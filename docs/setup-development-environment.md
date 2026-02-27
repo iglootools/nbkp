@@ -18,3 +18,8 @@
    # To recreate the virtualenv from scratch:
    poetry env remove --all
    ```
+
+5. Upgrade rsync if you're on macOS, as the default version is too old and lacks some features nbkp relies on:
+   ```bash
+   brew install rsync
+   ```
