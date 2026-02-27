@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import enum
+import re as regex
 import shutil
 import subprocess
 from pathlib import Path
@@ -36,6 +37,12 @@ class SyncReason(str, enum.Enum):
     SOURCE_SNAPSHOTS_DIR_NOT_FOUND = "source snapshots/ directory not found"
     RSYNC_NOT_FOUND_ON_SOURCE = "rsync not found on source"
     RSYNC_NOT_FOUND_ON_DESTINATION = "rsync not found on destination"
+    RSYNC_TOO_OLD_ON_SOURCE = (
+        "rsync too old on source (3.0+ required)"
+    )
+    RSYNC_TOO_OLD_ON_DESTINATION = (
+        "rsync too old on destination (3.0+ required)"
+    )
     BTRFS_NOT_FOUND_ON_DESTINATION = "btrfs not found on destination"
     STAT_NOT_FOUND_ON_DESTINATION = "stat not found on destination"
     FINDMNT_NOT_FOUND_ON_DESTINATION = "findmnt not found on destination"
@@ -167,6 +174,50 @@ def _check_command_available(
                 ep.server, ["which", command], ep.proxy_chain
             )
             return result.returncode == 0
+
+
+_MIN_RSYNC_VERSION = (3, 0, 0)
+
+_GNU_RSYNC_RE = regex.compile(
+    r"rsync\s+version\s+(\d+)\.(\d+)\.(\d+)"
+)
+
+
+def parse_rsync_version(output: str) -> tuple[int, ...]:
+    """Extract version tuple from ``rsync --version`` output.
+
+    GNU rsync:  ``rsync  version 3.2.7  protocol version 31``
+    openrsync:  ``openrsync: protocol version 29``
+
+    Returns ``(0, 0, 0)`` for openrsync or unparseable output.
+    """
+    if "openrsync" in output:
+        return (0, 0, 0)
+    m = _GNU_RSYNC_RE.search(output)
+    if m:
+        return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    return (0, 0, 0)
+
+
+def _check_rsync_version(
+    volume: Volume,
+    resolved_endpoints: ResolvedEndpoints,
+) -> bool:
+    """Check that rsync is GNU rsync >= 3.0.0."""
+    cmd = ["rsync", "--version"]
+    match volume:
+        case LocalVolume():
+            result = subprocess.run(
+                cmd, capture_output=True, text=True
+            )
+        case RemoteVolume():
+            ep = resolved_endpoints[volume.slug]
+            result = run_remote_command(
+                ep.server, cmd, ep.proxy_chain
+            )
+    if result.returncode != 0:
+        return False
+    return parse_rsync_version(result.stdout) >= _MIN_RSYNC_VERSION
 
 
 def _check_btrfs_filesystem(
@@ -384,6 +435,8 @@ def check_sync(
                 reasons.append(SyncReason.SOURCE_SENTINEL_NOT_FOUND)
             if not _check_command_available(src_vol, "rsync", re):
                 reasons.append(SyncReason.RSYNC_NOT_FOUND_ON_SOURCE)
+            elif not _check_rsync_version(src_vol, re):
+                reasons.append(SyncReason.RSYNC_TOO_OLD_ON_SOURCE)
             if sync.source.snapshot_mode != "none":
                 src_ep = _resolve_endpoint(src_vol, sync.source.subdir)
                 if not _check_directory_exists(
@@ -406,6 +459,10 @@ def check_sync(
                 reasons.append(SyncReason.DESTINATION_SENTINEL_NOT_FOUND)
             if not _check_command_available(dst_vol, "rsync", re):
                 reasons.append(SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION)
+            elif not _check_rsync_version(dst_vol, re):
+                reasons.append(
+                    SyncReason.RSYNC_TOO_OLD_ON_DESTINATION
+                )
             if sync.destination.btrfs_snapshots.enabled:
                 if not _check_command_available(dst_vol, "btrfs", re):
                     reasons.append(SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION)

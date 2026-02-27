@@ -177,6 +177,13 @@ def troubleshoot_config() -> Config:
                     ),
                 ),
             ),
+            "rsync-too-old": SyncConfig(
+                slug="rsync-too-old",
+                source=SyncEndpoint(volume="laptop"),
+                destination=DestinationSyncEndpoint(
+                    volume="nas-backup",
+                ),
+            ),
             "source-latest-missing": SyncConfig(
                 slug="source-latest-missing",
                 source=SyncEndpoint(
@@ -297,6 +304,16 @@ def troubleshoot_data(
             reasons=[
                 SyncReason.DESTINATION_NO_HARDLINK_SUPPORT,
                 SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND,
+            ],
+        ),
+        "rsync-too-old": SyncStatus(
+            slug="rsync-too-old",
+            config=config.syncs["rsync-too-old"],
+            source_status=laptop_vs,
+            destination_status=nas_vs,
+            reasons=[
+                SyncReason.RSYNC_TOO_OLD_ON_SOURCE,
+                SyncReason.RSYNC_TOO_OLD_ON_DESTINATION,
             ],
         ),
         "source-latest-missing": SyncStatus(

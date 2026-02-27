@@ -577,6 +577,22 @@ def _print_sync_reason_fix(
             host = _host_label(dst, resolved_endpoints)
             console.print(f"{p2}Install rsync on {host}:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
+        case SyncReason.RSYNC_TOO_OLD_ON_SOURCE:
+            src = config.volumes[sync.source.volume]
+            host = _host_label(src, resolved_endpoints)
+            console.print(
+                f"{p2}rsync 3.0+ is required on {host}."
+                " Install or upgrade:"
+            )
+            _print_cmd(console, _RSYNC_INSTALL, indent=3)
+        case SyncReason.RSYNC_TOO_OLD_ON_DESTINATION:
+            dst = config.volumes[sync.destination.volume]
+            host = _host_label(dst, resolved_endpoints)
+            console.print(
+                f"{p2}rsync 3.0+ is required on {host}."
+                " Install or upgrade:"
+            )
+            _print_cmd(console, _RSYNC_INSTALL, indent=3)
         case SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION:
             dst = config.volumes[sync.destination.volume]
             host = _host_label(dst, resolved_endpoints)

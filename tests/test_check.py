@@ -31,9 +31,11 @@ from nbkp.check import (
     _check_btrfs_mount_option,
     _check_btrfs_subvolume,
     _check_command_available,
+    _check_rsync_version,
     check_all_syncs,
     check_sync,
     check_volume,
+    parse_rsync_version,
 )
 
 
@@ -727,11 +729,17 @@ class TestCheckSync:
         )
         return config, sync
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch(
         "nbkp.check.shutil.which",
         return_value="/usr/bin/rsync",
     )
-    def test_active_sync(self, mock_which: MagicMock, tmp_path: Path) -> None:
+    def test_active_sync(
+        self,
+        mock_which: MagicMock,
+        _mock_rsync_ver: MagicMock,
+        tmp_path: Path,
+    ) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -957,6 +965,7 @@ class TestCheckSync:
         assert SyncReason.DESTINATION_NOT_BTRFS not in status.reasons
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.reasons
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.subprocess.run")
     @patch(
         "nbkp.check.shutil.which",
@@ -968,6 +977,7 @@ class TestCheckSync:
         self,
         mock_which: MagicMock,
         mock_subprocess: MagicMock,
+        _mock_rsync_ver: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1093,6 +1103,7 @@ class TestCheckSync:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS in status.reasons
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.subprocess.run")
     @patch(
         "nbkp.check.shutil.which",
@@ -1102,6 +1113,7 @@ class TestCheckSync:
         self,
         mock_which: MagicMock,
         mock_subprocess: MagicMock,
+        _mock_rsync_ver: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1142,6 +1154,7 @@ class TestCheckSync:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.subprocess.run")
     @patch(
         "nbkp.check.shutil.which",
@@ -1151,6 +1164,7 @@ class TestCheckSync:
         self,
         mock_which: MagicMock,
         mock_subprocess: MagicMock,
+        _mock_rsync_ver: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1197,6 +1211,7 @@ class TestCheckSync:
             SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.reasons
         )
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.subprocess.run")
     @patch(
         "nbkp.check.shutil.which",
@@ -1206,6 +1221,7 @@ class TestCheckSync:
         self,
         mock_which: MagicMock,
         mock_subprocess: MagicMock,
+        _mock_rsync_ver: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1257,6 +1273,7 @@ class TestCheckSync:
             not in status.reasons
         )
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.subprocess.run")
     @patch(
         "nbkp.check.shutil.which",
@@ -1266,6 +1283,7 @@ class TestCheckSync:
         self,
         mock_which: MagicMock,
         mock_subprocess: MagicMock,
+        _mock_rsync_ver: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1314,6 +1332,7 @@ class TestCheckSync:
         assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
         assert SyncReason.DESTINATION_LATEST_NOT_FOUND not in status.reasons
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.subprocess.run")
     @patch(
         "nbkp.check.shutil.which",
@@ -1323,6 +1342,7 @@ class TestCheckSync:
         self,
         mock_which: MagicMock,
         mock_subprocess: MagicMock,
+        _mock_rsync_ver: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1370,12 +1390,16 @@ class TestCheckSync:
         assert SyncReason.DESTINATION_LATEST_NOT_FOUND in status.reasons
         assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch(
         "nbkp.check.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_btrfs_check_skipped_when_not_enabled(
-        self, mock_which: MagicMock, tmp_path: Path
+        self,
+        mock_which: MagicMock,
+        _mock_rsync_ver: MagicMock,
+        tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
@@ -1568,6 +1592,7 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION in status.reasons
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.run_remote_command")
     @patch(
         "nbkp.check.shutil.which",
@@ -1577,6 +1602,7 @@ class TestCheckSyncRemoteCommands:
         self,
         mock_which: MagicMock,
         mock_run: MagicMock,
+        _mock_rsync_ver: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1642,6 +1668,7 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION in status.reasons
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.run_remote_command")
     @patch(
         "nbkp.check.shutil.which",
@@ -1651,6 +1678,7 @@ class TestCheckSyncRemoteCommands:
         self,
         mock_which: MagicMock,
         mock_run: MagicMock,
+        _mock_rsync_ver: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1724,6 +1752,7 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS in status.reasons
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.run_remote_command")
     @patch(
         "nbkp.check.shutil.which",
@@ -1733,6 +1762,7 @@ class TestCheckSyncRemoteCommands:
         self,
         mock_which: MagicMock,
         mock_run: MagicMock,
+        _mock_rsync_ver: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1813,6 +1843,7 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.run_remote_command")
     @patch(
         "nbkp.check.shutil.which",
@@ -1822,6 +1853,7 @@ class TestCheckSyncRemoteCommands:
         self,
         mock_which: MagicMock,
         mock_run: MagicMock,
+        _mock_rsync_ver: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1912,6 +1944,7 @@ class TestCheckSyncRemoteCommands:
             SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.reasons
         )
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.run_remote_command")
     @patch(
         "nbkp.check.shutil.which",
@@ -1921,6 +1954,7 @@ class TestCheckSyncRemoteCommands:
         self,
         mock_which: MagicMock,
         mock_run: MagicMock,
+        _mock_rsync_ver: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1989,6 +2023,7 @@ class TestCheckSyncRemoteCommands:
         assert SyncReason.STAT_NOT_FOUND_ON_DESTINATION in status.reasons
         assert SyncReason.DESTINATION_NOT_BTRFS not in status.reasons
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.run_remote_command")
     @patch(
         "nbkp.check.shutil.which",
@@ -1998,6 +2033,7 @@ class TestCheckSyncRemoteCommands:
         self,
         mock_which: MagicMock,
         mock_run: MagicMock,
+        _mock_rsync_ver: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -2088,6 +2124,7 @@ class TestCheckSyncRemoteCommands:
             not in status.reasons
         )
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.run_remote_command")
     @patch(
         "nbkp.check.shutil.which",
@@ -2097,6 +2134,7 @@ class TestCheckSyncRemoteCommands:
         self,
         mock_which: MagicMock,
         mock_run: MagicMock,
+        _mock_rsync_ver: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -2204,6 +2242,7 @@ class TestCheckSyncRemoteCommands:
             not in status.reasons
         )
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.run_remote_command")
     @patch(
         "nbkp.check.shutil.which",
@@ -2213,6 +2252,7 @@ class TestCheckSyncRemoteCommands:
         self,
         mock_which: MagicMock,
         mock_run: MagicMock,
+        _mock_rsync_ver: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -2319,11 +2359,17 @@ class TestCheckSyncRemoteCommands:
 
 
 class TestCheckAllSyncs:
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch(
         "nbkp.check.shutil.which",
         return_value="/usr/bin/rsync",
     )
-    def test_check_all(self, mock_which: MagicMock, tmp_path: Path) -> None:
+    def test_check_all(
+        self,
+        mock_which: MagicMock,
+        _mock_rsync_ver: MagicMock,
+        tmp_path: Path,
+    ) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -2350,12 +2396,16 @@ class TestCheckAllSyncs:
         assert vol_statuses["dst"].active is True
         assert sync_statuses["s1"].active is True
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch(
         "nbkp.check.shutil.which",
         return_value="/usr/bin/rsync",
     )
     def test_only_syncs_filters_syncs_and_volumes(
-        self, mock_which: MagicMock, tmp_path: Path
+        self,
+        mock_which: MagicMock,
+        _mock_rsync_ver: MagicMock,
+        tmp_path: Path,
     ) -> None:
         """When only_syncs is given, only those syncs and their
         referenced volumes are checked."""
@@ -2501,6 +2551,7 @@ class TestCheckHardLinkDest:
         assert status.active is False
         assert SyncReason.DESTINATION_NO_HARDLINK_SUPPORT in status.reasons
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.subprocess.run")
     @patch(
         "nbkp.check.shutil.which",
@@ -2510,6 +2561,7 @@ class TestCheckHardLinkDest:
         self,
         mock_which: MagicMock,
         mock_subprocess: MagicMock,
+        _mock_rsync_ver: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -2586,6 +2638,7 @@ class TestCheckHardLinkDest:
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.reasons
         assert SyncReason.DESTINATION_LATEST_NOT_FOUND not in status.reasons
 
+    @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.run_remote_command")
     @patch(
         "nbkp.check.shutil.which",
@@ -2595,6 +2648,7 @@ class TestCheckHardLinkDest:
         self,
         mock_which: MagicMock,
         mock_run: MagicMock,
+        _mock_rsync_ver: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -3012,3 +3066,104 @@ class TestCheckRemoteVolumeSpaces:
             ["test", "-f", "/my backup/.nbkp-vol"],
             [],
         )
+
+
+class TestParseRsyncVersion:
+    def test_gnu_rsync_3(self) -> None:
+        output = (
+            "rsync  version 3.2.7  protocol version 31\n"
+            "Copyright (C) 1996-2022 by Andrew Tridgell\n"
+        )
+        assert parse_rsync_version(output) == (3, 2, 7)
+
+    def test_gnu_rsync_3_0_0(self) -> None:
+        output = "rsync  version 3.0.0  protocol version 30\n"
+        assert parse_rsync_version(output) == (3, 0, 0)
+
+    def test_gnu_rsync_2(self) -> None:
+        output = "rsync  version 2.6.9  protocol version 29\n"
+        assert parse_rsync_version(output) == (2, 6, 9)
+
+    def test_openrsync(self) -> None:
+        output = (
+            "openrsync: protocol version 29\n"
+            "rsync version 2.6.9 compatible\n"
+        )
+        assert parse_rsync_version(output) == (0, 0, 0)
+
+    def test_empty(self) -> None:
+        assert parse_rsync_version("") == (0, 0, 0)
+
+    def test_garbage(self) -> None:
+        assert parse_rsync_version("not rsync\n") == (0, 0, 0)
+
+
+class TestCheckRsyncVersionLocal:
+    @patch("nbkp.check.subprocess.run")
+    def test_new_enough(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="rsync  version 3.2.7  protocol version 31\n",
+        )
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        assert _check_rsync_version(vol, {}) is True
+
+    @patch("nbkp.check.subprocess.run")
+    def test_too_old(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="rsync  version 2.6.9  protocol version 29\n",
+        )
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        assert _check_rsync_version(vol, {}) is False
+
+    @patch("nbkp.check.subprocess.run")
+    def test_openrsync(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=(
+                "openrsync: protocol version 29\n"
+                "rsync version 2.6.9 compatible\n"
+            ),
+        )
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        assert _check_rsync_version(vol, {}) is False
+
+    @patch("nbkp.check.subprocess.run")
+    def test_command_failure(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=1, stdout=""
+        )
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        assert _check_rsync_version(vol, {}) is False
+
+    @patch("nbkp.check.subprocess.run")
+    def test_exactly_3_0_0(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="rsync  version 3.0.0  protocol version 30\n",
+        )
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        assert _check_rsync_version(vol, {}) is True
+
+
+class TestCheckRsyncVersionRemote:
+    @patch("nbkp.check.run_remote_command")
+    def test_new_enough(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="rsync  version 3.2.7  protocol version 31\n",
+        )
+        vol, config = _remote_config()
+        resolved = _make_resolved(config)
+        assert _check_rsync_version(vol, resolved) is True
+
+    @patch("nbkp.check.run_remote_command")
+    def test_too_old(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="rsync  version 2.6.9  protocol version 29\n",
+        )
+        vol, config = _remote_config()
+        resolved = _make_resolved(config)
+        assert _check_rsync_version(vol, resolved) is False
