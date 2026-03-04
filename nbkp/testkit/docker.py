@@ -14,7 +14,7 @@ from ..config import SshConnectionOptions, SshEndpoint
 from ..remote.fabricssh import run_remote_command
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"
-CONTAINER_NAME = "nbkp-demo"
+STORAGE_CONTAINER_NAME = "nbkp-demo"
 BASTION_CONTAINER_NAME = "nbkp-demo-bastion"
 _IMAGE_TAG = "nbkp-demo-server:latest"
 _NETWORK_NAME = "nbkp-demo-net"
@@ -149,7 +149,7 @@ def build_docker_image() -> None:
         raise typer.Exit(1)
 
 
-def start_docker_container(
+def start_storage_container(
     pub_key: Path,
     network_name: str | None = None,
     network_alias: str | None = None,
@@ -162,7 +162,7 @@ def start_docker_container(
 
     # Remove existing container if any
     try:
-        old = client.containers.get(CONTAINER_NAME)
+        old = client.containers.get(STORAGE_CONTAINER_NAME)
         old.remove(force=True)
     except dockerlib.errors.NotFound:
         pass
@@ -171,7 +171,7 @@ def start_docker_container(
     container = client.containers.run(
         _IMAGE_TAG,
         detach=True,
-        name=CONTAINER_NAME,
+        name=STORAGE_CONTAINER_NAME,
         privileged=True,
         ports={"22/tcp": None},
         volumes={

@@ -34,7 +34,7 @@ from .config import (
 try:
     from .testkit.docker import (
         BASTION_CONTAINER_NAME,
-        CONTAINER_NAME,
+        STORAGE_CONTAINER_NAME,
         DOCKER_DIR,
         REMOTE_BACKUP_PATH,
         REMOTE_BTRFS_PATH,
@@ -45,7 +45,7 @@ try:
         generate_ssh_keypair,
         ssh_exec,
         start_bastion_container,
-        start_docker_container,
+        start_storage_container,
         wait_for_ssh,
     )
 
@@ -327,8 +327,8 @@ def seed(
 
     tmp = Path(tempfile.mkdtemp(prefix="nbkp-demo-"))
 
-    # Docker containers
-    docker_endpoint = None
+    # Server and bastion containers
+    storage_endpoint = None
     bastion_endpoint = None
     if docker:
         private_key, pub_key = generate_ssh_keypair(tmp)
@@ -347,17 +347,17 @@ def seed(
         with _console.status("Waiting for bastion SSH..."):
             wait_for_ssh(bastion_endpoint)
 
-        with _console.status("Starting Docker container..."):
-            docker_port = start_docker_container(
+        with _console.status("Starting storage container..."):
+            storage_port = start_storage_container(
                 pub_key,
                 network_name=network_name,
                 network_alias="backup-server",
             )
-        docker_endpoint = create_test_ssh_endpoint(
-            "docker", "127.0.0.1", docker_port, private_key
+        storage_endpoint = create_test_ssh_endpoint(
+            "storage", "127.0.0.1", storage_port, private_key
         )
-        with _console.status("Waiting for SSH..."):
-            wait_for_ssh(docker_endpoint)
+        with _console.status("Waiting for storage SSH..."):
+            wait_for_ssh(storage_endpoint)
 
     # Config — chain layout matching integration test
     hl_src = HardLinkSnapshotConfig(enabled=True)
@@ -392,7 +392,7 @@ def seed(
     }
 
     if docker:
-        assert docker_endpoint is not None
+        assert storage_endpoint is not None
         assert bastion_endpoint is not None
         btrfs_snapshots_path = f"{REMOTE_BTRFS_PATH}/snapshots"
         btrfs_bare_path = f"{REMOTE_BTRFS_PATH}/bare"
@@ -400,7 +400,7 @@ def seed(
         btrfs_src = BtrfsSnapshotConfig(enabled=True)
 
         ssh_endpoints["bastion"] = bastion_endpoint
-        ssh_endpoints["docker"] = docker_endpoint
+        ssh_endpoints["storage"] = storage_endpoint
         ssh_endpoints["via-bastion"] = create_test_ssh_endpoint(
             "via-bastion",
             "backup-server",
@@ -520,15 +520,15 @@ def seed(
     # Create sentinels and seed data
     size_bytes = big_file_size * 1024 * 1024
     if docker:
-        assert docker_endpoint is not None
-        _server = docker_endpoint
+        assert storage_endpoint is not None
+        _server = storage_endpoint
 
         def _run_remote(cmd: str) -> None:
             ssh_exec(_server, cmd)
 
         with _console.status("Creating btrfs subvolume..."):
             ssh_exec(
-                docker_endpoint,
+                storage_endpoint,
                 "btrfs subvolume create" f" {btrfs_snapshots_path}",
             )
         remote_exec = _run_remote
@@ -557,7 +557,7 @@ def seed(
         ("Config file", str(config_path)),
     ]
     if docker:
-        assert docker_endpoint is not None
+        assert storage_endpoint is not None
         assert bastion_endpoint is not None
         rows.append(
             (
@@ -567,8 +567,8 @@ def seed(
         )
         rows.append(
             (
-                "Docker",
-                f"{CONTAINER_NAME}" f" (port {docker_endpoint.port})",
+                "Storage",
+                f"{STORAGE_CONTAINER_NAME}" f" (port {storage_endpoint.port})",
             )
         )
     label_w = max(len(r[0]) for r in rows)
@@ -622,8 +622,9 @@ def seed(
     if docker:
         lines += [
             "",
-            "# Teardown Docker containers and network",
-            f"docker rm -f {CONTAINER_NAME}" f" {BASTION_CONTAINER_NAME}",
+            "# Teardown containers and network",
+            f"docker rm -f {STORAGE_CONTAINER_NAME}"
+            f" {BASTION_CONTAINER_NAME}",
             "docker network rm nbkp-demo-net",
         ]
     commands = "\n".join(lines)
