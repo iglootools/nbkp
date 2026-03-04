@@ -42,6 +42,7 @@ from .output import (
     print_human_check,
     print_human_troubleshoot,
 )
+from .democli import app as demo_app
 from .scriptgen import ScriptOptions, generate_script
 from .sync import (
     ProgressMode,
@@ -67,6 +68,12 @@ config_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(config_app)
+
+app.add_typer(
+    demo_app,
+    name="demo",
+    help="Demo CLI: sample output rendering and seed data",
+)
 
 
 @app.command()

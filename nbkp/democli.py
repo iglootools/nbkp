@@ -1,7 +1,8 @@
-"""Developer test CLI: fake output rendering and seed data."""
+"""NBKP demo CLI: sample output rendering and seed data."""
 
 from __future__ import annotations
 
+import os
 import tempfile
 from io import StringIO
 from pathlib import Path
@@ -27,22 +28,30 @@ from .config import (
     SyncConfig,
     SyncEndpoint,
 )
-from .testkit.docker import (
-    BASTION_CONTAINER_NAME,
-    CONTAINER_NAME,
-    DOCKER_DIR,
-    REMOTE_BACKUP_PATH,
-    REMOTE_BTRFS_PATH,
-    build_docker_image,
-    check_docker,
-    create_docker_network,
-    create_test_ssh_endpoint,
-    generate_ssh_keypair,
-    ssh_exec,
-    start_bastion_container,
-    start_docker_container,
-    wait_for_ssh,
-)
+
+# Docker-dependent imports are deferred to seed --docker.
+# They require the 'docker' extra: pipx install nbkp[docker]
+try:
+    from .testkit.docker import (
+        BASTION_CONTAINER_NAME,
+        CONTAINER_NAME,
+        DOCKER_DIR,
+        REMOTE_BACKUP_PATH,
+        REMOTE_BTRFS_PATH,
+        build_docker_image,
+        check_docker,
+        create_docker_network,
+        create_test_ssh_endpoint,
+        generate_ssh_keypair,
+        ssh_exec,
+        start_bastion_container,
+        start_docker_container,
+        wait_for_ssh,
+    )
+
+    _HAS_DOCKER = True
+except ImportError:
+    _HAS_DOCKER = False
 from .config.protocol import Config as ConfigModel
 from .config.resolution import resolve_all_endpoints
 from .output import (
@@ -74,10 +83,32 @@ from .testkit.gen.sync import (
 _console = Console()
 
 app = typer.Typer(
-    name="nbkp-test",
-    help="NBKP developer test CLI",
+    name="nbkp-demo",
+    help="NBKP demo CLI",
     no_args_is_help=True,
 )
+
+
+def _is_dev_environment() -> bool:
+    """Detect whether we're running inside a Poetry/dev venv."""
+    venv = os.environ.get("VIRTUAL_ENV", "")
+    return venv.endswith(".venv") or "/.venv" in venv
+
+
+def _cmd_prefix() -> str:
+    """Return 'poetry run ' when in dev, empty string otherwise."""
+    return "poetry run " if _is_dev_environment() else ""
+
+
+def _require_docker_extra() -> None:
+    """Exit with install hint if docker extra is not installed."""
+    if not _HAS_DOCKER:
+        typer.echo(
+            "Docker support requires the 'docker' extra.\n"
+            "Install it with: pipx install nbkp[docker]",
+            err=True,
+        )
+        raise typer.Exit(1)
 
 
 # ── Commands ─────────────────────────────────────────────────────
@@ -285,8 +316,9 @@ def seed(
     )
 
     if docker:
+        _require_docker_extra()
         check_docker()
-        if not DOCKER_DIR.is_dir():
+        if not DOCKER_DIR.is_dir():  # type: ignore[possibly-undefined]
             typer.echo(
                 "Error: Docker directory not found:" f" {DOCKER_DIR}",
                 err=True,
@@ -548,39 +580,40 @@ def seed(
         summary.append(value)
     _console.print(Panel(summary, border_style="blue", padding=(0, 1)))
 
+    pfx = _cmd_prefix()
     lines = [
         f'CFG="{config_path}"',
         f'SH="{backup_sh}"',
         "",
         "# Show parsed configuration",
-        "poetry run nbkp config show --config $CFG",
+        f"{pfx}nbkp config show --config $CFG",
         "",
         "# Show configuration as JSON",
-        "poetry run nbkp config show --config $CFG --output json",
+        f"{pfx}nbkp config show --config $CFG --output json",
         "",
         "# Volume and sync health checks",
-        "poetry run nbkp check --config $CFG",
+        f"{pfx}nbkp check --config $CFG",
         "",
         "# Preview what rsync would do without changes",
-        "poetry run nbkp run --config $CFG --dry-run",
+        f"{pfx}nbkp run --config $CFG --dry-run",
         "",
         "# Execute backup syncs",
-        "poetry run nbkp run --config $CFG",
+        f"{pfx}nbkp run --config $CFG",
         "",
         "# Prune old btrfs snapshots",
-        "poetry run nbkp prune --config $CFG",
+        f"{pfx}nbkp prune --config $CFG",
         "",
         "# Generate standalone bash script to stdout",
-        "poetry run nbkp sh --config $CFG",
+        f"{pfx}nbkp sh --config $CFG",
         "",
         "# Write script to file, validate, and run",
-        "poetry run nbkp sh --config $CFG -o $SH \\",
+        f"{pfx}nbkp sh --config $CFG -o $SH \\",
         "  && bash -n $SH \\",
         "  && $SH --dry-run \\",
         "  && $SH",
         "",
         "# With relative paths (src and dst)",
-        "poetry run nbkp sh --config $CFG -o $SH"
+        f"{pfx}nbkp sh --config $CFG -o $SH"
         " --relative-src --relative-dst \\",
         "  && bash -n $SH \\",
         "  && $SH --dry-run \\",
@@ -611,7 +644,7 @@ def seed(
 
 
 def main() -> None:
-    """Test CLI entry point."""
+    """Demo CLI entry point."""
     app()
 
 

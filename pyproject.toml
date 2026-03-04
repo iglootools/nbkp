@@ -15,19 +15,22 @@ dependencies = [
 ]
 dynamic = ["version"]
 
+[tool.poetry]
+packages = [{ include = "nbkp" }]
+version = "0.0.0"
+
 [tool.poetry.requires-plugins]
 poetry-dynamic-versioning = { version = ">=1.0.0,<2.0.0", extras = ["plugin"] }
 
 [tool.poetry-dynamic-versioning]
 enable = true
 
+[project.optional-dependencies]
+docker = ["docker (>=7.0,<8.0)"]
+
 [project.scripts]
 nbkp = "nbkp.cli:main"
-nbkp-test = "nbkp.testcli:main"
-
-[tool.poetry]
-packages = [{ include = "nbkp" }]
-version = "0.0.0"
+nbkp-demo = "nbkp.democli:main"
 
 [tool.poetry.group.dev.dependencies]
 black = "^26.0.0"

@@ -55,7 +55,7 @@
     This ensures the test data is always valid and consistent with the models.
 - **Domain Logic Consistency**
   - When making changes to the config schema/models or status checks, make sure to update:
-    - The `testcli` CLI app to generate new test data that reflects the changes, and update the expected outputs in `testdata.py` if necessary.
+    - The demo CLI (`nbkp/democli.py`) to generate new test data that reflects the changes, and update the expected outputs in `testdata.py` if necessary.
     - The `cli` CLI app to support the new functionality, and update the formatting logic in `outputs.py` if necessary.
       - `sh` command: 
       - Ensure to add comments in the codebase to describe which choices have been made with regard to which of the original (`run`) functionality has been preserved vs dropped

@@ -4,7 +4,7 @@ The unit tests cover the core logic of the tool, while the integration tests exe
 
 Integration tests exercise the real rsync/SSH/btrfs pipeline against a Docker container.
 
-Additionally, `poetry run nbkp-test` provides helpers to test with manual testing/QA.
+Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/QA. The `seed --docker` command requires the `docker` extra: `pipx install nbkp[docker]`. In dev: `poetry run nbkp demo`.
 
 Run automated tests and checks (no external dependencies):
 ```bash

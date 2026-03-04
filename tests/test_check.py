@@ -3131,9 +3131,7 @@ class TestCheckRsyncVersionLocal:
 
     @patch("nbkp.check.subprocess.run")
     def test_command_failure(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=1, stdout=""
-        )
+        mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
         assert _check_rsync_version(vol, {}) is False
 

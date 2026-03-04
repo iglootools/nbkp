@@ -37,9 +37,7 @@ class SyncReason(str, enum.Enum):
     SOURCE_SNAPSHOTS_DIR_NOT_FOUND = "source snapshots/ directory not found"
     RSYNC_NOT_FOUND_ON_SOURCE = "rsync not found on source"
     RSYNC_NOT_FOUND_ON_DESTINATION = "rsync not found on destination"
-    RSYNC_TOO_OLD_ON_SOURCE = (
-        "rsync too old on source (3.0+ required)"
-    )
+    RSYNC_TOO_OLD_ON_SOURCE = "rsync too old on source (3.0+ required)"
     RSYNC_TOO_OLD_ON_DESTINATION = (
         "rsync too old on destination (3.0+ required)"
     )
@@ -178,9 +176,7 @@ def _check_command_available(
 
 _MIN_RSYNC_VERSION = (3, 0, 0)
 
-_GNU_RSYNC_RE = regex.compile(
-    r"rsync\s+version\s+(\d+)\.(\d+)\.(\d+)"
-)
+_GNU_RSYNC_RE = regex.compile(r"rsync\s+version\s+(\d+)\.(\d+)\.(\d+)")
 
 
 def parse_rsync_version(output: str) -> tuple[int, ...]:
@@ -207,14 +203,10 @@ def _check_rsync_version(
     cmd = ["rsync", "--version"]
     match volume:
         case LocalVolume():
-            result = subprocess.run(
-                cmd, capture_output=True, text=True
-            )
+            result = subprocess.run(cmd, capture_output=True, text=True)
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(
-                ep.server, cmd, ep.proxy_chain
-            )
+            result = run_remote_command(ep.server, cmd, ep.proxy_chain)
     if result.returncode != 0:
         return False
     return parse_rsync_version(result.stdout) >= _MIN_RSYNC_VERSION
@@ -460,9 +452,7 @@ def check_sync(
             if not _check_command_available(dst_vol, "rsync", re):
                 reasons.append(SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION)
             elif not _check_rsync_version(dst_vol, re):
-                reasons.append(
-                    SyncReason.RSYNC_TOO_OLD_ON_DESTINATION
-                )
+                reasons.append(SyncReason.RSYNC_TOO_OLD_ON_DESTINATION)
             if sync.destination.btrfs_snapshots.enabled:
                 if not _check_command_available(dst_vol, "btrfs", re):
                     reasons.append(SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION)
