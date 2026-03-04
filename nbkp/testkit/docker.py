@@ -14,10 +14,10 @@ from ..config import SshConnectionOptions, SshEndpoint
 from ..remote.fabricssh import run_remote_command
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"
-CONTAINER_NAME = "nbkp-seed"
-BASTION_CONTAINER_NAME = "nbkp-seed-bastion"
-_IMAGE_TAG = "nbkp-seed-server:latest"
-_NETWORK_NAME = "nbkp-seed-net"
+CONTAINER_NAME = "nbkp-demo"
+BASTION_CONTAINER_NAME = "nbkp-demo-bastion"
+_IMAGE_TAG = "nbkp-demo-server:latest"
+_NETWORK_NAME = "nbkp-demo-net"
 
 # ── Standard remote paths inside the test container ──────────
 
@@ -99,7 +99,7 @@ def generate_ssh_keypair(
         serialization.Encoding.OpenSSH,
         serialization.PublicFormat.OpenSSH,
     )
-    public_key_path.write_text(f"{pub_bytes.decode()} nbkp-seed\n")
+    public_key_path.write_text(f"{pub_bytes.decode()} nbkp-demo\n")
 
     return private_key_path, public_key_path
 

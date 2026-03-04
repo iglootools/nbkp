@@ -325,7 +325,7 @@ def seed(
             )
             raise typer.Exit(1)
 
-    tmp = Path(tempfile.mkdtemp(prefix="nbkp-seed-"))
+    tmp = Path(tempfile.mkdtemp(prefix="nbkp-demo-"))
 
     # Docker containers
     docker_endpoint = None
@@ -624,7 +624,7 @@ def seed(
             "",
             "# Teardown Docker containers and network",
             f"docker rm -f {CONTAINER_NAME}" f" {BASTION_CONTAINER_NAME}",
-            "docker network rm nbkp-seed-net",
+            "docker network rm nbkp-demo-net",
         ]
     commands = "\n".join(lines)
     _console.print(
