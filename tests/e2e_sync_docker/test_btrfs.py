@@ -5,8 +5,6 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-import pytest
-
 from nbkp.sync.btrfs import (
     create_snapshot,
     get_latest_snapshot,
@@ -30,15 +28,13 @@ from nbkp.sync.rsync import run_rsync
 from nbkp.testkit.docker import REMOTE_BTRFS_PATH
 from nbkp.testkit.gen.fs import create_seed_sentinels
 
-from .conftest import assert_sentinels_after_sync, ssh_exec
-
-pytestmark = pytest.mark.integration
+from tests._docker_fixtures import assert_sentinels_after_sync, ssh_exec
 
 
 def _make_btrfs_config(
     src_path: str,
     remote_btrfs_volume: RemoteVolume,
-    ssh_endpoint: SshEndpoint,
+    docker_ssh_endpoint: SshEndpoint,
 ) -> tuple[SyncConfig, Config, ResolvedEndpoints]:
     """Build btrfs config and create seed sentinels."""
     src_vol = LocalVolume(slug="src", path=src_path)
@@ -51,7 +47,7 @@ def _make_btrfs_config(
         ),
     )
     config = Config(
-        ssh_endpoints={"test-server": ssh_endpoint},
+        ssh_endpoints={"test-server": docker_ssh_endpoint},
         volumes={
             "src": src_vol,
             "dst": remote_btrfs_volume,
@@ -60,7 +56,7 @@ def _make_btrfs_config(
     )
 
     def _run_remote(cmd: str) -> None:
-        ssh_exec(ssh_endpoint, cmd)
+        ssh_exec(docker_ssh_endpoint, cmd)
 
     create_seed_sentinels(config, remote_exec=_run_remote)
 
@@ -72,7 +68,7 @@ class TestBtrfsSnapshots:
     def test_snapshot_created(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         src = tmp_path / "src"
@@ -80,7 +76,7 @@ class TestBtrfsSnapshots:
         (src / "data.txt").write_text("snapshot me")
 
         sync, config, resolved = _make_btrfs_config(
-            str(src), remote_btrfs_volume, ssh_endpoint
+            str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
 
         # Rsync into tmp
@@ -95,7 +91,7 @@ class TestBtrfsSnapshots:
         )
 
         # Verify snapshot exists
-        check = ssh_exec(ssh_endpoint, f"test -d {snapshot_path}")
+        check = ssh_exec(docker_ssh_endpoint, f"test -d {snapshot_path}")
         assert check.returncode == 0
 
         # Update latest symlink
@@ -106,19 +102,19 @@ class TestBtrfsSnapshots:
 
         # Verify latest symlink
         link = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"readlink {REMOTE_BTRFS_PATH}/latest",
         )
         assert f"snapshots/{snap_name}" in link.stdout
 
         assert_sentinels_after_sync(
-            sync, config, ssh_endpoint, dest_suffix="tmp"
+            sync, config, docker_ssh_endpoint, dest_suffix="tmp"
         )
 
     def test_snapshot_readonly(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         src = tmp_path / "src"
@@ -126,7 +122,7 @@ class TestBtrfsSnapshots:
         (src / "data.txt").write_text("readonly test")
 
         sync, config, resolved = _make_btrfs_config(
-            str(src), remote_btrfs_volume, ssh_endpoint
+            str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
         run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="tmp")
         snapshot_path = create_snapshot(
@@ -135,7 +131,7 @@ class TestBtrfsSnapshots:
 
         # Check readonly property
         check = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"btrfs property get {snapshot_path} ro",
         )
         assert check.returncode == 0
@@ -144,7 +140,7 @@ class TestBtrfsSnapshots:
     def test_second_sync_link_dest(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         src = tmp_path / "src"
@@ -152,7 +148,7 @@ class TestBtrfsSnapshots:
         (src / "file.txt").write_text("v1")
 
         sync, config, resolved = _make_btrfs_config(
-            str(src), remote_btrfs_volume, ssh_endpoint
+            str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
 
         # First sync + snapshot + symlink
@@ -188,7 +184,7 @@ class TestBtrfsSnapshots:
         snapshot_path = create_snapshot(
             sync, config, resolved_endpoints=resolved
         )
-        check = ssh_exec(ssh_endpoint, f"test -d {snapshot_path}")
+        check = ssh_exec(docker_ssh_endpoint, f"test -d {snapshot_path}")
         assert check.returncode == 0
 
         snap_name = snapshot_path.rsplit("/", 1)[-1]
@@ -198,24 +194,24 @@ class TestBtrfsSnapshots:
 
         # Verify latest symlink points to second snapshot
         link = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"readlink {REMOTE_BTRFS_PATH}/latest",
         )
         assert f"snapshots/{snap_name}" in link.stdout
 
         assert_sentinels_after_sync(
-            sync, config, ssh_endpoint, dest_suffix="tmp"
+            sync, config, docker_ssh_endpoint, dest_suffix="tmp"
         )
 
     def test_dry_run_no_snapshot(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         # Count existing snapshots before dry run
         before = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"ls {REMOTE_BTRFS_PATH}/snapshots 2>/dev/null || true",
         )
         count_before = len(
@@ -227,7 +223,7 @@ class TestBtrfsSnapshots:
         (src / "data.txt").write_text("dry run")
 
         sync, config, resolved = _make_btrfs_config(
-            str(src), remote_btrfs_volume, ssh_endpoint
+            str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
 
         # Dry-run rsync
@@ -242,7 +238,7 @@ class TestBtrfsSnapshots:
 
         # Verify no new snapshot was created
         after = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"ls {REMOTE_BTRFS_PATH}/snapshots 2>/dev/null || true",
         )
         count_after = len(
@@ -278,7 +274,7 @@ class TestPruneSnapshots:
     def test_prune_deletes_oldest_snapshots(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         src = tmp_path / "src"
@@ -286,7 +282,7 @@ class TestPruneSnapshots:
         (src / "data.txt").write_text("prune test")
 
         sync, config, resolved = _make_btrfs_config(
-            str(src), remote_btrfs_volume, ssh_endpoint
+            str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
         run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="tmp")
 
@@ -312,7 +308,7 @@ class TestPruneSnapshots:
     def test_prune_dry_run_keeps_all(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         src = tmp_path / "src"
@@ -320,7 +316,7 @@ class TestPruneSnapshots:
         (src / "data.txt").write_text("dry run prune")
 
         sync, config, resolved = _make_btrfs_config(
-            str(src), remote_btrfs_volume, ssh_endpoint
+            str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
         run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="tmp")
 
@@ -347,7 +343,7 @@ class TestPruneSnapshots:
     def test_prune_noop_when_under_limit(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         src = tmp_path / "src"
@@ -355,7 +351,7 @@ class TestPruneSnapshots:
         (src / "data.txt").write_text("noop prune")
 
         sync, config, resolved = _make_btrfs_config(
-            str(src), remote_btrfs_volume, ssh_endpoint
+            str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
         run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="tmp")
 

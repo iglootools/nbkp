@@ -10,7 +10,7 @@ fi
 
 if [ -z "$NBKP_BASTION_ONLY" ]; then
     # Create btrfs filesystem on a file-backed image
-    truncate -s 4G /srv/btrfs-backups.img
+    truncate -s 256M /srv/btrfs-backups.img
     mkfs.btrfs -f /srv/btrfs-backups.img
     mkdir -p /srv/btrfs-backups
     mount -o user_subvol_rm_allowed /srv/btrfs-backups.img /srv/btrfs-backups

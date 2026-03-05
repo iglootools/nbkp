@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from nbkp.check import (
     SyncReason,
     _check_btrfs_filesystem,
@@ -27,9 +25,7 @@ from nbkp.config import (
 from nbkp.testkit.docker import REMOTE_BACKUP_PATH, REMOTE_BTRFS_PATH
 from nbkp.testkit.gen.fs import create_seed_sentinels
 
-from .conftest import create_sentinels, ssh_exec
-
-pytestmark = pytest.mark.integration
+from tests._docker_fixtures import create_sentinels, ssh_exec
 
 
 class TestLocalVolumeCheck:
@@ -61,30 +57,32 @@ class TestLocalVolumeCheck:
 class TestRemoteVolumeCheck:
     def test_remote_volume_active(
         self,
-        ssh_endpoint: SshEndpoint,
-        remote_volume: RemoteVolume,
+        docker_ssh_endpoint: SshEndpoint,
+        docker_remote_volume: RemoteVolume,
     ) -> None:
-        create_sentinels(ssh_endpoint, REMOTE_BACKUP_PATH, [".nbkp-vol"])
+        create_sentinels(
+            docker_ssh_endpoint, REMOTE_BACKUP_PATH, [".nbkp-vol"]
+        )
         config = Config(
-            ssh_endpoints={"test-server": ssh_endpoint},
-            volumes={"test-remote": remote_volume},
+            ssh_endpoints={"test-server": docker_ssh_endpoint},
+            volumes={"test-remote": docker_remote_volume},
         )
         resolved = resolve_all_endpoints(config)
-        status = check_volume(remote_volume, resolved)
+        status = check_volume(docker_remote_volume, resolved)
         assert status.active is True
 
     def test_remote_volume_inactive(
         self,
-        ssh_endpoint: SshEndpoint,
-        remote_volume: RemoteVolume,
+        docker_ssh_endpoint: SshEndpoint,
+        docker_remote_volume: RemoteVolume,
     ) -> None:
         # No sentinel created
         config = Config(
-            ssh_endpoints={"test-server": ssh_endpoint},
-            volumes={"test-remote": remote_volume},
+            ssh_endpoints={"test-server": docker_ssh_endpoint},
+            volumes={"test-remote": docker_remote_volume},
         )
         resolved = resolve_all_endpoints(config)
-        status = check_volume(remote_volume, resolved)
+        status = check_volume(docker_remote_volume, resolved)
         assert status.active is False
 
 
@@ -92,8 +90,8 @@ class TestSyncCheck:
     def test_sync_status_active(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
-        remote_volume: RemoteVolume,
+        docker_ssh_endpoint: SshEndpoint,
+        docker_remote_volume: RemoteVolume,
     ) -> None:
         src_path = tmp_path / "src"
         src_vol = LocalVolume(slug="src", path=str(src_path))
@@ -103,19 +101,19 @@ class TestSyncCheck:
             destination=DestinationSyncEndpoint(volume="dst"),
         )
         config = Config(
-            ssh_endpoints={"test-server": ssh_endpoint},
-            volumes={"src": src_vol, "dst": remote_volume},
+            ssh_endpoints={"test-server": docker_ssh_endpoint},
+            volumes={"src": src_vol, "dst": docker_remote_volume},
             syncs={"test-sync": sync},
         )
 
         def _run_remote(cmd: str) -> None:
-            ssh_exec(ssh_endpoint, cmd)
+            ssh_exec(docker_ssh_endpoint, cmd)
 
         create_seed_sentinels(config, remote_exec=_run_remote)
 
         resolved = resolve_all_endpoints(config)
         src_status = check_volume(src_vol, resolved)
-        dst_status = check_volume(remote_volume, resolved)
+        dst_status = check_volume(docker_remote_volume, resolved)
         volume_statuses = {
             "src": src_status,
             "dst": dst_status,
@@ -134,11 +132,11 @@ class TestSyncCheck:
 class TestBtrfsFilesystemCheck:
     def test_btrfs_path_detected(
         self,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         config = Config(
-            ssh_endpoints={"test-server": ssh_endpoint},
+            ssh_endpoints={"test-server": docker_ssh_endpoint},
             volumes={"btrfs": remote_btrfs_volume},
         )
         resolved = resolve_all_endpoints(config)
@@ -146,29 +144,29 @@ class TestBtrfsFilesystemCheck:
 
     def test_non_btrfs_path_detected(
         self,
-        ssh_endpoint: SshEndpoint,
-        remote_volume: RemoteVolume,
+        docker_ssh_endpoint: SshEndpoint,
+        docker_remote_volume: RemoteVolume,
     ) -> None:
         config = Config(
-            ssh_endpoints={"test-server": ssh_endpoint},
-            volumes={"data": remote_volume},
+            ssh_endpoints={"test-server": docker_ssh_endpoint},
+            volumes={"data": docker_remote_volume},
         )
         resolved = resolve_all_endpoints(config)
-        assert _check_btrfs_filesystem(remote_volume, resolved) is False
+        assert _check_btrfs_filesystem(docker_remote_volume, resolved) is False
 
 
 class TestBtrfsSubvolumeCheck:
     def test_subvolume_detected(
         self,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"btrfs subvolume create {REMOTE_BTRFS_PATH}/test-subvol",
         )
         config = Config(
-            ssh_endpoints={"test-server": ssh_endpoint},
+            ssh_endpoints={"test-server": docker_ssh_endpoint},
             volumes={"btrfs": remote_btrfs_volume},
         )
         resolved = resolve_all_endpoints(config)
@@ -183,21 +181,21 @@ class TestBtrfsSubvolumeCheck:
 
         # Cleanup
         ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"btrfs subvolume delete {REMOTE_BTRFS_PATH}/test-subvol",
         )
 
     def test_regular_dir_not_subvolume(
         self,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"mkdir -p {REMOTE_BTRFS_PATH}/regular-dir",
         )
         config = Config(
-            ssh_endpoints={"test-server": ssh_endpoint},
+            ssh_endpoints={"test-server": docker_ssh_endpoint},
             volumes={"btrfs": remote_btrfs_volume},
         )
         resolved = resolve_all_endpoints(config)
@@ -212,7 +210,7 @@ class TestBtrfsSubvolumeCheck:
 
         # Cleanup
         ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"rm -rf {REMOTE_BTRFS_PATH}/regular-dir",
         )
 
@@ -221,21 +219,21 @@ class TestSyncCheckBtrfs:
     def test_sync_inactive_when_not_subvolume(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
         # Create a regular directory (not a subvolume)
         ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"mkdir -p {REMOTE_BTRFS_PATH}/not-a-subvol",
         )
         create_sentinels(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             REMOTE_BTRFS_PATH,
             [".nbkp-vol"],
         )
         create_sentinels(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"{REMOTE_BTRFS_PATH}/not-a-subvol",
             [".nbkp-dst"],
         )
@@ -256,7 +254,7 @@ class TestSyncCheckBtrfs:
             ),
         )
         config = Config(
-            ssh_endpoints={"test-server": ssh_endpoint},
+            ssh_endpoints={"test-server": docker_ssh_endpoint},
             volumes={
                 "src": src_vol,
                 "dst": remote_btrfs_volume,
@@ -283,6 +281,6 @@ class TestSyncCheckBtrfs:
 
         # Cleanup
         ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"rm -rf {REMOTE_BTRFS_PATH}/not-a-subvol",
         )

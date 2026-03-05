@@ -14,12 +14,32 @@ description = "Install dependencies"
 run = "poetry install"
 
 [tasks.test]
-description = "Run unit tests (no Docker)"
-run = "poetry run pytest tests/ --ignore=tests/integration/ -v"
+description = "Run unit tests (no Docker, no external dependencies)"
+run = "poetry run pytest tests/ --ignore=tests/e2e_sync/ --ignore=tests/e2e_sync_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -v"
+
+[tasks.test-e2e]
+description = "Run end-to-end sync tests (Docker + local)"
+run = "poetry run pytest tests/e2e_sync/ tests/e2e_sync_docker/ -v"
 
 [tasks.test-integration]
-description = "Run integration tests (requires Docker)"
-run = "poetry run pytest tests/integration/ -v"
+description = "Run all integration tests (Docker + filesystem)"
+run = "poetry run pytest tests/integration_docker/ tests/integration_fs/ -v"
+
+[tasks.test-integration-docker]
+description = "Run all Docker-based tests (e2e + integration)"
+run = "poetry run pytest tests/e2e_sync_docker/ tests/integration_docker/ -v"
+
+[tasks.test-integration-fs]
+description = "Run filesystem integration tests"
+run = "poetry run pytest tests/integration_fs/ -v"
+
+[tasks.test-btrfs-local]
+description = "Run local btrfs tests inside Docker (privileged)"
+run = """
+docker build -t nbkp-btrfs-test -f nbkp/testkit/dockerbuild/Dockerfile.btrfs-local-test .
+docker run --rm --privileged -v $(pwd):/app -w /app nbkp-btrfs-test \
+  poetry run pytest tests/integration_docker/test_btrfs_local.py -v
+"""
 
 [tasks.test-all]
 description = "Run all tests"

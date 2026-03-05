@@ -1,0 +1,18 @@
+FROM python:3.14-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    btrfs-progs \
+    git \
+    rsync \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --quiet poetry poetry-dynamic-versioning
+
+# Create btrfs loopback filesystem at container startup
+COPY nbkp/testkit/dockerbuild/btrfs-local-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+WORKDIR /app
+
+ENTRYPOINT ["/entrypoint.sh"]

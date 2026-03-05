@@ -52,7 +52,10 @@ target-version = ["py314"]
 
 [tool.pytest.ini_options]
 markers = [
-  "integration: Integration tests requiring Docker",
+  "e2e_sync: End-to-end sync tests (no Docker)",
+  "e2e_sync_docker: End-to-end sync tests requiring Docker",
+  "integration_docker: Component integration tests requiring Docker",
+  "integration_fs: Component integration tests using local filesystem",
 ]
 
 [tool.mypy]

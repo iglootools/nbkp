@@ -5,8 +5,6 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-import pytest
-
 from nbkp.config import (
     Config,
     DestinationSyncEndpoint,
@@ -31,15 +29,13 @@ from nbkp.sync.rsync import run_rsync
 from nbkp.testkit.docker import REMOTE_BACKUP_PATH
 from nbkp.testkit.gen.fs import create_seed_sentinels
 
-from .conftest import assert_sentinels_after_sync, ssh_exec
-
-pytestmark = pytest.mark.integration
+from tests._docker_fixtures import assert_sentinels_after_sync, ssh_exec
 
 
 def _make_hl_config(
     src_path: str,
     remote_hl_volume: RemoteVolume,
-    ssh_endpoint: SshEndpoint,
+    docker_ssh_endpoint: SshEndpoint,
     max_snapshots: int | None = 5,
 ) -> tuple[SyncConfig, Config, ResolvedEndpoints]:
     """Build hard-link config and create seed sentinels."""
@@ -55,7 +51,7 @@ def _make_hl_config(
         ),
     )
     config = Config(
-        ssh_endpoints={"test-server": ssh_endpoint},
+        ssh_endpoints={"test-server": docker_ssh_endpoint},
         volumes={
             "src": src_vol,
             "dst": remote_hl_volume,
@@ -64,7 +60,7 @@ def _make_hl_config(
     )
 
     def _run_remote(cmd: str) -> None:
-        ssh_exec(ssh_endpoint, cmd)
+        ssh_exec(docker_ssh_endpoint, cmd)
 
     create_seed_sentinels(config, remote_exec=_run_remote)
 
@@ -74,14 +70,14 @@ def _make_hl_config(
 
 def _do_sync(
     src: Path,
-    ssh_endpoint: SshEndpoint,
+    docker_ssh_endpoint: SshEndpoint,
     remote_hl_volume: RemoteVolume,
     max_snapshots: int | None = 5,
 ) -> tuple[SyncConfig, Config, ResolvedEndpoints, str]:
     """rsync + create snapshot dir + update symlink. Returns config
     tuple and the snapshot name."""
     sync, config, resolved = _make_hl_config(
-        str(src), remote_hl_volume, ssh_endpoint, max_snapshots
+        str(src), remote_hl_volume, docker_ssh_endpoint, max_snapshots
     )
     snapshot_path = create_snapshot_dir(
         sync, config, resolved_endpoints=resolved
@@ -103,7 +99,7 @@ def _do_sync(
     assert_sentinels_after_sync(
         sync,
         config,
-        ssh_endpoint,
+        docker_ssh_endpoint,
         dest_suffix=f"snapshots/{snapshot_name}",
     )
 
@@ -114,7 +110,7 @@ class TestHardLinkSnapshots:
     def test_snapshot_dir_created(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
         src = tmp_path / "src"
@@ -122,20 +118,20 @@ class TestHardLinkSnapshots:
         (src / "data.txt").write_text("snapshot me")
 
         sync, config, resolved = _make_hl_config(
-            str(src), remote_hardlink_volume, ssh_endpoint
+            str(src), remote_hardlink_volume, docker_ssh_endpoint
         )
         snapshot_path = create_snapshot_dir(
             sync, config, resolved_endpoints=resolved
         )
 
         # Verify directory exists on remote
-        check = ssh_exec(ssh_endpoint, f"test -d {snapshot_path}")
+        check = ssh_exec(docker_ssh_endpoint, f"test -d {snapshot_path}")
         assert check.returncode == 0
 
     def test_rsync_into_snapshot(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
         src = tmp_path / "src"
@@ -143,7 +139,7 @@ class TestHardLinkSnapshots:
         (src / "hello.txt").write_text("hello hard-link")
 
         sync, config, resolved = _make_hl_config(
-            str(src), remote_hardlink_volume, ssh_endpoint
+            str(src), remote_hardlink_volume, docker_ssh_endpoint
         )
         snapshot_path = create_snapshot_dir(
             sync, config, resolved_endpoints=resolved
@@ -160,7 +156,7 @@ class TestHardLinkSnapshots:
 
         # Verify file arrived in the snapshot dir
         check = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"cat {snapshot_path}/hello.txt",
         )
         assert check.returncode == 0
@@ -169,14 +165,14 @@ class TestHardLinkSnapshots:
         assert_sentinels_after_sync(
             sync,
             config,
-            ssh_endpoint,
+            docker_ssh_endpoint,
             dest_suffix=f"snapshots/{snapshot_name}",
         )
 
     def test_latest_symlink_updated(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
         src = tmp_path / "src"
@@ -184,7 +180,7 @@ class TestHardLinkSnapshots:
         (src / "data.txt").write_text("symlink test")
 
         sync, config, resolved, snap_name = _do_sync(
-            src, ssh_endpoint, remote_hardlink_volume
+            src, docker_ssh_endpoint, remote_hardlink_volume
         )
 
         # Verify symlink exists and points to correct snapshot
@@ -195,7 +191,7 @@ class TestHardLinkSnapshots:
 
         # Verify the file is accessible via the symlink
         check = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"cat {REMOTE_BACKUP_PATH}/latest/data.txt",
         )
         assert check.returncode == 0
@@ -204,7 +200,7 @@ class TestHardLinkSnapshots:
     def test_second_sync_uses_link_dest(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
         src = tmp_path / "src"
@@ -213,7 +209,7 @@ class TestHardLinkSnapshots:
 
         # First sync
         sync, config, resolved, snap1 = _do_sync(
-            src, ssh_endpoint, remote_hardlink_volume
+            src, docker_ssh_endpoint, remote_hardlink_volume
         )
 
         time.sleep(0.1)  # distinct timestamp
@@ -237,7 +233,7 @@ class TestHardLinkSnapshots:
 
         # Verify second snapshot has the file
         check = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"cat {REMOTE_BACKUP_PATH}/snapshots/{snap2}/file.txt",
         )
         assert check.returncode == 0
@@ -252,7 +248,7 @@ class TestHardLinkSnapshots:
     def test_incremental_hard_links(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
         """Unchanged files should be hard-linked between snapshots."""
@@ -263,7 +259,7 @@ class TestHardLinkSnapshots:
 
         # First sync
         sync, config, resolved, snap1 = _do_sync(
-            src, ssh_endpoint, remote_hardlink_volume
+            src, docker_ssh_endpoint, remote_hardlink_volume
         )
 
         time.sleep(0.1)
@@ -287,12 +283,12 @@ class TestHardLinkSnapshots:
 
         # Verify the unchanged file shares inode (hard-linked)
         inode1 = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"stat -c %i"
             f" {REMOTE_BACKUP_PATH}/snapshots/{snap1}/unchanged.txt",
         )
         inode2 = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"stat -c %i"
             f" {REMOTE_BACKUP_PATH}/snapshots/{snap2}/unchanged.txt",
         )
@@ -300,7 +296,7 @@ class TestHardLinkSnapshots:
 
         # Verify the changed file has different content
         check = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"cat {REMOTE_BACKUP_PATH}/snapshots/{snap2}/changed.txt",
         )
         assert check.stdout.strip() == "v2 is different"
@@ -308,7 +304,7 @@ class TestHardLinkSnapshots:
     def test_dry_run_no_symlink_update(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
         src = tmp_path / "src"
@@ -316,7 +312,7 @@ class TestHardLinkSnapshots:
         (src / "data.txt").write_text("dry run")
 
         sync, config, resolved = _make_hl_config(
-            str(src), remote_hardlink_volume, ssh_endpoint
+            str(src), remote_hardlink_volume, docker_ssh_endpoint
         )
         snapshot_path = create_snapshot_dir(
             sync, config, resolved_endpoints=resolved
@@ -342,7 +338,7 @@ class TestHardLinkOrphanCleanup:
     def test_orphan_cleaned_up(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
         src = tmp_path / "src"
@@ -351,7 +347,7 @@ class TestHardLinkOrphanCleanup:
 
         # First sync (complete)
         sync, config, resolved, snap1 = _do_sync(
-            src, ssh_endpoint, remote_hardlink_volume
+            src, docker_ssh_endpoint, remote_hardlink_volume
         )
 
         time.sleep(0.1)
@@ -359,7 +355,7 @@ class TestHardLinkOrphanCleanup:
         # Simulate a failed sync: create a snapshot dir newer than
         # latest but don't update the symlink
         ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             (
                 "mkdir -p"
                 f" {REMOTE_BACKUP_PATH}/snapshots/9999-99-99T00:00:00.000Z"
@@ -368,7 +364,7 @@ class TestHardLinkOrphanCleanup:
 
         # Verify orphan exists
         check = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             (
                 "test -d"
                 f" {REMOTE_BACKUP_PATH}/snapshots/9999-99-99T00:00:00.000Z"
@@ -385,7 +381,7 @@ class TestHardLinkOrphanCleanup:
 
         # Verify orphan is gone
         check = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             (
                 "test -d"
                 f" {REMOTE_BACKUP_PATH}/snapshots/9999-99-99T00:00:00.000Z"
@@ -396,7 +392,7 @@ class TestHardLinkOrphanCleanup:
 
         # Verify the real snapshot is still there
         check = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"test -d {REMOTE_BACKUP_PATH}/snapshots/{snap1}",
         )
         assert check.returncode == 0
@@ -404,14 +400,14 @@ class TestHardLinkOrphanCleanup:
     def test_no_cleanup_without_latest(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
         src = tmp_path / "src"
         src.mkdir()
 
         sync, config, resolved = _make_hl_config(
-            str(src), remote_hardlink_volume, ssh_endpoint
+            str(src), remote_hardlink_volume, docker_ssh_endpoint
         )
 
         # No latest symlink -> no cleanup possible
@@ -425,7 +421,7 @@ class TestHardLinkPrune:
     def _create_snapshots(
         self,
         src: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_hl_volume: RemoteVolume,
         count: int,
         max_snapshots: int | None = None,
@@ -439,7 +435,7 @@ class TestHardLinkPrune:
         for _ in range(count):
             sync, config, resolved, snap_name = _do_sync(
                 src,
-                ssh_endpoint,
+                docker_ssh_endpoint,
                 remote_hl_volume,
                 max_snapshots=max_snapshots,
             )
@@ -454,7 +450,7 @@ class TestHardLinkPrune:
     def test_prune_deletes_oldest(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
         src = tmp_path / "src"
@@ -462,7 +458,7 @@ class TestHardLinkPrune:
         (src / "data.txt").write_text("prune test")
 
         sync, config, resolved, names = self._create_snapshots(
-            src, ssh_endpoint, remote_hardlink_volume, 3
+            src, docker_ssh_endpoint, remote_hardlink_volume, 3
         )
 
         # Prune to keep only 1
@@ -477,7 +473,7 @@ class TestHardLinkPrune:
     def test_prune_never_deletes_latest(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
         src = tmp_path / "src"
@@ -485,7 +481,7 @@ class TestHardLinkPrune:
         (src / "data.txt").write_text("never delete latest")
 
         sync, config, resolved, names = self._create_snapshots(
-            src, ssh_endpoint, remote_hardlink_volume, 2
+            src, docker_ssh_endpoint, remote_hardlink_volume, 2
         )
 
         # latest points to names[-1]; prune to 0 should still
@@ -503,7 +499,7 @@ class TestHardLinkPrune:
     def test_prune_dry_run_keeps_all(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
         src = tmp_path / "src"
@@ -511,7 +507,7 @@ class TestHardLinkPrune:
         (src / "data.txt").write_text("dry run prune")
 
         sync, config, resolved, names = self._create_snapshots(
-            src, ssh_endpoint, remote_hardlink_volume, 3
+            src, docker_ssh_endpoint, remote_hardlink_volume, 3
         )
 
         # Dry-run prune to 1
@@ -527,7 +523,7 @@ class TestHardLinkPrune:
     def test_prune_noop_under_limit(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         remote_hardlink_volume: RemoteVolume,
     ) -> None:
         src = tmp_path / "src"
@@ -535,7 +531,7 @@ class TestHardLinkPrune:
         (src / "data.txt").write_text("noop prune")
 
         sync, config, resolved, _ = self._create_snapshots(
-            src, ssh_endpoint, remote_hardlink_volume, 2
+            src, docker_ssh_endpoint, remote_hardlink_volume, 2
         )
 
         # Prune with limit higher than count

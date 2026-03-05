@@ -1,4 +1,4 @@
-"""Integration test fixtures -- Docker SSH server with rsync + btrfs."""
+"""Shared Docker test fixtures for e2e and integration tests."""
 
 from __future__ import annotations
 
@@ -265,7 +265,7 @@ def proxied_ssh_endpoint(
 
 
 @pytest.fixture(scope="session")
-def ssh_endpoint(
+def docker_ssh_endpoint(
     docker_container: SshEndpoint,
 ) -> SshEndpoint:
     """SshEndpoint pointing at the Docker container."""
@@ -273,7 +273,7 @@ def ssh_endpoint(
 
 
 @pytest.fixture(scope="session")
-def remote_volume() -> RemoteVolume:
+def docker_remote_volume() -> RemoteVolume:
     """RemoteVolume pointing at /srv/backups on the container."""
     return RemoteVolume(
         slug="test-remote",
@@ -312,11 +312,13 @@ def _cleanup_remote(
     """Clean up /srv/backups and /srv/btrfs-backups between tests."""
     yield
 
-    # Only clean up if ssh_endpoint was used by this test
-    if "ssh_endpoint" not in request.fixturenames:
+    # Only clean up if docker_ssh_endpoint was used by this test
+    if "docker_ssh_endpoint" not in request.fixturenames:
         return
 
-    server: SshEndpoint = request.getfixturevalue("ssh_endpoint")
+    server: SshEndpoint = request.getfixturevalue(
+        "docker_ssh_endpoint"
+    )
 
     def run(cmd: str) -> None:
         ssh_exec(server, cmd, check=False)

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from nbkp.config import (
     Config,
     DestinationSyncEndpoint,
@@ -20,17 +18,15 @@ from nbkp.sync.rsync import run_rsync
 from nbkp.testkit.docker import REMOTE_BACKUP_PATH
 from nbkp.testkit.gen.fs import create_seed_sentinels
 
-from .conftest import assert_sentinels_after_sync, ssh_exec
-
-pytestmark = pytest.mark.integration
+from tests._docker_fixtures import assert_sentinels_after_sync, ssh_exec
 
 
 class TestLocalToRemote:
     def test_sync_to_container(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
-        remote_volume: RemoteVolume,
+        docker_ssh_endpoint: SshEndpoint,
+        docker_remote_volume: RemoteVolume,
     ) -> None:
         # Create local source files
         src_dir = tmp_path / "src"
@@ -44,13 +40,13 @@ class TestLocalToRemote:
             destination=DestinationSyncEndpoint(volume="dst"),
         )
         config = Config(
-            ssh_endpoints={"test-server": ssh_endpoint},
-            volumes={"src": src_vol, "dst": remote_volume},
+            ssh_endpoints={"test-server": docker_ssh_endpoint},
+            volumes={"src": src_vol, "dst": docker_remote_volume},
             syncs={"test-sync": sync},
         )
 
         def _run_remote(cmd: str) -> None:
-            ssh_exec(ssh_endpoint, cmd)
+            ssh_exec(docker_ssh_endpoint, cmd)
 
         create_seed_sentinels(config, remote_exec=_run_remote)
 
@@ -64,19 +60,19 @@ class TestLocalToRemote:
 
         # Verify file arrived on container
         check = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"cat {REMOTE_BACKUP_PATH}/hello.txt",
         )
         assert check.returncode == 0
         assert check.stdout.strip() == "hello from local"
 
-        assert_sentinels_after_sync(sync, config, ssh_endpoint)
+        assert_sentinels_after_sync(sync, config, docker_ssh_endpoint)
 
     def test_sync_with_subdir(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
-        remote_volume: RemoteVolume,
+        docker_ssh_endpoint: SshEndpoint,
+        docker_remote_volume: RemoteVolume,
     ) -> None:
         # Create local source with subdir
         src_dir = tmp_path / "src" / "photos"
@@ -92,13 +88,13 @@ class TestLocalToRemote:
             ),
         )
         config = Config(
-            ssh_endpoints={"test-server": ssh_endpoint},
-            volumes={"src": src_vol, "dst": remote_volume},
+            ssh_endpoints={"test-server": docker_ssh_endpoint},
+            volumes={"src": src_vol, "dst": docker_remote_volume},
             syncs={"test-sync": sync},
         )
 
         def _run_remote(cmd: str) -> None:
-            ssh_exec(ssh_endpoint, cmd)
+            ssh_exec(docker_ssh_endpoint, cmd)
 
         create_seed_sentinels(config, remote_exec=_run_remote)
 
@@ -111,10 +107,10 @@ class TestLocalToRemote:
         assert result.returncode == 0
 
         check = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"cat {REMOTE_BACKUP_PATH}/photos-backup/img.jpg",
         )
         assert check.returncode == 0
         assert check.stdout.strip() == "image-data"
 
-        assert_sentinels_after_sync(sync, config, ssh_endpoint)
+        assert_sentinels_after_sync(sync, config, docker_ssh_endpoint)

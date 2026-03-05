@@ -14,8 +14,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from nbkp.check import check_all_syncs
 from nbkp.config import (
     BtrfsSnapshotConfig,
@@ -35,9 +33,7 @@ from nbkp.testkit.docker import (
 )
 from nbkp.testkit.gen.fs import create_seed_sentinels, seed_volume
 
-from .conftest import assert_sentinels_after_sync, ssh_exec
-
-pytestmark = pytest.mark.integration
+from tests._docker_fixtures import assert_sentinels_after_sync, ssh_exec
 
 BTRFS_SNAPSHOTS_PATH = f"{REMOTE_BTRFS_PATH}/snapshots"
 BTRFS_BARE_PATH = f"{REMOTE_BTRFS_PATH}/bare"
@@ -201,7 +197,7 @@ class TestChainSync:
     def test_data_propagates_through_chain(
         self,
         tmp_path: Path,
-        ssh_endpoint: SshEndpoint,
+        docker_ssh_endpoint: SshEndpoint,
         bastion_container: SshEndpoint,
         proxied_ssh_endpoint: SshEndpoint,
     ) -> None:
@@ -214,13 +210,13 @@ class TestChainSync:
 
         # 2. Create btrfs subvolume for the btrfs-snapshots volume
         ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"btrfs subvolume create {BTRFS_SNAPSHOTS_PATH}",
         )
 
         # 3. Create sentinels
         def _run_remote(cmd: str) -> None:
-            ssh_exec(ssh_endpoint, cmd)
+            ssh_exec(docker_ssh_endpoint, cmd)
 
         create_seed_sentinels(config, remote_exec=_run_remote)
 
@@ -263,23 +259,23 @@ class TestChainSync:
 
         #    Btrfs dest (step-3): snapshot + latest symlink on remote-btrfs
         snap_check = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"ls {BTRFS_SNAPSHOTS_PATH}/snapshots/",
         )
         assert snap_check.stdout.strip()
         btrfs_link = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"readlink {BTRFS_SNAPSHOTS_PATH}/latest",
         )
         assert "snapshots/" in btrfs_link.stdout
 
         #    HL dest (step-5): latest symlink on remote-hl
         hl_check = ssh_exec(
-            ssh_endpoint,
+            docker_ssh_endpoint,
             f"readlink {REMOTE_BACKUP_PATH}/hl/latest",
         )
         assert "snapshots/" in hl_check.stdout
 
         # 10. Verify sentinel handling on final destination
         step6 = config.syncs["step-6"]
-        assert_sentinels_after_sync(step6, config, ssh_endpoint)
+        assert_sentinels_after_sync(step6, config, docker_ssh_endpoint)

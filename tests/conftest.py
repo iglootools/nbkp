@@ -17,6 +17,8 @@ from nbkp.config import (
     SyncEndpoint,
 )
 
+pytest_plugins = ["tests._docker_fixtures"]
+
 
 def config_to_yaml(config: Config) -> str:
     """Convert a Config to a YAML string."""

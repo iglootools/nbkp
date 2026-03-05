@@ -51,8 +51,22 @@
   - Provide a dry-run parameter for all data-mutating or long-running operations
 - **Testing**
   - No real rsync/ssh/btrfs calls in unit tests - use mocks instead. Docker-enabled integration tests cover the real interactions.
-  - Generate YAML test data using the Pydantic data models and `model.model_dump()` instead of hardcoding YAML strings. 
+  - Generate YAML test data using the Pydantic data models and `model.model_dump()` instead of hardcoding YAML strings.
     This ensures the test data is always valid and consistent with the models.
+
+## Testing Categories
+
+Tests are organized into 5 categories based on what they test and what infrastructure they require:
+
+1. **Unit tests** (`tests/`, `tests/sync/`, `tests/remote/`) — Mock all external calls (rsync, SSH, btrfs). Test logic and command building. No external dependencies.
+
+2. **E2E sync** (`tests/e2e_sync/`) — Full sync pipeline on local filesystem, no Docker. Tests local-to-local syncs end-to-end with real rsync.
+
+3. **E2E sync (Docker)** (`tests/e2e_sync_docker/`) — Full sync pipeline with remote endpoints via Docker containers. Includes end-to-end btrfs and hard-link snapshot workflows, proxy jump, chained syncs, and remote-to-remote syncs.
+
+4. **Integration (Docker)** (`tests/integration_docker/`) — Component-level tests against real infrastructure in Docker. Tests individual module functions (volume/sync checks, btrfs operations) via SSH. Includes local btrfs tests that run inside a privileged Docker container (`mise run test-btrfs-local`).
+
+5. **Integration (filesystem)** (`tests/integration_fs/`) — Component-level tests using real local filesystem operations (hard-link snapshots, symlinks, inode verification). Runs on any OS that supports hard links.
 - **Domain Logic Consistency**
   - When making changes to the config schema/models or status checks, make sure to update:
     - The demo CLI (`nbkp/democli.py`) to generate new test data that reflects the changes, and update the expected outputs in `testdata.py` if necessary.
