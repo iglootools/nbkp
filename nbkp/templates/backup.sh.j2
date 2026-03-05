@@ -100,6 +100,9 @@ ${{ sync.rsync | indent(4, first=true) }}
 
     # Btrfs snapshot (skip if dry-run)
 ${{ sync.snapshot | indent(4, first=true) }}
+
+    # Update latest symlink (skip if dry-run)
+${{ sync.symlink | indent(4, first=true) }}
 <% if sync.has_prune %>
 
     # Prune old snapshots (max: ${{ sync.max_snapshots }})

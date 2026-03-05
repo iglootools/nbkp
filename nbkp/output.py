@@ -529,8 +529,10 @@ def _print_sync_reason_fix(
             )
             if sync.source.btrfs_snapshots.enabled:
                 cmds = [
-                    "sudo btrfs subvolume create" f" {path}/latest",
-                    "sudo chown <user>:<group>" f" {path}/latest",
+                    "sudo btrfs subvolume create" f" {path}/tmp",
+                    "sudo chown <user>:<group>" f" {path}/tmp",
+                    f"mkdir -p {path}/snapshots",
+                    f"ln -sfn snapshots/initial" f" {path}/latest",
                 ]
             else:
                 cmds = [
@@ -614,9 +616,9 @@ def _print_sync_reason_fix(
             dst = config.volumes[sync.destination.volume]
             path = _endpoint_path(dst, sync.destination.subdir)
             cmds = [
-                f"sudo btrfs subvolume create {path}/latest",
+                f"sudo btrfs subvolume create {path}/tmp",
                 f"sudo mkdir {path}/snapshots",
-                "sudo chown <user>:<group>" f" {path}/latest {path}/snapshots",
+                "sudo chown <user>:<group>" f" {path}/tmp {path}/snapshots",
             ]
             for cmd in cmds:
                 _print_cmd(
@@ -643,12 +645,12 @@ def _print_sync_reason_fix(
                 " the mount options in /etc/fstab"
                 f" for {dst.path}."
             )
-        case SyncReason.DESTINATION_LATEST_NOT_FOUND:
+        case SyncReason.DESTINATION_TMP_NOT_FOUND:
             dst = config.volumes[sync.destination.volume]
             path = _endpoint_path(dst, sync.destination.subdir)
             cmds = [
-                f"sudo btrfs subvolume create {path}/latest",
-                "sudo chown <user>:<group>" f" {path}/latest",
+                f"sudo btrfs subvolume create {path}/tmp",
+                "sudo chown <user>:<group>" f" {path}/tmp",
             ]
             for cmd in cmds:
                 _print_cmd(

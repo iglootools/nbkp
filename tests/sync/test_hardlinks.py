@@ -152,7 +152,7 @@ class TestReadLatestSymlink:
         result = read_latest_symlink(sync, config)
         assert result is None
 
-    @patch("nbkp.sync.hardlinks.run_remote_command")
+    @patch("nbkp.sync.symlink.run_remote_command")
     def test_remote_exists(self, mock_remote: MagicMock) -> None:
         mock_remote.return_value = MagicMock(
             returncode=0,
@@ -163,7 +163,7 @@ class TestReadLatestSymlink:
         result = read_latest_symlink(sync, config, resolved_endpoints=re)
         assert result == "2026-02-21T12:00:00.000Z"
 
-    @patch("nbkp.sync.hardlinks.run_remote_command")
+    @patch("nbkp.sync.symlink.run_remote_command")
     def test_remote_missing(self, mock_remote: MagicMock) -> None:
         mock_remote.return_value = MagicMock(returncode=1, stdout="")
         sync, config, re = _remote_config()
@@ -194,7 +194,7 @@ class TestUpdateLatestSymlink:
         assert link.is_symlink()
         assert str(link.readlink()) == f"snapshots/{_TS}"
 
-    @patch("nbkp.sync.hardlinks.run_remote_command")
+    @patch("nbkp.sync.symlink.run_remote_command")
     def test_remote(self, mock_remote: MagicMock) -> None:
         mock_remote.return_value = MagicMock(returncode=0, stderr="")
         sync, config, re = _remote_config()

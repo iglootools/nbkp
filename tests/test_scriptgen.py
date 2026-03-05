@@ -367,7 +367,7 @@ class TestBtrfs:
         assert "btrfs" in script
         assert "subvolume" in script
         assert "snapshot" in script
-        assert "/mnt/dst/latest" in script
+        assert "/mnt/dst/tmp" in script
         assert "NBKP_TS=$(date -u" in script
 
     def test_snapshot_guarded_by_dry_run(self) -> None:
@@ -383,17 +383,26 @@ class TestBtrfs:
         assert "NBKP_EXCESS" in script
         assert "btrfs property set" in script
         assert "btrfs subvolume delete" in script
+        # Latest-protection: prune block must read the latest symlink target
+        assert "readlink" in script
+        assert "NBKP_LATEST" in script
 
     def test_no_prune_without_max(self) -> None:
         config = _btrfs_no_prune_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert "Prune old snapshots" not in script
 
-    def test_latest_and_snapshots_dir_checks(self) -> None:
+    def test_tmp_and_snapshots_dir_checks(self) -> None:
         config = _btrfs_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert "latest/ directory not found" in script
+        assert "tmp/ directory not found" in script
         assert "snapshots/ directory not found" in script
+
+    def test_symlink_update_after_snapshot(self) -> None:
+        config = _btrfs_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "ln -sfn" in script
+        assert "snapshots/$NBKP_TS" in script
 
 
 class TestPreflightChecks:

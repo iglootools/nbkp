@@ -23,8 +23,7 @@ Individual syncs can be enabled or disabled when calling the backup tool.
 A sync can optionally enable btrfs snapshots, which will be used to perform incremental backups.
 This is only supported for local sources and destinations that are on btrfs volumes.
 
-The latest backup will be stored under ${destination}/latest and snapshots (if enabled and supported) will be stored under ${destination}/snapshots/${iso8601_timestamp}.
-When enabled, a new btrfs snapshot is created each time the backup completes.
+Rsync writes to a staging area at `${destination}/tmp/` (a writable btrfs subvolume). After each successful sync, a read-only btrfs snapshot is created at `${destination}/snapshots/${iso8601_timestamp}`, and a `${destination}/latest` symlink is updated to point to the new snapshot.
 
 The `max-snapshots` field controls the maximum number of snapshots to keep. When set, old snapshots are automatically pruned after each `run`. The `prune` command can also be used to manually prune snapshots.
 
@@ -40,7 +39,7 @@ destination:
 
 A sync can optionally enable hard-link-based snapshots as an alternative to btrfs snapshots. This works on any filesystem that supports hard links (ext4, xfs, btrfs, etc.) but not on FAT/exFAT.
 
-Unlike btrfs snapshots (which sync to `${destination}/latest/` then snapshot it), hard-link snapshots sync **directly into a new snapshot directory**:
+Unlike btrfs snapshots (which sync to `${destination}/tmp/` then snapshot it), hard-link snapshots sync **directly into a new snapshot directory**:
 
 1. Create `${destination}/snapshots/${timestamp}/`
 2. rsync into that directory with `--link-dest=../${previous-snapshot}` (unchanged files are hard-linked, saving disk space)

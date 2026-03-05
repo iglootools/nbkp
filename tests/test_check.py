@@ -985,7 +985,7 @@ class TestCheckSync:
         src.mkdir()
         dst.mkdir()
         self._setup_active_sentinels(src, dst)
-        (dst / "backup" / "latest").mkdir()
+        (dst / "backup" / "tmp").mkdir()
         (dst / "backup" / "snapshots").mkdir()
 
         src_vol = LocalVolume(slug="src", path=str(src))
@@ -1172,7 +1172,7 @@ class TestCheckSync:
         src.mkdir()
         dst.mkdir()
         self._setup_active_sentinels(src, dst)
-        (dst / "backup" / "latest").mkdir()
+        (dst / "backup" / "tmp").mkdir()
         (dst / "backup" / "snapshots").mkdir()
 
         src_vol = LocalVolume(slug="src", path=str(src))
@@ -1267,7 +1267,7 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.DESTINATION_LATEST_NOT_FOUND in status.reasons
+        assert SyncReason.DESTINATION_TMP_NOT_FOUND in status.reasons
         assert (
             SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND
             not in status.reasons
@@ -1291,8 +1291,8 @@ class TestCheckSync:
         src.mkdir()
         dst.mkdir()
         self._setup_active_sentinels(src, dst)
-        # latest exists but snapshots does not
-        (dst / "backup" / "latest").mkdir()
+        # tmp exists but snapshots does not
+        (dst / "backup" / "tmp").mkdir()
 
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = LocalVolume(slug="dst", path=str(dst))
@@ -1330,7 +1330,7 @@ class TestCheckSync:
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
         assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
-        assert SyncReason.DESTINATION_LATEST_NOT_FOUND not in status.reasons
+        assert SyncReason.DESTINATION_TMP_NOT_FOUND not in status.reasons
 
     @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.subprocess.run")
@@ -1387,7 +1387,7 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.DESTINATION_LATEST_NOT_FOUND in status.reasons
+        assert SyncReason.DESTINATION_TMP_NOT_FOUND in status.reasons
         assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
 
     @patch("nbkp.check._check_rsync_version", return_value=True)
@@ -2108,7 +2108,7 @@ class TestCheckSyncRemoteCommands:
                 "/backup/backup",
             ]:
                 return MagicMock(returncode=0, stdout="256\n")
-            if cmd == ["test", "-d", "/backup/backup/latest"]:
+            if cmd == ["test", "-d", "/backup/backup/tmp"]:
                 return MagicMock(returncode=0)
             if cmd == ["test", "-d", "/backup/backup/snapshots"]:
                 return MagicMock(returncode=0)
@@ -2221,7 +2221,7 @@ class TestCheckSyncRemoteCommands:
             if cmd == [
                 "test",
                 "-d",
-                "/backup/backup/latest",
+                "/backup/backup/tmp",
             ]:
                 return MagicMock(returncode=1)
             if cmd == [
@@ -2236,7 +2236,7 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert SyncReason.DESTINATION_LATEST_NOT_FOUND in status.reasons
+        assert SyncReason.DESTINATION_TMP_NOT_FOUND in status.reasons
         assert (
             SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND
             not in status.reasons
@@ -2339,7 +2339,7 @@ class TestCheckSyncRemoteCommands:
             if cmd == [
                 "test",
                 "-d",
-                "/backup/backup/latest",
+                "/backup/backup/tmp",
             ]:
                 return MagicMock(returncode=0)
             if cmd == [
@@ -2355,7 +2355,7 @@ class TestCheckSyncRemoteCommands:
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
         assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
-        assert SyncReason.DESTINATION_LATEST_NOT_FOUND not in status.reasons
+        assert SyncReason.DESTINATION_TMP_NOT_FOUND not in status.reasons
 
 
 class TestCheckAllSyncs:
@@ -2636,7 +2636,7 @@ class TestCheckHardLinkDest:
         assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION not in status.reasons
         assert SyncReason.DESTINATION_NOT_BTRFS not in status.reasons
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.reasons
-        assert SyncReason.DESTINATION_LATEST_NOT_FOUND not in status.reasons
+        assert SyncReason.DESTINATION_TMP_NOT_FOUND not in status.reasons
 
     @patch("nbkp.check._check_rsync_version", return_value=True)
     @patch("nbkp.check.run_remote_command")

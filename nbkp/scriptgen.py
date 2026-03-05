@@ -549,12 +549,12 @@ def _build_preflight_block(
                 resolved_endpoints,
             )
         )
-        latest_dir = f"{dst_path}/latest"
+        tmp_dir = f"{dst_path}/tmp"
         lines.append(
             _build_check_line(
                 dst_vol,
-                ["-d", latest_dir],
-                "destination latest/ directory not found" f" ({latest_dir})",
+                ["-d", tmp_dir],
+                "destination tmp/ directory not found" f" ({tmp_dir})",
                 resolved_endpoints,
             )
         )
@@ -680,9 +680,9 @@ def _build_snapshot_block(
         sync.destination.volume,
         sync.destination.subdir,
     )
-    latest = f"{dest_path}/latest"
+    tmp = f"{dest_path}/tmp"
     snaps_dir = f"{dest_path}/snapshots"
-    snap = _snapshot_cmd(dst_vol, latest, snaps_dir, resolved_endpoints)
+    snap = _snapshot_cmd(dst_vol, tmp, snaps_dir, resolved_endpoints)
 
     return dedent(f"""\
         if [ "$NBKP_DRY_RUN" = false ]; then
@@ -698,15 +698,17 @@ def _build_prune_block(
     vol_paths: dict[str, str],
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
-    """Build btrfs prune block at indent 0."""
+    """Build btrfs prune block (skip latest symlink target)."""
     dst_vol = config.volumes[sync.destination.volume]
     dest_path = _vol_path(
         vol_paths,
         sync.destination.volume,
         sync.destination.subdir,
     )
+    latest_path = f"{dest_path}/latest"
     snaps_dir = f"{dest_path}/snapshots"
     ls_cmd = _ls_snapshots_cmd(dst_vol, snaps_dir, resolved_endpoints)
+    rl_cmd = _readlink_cmd(dst_vol, latest_path, resolved_endpoints)
     prop_cmd = _btrfs_prop_cmd(dst_vol, snaps_dir, resolved_endpoints)
     del_cmd = _btrfs_del_cmd(dst_vol, snaps_dir, resolved_endpoints)
 
@@ -722,11 +724,15 @@ def _build_prune_block(
             NBKP_SNAPS=$({ls_cmd} | sort)
             NBKP_COUNT=$(echo "$NBKP_SNAPS" | wc -l | tr -d ' ')
             NBKP_EXCESS=$((NBKP_COUNT - {max_snapshots}))
+            NBKP_LATEST_LINK=$({rl_cmd} 2>/dev/null || true)
+            NBKP_LATEST_NAME="${{NBKP_LATEST_LINK##*/}}"
             if [ "$NBKP_EXCESS" -gt 0 ]; then
                 {pipe_while}
-                    nbkp_log "Pruning snapshot: $snap"
-                    {prop_cmd}
-                    {del_cmd}
+                    if [ "$snap" != "$NBKP_LATEST_NAME" ]; then
+                        nbkp_log "Pruning snapshot: $snap"
+                        {prop_cmd}
+                        {del_cmd}
+                    fi
                 done
             fi
         fi""")
@@ -957,6 +963,10 @@ def _render_enabled_function(ctx: _SyncContext) -> str:
         parts.append("    # Btrfs snapshot (skip if dry-run)")
         for line in ctx.snapshot.split("\n"):
             parts.append(f"    {line}" if line else "")
+        parts.append("")
+        parts.append("    # Update latest symlink (skip if dry-run)")
+        for line in ctx.symlink.split("\n"):
+            parts.append(f"    {line}" if line else "")
         if ctx.has_prune:
             parts.append("")
             parts.append(
@@ -1040,7 +1050,7 @@ def _build_sync_context(
             config,
             vol_paths,
             resolved_endpoints,
-            dest_suffix="latest",
+            dest_suffix="tmp",
         )
     else:
         rsync = _build_rsync_block(
@@ -1088,7 +1098,7 @@ def _build_sync_context(
         _build_hard_link_symlink_block(
             sync, config, vol_paths, resolved_endpoints
         )
-        if has_hard_link
+        if has_hard_link or has_btrfs
         else ""
     )
     hl_prune = (

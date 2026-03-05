@@ -51,7 +51,7 @@ class SyncReason(str, enum.Enum):
     DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM = (
         "destination not mounted with user_subvol_rm_allowed"
     )
-    DESTINATION_LATEST_NOT_FOUND = "destination latest/ directory not found"
+    DESTINATION_TMP_NOT_FOUND = "destination tmp/ directory not found"
     DESTINATION_SNAPSHOTS_DIR_NOT_FOUND = (
         "destination snapshots/ directory not found"
     )
@@ -356,9 +356,9 @@ def _check_btrfs_dest(
             reasons.append(SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM)
         ep = _resolve_endpoint(dst_vol, sync.destination.subdir)
         if not _check_directory_exists(
-            dst_vol, f"{ep}/latest", resolved_endpoints
+            dst_vol, f"{ep}/tmp", resolved_endpoints
         ):
-            reasons.append(SyncReason.DESTINATION_LATEST_NOT_FOUND)
+            reasons.append(SyncReason.DESTINATION_TMP_NOT_FOUND)
         if not _check_directory_exists(
             dst_vol, f"{ep}/snapshots", resolved_endpoints
         ):

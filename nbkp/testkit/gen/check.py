@@ -282,7 +282,7 @@ def troubleshoot_data(
             destination_status=nas_vs,
             reasons=[
                 SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM,
-                SyncReason.DESTINATION_LATEST_NOT_FOUND,
+                SyncReason.DESTINATION_TMP_NOT_FOUND,
                 SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND,
             ],
         ),

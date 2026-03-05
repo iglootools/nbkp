@@ -327,7 +327,7 @@ def _cleanup_remote(
     run(f"find {REMOTE_BACKUP_PATH}" " -name '.nbkp-*' -delete")
 
     # Clean btrfs paths — delete snapshot subvolumes first,
-    # then latest
+    # then tmp subvolume and latest symlink
     snapshots_result = ssh_exec(
         server,
         f"ls {REMOTE_BTRFS_PATH}/snapshots 2>/dev/null || true",
@@ -348,21 +348,18 @@ def _cleanup_remote(
                     " 2>/dev/null || true"
                 )
 
-    # Delete latest subvolume if it exists
-    run(
-        "btrfs property set"
-        f" {REMOTE_BTRFS_PATH}/latest ro false"
-        " 2>/dev/null || true"
-    )
+    # Delete tmp subvolume if it exists
     run(
         "btrfs subvolume delete"
-        f" {REMOTE_BTRFS_PATH}/latest"
+        f" {REMOTE_BTRFS_PATH}/tmp"
         " 2>/dev/null || true"
     )
+    # Remove latest symlink
+    run(f"rm -f {REMOTE_BTRFS_PATH}/latest" " 2>/dev/null || true")
     run(f"rm -rf {REMOTE_BTRFS_PATH}/snapshots" " 2>/dev/null || true")
 
     # Clean chain subpath (btrfs subvolume with its own
-    # latest + snapshots, used by chain test)
+    # tmp + snapshots + latest symlink, used by chain test)
     chain = f"{REMOTE_BTRFS_PATH}/chain"
     chain_snaps = ssh_exec(
         server,
@@ -383,10 +380,8 @@ def _cleanup_remote(
                     f" {chain}/snapshots/{snap}"
                     " 2>/dev/null || true"
                 )
-    run(
-        "btrfs property set" f" {chain}/latest ro false" " 2>/dev/null || true"
-    )
-    run(f"btrfs subvolume delete {chain}/latest" " 2>/dev/null || true")
+    run(f"btrfs subvolume delete {chain}/tmp" " 2>/dev/null || true")
+    run(f"rm -f {chain}/latest" " 2>/dev/null || true")
     run(f"btrfs subvolume delete {chain}" " 2>/dev/null || true")
 
     # Clean bare subpath on btrfs (regular dir, used by chain test)

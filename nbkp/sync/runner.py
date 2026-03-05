@@ -15,8 +15,8 @@ from .hardlinks import (
     cleanup_orphaned_snapshots,
     create_snapshot_dir,
     prune_snapshots as hl_prune_snapshots,
-    update_latest_symlink,
 )
+from .symlink import update_latest_symlink
 from .btrfs import get_latest_snapshot
 from ..config import Config, ResolvedEndpoints
 from ..check import SyncStatus
@@ -233,7 +233,7 @@ def _run_btrfs_sync(
             progress=progress,
             on_output=on_rsync_output,
             resolved_endpoints=resolved_endpoints,
-            dest_suffix="latest",
+            dest_suffix="tmp",
         )
     except Exception as e:
         return SyncResult(
@@ -274,6 +274,25 @@ def _run_btrfs_sync(
                     output=proc.stdout,
                     error=f"Snapshot failed: {e}",
                 )
+
+            snapshot_name = snapshot_path.rsplit("/", 1)[-1]
+            try:
+                update_latest_symlink(
+                    sync,
+                    config,
+                    snapshot_name,
+                    resolved_endpoints=resolved_endpoints,
+                )
+            except RuntimeError as e:
+                return SyncResult(
+                    sync_slug=slug,
+                    success=False,
+                    dry_run=dry_run,
+                    rsync_exit_code=proc.returncode,
+                    output=proc.stdout,
+                    error=f"Symlink update failed: {e}",
+                )
+
             if prune and btrfs_cfg.max_snapshots is not None:
                 pruned_paths = btrfs_prune_snapshots(
                     sync,

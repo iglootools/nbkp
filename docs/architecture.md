@@ -21,9 +21,9 @@ All modules resolve volumes from `Config.volumes[name]` and dispatch on volume t
 1. `check_all_syncs()` — verifies volumes are reachable and sentinel files exist (`.nbkp-vol`, `.nbkp-src`, `.nbkp-dst`)
 2. For each active sync, dispatch on `snapshot_mode`:
    - **`none`**: `run_rsync()` → done
-   - **`btrfs`**: `run_rsync()` to `{destination}/latest/` → `create_snapshot()` → optional `prune_snapshots()`
+   - **`btrfs`**: `run_rsync()` to `{destination}/tmp/` → `create_snapshot()` → `update_latest_symlink()` → optional `prune_snapshots()`
    - **`hard-link`**: cleanup orphans → resolve `--link-dest` from previous snapshot → `create_snapshot_dir()` → `run_rsync()` to `{destination}/snapshots/{timestamp}/` → `update_latest_symlink()` → optional `prune_snapshots()`
-3. Btrfs syncs write to `{destination}/latest/`; hard-link syncs write directly to `{destination}/snapshots/{ISO8601Z}/`. Both store snapshots under `{destination}/snapshots/`.
+3. Btrfs syncs write to `{destination}/tmp/`; hard-link syncs write directly to `{destination}/snapshots/{ISO8601Z}/`. Both store snapshots under `{destination}/snapshots/` and maintain a `latest` symlink pointing to the most recent complete snapshot.
 
 ## Rsync command variants (rsync.py)
 

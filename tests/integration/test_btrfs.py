@@ -13,6 +13,7 @@ from nbkp.sync.btrfs import (
     list_snapshots,
     prune_snapshots,
 )
+from nbkp.sync.symlink import update_latest_symlink
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
@@ -82,9 +83,9 @@ class TestBtrfsSnapshots:
             str(src), remote_btrfs_volume, ssh_endpoint
         )
 
-        # Rsync into latest
+        # Rsync into tmp
         result = run_rsync(
-            sync, config, resolved_endpoints=resolved, dest_suffix="latest"
+            sync, config, resolved_endpoints=resolved, dest_suffix="tmp"
         )
         assert result.returncode == 0
 
@@ -97,8 +98,21 @@ class TestBtrfsSnapshots:
         check = ssh_exec(ssh_endpoint, f"test -d {snapshot_path}")
         assert check.returncode == 0
 
+        # Update latest symlink
+        snap_name = snapshot_path.rsplit("/", 1)[-1]
+        update_latest_symlink(
+            sync, config, snap_name, resolved_endpoints=resolved
+        )
+
+        # Verify latest symlink
+        link = ssh_exec(
+            ssh_endpoint,
+            f"readlink {REMOTE_BTRFS_PATH}/latest",
+        )
+        assert f"snapshots/{snap_name}" in link.stdout
+
         assert_sentinels_after_sync(
-            sync, config, ssh_endpoint, dest_suffix="latest"
+            sync, config, ssh_endpoint, dest_suffix="tmp"
         )
 
     def test_snapshot_readonly(
@@ -114,9 +128,7 @@ class TestBtrfsSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(src), remote_btrfs_volume, ssh_endpoint
         )
-        run_rsync(
-            sync, config, resolved_endpoints=resolved, dest_suffix="latest"
-        )
+        run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="tmp")
         snapshot_path = create_snapshot(
             sync, config, resolved_endpoints=resolved
         )
@@ -143,11 +155,13 @@ class TestBtrfsSnapshots:
             str(src), remote_btrfs_volume, ssh_endpoint
         )
 
-        # First sync + snapshot
-        run_rsync(
-            sync, config, resolved_endpoints=resolved, dest_suffix="latest"
+        # First sync + snapshot + symlink
+        run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="tmp")
+        first_snap = create_snapshot(sync, config, resolved_endpoints=resolved)
+        first_name = first_snap.rsplit("/", 1)[-1]
+        update_latest_symlink(
+            sync, config, first_name, resolved_endpoints=resolved
         )
-        create_snapshot(sync, config, resolved_endpoints=resolved)
 
         # Small delay to ensure distinct timestamp
         time.sleep(0.1)
@@ -160,25 +174,37 @@ class TestBtrfsSnapshots:
         )
         assert latest_snap is not None
 
-        link_dest = f"../../snapshots/{latest_snap.rsplit('/', 1)[-1]}"
+        link_dest = f"../snapshots/{latest_snap.rsplit('/', 1)[-1]}"
         result = run_rsync(
             sync,
             config,
             link_dest=link_dest,
             resolved_endpoints=resolved,
-            dest_suffix="latest",
+            dest_suffix="tmp",
         )
         assert result.returncode == 0
 
-        # Create second snapshot
+        # Create second snapshot + symlink
         snapshot_path = create_snapshot(
             sync, config, resolved_endpoints=resolved
         )
         check = ssh_exec(ssh_endpoint, f"test -d {snapshot_path}")
         assert check.returncode == 0
 
+        snap_name = snapshot_path.rsplit("/", 1)[-1]
+        update_latest_symlink(
+            sync, config, snap_name, resolved_endpoints=resolved
+        )
+
+        # Verify latest symlink points to second snapshot
+        link = ssh_exec(
+            ssh_endpoint,
+            f"readlink {REMOTE_BTRFS_PATH}/latest",
+        )
+        assert f"snapshots/{snap_name}" in link.stdout
+
         assert_sentinels_after_sync(
-            sync, config, ssh_endpoint, dest_suffix="latest"
+            sync, config, ssh_endpoint, dest_suffix="tmp"
         )
 
     def test_dry_run_no_snapshot(
@@ -210,7 +236,7 @@ class TestBtrfsSnapshots:
             config,
             dry_run=True,
             resolved_endpoints=resolved,
-            dest_suffix="latest",
+            dest_suffix="tmp",
         )
         assert result.returncode == 0
 
@@ -233,13 +259,17 @@ class TestPruneSnapshots:
         resolved: ResolvedEndpoints,
         count: int,
     ) -> list[str]:
-        """Create multiple snapshots with distinct timestamps."""
+        """Create multiple snapshots with latest symlink updates."""
         paths: list[str] = []
         for _ in range(count):
             path = create_snapshot(
                 sync,
                 config,
                 resolved_endpoints=resolved,
+            )
+            name = path.rsplit("/", 1)[-1]
+            update_latest_symlink(
+                sync, config, name, resolved_endpoints=resolved
             )
             paths.append(path)
             time.sleep(0.1)  # distinct timestamps
@@ -258,9 +288,7 @@ class TestPruneSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(src), remote_btrfs_volume, ssh_endpoint
         )
-        run_rsync(
-            sync, config, resolved_endpoints=resolved, dest_suffix="latest"
-        )
+        run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="tmp")
 
         self._create_snapshots(sync, config, resolved, 3)
 
@@ -294,9 +322,7 @@ class TestPruneSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(src), remote_btrfs_volume, ssh_endpoint
         )
-        run_rsync(
-            sync, config, resolved_endpoints=resolved, dest_suffix="latest"
-        )
+        run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="tmp")
 
         self._create_snapshots(sync, config, resolved, 3)
 
@@ -331,9 +357,7 @@ class TestPruneSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(src), remote_btrfs_volume, ssh_endpoint
         )
-        run_rsync(
-            sync, config, resolved_endpoints=resolved, dest_suffix="latest"
-        )
+        run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="tmp")
 
         self._create_snapshots(sync, config, resolved, 2)
 

@@ -261,12 +261,17 @@ class TestChainSync:
         assert (local_hl / "latest").is_symlink()
         _assert_trees_equal(src, local_hl / "latest")
 
-        #    Btrfs dest (step-3): snapshot on remote-btrfs
+        #    Btrfs dest (step-3): snapshot + latest symlink on remote-btrfs
         snap_check = ssh_exec(
             ssh_endpoint,
             f"ls {BTRFS_SNAPSHOTS_PATH}/snapshots/",
         )
         assert snap_check.stdout.strip()
+        btrfs_link = ssh_exec(
+            ssh_endpoint,
+            f"readlink {BTRFS_SNAPSHOTS_PATH}/latest",
+        )
+        assert "snapshots/" in btrfs_link.stdout
 
         #    HL dest (step-5): latest symlink on remote-hl
         hl_check = ssh_exec(

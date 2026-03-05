@@ -32,7 +32,7 @@ def create_snapshot(
     now: datetime | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> str:
-    """Create a read-only btrfs snapshot of latest/ into snapshots/.
+    """Create a read-only btrfs snapshot of tmp/ into snapshots/.
 
     Returns the snapshot path.
     """
@@ -43,14 +43,14 @@ def create_snapshot(
     # isoformat uses +00:00, but Z is more conventional for UTC.
     timestamp = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
     snapshot_path = f"{dest_path}/snapshots/{timestamp}"
-    latest_path = f"{dest_path}/latest"
+    tmp_path = f"{dest_path}/tmp"
 
     cmd = [
         "btrfs",
         "subvolume",
         "snapshot",
         "-r",
-        latest_path,
+        tmp_path,
         snapshot_path,
     ]
 
@@ -179,15 +179,29 @@ def prune_snapshots(
 ) -> list[str]:
     """Delete oldest snapshots exceeding max_snapshots.
 
+    Never prunes the snapshot that the latest symlink points to.
     Returns list of deleted (or would-be-deleted) paths.
     """
+    from .symlink import read_latest_symlink
+
     re = resolved_endpoints or {}
     snapshots = list_snapshots(sync, config, re)
     excess = len(snapshots) - max_snapshots
     if excess <= 0:
         return []
 
-    to_delete = snapshots[:excess]
+    latest_name = read_latest_symlink(sync, config, resolved_endpoints=re)
+
+    # Candidates are oldest first, but skip the latest target
+    to_delete: list[str] = []
+    for snap_path in snapshots:
+        if len(to_delete) >= excess:
+            break
+        snap_name = snap_path.rsplit("/", 1)[-1]
+        if snap_name == latest_name:
+            continue
+        to_delete.append(snap_path)
+
     if not dry_run:
         dst_vol = config.volumes[sync.destination.volume]
         for path in to_delete:

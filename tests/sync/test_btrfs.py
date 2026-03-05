@@ -91,7 +91,7 @@ class TestCreateSnapshotLocal:
             "subvolume",
             "snapshot",
             "-r",
-            "/mnt/dst/backup/latest",
+            "/mnt/dst/backup/tmp",
             "/mnt/dst/backup/snapshots/2024-01-15T12:00:00.000Z",
         ]
 
@@ -129,7 +129,7 @@ class TestCreateSnapshotRemote:
             "subvolume",
             "snapshot",
             "-r",
-            "/backup/data/latest",
+            "/backup/data/tmp",
             "/backup/data/snapshots/2024-01-15T12:00:00.000Z",
         ]
 
@@ -248,7 +248,7 @@ class TestCreateSnapshotLocalSpaces:
             "subvolume",
             "snapshot",
             "-r",
-            "/mnt/my dst/my backup/latest",
+            "/mnt/my dst/my backup/tmp",
             "/mnt/my dst/my backup/snapshots/" "2024-01-15T12:00:00.000Z",
         ]
 
@@ -274,7 +274,7 @@ class TestCreateSnapshotRemoteSpaces:
             "subvolume",
             "snapshot",
             "-r",
-            "/my backup/my data/latest",
+            "/my backup/my data/tmp",
             "/my backup/my data/snapshots/" "2024-01-15T12:00:00.000Z",
         ]
 
@@ -433,8 +433,14 @@ class TestDeleteSnapshotRemote:
 
 
 class TestPruneSnapshotsLocal:
+    @patch(
+        "nbkp.sync.symlink.read_latest_symlink",
+        return_value=None,
+    )
     @patch("nbkp.sync.btrfs.subprocess.run")
-    def test_prunes_oldest(self, mock_run: MagicMock) -> None:
+    def test_prunes_oldest(
+        self, mock_run: MagicMock, mock_latest: MagicMock
+    ) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="20240101T000000Z\n20240102T000000Z\n20240103T000000Z\n",
@@ -450,8 +456,14 @@ class TestPruneSnapshotsLocal:
         # ls call + 2 × (property set + delete) calls
         assert mock_run.call_count == 5
 
+    @patch(
+        "nbkp.sync.symlink.read_latest_symlink",
+        return_value=None,
+    )
     @patch("nbkp.sync.btrfs.subprocess.run")
-    def test_nothing_to_prune(self, mock_run: MagicMock) -> None:
+    def test_nothing_to_prune(
+        self, mock_run: MagicMock, mock_latest: MagicMock
+    ) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="20240101T000000Z\n20240102T000000Z\n",
@@ -464,8 +476,14 @@ class TestPruneSnapshotsLocal:
         # Only the ls call
         assert mock_run.call_count == 1
 
+    @patch(
+        "nbkp.sync.symlink.read_latest_symlink",
+        return_value=None,
+    )
     @patch("nbkp.sync.btrfs.subprocess.run")
-    def test_dry_run(self, mock_run: MagicMock) -> None:
+    def test_dry_run(
+        self, mock_run: MagicMock, mock_latest: MagicMock
+    ) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="20240101T000000Z\n20240102T000000Z\n20240103T000000Z\n",
@@ -481,10 +499,42 @@ class TestPruneSnapshotsLocal:
         # Only the ls call, no delete calls
         assert mock_run.call_count == 1
 
+    @patch("nbkp.sync.symlink.read_latest_symlink")
+    @patch("nbkp.sync.btrfs.subprocess.run")
+    def test_protects_latest_snapshot(
+        self, mock_run: MagicMock, mock_latest: MagicMock
+    ) -> None:
+        """The snapshot that latest points to must not be pruned."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=(
+                "20240101T000000Z\n" "20240102T000000Z\n" "20240103T000000Z\n"
+            ),
+            stderr="",
+        )
+        # latest points to the second-oldest snapshot
+        mock_latest.return_value = "20240102T000000Z"
+        config, sync = _local_config()
+
+        deleted = prune_snapshots(sync, config, max_snapshots=1)
+        # 20240102T000000Z is skipped; 20240101T000000Z and then
+        # 20240103T000000Z are candidates, but we only need to remove
+        # excess=2 items while protecting the latest target.
+        # Oldest first: 20240101 (delete), 20240102 (skip/latest),
+        # 20240103 (delete to reach excess=2).
+        assert deleted == [
+            "/mnt/dst/backup/snapshots/20240101T000000Z",
+            "/mnt/dst/backup/snapshots/20240103T000000Z",
+        ]
+        mock_latest.assert_called_once()
+
 
 class TestPruneSnapshotsRemote:
+    @patch("nbkp.sync.symlink.read_latest_symlink", return_value=None)
     @patch("nbkp.sync.btrfs.run_remote_command")
-    def test_prunes_oldest(self, mock_run: MagicMock) -> None:
+    def test_prunes_oldest(
+        self, mock_run: MagicMock, mock_latest: MagicMock
+    ) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="20240101T000000Z\n20240102T000000Z\n20240103T000000Z\n",
@@ -501,3 +551,31 @@ class TestPruneSnapshotsRemote:
         ]
         # ls call + 1 × (property set + delete) calls
         assert mock_run.call_count == 3
+
+    @patch("nbkp.sync.symlink.read_latest_symlink")
+    @patch("nbkp.sync.btrfs.run_remote_command")
+    def test_protects_latest_snapshot(
+        self, mock_run: MagicMock, mock_latest: MagicMock
+    ) -> None:
+        """The snapshot that latest points to must not be pruned."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=(
+                "20240101T000000Z\n" "20240102T000000Z\n" "20240103T000000Z\n"
+            ),
+            stderr="",
+        )
+        # latest points to the oldest snapshot
+        mock_latest.return_value = "20240101T000000Z"
+        config, sync = _remote_config()
+        resolved = resolve_all_endpoints(config)
+
+        deleted = prune_snapshots(
+            sync, config, max_snapshots=2, resolved_endpoints=resolved
+        )
+        # excess=1; 20240101T000000Z is skipped (latest), so
+        # 20240102T000000Z is deleted instead.
+        assert deleted == [
+            "/backup/data/snapshots/20240102T000000Z",
+        ]
+        mock_latest.assert_called_once()
