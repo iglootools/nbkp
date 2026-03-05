@@ -29,7 +29,7 @@ from nbkp.sync.rsync import run_rsync
 from nbkp.testkit.docker import REMOTE_BTRFS_PATH
 from nbkp.testkit.gen.fs import create_seed_sentinels
 
-from .conftest import ssh_exec
+from .conftest import assert_sentinels_after_sync, ssh_exec
 
 pytestmark = pytest.mark.integration
 
@@ -96,6 +96,10 @@ class TestBtrfsSnapshots:
         # Verify snapshot exists
         check = ssh_exec(ssh_endpoint, f"test -d {snapshot_path}")
         assert check.returncode == 0
+
+        assert_sentinels_after_sync(
+            sync, config, ssh_endpoint, dest_suffix="latest"
+        )
 
     def test_snapshot_readonly(
         self,
@@ -172,6 +176,10 @@ class TestBtrfsSnapshots:
         )
         check = ssh_exec(ssh_endpoint, f"test -d {snapshot_path}")
         assert check.returncode == 0
+
+        assert_sentinels_after_sync(
+            sync, config, ssh_endpoint, dest_suffix="latest"
+        )
 
     def test_dry_run_no_snapshot(
         self,

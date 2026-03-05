@@ -11,7 +11,13 @@ from typing import Any, Generator
 import docker as dockerlib
 import pytest
 
-from nbkp.config import RemoteVolume, SshEndpoint
+from nbkp.config import (
+    Config,
+    LocalVolume,
+    RemoteVolume,
+    SshEndpoint,
+    SyncConfig,
+)
 from nbkp.testkit.docker import (  # noqa: F401
     DOCKER_DIR,
     REMOTE_BACKUP_PATH,
@@ -24,6 +30,71 @@ from nbkp.testkit.docker import (  # noqa: F401
     ssh_exec,
     wait_for_ssh,
 )
+
+
+def assert_sentinels_after_sync(
+    sync: SyncConfig,
+    config: Config,
+    ssh_endpoint: SshEndpoint,
+    *,
+    dest_suffix: str | None = None,
+) -> None:
+    """Assert sentinel files are handled correctly after sync.
+
+    - .nbkp-src must NOT exist at the rsync destination
+    - .nbkp-vol must NOT exist at the rsync destination
+      (when it differs from the volume root)
+    - .nbkp-dst must still exist at the destination
+      sync endpoint path
+    """
+    dst_vol = config.volumes[sync.destination.volume]
+    vol_path = dst_vol.path
+    subdir = sync.destination.subdir
+
+    # Where rsync actually wrote files
+    if dest_suffix:
+        if subdir:
+            rsync_target = f"{vol_path}/{subdir}/{dest_suffix}"
+        else:
+            rsync_target = f"{vol_path}/{dest_suffix}"
+    elif subdir:
+        rsync_target = f"{vol_path}/{subdir}"
+    else:
+        rsync_target = vol_path
+
+    # Where .nbkp-dst lives
+    if subdir:
+        sentinel_dir = f"{vol_path}/{subdir}"
+    else:
+        sentinel_dir = vol_path
+
+    def _remote_exists(path: str) -> bool:
+        r = ssh_exec(ssh_endpoint, f"test -f {path}", check=False)
+        return r.returncode == 0
+
+    def _check_exists(path: str) -> bool:
+        match dst_vol:
+            case LocalVolume():
+                return Path(path).exists()
+            case RemoteVolume():
+                return _remote_exists(path)
+
+    # 1. .nbkp-src must NOT be at the rsync target
+    assert not _check_exists(
+        f"{rsync_target}/.nbkp-src"
+    ), f".nbkp-src was copied to rsync target {rsync_target}"
+
+    # 2. .nbkp-vol must NOT be at the rsync target
+    #    (unless rsync target IS the volume root)
+    if rsync_target != vol_path:
+        assert not _check_exists(
+            f"{rsync_target}/.nbkp-vol"
+        ), f".nbkp-vol found at rsync target {rsync_target}"
+
+    # 3. .nbkp-dst must still exist at the sentinel dir
+    assert _check_exists(
+        f"{sentinel_dir}/.nbkp-dst"
+    ), f".nbkp-dst missing from {sentinel_dir}"
 
 
 def _docker_available() -> bool:

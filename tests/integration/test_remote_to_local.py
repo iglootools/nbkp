@@ -20,7 +20,7 @@ from nbkp.sync.rsync import run_rsync
 from nbkp.testkit.docker import REMOTE_BACKUP_PATH
 from nbkp.testkit.gen.fs import create_seed_sentinels
 
-from .conftest import ssh_exec
+from .conftest import assert_sentinels_after_sync, ssh_exec
 
 pytestmark = pytest.mark.integration
 
@@ -72,6 +72,8 @@ class TestRemoteToLocal:
         assert local_file.exists()
         assert local_file.read_text().strip() == "hello from remote"
 
+        assert_sentinels_after_sync(sync, config, ssh_endpoint)
+
     def test_sync_with_subdir(
         self,
         tmp_path: Path,
@@ -121,3 +123,5 @@ class TestRemoteToLocal:
         local_file = dst_dir / "photos-backup" / "img.jpg"
         assert local_file.exists()
         assert local_file.read_text().strip() == "image-data"
+
+        assert_sentinels_after_sync(sync, config, ssh_endpoint)

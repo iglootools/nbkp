@@ -31,7 +31,7 @@ from nbkp.sync.rsync import run_rsync
 from nbkp.testkit.docker import REMOTE_BACKUP_PATH
 from nbkp.testkit.gen.fs import create_seed_sentinels
 
-from .conftest import ssh_exec
+from .conftest import assert_sentinels_after_sync, ssh_exec
 
 pytestmark = pytest.mark.integration
 
@@ -99,6 +99,14 @@ def _do_sync(
     update_latest_symlink(
         sync, config, snapshot_name, resolved_endpoints=resolved
     )
+
+    assert_sentinels_after_sync(
+        sync,
+        config,
+        ssh_endpoint,
+        dest_suffix=f"snapshots/{snapshot_name}",
+    )
+
     return sync, config, resolved, snapshot_name
 
 
@@ -157,6 +165,13 @@ class TestHardLinkSnapshots:
         )
         assert check.returncode == 0
         assert check.stdout.strip() == "hello hard-link"
+
+        assert_sentinels_after_sync(
+            sync,
+            config,
+            ssh_endpoint,
+            dest_suffix=f"snapshots/{snapshot_name}",
+        )
 
     def test_latest_symlink_updated(
         self,

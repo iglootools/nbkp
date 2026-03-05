@@ -20,7 +20,7 @@ from nbkp.sync.rsync import run_rsync
 from nbkp.testkit.docker import REMOTE_BACKUP_PATH
 from nbkp.testkit.gen.fs import create_seed_sentinels
 
-from .conftest import ssh_exec
+from .conftest import assert_sentinels_after_sync, ssh_exec
 
 pytestmark = pytest.mark.integration
 
@@ -78,3 +78,5 @@ class TestProxyJump:
         )
         assert check.returncode == 0
         assert check.stdout.strip() == "via bastion"
+
+        assert_sentinels_after_sync(sync, config, ssh_endpoint)

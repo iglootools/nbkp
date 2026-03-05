@@ -35,7 +35,7 @@ from nbkp.testkit.docker import (
 )
 from nbkp.testkit.gen.fs import create_seed_sentinels, seed_volume
 
-from .conftest import ssh_exec
+from .conftest import assert_sentinels_after_sync, ssh_exec
 
 pytestmark = pytest.mark.integration
 
@@ -274,3 +274,7 @@ class TestChainSync:
             f"readlink {REMOTE_BACKUP_PATH}/hl/latest",
         )
         assert "snapshots/" in hl_check.stdout
+
+        # 10. Verify sentinel handling on final destination
+        step6 = config.syncs["step-6"]
+        assert_sentinels_after_sync(step6, config, ssh_endpoint)
