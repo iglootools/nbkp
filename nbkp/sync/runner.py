@@ -65,7 +65,7 @@ def run_all_syncs(
 
     results: list[SyncResult] = []
 
-    from .ordering import sort_syncs
+    from .ordering import sort_syncs, sync_predecessors
 
     selected = (
         {s: st for s, st in sync_statuses.items() if s in only_syncs}
@@ -73,14 +73,29 @@ def run_all_syncs(
         else sync_statuses
     )
 
-    ordered_slugs = sort_syncs({s: config.syncs[s] for s in selected})
+    selected_syncs = {s: config.syncs[s] for s in selected}
+    ordered_slugs = sort_syncs(selected_syncs)
+    predecessors = sync_predecessors(selected_syncs)
+    failed: set[str] = set()
 
     for slug in ordered_slugs:
         status = selected[slug]
         if on_sync_start:
             on_sync_start(slug)
 
-        if not status.active:
+        # Check if any predecessor failed
+        failed_deps = predecessors.get(slug, set()) & failed
+        if failed_deps:
+            dep = sorted(failed_deps)[0]
+            result = SyncResult(
+                sync_slug=slug,
+                success=False,
+                dry_run=dry_run,
+                rsync_exit_code=-1,
+                output="",
+                error=f"Cancelled: dependency '{dep}' failed",
+            )
+        elif not status.active:
             result = SyncResult(
                 sync_slug=slug,
                 success=False,
@@ -103,6 +118,9 @@ def run_all_syncs(
                 on_rsync_output,
                 resolved_endpoints,
             )
+
+        if not result.success:
+            failed.add(slug)
 
         results.append(result)
         if on_sync_end:

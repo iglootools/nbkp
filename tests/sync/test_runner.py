@@ -339,3 +339,169 @@ class TestRunAllSyncs:
         assert results[0].success is True
         assert results[0].pruned_paths is None
         mock_prune.assert_not_called()
+
+
+def _make_chain_config() -> Config:
+    """A→B chain: s1 writes to 'mid', s2 reads from 'mid'."""
+    src = LocalVolume(slug="src", path="/src")
+    mid = LocalVolume(slug="mid", path="/mid")
+    dst = LocalVolume(slug="dst", path="/dst")
+    s1 = SyncConfig(
+        slug="s1",
+        source=SyncEndpoint(volume="src"),
+        destination=DestinationSyncEndpoint(volume="mid"),
+    )
+    s2 = SyncConfig(
+        slug="s2",
+        source=SyncEndpoint(volume="mid"),
+        destination=DestinationSyncEndpoint(volume="dst"),
+    )
+    return Config(
+        volumes={"src": src, "mid": mid, "dst": dst},
+        syncs={"s1": s1, "s2": s2},
+    )
+
+
+def _make_independent_config() -> Config:
+    """Two independent syncs with no shared volumes."""
+    src1 = LocalVolume(slug="src1", path="/src1")
+    dst1 = LocalVolume(slug="dst1", path="/dst1")
+    src2 = LocalVolume(slug="src2", path="/src2")
+    dst2 = LocalVolume(slug="dst2", path="/dst2")
+    s1 = SyncConfig(
+        slug="s1",
+        source=SyncEndpoint(volume="src1"),
+        destination=DestinationSyncEndpoint(volume="dst1"),
+    )
+    s2 = SyncConfig(
+        slug="s2",
+        source=SyncEndpoint(volume="src2"),
+        destination=DestinationSyncEndpoint(volume="dst2"),
+    )
+    return Config(
+        volumes={
+            "src1": src1,
+            "dst1": dst1,
+            "src2": src2,
+            "dst2": dst2,
+        },
+        syncs={"s1": s1, "s2": s2},
+    )
+
+
+class TestFailurePropagation:
+    @patch("nbkp.sync.runner.run_rsync")
+    def test_dependent_sync_cancelled_on_failure(
+        self,
+        mock_rsync: MagicMock,
+    ) -> None:
+        config = _make_chain_config()
+        _, sync_statuses = _active_statuses(config)
+        mock_rsync.return_value = MagicMock(
+            returncode=23, stdout="", stderr="error"
+        )
+
+        results = run_all_syncs(config, sync_statuses)
+        assert len(results) == 2
+
+        # s1 failed
+        r1 = next(r for r in results if r.sync_slug == "s1")
+        assert r1.success is False
+        assert r1.rsync_exit_code == 23
+
+        # s2 cancelled
+        r2 = next(r for r in results if r.sync_slug == "s2")
+        assert r2.success is False
+        assert r2.error is not None
+        assert r2.error.startswith("Cancelled:")
+        assert "'s1'" in r2.error
+
+    @patch("nbkp.sync.runner.run_rsync")
+    def test_independent_sync_not_cancelled(
+        self,
+        mock_rsync: MagicMock,
+    ) -> None:
+        config = _make_independent_config()
+        _, sync_statuses = _active_statuses(config)
+
+        call_count = 0
+
+        def _side_effect(*args: object, **kwargs: object) -> MagicMock:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return MagicMock(returncode=23, stdout="", stderr="error")
+            return MagicMock(returncode=0, stdout="done\n", stderr="")
+
+        mock_rsync.side_effect = _side_effect
+
+        results = run_all_syncs(config, sync_statuses)
+        assert len(results) == 2
+        # One failed, one succeeded (order may vary)
+        successes = [r for r in results if r.success]
+        failures = [r for r in results if not r.success]
+        assert len(successes) == 1
+        assert len(failures) == 1
+        # The failure is a real rsync failure, not a cancellation
+        assert failures[0].rsync_exit_code == 23
+        assert failures[0].error is None or not failures[0].error.startswith(
+            "Cancelled:"
+        )
+
+    @patch("nbkp.sync.runner.run_rsync")
+    def test_transitive_cancellation(
+        self,
+        mock_rsync: MagicMock,
+    ) -> None:
+        """A→B→C chain: A fails → both B and C cancelled."""
+        v0 = LocalVolume(slug="v0", path="/v0")
+        v1 = LocalVolume(slug="v1", path="/v1")
+        v2 = LocalVolume(slug="v2", path="/v2")
+        v3 = LocalVolume(slug="v3", path="/v3")
+        config = Config(
+            volumes={
+                "v0": v0,
+                "v1": v1,
+                "v2": v2,
+                "v3": v3,
+            },
+            syncs={
+                "a": SyncConfig(
+                    slug="a",
+                    source=SyncEndpoint(volume="v0"),
+                    destination=DestinationSyncEndpoint(volume="v1"),
+                ),
+                "b": SyncConfig(
+                    slug="b",
+                    source=SyncEndpoint(volume="v1"),
+                    destination=DestinationSyncEndpoint(volume="v2"),
+                ),
+                "c": SyncConfig(
+                    slug="c",
+                    source=SyncEndpoint(volume="v2"),
+                    destination=DestinationSyncEndpoint(volume="v3"),
+                ),
+            },
+        )
+        _, sync_statuses = _active_statuses(config)
+        mock_rsync.return_value = MagicMock(
+            returncode=23, stdout="", stderr="error"
+        )
+
+        results = run_all_syncs(config, sync_statuses)
+        assert len(results) == 3
+
+        ra = next(r for r in results if r.sync_slug == "a")
+        rb = next(r for r in results if r.sync_slug == "b")
+        rc = next(r for r in results if r.sync_slug == "c")
+
+        assert ra.success is False
+        assert ra.rsync_exit_code == 23
+
+        assert rb.success is False
+        assert rb.error is not None
+        assert rb.error.startswith("Cancelled:")
+
+        assert rc.success is False
+        assert rc.error is not None
+        assert rc.error.startswith("Cancelled:")

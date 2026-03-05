@@ -20,6 +20,18 @@ For the rsync backup type, the source and the destination can either be a rsync 
 
 Individual syncs can be enabled or disabled when calling the backup tool.
 
+### Sync Dependencies and Failure Propagation
+
+When one sync's destination matches another sync's source (same volume and subdir), a dependency exists between them. Syncs are automatically executed in topological order so that upstream data is always fresh before downstream syncs begin.
+
+If a sync fails, all syncs that depend on it (directly or transitively) are automatically **cancelled** to prevent propagating partial or stale data through the chain. Cancelled syncs appear with a `CANCELLED` status in the output, along with the name of the failed dependency. Independent syncs (those with no dependency relationship) are unaffected and continue to run normally.
+
+For example, in a chain `A → B → C` where A's destination is B's source and B's destination is C's source: if A fails, both B and C are cancelled. But a sync D that reads from an unrelated volume still executes.
+
+The generated shell script (`nbkp sh`) implements the same failure propagation logic.
+
+### BTRFS Snapshots
+
 A sync can optionally enable btrfs snapshots, which will be used to perform incremental backups.
 This is only supported for local sources and destinations that are on btrfs volumes.
 

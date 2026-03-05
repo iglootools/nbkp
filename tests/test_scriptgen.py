@@ -311,9 +311,7 @@ class TestLocalToLocal:
     def test_sync_invocation(self) -> None:
         config = _local_to_local_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert (
-            "sync_my_sync" " || NBKP_FAILURES=$((NBKP_FAILURES + 1))"
-        ) in script
+        assert ("sync_my_sync" " || { NBKP_FAILED[sync_") in script
 
 
 class TestLocalToRemote:
@@ -352,7 +350,7 @@ class TestDisabledSync:
     def test_disabled_invocation_commented(self) -> None:
         config = _disabled_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert "# sync_disabled_sync || NBKP_FAILURES" in script
+        assert "# sync_disabled_sync  # disabled" in script
 
 
 class TestBtrfs:
@@ -764,10 +762,8 @@ class TestEdgeCases:
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert "sync_active_sync()" in script
         assert "# : disabled — off-sync" in script
-        assert (
-            "sync_active_sync" " || NBKP_FAILURES=$((NBKP_FAILURES + 1))"
-        ) in script
-        assert "# sync_off_sync || NBKP_FAILURES" in script
+        assert ("sync_active_sync" " || { NBKP_FAILED[sync_") in script
+        assert "# sync_off_sync  # disabled" in script
         result = subprocess.run(
             ["bash", "-n"],
             input=script,
@@ -1166,3 +1162,67 @@ class TestRelativePaths:
         assert "/mnt/src/photos/.nbkp-src" in script
         # Dest preflight uses relative
         assert ".nbkp-dst" in script
+
+
+class TestDependencyGuard:
+    def test_dependent_sync_has_guard(self) -> None:
+        """A chain sync should have a dependency guard."""
+        src = LocalVolume(slug="src", path="/src")
+        mid = LocalVolume(slug="mid", path="/mid")
+        dst = LocalVolume(slug="dst", path="/dst")
+        config = Config(
+            volumes={"src": src, "mid": mid, "dst": dst},
+            syncs={
+                "step-1": SyncConfig(
+                    slug="step-1",
+                    source=SyncEndpoint(volume="src"),
+                    destination=DestinationSyncEndpoint(volume="mid"),
+                ),
+                "step-2": SyncConfig(
+                    slug="step-2",
+                    source=SyncEndpoint(volume="mid"),
+                    destination=DestinationSyncEndpoint(volume="dst"),
+                ),
+            },
+        )
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        # step-1 has no guard (no predecessors)
+        assert "NBKP_FAILED[sync_step_1]" in script
+        # step-2 has a dependency guard checking step-1
+        assert "NBKP_FAILED[sync_step_1]+set" in script
+        assert "CANCELLED step-2" in script
+
+    def test_independent_syncs_no_guard(self) -> None:
+        """Independent syncs should not have guards."""
+        config = _local_to_local_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "CANCELLED" not in script
+
+    def test_dependency_guard_valid_syntax(self) -> None:
+        """Generated script with guards must pass bash -n."""
+        src = LocalVolume(slug="src", path="/src")
+        mid = LocalVolume(slug="mid", path="/mid")
+        dst = LocalVolume(slug="dst", path="/dst")
+        config = Config(
+            volumes={"src": src, "mid": mid, "dst": dst},
+            syncs={
+                "step-1": SyncConfig(
+                    slug="step-1",
+                    source=SyncEndpoint(volume="src"),
+                    destination=DestinationSyncEndpoint(volume="mid"),
+                ),
+                "step-2": SyncConfig(
+                    slug="step-2",
+                    source=SyncEndpoint(volume="mid"),
+                    destination=DestinationSyncEndpoint(volume="dst"),
+                ),
+            },
+        )
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        result = subprocess.run(
+            ["bash", "-n"],
+            input=script,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"

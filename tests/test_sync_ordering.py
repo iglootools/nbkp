@@ -10,7 +10,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.sync.ordering import endpoint_key, sort_syncs
+from nbkp.sync.ordering import endpoint_key, sort_syncs, sync_predecessors
 
 
 def _sync(
@@ -108,3 +108,24 @@ class TestSortSyncs:
             "a": _sync("a", "v1", "v1"),
         }
         assert sort_syncs(syncs) == ["a"]
+
+
+class TestSyncPredecessors:
+    def test_no_dependencies(self) -> None:
+        syncs = {
+            "a": _sync("a", "v1", "v2"),
+            "b": _sync("b", "v3", "v4"),
+        }
+        preds = sync_predecessors(syncs)
+        assert preds == {"a": set(), "b": set()}
+
+    def test_chain_dependency(self) -> None:
+        syncs = {
+            "a": _sync("a", "v0", "v1"),
+            "b": _sync("b", "v1", "v2"),
+            "c": _sync("c", "v2", "v3"),
+        }
+        preds = sync_predecessors(syncs)
+        assert preds["a"] == set()
+        assert preds["b"] == {"a"}
+        assert preds["c"] == {"b"}

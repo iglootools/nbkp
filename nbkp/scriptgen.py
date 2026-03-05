@@ -11,7 +11,7 @@ from __future__ import annotations
 import importlib.resources
 import os
 import shlex
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from textwrap import dedent
 
@@ -79,6 +79,7 @@ class _SyncContext:
     hl_mkdir: str = ""
     symlink: str = ""
     hl_prune: str = ""
+    predecessors: tuple[str, ...] = ()
     disabled_body: str = ""
 
 
@@ -1154,7 +1155,9 @@ def _build_script_context(
         for slug, vol in config.volumes.items()
     ]
 
-    from .sync.ordering import sort_syncs
+    from .sync.ordering import sort_syncs, sync_predecessors
+
+    pred_map = sync_predecessors(config.syncs)
 
     syncs: list[_SyncContext] = []
     for slug in sort_syncs(config.syncs):
@@ -1162,8 +1165,11 @@ def _build_script_context(
         ctx = _build_sync_context(
             slug, sync, config, vol_paths, resolved_endpoints
         )
+        pred_fns = tuple(
+            _slug_to_fn(p) for p in sorted(pred_map.get(slug, set()))
+        )
         if sync.enabled:
-            syncs.append(ctx)
+            syncs.append(replace(ctx, predecessors=pred_fns))
         else:
             disabled_body = _build_disabled_body(
                 slug,

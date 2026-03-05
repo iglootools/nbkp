@@ -240,6 +240,8 @@ def print_human_results(
     for r in results:
         if r.success:
             status = Text("OK", style="green")
+        elif r.error and r.error.startswith("Cancelled:"):
+            status = Text("CANCELLED", style="yellow")
         else:
             status = Text("FAILED", style="red")
 
