@@ -2,9 +2,10 @@
 
 These tests exercise the local (subprocess) code path of the btrfs
 module. They require Linux with btrfs-progs installed and a btrfs
-mount point. Run via: mise run test-btrfs-local
+mount point.
 
-Skipped automatically when btrfs is unavailable (e.g. on macOS).
+When btrfs is unavailable (e.g. on macOS), the tests automatically
+run inside a privileged Docker container instead.
 """
 
 from __future__ import annotations
@@ -35,12 +36,15 @@ from nbkp.sync.btrfs import (
 )
 from nbkp.sync.symlink import update_latest_symlink
 
-_skip_no_btrfs = pytest.mark.skipif(
-    platform.system() != "Linux" or shutil.which("btrfs") is None,
-    reason="btrfs not available (requires Linux + btrfs-progs)",
+_btrfs_available = (
+    platform.system() == "Linux"
+    and shutil.which("btrfs") is not None
 )
 
-pytestmark = _skip_no_btrfs
+_skip_no_btrfs = pytest.mark.skipif(
+    not _btrfs_available,
+    reason="btrfs not available (runs via Docker proxy)",
+)
 
 # The btrfs mount point — set by the Docker entrypoint or CI
 BTRFS_MOUNT = os.environ.get("NBKP_BTRFS_MOUNT", "/srv/btrfs-backups")
@@ -135,6 +139,7 @@ def _seed_tmp(dst: Path, content: str = "test data") -> None:
     (dst / "tmp" / "data.txt").write_text(content)
 
 
+@_skip_no_btrfs
 class TestCreateSnapshot:
     def test_creates_readonly_snapshot(
         self, tmp_path: Path, btrfs_dst: Path
@@ -159,6 +164,7 @@ class TestCreateSnapshot:
         assert "ro=true" in result.stdout
 
 
+@_skip_no_btrfs
 class TestListSnapshots:
     def test_lists_sorted_oldest_first(
         self, tmp_path: Path, btrfs_dst: Path
@@ -182,6 +188,7 @@ class TestListSnapshots:
         assert "2024-01-02" in snapshots[1]
 
 
+@_skip_no_btrfs
 class TestGetLatestSnapshot:
     def test_returns_most_recent(
         self, tmp_path: Path, btrfs_dst: Path
@@ -204,6 +211,7 @@ class TestGetLatestSnapshot:
         assert "2024-01-02" in latest
 
 
+@_skip_no_btrfs
 class TestDeleteSnapshot:
     def test_deletes_subvolume(self, tmp_path: Path, btrfs_dst: Path) -> None:
         src = tmp_path / "src"
@@ -222,6 +230,7 @@ class TestDeleteSnapshot:
         assert not Path(snapshot_path).exists()
 
 
+@_skip_no_btrfs
 class TestPruneSnapshots:
     def test_prunes_oldest_beyond_limit(
         self, tmp_path: Path, btrfs_dst: Path
@@ -269,3 +278,95 @@ class TestPruneSnapshots:
 
         remaining = list_snapshots(sync, config)
         assert len(remaining) == 3
+
+
+# ── Guard: at least one execution path must be available ─────
+
+_docker_available_cached: bool | None = None
+
+
+def _docker_available() -> bool:
+    """Check if Docker is available and daemon is running."""
+    try:
+        import docker as dockerlib
+
+        client = dockerlib.from_env()
+        client.ping()
+        return True
+    except Exception:
+        return False
+
+
+def test_btrfs_local_has_execution_path() -> None:
+    """Fail loudly if neither native btrfs nor Docker is
+    available — all other tests would silently skip."""
+    assert _btrfs_available or _docker_available(), (
+        "Cannot run btrfs-local tests: "
+        "btrfs is not available and Docker is not running. "
+        "Install btrfs-progs (Linux) or start Docker."
+    )
+
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_DOCKERFILE = (
+    "nbkp/testkit/dockerbuild/Dockerfile.btrfs-local-test"
+)
+_IMAGE_TAG = "nbkp-btrfs-test:latest"
+
+
+@pytest.mark.skipif(
+    _btrfs_available,
+    reason="btrfs available locally, running tests directly",
+)
+@pytest.mark.skipif(
+    not _docker_available(),
+    reason="Docker not available",
+)
+class TestBtrfsLocalViaDocker:
+    """Proxy: re-runs the native tests inside a privileged
+    Docker container when btrfs is not available locally."""
+
+    def test_all_pass_in_docker(self) -> None:
+        from testcontainers.core.image import DockerImage
+
+        import docker as dockerlib
+
+        image = DockerImage(
+            path=str(_PROJECT_ROOT),
+            tag=_IMAGE_TAG,
+            dockerfile_path=_DOCKERFILE,
+        )
+        image.build()
+
+        client = dockerlib.from_env()
+        container = client.containers.run(
+            _IMAGE_TAG,
+            command=[
+                "poetry",
+                "run",
+                "pytest",
+                "tests/integration_docker/test_btrfs_local.py",
+                "-v",
+                "-k",
+                "not ViaDocker",
+            ],
+            volumes={
+                str(_PROJECT_ROOT): {
+                    "bind": "/app",
+                    "mode": "rw",
+                },
+            },
+            working_dir="/app",
+            privileged=True,
+            detach=True,
+        )
+        try:
+            result = container.wait(timeout=300)
+            logs = container.logs().decode()
+            exit_code = result["StatusCode"]
+        finally:
+            container.remove(force=True)
+
+        assert exit_code == 0, (
+            f"Tests failed inside Docker:\n{logs}"
+        )
