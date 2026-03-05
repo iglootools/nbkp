@@ -334,7 +334,7 @@ class TestSyncResult:
             output="done",
         )
         assert sr.snapshot_path is None
-        assert sr.error is None
+        assert sr.detail is None
 
     def test_construction_full(self) -> None:
         sr = SyncResult(
@@ -343,10 +343,10 @@ class TestSyncResult:
             dry_run=False,
             rsync_exit_code=1,
             output="",
-            error="failed",
+            detail="failed",
             snapshot_path="/snap/2024",
         )
-        assert sr.error == "failed"
+        assert sr.detail == "failed"
         assert sr.snapshot_path == "/snap/2024"
 
 

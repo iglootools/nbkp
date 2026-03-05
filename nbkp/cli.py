@@ -567,7 +567,7 @@ def prune(
                     deleted=[],
                     kept=0,
                     dry_run=dry_run,
-                    error=str(e),
+                    detail=str(e),
                 )
             )
 
@@ -582,7 +582,7 @@ def prune(
         case OutputFormat.HUMAN:
             print_human_prune_results(results, dry_run)
 
-    if any(r.error for r in results):
+    if any(r.detail for r in results):
         raise typer.Exit(1)
 
 

@@ -49,7 +49,7 @@ def run_results(config: Config) -> list[SyncResult]:
                 "rsync error: some files/attrs"
                 " were not transferred (code 23)\n"
             ),
-            error="rsync exited with code 23",
+            detail="rsync exited with code 23",
         ),
     ]
 
@@ -90,7 +90,7 @@ def prune_results(config: Config) -> list[PruneResult]:
             deleted=[],
             kept=0,
             dry_run=False,
-            error="btrfs delete failed:" " Permission denied",
+            detail="btrfs delete failed:" " Permission denied",
         ),
     ]
 

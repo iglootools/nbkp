@@ -8,12 +8,14 @@ from .rsync import ProgressMode as ProgressMode
 
 if TYPE_CHECKING:
     from .runner import PruneResult as PruneResult
+    from .runner import SyncOutcome as SyncOutcome
     from .runner import SyncResult as SyncResult
     from .runner import run_all_syncs as run_all_syncs
 
 __all__ = [
     "ProgressMode",
     "PruneResult",
+    "SyncOutcome",
     "SyncResult",
     "run_all_syncs",
 ]
@@ -26,6 +28,7 @@ def __getattr__(name: str) -> object:
         globals().update(
             {
                 "PruneResult": runner.PruneResult,
+                "SyncOutcome": runner.SyncOutcome,
                 "SyncResult": runner.SyncResult,
                 "run_all_syncs": runner.run_all_syncs,
             }

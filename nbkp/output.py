@@ -24,7 +24,7 @@ from .config import (
     SyncConfig,
     SyncEndpoint,
 )
-from .sync import PruneResult, SyncResult
+from .sync import PruneResult, SyncOutcome, SyncResult
 from .sync.rsync import build_rsync_command
 from .check import SyncReason, SyncStatus, VolumeReason, VolumeStatus
 from .remote.ssh import format_proxy_jump_chain
@@ -238,16 +238,19 @@ def print_human_results(
     table.add_column("Details")
 
     for r in results:
-        if r.success:
-            status = Text("OK", style="green")
-        elif r.error and r.error.startswith("Cancelled:"):
-            status = Text("CANCELLED", style="yellow")
-        else:
-            status = Text("FAILED", style="red")
+        match r.outcome:
+            case SyncOutcome.SUCCESS:
+                status = Text("OK", style="green")
+            case SyncOutcome.CANCELLED:
+                status = Text("CANCELLED", style="yellow")
+            case SyncOutcome.SKIPPED:
+                status = Text("SKIPPED", style="dim")
+            case SyncOutcome.FAILED:
+                status = Text("FAILED", style="red")
 
         details_parts: list[str] = []
-        if r.error:
-            details_parts.append(f"Error: {r.error}")
+        if r.detail:
+            details_parts.append(f"Error: {r.detail}")
         if r.snapshot_path:
             details_parts.append(f"Snapshot: {r.snapshot_path}")
         if r.pruned_paths:
@@ -285,7 +288,7 @@ def print_human_prune_results(
     table.add_column("Status")
 
     for r in results:
-        if r.error:
+        if r.detail:
             status = Text("FAILED", style="red")
         else:
             status = Text("OK", style="green")

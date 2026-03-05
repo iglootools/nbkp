@@ -421,7 +421,7 @@ class TestRunCommand:
                 dry_run=False,
                 rsync_exit_code=23,
                 output="",
-                error="rsync failed",
+                detail="rsync failed",
             )
         ]
 

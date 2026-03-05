@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import shutil
+from enum import Enum
 from typing import Callable, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from .btrfs import (
     create_snapshot,
@@ -23,6 +24,15 @@ from ..check import SyncStatus
 from .rsync import ProgressMode, run_rsync
 
 
+class SyncOutcome(str, Enum):
+    """Outcome of a sync operation."""
+
+    SUCCESS = "success"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    SKIPPED = "skipped"
+
+
 class SyncResult(BaseModel):
     """Result of running a sync."""
 
@@ -31,9 +41,17 @@ class SyncResult(BaseModel):
     dry_run: bool
     rsync_exit_code: int
     output: str
+    outcome: SyncOutcome = SyncOutcome.SUCCESS
     snapshot_path: Optional[str] = None
     pruned_paths: Optional[list[str]] = None
-    error: Optional[str] = None
+    detail: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _derive_outcome(self) -> SyncResult:
+        """Default outcome from success when not explicitly set."""
+        if not self.success and self.outcome == SyncOutcome.SUCCESS:
+            self.outcome = SyncOutcome.FAILED
+        return self
 
 
 class PruneResult(BaseModel):
@@ -43,7 +61,7 @@ class PruneResult(BaseModel):
     deleted: list[str]
     kept: int
     dry_run: bool
-    error: Optional[str] = None
+    detail: Optional[str] = None
 
 
 def run_all_syncs(
@@ -93,7 +111,8 @@ def run_all_syncs(
                 dry_run=dry_run,
                 rsync_exit_code=-1,
                 output="",
-                error=f"Cancelled: dependency '{dep}' failed",
+                outcome=SyncOutcome.CANCELLED,
+                detail=f"Cancelled: dependency '{dep}' failed",
             )
         elif not status.active:
             result = SyncResult(
@@ -102,7 +121,8 @@ def run_all_syncs(
                 dry_run=dry_run,
                 rsync_exit_code=-1,
                 output="",
-                error=(
+                outcome=SyncOutcome.SKIPPED,
+                detail=(
                     "Sync not active: "
                     + ", ".join(r.value for r in status.reasons)
                 ),
@@ -207,7 +227,7 @@ def _run_plain_sync(
             dry_run=dry_run,
             rsync_exit_code=-1,
             output="",
-            error=str(e),
+            detail=str(e),
         )
 
     if proc.returncode != 0:
@@ -217,7 +237,7 @@ def _run_plain_sync(
             dry_run=dry_run,
             rsync_exit_code=proc.returncode,
             output=proc.stdout + proc.stderr,
-            error=f"rsync exited with code {proc.returncode}",
+            detail=f"rsync exited with code {proc.returncode}",
         )
     else:
         return SyncResult(
@@ -260,7 +280,7 @@ def _run_btrfs_sync(
             dry_run=dry_run,
             rsync_exit_code=-1,
             output="",
-            error=str(e),
+            detail=str(e),
         )
 
     if proc.returncode != 0:
@@ -270,7 +290,7 @@ def _run_btrfs_sync(
             dry_run=dry_run,
             rsync_exit_code=proc.returncode,
             output=proc.stdout + proc.stderr,
-            error=f"rsync exited with code {proc.returncode}",
+            detail=f"rsync exited with code {proc.returncode}",
         )
     else:
         snapshot_path: str | None = None
@@ -290,7 +310,7 @@ def _run_btrfs_sync(
                     dry_run=dry_run,
                     rsync_exit_code=proc.returncode,
                     output=proc.stdout,
-                    error=f"Snapshot failed: {e}",
+                    detail=f"Snapshot failed: {e}",
                 )
 
             snapshot_name = snapshot_path.rsplit("/", 1)[-1]
@@ -308,7 +328,7 @@ def _run_btrfs_sync(
                     dry_run=dry_run,
                     rsync_exit_code=proc.returncode,
                     output=proc.stdout,
-                    error=f"Symlink update failed: {e}",
+                    detail=f"Symlink update failed: {e}",
                 )
 
             if prune and btrfs_cfg.max_snapshots is not None:
@@ -373,7 +393,7 @@ def _run_hard_link_sync(
             dry_run=dry_run,
             rsync_exit_code=-1,
             output="",
-            error=f"Failed to create snapshot dir: {e}",
+            detail=f"Failed to create snapshot dir: {e}",
         )
     snapshot_name = snapshot_path.rsplit("/", 1)[-1]
 
@@ -396,7 +416,7 @@ def _run_hard_link_sync(
             dry_run=dry_run,
             rsync_exit_code=-1,
             output="",
-            error=str(e),
+            detail=str(e),
         )
 
     if proc.returncode != 0:
@@ -408,7 +428,7 @@ def _run_hard_link_sync(
             dry_run=dry_run,
             rsync_exit_code=proc.returncode,
             output=proc.stdout + proc.stderr,
-            error=f"rsync exited with code {proc.returncode}",
+            detail=f"rsync exited with code {proc.returncode}",
         )
 
     # 5. Update latest symlink (skip on dry-run)
@@ -428,7 +448,7 @@ def _run_hard_link_sync(
                 dry_run=dry_run,
                 rsync_exit_code=proc.returncode,
                 output=proc.stdout,
-                error=f"Symlink update failed: {e}",
+                detail=f"Symlink update failed: {e}",
             )
 
         # 6. Prune old snapshots

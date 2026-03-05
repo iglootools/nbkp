@@ -244,7 +244,7 @@ class TestChainSync:
             resolved_endpoints=resolved,
         )
         for r in results:
-            assert r.success, f"{r.sync_slug}: {r.error}"
+            assert r.success, f"{r.sync_slug}: {r.detail}"
 
         # 7. Verify final destination matches source
         dst = tmp_path / "dst-local-bare"

@@ -21,6 +21,7 @@ from nbkp.check import (
     VolumeStatus,
 )
 from nbkp.sync import run_all_syncs
+from nbkp.sync.runner import SyncOutcome
 
 
 def _make_local_config() -> Config:
@@ -167,7 +168,7 @@ class TestRunAllSyncs:
         results = run_all_syncs(config, sync_statuses)
         assert len(results) == 1
         assert results[0].success is False
-        assert "not active" in (results[0].error or "")
+        assert "not active" in (results[0].detail or "")
 
     @patch("nbkp.sync.runner.run_rsync")
     def test_rsync_failure(self, mock_rsync: MagicMock) -> None:
@@ -291,7 +292,7 @@ class TestRunAllSyncs:
 
         results = run_all_syncs(config, sync_statuses)
         assert results[0].success is False
-        assert "Snapshot failed" in (results[0].error or "")
+        assert "Snapshot failed" in (results[0].detail or "")
 
     @patch("nbkp.sync.runner.update_latest_symlink")
     @patch("nbkp.sync.runner.btrfs_prune_snapshots")
@@ -407,14 +408,14 @@ class TestFailurePropagation:
         # s1 failed
         r1 = next(r for r in results if r.sync_slug == "s1")
         assert r1.success is False
+        assert r1.outcome == SyncOutcome.FAILED
         assert r1.rsync_exit_code == 23
 
         # s2 cancelled
         r2 = next(r for r in results if r.sync_slug == "s2")
         assert r2.success is False
-        assert r2.error is not None
-        assert r2.error.startswith("Cancelled:")
-        assert "'s1'" in r2.error
+        assert r2.outcome == SyncOutcome.CANCELLED
+        assert "'s1'" in (r2.detail or "")
 
     @patch("nbkp.sync.runner.run_rsync")
     def test_independent_sync_not_cancelled(
@@ -444,9 +445,7 @@ class TestFailurePropagation:
         assert len(failures) == 1
         # The failure is a real rsync failure, not a cancellation
         assert failures[0].rsync_exit_code == 23
-        assert failures[0].error is None or not failures[0].error.startswith(
-            "Cancelled:"
-        )
+        assert failures[0].outcome == SyncOutcome.FAILED
 
     @patch("nbkp.sync.runner.run_rsync")
     def test_transitive_cancellation(
@@ -496,12 +495,11 @@ class TestFailurePropagation:
         rc = next(r for r in results if r.sync_slug == "c")
 
         assert ra.success is False
+        assert ra.outcome == SyncOutcome.FAILED
         assert ra.rsync_exit_code == 23
 
         assert rb.success is False
-        assert rb.error is not None
-        assert rb.error.startswith("Cancelled:")
+        assert rb.outcome == SyncOutcome.CANCELLED
 
         assert rc.success is False
-        assert rc.error is not None
-        assert rc.error.startswith("Cancelled:")
+        assert rc.outcome == SyncOutcome.CANCELLED
