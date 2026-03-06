@@ -43,6 +43,7 @@ It intentionally does not support multi-server topologies where data flows direc
 
 If you need server-to-server replication:
 - **Install nbkp on one of the servers** and configure separate syncs from there, treating that server as the orchestrator.
+- **Compile a standalone script** with `nbkp sh` and deploy it to the server — no Python or nbkp installation required on the target server.
 - **Use tools designed for multi-server topologies**: check the [Similar Tools](#similar-tools) section for options that support enterpris-y / multi-host setups.
 
 ## Philosophy
