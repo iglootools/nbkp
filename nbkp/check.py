@@ -121,12 +121,17 @@ def _check_remote_volume(
     """Check if a remote volume is active (SSH + .nbkp-vol sentinel)."""
     ep = resolved_endpoints[volume.slug]
     sentinel_path = f"{volume.path}/.nbkp-vol"
-    result = run_remote_command(
-        ep.server, ["test", "-f", sentinel_path], ep.proxy_chain
-    )
-    reasons: list[VolumeReason] = (
-        [] if result.returncode == 0 else [VolumeReason.UNREACHABLE]
-    )
+    try:
+        result = run_remote_command(
+            ep.server, ["test", "-f", sentinel_path], ep.proxy_chain
+        )
+        reasons: list[VolumeReason] = (
+            []
+            if result.returncode == 0
+            else [VolumeReason.UNREACHABLE]
+        )
+    except Exception:
+        reasons = [VolumeReason.UNREACHABLE]
     return VolumeStatus(
         slug=volume.slug,
         config=volume,

@@ -53,20 +53,6 @@
   - No real rsync/ssh/btrfs calls in unit tests - use mocks instead. Docker-enabled integration tests cover the real interactions.
   - Generate YAML test data using the Pydantic data models and `model.model_dump()` instead of hardcoding YAML strings.
     This ensures the test data is always valid and consistent with the models.
-
-## Testing Categories
-
-Tests are organized into 5 categories based on what they test and what infrastructure they require:
-
-1. **Unit tests** (`tests/`, `tests/sync/`, `tests/remote/`) — Mock all external calls (rsync, SSH, btrfs). Test logic and command building. No external dependencies.
-
-2. **E2E sync** (`tests/e2e_sync/`) — Full sync pipeline on local filesystem, no Docker. Tests local-to-local syncs end-to-end with real rsync.
-
-3. **E2E sync (Docker)** (`tests/e2e_sync_docker/`) — Full sync pipeline with remote endpoints via Docker containers. Includes end-to-end btrfs and hard-link snapshot workflows, proxy jump, chained syncs, and remote-to-remote syncs.
-
-4. **Integration (Docker)** (`tests/integration_docker/`) — Component-level tests against real infrastructure in Docker. Tests individual module functions (volume/sync checks, btrfs operations) via SSH. Includes local btrfs tests that run inside a privileged Docker container (`mise run test-btrfs-local`).
-
-5. **Integration (filesystem)** (`tests/integration_fs/`) — Component-level tests using real local filesystem operations (hard-link snapshots, symlinks, inode verification). Runs on any OS that supports hard links.
 - **Domain Logic Consistency**
   - When making changes to the config schema/models or status checks, make sure to update:
     - The demo CLI (`nbkp/democli.py`) to generate new test data that reflects the changes, and update the expected outputs in `testdata.py` if necessary.
@@ -75,3 +61,35 @@ Tests are organized into 5 categories based on what they test and what infrastru
       - Ensure to add comments in the codebase to describe which choices have been made with regard to which of the original (`run`) functionality has been preserved vs dropped
       - When adding functionality to the `run` command, make sure to also add it to the `sh` command, or explicitly document why it's not applicable.
   - When adding a dependency on an external tool (e.g. `stat`, `findfmt`), add a check for the tool in the CLI app and provide a clear error message if it's not found. 
+
+## Testing Strategy
+
+### Manual Testing
+
+In addition to the automated tests, the `nbkp demo seed --docker` command can be used for manual testing and debugging. It generates:
+1. a similar environment as the one used in the Docker-enabled tests
+2. a set of pre-configured test data.
+
+### Automated tests
+
+Automated tests are organized into 5 categories based on what they test and what infrastructure they require:
+
+1. **Unit tests** (`tests/`, `tests/sync/`, `tests/remote/`) — Mock all external calls (rsync, SSH, filesystem). Test logic and command building. No external dependencies.
+
+2. **E2E sync** (`tests/e2e_sync/`) — Full sync pipeline on local filesystem, no Docker. Tests local-to-local syncs end-to-end with real rsync.
+
+3. **E2E sync (Docker)** (`tests/e2e_sync_docker/`) — Full sync pipeline with remote endpoints via Docker containers. Includes end-to-end btrfs and hard-link snapshot workflows, proxy jump, chained syncs, and remote-to-remote syncs.
+
+4. **Integration (Docker)** (`tests/integration_docker/`) — Component-level tests against real infrastructure in Docker. Tests individual module functions (volume/sync checks, btrfs operations) via SSH. Includes local btrfs tests that run inside a privileged Docker container (`mise run test-btrfs-local`).
+
+5. **Integration (filesystem)** (`tests/integration_fs/`) — Component-level tests using real local filesystem operations (hard-link snapshots, symlinks, inode verification). Runs on any OS that supports hard links.
+
+### Known Gaps and Limitations
+
+The following SSH features have unit test coverage (command building, option mapping) but are **not** tested end-to-end against real infrastructure:
+
+- **SSH agent authentication**: Tests always use explicit key files. Agent-based auth (`ssh-agent`) is not exercised because it requires managing an agent process in the test environment. The `allow_agent` parameter is validated via the explicit-key-only test (`allow_agent=False`).
+- **Paramiko-specific timeouts**: `banner_timeout`, `auth_timeout`, `channel_timeout` are only mock-tested. E2e testing would require a deliberately slow or broken SSH server.
+- **`disabled_algorithms`**: Only mock-tested. E2e testing would require a server configured to require specific algorithms.
+- **`compress` / `server_alive_interval`**: Tested for correct flag generation. Verifying actual compression or keepalive behavior is impractical.
+- **Per-hop connection options**: Multi-hop proxy tests use identical options on all hops. Per-hop option variation is covered by unit tests (each hop generates options independently).
