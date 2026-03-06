@@ -40,6 +40,7 @@ class ScriptOptions:
     output_file: str | None = None
     relative_src: bool = False
     relative_dst: bool = False
+    portable: bool = True
 
 
 def generate_script(
@@ -614,14 +615,12 @@ def _build_link_dest_block(
     snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     ls_cmd = _ls_snapshots_cmd(dst_vol, snaps_dir, resolved_endpoints)
 
-    return dedent(
-        f"""\
+    return dedent(f"""\
         NBKP_LATEST_SNAP=$({ls_cmd} 2>/dev/null | sort | tail -1)
         RSYNC_LINK_DEST=""
         if [ -n "$NBKP_LATEST_SNAP" ]; then
             RSYNC_LINK_DEST="--link-dest={link_dest_prefix}$NBKP_LATEST_SNAP"
-        fi"""
-    )
+        fi""")
 
 
 def _build_rsync_block(
@@ -694,13 +693,11 @@ def _build_snapshot_block(
     snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     snap = _snapshot_cmd(dst_vol, tmp, snaps_dir, resolved_endpoints)
 
-    return dedent(
-        f"""\
+    return dedent(f"""\
         if [ "$NBKP_DRY_RUN" = false ]; then
             NBKP_TS=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
             {snap}
-        fi"""
-    )
+        fi""")
 
 
 def _build_prune_block(
@@ -731,8 +728,7 @@ def _build_prune_block(
         " | while IFS= read -r snap; do"
     )
     # fmt: on
-    return dedent(
-        f"""\
+    return dedent(f"""\
         if [ "$NBKP_DRY_RUN" = false ]; then
             NBKP_SNAPS=$({ls_cmd} | sort)
             NBKP_COUNT=$(echo "$NBKP_SNAPS" | wc -l | tr -d ' ')
@@ -748,8 +744,7 @@ def _build_prune_block(
                     fi
                 done
             fi
-        fi"""
-    )
+        fi""")
 
 
 def _build_hard_link_orphan_cleanup_block(
@@ -771,8 +766,7 @@ def _build_hard_link_orphan_cleanup_block(
     ls_cmd = _ls_snapshots_cmd(dst_vol, snaps_dir, resolved_endpoints)
     rm_cmd = _rm_rf_snap_cmd(dst_vol, snaps_dir, resolved_endpoints)
 
-    return dedent(
-        f"""\
+    return dedent(f"""\
         NBKP_LATEST_LINK=$({rl_cmd} 2>/dev/null || true)
         if [ -n "$NBKP_LATEST_LINK" ]; then
             NBKP_LATEST_NAME="${{NBKP_LATEST_LINK##*/}}"
@@ -782,8 +776,7 @@ def _build_hard_link_orphan_cleanup_block(
                     {rm_cmd}
                 fi
             done
-        fi"""
-    )
+        fi""")
 
 
 def _build_hard_link_mkdir_block(
@@ -802,11 +795,9 @@ def _build_hard_link_mkdir_block(
     snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     mkdir_cmd = _mkdir_snap_cmd(dst_vol, snaps_dir, resolved_endpoints)
 
-    return dedent(
-        f"""\
+    return dedent(f"""\
         NBKP_TS=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
-        {mkdir_cmd}"""
-    )
+        {mkdir_cmd}""")
 
 
 def _build_hard_link_symlink_block(
@@ -824,12 +815,10 @@ def _build_hard_link_symlink_block(
     )
     ln_cmd = _ln_sfn_cmd(dst_vol, dest_path, resolved_endpoints)
 
-    return dedent(
-        f"""\
+    return dedent(f"""\
         if [ "$NBKP_DRY_RUN" = false ]; then
             {ln_cmd}
-        fi"""
-    )
+        fi""")
 
 
 def _build_hard_link_prune_block(
@@ -859,8 +848,7 @@ def _build_hard_link_prune_block(
         " | while IFS= read -r snap; do"
     )
     # fmt: on
-    return dedent(
-        f"""\
+    return dedent(f"""\
         if [ "$NBKP_DRY_RUN" = false ]; then
             NBKP_SNAPS=$({ls_cmd} | sort)
             NBKP_COUNT=$(echo "$NBKP_SNAPS" | wc -l | tr -d ' ')
@@ -875,8 +863,7 @@ def _build_hard_link_prune_block(
                     fi
                 done
             fi
-        fi"""
-    )
+        fi""")
 
 
 # ── Volume check builder ────────────────────────────────────
@@ -1212,6 +1199,7 @@ def _build_script_context(
         "timestamp": timestamp,
         "config_line": config_line,
         "has_script_dir": has_script_dir,
+        "portable": options.portable,
         "volume_checks": volume_checks,
         "syncs": syncs,
     }

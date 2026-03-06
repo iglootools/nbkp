@@ -374,6 +374,13 @@ def sh(
             help="Prefer public (WAN) endpoints",
         ),
     ] = False,
+    portable: Annotated[
+        bool,
+        typer.Option(
+            "--portable/--no-portable",
+            help=("Generate bash 3.2-compatible script" " (default: enabled)"),
+        ),
+    ] = True,
 ) -> None:
     """Generate a standalone backup shell script.
 
@@ -398,6 +405,7 @@ def sh(
             ),
             relative_src=relative_src,
             relative_dst=relative_dst,
+            portable=portable,
         ),
         resolved_endpoints=resolved,
     )

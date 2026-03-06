@@ -139,6 +139,7 @@ The generated script supports `--dry-run` (`-n`) and `--verbose` (`-v`, `-vv`, `
 | `--locations` | `-l` | Prefer endpoints at these locations (repeatable) |
 | `--private` | | Prefer private (LAN) endpoints |
 | `--public` | | Prefer public (WAN) endpoints |
+| `--portable/--no-portable` | | Generate bash 3.2-compatible script (default: enabled) |
 
 ### `prune` — Prune old snapshots
 

@@ -311,7 +311,9 @@ class TestLocalToLocal:
     def test_sync_invocation(self) -> None:
         config = _local_to_local_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert ("sync_my_sync" " || { NBKP_FAILED[sync_") in script
+        assert (
+            "sync_my_sync" ' || { NBKP_FAILED="$NBKP_FAILED' 'sync_my_sync "'
+        ) in script
 
 
 class TestLocalToRemote:
@@ -762,7 +764,11 @@ class TestEdgeCases:
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert "sync_active_sync()" in script
         assert "# : disabled — off-sync" in script
-        assert ("sync_active_sync" " || { NBKP_FAILED[sync_") in script
+        assert (
+            "sync_active_sync"
+            ' || { NBKP_FAILED="$NBKP_FAILED'
+            'sync_active_sync "'
+        ) in script
         assert "# sync_off_sync  # disabled" in script
         result = subprocess.run(
             ["bash", "-n"],
@@ -1187,9 +1193,9 @@ class TestDependencyGuard:
         )
         script = generate_script(config, _OPTIONS, now=_NOW)
         # step-1 has no guard (no predecessors)
-        assert "NBKP_FAILED[sync_step_1]" in script
+        assert "NBKP_FAILEDsync_step_1 " in script
         # step-2 has a dependency guard checking step-1
-        assert "NBKP_FAILED[sync_step_1]+set" in script
+        assert 'nbkp_has_failed "sync_step_1"' in script
         assert "CANCELLED step-2" in script
 
     def test_independent_syncs_no_guard(self) -> None:
@@ -1226,3 +1232,63 @@ class TestDependencyGuard:
             text=True,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+
+
+class TestNoPortable:
+    """Tests for --no-portable (bash 4+ with declare -A)."""
+
+    def _chain_config(self) -> Config:
+        src = LocalVolume(slug="src", path="/src")
+        mid = LocalVolume(slug="mid", path="/mid")
+        dst = LocalVolume(slug="dst", path="/dst")
+        return Config(
+            volumes={"src": src, "mid": mid, "dst": dst},
+            syncs={
+                "step-1": SyncConfig(
+                    slug="step-1",
+                    source=SyncEndpoint(volume="src"),
+                    destination=DestinationSyncEndpoint(volume="mid"),
+                ),
+                "step-2": SyncConfig(
+                    slug="step-2",
+                    source=SyncEndpoint(volume="mid"),
+                    destination=DestinationSyncEndpoint(volume="dst"),
+                ),
+            },
+        )
+
+    def test_uses_declare_a(self) -> None:
+        """--no-portable uses declare -A."""
+        opts = ScriptOptions(config_path="test.yaml", portable=False)
+        script = generate_script(self._chain_config(), opts, now=_NOW)
+        assert "declare -A NBKP_FAILED=()" in script
+        assert "nbkp_has_failed" not in script
+
+    def test_associative_array_guard(self) -> None:
+        """--no-portable uses associative array for guards."""
+        opts = ScriptOptions(config_path="test.yaml", portable=False)
+        script = generate_script(self._chain_config(), opts, now=_NOW)
+        assert "NBKP_FAILED[sync_step_1]=1" in script
+        assert '${NBKP_FAILED[sync_step_1]+set}" = "set"' in script
+
+    def test_valid_bash_syntax(self) -> None:
+        """--no-portable script passes bash -n."""
+        opts = ScriptOptions(config_path="test.yaml", portable=False)
+        script = generate_script(self._chain_config(), opts, now=_NOW)
+        result = subprocess.run(
+            ["bash", "-n"],
+            input=script,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+
+    def test_simple_sync_uses_associative_array(
+        self,
+    ) -> None:
+        """--no-portable uses associative array for simple."""
+        config = _local_to_local_config()
+        opts = ScriptOptions(config_path="test.yaml", portable=False)
+        script = generate_script(config, opts, now=_NOW)
+        assert "declare -A NBKP_FAILED=()" in script
+        assert "NBKP_FAILED[sync_my_sync]=1" in script
