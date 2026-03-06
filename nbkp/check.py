@@ -20,7 +20,7 @@ from .config import (
     Volume,
 )
 from .remote import run_remote_command
-from .sync.btrfs import STAGING_DIR
+from .sync.btrfs import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
 
 
 class VolumeReason(str, enum.Enum):
@@ -34,8 +34,10 @@ class SyncReason(str, enum.Enum):
     DESTINATION_UNAVAILABLE = "destination unavailable"
     SOURCE_SENTINEL_NOT_FOUND = ".nbkp-src source sentinel not found"
     DESTINATION_SENTINEL_NOT_FOUND = ".nbkp-dst destination sentinel not found"
-    SOURCE_LATEST_NOT_FOUND = "source latest/ directory not found"
-    SOURCE_SNAPSHOTS_DIR_NOT_FOUND = "source snapshots/ directory not found"
+    SOURCE_LATEST_NOT_FOUND = f"source {LATEST_LINK}/ directory not found"
+    SOURCE_SNAPSHOTS_DIR_NOT_FOUND = (
+        f"source {SNAPSHOTS_DIR}/ directory not found"
+    )
     RSYNC_NOT_FOUND_ON_SOURCE = "rsync not found on source"
     RSYNC_NOT_FOUND_ON_DESTINATION = "rsync not found on destination"
     RSYNC_TOO_OLD_ON_SOURCE = "rsync too old on source (3.0+ required)"
@@ -56,7 +58,7 @@ class SyncReason(str, enum.Enum):
         f"destination {STAGING_DIR}/ directory not found"
     )
     DESTINATION_SNAPSHOTS_DIR_NOT_FOUND = (
-        "destination snapshots/ directory not found"
+        f"destination {SNAPSHOTS_DIR}/ directory not found"
     )
     DESTINATION_NO_HARDLINK_SUPPORT = (
         "destination filesystem does not support hard links"
@@ -366,7 +368,7 @@ def _check_btrfs_dest(
         ):
             reasons.append(SyncReason.DESTINATION_TMP_NOT_FOUND)
         if not _check_directory_exists(
-            dst_vol, f"{ep}/snapshots", resolved_endpoints
+            dst_vol, f"{ep}/{SNAPSHOTS_DIR}", resolved_endpoints
         ):
             reasons.append(SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND)
 
@@ -382,7 +384,7 @@ def _check_hard_link_dest(
         reasons.append(SyncReason.DESTINATION_NO_HARDLINK_SUPPORT)
     ep = _resolve_endpoint(dst_vol, sync.destination.subdir)
     if not _check_directory_exists(
-        dst_vol, f"{ep}/snapshots", resolved_endpoints
+        dst_vol, f"{ep}/{SNAPSHOTS_DIR}", resolved_endpoints
     ):
         reasons.append(SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND)
 
@@ -438,11 +440,11 @@ def check_sync(
             if sync.source.snapshot_mode != "none":
                 src_ep = _resolve_endpoint(src_vol, sync.source.subdir)
                 if not _check_directory_exists(
-                    src_vol, f"{src_ep}/latest", re
+                    src_vol, f"{src_ep}/{LATEST_LINK}", re
                 ):
                     reasons.append(SyncReason.SOURCE_LATEST_NOT_FOUND)
                 if not _check_directory_exists(
-                    src_vol, f"{src_ep}/snapshots", re
+                    src_vol, f"{src_ep}/{SNAPSHOTS_DIR}", re
                 ):
                     reasons.append(SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND)
 

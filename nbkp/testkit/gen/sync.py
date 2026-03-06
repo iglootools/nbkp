@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from ...config import Config
 from ...sync import PruneResult, SyncResult
+from ...sync.btrfs import SNAPSHOTS_DIR
 
 
 def _snap_base(config: Config) -> str:
     vol = config.volumes[config.syncs["photos-to-usb"].destination.volume]
-    return f"{vol.path}/snapshots"
+    return f"{vol.path}/{SNAPSHOTS_DIR}"
 
 
 def run_results(config: Config) -> list[SyncResult]:

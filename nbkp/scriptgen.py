@@ -26,7 +26,7 @@ from .config import (
     SyncConfig,
 )
 from .remote.ssh import build_ssh_base_args
-from .sync.btrfs import STAGING_DIR
+from .sync.btrfs import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
 from .sync.rsync import build_rsync_command
 
 # ── Public API ────────────────────────────────────────────────
@@ -421,10 +421,13 @@ def _ln_sfn_cmd(
     dest_path: str,
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
-    """Shell command for ln -sfn snapshots/$NBKP_TS {dest}/latest."""
+    """Shell command for ln -sfn."""
     match dst_vol:
         case LocalVolume():
-            return f'ln -sfn "snapshots/$NBKP_TS"' f" {_qp(dest_path)}/latest"
+            return (
+                f'ln -sfn "{SNAPSHOTS_DIR}/$NBKP_TS"'
+                f" {_qp(dest_path)}/{LATEST_LINK}"
+            )
         case RemoteVolume():
             ep = resolved_endpoints[dst_vol.slug]
             ssh_pfx = " ".join(
@@ -432,8 +435,8 @@ def _ln_sfn_cmd(
             )
             return (
                 f"{ssh_pfx}"
-                f' "ln -sfn snapshots/$NBKP_TS'
-                f' {dest_path}/latest"'
+                f' "ln -sfn {SNAPSHOTS_DIR}/$NBKP_TS'
+                f' {dest_path}/{LATEST_LINK}"'
             )
 
 
@@ -491,21 +494,21 @@ def _build_preflight_block(
 
     # Source snapshot: verify latest/ and snapshots/ exist
     if sync.source.snapshot_mode != "none":
-        src_latest = f"{src_path}/latest"
+        src_latest = f"{src_path}/{LATEST_LINK}"
         lines.append(
             _build_check_line(
                 src_vol,
                 ["-d", src_latest],
-                ("source latest/ not found" f" ({src_latest})"),
+                (f"source {LATEST_LINK}/ not found" f" ({src_latest})"),
                 resolved_endpoints,
             )
         )
-        src_snapshots = f"{src_path}/snapshots"
+        src_snapshots = f"{src_path}/{SNAPSHOTS_DIR}"
         lines.append(
             _build_check_line(
                 src_vol,
                 ["-d", src_snapshots],
-                ("source snapshots/ not found" f" ({src_snapshots})"),
+                (f"source {SNAPSHOTS_DIR}/ not found" f" ({src_snapshots})"),
                 resolved_endpoints,
             )
         )
@@ -561,24 +564,26 @@ def _build_preflight_block(
                 resolved_endpoints,
             )
         )
-        snaps_dir = f"{dst_path}/snapshots"
+        snaps_dir = f"{dst_path}/{SNAPSHOTS_DIR}"
         lines.append(
             _build_check_line(
                 dst_vol,
                 ["-d", snaps_dir],
-                "destination snapshots/ directory not found" f" ({snaps_dir})",
+                f"destination {SNAPSHOTS_DIR}/ directory"
+                f" not found ({snaps_dir})",
                 resolved_endpoints,
             )
         )
 
     # Hard-link checks
     if sync.destination.hard_link_snapshots.enabled:
-        snaps_dir = f"{dst_path}/snapshots"
+        snaps_dir = f"{dst_path}/{SNAPSHOTS_DIR}"
         lines.append(
             _build_check_line(
                 dst_vol,
                 ["-d", snaps_dir],
-                "destination snapshots/ directory not found" f" ({snaps_dir})",
+                f"destination {SNAPSHOTS_DIR}/ directory"
+                f" not found ({snaps_dir})",
                 resolved_endpoints,
             )
         )
@@ -606,15 +611,17 @@ def _build_link_dest_block(
         sync.destination.volume,
         sync.destination.subdir,
     )
-    snaps_dir = f"{dest_path}/snapshots"
+    snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     ls_cmd = _ls_snapshots_cmd(dst_vol, snaps_dir, resolved_endpoints)
 
-    return dedent(f"""\
+    return dedent(
+        f"""\
         NBKP_LATEST_SNAP=$({ls_cmd} 2>/dev/null | sort | tail -1)
         RSYNC_LINK_DEST=""
         if [ -n "$NBKP_LATEST_SNAP" ]; then
             RSYNC_LINK_DEST="--link-dest={link_dest_prefix}$NBKP_LATEST_SNAP"
-        fi""")
+        fi"""
+    )
 
 
 def _build_rsync_block(
@@ -684,14 +691,16 @@ def _build_snapshot_block(
         sync.destination.subdir,
     )
     tmp = f"{dest_path}/{STAGING_DIR}"
-    snaps_dir = f"{dest_path}/snapshots"
+    snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     snap = _snapshot_cmd(dst_vol, tmp, snaps_dir, resolved_endpoints)
 
-    return dedent(f"""\
+    return dedent(
+        f"""\
         if [ "$NBKP_DRY_RUN" = false ]; then
             NBKP_TS=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
             {snap}
-        fi""")
+        fi"""
+    )
 
 
 def _build_prune_block(
@@ -708,8 +717,8 @@ def _build_prune_block(
         sync.destination.volume,
         sync.destination.subdir,
     )
-    latest_path = f"{dest_path}/latest"
-    snaps_dir = f"{dest_path}/snapshots"
+    latest_path = f"{dest_path}/{LATEST_LINK}"
+    snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     ls_cmd = _ls_snapshots_cmd(dst_vol, snaps_dir, resolved_endpoints)
     rl_cmd = _readlink_cmd(dst_vol, latest_path, resolved_endpoints)
     prop_cmd = _btrfs_prop_cmd(dst_vol, snaps_dir, resolved_endpoints)
@@ -722,7 +731,8 @@ def _build_prune_block(
         " | while IFS= read -r snap; do"
     )
     # fmt: on
-    return dedent(f"""\
+    return dedent(
+        f"""\
         if [ "$NBKP_DRY_RUN" = false ]; then
             NBKP_SNAPS=$({ls_cmd} | sort)
             NBKP_COUNT=$(echo "$NBKP_SNAPS" | wc -l | tr -d ' ')
@@ -738,7 +748,8 @@ def _build_prune_block(
                     fi
                 done
             fi
-        fi""")
+        fi"""
+    )
 
 
 def _build_hard_link_orphan_cleanup_block(
@@ -754,13 +765,14 @@ def _build_hard_link_orphan_cleanup_block(
         sync.destination.volume,
         sync.destination.subdir,
     )
-    latest_path = f"{dest_path}/latest"
-    snaps_dir = f"{dest_path}/snapshots"
+    latest_path = f"{dest_path}/{LATEST_LINK}"
+    snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     rl_cmd = _readlink_cmd(dst_vol, latest_path, resolved_endpoints)
     ls_cmd = _ls_snapshots_cmd(dst_vol, snaps_dir, resolved_endpoints)
     rm_cmd = _rm_rf_snap_cmd(dst_vol, snaps_dir, resolved_endpoints)
 
-    return dedent(f"""\
+    return dedent(
+        f"""\
         NBKP_LATEST_LINK=$({rl_cmd} 2>/dev/null || true)
         if [ -n "$NBKP_LATEST_LINK" ]; then
             NBKP_LATEST_NAME="${{NBKP_LATEST_LINK##*/}}"
@@ -770,7 +782,8 @@ def _build_hard_link_orphan_cleanup_block(
                     {rm_cmd}
                 fi
             done
-        fi""")
+        fi"""
+    )
 
 
 def _build_hard_link_mkdir_block(
@@ -786,12 +799,14 @@ def _build_hard_link_mkdir_block(
         sync.destination.volume,
         sync.destination.subdir,
     )
-    snaps_dir = f"{dest_path}/snapshots"
+    snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     mkdir_cmd = _mkdir_snap_cmd(dst_vol, snaps_dir, resolved_endpoints)
 
-    return dedent(f"""\
+    return dedent(
+        f"""\
         NBKP_TS=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
-        {mkdir_cmd}""")
+        {mkdir_cmd}"""
+    )
 
 
 def _build_hard_link_symlink_block(
@@ -809,10 +824,12 @@ def _build_hard_link_symlink_block(
     )
     ln_cmd = _ln_sfn_cmd(dst_vol, dest_path, resolved_endpoints)
 
-    return dedent(f"""\
+    return dedent(
+        f"""\
         if [ "$NBKP_DRY_RUN" = false ]; then
             {ln_cmd}
-        fi""")
+        fi"""
+    )
 
 
 def _build_hard_link_prune_block(
@@ -829,8 +846,8 @@ def _build_hard_link_prune_block(
         sync.destination.volume,
         sync.destination.subdir,
     )
-    latest_path = f"{dest_path}/latest"
-    snaps_dir = f"{dest_path}/snapshots"
+    latest_path = f"{dest_path}/{LATEST_LINK}"
+    snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     ls_cmd = _ls_snapshots_cmd(dst_vol, snaps_dir, resolved_endpoints)
     rl_cmd = _readlink_cmd(dst_vol, latest_path, resolved_endpoints)
     rm_cmd = _rm_rf_snap_cmd(dst_vol, snaps_dir, resolved_endpoints)
@@ -842,7 +859,8 @@ def _build_hard_link_prune_block(
         " | while IFS= read -r snap; do"
     )
     # fmt: on
-    return dedent(f"""\
+    return dedent(
+        f"""\
         if [ "$NBKP_DRY_RUN" = false ]; then
             NBKP_SNAPS=$({ls_cmd} | sort)
             NBKP_COUNT=$(echo "$NBKP_SNAPS" | wc -l | tr -d ' ')
@@ -857,7 +875,8 @@ def _build_hard_link_prune_block(
                     fi
                 done
             fi
-        fi""")
+        fi"""
+    )
 
 
 # ── Volume check builder ────────────────────────────────────
@@ -1044,7 +1063,7 @@ def _build_sync_context(
             config,
             vol_paths,
             resolved_endpoints,
-            dest_suffix="snapshots/$NBKP_TS",
+            dest_suffix=f"{SNAPSHOTS_DIR}/$NBKP_TS",
             has_link_dest=True,
         )
     elif has_btrfs:

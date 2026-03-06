@@ -21,6 +21,7 @@ from ..remote import (
     build_ssh_e_option,
     format_remote_path,
 )
+from .btrfs import LATEST_LINK
 
 
 class ProgressMode(str, Enum):
@@ -67,7 +68,7 @@ def resolve_source_path(
     """
     base = resolve_path(volume, source.subdir)
     if source.snapshot_mode != "none":
-        return f"{base}/latest"
+        return f"{base}/{LATEST_LINK}"
     return base
 
 

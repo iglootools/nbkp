@@ -13,7 +13,7 @@ from ...config import (
     RemoteVolume,
     SyncConfig,
 )
-from ...sync.btrfs import STAGING_DIR
+from ...sync.btrfs import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
 
 _CHUNK_SIZE = 1024 * 1024  # 1 MB
 
@@ -90,11 +90,11 @@ def _create_source_sentinels(
             path.mkdir(parents=True, exist_ok=True)
             (path / ".nbkp-src").touch()
             if hard_link.enabled:
-                snap = path / "snapshots" / _SEED_SNAPSHOT_NAME
+                snap = path / SNAPSHOTS_DIR / _SEED_SNAPSHOT_NAME
                 snap.mkdir(parents=True, exist_ok=True)
-                latest = path / "latest"
+                latest = path / LATEST_LINK
                 if not latest.exists():
-                    latest.symlink_to(f"snapshots/{_SEED_SNAPSHOT_NAME}")
+                    latest.symlink_to(f"{SNAPSHOTS_DIR}/{_SEED_SNAPSHOT_NAME}")
             elif btrfs.enabled:
                 if not (path / STAGING_DIR).exists():
                     subprocess.run(
@@ -106,9 +106,9 @@ def _create_source_sentinels(
                         ],
                         check=True,
                     )
-                (path / "snapshots").mkdir(exist_ok=True)
+                (path / SNAPSHOTS_DIR).mkdir(exist_ok=True)
                 # Seed snapshot + latest symlink
-                seed = path / "snapshots" / _SEED_SNAPSHOT_NAME
+                seed = path / SNAPSHOTS_DIR / _SEED_SNAPSHOT_NAME
                 if not seed.exists():
                     subprocess.run(
                         [
@@ -121,9 +121,9 @@ def _create_source_sentinels(
                         ],
                         check=True,
                     )
-                latest = path / "latest"
+                latest = path / LATEST_LINK
                 if not latest.exists():
-                    latest.symlink_to(f"snapshots/{_SEED_SNAPSHOT_NAME}")
+                    latest.symlink_to(f"{SNAPSHOTS_DIR}/{_SEED_SNAPSHOT_NAME}")
         case RemoteVolume():
             if remote_exec is not None:
                 rp = vol.path
@@ -132,11 +132,11 @@ def _create_source_sentinels(
                 remote_exec(f"mkdir -p {rp}")
                 remote_exec(f"touch {rp}/.nbkp-src")
                 if hard_link.enabled:
-                    snap_rel = f"snapshots/{_SEED_SNAPSHOT_NAME}"
+                    snap_rel = f"{SNAPSHOTS_DIR}/{_SEED_SNAPSHOT_NAME}"
                     remote_exec(f"mkdir -p {rp}/{snap_rel}")
                     remote_exec(
-                        f"test -e {rp}/latest"
-                        f" || ln -sfn {snap_rel} {rp}/latest"
+                        f"test -e {rp}/{LATEST_LINK}"
+                        f" || ln -sfn {snap_rel} {rp}/{LATEST_LINK}"
                     )
                 elif btrfs.enabled:
                     remote_exec(
@@ -144,17 +144,17 @@ def _create_source_sentinels(
                         " || btrfs subvolume create"
                         f" {rp}/{STAGING_DIR}"
                     )
-                    remote_exec(f"mkdir -p {rp}/snapshots")
+                    remote_exec(f"mkdir -p {rp}/{SNAPSHOTS_DIR}")
                     # Seed snapshot + latest symlink
-                    seed_rel = f"snapshots/{_SEED_SNAPSHOT_NAME}"
+                    seed_rel = f"{SNAPSHOTS_DIR}/{_SEED_SNAPSHOT_NAME}"
                     remote_exec(
                         f"test -e {rp}/{seed_rel}"
                         " || btrfs subvolume snapshot -r"
                         f" {rp}/{STAGING_DIR} {rp}/{seed_rel}"
                     )
                     remote_exec(
-                        f"test -e {rp}/latest"
-                        f" || ln -sfn {seed_rel} {rp}/latest"
+                        f"test -e {rp}/{LATEST_LINK}"
+                        f" || ln -sfn {seed_rel} {rp}/{LATEST_LINK}"
                     )
 
 
@@ -176,7 +176,7 @@ def _create_dest_sentinels(
             path.mkdir(parents=True, exist_ok=True)
             (path / ".nbkp-dst").touch()
             if hard_link.enabled:
-                (path / "snapshots").mkdir(exist_ok=True)
+                (path / SNAPSHOTS_DIR).mkdir(exist_ok=True)
             elif btrfs.enabled:
                 if not (path / STAGING_DIR).exists():
                     subprocess.run(
@@ -188,7 +188,7 @@ def _create_dest_sentinels(
                         ],
                         check=True,
                     )
-                (path / "snapshots").mkdir(exist_ok=True)
+                (path / SNAPSHOTS_DIR).mkdir(exist_ok=True)
         case RemoteVolume():
             if remote_exec is not None:
                 rp = vol.path
@@ -197,14 +197,14 @@ def _create_dest_sentinels(
                 remote_exec(f"mkdir -p {rp}")
                 remote_exec(f"touch {rp}/.nbkp-dst")
                 if hard_link.enabled:
-                    remote_exec(f"mkdir -p {rp}/snapshots")
+                    remote_exec(f"mkdir -p {rp}/{SNAPSHOTS_DIR}")
                 elif btrfs.enabled:
                     remote_exec(
                         f"test -e {rp}/{STAGING_DIR}"
                         " || btrfs subvolume create"
                         f" {rp}/{STAGING_DIR}"
                     )
-                    remote_exec(f"mkdir -p {rp}/snapshots")
+                    remote_exec(f"mkdir -p {rp}/{SNAPSHOTS_DIR}")
 
 
 def _volume_key(

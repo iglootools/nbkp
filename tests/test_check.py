@@ -52,7 +52,7 @@ class TestLocalVolume:
         try:
             vol.slug = "other"  # type: ignore[misc]
             assert False, "Should be frozen"
-        except AttributeError, pydantic.ValidationError:
+        except (AttributeError, pydantic.ValidationError):
             pass
 
 
@@ -116,7 +116,7 @@ class TestRemoteVolume:
         try:
             vol.path = "other"  # type: ignore[misc]
             assert False, "Should be frozen"
-        except AttributeError, pydantic.ValidationError:
+        except (AttributeError, pydantic.ValidationError):
             pass
 
 

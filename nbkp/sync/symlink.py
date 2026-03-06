@@ -12,7 +12,7 @@ from ..config import (
     SyncConfig,
 )
 from ..remote import run_remote_command
-from .btrfs import resolve_dest_path
+from .btrfs import LATEST_LINK, SNAPSHOTS_DIR, resolve_dest_path
 
 
 def read_latest_symlink(
@@ -27,7 +27,7 @@ def read_latest_symlink(
     """
     re = resolved_endpoints or {}
     dest_path = resolve_dest_path(sync, config)
-    latest_path = f"{dest_path}/latest"
+    latest_path = f"{dest_path}/{LATEST_LINK}"
 
     dst_vol = config.volumes[sync.destination.volume]
     match dst_vol:
@@ -64,8 +64,8 @@ def update_latest_symlink(
     """Create or update the latest symlink to point to a snapshot."""
     re = resolved_endpoints or {}
     dest_path = resolve_dest_path(sync, config)
-    latest_path = f"{dest_path}/latest"
-    target = f"snapshots/{snapshot_name}"
+    latest_path = f"{dest_path}/{LATEST_LINK}"
+    target = f"{SNAPSHOTS_DIR}/{snapshot_name}"
 
     dst_vol = config.volumes[sync.destination.volume]
     match dst_vol:

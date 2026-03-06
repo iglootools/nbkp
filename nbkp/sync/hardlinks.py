@@ -15,7 +15,7 @@ from ..config import (
     Volume,
 )
 from ..remote import run_remote_command
-from .btrfs import list_snapshots, resolve_dest_path
+from .btrfs import SNAPSHOTS_DIR, list_snapshots, resolve_dest_path
 from .symlink import (  # noqa: F401 — re-exported
     read_latest_symlink,
     update_latest_symlink,
@@ -38,7 +38,7 @@ def create_snapshot_dir(
         now = datetime.now(timezone.utc)
     dest_path = resolve_dest_path(sync, config)
     timestamp = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
-    snapshot_path = f"{dest_path}/snapshots/{timestamp}"
+    snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{timestamp}"
 
     dst_vol = config.volumes[sync.destination.volume]
     match dst_vol:

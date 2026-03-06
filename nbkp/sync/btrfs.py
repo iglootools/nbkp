@@ -19,6 +19,13 @@ from ..remote import run_remote_command
 #: syncs into before a read-only snapshot is created.
 STAGING_DIR = "staging"
 
+#: Directory name that holds timestamped snapshots (both btrfs
+#: and hard-link).
+SNAPSHOTS_DIR = "snapshots"
+
+#: Symlink name that points to the most recent complete snapshot.
+LATEST_LINK = "latest"
+
 
 def resolve_dest_path(sync: SyncConfig, config: Config) -> str:
     """Resolve the destination path for a sync."""
@@ -46,7 +53,7 @@ def create_snapshot(
     dest_path = resolve_dest_path(sync, config)
     # isoformat uses +00:00, but Z is more conventional for UTC.
     timestamp = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
-    snapshot_path = f"{dest_path}/snapshots/{timestamp}"
+    snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{timestamp}"
     tmp_path = f"{dest_path}/{STAGING_DIR}"
 
     cmd = [
@@ -84,7 +91,7 @@ def list_snapshots(
     """List all snapshot paths sorted oldest-first."""
     re = resolved_endpoints or {}
     dest_path = resolve_dest_path(sync, config)
-    snapshots_dir = f"{dest_path}/snapshots"
+    snapshots_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
 
     dst_vol = config.volumes[sync.destination.volume]
     match dst_vol:

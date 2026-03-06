@@ -25,7 +25,7 @@ from .config import (
     SyncEndpoint,
 )
 from .sync import PruneResult, SyncOutcome, SyncResult
-from .sync.btrfs import STAGING_DIR
+from .sync.btrfs import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
 from .sync.rsync import build_rsync_command
 from .check import SyncReason, SyncStatus, VolumeReason, VolumeStatus
 from .remote.ssh import format_proxy_jump_chain
@@ -528,7 +528,7 @@ def _print_sync_reason_fix(
             path = _endpoint_path(src, sync.source.subdir)
             console.print(
                 f"{p2}Source has snapshots enabled"
-                f" but {path}/latest does not"
+                f" but {path}/{LATEST_LINK} does not"
                 " exist. Ensure the upstream"
                 " sync has run at least once,"
                 " or create it manually:"
@@ -537,13 +537,15 @@ def _print_sync_reason_fix(
                 cmds = [
                     "sudo btrfs subvolume create" f" {path}/{STAGING_DIR}",
                     "sudo chown <user>:<group>" f" {path}/{STAGING_DIR}",
-                    f"mkdir -p {path}/snapshots",
-                    f"ln -sfn snapshots/initial" f" {path}/latest",
+                    f"mkdir -p {path}/{SNAPSHOTS_DIR}",
+                    f"ln -sfn {SNAPSHOTS_DIR}/initial"
+                    f" {path}/{LATEST_LINK}",
                 ]
             else:
                 cmds = [
-                    f"mkdir -p {path}/snapshots/initial",
-                    f"ln -sfn snapshots/initial" f" {path}/latest",
+                    f"mkdir -p" f" {path}/{SNAPSHOTS_DIR}/initial",
+                    f"ln -sfn {SNAPSHOTS_DIR}/initial"
+                    f" {path}/{LATEST_LINK}",
                 ]
             for cmd in cmds:
                 _print_cmd(
@@ -555,11 +557,11 @@ def _print_sync_reason_fix(
             path = _endpoint_path(src, sync.source.subdir)
             if sync.source.btrfs_snapshots.enabled:
                 cmds = [
-                    f"sudo mkdir {path}/snapshots",
-                    "sudo chown <user>:<group>" f" {path}/snapshots",
+                    f"sudo mkdir {path}/{SNAPSHOTS_DIR}",
+                    "sudo chown <user>:<group>" f" {path}/{SNAPSHOTS_DIR}",
                 ]
             else:
-                cmds = [f"mkdir -p {path}/snapshots"]
+                cmds = [f"mkdir -p {path}/{SNAPSHOTS_DIR}"]
             for cmd in cmds:
                 _print_cmd(
                     console,
@@ -623,10 +625,10 @@ def _print_sync_reason_fix(
             path = _endpoint_path(dst, sync.destination.subdir)
             cmds = [
                 "sudo btrfs subvolume create" f" {path}/{STAGING_DIR}",
-                f"sudo mkdir {path}/snapshots",
+                f"sudo mkdir {path}/{SNAPSHOTS_DIR}",
                 "sudo chown <user>:<group>"
                 f" {path}/{STAGING_DIR}"
-                f" {path}/snapshots",
+                f" {path}/{SNAPSHOTS_DIR}",
             ]
             for cmd in cmds:
                 _print_cmd(
@@ -669,11 +671,11 @@ def _print_sync_reason_fix(
             dst = config.volumes[sync.destination.volume]
             path = _endpoint_path(dst, sync.destination.subdir)
             if sync.destination.hard_link_snapshots.enabled:
-                cmds = [f"mkdir -p {path}/snapshots"]
+                cmds = [f"mkdir -p {path}/{SNAPSHOTS_DIR}"]
             else:
                 cmds = [
-                    f"sudo mkdir {path}/snapshots",
-                    "sudo chown <user>:<group>" f" {path}/snapshots",
+                    f"sudo mkdir" f" {path}/{SNAPSHOTS_DIR}",
+                    "sudo chown <user>:<group>" f" {path}/{SNAPSHOTS_DIR}",
                 ]
             for cmd in cmds:
                 _print_cmd(
