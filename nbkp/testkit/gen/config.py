@@ -95,6 +95,9 @@ def base_syncs() -> dict[str, SyncConfig]:
             destination=DestinationSyncEndpoint(
                 volume="nas-backup",
                 subdir="docs",
+                hard_link_snapshots=HardLinkSnapshotConfig(
+                    enabled=True, max_snapshots=10
+                ),
             ),
         ),
         "music-to-usb": SyncConfig(

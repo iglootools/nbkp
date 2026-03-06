@@ -220,9 +220,28 @@ def print_human_check(
             console.print(section)
 
 
+def _format_snapshot_display(
+    snapshot_path: str,
+    sync_slug: str,
+    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
+) -> str:
+    """Format a snapshot path with SSH URI prefix for remote volumes."""
+    sync = config.syncs[sync_slug]
+    vol = config.volumes[sync.destination.volume]
+    match vol:
+        case RemoteVolume():
+            ep = resolved_endpoints[vol.slug]
+            return f"{ep.server.host}:{snapshot_path}"
+        case LocalVolume():
+            return snapshot_path
+
+
 def print_human_results(
     results: list[SyncResult],
     dry_run: bool,
+    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
     *,
     console: Console | None = None,
 ) -> None:
@@ -253,7 +272,13 @@ def print_human_results(
         if r.detail:
             details_parts.append(f"Error: {r.detail}")
         if r.snapshot_path:
-            details_parts.append(f"Snapshot: {r.snapshot_path}")
+            display = _format_snapshot_display(
+                r.snapshot_path,
+                r.sync_slug,
+                config,
+                resolved_endpoints,
+            )
+            details_parts.append(f"Snapshot: {display}")
         if r.pruned_paths:
             details_parts.append(f"Pruned: {len(r.pruned_paths)} snapshot(s)")
         if r.output and not r.success:

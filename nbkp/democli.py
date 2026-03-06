@@ -75,7 +75,7 @@ from .testkit.gen.fs import (
     seed_volume,
 )
 from .testkit.gen.sync import (
-    dry_run_result,
+    dry_run_results,
     prune_dry_run_results,
     prune_results,
     run_results,
@@ -176,13 +176,16 @@ def _show_check() -> None:
 
 def _show_results() -> None:
     config = config_show_config()
+    re = resolve_all_endpoints(config)
     console, buf = _capture_console()
-    print_human_results(run_results(config), dry_run=False, console=console)
+    print_human_results(
+        run_results(config), False, config, re, console=console
+    )
     _print_panel("print_human_results (run)", buf)
 
     console, buf = _capture_console()
     print_human_results(
-        [dry_run_result(config)], dry_run=True, console=console
+        dry_run_results(config), True, config, re, console=console
     )
     _print_panel("print_human_results (dry run)", buf)
 

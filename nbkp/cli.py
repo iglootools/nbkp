@@ -310,7 +310,9 @@ def run(
                 typer.echo(json.dumps(data, indent=2))
             case OutputFormat.HUMAN:
                 typer.echo("")
-                print_human_results(results, dry_run)
+                print_human_results(
+                    results, dry_run, cfg, resolved
+                )
 
         if any(not r.success for r in results):
             raise typer.Exit(1)

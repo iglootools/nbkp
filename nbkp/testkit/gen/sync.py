@@ -7,15 +7,23 @@ from ...sync import PruneResult, SyncResult
 from ...sync.btrfs import SNAPSHOTS_DIR
 
 
-def _snap_base(config: Config) -> str:
-    vol = config.volumes[config.syncs["photos-to-usb"].destination.volume]
-    return f"{vol.path}/{SNAPSHOTS_DIR}"
+def _snap_base(
+    config: Config, sync_slug: str
+) -> str:
+    vol = config.volumes[config.syncs[sync_slug].destination.volume]
+    subdir = config.syncs[sync_slug].destination.subdir
+    base = vol.path
+    if subdir:
+        base = f"{base}/{subdir}"
+    return f"{base}/{SNAPSHOTS_DIR}"
 
 
 def run_results(config: Config) -> list[SyncResult]:
-    """Sync results: success, success+snapshot, failure."""
-    snap_base = _snap_base(config)
-    snap = f"{snap_base}/2026-02-19T10:30:00.000Z"
+    """Sync results: success, success+snapshot (local & remote), failure."""
+    local_snap_base = _snap_base(config, "photos-to-usb")
+    local_snap = f"{local_snap_base}/2026-02-19T10:30:00.000Z"
+    remote_snap_base = _snap_base(config, "docs-to-nas")
+    remote_snap = f"{remote_snap_base}/2026-02-19T11:00:00.000Z"
     src_vol = config.volumes[config.syncs["docs-to-nas"].source.volume]
     src_subdir = config.syncs["docs-to-nas"].source.subdir
     return [
@@ -32,10 +40,10 @@ def run_results(config: Config) -> list[SyncResult]:
             dry_run=False,
             rsync_exit_code=0,
             output="",
-            snapshot_path=snap,
+            snapshot_path=local_snap,
             pruned_paths=[
-                f"{snap_base}/2026-02-01T08:00:00.000Z",
-                f"{snap_base}/2026-02-10T12:00:00.000Z",
+                f"{local_snap_base}/2026-02-01T08:00:00.000Z",
+                f"{local_snap_base}/2026-02-10T12:00:00.000Z",
             ],
         ),
         SyncResult(
@@ -51,24 +59,22 @@ def run_results(config: Config) -> list[SyncResult]:
                 " were not transferred (code 23)\n"
             ),
             detail="rsync exited with code 23",
+            snapshot_path=remote_snap,
         ),
     ]
 
 
-def dry_run_result(config: Config) -> SyncResult:
-    """Single dry-run success result."""
-    return SyncResult(
-        sync_slug="photos-to-usb",
-        success=True,
-        dry_run=True,
-        rsync_exit_code=0,
-        output="",
-    )
+def dry_run_results(config: Config) -> list[SyncResult]:
+    """Same results as run_results but flagged as dry run."""
+    return [
+        r.model_copy(update={"dry_run": True})
+        for r in run_results(config)
+    ]
 
 
 def prune_results(config: Config) -> list[PruneResult]:
     """Prune results: success, noop, error."""
-    snap_base = _snap_base(config)
+    snap_base = _snap_base(config, "photos-to-usb")
     return [
         PruneResult(
             sync_slug="photos-to-usb",
@@ -100,7 +106,7 @@ def prune_dry_run_results(
     config: Config,
 ) -> list[PruneResult]:
     """Prune dry-run results."""
-    snap_base = _snap_base(config)
+    snap_base = _snap_base(config, "photos-to-usb")
     return [
         PruneResult(
             sync_slug="photos-to-usb",
