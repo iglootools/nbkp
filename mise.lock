@@ -1,3 +1,20 @@
+[[tools."aqua:asciinema/agg"]]
+version = "1.7.0"
+backend = "aqua:asciinema/agg"
+"platforms.linux-arm64" = { checksum = "sha256:4b22399a4a0882f8ac9585a27c5bda1dfd755e04a7a989505bc434d49f25434a", url = "https://github.com/asciinema/agg/releases/download/v1.7.0/agg-aarch64-unknown-linux-gnu"}
+"platforms.linux-x64" = { checksum = "sha256:593122aced7f11b367e397c06061eaadb7bd6ef7acde16832a3138d70105d26c", url = "https://github.com/asciinema/agg/releases/download/v1.7.0/agg-x86_64-unknown-linux-musl"}
+"platforms.macos-arm64" = { checksum = "sha256:61b1d56fbdf6aa6e2367eeab287764971ea5560b2df9600ae420c83fbdb2c33a", url = "https://github.com/asciinema/agg/releases/download/v1.7.0/agg-aarch64-apple-darwin"}
+"platforms.macos-x64" = { checksum = "sha256:049ac882748837a8717bbc99ceccad427e8d838a24181b9694e2ff587e62193e", url = "https://github.com/asciinema/agg/releases/download/v1.7.0/agg-x86_64-apple-darwin"}
+"platforms.windows-x64" = { checksum = "sha256:f5a85d6ec09cfeea5938093a6364c5de8a88948ef241563b16a5de66da7b7d32", url = "https://github.com/asciinema/agg/releases/download/v1.7.0/agg-x86_64-pc-windows-msvc.exe"}
+
+[[tools."aqua:asciinema/asciinema"]]
+version = "3.2.0"
+backend = "aqua:asciinema/asciinema"
+"platforms.linux-arm64" = { checksum = "sha256:f7f92769f7b4150df2835ddd4eda067b0786d0d734284a0f9c2aaa2514e8beb6", url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-aarch64-unknown-linux-gnu"}
+"platforms.linux-x64" = { checksum = "sha256:34cf9ddb54df166878a213d5173af4d5f9df9564ab8b1054a080408bce0b720e", url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-x86_64-unknown-linux-musl"}
+"platforms.macos-arm64" = { checksum = "sha256:bdde8367f343ed61fdc7fd942657bcd050b15cce67005f72e1a54b7fda20e5ea", url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-aarch64-apple-darwin"}
+"platforms.macos-x64" = { checksum = "sha256:a76ef31773c7f0f0e2fa18c0517dca571968b509156e6771df02c35f4279791f", url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-x86_64-apple-darwin"}
+
 [[tools.github-cli]]
 version = "2.87.2"
 backend = "aqua:cli/cli"

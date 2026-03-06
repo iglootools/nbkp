@@ -47,5 +47,18 @@ The Docker-based test suites use [testcontainers](https://testcontainers-python.
 The `check-links` workflow runs a link checker against the documentation to catch broken links.
 It is scheduled to run weekly, but can also be triggered manually using `gh workflow run check-links.yml`.
 
+## Release Process
+- Trigger the `release` workflow: `gh workflow run release.yml`
+- Let github workflows take care of the rest
+    - `release` workflow: will bump version according to conventional commit conventions, push tag, and create a Github release
+    - `publish` workflow: will publish the new version to PyPI
+- When this is a major release, manually update `README.md` to include the latest [asciinema recording](https://asciinema.org/~samidalouche/recordings) 
+
+
 ## Github Config
 - The `main` branch is protected against force pushes.
+- Set up the following Github secrets:
+    - `ASCIINEMA_INSTALL_ID`:
+        1. Execute `asciinema auth` in your terminal
+        2. Click the suggested link
+        3. store the content of `~/.local/state/asciinema/install-id` in the `ASCIINEMA_INSTALL_ID` secret
