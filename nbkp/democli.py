@@ -308,6 +308,14 @@ def seed(
             " Set to 0 to disable.",
         ),
     ] = 250,
+    base_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--base-dir",
+            help="Use a fixed directory instead of a random"
+            " temp folder. Created if it does not exist.",
+        ),
+    ] = None,
 ) -> None:
     """Create a temp folder with config and test data."""
     rsync_opts = (
@@ -326,7 +334,11 @@ def seed(
             )
             raise typer.Exit(1)
 
-    tmp = Path(tempfile.mkdtemp(prefix="nbkp-demo-"))
+    if base_dir is not None:
+        tmp = base_dir
+        tmp.mkdir(parents=True, exist_ok=True)
+    else:
+        tmp = Path(tempfile.mkdtemp(prefix="nbkp-demo-"))
 
     # Server and bastion containers
     storage_endpoint = None
