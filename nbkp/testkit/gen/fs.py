@@ -207,11 +207,11 @@ def _create_dest_sentinels(
                     remote_exec(f"mkdir -p {rp}/{SNAPSHOTS_DIR}")
 
 
-def _volume_key(
+def _source_endpoint_key(
     vol: LocalVolume | RemoteVolume,
     subdir: str | None,
 ) -> str:
-    """Return a dedup key for a volume + subdir combination."""
+    """Return a dedup key for a source endpoint."""
     match vol:
         case LocalVolume():
             base = Path(vol.path)
@@ -241,7 +241,7 @@ def create_seed_data(
     size_bytes = big_file_size_mb * 1024 * 1024
 
     unique_sources = {
-        _volume_key(config.volumes[s.source.volume], s.source.subdir): (
+        _source_endpoint_key(config.volumes[s.source.volume], s.source.subdir): (
             config.volumes[s.source.volume],
             s.source.subdir,
         )
