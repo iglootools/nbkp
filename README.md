@@ -15,6 +15,15 @@ Sentinel files ensure backups only run when volumes are genuinely present, with 
 
 [![asciicast](https://asciinema.org/a/km9UuWa5TGjy9ldg.svg)](https://asciinema.org/a/km9UuWa5TGjy9ldg)
 
+## Installation
+
+See [docs/installation.md](https://github.com/iglootools/nbkp/blob/main/docs/installation.md).
+
+## Usage
+
+See [docs/usage.md](https://github.com/iglootools/nbkp/blob/main/docs/usage.md).
+
+
 ## Main Use Cases
 
 The tool is primarily designed for the following backup scenarios:
@@ -80,14 +89,6 @@ Which maps to:
 - Home server
 - Network availability
 - Mount detection
-
-## Installation
-
-See [docs/installation.md](https://github.com/iglootools/nbkp/blob/main/docs/installation.md).
-
-## Usage
-
-See [docs/usage.md](https://github.com/iglootools/nbkp/blob/main/docs/usage.md).
 
 ## Concepts
 
