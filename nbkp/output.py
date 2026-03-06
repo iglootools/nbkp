@@ -25,6 +25,7 @@ from .config import (
     SyncEndpoint,
 )
 from .sync import PruneResult, SyncOutcome, SyncResult
+from .sync.btrfs import STAGING_DIR
 from .sync.rsync import build_rsync_command
 from .check import SyncReason, SyncStatus, VolumeReason, VolumeStatus
 from .remote.ssh import format_proxy_jump_chain
@@ -534,8 +535,8 @@ def _print_sync_reason_fix(
             )
             if sync.source.btrfs_snapshots.enabled:
                 cmds = [
-                    "sudo btrfs subvolume create" f" {path}/tmp",
-                    "sudo chown <user>:<group>" f" {path}/tmp",
+                    "sudo btrfs subvolume create" f" {path}/{STAGING_DIR}",
+                    "sudo chown <user>:<group>" f" {path}/{STAGING_DIR}",
                     f"mkdir -p {path}/snapshots",
                     f"ln -sfn snapshots/initial" f" {path}/latest",
                 ]
@@ -621,9 +622,11 @@ def _print_sync_reason_fix(
             dst = config.volumes[sync.destination.volume]
             path = _endpoint_path(dst, sync.destination.subdir)
             cmds = [
-                f"sudo btrfs subvolume create {path}/tmp",
+                "sudo btrfs subvolume create" f" {path}/{STAGING_DIR}",
                 f"sudo mkdir {path}/snapshots",
-                "sudo chown <user>:<group>" f" {path}/tmp {path}/snapshots",
+                "sudo chown <user>:<group>"
+                f" {path}/{STAGING_DIR}"
+                f" {path}/snapshots",
             ]
             for cmd in cmds:
                 _print_cmd(
@@ -654,8 +657,8 @@ def _print_sync_reason_fix(
             dst = config.volumes[sync.destination.volume]
             path = _endpoint_path(dst, sync.destination.subdir)
             cmds = [
-                f"sudo btrfs subvolume create {path}/tmp",
-                "sudo chown <user>:<group>" f" {path}/tmp",
+                "sudo btrfs subvolume create" f" {path}/{STAGING_DIR}",
+                "sudo chown <user>:<group>" f" {path}/{STAGING_DIR}",
             ]
             for cmd in cmds:
                 _print_cmd(

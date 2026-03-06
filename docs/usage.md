@@ -38,9 +38,9 @@ touch /mnt/backups/photos/.nbkp-dst
 For **btrfs snapshot** destinations, create the staging subvolume and snapshots directory:
 
 ```bash
-sudo btrfs subvolume create /mnt/backups/photos/tmp
+sudo btrfs subvolume create /mnt/backups/photos/staging
 sudo mkdir /mnt/backups/photos/snapshots
-sudo chown <user>:<group> /mnt/backups/photos/tmp /mnt/backups/photos/snapshots
+sudo chown <user>:<group> /mnt/backups/photos/staging /mnt/backups/photos/snapshots
 ```
 
 The btrfs volume must also be mounted with `user_subvol_rm_allowed` for pruning to work:

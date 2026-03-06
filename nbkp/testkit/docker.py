@@ -12,6 +12,7 @@ import typer
 
 from ..config import SshConnectionOptions, SshEndpoint
 from ..remote.fabricssh import run_remote_command
+from ..sync.btrfs import STAGING_DIR
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"
 STORAGE_CONTAINER_NAME = "nbkp-demo"
@@ -291,10 +292,10 @@ def prepare_btrfs_snapshot_based_backup_dst(
 ) -> None:
     """Create btrfs destination structure.
 
-    Creates the ``tmp`` btrfs subvolume and the ``snapshots``
+    Creates the ``staging`` btrfs subvolume and the ``snapshots``
     directory under *path*.
     """
-    ssh_exec(server, f"btrfs subvolume create {path}/tmp")
+    ssh_exec(server, f"btrfs subvolume create {path}/{STAGING_DIR}")
     ssh_exec(server, f"mkdir -p {path}/snapshots")
 
 

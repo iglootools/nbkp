@@ -9,6 +9,7 @@ from typing import Callable, Optional
 from pydantic import BaseModel, model_validator
 
 from .btrfs import (
+    STAGING_DIR,
     create_snapshot,
     prune_snapshots as btrfs_prune_snapshots,
 )
@@ -271,7 +272,7 @@ def _run_btrfs_sync(
             progress=progress,
             on_output=on_rsync_output,
             resolved_endpoints=resolved_endpoints,
-            dest_suffix="tmp",
+            dest_suffix=STAGING_DIR,
         )
     except Exception as e:
         return SyncResult(

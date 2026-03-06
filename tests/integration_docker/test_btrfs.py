@@ -55,13 +55,13 @@ def _make_btrfs_config(
     return sync, config, resolved
 
 
-def _create_tmp_subvolume(
+def _create_staging_subvolume(
     docker_ssh_endpoint: SshEndpoint,
 ) -> None:
-    """Create the tmp btrfs subvolume on the remote server."""
+    """Create the staging btrfs subvolume on the remote server."""
     ssh_exec(
         docker_ssh_endpoint,
-        f"btrfs subvolume create {REMOTE_BTRFS_PATH}/tmp",
+        f"btrfs subvolume create {REMOTE_BTRFS_PATH}/staging",
     )
     ssh_exec(
         docker_ssh_endpoint,
@@ -69,14 +69,14 @@ def _create_tmp_subvolume(
     )
 
 
-def _seed_tmp(
+def _seed_staging(
     docker_ssh_endpoint: SshEndpoint,
     content: str = "test data",
 ) -> None:
-    """Put some data in the tmp subvolume."""
+    """Put some data in the staging subvolume."""
     ssh_exec(
         docker_ssh_endpoint,
-        f"echo '{content}'" f" > {REMOTE_BTRFS_PATH}/tmp/data.txt",
+        f"echo '{content}'" f" > {REMOTE_BTRFS_PATH}/staging/data.txt",
     )
 
 
@@ -90,8 +90,8 @@ class TestCreateSnapshot:
         sync, config, resolved = _make_btrfs_config(
             str(tmp_path), remote_btrfs_volume, docker_ssh_endpoint
         )
-        _create_tmp_subvolume(docker_ssh_endpoint)
-        _seed_tmp(docker_ssh_endpoint)
+        _create_staging_subvolume(docker_ssh_endpoint)
+        _seed_staging(docker_ssh_endpoint)
 
         snapshot_path = create_snapshot(
             sync, config, resolved_endpoints=resolved
@@ -119,8 +119,8 @@ class TestListSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(tmp_path), remote_btrfs_volume, docker_ssh_endpoint
         )
-        _create_tmp_subvolume(docker_ssh_endpoint)
-        _seed_tmp(docker_ssh_endpoint)
+        _create_staging_subvolume(docker_ssh_endpoint)
+        _seed_staging(docker_ssh_endpoint)
 
         now1 = datetime(2024, 1, 1, tzinfo=timezone.utc)
         now2 = datetime(2024, 1, 2, tzinfo=timezone.utc)
@@ -145,8 +145,8 @@ class TestGetLatestSnapshot:
         sync, config, resolved = _make_btrfs_config(
             str(tmp_path), remote_btrfs_volume, docker_ssh_endpoint
         )
-        _create_tmp_subvolume(docker_ssh_endpoint)
-        _seed_tmp(docker_ssh_endpoint)
+        _create_staging_subvolume(docker_ssh_endpoint)
+        _seed_staging(docker_ssh_endpoint)
 
         now1 = datetime(2024, 1, 1, tzinfo=timezone.utc)
         now2 = datetime(2024, 1, 2, tzinfo=timezone.utc)
@@ -181,8 +181,8 @@ class TestDeleteSnapshot:
         sync, config, resolved = _make_btrfs_config(
             str(tmp_path), remote_btrfs_volume, docker_ssh_endpoint
         )
-        _create_tmp_subvolume(docker_ssh_endpoint)
-        _seed_tmp(docker_ssh_endpoint)
+        _create_staging_subvolume(docker_ssh_endpoint)
+        _seed_staging(docker_ssh_endpoint)
 
         snapshot_path = create_snapshot(
             sync, config, resolved_endpoints=resolved
@@ -210,8 +210,8 @@ class TestPruneSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(tmp_path), remote_btrfs_volume, docker_ssh_endpoint
         )
-        _create_tmp_subvolume(docker_ssh_endpoint)
-        _seed_tmp(docker_ssh_endpoint)
+        _create_staging_subvolume(docker_ssh_endpoint)
+        _seed_staging(docker_ssh_endpoint)
 
         # Create 3 snapshots
         names = []
@@ -248,8 +248,8 @@ class TestPruneSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(tmp_path), remote_btrfs_volume, docker_ssh_endpoint
         )
-        _create_tmp_subvolume(docker_ssh_endpoint)
-        _seed_tmp(docker_ssh_endpoint)
+        _create_staging_subvolume(docker_ssh_endpoint)
+        _seed_staging(docker_ssh_endpoint)
 
         for i in range(3):
             now = datetime(2024, 1, 1 + i, tzinfo=timezone.utc)

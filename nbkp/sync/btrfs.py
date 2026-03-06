@@ -15,6 +15,10 @@ from ..config import (
 )
 from ..remote import run_remote_command
 
+#: Directory name for the writable btrfs subvolume that rsync
+#: syncs into before a read-only snapshot is created.
+STAGING_DIR = "staging"
+
 
 def resolve_dest_path(sync: SyncConfig, config: Config) -> str:
     """Resolve the destination path for a sync."""
@@ -32,7 +36,7 @@ def create_snapshot(
     now: datetime | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> str:
-    """Create a read-only btrfs snapshot of tmp/ into snapshots/.
+    """Create a read-only btrfs snapshot of staging/ into snapshots/.
 
     Returns the snapshot path.
     """
@@ -43,7 +47,7 @@ def create_snapshot(
     # isoformat uses +00:00, but Z is more conventional for UTC.
     timestamp = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
     snapshot_path = f"{dest_path}/snapshots/{timestamp}"
-    tmp_path = f"{dest_path}/tmp"
+    tmp_path = f"{dest_path}/{STAGING_DIR}"
 
     cmd = [
         "btrfs",

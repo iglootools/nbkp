@@ -91,7 +91,7 @@ class TestCreateSnapshotLocal:
             "subvolume",
             "snapshot",
             "-r",
-            "/mnt/dst/backup/tmp",
+            "/mnt/dst/backup/staging",
             "/mnt/dst/backup/snapshots/2024-01-15T12:00:00.000Z",
         ]
 
@@ -129,7 +129,7 @@ class TestCreateSnapshotRemote:
             "subvolume",
             "snapshot",
             "-r",
-            "/backup/data/tmp",
+            "/backup/data/staging",
             "/backup/data/snapshots/2024-01-15T12:00:00.000Z",
         ]
 
@@ -248,7 +248,7 @@ class TestCreateSnapshotLocalSpaces:
             "subvolume",
             "snapshot",
             "-r",
-            "/mnt/my dst/my backup/tmp",
+            "/mnt/my dst/my backup/staging",
             "/mnt/my dst/my backup/snapshots/" "2024-01-15T12:00:00.000Z",
         ]
 
@@ -274,7 +274,7 @@ class TestCreateSnapshotRemoteSpaces:
             "subvolume",
             "snapshot",
             "-r",
-            "/my backup/my data/tmp",
+            "/my backup/my data/staging",
             "/my backup/my data/snapshots/" "2024-01-15T12:00:00.000Z",
         ]
 

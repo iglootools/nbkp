@@ -13,6 +13,7 @@ from ...config import (
     RemoteVolume,
     SyncConfig,
 )
+from ...sync.btrfs import STAGING_DIR
 
 _CHUNK_SIZE = 1024 * 1024  # 1 MB
 
@@ -95,13 +96,13 @@ def _create_source_sentinels(
                 if not latest.exists():
                     latest.symlink_to(f"snapshots/{_SEED_SNAPSHOT_NAME}")
             elif btrfs.enabled:
-                if not (path / "tmp").exists():
+                if not (path / STAGING_DIR).exists():
                     subprocess.run(
                         [
                             "btrfs",
                             "subvolume",
                             "create",
-                            str(path / "tmp"),
+                            str(path / STAGING_DIR),
                         ],
                         check=True,
                     )
@@ -115,7 +116,7 @@ def _create_source_sentinels(
                             "subvolume",
                             "snapshot",
                             "-r",
-                            str(path / "tmp"),
+                            str(path / STAGING_DIR),
                             str(seed),
                         ],
                         check=True,
@@ -139,9 +140,9 @@ def _create_source_sentinels(
                     )
                 elif btrfs.enabled:
                     remote_exec(
-                        f"test -e {rp}/tmp"
+                        f"test -e {rp}/{STAGING_DIR}"
                         " || btrfs subvolume create"
-                        f" {rp}/tmp"
+                        f" {rp}/{STAGING_DIR}"
                     )
                     remote_exec(f"mkdir -p {rp}/snapshots")
                     # Seed snapshot + latest symlink
@@ -149,7 +150,7 @@ def _create_source_sentinels(
                     remote_exec(
                         f"test -e {rp}/{seed_rel}"
                         " || btrfs subvolume snapshot -r"
-                        f" {rp}/tmp {rp}/{seed_rel}"
+                        f" {rp}/{STAGING_DIR} {rp}/{seed_rel}"
                     )
                     remote_exec(
                         f"test -e {rp}/latest"
@@ -177,13 +178,13 @@ def _create_dest_sentinels(
             if hard_link.enabled:
                 (path / "snapshots").mkdir(exist_ok=True)
             elif btrfs.enabled:
-                if not (path / "tmp").exists():
+                if not (path / STAGING_DIR).exists():
                     subprocess.run(
                         [
                             "btrfs",
                             "subvolume",
                             "create",
-                            str(path / "tmp"),
+                            str(path / STAGING_DIR),
                         ],
                         check=True,
                     )
@@ -199,9 +200,9 @@ def _create_dest_sentinels(
                     remote_exec(f"mkdir -p {rp}/snapshots")
                 elif btrfs.enabled:
                     remote_exec(
-                        f"test -e {rp}/tmp"
+                        f"test -e {rp}/{STAGING_DIR}"
                         " || btrfs subvolume create"
-                        f" {rp}/tmp"
+                        f" {rp}/{STAGING_DIR}"
                     )
                     remote_exec(f"mkdir -p {rp}/snapshots")
 

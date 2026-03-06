@@ -26,6 +26,7 @@ from .config import (
     SyncConfig,
 )
 from .remote.ssh import build_ssh_base_args
+from .sync.btrfs import STAGING_DIR
 from .sync.rsync import build_rsync_command
 
 # ── Public API ────────────────────────────────────────────────
@@ -550,12 +551,13 @@ def _build_preflight_block(
                 resolved_endpoints,
             )
         )
-        tmp_dir = f"{dst_path}/tmp"
+        tmp_dir = f"{dst_path}/{STAGING_DIR}"
         lines.append(
             _build_check_line(
                 dst_vol,
                 ["-d", tmp_dir],
-                "destination tmp/ directory not found" f" ({tmp_dir})",
+                f"destination {STAGING_DIR}/ directory not found"
+                f" ({tmp_dir})",
                 resolved_endpoints,
             )
         )
@@ -681,7 +683,7 @@ def _build_snapshot_block(
         sync.destination.volume,
         sync.destination.subdir,
     )
-    tmp = f"{dest_path}/tmp"
+    tmp = f"{dest_path}/{STAGING_DIR}"
     snaps_dir = f"{dest_path}/snapshots"
     snap = _snapshot_cmd(dst_vol, tmp, snaps_dir, resolved_endpoints)
 
@@ -1051,7 +1053,7 @@ def _build_sync_context(
             config,
             vol_paths,
             resolved_endpoints,
-            dest_suffix="tmp",
+            dest_suffix=STAGING_DIR,
         )
     else:
         rsync = _build_rsync_block(

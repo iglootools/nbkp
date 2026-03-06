@@ -107,14 +107,14 @@ def btrfs_dst(tmp_path: Path) -> Path:
                     ],
                     capture_output=True,
                 )
-        tmp_sub = dst / "tmp"
-        if tmp_sub.is_dir():
+        staging_sub = dst / "staging"
+        if staging_sub.is_dir():
             subprocess.run(
                 [
                     "btrfs",
                     "subvolume",
                     "delete",
-                    str(tmp_sub),
+                    str(staging_sub),
                 ],
                 capture_output=True,
             )
@@ -123,19 +123,19 @@ def btrfs_dst(tmp_path: Path) -> Path:
         pytest.skip(f"btrfs mount not found: {BTRFS_MOUNT}")
 
 
-def _create_tmp_subvolume(dst: Path) -> None:
-    """Create the tmp btrfs subvolume locally."""
+def _create_staging_subvolume(dst: Path) -> None:
+    """Create the staging btrfs subvolume locally."""
     subprocess.run(
-        ["btrfs", "subvolume", "create", str(dst / "tmp")],
+        ["btrfs", "subvolume", "create", str(dst / "staging")],
         check=True,
         capture_output=True,
     )
     (dst / "snapshots").mkdir(exist_ok=True)
 
 
-def _seed_tmp(dst: Path, content: str = "test data") -> None:
-    """Put data in the tmp subvolume."""
-    (dst / "tmp" / "data.txt").write_text(content)
+def _seed_staging(dst: Path, content: str = "test data") -> None:
+    """Put data in the staging subvolume."""
+    (dst / "staging" / "data.txt").write_text(content)
 
 
 @_skip_no_btrfs
@@ -147,8 +147,8 @@ class TestCreateSnapshot:
         src.mkdir()
 
         sync, config = _make_btrfs_config(str(src), str(btrfs_dst))
-        _create_tmp_subvolume(btrfs_dst)
-        _seed_tmp(btrfs_dst)
+        _create_staging_subvolume(btrfs_dst)
+        _seed_staging(btrfs_dst)
 
         snapshot_path = create_snapshot(sync, config)
 
@@ -172,8 +172,8 @@ class TestListSnapshots:
         src.mkdir()
 
         sync, config = _make_btrfs_config(str(src), str(btrfs_dst))
-        _create_tmp_subvolume(btrfs_dst)
-        _seed_tmp(btrfs_dst)
+        _create_staging_subvolume(btrfs_dst)
+        _seed_staging(btrfs_dst)
 
         now1 = datetime(2024, 1, 1, tzinfo=timezone.utc)
         now2 = datetime(2024, 1, 2, tzinfo=timezone.utc)
@@ -196,8 +196,8 @@ class TestGetLatestSnapshot:
         src.mkdir()
 
         sync, config = _make_btrfs_config(str(src), str(btrfs_dst))
-        _create_tmp_subvolume(btrfs_dst)
-        _seed_tmp(btrfs_dst)
+        _create_staging_subvolume(btrfs_dst)
+        _seed_staging(btrfs_dst)
 
         now1 = datetime(2024, 1, 1, tzinfo=timezone.utc)
         now2 = datetime(2024, 1, 2, tzinfo=timezone.utc)
@@ -217,8 +217,8 @@ class TestDeleteSnapshot:
         src.mkdir()
 
         sync, config = _make_btrfs_config(str(src), str(btrfs_dst))
-        _create_tmp_subvolume(btrfs_dst)
-        _seed_tmp(btrfs_dst)
+        _create_staging_subvolume(btrfs_dst)
+        _seed_staging(btrfs_dst)
 
         snapshot_path = create_snapshot(sync, config)
         assert Path(snapshot_path).is_dir()
@@ -238,8 +238,8 @@ class TestPruneSnapshots:
         src.mkdir()
 
         sync, config = _make_btrfs_config(str(src), str(btrfs_dst))
-        _create_tmp_subvolume(btrfs_dst)
-        _seed_tmp(btrfs_dst)
+        _create_staging_subvolume(btrfs_dst)
+        _seed_staging(btrfs_dst)
 
         names = []
         for i in range(3):
@@ -263,8 +263,8 @@ class TestPruneSnapshots:
         src.mkdir()
 
         sync, config = _make_btrfs_config(str(src), str(btrfs_dst))
-        _create_tmp_subvolume(btrfs_dst)
-        _seed_tmp(btrfs_dst)
+        _create_staging_subvolume(btrfs_dst)
+        _seed_staging(btrfs_dst)
 
         for i in range(3):
             now = datetime(2024, 1, 1 + i, tzinfo=timezone.utc)

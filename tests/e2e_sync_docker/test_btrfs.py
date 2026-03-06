@@ -79,9 +79,9 @@ class TestBtrfsSnapshots:
             str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
 
-        # Rsync into tmp
+        # Rsync into staging
         result = run_rsync(
-            sync, config, resolved_endpoints=resolved, dest_suffix="tmp"
+            sync, config, resolved_endpoints=resolved, dest_suffix="staging"
         )
         assert result.returncode == 0
 
@@ -108,7 +108,7 @@ class TestBtrfsSnapshots:
         assert f"snapshots/{snap_name}" in link.stdout
 
         assert_sentinels_after_sync(
-            sync, config, docker_ssh_endpoint, dest_suffix="tmp"
+            sync, config, docker_ssh_endpoint, dest_suffix="staging"
         )
 
     def test_snapshot_readonly(
@@ -124,7 +124,9 @@ class TestBtrfsSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
-        run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="tmp")
+        run_rsync(
+            sync, config, resolved_endpoints=resolved, dest_suffix="staging"
+        )
         snapshot_path = create_snapshot(
             sync, config, resolved_endpoints=resolved
         )
@@ -152,7 +154,9 @@ class TestBtrfsSnapshots:
         )
 
         # First sync + snapshot + symlink
-        run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="tmp")
+        run_rsync(
+            sync, config, resolved_endpoints=resolved, dest_suffix="staging"
+        )
         first_snap = create_snapshot(sync, config, resolved_endpoints=resolved)
         first_name = first_snap.rsplit("/", 1)[-1]
         update_latest_symlink(
@@ -176,7 +180,7 @@ class TestBtrfsSnapshots:
             config,
             link_dest=link_dest,
             resolved_endpoints=resolved,
-            dest_suffix="tmp",
+            dest_suffix="staging",
         )
         assert result.returncode == 0
 
@@ -200,7 +204,7 @@ class TestBtrfsSnapshots:
         assert f"snapshots/{snap_name}" in link.stdout
 
         assert_sentinels_after_sync(
-            sync, config, docker_ssh_endpoint, dest_suffix="tmp"
+            sync, config, docker_ssh_endpoint, dest_suffix="staging"
         )
 
     def test_dry_run_no_snapshot(
@@ -232,7 +236,7 @@ class TestBtrfsSnapshots:
             config,
             dry_run=True,
             resolved_endpoints=resolved,
-            dest_suffix="tmp",
+            dest_suffix="staging",
         )
         assert result.returncode == 0
 
@@ -284,7 +288,9 @@ class TestPruneSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
-        run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="tmp")
+        run_rsync(
+            sync, config, resolved_endpoints=resolved, dest_suffix="staging"
+        )
 
         self._create_snapshots(sync, config, resolved, 3)
 
@@ -318,7 +324,9 @@ class TestPruneSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
-        run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="tmp")
+        run_rsync(
+            sync, config, resolved_endpoints=resolved, dest_suffix="staging"
+        )
 
         self._create_snapshots(sync, config, resolved, 3)
 
@@ -353,7 +361,9 @@ class TestPruneSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
-        run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="tmp")
+        run_rsync(
+            sync, config, resolved_endpoints=resolved, dest_suffix="staging"
+        )
 
         self._create_snapshots(sync, config, resolved, 2)
 

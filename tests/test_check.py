@@ -985,7 +985,7 @@ class TestCheckSync:
         src.mkdir()
         dst.mkdir()
         self._setup_active_sentinels(src, dst)
-        (dst / "backup" / "tmp").mkdir()
+        (dst / "backup" / "staging").mkdir()
         (dst / "backup" / "snapshots").mkdir()
 
         src_vol = LocalVolume(slug="src", path=str(src))
@@ -1172,7 +1172,7 @@ class TestCheckSync:
         src.mkdir()
         dst.mkdir()
         self._setup_active_sentinels(src, dst)
-        (dst / "backup" / "tmp").mkdir()
+        (dst / "backup" / "staging").mkdir()
         (dst / "backup" / "snapshots").mkdir()
 
         src_vol = LocalVolume(slug="src", path=str(src))
@@ -1292,7 +1292,7 @@ class TestCheckSync:
         dst.mkdir()
         self._setup_active_sentinels(src, dst)
         # tmp exists but snapshots does not
-        (dst / "backup" / "tmp").mkdir()
+        (dst / "backup" / "staging").mkdir()
 
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = LocalVolume(slug="dst", path=str(dst))
@@ -2108,7 +2108,7 @@ class TestCheckSyncRemoteCommands:
                 "/backup/backup",
             ]:
                 return MagicMock(returncode=0, stdout="256\n")
-            if cmd == ["test", "-d", "/backup/backup/tmp"]:
+            if cmd == ["test", "-d", "/backup/backup/staging"]:
                 return MagicMock(returncode=0)
             if cmd == ["test", "-d", "/backup/backup/snapshots"]:
                 return MagicMock(returncode=0)
@@ -2221,7 +2221,7 @@ class TestCheckSyncRemoteCommands:
             if cmd == [
                 "test",
                 "-d",
-                "/backup/backup/tmp",
+                "/backup/backup/staging",
             ]:
                 return MagicMock(returncode=1)
             if cmd == [
@@ -2339,7 +2339,7 @@ class TestCheckSyncRemoteCommands:
             if cmd == [
                 "test",
                 "-d",
-                "/backup/backup/tmp",
+                "/backup/backup/staging",
             ]:
                 return MagicMock(returncode=0)
             if cmd == [

@@ -365,7 +365,7 @@ class TestBtrfs:
         assert "btrfs" in script
         assert "subvolume" in script
         assert "snapshot" in script
-        assert "/mnt/dst/tmp" in script
+        assert "/mnt/dst/staging" in script
         assert "NBKP_TS=$(date -u" in script
 
     def test_snapshot_guarded_by_dry_run(self) -> None:
@@ -393,7 +393,7 @@ class TestBtrfs:
     def test_tmp_and_snapshots_dir_checks(self) -> None:
         config = _btrfs_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert "tmp/ directory not found" in script
+        assert "staging/ directory not found" in script
         assert "snapshots/ directory not found" in script
 
     def test_symlink_update_after_snapshot(self) -> None:
