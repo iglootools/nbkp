@@ -1,19 +1,8 @@
 # Usage
 
-## System Requirements
-
-- Python 3.14+
-- rsync 3.0+ (macOS ships with openrsync which is not supported — install GNU rsync via `brew install rsync`)
-- `btrfs-progs` (only if using btrfs snapshots)
-
 ## Installation
 
-- [Install pipx](https://pipx.pypa.io/stable/installation/)
-- Install nbkp via pipx:
-
-    ```bash
-    pipx install nbkp
-    ```
+See [Installation instructions](./installation.md)
 
 ## Quick Start
 

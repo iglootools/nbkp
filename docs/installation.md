@@ -1,5 +1,11 @@
 # Installation
 
+## System Requirements
+
+- Python 3.14+
+- rsync 3.0+ (macOS ships with openrsync which is not supported — install GNU rsync via `brew install rsync`)
+- `btrfs-progs` (only if using btrfs snapshots)
+
 ## Install with pipx
 
 [pipx](https://pipx.pypa.io/) installs CLI tools in isolated environments, keeping your system Python clean:
