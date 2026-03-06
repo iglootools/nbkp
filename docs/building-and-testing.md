@@ -52,7 +52,9 @@ It is scheduled to run weekly, but can also be triggered manually using `gh work
 - Let github workflows take care of the rest
     - `release` workflow: will bump version according to conventional commit conventions, push tag, and create a Github release
     - `publish` workflow: will publish the new version to PyPI
-- When this is a major release, manually update `README.md` to include the latest [asciinema recording](https://asciinema.org/~samidalouche/recordings) 
+- When this is a major release, manually:
+    - include additional demo scenarios in `demo/demo.sh`
+    - update `README.md` to include the latest [asciinema recording](https://asciinema.org/~samidalouche/recordings) 
 
 
 ## Github Config
