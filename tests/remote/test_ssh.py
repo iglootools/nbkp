@@ -58,6 +58,8 @@ class TestBuildSshBaseArgs:
             "StrictHostKeyChecking=no",
             "-o",
             "UserKnownHostsFile=/dev/null",
+            "-o",
+            "LogLevel=ERROR",
             "host.example.com",
         ]
 

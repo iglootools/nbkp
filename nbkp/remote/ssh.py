@@ -22,6 +22,10 @@ def _ssh_o_options(opts: SshConnectionOptions) -> list[str]:
         result.append("StrictHostKeyChecking=no")
     if opts.known_hosts_file is not None:
         result.append(f"UserKnownHostsFile={opts.known_hosts_file}")
+    # Suppress "Permanently added ... to the list of known hosts"
+    # warnings when host-key verification is fully disabled.
+    if not opts.strict_host_key_checking and opts.known_hosts_file:
+        result.append("LogLevel=ERROR")
     if opts.forward_agent:
         result.append("ForwardAgent=yes")
     return result
