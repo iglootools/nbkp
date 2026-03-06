@@ -26,6 +26,8 @@
   - When calling external commands, build the command lines as lists of arguments instead of strings to avoid issues with quoting and escaping.
 - **Testability**
   - Expose exceptions/errors as structured data classes and perform the assertions on the structured output in tests instead of matching against raw error message strings. This allows for more robust tests that are not brittle to changes in error message formatting.
+- **No Silent Failures**
+  - Avoid silent failures and ensure that all errors are surfaced with clear messages. This includes validating inputs and configurations early, and providing informative error messages when something goes wrong.
 
 ## General Python Coding Conventions
 - **Typing**: Use type annotations for all functions and methods, including return types. Use `mypy` for static type checking.
