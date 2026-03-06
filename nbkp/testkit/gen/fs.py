@@ -14,6 +14,7 @@ from ...config import (
     SyncConfig,
 )
 from ...sync.btrfs import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
+from ...sync.rsync import resolve_path
 
 _CHUNK_SIZE = 1024 * 1024  # 1 MB
 
@@ -207,22 +208,6 @@ def _create_dest_sentinels(
                     remote_exec(f"mkdir -p {rp}/{SNAPSHOTS_DIR}")
 
 
-def _source_endpoint_key(
-    vol: LocalVolume | RemoteVolume,
-    subdir: str | None,
-) -> str:
-    """Return a dedup key for a source endpoint."""
-    match vol:
-        case LocalVolume():
-            base = Path(vol.path)
-            return str(base / subdir if subdir else base)
-        case RemoteVolume():
-            rp = vol.path
-            if subdir:
-                rp = f"{rp}/{subdir}"
-            return rp
-
-
 def create_seed_data(
     config: Config,
     big_file_size_mb: int = 0,
@@ -241,7 +226,10 @@ def create_seed_data(
     size_bytes = big_file_size_mb * 1024 * 1024
 
     unique_sources = {
-        _source_endpoint_key(config.volumes[s.source.volume], s.source.subdir): (
+        resolve_path(
+            config.volumes[s.source.volume],
+            s.source.subdir,
+        ): (
             config.volumes[s.source.volume],
             s.source.subdir,
         )
