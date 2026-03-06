@@ -90,16 +90,17 @@ Which maps to:
 - Network availability
 - Mount detection
 
-## Concepts
-
-See [docs/concepts.md](https://github.com/iglootools/nbkp/blob/main/docs/concepts.md).
-
 ## Contribute
-- [docs/architecture.md](https://github.com/iglootools/nbkp/blob/main/docs/architecture.md) - architecture overview
-- [docs/conventions.md](https://github.com/iglootools/nbkp/blob/main/docs/conventions.md) — coding conventions and guidelines
+
+Practical information:
 - [docs/setup-development-environment.md](https://github.com/iglootools/nbkp/blob/main/docs/setup-development-environment.md) — development setup
 - [docs/building-and-testing.md](https://github.com/iglootools/nbkp/blob/main/docs/building-and-testing.md) — running tests and checks
 - [docs/releasing-and-publishing.md](https://github.com/iglootools/nbkp/blob/main/docs/releasing-and-publishing.md) — releases and PyPI publishing
+- [docs/conventions.md](https://github.com/iglootools/nbkp/blob/main/docs/conventions.md) — coding conventions and guidelines
+
+Conceptual information:
+- [docs/concepts.md](https://github.com/iglootools/nbkp/blob/main/docs/concepts.md) - key concepts and terminology
+- [docs/architecture.md](https://github.com/iglootools/nbkp/blob/main/docs/architecture.md) - architecture overview
 
 ## Resources
 - [Releases](https://pypi.org/project/nbkp/#history)
