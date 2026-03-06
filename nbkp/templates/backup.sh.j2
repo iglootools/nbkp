@@ -144,10 +144,10 @@ declare -A NBKP_FAILED=()
 <% if portable %>
 if <% for dep in sync.predecessors %><% if not loop.first %> || <% endif %>nbkp_has_failed "${{ dep }}"<% endfor %>; then
     nbkp_log "CANCELLED ${{ sync.slug }}: dependency failed"
-    NBKP_FAILED="$NBKP_FAILED${{ sync.fn_name }} "
+    NBKP_FAILED="${NBKP_FAILED}${{ sync.fn_name }} "
     NBKP_FAILURES=$((NBKP_FAILURES + 1))
 else
-    ${{ sync.fn_name }} || { NBKP_FAILED="$NBKP_FAILED${{ sync.fn_name }} "; NBKP_FAILURES=$((NBKP_FAILURES + 1)); }
+    ${{ sync.fn_name }} || { NBKP_FAILED="${NBKP_FAILED}${{ sync.fn_name }} "; NBKP_FAILURES=$((NBKP_FAILURES + 1)); }
 fi
 <% else %>
 if <% for dep in sync.predecessors %><% if not loop.first %> || <% endif %>[ "${NBKP_FAILED[${{ dep }}]+set}" = "set" ]<% endfor %>; then
@@ -160,7 +160,7 @@ fi
 <% endif %>
 <% else %>
 <% if portable %>
-${{ sync.fn_name }} || { NBKP_FAILED="$NBKP_FAILED${{ sync.fn_name }} "; NBKP_FAILURES=$((NBKP_FAILURES + 1)); }
+${{ sync.fn_name }} || { NBKP_FAILED="${NBKP_FAILED}${{ sync.fn_name }} "; NBKP_FAILURES=$((NBKP_FAILURES + 1)); }
 <% else %>
 ${{ sync.fn_name }} || { NBKP_FAILED[${{ sync.fn_name }}]=1; NBKP_FAILURES=$((NBKP_FAILURES + 1)); }
 <% endif %>

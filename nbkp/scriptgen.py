@@ -301,16 +301,13 @@ def _snapshot_cmd(
             return _format_shell_command(snap_args, cont_indent="        ")
         case RemoteVolume():
             ep = resolved_endpoints[dst_vol.slug]
-            remote_args = [
-                "btrfs",
-                "subvolume",
-                "snapshot",
-                "-r",
-                latest,
-                f"{snaps_dir}/\\$NBKP_TS",
-            ]
-            return _format_remote_command_str(
-                ep.server, ep.proxy_chain, remote_args
+            ssh_pfx = " ".join(
+                _sq(a) for a in build_ssh_base_args(ep.server, ep.proxy_chain)
+            )
+            return (
+                f'{ssh_pfx} "btrfs subvolume snapshot'
+                f" -r {latest}"
+                f' {snaps_dir}/$NBKP_TS"'
             )
 
 
