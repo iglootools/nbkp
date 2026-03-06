@@ -155,6 +155,8 @@ If you believe that the representation is inaccurate or if there are other tools
 
 - **[Bacula](https://www.bacula.org/) / [Bareos](https://www.bareos.com/)** — enterprise client-server backup with a director, storage daemons, and file daemons across multiple hosts. Full multi-server topology; proprietary catalog and storage format; significant setup complexity.
 - **[Amanda](https://www.amanda.org/)** — network backup orchestrating multiple clients from a central server. Designed for tape and disk pools; uses native dump/tar; heavier infrastructure than nbkp targets.
+- **[UrBackup](https://www.urbackup.org/)** — client-server backup system with a web UI for managing image and file backups across multiple machines. Requires a dedicated server process; proprietary transfer protocol; no rsync or btrfs integration.
+- **[Velero](https://velero.io/)** — backup and disaster recovery for Kubernetes clusters, snapshotting persistent volumes and cluster resources. Kubernetes-specific; not applicable to general-purpose file backups.
 
 ## License
 
