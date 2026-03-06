@@ -61,6 +61,8 @@
       - Ensure to add comments in the codebase to describe which choices have been made with regard to which of the original (`run`) functionality has been preserved vs dropped
       - When adding functionality to the `run` command, make sure to also add it to the `sh` command, or explicitly document why it's not applicable.
   - When adding a dependency on an external tool (e.g. `stat`, `findfmt`), add a check for the tool in the CLI app and provide a clear error message if it's not found. 
+- **Documentation Consistency**
+  - When making changes to the CLI or config schema, make sure to update the documentation in `docs/` to reflect the changes, especially in `features.md`, `usage.md` and `conventions.md`.
 
 ## Testing Strategy
 
