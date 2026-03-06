@@ -117,6 +117,36 @@ class TestLocalToLocal:
         assert result.returncode == 0
         assert not (dst / "file.txt").exists()
 
+    def test_filters_exclude_directory(self, tmp_path: Path) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+
+        (src / "keep.txt").write_text("keep")
+        excluded = src / "excluded"
+        excluded.mkdir()
+        (excluded / "cache.tmp").write_text("should not sync")
+
+        sync = SyncConfig(
+            slug="test-sync",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+            filters=["- excluded/"],
+        )
+        config = Config(
+            volumes={
+                "src": LocalVolume(slug="src", path=str(src)),
+                "dst": LocalVolume(slug="dst", path=str(dst)),
+            },
+            syncs={"test-sync": sync},
+        )
+        result = run_rsync(sync, config)
+
+        assert result.returncode == 0
+        assert (dst / "keep.txt").read_text() == "keep"
+        assert not (dst / "excluded").exists()
+
     def test_subdir(self, tmp_path: Path) -> None:
         src = tmp_path / "src" / "photos"
         dst = tmp_path / "dst" / "photos-backup"

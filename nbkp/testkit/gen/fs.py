@@ -16,10 +16,17 @@ from ...config import (
 
 _CHUNK_SIZE = 1024 * 1024  # 1 MB
 
+#: Filter rules that exclude the ``excluded/`` directory seeded
+#: by :func:`seed_volume`.  Reuse in test configs to verify
+#: that rsync filters are honoured end-to-end.
+SEED_EXCLUDE_FILTERS: list[str] = ["- excluded/"]
+
 _SAMPLE_FILES = [
     ("sample.txt", "Sample data for backup testing\n"),
     ("photo.jpg", "fake jpeg data\n"),
     ("document.pdf", "fake pdf data\n"),
+    ("excluded/cache.tmp", "temporary cached data\n"),
+    ("excluded/debug.log", "debug log output\n"),
 ]
 
 
@@ -262,7 +269,9 @@ def seed_volume(
             path = base / subdir if subdir else base
             path.mkdir(parents=True, exist_ok=True)
             for name, content in _SAMPLE_FILES:
-                (path / name).write_text(content)
+                file_path = path / name
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                file_path.write_text(content)
             if big_file_size_bytes:
                 _write_zeroed_file(
                     path / "large-file.bin",
@@ -276,6 +285,9 @@ def seed_volume(
                 rp = f"{rp}/{subdir}"
             remote_exec(f"mkdir -p {rp}")
             for name, content in _SAMPLE_FILES:
+                if "/" in name:
+                    parent = name.rsplit("/", 1)[0]
+                    remote_exec(f"mkdir -p {rp}/{parent}")
                 remote_exec(
                     f"printf %s {shlex.quote(content)}" f" > {rp}/{name}"
                 )

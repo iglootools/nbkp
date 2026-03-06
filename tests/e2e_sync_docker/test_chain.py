@@ -31,7 +31,11 @@ from nbkp.testkit.docker import (
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_PATH,
 )
-from nbkp.testkit.gen.fs import create_seed_sentinels, seed_volume
+from nbkp.testkit.gen.fs import (
+    SEED_EXCLUDE_FILTERS,
+    create_seed_sentinels,
+    seed_volume,
+)
 
 from tests._docker_fixtures import assert_sentinels_after_sync, ssh_exec
 
@@ -104,6 +108,7 @@ def _build_chain_config(
                 volume="stage-local-hl-snapshots",
                 hard_link_snapshots=hl_dst,
             ),
+            filters=SEED_EXCLUDE_FILTERS,
         ),
         # local→remote (bastion), bare destination
         "step-2": SyncConfig(
@@ -115,6 +120,7 @@ def _build_chain_config(
             destination=SyncEndpoint(
                 volume="stage-remote-bare",
             ),
+            filters=SEED_EXCLUDE_FILTERS,
         ),
         # remote→remote same-server (bastion), btrfs destination
         "step-3": SyncConfig(
@@ -126,6 +132,7 @@ def _build_chain_config(
                 volume="stage-remote-btrfs-snapshots",
                 btrfs_snapshots=btrfs_dst,
             ),
+            filters=SEED_EXCLUDE_FILTERS,
         ),
         # remote→remote same-server (bastion), bare dest on btrfs
         "step-4": SyncConfig(
@@ -137,6 +144,7 @@ def _build_chain_config(
             destination=SyncEndpoint(
                 volume="stage-remote-btrfs-bare",
             ),
+            filters=SEED_EXCLUDE_FILTERS,
         ),
         # remote→remote same-server (bastion), HL destination
         "step-5": SyncConfig(
@@ -148,6 +156,7 @@ def _build_chain_config(
                 volume="stage-remote-hl-snapshots",
                 hard_link_snapshots=hl_dst,
             ),
+            filters=SEED_EXCLUDE_FILTERS,
         ),
         # remote (bastion)→local, bare destination
         "step-6": SyncConfig(
@@ -157,6 +166,7 @@ def _build_chain_config(
                 hard_link_snapshots=hl_src,
             ),
             destination=SyncEndpoint(volume="dst-local-bare"),
+            filters=SEED_EXCLUDE_FILTERS,
         ),
     }
 
@@ -170,12 +180,28 @@ def _build_chain_config(
     )
 
 
-def _assert_trees_equal(expected: Path, actual: Path) -> None:
-    """Assert two directory trees have identical structure and content."""
+def _assert_trees_equal(
+    expected: Path,
+    actual: Path,
+    *,
+    exclude_dirs: set[str] | None = None,
+) -> None:
+    """Assert two directory trees have identical structure and content.
+
+    Files under *exclude_dirs* (relative dir names) are skipped in
+    the expected tree — they should NOT appear in the actual tree.
+    """
+    _exclude = exclude_dirs or set()
+
+    def _is_excluded(p: Path, root: Path) -> bool:
+        return any(part in _exclude for part in p.relative_to(root).parts)
+
     expected_files = {
         p.relative_to(expected): p
         for p in sorted(expected.rglob("*"))
-        if p.is_file() and not p.name.startswith(".nbkp-")
+        if p.is_file()
+        and not p.name.startswith(".nbkp-")
+        and not _is_excluded(p, expected)
     }
     actual_files = {
         p.relative_to(actual): p
@@ -242,9 +268,12 @@ class TestChainSync:
         for r in results:
             assert r.success, f"{r.sync_slug}: {r.detail}"
 
-        # 7. Verify final destination matches source
+        # 7. Verify final destination matches source (minus excluded/)
         dst = tmp_path / "dst-local-bare"
-        _assert_trees_equal(src, dst)
+        _assert_trees_equal(src, dst, exclude_dirs={"excluded"})
+        # excluded/ must exist in source but NOT in destination
+        assert (src / "excluded").is_dir()
+        assert not (dst / "excluded").exists()
 
         # 8. Verify topological ordering
         slugs = [r.sync_slug for r in results]
@@ -255,7 +284,9 @@ class TestChainSync:
         #    HL dest (step-1): latest symlink on local-hl
         local_hl = tmp_path / "stage-local-hl-snapshots"
         assert (local_hl / "latest").is_symlink()
-        _assert_trees_equal(src, local_hl / "latest")
+        _assert_trees_equal(
+            src, local_hl / "latest", exclude_dirs={"excluded"}
+        )
 
         #    Btrfs dest (step-3): snapshot + latest symlink on remote-btrfs
         snap_check = ssh_exec(

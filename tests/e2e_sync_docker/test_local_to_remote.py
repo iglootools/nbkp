@@ -21,6 +21,58 @@ from nbkp.testkit.gen.fs import create_seed_sentinels
 from tests._docker_fixtures import assert_sentinels_after_sync, ssh_exec
 
 
+class TestLocalToRemoteFilters:
+    def test_filters_exclude_directory(
+        self,
+        tmp_path: Path,
+        docker_ssh_endpoint: SshEndpoint,
+        docker_remote_volume: RemoteVolume,
+    ) -> None:
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "keep.txt").write_text("keep me")
+        excluded = src_dir / "excluded"
+        excluded.mkdir()
+        (excluded / "cache.tmp").write_text("should not sync")
+
+        src_vol = LocalVolume(slug="src", path=str(src_dir))
+        sync = SyncConfig(
+            slug="test-sync",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(volume="dst"),
+            filters=["- excluded/"],
+        )
+        config = Config(
+            ssh_endpoints={"test-server": docker_ssh_endpoint},
+            volumes={"src": src_vol, "dst": docker_remote_volume},
+            syncs={"test-sync": sync},
+        )
+
+        def _run_remote(cmd: str) -> None:
+            ssh_exec(docker_ssh_endpoint, cmd)
+
+        create_seed_sentinels(config, remote_exec=_run_remote)
+
+        resolved = resolve_all_endpoints(config)
+        result = run_rsync(sync, config, resolved_endpoints=resolved)
+        assert result.returncode == 0
+
+        # keep.txt should arrive
+        check = ssh_exec(
+            docker_ssh_endpoint,
+            f"cat {REMOTE_BACKUP_PATH}/keep.txt",
+        )
+        assert check.stdout.strip() == "keep me"
+
+        # excluded/ should NOT arrive
+        check_exc = ssh_exec(
+            docker_ssh_endpoint,
+            f"test -d {REMOTE_BACKUP_PATH}/excluded"
+            " && echo EXISTS || echo MISSING",
+        )
+        assert check_exc.stdout.strip() == "MISSING"
+
+
 class TestLocalToRemote:
     def test_sync_to_container(
         self,

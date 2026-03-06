@@ -70,6 +70,7 @@ from .testkit.gen.check import (
 )
 from .testkit.gen.config import config_show_config
 from .testkit.gen.fs import (
+    SEED_EXCLUDE_FILTERS,
     create_seed_sentinels,
     seed_volume,
 )
@@ -388,6 +389,7 @@ def seed(
                 hard_link_snapshots=hl_dst,
             ),
             rsync_options=rsync_opts,
+            filters=SEED_EXCLUDE_FILTERS,
         ),
     }
 
@@ -445,6 +447,7 @@ def seed(
                         volume="stage-remote-bare",
                     ),
                     rsync_options=rsync_opts,
+                    filters=SEED_EXCLUDE_FILTERS,
                 ),
                 # remote→remote (bastion), btrfs dest
                 "step-3": SyncConfig(
@@ -457,6 +460,7 @@ def seed(
                         btrfs_snapshots=btrfs_dst,
                     ),
                     rsync_options=rsync_opts,
+                    filters=SEED_EXCLUDE_FILTERS,
                 ),
                 # remote→remote (bastion), bare on btrfs
                 "step-4": SyncConfig(
@@ -469,6 +473,7 @@ def seed(
                         volume="stage-remote-btrfs-bare",
                     ),
                     rsync_options=rsync_opts,
+                    filters=SEED_EXCLUDE_FILTERS,
                 ),
                 # remote→remote (bastion), HL dest
                 "step-5": SyncConfig(
@@ -481,6 +486,7 @@ def seed(
                         hard_link_snapshots=hl_dst,
                     ),
                     rsync_options=rsync_opts,
+                    filters=SEED_EXCLUDE_FILTERS,
                 ),
                 # remote (bastion)→local, bare dest
                 "step-6": SyncConfig(
@@ -493,6 +499,7 @@ def seed(
                         volume="dst-local-bare",
                     ),
                     rsync_options=rsync_opts,
+                    filters=SEED_EXCLUDE_FILTERS,
                 ),
             }
         )
@@ -508,6 +515,7 @@ def seed(
                 volume="dst-local-bare",
             ),
             rsync_options=rsync_opts,
+            filters=SEED_EXCLUDE_FILTERS,
         )
 
     config = Config(
