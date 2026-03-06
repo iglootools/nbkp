@@ -106,6 +106,29 @@ ssh-endpoints:
     location: travel
 ```
 
+#### SSH config integration
+
+Fields not explicitly set in the nbkp config (or inherited via `extends`) are automatically filled from `~/.ssh/config`. This lets you define a minimal endpoint that relies on your existing SSH configuration:
+
+```yaml
+ssh-endpoints:
+  nas:
+    host: nas          # matches "Host nas" in ~/.ssh/config
+    proxy-jump: bastion
+```
+
+If `~/.ssh/config` contains `Host nas` with `Port 5022`, `User backup`, and `IdentityFile ~/.ssh/nas_key`, the endpoint behaves as if those values were written directly in the nbkp config.
+
+**Enriched fields:** `port`, `user`, `key` (first `IdentityFile` entry, with `~` expansion).
+
+**Precedence order** (highest wins):
+1. Explicit value in the nbkp config
+2. Value inherited via `extends`
+3. Value from `~/.ssh/config`
+4. Pydantic default (e.g. `port: 22`)
+
+**Not enriched:** `proxy-jump` and `connection-options` are not read from SSH config. Use nbkp's own `proxy-jump` field for proxy chains. For `proxy-jump` specifically, when no explicit value is set in nbkp config, Fabric and the SSH CLI both read `ProxyJump` from `~/.ssh/config` transparently, so proxy jumps defined in SSH config work without nbkp enrichment.
+
 The `connection-options` field is an optional dictionary of typed SSH connection settings. These map to parameters across SSH (`ssh(1) -o`), Paramiko (`SSHClient.connect()`), and Fabric (`Connection()`). Available options:
 
 | Field | Default | Description |

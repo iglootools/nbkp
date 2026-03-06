@@ -8,6 +8,8 @@ from pathlib import Path
 
 import paramiko
 
+from ..config.protocol import SshEndpoint
+
 
 def _load_ssh_config() -> paramiko.SSHConfig | None:
     """Load the user's SSH config if it exists."""
@@ -59,3 +61,39 @@ def is_private_host(hostname: str) -> bool | None:
         return None
     else:
         return all(ipaddress.ip_address(a).is_private for a in addrs)
+
+
+def enrich_from_ssh_config(
+    endpoint: SshEndpoint,
+) -> SshEndpoint:
+    """Fill unset endpoint fields from ``~/.ssh/config``.
+
+    Uses ``model_fields_set`` to determine which fields were
+    explicitly provided in the config (or inherited via
+    ``extends``).  Only fields NOT in that set are candidates
+    for SSH config enrichment.
+
+    Enriched fields: ``port``, ``user``, ``key``.
+    """
+    ssh_config = _load_ssh_config()
+    if ssh_config is None:
+        return endpoint
+
+    result = ssh_config.lookup(endpoint.host)
+    fields_set = endpoint.model_fields_set
+    updates: dict[str, object] = {}
+
+    if "port" not in fields_set and "port" in result:
+        updates["port"] = int(result["port"])
+
+    if "user" not in fields_set and "user" in result:
+        updates["user"] = result["user"]
+
+    if "key" not in fields_set and "identityfile" in result:
+        raw = result["identityfile"][0]
+        updates["key"] = str(Path(raw).expanduser())
+
+    if not updates:
+        return endpoint
+
+    return endpoint.model_copy(update=updates)

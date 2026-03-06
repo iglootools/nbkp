@@ -126,9 +126,7 @@ def _check_remote_volume(
             ep.server, ["test", "-f", sentinel_path], ep.proxy_chain
         )
         reasons: list[VolumeReason] = (
-            []
-            if result.returncode == 0
-            else [VolumeReason.UNREACHABLE]
+            [] if result.returncode == 0 else [VolumeReason.UNREACHABLE]
         )
     except Exception:
         reasons = [VolumeReason.UNREACHABLE]

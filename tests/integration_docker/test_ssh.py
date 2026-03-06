@@ -46,7 +46,6 @@ from nbkp.testkit.gen.fs import create_seed_sentinels
 
 from tests._docker_fixtures import ssh_exec
 
-
 # ── Helpers ──────────────────────────────────────────────────
 
 
@@ -288,9 +287,7 @@ class TestHostKeyVerification:
         create_seed_sentinels(config, remote_exec=_run_remote)
 
         resolved = resolve_all_endpoints(config)
-        result = run_rsync(
-            sync, config, resolved_endpoints=resolved
-        )
+        result = run_rsync(sync, config, resolved_endpoints=resolved)
         assert result.returncode == 0
 
         check = ssh_exec(
@@ -379,9 +376,7 @@ class TestExplicitKeyOnly:
         create_seed_sentinels(config, remote_exec=_run_remote)
 
         resolved = resolve_all_endpoints(config)
-        result = run_rsync(
-            sync, config, resolved_endpoints=resolved
-        )
+        result = run_rsync(sync, config, resolved_endpoints=resolved)
         assert result.returncode == 0
 
         check = ssh_exec(
@@ -516,7 +511,8 @@ class TestAgentForwarding:
 
         with _ssh_agent(private_key):
             config, vol = self._forwarding_config(
-                private_key, bastion_container,
+                private_key,
+                bastion_container,
             )
             resolved = resolve_all_endpoints(config)
             ep = resolved[vol.slug]
@@ -540,7 +536,8 @@ class TestAgentForwarding:
 
         with _ssh_agent(private_key):
             config, vol = self._forwarding_config(
-                private_key, bastion_container,
+                private_key,
+                bastion_container,
             )
             resolved = resolve_all_endpoints(config)
             ep = resolved[vol.slug]

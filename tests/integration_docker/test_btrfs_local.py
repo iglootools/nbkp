@@ -37,8 +37,7 @@ from nbkp.sync.btrfs import (
 from nbkp.sync.symlink import update_latest_symlink
 
 _btrfs_available = (
-    platform.system() == "Linux"
-    and shutil.which("btrfs") is not None
+    platform.system() == "Linux" and shutil.which("btrfs") is not None
 )
 
 _skip_no_btrfs = pytest.mark.skipif(
@@ -308,9 +307,7 @@ def test_btrfs_local_has_execution_path() -> None:
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_DOCKERFILE = (
-    "nbkp/testkit/dockerbuild/Dockerfile.btrfs-local-test"
-)
+_DOCKERFILE = "nbkp/testkit/dockerbuild/Dockerfile.btrfs-local-test"
 _IMAGE_TAG = "nbkp-btrfs-test:latest"
 
 
@@ -367,6 +364,4 @@ class TestBtrfsLocalViaDocker:
         finally:
             container.remove(force=True)
 
-        assert exit_code == 0, (
-            f"Tests failed inside Docker:\n{logs}"
-        )
+        assert exit_code == 0, f"Tests failed inside Docker:\n{logs}"

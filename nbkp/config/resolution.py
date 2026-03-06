@@ -6,6 +6,7 @@ from pydantic import ConfigDict
 
 from pydantic import Field
 
+from ..remote.resolution import enrich_from_ssh_config
 from .protocol import (
     Config,
     EndpointFilter,
@@ -42,7 +43,11 @@ def resolve_all_endpoints(
                 server = config.resolve_endpoint_for_volume(
                     vol, endpoint_filter
                 )
+                server = enrich_from_ssh_config(server)
                 proxy_chain = config.resolve_proxy_chain(server)
+                proxy_chain = [
+                    enrich_from_ssh_config(ep) for ep in proxy_chain
+                ]
                 result[vol.slug] = ResolvedEndpoint(
                     server=server,
                     proxy_chain=proxy_chain,

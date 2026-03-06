@@ -316,9 +316,7 @@ def _cleanup_remote(
     if "docker_ssh_endpoint" not in request.fixturenames:
         return
 
-    server: SshEndpoint = request.getfixturevalue(
-        "docker_ssh_endpoint"
-    )
+    server: SshEndpoint = request.getfixturevalue("docker_ssh_endpoint")
 
     def run(cmd: str) -> None:
         ssh_exec(server, cmd, check=False)
