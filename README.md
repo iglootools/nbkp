@@ -120,19 +120,19 @@ Conceptual information:
 There are a number of open source backup tools that use rsync, btrfs, or similar principles. This section describes how `nbkp` compares to some of the popular ones.
 If you believe that the representation is inaccurate or if there are other tools that should be included in this list, please submit an issue or PR to update this section.
 
-#### Rsync-based
+#### Rsync-related
 
 - **[rsnapshot](https://rsnapshot.org/)** — periodic snapshots via rsync + hard links (hourly/daily/weekly/monthly). Designed for server/cron use with no awareness of removable or intermittent targets. Files stored as plain directories.
 - **[Back In Time](https://github.com/bit-team/backintime)** — GUI/CLI tool using rsync + hard links with scheduling and encfs encryption. Provides a Qt interface; uses hard links instead of btrfs snapshots; no sentinel-file mechanism for removable drives.
 - **[rsync-time-backup](https://github.com/laurent22/rsync-time-backup)** — Time Machine-style shell script using rsync `--link-dest`. Single script, no config file; uses hard links instead of btrfs snapshots; no volume detection.
 - **[rdiff-backup](https://rdiff-backup.net/)** — keeps the latest backup as a plain mirror, stores reverse diffs for older versions. Older versions require the tool to reconstruct; no removable-drive awareness.
 - **[Dirvish](https://dirvish.org/)** — rotating network backup system using rsync + hard links. Oriented toward server-pull workflows; no removable-drive detection or btrfs support.
+- **[Duplicity](https://duplicity.us/)** — GPG-encrypted tar volumes with librsync incremental transfers. Not browsable as plain directories; full+incremental chain model; no btrfs integration.
 
 #### Deduplicating
 
 - **[BorgBackup](https://www.borgbackup.org/)** — chunk-level deduplication with compression and authenticated encryption. Proprietary repository format (not plain directories); requires `borg` on the remote side; no removable-drive detection.
 - **[Restic](https://restic.net/)** — content-addressable backups with encryption by default, supporting many backends (local, S3, SFTP, B2). Proprietary format; restoring requires the restic tool; no volume detection.
-- **[Duplicity](https://duplicity.us/)** — GPG-encrypted tar volumes with librsync incremental transfers. Not browsable as plain directories; full+incremental chain model; no btrfs integration.
 - **[Kopia](https://kopia.io/)** — content-addressable storage with encryption, compression, and both CLI/GUI. Proprietary format; includes an optional scheduling server; no removable-drive or btrfs support.
 
 #### Btrfs / snapshot-focused
