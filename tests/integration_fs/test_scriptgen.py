@@ -12,6 +12,7 @@ from nbkp.config import (
     Config,
     HardLinkSnapshotConfig,
     LocalVolume,
+    RemoteVolume,
     SyncConfig,
     SyncEndpoint,
 )
@@ -50,7 +51,7 @@ def _build_chain_config(tmp_path: Path) -> Config:
     hl_src = HardLinkSnapshotConfig(enabled=True)
     hl_dst = HardLinkSnapshotConfig(enabled=True)
 
-    volumes: dict[str, LocalVolume] = {
+    volumes: dict[str, LocalVolume | RemoteVolume] = {
         "src": LocalVolume(
             slug="src",
             path=str(tmp_path / "src"),
@@ -89,9 +90,7 @@ def _build_chain_config(tmp_path: Path) -> Config:
 
 class TestGeneratedScriptSyntax:
     @_requires_bash4
-    def test_chain_config_valid_bash_no_portable(
-        self, tmp_path: Path
-    ) -> None:
+    def test_chain_config_valid_bash_no_portable(self, tmp_path: Path) -> None:
         """--no-portable script passes bash -n (bash 4+)."""
         config = _build_chain_config(tmp_path)
         create_seed_sentinels(config)
@@ -99,9 +98,7 @@ class TestGeneratedScriptSyntax:
 
         script = generate_script(
             config,
-            ScriptOptions(
-                config_path="test.yaml", portable=False
-            ),
+            ScriptOptions(config_path="test.yaml", portable=False),
         )
 
         result = subprocess.run(
@@ -110,13 +107,9 @@ class TestGeneratedScriptSyntax:
             capture_output=True,
             text=True,
         )
-        assert result.returncode == 0, (
-            f"bash -n failed:\n{result.stderr}"
-        )
+        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
-    def test_chain_config_valid_bash32(
-        self, tmp_path: Path
-    ) -> None:
+    def test_chain_config_valid_bash32(self, tmp_path: Path) -> None:
         """Generated script passes syntax check with /bin/bash.
 
         On macOS, /bin/bash is version 3.2.  This test verifies
@@ -137,7 +130,4 @@ class TestGeneratedScriptSyntax:
             capture_output=True,
             text=True,
         )
-        assert result.returncode == 0, (
-            f"/bin/bash -n failed:\n{result.stderr}"
-        )
-
+        assert result.returncode == 0, f"/bin/bash -n failed:\n{result.stderr}"

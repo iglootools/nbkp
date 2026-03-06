@@ -312,7 +312,7 @@ class TestLocalToLocal:
         config = _local_to_local_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert (
-            "sync_my_sync" ' || { NBKP_FAILED="$NBKP_FAILED' 'sync_my_sync "'
+            "sync_my_sync" ' || { NBKP_FAILED="${NBKP_FAILED}' 'sync_my_sync "'
         ) in script
 
 
@@ -766,7 +766,7 @@ class TestEdgeCases:
         assert "# : disabled — off-sync" in script
         assert (
             "sync_active_sync"
-            ' || { NBKP_FAILED="$NBKP_FAILED'
+            ' || { NBKP_FAILED="${NBKP_FAILED}'
             'sync_active_sync "'
         ) in script
         assert "# sync_off_sync  # disabled" in script
@@ -1193,7 +1193,7 @@ class TestDependencyGuard:
         )
         script = generate_script(config, _OPTIONS, now=_NOW)
         # step-1 has no guard (no predecessors)
-        assert "NBKP_FAILEDsync_step_1 " in script
+        assert "${NBKP_FAILED}sync_step_1 " in script
         # step-2 has a dependency guard checking step-1
         assert 'nbkp_has_failed "sync_step_1"' in script
         assert "CANCELLED step-2" in script
