@@ -78,7 +78,7 @@ Automated tests are organized into 5 categories based on what they test and what
 
 1. **Unit tests** (`tests/`, `tests/sync/`, `tests/remote/`) — Mock all external calls (rsync, SSH, filesystem). Test logic and command building. No external dependencies.
 
-2. **E2E sync** (`tests/e2e_sync/`) — Full sync pipeline on local filesystem, no Docker. Tests local-to-local syncs end-to-end with real rsync.
+2. **E2E sync (local)** (`tests/e2e_sync_local/`) — Full sync pipeline on local filesystem, no Docker. Tests local-to-local syncs end-to-end with real rsync.
 
 3. **E2E sync (Docker)** (`tests/e2e_sync_docker/`) — Full sync pipeline with remote endpoints via Docker containers. Includes end-to-end btrfs and hard-link snapshot workflows, proxy jump, chained syncs, and remote-to-remote syncs.
 

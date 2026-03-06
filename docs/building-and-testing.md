@@ -7,21 +7,29 @@ Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/Q
 Run automated tests and checks (no external dependencies):
 ```bash
 # mise tasks
-mise run check              # Run all checks: format + lint + type-check + unit tests
-mise run test               # Unit tests only (no Docker, no external dependencies)
-mise run test-e2e           # End-to-end sync tests (Docker + local)
+mise run check              # Run all checks: format + lint + type-check
+mise run check-all          # Run all checks: regular checks + all tests
+
+mise run test-all           # All tests
+
+mise run test-unit               # Unit tests only (no Docker, no external dependencies)
+
+mise run test-e2e                # End-to-end sync tests (Docker + local)
+mise run test-e2e-local           # End-to-end sync tests (local)
+mise run test-e2e-docker           # End-to-end sync tests (Docker only)
+
 mise run test-integration   # All integration tests (Docker + filesystem)
 mise run test-integration-docker  # All Docker-based tests (e2e + integration)
+mise run test-integration-docker-btrfs   # Local btrfs tests inside Docker (privileged)
 mise run test-integration-fs     # Filesystem integration tests
-mise run test-btrfs-local   # Local btrfs tests inside Docker (privileged)
-mise run test-all           # All tests
+
 mise run format             # black
 mise run lint               # flake8
 mise run type-check         # mypy (strict: disallow_untyped_defs)
 
 # Using Poetry syntax directly
-poetry run pytest tests/ --ignore=tests/e2e_sync/ --ignore=tests/e2e_sync_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -v  # Unit tests only
-poetry run pytest tests/e2e_sync/ tests/e2e_sync_docker/ -v             # End-to-end sync tests
+poetry run pytest tests/ --ignore=tests/e2e_sync_local/ --ignore=tests/e2e_sync_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -v  # Unit tests only
+poetry run pytest tests/e2e_sync_local/ tests/e2e_sync_docker/ -v             # End-to-end sync tests
 poetry run pytest tests/integration_docker/ tests/integration_fs/ -v    # Integration tests
 poetry run pytest tests/ -v                                             # All tests
 poetry run black .                                                      # formatting

@@ -4,4 +4,4 @@ from __future__ import annotations
 
 import pytest
 
-pytestmark = pytest.mark.e2e_sync
+pytestmark = pytest.mark.e2e_sync_local

@@ -352,6 +352,23 @@ class TestBtrfsLocalViaDocker:
                     "bind": "/app",
                     "mode": "rw",
                 },
+                # The bind mount above exposes the host's
+                # .venv inside the container.  When the
+                # container's poetry sees a macOS venv it
+                # considers it broken and recreates it with
+                # Linux binaries — overwriting the host's
+                # .venv via the shared mount.  Mounting a
+                # separate volume on /app/.venv shadows the
+                # host directory so the container can't
+                # touch it.
+                "nbkp-btrfs-test-venv": {
+                    "bind": "/app/.venv",
+                    "mode": "rw",
+                },
+            },
+            environment={
+                "POETRY_VIRTUALENVS_IN_PROJECT": "false",
+                "POETRY_VIRTUALENVS_PATH": "/tmp/venvs",
             },
             working_dir="/app",
             privileged=True,
