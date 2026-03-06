@@ -122,6 +122,21 @@ run = "poetry publish"
 description = "Start a Poetry shell"
 run = "poetry shell"
 
+[tasks.demo]
+description = "Record the demo and upload to asciinema.org"
+run = [
+  { task = "demo-record" },
+  { task = "demo-upload" },
+]
+
+[tasks.demo-record]
+description = "Record the demo and convert to GIF"
+run = "./demo/record-demo.sh \"$(poetry version -s)\""
+
+[tasks.demo-upload]
+description = "Upload the recorded demo to asciinema.org"
+run = "asciinema upload demo/demo.cast"
+
 # Tasks used by CI workflows
 [tasks.ci-test]
 description = "Run all checks needed on CI"
@@ -136,4 +151,19 @@ description = "Run all checks needed on CI"
 run = [
   { task = "install" },
   { task = "build" },
+]
+
+[tasks.ci-demo-record]
+description = "Record the demo on CI"
+run = [
+  { task = "install" },
+  { task = "demo-record" },
+]
+
+[tasks.ci-demo]
+description = "Record and upload the demo on CI"
+run = [
+  { task = "install" },
+  { task = "demo-record" },
+  { task = "demo-upload" },
 ]

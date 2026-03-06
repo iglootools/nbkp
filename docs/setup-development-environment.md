@@ -23,3 +23,8 @@
    ```bash
    brew install rsync
    ```
+
+6. (Optional) If you want to record the demo, install pv:
+   ```bash
+   brew install pv
+   ```

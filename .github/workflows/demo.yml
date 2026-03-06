@@ -1,0 +1,46 @@
+name: demo
+
+on:
+  # Manually trigger the workflow using
+  # gh workflow run demo.yml # --ref <branch>
+  # gh run list --workflow demo.yml # --branch <branch>
+  workflow_dispatch:
+  repository_dispatch:
+  pull_request:
+  push:
+    tags:
+      - "*"
+    branches:
+      - "main"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/release' ) && format('{0}-main-{1}', github.workflow, github.sha) || format('{0}-main-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: true
+
+env:
+  MISE_EXPERIMENTAL: true
+  HAS_ASCIINEMA_INSTALL_ID: ${{ secrets.ASCIINEMA_INSTALL_ID != '' }}
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v3
+      - name: Install pv (required by demo-magic)
+        run: sudo apt-get update && sudo apt-get install -y pv
+      - name: Record demo
+        run: mise run ci-demo-record
+      - name: Set up asciinema install ID
+        if: env.HAS_ASCIINEMA_INSTALL_ID == 'true'
+        env:
+          ASCIINEMA_INSTALL_ID: ${{ secrets.ASCIINEMA_INSTALL_ID }}
+        run: |
+          mkdir -p "$HOME/.local/state/asciinema"
+          echo "$ASCIINEMA_INSTALL_ID" > "$HOME/.local/state/asciinema/install-id"
+      - name: Upload demo
+        if: github.event_name != 'pull_request'
+        env:
+          ASCIINEMA_SERVER_URL: https://asciinema.org
+        run: mise run demo-upload
