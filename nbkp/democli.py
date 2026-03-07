@@ -377,7 +377,7 @@ def seed(
 
     # Config — chain layout matching integration test
     hl_src = HardLinkSnapshotConfig(enabled=True)
-    hl_dst = HardLinkSnapshotConfig(enabled=True)
+    hl_dst = HardLinkSnapshotConfig(enabled=True, max_snapshots=5)
 
     ssh_endpoints: dict[str, SshEndpoint] = {}
     volumes: dict[str, LocalVolume | RemoteVolume] = {
@@ -413,7 +413,7 @@ def seed(
         assert bastion_endpoint is not None
         btrfs_snapshots_path = f"{REMOTE_BTRFS_PATH}/snapshots"
         btrfs_bare_path = f"{REMOTE_BTRFS_PATH}/bare"
-        btrfs_dst = BtrfsSnapshotConfig(enabled=True)
+        btrfs_dst = BtrfsSnapshotConfig(enabled=True, max_snapshots=5)
         btrfs_src = BtrfsSnapshotConfig(enabled=True)
 
         ssh_endpoints["bastion"] = bastion_endpoint

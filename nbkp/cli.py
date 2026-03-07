@@ -516,28 +516,56 @@ def prune(
         resolved_endpoints=resolved,
     )
 
-    def _is_prunable(slug: str, status: SyncStatus) -> bool:
+    def _skip_reason(slug: str, status: SyncStatus) -> str | None:
+        """Return skip reason, or None if prunable."""
         if sync and slug not in sync:
-            return False
+            return None  # filtered out by --sync, omit entirely
         if not status.active:
-            return False
+            return "inactive"
         dst = status.config.destination
         match dst.snapshot_mode:
             case "btrfs":
-                return dst.btrfs_snapshots.max_snapshots is not None
+                if dst.btrfs_snapshots.max_snapshots is None:
+                    return "no max-snapshots limit"
+                return None
             case "hard-link":
-                return dst.hard_link_snapshots.max_snapshots is not None
+                if dst.hard_link_snapshots.max_snapshots is None:
+                    return "no max-snapshots limit"
+                return None
             case _:
-                return False
+                return "no snapshots configured"
 
-    prunable = [
-        (slug, status)
+    candidates = [
+        (slug, status, _skip_reason(slug, status))
         for slug, status in sync_statuses.items()
-        if _is_prunable(slug, status)
+        if not (sync and slug not in sync)
     ]
 
     results: list[PruneResult] = []
-    for slug, status in prunable:
+    for slug, status, skip in candidates:
+        if skip is not None:
+            kept = 0
+            if (
+                status.active
+                and status.config.destination.snapshot_mode != "none"
+            ):
+                try:
+                    kept = len(
+                        list_snapshots(status.config, cfg, resolved)
+                    )
+                except RuntimeError:
+                    pass
+            results.append(
+                PruneResult(
+                    sync_slug=slug,
+                    deleted=[],
+                    kept=kept,
+                    dry_run=dry_run,
+                    detail=skip,
+                    skipped=True,
+                )
+            )
+            continue
         dst = status.config.destination
         try:
             match dst.snapshot_mode:
@@ -592,7 +620,7 @@ def prune(
         case OutputFormat.HUMAN:
             print_human_prune_results(results, dry_run)
 
-    if any(r.detail for r in results):
+    if any(r.detail and not r.skipped for r in results):
         raise typer.Exit(1)
 
 
