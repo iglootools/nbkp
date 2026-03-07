@@ -1,38 +1,97 @@
 # Architecture
 
-NBKP is an rsync-based backup tool. The execution flow is:
+## Module Overview
 
 ```
-CLI (cli.py) → Runner (runner.py) → Check (check.py) + Rsync (rsync.py) + Btrfs (btrfs.py) + Hardlinks (hardlinks.py)
-                                         ↓                    ↓                    ↓                    ↓
-                                    SSH (ssh.py)          SSH (ssh.py)         SSH (ssh.py)         SSH (ssh.py)
-
+nbkp/
+  config/
+    protocol.py      Config model: volumes, SSH endpoints, sync endpoints, syncs
+    loader.py         YAML loading, search order, validation
+    resolution.py     SSH endpoint resolution (enrichment, proxy chains)
+  remote/
+    ssh.py            SSH CLI argument building (-e "ssh -p PORT -i KEY ...")
+    fabricssh.py      Fabric/Paramiko connections for status checks and btrfs ops
+    resolution.py     Endpoint filtering (location, private/public, DNS)
+  sync/
+    ordering.py       Topological sort, dependency graph, failure propagation
+    rsync.py          Rsync command building and execution
+    btrfs.py          Btrfs snapshot creation, listing, pruning
+    hardlinks.py      Hard-link snapshot creation, orphan cleanup, pruning
+    symlink.py        latest symlink management (read/update)
+    runner.py         Orchestrator: check → sort → dispatch per snapshot mode
+  check.py            Pre-flight validation (sentinels, SSH, rsync, btrfs, hard-link)
+  scriptgen.py        Compile config into standalone bash script
+  output.py           Rich/JSON formatting for all commands
+  cli.py              Typer CLI: check, run, sh, prune, troubleshoot, config show
+  democli.py          Demo/QA helpers: seed environments, render sample output
 ```
 
-All modules resolve volumes from `Config.volumes[name]` and dispatch on volume type.
+## Execution Flow
 
-## Key dispatch pattern
+```mermaid
+flowchart TD
+    CLI["CLI (cli.py)"]
 
-`LocalVolume | RemoteVolume` (the `Volume` union type) is used throughout. Every module that touches the filesystem branches on `isinstance(vol, RemoteVolume)` — local operations use `pathlib`/`subprocess` directly, remote operations go through `ssh.run_remote_command()`.
+    CLI --> Resolve["resolve_all_endpoints()
+    config/resolution.py
+    ─────────────────────
+    extends inheritance
+    ~/.ssh/config enrichment
+    proxy-jump chain resolution
+    endpoint filtering"]
 
+    Resolve --> Check["check_all_syncs()
+    check.py
+    ─────────────────────
+    Volume sentinels, SSH reachability
+    Endpoint sentinels, rsync version
+    btrfs/hard-link readiness
+    latest symlink validity"]
 
-## Sync flow (runner.py)
+    Check --> Sort["sort_syncs()
+    sync/ordering.py
+    ─────────────────────
+    Build dependency graph
+    from endpoint slugs
+    Topological sort, detect cycles"]
 
-1. `check_all_syncs()` — verifies volumes are reachable and sentinel files exist (`.nbkp-vol`, `.nbkp-src`, `.nbkp-dst`)
-2. For each active sync, dispatch on `snapshot_mode`:
-   - **`none`**: `run_rsync()` → done
-   - **`btrfs`**: `run_rsync()` to `{destination}/staging/` → `create_snapshot()` → `update_latest_symlink()` → optional `prune_snapshots()`
-   - **`hard-link`**: cleanup orphans → resolve `--link-dest` from previous snapshot → `create_snapshot_dir()` → `run_rsync()` to `{destination}/snapshots/{timestamp}/` → `update_latest_symlink()` → optional `prune_snapshots()`
-3. Btrfs syncs write to `{destination}/staging/`; hard-link syncs write directly to `{destination}/snapshots/{ISO8601Z}/`. Both store snapshots under `{destination}/snapshots/` and maintain a `latest` symlink pointing to the most recent complete snapshot.
+    Sort --> Run["run_all_syncs()
+    sync/runner.py"]
 
-## Rsync command variants (rsync.py)
+    Run --> Skip{Inactive or
+    cancelled?}
+    Skip -- Yes --> NextSync[Next sync]
+    Skip -- No --> ResolveEP["Resolve endpoints
+    config.source_endpoint(sync)
+    config.destination_endpoint(sync)"]
 
-- **Local→Local**: direct rsync
-- **Local→Remote / Remote→Local**: rsync with `-e "ssh -p PORT -i KEY -o OPT"`
-- **Remote→Remote (same server)**: SSH into the server once, run rsync with local paths
+    ResolveEP --> Dispatch{snapshot_mode?}
 
-Cross-server remote-to-remote syncs (different SSH endpoints) are not supported. Use two separate syncs through the local machine instead.
+    Dispatch -- none --> Rsync["run_rsync()"]
+    Rsync --> Done[Done]
 
-## Config resolution (config.py)
+    Dispatch -- btrfs --> RsyncBtrfs["run_rsync()
+    → staging/"]
+    RsyncBtrfs --> Snapshot["create_snapshot()"]
+    Snapshot --> Symlink["update_latest_symlink()"]
+    Symlink --> Prune["prune_snapshots()"]
 
-Search order: explicit path → `$XDG_CONFIG_HOME/nbkp/config.yaml` → `/etc/nbkp/config.yaml`. Raises `ConfigError` on validation failure.
+    Dispatch -- hard-link --> Cleanup["cleanup_orphans()"]
+    Cleanup --> LinkDest["resolve --link-dest
+    from previous snapshot"]
+    LinkDest --> CreateDir["create_snapshot_dir()"]
+    CreateDir --> RsyncHL["run_rsync()
+    → snapshots/timestamp/"]
+    RsyncHL --> SymlinkHL["update_latest_symlink()"]
+    SymlinkHL --> PruneHL["prune_snapshots()"]
+
+    Done --> NextSync
+    Prune --> NextSync
+    PruneHL --> NextSync
+
+    RsyncBtrfs -- failure --> Cancel["Cancel all
+    downstream syncs"]
+    RsyncHL -- failure --> Cancel
+    Rsync -- failure --> Cancel
+    Cancel --> NextSync
+```
