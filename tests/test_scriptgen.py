@@ -125,6 +125,36 @@ def _btrfs_no_prune_config() -> Config:
     )
 
 
+def _btrfs_chain_config() -> Config:
+    """A→B chain where B's source has btrfs snapshots."""
+    src = LocalVolume(slug="src", path="/mnt/src")
+    mid = LocalVolume(slug="mid", path="/mnt/mid")
+    dst = LocalVolume(slug="dst", path="/mnt/dst")
+    s1 = SyncConfig(
+        slug="step-1",
+        source=SyncEndpoint(volume="src"),
+        destination=DestinationSyncEndpoint(
+            volume="mid",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=5),
+        ),
+    )
+    s2 = SyncConfig(
+        slug="step-2",
+        source=SyncEndpoint(
+            volume="mid",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+        ),
+        destination=DestinationSyncEndpoint(
+            volume="dst",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=5),
+        ),
+    )
+    return Config(
+        volumes={"src": src, "mid": mid, "dst": dst},
+        syncs={"step-1": s1, "step-2": s2},
+    )
+
+
 def _disabled_config() -> Config:
     src = LocalVolume(slug="src", path="/mnt/src")
     dst = LocalVolume(slug="dst", path="/mnt/dst")
@@ -429,6 +459,13 @@ class TestPreflightChecks:
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert "command -v btrfs" in script
         assert "btrfs not found" in script
+
+    def test_source_latest_symlink_check(self) -> None:
+        """Source latest check uses test -L (symlink), not -d."""
+        config = _btrfs_chain_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "test -L" in script
+        assert "latest symlink not found" in script
 
     def test_remote_preflight_uses_ssh(self) -> None:
         config = _local_to_remote_config()
@@ -955,6 +992,17 @@ class TestHardLink:
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert "snapshots/ directory not found" in script
 
+    def test_devnull_guard_in_orphan_cleanup(self) -> None:
+        config = self._hl_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert '!= "/dev/null"' in script
+
+    def test_devnull_guard_in_prune(self) -> None:
+        config = self._hl_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert '= "/dev/null"' in script
+        assert 'NBKP_LATEST_NAME=""' in script
+
     def test_valid_syntax(self) -> None:
         config = self._hl_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
@@ -1171,8 +1219,8 @@ class TestRelativePaths:
 
 
 class TestDependencyGuard:
-    def test_dependent_sync_has_guard(self) -> None:
-        """A chain sync should have a dependency guard."""
+    def test_downstream_sync_has_guard(self) -> None:
+        """A downstream sync should have a dependency guard."""
         src = LocalVolume(slug="src", path="/src")
         mid = LocalVolume(slug="mid", path="/mid")
         dst = LocalVolume(slug="dst", path="/dst")
@@ -1192,9 +1240,9 @@ class TestDependencyGuard:
             },
         )
         script = generate_script(config, _OPTIONS, now=_NOW)
-        # step-1 has no guard (no predecessors)
+        # step-1 has no guard (no upstream syncs)
         assert "${NBKP_FAILED}sync_step_1 " in script
-        # step-2 has a dependency guard checking step-1
+        # step-2 has a guard checking upstream step-1
         assert 'nbkp_has_failed "sync_step_1"' in script
         assert "CANCELLED step-2" in script
 

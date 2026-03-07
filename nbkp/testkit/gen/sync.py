@@ -7,9 +7,7 @@ from ...sync import PruneResult, SyncResult
 from ...sync.btrfs import SNAPSHOTS_DIR
 
 
-def _snap_base(
-    config: Config, sync_slug: str
-) -> str:
+def _snap_base(config: Config, sync_slug: str) -> str:
     vol = config.volumes[config.syncs[sync_slug].destination.volume]
     subdir = config.syncs[sync_slug].destination.subdir
     base = vol.path
@@ -67,8 +65,7 @@ def run_results(config: Config) -> list[SyncResult]:
 def dry_run_results(config: Config) -> list[SyncResult]:
     """Same results as run_results but flagged as dry run."""
     return [
-        r.model_copy(update={"dry_run": True})
-        for r in run_results(config)
+        r.model_copy(update={"dry_run": True}) for r in run_results(config)
     ]
 
 

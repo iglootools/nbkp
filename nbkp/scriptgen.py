@@ -490,14 +490,14 @@ def _build_preflight_block(
         )
     )
 
-    # Source snapshot: verify latest/ and snapshots/ exist
+    # Source snapshot: verify latest symlink and snapshots/ exist
     if sync.source.snapshot_mode != "none":
         src_latest = f"{src_path}/{LATEST_LINK}"
         lines.append(
             _build_check_line(
                 src_vol,
-                ["-d", src_latest],
-                (f"source {LATEST_LINK}/ not found" f" ({src_latest})"),
+                ["-L", src_latest],
+                (f"source {LATEST_LINK} symlink not found" f" ({src_latest})"),
                 resolved_endpoints,
             )
         )
@@ -731,7 +731,11 @@ def _build_prune_block(
             NBKP_COUNT=$(echo "$NBKP_SNAPS" | wc -l | tr -d ' ')
             NBKP_EXCESS=$((NBKP_COUNT - {max_snapshots}))
             NBKP_LATEST_LINK=$({rl_cmd} 2>/dev/null || true)
-            NBKP_LATEST_NAME="${{NBKP_LATEST_LINK##*/}}"
+            if [ "$NBKP_LATEST_LINK" = "/dev/null" ]; then
+                NBKP_LATEST_NAME=""
+            else
+                NBKP_LATEST_NAME="${{NBKP_LATEST_LINK##*/}}"
+            fi
             if [ "$NBKP_EXCESS" -gt 0 ]; then
                 {pipe_while}
                     if [ "$snap" != "$NBKP_LATEST_NAME" ]; then
@@ -763,9 +767,15 @@ def _build_hard_link_orphan_cleanup_block(
     ls_cmd = _ls_snapshots_cmd(dst_vol, snaps_dir, resolved_endpoints)
     rm_cmd = _rm_rf_snap_cmd(dst_vol, snaps_dir, resolved_endpoints)
 
+    # fmt: off
+    guard = (
+        'if [ -n "$NBKP_LATEST_LINK" ]'
+        ' && [ "$NBKP_LATEST_LINK" != "/dev/null" ]; then'
+    )
+    # fmt: on
     return dedent(f"""\
         NBKP_LATEST_LINK=$({rl_cmd} 2>/dev/null || true)
-        if [ -n "$NBKP_LATEST_LINK" ]; then
+        {guard}
             NBKP_LATEST_NAME="${{NBKP_LATEST_LINK##*/}}"
             for snap in $({ls_cmd} 2>/dev/null | sort); do
                 if [ "$snap" \\> "$NBKP_LATEST_NAME" ]; then
@@ -851,7 +861,11 @@ def _build_hard_link_prune_block(
             NBKP_COUNT=$(echo "$NBKP_SNAPS" | wc -l | tr -d ' ')
             NBKP_EXCESS=$((NBKP_COUNT - {max_snapshots}))
             NBKP_LATEST_LINK=$({rl_cmd} 2>/dev/null || true)
-            NBKP_LATEST_NAME="${{NBKP_LATEST_LINK##*/}}"
+            if [ "$NBKP_LATEST_LINK" = "/dev/null" ]; then
+                NBKP_LATEST_NAME=""
+            else
+                NBKP_LATEST_NAME="${{NBKP_LATEST_LINK##*/}}"
+            fi
             if [ "$NBKP_EXCESS" -gt 0 ]; then
                 {pipe_while}
                     if [ "$snap" != "$NBKP_LATEST_NAME" ]; then

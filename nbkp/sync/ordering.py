@@ -19,7 +19,7 @@ def endpoint_key(endpoint: SyncEndpoint) -> EndpointKey:
 def _build_graph(
     syncs: dict[str, SyncConfig],
 ) -> dict[str, set[str]]:
-    """Build dependency graph: node → set of predecessors."""
+    """Build dependency graph: node → set of upstream syncs."""
     writers: dict[EndpointKey, list[str]] = defaultdict(list)
     for sync_slug, sync in syncs.items():
         dst_key = endpoint_key(sync.destination)
@@ -41,9 +41,9 @@ def _build_graph(
 def sync_predecessors(
     syncs: dict[str, SyncConfig],
 ) -> dict[str, set[str]]:
-    """Return direct predecessors for each sync slug.
+    """Return direct upstream syncs for each sync slug.
 
-    A sync B has predecessor A when A's destination matches
+    A sync B has upstream sync A when A's destination matches
     B's source (same volume and subdir).
     """
     return _build_graph(syncs)
@@ -54,7 +54,7 @@ def sort_syncs(syncs: dict[str, SyncConfig]) -> list[str]:
 
     A sync B depends on sync A when A's destination matches
     B's source (same volume and subdir).  Returns sync slugs
-    in an order where dependees come before dependents.
+    in an order where upstream syncs come before downstream syncs.
 
     Raises ``ConfigError`` when a dependency cycle is detected.
     """

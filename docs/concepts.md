@@ -24,7 +24,7 @@ Individual syncs can be enabled or disabled when calling the backup tool.
 
 When one sync's destination matches another sync's source (same volume and subdir), a dependency exists between them. Syncs are automatically executed in topological order so that upstream data is always fresh before downstream syncs begin.
 
-If a sync fails, all syncs that depend on it (directly or transitively) are automatically **cancelled** to prevent propagating partial or stale data through the chain. Cancelled syncs appear with a `CANCELLED` status in the output, along with the name of the failed dependency. Independent syncs (those with no dependency relationship) are unaffected and continue to run normally.
+If a sync fails, all downstream syncs (directly or transitively) are automatically **cancelled** to prevent propagating partial or stale data through the chain. Cancelled syncs appear with a `CANCELLED` status in the output, along with the name of the failed upstream sync. Independent syncs (those with no dependency relationship) are unaffected and continue to run normally.
 
 For example, in a chain `A → B → C` where A's destination is B's source and B's destination is C's source: if A fails, both B and C are cancelled. But a sync D that reads from an unrelated volume still executes.
 
@@ -35,7 +35,7 @@ The generated shell script (`nbkp sh`) implements the same failure propagation l
 A sync can optionally enable btrfs snapshots, which will be used to perform incremental backups.
 This is only supported for local sources and destinations that are on btrfs volumes.
 
-Rsync writes to a staging area at `${destination}/staging/` (a writable btrfs subvolume). After each successful sync, a read-only btrfs snapshot is created at `${destination}/snapshots/${iso8601_timestamp}`, and a `${destination}/latest` symlink is updated to point to the new snapshot.
+Rsync writes to a staging area at `${destination}/staging/` (a writable btrfs subvolume). After each successful sync, a read-only btrfs snapshot is created at `${destination}/snapshots/${iso8601_timestamp}`, and a `${destination}/latest` symlink is updated to point to the new snapshot. Initially, `latest` points to `/dev/null` (meaning "no snapshot yet"); after the first successful sync it is updated to point to the real snapshot.
 
 The `max-snapshots` field controls the maximum number of snapshots to keep. When set, old snapshots are automatically pruned after each `run`. The `prune` command can also be used to manually prune snapshots.
 
@@ -58,7 +58,7 @@ Unlike btrfs snapshots (which sync to `${destination}/staging/` then snapshot it
 3. On success: update symlink `${destination}/latest` → `snapshots/${timestamp}`
 4. Prune old snapshots with `rm -rf` (no btrfs commands needed)
 
-**Safety:** The `latest` symlink is only updated after a successful sync. If a sync fails midway, `latest` still points to the previous complete snapshot. Orphaned snapshot directories (from failed syncs) are detected and cleaned up before the next sync. Pruning never removes the snapshot that `latest` points to.
+**Safety:** The `latest` symlink is only updated after a successful sync. If a sync fails midway, `latest` still points to the previous complete snapshot. Orphaned snapshot directories (from failed syncs) are detected and cleaned up before the next sync. Pruning never removes the snapshot that `latest` points to. Initially, `latest` points to `/dev/null` (meaning "no snapshot yet"); `--link-dest` is not used for the first sync, and `latest` is updated to point to the real snapshot after success.
 
 Only one of `btrfs-snapshots` and `hard-link-snapshots` can be enabled per sync (they are mutually exclusive).
 

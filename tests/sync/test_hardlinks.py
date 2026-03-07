@@ -171,6 +171,40 @@ class TestReadLatestSymlink:
         result = read_latest_symlink(sync, config, resolved_endpoints=re)
         assert result is None
 
+    def test_local_devnull(self, tmp_path: Path) -> None:
+        """latest → /dev/null returns None."""
+        dst = LocalVolume(slug="dst", path=str(tmp_path))
+        src = LocalVolume(slug="src", path="/src")
+        sync = SyncConfig(
+            slug="s1",
+            source=SyncEndpoint(volume="src"),
+            destination=DestinationSyncEndpoint(
+                volume="dst",
+                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+            ),
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            syncs={"s1": sync},
+        )
+        latest = tmp_path / "latest"
+        latest.symlink_to("/dev/null")
+
+        result = read_latest_symlink(sync, config)
+        assert result is None
+
+    @patch("nbkp.sync.symlink.run_remote_command")
+    def test_remote_devnull(self, mock_remote: MagicMock) -> None:
+        """Remote latest → /dev/null returns None."""
+        mock_remote.return_value = MagicMock(
+            returncode=0,
+            stdout="/dev/null\n",
+        )
+        sync, config, re = _remote_config()
+
+        result = read_latest_symlink(sync, config, resolved_endpoints=re)
+        assert result is None
+
 
 class TestUpdateLatestSymlink:
     def test_local(self, tmp_path: Path) -> None:
