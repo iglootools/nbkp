@@ -7,7 +7,6 @@ from pathlib import Path
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
-    DestinationSyncEndpoint,
     LocalVolume,
     SyncConfig,
     SyncEndpoint,
@@ -24,23 +23,27 @@ def _make_local_config(
 ) -> tuple[SyncConfig, Config]:
     src_vol = LocalVolume(slug="src", path=src_path)
     dst_vol = LocalVolume(slug="dst", path=dst_path)
-    destination = DestinationSyncEndpoint(
-        volume="dst",
-        subdir=dst_subdir,
+    ep_src = SyncEndpoint(
+        slug="ep-src",
+        volume="src",
+        subdir=src_subdir,
     )
+    ep_dst_kwargs: dict[str, object] = {
+        "slug": "ep-dst",
+        "volume": "dst",
+        "subdir": dst_subdir,
+    }
     if btrfs_snapshots is not None:
-        destination = DestinationSyncEndpoint(
-            volume="dst",
-            subdir=dst_subdir,
-            btrfs_snapshots=btrfs_snapshots,
-        )
+        ep_dst_kwargs["btrfs_snapshots"] = btrfs_snapshots
+    ep_dst = SyncEndpoint(**ep_dst_kwargs)  # type: ignore[arg-type]
     sync = SyncConfig(
         slug="test-sync",
-        source=SyncEndpoint(volume="src", subdir=src_subdir),
-        destination=destination,
+        source="ep-src",
+        destination="ep-dst",
     )
     config = Config(
         volumes={"src": src_vol, "dst": dst_vol},
+        sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
         syncs={"test-sync": sync},
     )
     return sync, config
@@ -130,14 +133,18 @@ class TestLocalToLocal:
 
         sync = SyncConfig(
             slug="test-sync",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(volume="dst"),
+            source="ep-src",
+            destination="ep-dst",
             filters=["- excluded/"],
         )
         config = Config(
             volumes={
                 "src": LocalVolume(slug="src", path=str(src)),
                 "dst": LocalVolume(slug="dst", path=str(dst)),
+            },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
             },
             syncs={"test-sync": sync},
         )

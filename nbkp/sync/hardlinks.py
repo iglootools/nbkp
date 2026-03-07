@@ -40,12 +40,15 @@ def create_snapshot_dir(
     timestamp = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
     snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{timestamp}"
 
-    dst_vol = config.volumes[sync.destination.volume]
+    dst = config.destination_endpoint(sync)
+    dst_vol = config.volumes[dst.volume]
     match dst_vol:
         case RemoteVolume():
             ep = re[dst_vol.slug]
             result = run_remote_command(
-                ep.server, ["mkdir", "-p", snapshot_path], ep.proxy_chain
+                ep.server,
+                ["mkdir", "-p", snapshot_path],
+                ep.proxy_chain,
             )
         case LocalVolume():
             result = subprocess.run(
@@ -76,7 +79,8 @@ def cleanup_orphaned_snapshots(
         return []
 
     all_snapshots = list_snapshots(sync, config, re)
-    dst_vol = config.volumes[sync.destination.volume]
+    dst = config.destination_endpoint(sync)
+    dst_vol = config.volumes[dst.volume]
     deleted: list[str] = []
 
     for snap_path in all_snapshots:
@@ -138,7 +142,8 @@ def prune_snapshots(
         to_delete.append(snap_path)
 
     if not dry_run:
-        dst_vol = config.volumes[sync.destination.volume]
+        dst = config.destination_endpoint(sync)
+        dst_vol = config.volumes[dst.volume]
         for path in to_delete:
             delete_snapshot(path, dst_vol, re)
 

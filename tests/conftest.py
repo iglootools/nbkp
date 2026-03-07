@@ -9,7 +9,6 @@ import yaml
 
 from nbkp.config import (
     Config,
-    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SshEndpoint,
@@ -49,14 +48,23 @@ def _sample_config() -> Config:
                 path="/volume1/backups",
             ),
         },
+        sync_endpoints={
+            "local-photos": SyncEndpoint(
+                slug="local-photos",
+                volume="local-data",
+                subdir="photos",
+            ),
+            "nas-photos": SyncEndpoint(
+                slug="nas-photos",
+                volume="nas",
+                subdir="photos-backup",
+            ),
+        },
         syncs={
             "photos-to-nas": SyncConfig(
                 slug="photos-to-nas",
-                source=SyncEndpoint(volume="local-data", subdir="photos"),
-                destination=DestinationSyncEndpoint(
-                    volume="nas",
-                    subdir="photos-backup",
-                ),
+                source="local-photos",
+                destination="nas-photos",
                 enabled=True,
                 filters=["+ *.jpg", "- *.tmp"],
                 filter_file=("~/.config/nbkp/filters/photos.rules"),
@@ -72,11 +80,15 @@ def _sample_minimal_config() -> Config:
             "src": LocalVolume(slug="src", path="/src"),
             "dst": LocalVolume(slug="dst", path="/dst"),
         },
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+        },
         syncs={
             "s1": SyncConfig(
                 slug="s1",
-                source=SyncEndpoint(volume="src"),
-                destination=DestinationSyncEndpoint(volume="dst"),
+                source="ep-src",
+                destination="ep-dst",
             ),
         },
     )

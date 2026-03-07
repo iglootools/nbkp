@@ -11,7 +11,6 @@ from ...check import (
 from ...config import (
     BtrfsSnapshotConfig,
     Config,
-    DestinationSyncEndpoint,
     HardLinkSnapshotConfig,
     LocalVolume,
     SyncConfig,
@@ -19,6 +18,7 @@ from ...config import (
 )
 from .config import (
     base_ssh_endpoints,
+    base_sync_endpoints,
     base_syncs,
     base_volumes,
 )
@@ -30,18 +30,22 @@ def check_config() -> Config:
     volumes["external-drive"] = LocalVolume(
         slug="external-drive", path="/mnt/external"
     )
+    sync_endpoints = base_sync_endpoints()
+    sync_endpoints["external-root"] = SyncEndpoint(
+        slug="external-root",
+        volume="external-drive",
+    )
     syncs = base_syncs()
     syncs["disabled-backup"] = SyncConfig(
         slug="disabled-backup",
-        source=SyncEndpoint(volume="laptop"),
-        destination=DestinationSyncEndpoint(
-            volume="external-drive",
-        ),
+        source="laptop-root",
+        destination="external-root",
         enabled=False,
     )
     return Config(
         ssh_endpoints=base_ssh_endpoints(),
         volumes=volumes,
+        sync_endpoints=sync_endpoints,
         syncs=syncs,
     )
 
@@ -112,89 +116,146 @@ def check_data(
     return vol_statuses, sync_statuses
 
 
+def _troubleshoot_volumes() -> dict[str, LocalVolume]:
+    """Extra local volumes for troubleshoot scenarios."""
+    return {
+        "usb-1": LocalVolume(slug="usb-1", path="/mnt/usb-1"),
+        "usb-2": LocalVolume(slug="usb-2", path="/mnt/usb-2"),
+        "usb-3": LocalVolume(slug="usb-3", path="/mnt/usb-3"),
+        "usb-4": LocalVolume(slug="usb-4", path="/mnt/usb-4"),
+        "usb-5": LocalVolume(slug="usb-5", path="/mnt/usb-5"),
+        "usb-6": LocalVolume(slug="usb-6", path="/mnt/usb-6"),
+    }
+
+
 def troubleshoot_config() -> Config:
-    """Config designed to trigger every troubleshoot reason."""
+    """Config designed to trigger every troubleshoot reason.
+
+    Each sync needs a unique destination endpoint, and each
+    endpoint needs a unique (volume, subdir) pair.  We use
+    extra local volumes to satisfy these constraints.
+    """
+    base_vols = base_volumes()
+    extra_vols = _troubleshoot_volumes()
+    volumes = {**base_vols, **extra_vols}
+
+    sync_endpoints: dict[str, SyncEndpoint] = {
+        # Source endpoints
+        "laptop-src": SyncEndpoint(
+            slug="laptop-src",
+            volume="laptop",
+        ),
+        "usb-btrfs-src": SyncEndpoint(
+            slug="usb-btrfs-src",
+            volume="usb-drive",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+        ),
+        # Each sync gets its own unique destination endpoint
+        "dst-disabled": SyncEndpoint(
+            slug="dst-disabled",
+            volume="usb-1",
+        ),
+        "dst-unavail": SyncEndpoint(
+            slug="dst-unavail",
+            volume="nas-backup",
+        ),
+        "dst-sentinels": SyncEndpoint(
+            slug="dst-sentinels",
+            volume="usb-2",
+        ),
+        "dst-rsync-missing": SyncEndpoint(
+            slug="dst-rsync-missing",
+            volume="nas-backup",
+            subdir="rsync-check",
+        ),
+        "dst-btrfs-detect": SyncEndpoint(
+            slug="dst-btrfs-detect",
+            volume="usb-3",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+        ),
+        "dst-btrfs-mount": SyncEndpoint(
+            slug="dst-btrfs-mount",
+            volume="nas-backup",
+            subdir="btrfs-mount",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+        ),
+        "dst-tools": SyncEndpoint(
+            slug="dst-tools",
+            volume="usb-4",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+        ),
+        "dst-hardlink": SyncEndpoint(
+            slug="dst-hardlink",
+            volume="usb-5",
+            hard_link_snapshots=HardLinkSnapshotConfig(
+                enabled=True, max_snapshots=5
+            ),
+        ),
+        "dst-rsync-old": SyncEndpoint(
+            slug="dst-rsync-old",
+            volume="usb-6",
+        ),
+        "dst-src-latest": SyncEndpoint(
+            slug="dst-src-latest",
+            volume="nas-backup",
+            subdir="src-latest",
+        ),
+    }
     return Config(
         ssh_endpoints=base_ssh_endpoints(),
-        volumes=base_volumes(),
+        volumes=volumes,
+        sync_endpoints=sync_endpoints,
         syncs={
             "disabled-sync": SyncConfig(
                 slug="disabled-sync",
-                source=SyncEndpoint(volume="laptop"),
-                destination=DestinationSyncEndpoint(
-                    volume="usb-drive",
-                ),
+                source="laptop-src",
+                destination="dst-disabled",
                 enabled=False,
             ),
             "unavailable-volumes": SyncConfig(
                 slug="unavailable-volumes",
-                source=SyncEndpoint(volume="laptop"),
-                destination=DestinationSyncEndpoint(
-                    volume="nas-backup",
-                ),
+                source="laptop-src",
+                destination="dst-unavail",
             ),
             "missing-sentinels": SyncConfig(
                 slug="missing-sentinels",
-                source=SyncEndpoint(volume="laptop"),
-                destination=DestinationSyncEndpoint(volume="usb-drive"),
+                source="laptop-src",
+                destination="dst-sentinels",
             ),
             "rsync-missing": SyncConfig(
                 slug="rsync-missing",
-                source=SyncEndpoint(volume="laptop"),
-                destination=DestinationSyncEndpoint(volume="nas-backup"),
+                source="laptop-src",
+                destination="dst-rsync-missing",
             ),
             "btrfs-not-detected": SyncConfig(
                 slug="btrfs-not-detected",
-                source=SyncEndpoint(volume="laptop"),
-                destination=DestinationSyncEndpoint(
-                    volume="usb-drive",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
+                source="laptop-src",
+                destination="dst-btrfs-detect",
             ),
             "btrfs-mount-issues": SyncConfig(
                 slug="btrfs-mount-issues",
-                source=SyncEndpoint(volume="laptop"),
-                destination=DestinationSyncEndpoint(
-                    volume="nas-backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
+                source="laptop-src",
+                destination="dst-btrfs-mount",
             ),
             "tools-missing": SyncConfig(
                 slug="tools-missing",
-                source=SyncEndpoint(volume="laptop"),
-                destination=DestinationSyncEndpoint(
-                    volume="usb-drive",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
+                source="laptop-src",
+                destination="dst-tools",
             ),
             "hardlink-issues": SyncConfig(
                 slug="hardlink-issues",
-                source=SyncEndpoint(volume="laptop"),
-                destination=DestinationSyncEndpoint(
-                    volume="usb-drive",
-                    hard_link_snapshots=HardLinkSnapshotConfig(
-                        enabled=True, max_snapshots=5
-                    ),
-                ),
+                source="laptop-src",
+                destination="dst-hardlink",
             ),
             "rsync-too-old": SyncConfig(
                 slug="rsync-too-old",
-                source=SyncEndpoint(volume="laptop"),
-                destination=DestinationSyncEndpoint(
-                    volume="nas-backup",
-                ),
+                source="laptop-src",
+                destination="dst-rsync-old",
             ),
             "source-latest-missing": SyncConfig(
                 slug="source-latest-missing",
-                source=SyncEndpoint(
-                    volume="usb-drive",
-                    btrfs_snapshots=BtrfsSnapshotConfig(
-                        enabled=True,
-                    ),
-                ),
-                destination=DestinationSyncEndpoint(
-                    volume="nas-backup",
-                ),
+                source="usb-btrfs-src",
+                destination="dst-src-latest",
             ),
         },
     )

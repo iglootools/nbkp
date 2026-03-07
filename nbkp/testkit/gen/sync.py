@@ -8,11 +8,12 @@ from ...sync.btrfs import SNAPSHOTS_DIR
 
 
 def _snap_base(config: Config, sync_slug: str) -> str:
-    vol = config.volumes[config.syncs[sync_slug].destination.volume]
-    subdir = config.syncs[sync_slug].destination.subdir
+    sync = config.syncs[sync_slug]
+    dst_ep = config.destination_endpoint(sync)
+    vol = config.volumes[dst_ep.volume]
     base = vol.path
-    if subdir:
-        base = f"{base}/{subdir}"
+    if dst_ep.subdir:
+        base = f"{base}/{dst_ep.subdir}"
     return f"{base}/{SNAPSHOTS_DIR}"
 
 
@@ -22,8 +23,9 @@ def run_results(config: Config) -> list[SyncResult]:
     local_snap = f"{local_snap_base}/2026-02-19T10:30:00.000Z"
     remote_snap_base = _snap_base(config, "docs-to-nas")
     remote_snap = f"{remote_snap_base}/2026-02-19T11:00:00.000Z"
-    src_vol = config.volumes[config.syncs["docs-to-nas"].source.volume]
-    src_subdir = config.syncs["docs-to-nas"].source.subdir
+    _docs_src = config.source_endpoint(config.syncs["docs-to-nas"])
+    src_vol = config.volumes[_docs_src.volume]
+    src_subdir = _docs_src.subdir
     return [
         SyncResult(
             sync_slug="music-to-usb",

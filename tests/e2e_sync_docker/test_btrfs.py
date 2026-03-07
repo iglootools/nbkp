@@ -15,7 +15,6 @@ from nbkp.sync.symlink import update_latest_symlink
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
-    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     ResolvedEndpoints,
@@ -40,17 +39,22 @@ def _make_btrfs_config(
     src_vol = LocalVolume(slug="src", path=src_path)
     sync = SyncConfig(
         slug="test-sync",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(
-            volume="dst",
-            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-        ),
+        source="ep-src",
+        destination="ep-dst",
     )
     config = Config(
         ssh_endpoints={"test-server": docker_ssh_endpoint},
         volumes={
             "src": src_vol,
             "dst": remote_btrfs_volume,
+        },
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+            ),
         },
         syncs={"test-sync": sync},
     )

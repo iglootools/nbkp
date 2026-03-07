@@ -11,7 +11,6 @@ from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     ConfigError,
-    DestinationSyncEndpoint,
     EndpointFilter,
     HardLinkSnapshotConfig,
     LocalVolume,
@@ -83,12 +82,16 @@ class TestLoadConfig:
         assert isinstance(remote, RemoteVolume)
         assert remote.ssh_endpoint == "nas-server"
         sync = cfg.syncs["photos-to-nas"]
-        assert sync.source.volume == "local-data"
-        assert sync.source.subdir == "photos"
-        assert sync.destination.volume == "nas"
-        assert sync.destination.subdir == "photos-backup"
+        assert sync.source == "local-photos"
+        assert sync.destination == "nas-photos"
+        src_ep = cfg.source_endpoint(sync)
+        dst_ep = cfg.destination_endpoint(sync)
+        assert src_ep.volume == "local-data"
+        assert src_ep.subdir == "photos"
+        assert dst_ep.volume == "nas"
+        assert dst_ep.subdir == "photos-backup"
         assert sync.enabled is True
-        assert sync.destination.btrfs_snapshots.enabled is False
+        assert dst_ep.btrfs_snapshots.enabled is False
         assert sync.rsync_options.default_options_override is None
         assert sync.rsync_options.extra_options == []
         assert sync.rsync_options.checksum is True
@@ -100,8 +103,10 @@ class TestLoadConfig:
         cfg = load_config(str(sample_minimal_config_file))
         sync = cfg.syncs["s1"]
         assert sync.enabled is True
-        assert sync.destination.btrfs_snapshots.enabled is False
-        assert sync.source.subdir is None
+        dst_ep = cfg.destination_endpoint(sync)
+        src_ep = cfg.source_endpoint(sync)
+        assert dst_ep.btrfs_snapshots.enabled is False
+        assert src_ep.subdir is None
         assert sync.rsync_options.default_options_override is None
         assert sync.rsync_options.extra_options == []
         assert sync.filters == []
@@ -182,33 +187,41 @@ class TestLoadConfig:
         p = tmp_path / "bad_ref.yaml"
         p.write_text(
             "volumes:\n  v:\n    type: local\n    path: /x\n"
-            "syncs:\n  s:\n    source:\n      volume: v\n"
-            "    destination:\n      volume: missing\n"
+            "sync-endpoints:\n"
+            "  ep-src:\n    volume: v\n"
+            "  ep-dst:\n    volume: missing\n"
+            "syncs:\n  s:\n    source: ep-src\n"
+            "    destination: ep-dst\n"
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         cause = excinfo.value.__cause__
         assert cause is not None
-        assert "unknown destination volume" in str(cause)
+        assert "unknown volume" in str(cause)
 
     def test_missing_source_volume(self, tmp_path: Path) -> None:
         p = tmp_path / "no_src_vol.yaml"
         p.write_text(
             "volumes:\n  v:\n    type: local\n    path: /x\n"
-            "syncs:\n  s:\n    source:\n      volume: missing\n"
-            "    destination:\n      volume: v\n"
+            "sync-endpoints:\n"
+            "  ep-src:\n    volume: missing\n"
+            "  ep-dst:\n    volume: v\n"
+            "syncs:\n  s:\n    source: ep-src\n"
+            "    destination: ep-dst\n"
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         cause = excinfo.value.__cause__
         assert cause is not None
-        assert "unknown source volume" in str(cause)
+        assert "unknown volume" in str(cause)
 
     def test_sync_missing_source(self, tmp_path: Path) -> None:
         p = tmp_path / "no_src.yaml"
         p.write_text(
             "volumes:\n  v:\n    type: local\n    path: /x\n"
-            "syncs:\n  s:\n    destination:\n      volume: v\n"
+            "sync-endpoints:\n"
+            "  ep-dst:\n    volume: v\n"
+            "syncs:\n  s:\n    destination: ep-dst\n"
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
@@ -225,10 +238,13 @@ class TestLoadConfig:
         p.write_text(
             "volumes:\n"
             "  v:\n    type: local\n    path: /x\n"
+            "sync-endpoints:\n"
+            "  ep-src:\n    volume: v\n"
+            "  ep-dst:\n    volume: v\n    subdir: dst\n"
             "syncs:\n"
             "  s:\n"
-            "    source:\n      volume: v\n"
-            "    destination:\n      volume: v\n"
+            "    source: ep-src\n"
+            "    destination: ep-dst\n"
             "    filters:\n"
             '      - include: "*.jpg"\n'
             '      - exclude: "*.tmp"\n'
@@ -243,11 +259,19 @@ class TestLoadConfig:
             volumes={
                 "v": LocalVolume(slug="v", path="/x"),
             },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(
+                    slug="ep-src", volume="v", subdir="src"
+                ),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst", volume="v", subdir="dst"
+                ),
+            },
             syncs={
                 "s": SyncConfig(
                     slug="s",
-                    source=SyncEndpoint(volume="v"),
-                    destination=DestinationSyncEndpoint(volume="v"),
+                    source="ep-src",
+                    destination="ep-dst",
                     rsync_options=RsyncOptions(
                         default_options_override=["-a", "--delete"],
                     ),
@@ -269,11 +293,19 @@ class TestLoadConfig:
             volumes={
                 "v": LocalVolume(slug="v", path="/x"),
             },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(
+                    slug="ep-src", volume="v", subdir="src"
+                ),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst", volume="v", subdir="dst"
+                ),
+            },
             syncs={
                 "s": SyncConfig(
                     slug="s",
-                    source=SyncEndpoint(volume="v"),
-                    destination=DestinationSyncEndpoint(volume="v"),
+                    source="ep-src",
+                    destination="ep-dst",
                     rsync_options=RsyncOptions(
                         extra_options=[
                             "--bwlimit=1000",
@@ -669,10 +701,13 @@ class TestLoadConfig:
         p.write_text(
             "volumes:\n"
             "  v:\n    type: local\n    path: /x\n"
+            "sync-endpoints:\n"
+            "  ep-src:\n    volume: v\n"
+            "  ep-dst:\n    volume: v\n    subdir: dst\n"
             "syncs:\n"
             "  s:\n"
-            "    source:\n      volume: v\n"
-            "    destination:\n      volume: v\n"
+            "    source: ep-src\n"
+            "    destination: ep-dst\n"
             "    filters:\n"
             "      - badkey: value\n"
         )
@@ -687,16 +722,24 @@ class TestLoadConfig:
             volumes={
                 "v": LocalVolume(slug="v", path="/x"),
             },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(
+                    slug="ep-src", volume="v", subdir="src"
+                ),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="v",
+                    subdir="dst",
+                    hard_link_snapshots=HardLinkSnapshotConfig(
+                        enabled=True, max_snapshots=10
+                    ),
+                ),
+            },
             syncs={
                 "s": SyncConfig(
                     slug="s",
-                    source=SyncEndpoint(volume="v"),
-                    destination=DestinationSyncEndpoint(
-                        volume="v",
-                        hard_link_snapshots=HardLinkSnapshotConfig(
-                            enabled=True, max_snapshots=10
-                        ),
-                    ),
+                    source="ep-src",
+                    destination="ep-dst",
                 ),
             },
         )
@@ -704,26 +747,33 @@ class TestLoadConfig:
         p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
-        assert sync.destination.hard_link_snapshots.enabled is True
-        assert sync.destination.hard_link_snapshots.max_snapshots == 10
-        assert sync.destination.btrfs_snapshots.enabled is False
-        assert sync.destination.snapshot_mode == "hard-link"
+        dst_ep = cfg.destination_endpoint(sync)
+        assert dst_ep.hard_link_snapshots.enabled is True
+        assert dst_ep.hard_link_snapshots.max_snapshots == 10
+        assert dst_ep.btrfs_snapshots.enabled is False
+        assert dst_ep.snapshot_mode == "hard-link"
 
     def test_hard_link_snapshots_no_max(self, tmp_path: Path) -> None:
         config = Config(
             volumes={
                 "v": LocalVolume(slug="v", path="/x"),
             },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(
+                    slug="ep-src", volume="v", subdir="src"
+                ),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="v",
+                    subdir="dst",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={
                 "s": SyncConfig(
                     slug="s",
-                    source=SyncEndpoint(volume="v"),
-                    destination=DestinationSyncEndpoint(
-                        volume="v",
-                        hard_link_snapshots=HardLinkSnapshotConfig(
-                            enabled=True
-                        ),
-                    ),
+                    source="ep-src",
+                    destination="ep-dst",
                 ),
             },
         )
@@ -731,32 +781,36 @@ class TestLoadConfig:
         p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
-        assert sync.destination.hard_link_snapshots.enabled is True
-        assert sync.destination.hard_link_snapshots.max_snapshots is None
+        dst_ep = cfg.destination_endpoint(sync)
+        assert dst_ep.hard_link_snapshots.enabled is True
+        assert dst_ep.hard_link_snapshots.max_snapshots is None
 
     def test_mutual_exclusivity_btrfs_and_hardlink(
         self, tmp_path: Path
     ) -> None:
         with pytest.raises(Exception, match="mutually exclusive"):
-            DestinationSyncEndpoint(
+            SyncEndpoint(
+                slug="ep",
                 volume="v",
                 btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
                 hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
             )
 
     def test_snapshot_mode_none(self) -> None:
-        ep = DestinationSyncEndpoint(volume="v")
+        ep = SyncEndpoint(slug="ep", volume="v")
         assert ep.snapshot_mode == "none"
 
     def test_snapshot_mode_btrfs(self) -> None:
-        ep = DestinationSyncEndpoint(
+        ep = SyncEndpoint(
+            slug="ep",
             volume="v",
             btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
         )
         assert ep.snapshot_mode == "btrfs"
 
     def test_snapshot_mode_hard_link(self) -> None:
-        ep = DestinationSyncEndpoint(
+        ep = SyncEndpoint(
+            slug="ep",
             volume="v",
             hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
         )
@@ -912,14 +966,22 @@ class TestLoadConfig:
             volumes={
                 "v": LocalVolume(slug="v", path="/x"),
             },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(
+                    slug="ep-src",
+                    volume="v",
+                    subdir="src",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst", volume="v", subdir="dst"
+                ),
+            },
             syncs={
                 "s": SyncConfig(
                     slug="s",
-                    source=SyncEndpoint(
-                        volume="v",
-                        btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                    ),
-                    destination=DestinationSyncEndpoint(volume="v"),
+                    source="ep-src",
+                    destination="ep-dst",
                 ),
             },
         )
@@ -927,25 +989,33 @@ class TestLoadConfig:
         p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
-        assert sync.source.btrfs_snapshots.enabled is True
-        assert sync.source.snapshot_mode == "btrfs"
-        assert sync.destination.btrfs_snapshots.enabled is False
+        src_ep = cfg.source_endpoint(sync)
+        dst_ep = cfg.destination_endpoint(sync)
+        assert src_ep.btrfs_snapshots.enabled is True
+        assert src_ep.snapshot_mode == "btrfs"
+        assert dst_ep.btrfs_snapshots.enabled is False
 
     def test_source_hard_link_snapshots(self, tmp_path: Path) -> None:
         config = Config(
             volumes={
                 "v": LocalVolume(slug="v", path="/x"),
             },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(
+                    slug="ep-src",
+                    volume="v",
+                    subdir="src",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst", volume="v", subdir="dst"
+                ),
+            },
             syncs={
                 "s": SyncConfig(
                     slug="s",
-                    source=SyncEndpoint(
-                        volume="v",
-                        hard_link_snapshots=HardLinkSnapshotConfig(
-                            enabled=True
-                        ),
-                    ),
-                    destination=DestinationSyncEndpoint(volume="v"),
+                    source="ep-src",
+                    destination="ep-dst",
                 ),
             },
         )
@@ -953,6 +1023,92 @@ class TestLoadConfig:
         p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
-        assert sync.source.hard_link_snapshots.enabled is True
-        assert sync.source.snapshot_mode == "hard-link"
-        assert sync.source.btrfs_snapshots.enabled is False
+        src_ep = cfg.source_endpoint(sync)
+        assert src_ep.hard_link_snapshots.enabled is True
+        assert src_ep.snapshot_mode == "hard-link"
+        assert src_ep.btrfs_snapshots.enabled is False
+
+    def test_unknown_source_endpoint_reference(self, tmp_path: Path) -> None:
+        p = tmp_path / "bad_src_ep.yaml"
+        p.write_text(
+            "volumes:\n  v:\n    type: local\n    path: /x\n"
+            "sync-endpoints:\n"
+            "  ep-dst:\n    volume: v\n"
+            "syncs:\n  s:\n    source: missing\n"
+            "    destination: ep-dst\n"
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        cause = excinfo.value.__cause__
+        assert cause is not None
+        assert "unknown source endpoint" in str(cause)
+
+    def test_unknown_destination_endpoint_reference(
+        self, tmp_path: Path
+    ) -> None:
+        p = tmp_path / "bad_dst_ep.yaml"
+        p.write_text(
+            "volumes:\n  v:\n    type: local\n    path: /x\n"
+            "sync-endpoints:\n"
+            "  ep-src:\n    volume: v\n"
+            "syncs:\n  s:\n    source: ep-src\n"
+            "    destination: missing\n"
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        cause = excinfo.value.__cause__
+        assert cause is not None
+        assert "unknown destination endpoint" in str(cause)
+
+    def test_duplicate_destination_endpoint(self, tmp_path: Path) -> None:
+        p = tmp_path / "dup_dst.yaml"
+        p.write_text(
+            "volumes:\n"
+            "  v:\n    type: local\n    path: /x\n"
+            "sync-endpoints:\n"
+            "  ep-src1:\n    volume: v\n    subdir: src1\n"
+            "  ep-src2:\n    volume: v\n    subdir: src2\n"
+            "  ep-dst:\n    volume: v\n    subdir: dst\n"
+            "syncs:\n"
+            "  s1:\n    source: ep-src1\n"
+            "    destination: ep-dst\n"
+            "  s2:\n    source: ep-src2\n"
+            "    destination: ep-dst\n"
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        cause = excinfo.value.__cause__
+        assert cause is not None
+        assert "share destination endpoint" in str(cause)
+
+    def test_duplicate_volume_subdir_in_endpoints(
+        self, tmp_path: Path
+    ) -> None:
+        p = tmp_path / "dup_loc.yaml"
+        p.write_text(
+            "volumes:\n"
+            "  v:\n    type: local\n    path: /x\n"
+            "sync-endpoints:\n"
+            "  ep1:\n    volume: v\n    subdir: data\n"
+            "  ep2:\n    volume: v\n    subdir: data\n"
+            "syncs: {}\n"
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        cause = excinfo.value.__cause__
+        assert cause is not None
+        assert "both target volume" in str(cause)
+
+    def test_sync_endpoint_unknown_volume(self, tmp_path: Path) -> None:
+        p = tmp_path / "ep_bad_vol.yaml"
+        p.write_text(
+            "volumes:\n  v:\n    type: local\n    path: /x\n"
+            "sync-endpoints:\n"
+            "  ep:\n    volume: nonexistent\n"
+            "syncs: {}\n"
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        cause = excinfo.value.__cause__
+        assert cause is not None
+        assert "unknown volume" in str(cause)

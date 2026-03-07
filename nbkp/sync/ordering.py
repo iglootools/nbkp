@@ -6,31 +6,26 @@ from collections import defaultdict
 from graphlib import CycleError, TopologicalSorter
 
 from ..config import ConfigError
-from ..config.protocol import SyncConfig, SyncEndpoint
-
-EndpointKey = tuple[str, str | None]
-
-
-def endpoint_key(endpoint: SyncEndpoint) -> EndpointKey:
-    """Return a hashable key for a sync endpoint."""
-    return (endpoint.volume, endpoint.subdir)
+from ..config.protocol import SyncConfig
 
 
 def _build_graph(
     syncs: dict[str, SyncConfig],
 ) -> dict[str, set[str]]:
-    """Build dependency graph: node → set of upstream syncs."""
-    writers: dict[EndpointKey, list[str]] = defaultdict(list)
+    """Build dependency graph: node -> set of upstream syncs.
+
+    A sync B depends on sync A when A's destination endpoint
+    slug matches B's source endpoint slug.
+    """
+    writers: dict[str, list[str]] = defaultdict(list)
     for sync_slug, sync in syncs.items():
-        dst_key = endpoint_key(sync.destination)
-        writers[dst_key].append(sync_slug)
+        writers[sync.destination].append(sync_slug)
 
     graph: dict[str, set[str]] = {}
     for sync_slug, sync in syncs.items():
-        src_key = endpoint_key(sync.source)
         deps = {
             writer
-            for writer in writers.get(src_key, [])
+            for writer in writers.get(sync.source, [])
             if writer != sync_slug
         }
         graph[sync_slug] = deps
@@ -43,8 +38,8 @@ def sync_predecessors(
 ) -> dict[str, set[str]]:
     """Return direct upstream syncs for each sync slug.
 
-    A sync B has upstream sync A when A's destination matches
-    B's source (same volume and subdir).
+    A sync B has upstream sync A when A's destination endpoint
+    matches B's source endpoint (same slug).
     """
     return _build_graph(syncs)
 
@@ -52,9 +47,10 @@ def sync_predecessors(
 def sort_syncs(syncs: dict[str, SyncConfig]) -> list[str]:
     """Topologically sort syncs by their endpoint dependencies.
 
-    A sync B depends on sync A when A's destination matches
-    B's source (same volume and subdir).  Returns sync slugs
-    in an order where upstream syncs come before downstream syncs.
+    A sync B depends on sync A when A's destination endpoint
+    matches B's source endpoint (same slug).  Returns sync
+    slugs in an order where upstream syncs come before
+    downstream syncs.
 
     Raises ``ConfigError`` when a dependency cycle is detected.
     """

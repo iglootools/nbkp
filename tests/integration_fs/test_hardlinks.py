@@ -8,7 +8,6 @@ from pathlib import Path
 
 from nbkp.config import (
     Config,
-    DestinationSyncEndpoint,
     HardLinkSnapshotConfig,
     LocalVolume,
     SyncConfig,
@@ -35,16 +34,21 @@ def _make_config(
     dst_vol = LocalVolume(slug="dst", path=dst_path)
     sync = SyncConfig(
         slug="test-sync",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(
-            volume="dst",
-            hard_link_snapshots=HardLinkSnapshotConfig(
-                enabled=True, max_snapshots=max_snapshots
-            ),
-        ),
+        source="ep-src",
+        destination="ep-dst",
     )
     config = Config(
         volumes={"src": src_vol, "dst": dst_vol},
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                hard_link_snapshots=HardLinkSnapshotConfig(
+                    enabled=True, max_snapshots=max_snapshots
+                ),
+            ),
+        },
         syncs={"test-sync": sync},
     )
 

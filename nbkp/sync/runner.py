@@ -165,7 +165,8 @@ def _run_single_sync(
     """Run a single sync operation."""
     sync = status.config
 
-    match sync.destination.snapshot_mode:
+    dst = config.destination_endpoint(sync)
+    match dst.snapshot_mode:
         case "hard-link":
             return _run_hard_link_sync(
                 slug,
@@ -298,7 +299,8 @@ def _run_btrfs_sync(
     else:
         snapshot_path: str | None = None
         pruned_paths: list[str] | None = None
-        btrfs_cfg = sync.destination.btrfs_snapshots
+        dst = config.destination_endpoint(sync)
+        btrfs_cfg = dst.btrfs_snapshots
         if not dry_run:
             try:
                 snapshot_path = create_snapshot(
@@ -367,7 +369,8 @@ def _run_hard_link_sync(
     from ..config import SyncConfig
 
     assert isinstance(sync, SyncConfig)
-    hl_cfg = sync.destination.hard_link_snapshots
+    dst = config.destination_endpoint(sync)
+    hl_cfg = dst.hard_link_snapshots
 
     # 1. Clean up orphaned snapshots from failed syncs
     try:
@@ -487,7 +490,8 @@ def _cleanup_snapshot_dir(
     from ..config import LocalVolume, RemoteVolume, SyncConfig
 
     assert isinstance(sync, SyncConfig)
-    dst_vol = config.volumes[sync.destination.volume]
+    dst = config.destination_endpoint(sync)
+    dst_vol = config.volumes[dst.volume]
     try:
         match dst_vol:
             case LocalVolume():

@@ -29,9 +29,10 @@ LATEST_LINK = "latest"
 
 def resolve_dest_path(sync: SyncConfig, config: Config) -> str:
     """Resolve the destination path for a sync."""
-    vol = config.volumes[sync.destination.volume]
-    if sync.destination.subdir:
-        return f"{vol.path}/{sync.destination.subdir}"
+    dst = config.destination_endpoint(sync)
+    vol = config.volumes[dst.volume]
+    if dst.subdir:
+        return f"{vol.path}/{dst.subdir}"
     else:
         return vol.path
 
@@ -65,7 +66,8 @@ def create_snapshot(
         snapshot_path,
     ]
 
-    dst_vol = config.volumes[sync.destination.volume]
+    dst = config.destination_endpoint(sync)
+    dst_vol = config.volumes[dst.volume]
     match dst_vol:
         case RemoteVolume():
             ep = re[dst_vol.slug]
@@ -93,12 +95,15 @@ def list_snapshots(
     dest_path = resolve_dest_path(sync, config)
     snapshots_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
 
-    dst_vol = config.volumes[sync.destination.volume]
+    dst = config.destination_endpoint(sync)
+    dst_vol = config.volumes[dst.volume]
     match dst_vol:
         case RemoteVolume():
             ep = re[dst_vol.slug]
             result = run_remote_command(
-                ep.server, ["ls", snapshots_dir], ep.proxy_chain
+                ep.server,
+                ["ls", snapshots_dir],
+                ep.proxy_chain,
             )
         case LocalVolume():
             result = subprocess.run(
@@ -214,7 +219,8 @@ def prune_snapshots(
         to_delete.append(snap_path)
 
     if not dry_run:
-        dst_vol = config.volumes[sync.destination.volume]
+        dst = config.destination_endpoint(sync)
+        dst_vol = config.volumes[dst.volume]
         for path in to_delete:
             delete_snapshot(path, dst_vol, re)
 

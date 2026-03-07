@@ -22,7 +22,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 from nbkp.check import VolumeReason, check_volume
 from nbkp.config import (
     Config,
-    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SshConnectionOptions,
@@ -270,16 +269,22 @@ class TestHostKeyVerification:
             ssh_endpoint="test-ssh",
             path=REMOTE_BACKUP_PATH,
         )
-        sync = SyncConfig(
-            slug="test-sync",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(volume="test-remote"),
-        )
         config = Config(
             ssh_endpoints={"test-ssh": endpoint},
             volumes={"src": src_vol, "test-remote": vol},
-            syncs={"test-sync": sync},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="test-remote"),
+            },
+            syncs={
+                "test-sync": SyncConfig(
+                    slug="test-sync",
+                    source="ep-src",
+                    destination="ep-dst",
+                ),
+            },
         )
+        sync = config.syncs["test-sync"]
 
         def _run_remote(cmd: str) -> None:
             ssh_exec(docker_ssh_endpoint, cmd)
@@ -359,16 +364,22 @@ class TestExplicitKeyOnly:
             ssh_endpoint="test-ssh",
             path=REMOTE_BACKUP_PATH,
         )
-        sync = SyncConfig(
-            slug="test-sync",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(volume="test-remote"),
-        )
         config = Config(
             ssh_endpoints={"test-ssh": endpoint},
             volumes={"src": src_vol, "test-remote": vol},
-            syncs={"test-sync": sync},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="test-remote"),
+            },
+            syncs={
+                "test-sync": SyncConfig(
+                    slug="test-sync",
+                    source="ep-src",
+                    destination="ep-dst",
+                ),
+            },
         )
+        sync = config.syncs["test-sync"]
 
         def _run_remote(cmd: str) -> None:
             ssh_exec(docker_ssh_endpoint, cmd)

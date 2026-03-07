@@ -16,7 +16,6 @@ from nbkp.sync.btrfs import (
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
-    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SshEndpoint,
@@ -31,15 +30,20 @@ def _local_config() -> tuple[Config, SyncConfig]:
     dst = LocalVolume(slug="dst", path="/mnt/dst")
     sync = SyncConfig(
         slug="s1",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(
-            volume="dst",
-            subdir="backup",
-            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-        ),
+        source="ep-src",
+        destination="ep-dst",
     )
     config = Config(
         volumes={"src": src, "dst": dst},
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                subdir="backup",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+            ),
+        },
         syncs={"s1": sync},
     )
     return config, sync
@@ -59,16 +63,21 @@ def _remote_config() -> tuple[Config, SyncConfig]:
     )
     sync = SyncConfig(
         slug="s1",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(
-            volume="dst",
-            subdir="data",
-            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-        ),
+        source="ep-src",
+        destination="ep-dst",
     )
     config = Config(
         ssh_endpoints={"nas-server": dst_server},
         volumes={"src": src, "dst": dst},
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                subdir="data",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+            ),
+        },
         syncs={"s1": sync},
     )
     return config, sync
@@ -187,15 +196,20 @@ def _local_config_spaces() -> tuple[Config, SyncConfig]:
     dst = LocalVolume(slug="dst", path="/mnt/my dst")
     sync = SyncConfig(
         slug="s1",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(
-            volume="dst",
-            subdir="my backup",
-            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-        ),
+        source="ep-src",
+        destination="ep-dst",
     )
     config = Config(
         volumes={"src": src, "dst": dst},
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                subdir="my backup",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+            ),
+        },
         syncs={"s1": sync},
     )
     return config, sync
@@ -215,16 +229,21 @@ def _remote_config_spaces() -> tuple[Config, SyncConfig]:
     )
     sync = SyncConfig(
         slug="s1",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(
-            volume="dst",
-            subdir="my data",
-            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-        ),
+        source="ep-src",
+        destination="ep-dst",
     )
     config = Config(
         ssh_endpoints={"nas-server": dst_server},
         volumes={"src": src, "dst": dst},
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                subdir="my data",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+            ),
+        },
         syncs={"s1": sync},
     )
     return config, sync

@@ -117,8 +117,12 @@ def _build_vol_paths(
     options: ScriptOptions,
 ) -> dict[str, str]:
     """Compute volume slug -> effective path."""
-    src_slugs = {s.source.volume for s in config.syncs.values()}
-    dst_slugs = {s.destination.volume for s in config.syncs.values()}
+    src_slugs = {
+        config.source_endpoint(s).volume for s in config.syncs.values()
+    }
+    dst_slugs = {
+        config.destination_endpoint(s).volume for s in config.syncs.values()
+    }
 
     vol_paths: dict[str, str] = {}
     for slug, vol in config.volumes.items():
@@ -468,14 +472,12 @@ def _build_preflight_block(
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Build preflight check lines at indent 0."""
-    src_vol = config.volumes[sync.source.volume]
-    dst_vol = config.volumes[sync.destination.volume]
-    src_path = _vol_path(vol_paths, sync.source.volume, sync.source.subdir)
-    dst_path = _vol_path(
-        vol_paths,
-        sync.destination.volume,
-        sync.destination.subdir,
-    )
+    src_ep = config.source_endpoint(sync)
+    dst_ep = config.destination_endpoint(sync)
+    src_vol = config.volumes[src_ep.volume]
+    dst_vol = config.volumes[dst_ep.volume]
+    src_path = _vol_path(vol_paths, src_ep.volume, src_ep.subdir)
+    dst_path = _vol_path(vol_paths, dst_ep.volume, dst_ep.subdir)
 
     lines: list[str] = []
 
@@ -491,7 +493,7 @@ def _build_preflight_block(
     )
 
     # Source snapshot: verify latest symlink and snapshots/ exist
-    if sync.source.snapshot_mode != "none":
+    if src_ep.snapshot_mode != "none":
         src_latest = f"{src_path}/{LATEST_LINK}"
         lines.append(
             _build_check_line(
@@ -543,7 +545,7 @@ def _build_preflight_block(
     )
 
     # Btrfs checks
-    if sync.destination.btrfs_snapshots.enabled:
+    if dst_ep.btrfs_snapshots.enabled:
         lines.append(
             _build_which_line(
                 dst_vol,
@@ -574,7 +576,7 @@ def _build_preflight_block(
         )
 
     # Hard-link checks
-    if sync.destination.hard_link_snapshots.enabled:
+    if dst_ep.hard_link_snapshots.enabled:
         snaps_dir = f"{dst_path}/{SNAPSHOTS_DIR}"
         lines.append(
             _build_check_line(
@@ -603,12 +605,9 @@ def _build_link_dest_block(
     destination to the snapshots directory (``../`` for hard-link
     where rsync writes to ``snapshots/{ts}/``).
     """
-    dst_vol = config.volumes[sync.destination.volume]
-    dest_path = _vol_path(
-        vol_paths,
-        sync.destination.volume,
-        sync.destination.subdir,
-    )
+    dst_ep = config.destination_endpoint(sync)
+    dst_vol = config.volumes[dst_ep.volume]
+    dest_path = _vol_path(vol_paths, dst_ep.volume, dst_ep.subdir)
     snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     ls_cmd = _ls_snapshots_cmd(dst_vol, snaps_dir, resolved_endpoints)
 
@@ -642,8 +641,10 @@ def _build_rsync_block(
     )
 
     # Substitute local volume paths
-    src_vol = config.volumes[sync.source.volume]
-    dst_vol = config.volumes[sync.destination.volume]
+    src_ep = config.source_endpoint(sync)
+    dst_ep = config.destination_endpoint(sync)
+    src_vol = config.volumes[src_ep.volume]
+    dst_vol = config.volumes[dst_ep.volume]
     match (src_vol, dst_vol):
         case (RemoteVolume(), RemoteVolume()):
             pass
@@ -652,13 +653,13 @@ def _build_rsync_block(
                 cmd[-2],
                 src_vol,
                 vol_paths,
-                sync.source.volume,
+                src_ep.volume,
             )
             cmd[-1] = _substitute_vol_path(
                 cmd[-1],
                 dst_vol,
                 vol_paths,
-                sync.destination.volume,
+                dst_ep.volume,
             )
 
     formatted = _format_shell_command(cmd, cont_indent=i2)
@@ -680,12 +681,9 @@ def _build_snapshot_block(
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Build btrfs snapshot block at indent 0."""
-    dst_vol = config.volumes[sync.destination.volume]
-    dest_path = _vol_path(
-        vol_paths,
-        sync.destination.volume,
-        sync.destination.subdir,
-    )
+    dst_ep = config.destination_endpoint(sync)
+    dst_vol = config.volumes[dst_ep.volume]
+    dest_path = _vol_path(vol_paths, dst_ep.volume, dst_ep.subdir)
     tmp = f"{dest_path}/{STAGING_DIR}"
     snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     snap = _snapshot_cmd(dst_vol, tmp, snaps_dir, resolved_endpoints)
@@ -705,12 +703,9 @@ def _build_prune_block(
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Build btrfs prune block (skip latest symlink target)."""
-    dst_vol = config.volumes[sync.destination.volume]
-    dest_path = _vol_path(
-        vol_paths,
-        sync.destination.volume,
-        sync.destination.subdir,
-    )
+    dst_ep = config.destination_endpoint(sync)
+    dst_vol = config.volumes[dst_ep.volume]
+    dest_path = _vol_path(vol_paths, dst_ep.volume, dst_ep.subdir)
     latest_path = f"{dest_path}/{LATEST_LINK}"
     snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     ls_cmd = _ls_snapshots_cmd(dst_vol, snaps_dir, resolved_endpoints)
@@ -755,12 +750,9 @@ def _build_hard_link_orphan_cleanup_block(
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Build orphan cleanup block for hard-link snapshots."""
-    dst_vol = config.volumes[sync.destination.volume]
-    dest_path = _vol_path(
-        vol_paths,
-        sync.destination.volume,
-        sync.destination.subdir,
-    )
+    dst_ep = config.destination_endpoint(sync)
+    dst_vol = config.volumes[dst_ep.volume]
+    dest_path = _vol_path(vol_paths, dst_ep.volume, dst_ep.subdir)
     latest_path = f"{dest_path}/{LATEST_LINK}"
     snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     rl_cmd = _readlink_cmd(dst_vol, latest_path, resolved_endpoints)
@@ -793,12 +785,9 @@ def _build_hard_link_mkdir_block(
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Build snapshot directory creation block."""
-    dst_vol = config.volumes[sync.destination.volume]
-    dest_path = _vol_path(
-        vol_paths,
-        sync.destination.volume,
-        sync.destination.subdir,
-    )
+    dst_ep = config.destination_endpoint(sync)
+    dst_vol = config.volumes[dst_ep.volume]
+    dest_path = _vol_path(vol_paths, dst_ep.volume, dst_ep.subdir)
     snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     mkdir_cmd = _mkdir_snap_cmd(dst_vol, snaps_dir, resolved_endpoints)
 
@@ -814,12 +803,9 @@ def _build_hard_link_symlink_block(
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Build latest symlink update block."""
-    dst_vol = config.volumes[sync.destination.volume]
-    dest_path = _vol_path(
-        vol_paths,
-        sync.destination.volume,
-        sync.destination.subdir,
-    )
+    dst_ep = config.destination_endpoint(sync)
+    dst_vol = config.volumes[dst_ep.volume]
+    dest_path = _vol_path(vol_paths, dst_ep.volume, dst_ep.subdir)
     ln_cmd = _ln_sfn_cmd(dst_vol, dest_path, resolved_endpoints)
 
     return dedent(f"""\
@@ -836,12 +822,9 @@ def _build_hard_link_prune_block(
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Build hard-link prune block (rm -rf, skip latest)."""
-    dst_vol = config.volumes[sync.destination.volume]
-    dest_path = _vol_path(
-        vol_paths,
-        sync.destination.volume,
-        sync.destination.subdir,
-    )
+    dst_ep = config.destination_endpoint(sync)
+    dst_vol = config.volumes[dst_ep.volume]
+    dest_path = _vol_path(vol_paths, dst_ep.volume, dst_ep.subdir)
     latest_path = f"{dest_path}/{LATEST_LINK}"
     snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     ls_cmd = _ls_snapshots_cmd(dst_vol, snaps_dir, resolved_endpoints)
@@ -1023,10 +1006,11 @@ def _build_sync_context(
     resolved_endpoints: ResolvedEndpoints,
 ) -> _SyncContext:
     """Build a _SyncContext with all pre-computed blocks."""
-    has_btrfs = sync.destination.btrfs_snapshots.enabled
-    has_hard_link = sync.destination.hard_link_snapshots.enabled
-    btrfs_cfg = sync.destination.btrfs_snapshots
-    hl_cfg = sync.destination.hard_link_snapshots
+    dst_ep = config.destination_endpoint(sync)
+    has_btrfs = dst_ep.btrfs_snapshots.enabled
+    has_hard_link = dst_ep.hard_link_snapshots.enabled
+    btrfs_cfg = dst_ep.btrfs_snapshots
+    hl_cfg = dst_ep.hard_link_snapshots
 
     has_prune = (has_btrfs and btrfs_cfg.max_snapshots is not None) or (
         has_hard_link and hl_cfg.max_snapshots is not None

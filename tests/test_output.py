@@ -15,7 +15,6 @@ from nbkp.check import (
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
-    DestinationSyncEndpoint,
     LocalVolume,
     SyncConfig,
     SyncEndpoint,
@@ -33,16 +32,20 @@ def _make_console() -> tuple[Console, StringIO]:
 def _btrfs_config() -> Config:
     src = LocalVolume(slug="src", path="/mnt/src")
     dst = LocalVolume(slug="dst", path="/mnt/dst")
+    ep_src = SyncEndpoint(slug="ep-src", volume="src")
+    ep_dst = SyncEndpoint(
+        slug="ep-dst",
+        volume="dst",
+        btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+    )
     sync = SyncConfig(
         slug="btrfs-sync",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(
-            volume="dst",
-            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-        ),
+        source="ep-src",
+        destination="ep-dst",
     )
     return Config(
         volumes={"src": src, "dst": dst},
+        sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
         syncs={"btrfs-sync": sync},
     )
 
@@ -166,17 +169,21 @@ class TestTroubleshootBtrfsStagingNotFound:
         """Troubleshoot output uses the correct subdir path for staging/."""
         src = LocalVolume(slug="src", path="/mnt/src")
         dst = LocalVolume(slug="dst", path="/mnt/dst")
+        ep_src = SyncEndpoint(slug="ep-src", volume="src")
+        ep_dst = SyncEndpoint(
+            slug="ep-dst",
+            volume="dst",
+            subdir="backup",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+        )
         sync = SyncConfig(
             slug="btrfs-sync",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-src",
+            destination="ep-dst",
         )
         config = Config(
             volumes={"src": src, "dst": dst},
+            sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
             syncs={"btrfs-sync": sync},
         )
         vol_statuses = {

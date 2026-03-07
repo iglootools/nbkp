@@ -14,7 +14,6 @@ from nbkp.check import (
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
-    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SshEndpoint,
@@ -35,10 +34,7 @@ class TestLocalVolumeCheck:
         (vol_path / ".nbkp-vol").touch()
 
         vol = LocalVolume(slug="local", path=str(vol_path))
-        config = Config(
-            volumes={"local": vol},
-        )
-        status = check_volume(vol, config)
+        status = check_volume(vol)
         assert status.active is True
 
     def test_local_volume_inactive(self, tmp_path: Path) -> None:
@@ -47,10 +43,7 @@ class TestLocalVolumeCheck:
         # No .nbkp-vol sentinel
 
         vol = LocalVolume(slug="local", path=str(vol_path))
-        config = Config(
-            volumes={"local": vol},
-        )
-        status = check_volume(vol, config)
+        status = check_volume(vol)
         assert status.active is False
 
 
@@ -95,16 +88,22 @@ class TestSyncCheck:
     ) -> None:
         src_path = tmp_path / "src"
         src_vol = LocalVolume(slug="src", path=str(src_path))
-        sync = SyncConfig(
-            slug="test-sync",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(volume="dst"),
-        )
         config = Config(
             ssh_endpoints={"test-server": docker_ssh_endpoint},
             volumes={"src": src_vol, "dst": docker_remote_volume},
-            syncs={"test-sync": sync},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+            },
+            syncs={
+                "test-sync": SyncConfig(
+                    slug="test-sync",
+                    source="ep-src",
+                    destination="ep-dst",
+                ),
+            },
         )
+        sync = config.syncs["test-sync"]
 
         def _run_remote(cmd: str) -> None:
             ssh_exec(docker_ssh_endpoint, cmd)
@@ -244,23 +243,30 @@ class TestSyncCheckBtrfs:
         (src_path / ".nbkp-src").touch()
 
         src_vol = LocalVolume(slug="src", path=str(src_path))
-        sync = SyncConfig(
-            slug="test-sync",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="not-a-subvol",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
-        )
         config = Config(
             ssh_endpoints={"test-server": docker_ssh_endpoint},
             volumes={
                 "src": src_vol,
                 "dst": remote_btrfs_volume,
             },
-            syncs={"test-sync": sync},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="dst",
+                    subdir="not-a-subvol",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
+            syncs={
+                "test-sync": SyncConfig(
+                    slug="test-sync",
+                    source="ep-src",
+                    destination="ep-dst",
+                ),
+            },
         )
+        sync = config.syncs["test-sync"]
 
         resolved = resolve_all_endpoints(config)
         src_status = check_volume(src_vol, resolved)

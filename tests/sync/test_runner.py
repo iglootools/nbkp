@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
-    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SshEndpoint,
@@ -29,11 +28,15 @@ def _make_local_config() -> Config:
     dst = LocalVolume(slug="dst", path="/dst")
     sync = SyncConfig(
         slug="s1",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(volume="dst"),
+        source="ep-src",
+        destination="ep-dst",
     )
     return Config(
         volumes={"src": src, "dst": dst},
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+        },
         syncs={"s1": sync},
     )
 
@@ -43,14 +46,19 @@ def _make_btrfs_config() -> Config:
     dst = LocalVolume(slug="dst", path="/dst")
     sync = SyncConfig(
         slug="s1",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(
-            volume="dst",
-            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-        ),
+        source="ep-src",
+        destination="ep-dst",
     )
     return Config(
         volumes={"src": src, "dst": dst},
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+            ),
+        },
         syncs={"s1": sync},
     )
 
@@ -60,14 +68,21 @@ def _make_btrfs_config_with_max() -> Config:
     dst = LocalVolume(slug="dst", path="/dst")
     sync = SyncConfig(
         slug="s1",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(
-            volume="dst",
-            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=5),
-        ),
+        source="ep-src",
+        destination="ep-dst",
     )
     return Config(
         volumes={"src": src, "dst": dst},
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                btrfs_snapshots=BtrfsSnapshotConfig(
+                    enabled=True, max_snapshots=5
+                ),
+            ),
+        },
         syncs={"s1": sync},
     )
 
@@ -86,15 +101,20 @@ def _make_remote_same_server_btrfs_config() -> Config:
     )
     sync = SyncConfig(
         slug="s1",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(
-            volume="dst",
-            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-        ),
+        source="ep-src",
+        destination="ep-dst",
     )
     return Config(
         ssh_endpoints={"server": server},
         volumes={"src": src, "dst": dst},
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+            ),
+        },
         syncs={"s1": sync},
     )
 
@@ -114,8 +134,10 @@ def _active_statuses(
         name: SyncStatus(
             slug=name,
             config=sync,
-            source_status=vol_statuses[sync.source.volume],
-            destination_status=vol_statuses[sync.destination.volume],
+            source_status=vol_statuses[config.source_endpoint(sync).volume],
+            destination_status=vol_statuses[
+                config.destination_endpoint(sync).volume
+            ],
             reasons=[],
         )
         for name, sync in config.syncs.items()
@@ -138,8 +160,10 @@ def _inactive_statuses(
         name: SyncStatus(
             slug=name,
             config=sync,
-            source_status=vol_statuses[sync.source.volume],
-            destination_status=vol_statuses[sync.destination.volume],
+            source_status=vol_statuses[config.source_endpoint(sync).volume],
+            destination_status=vol_statuses[
+                config.destination_endpoint(sync).volume
+            ],
             reasons=[SyncReason.SOURCE_UNAVAILABLE],
         )
         for name, sync in config.syncs.items()
@@ -349,16 +373,21 @@ def _make_chain_config() -> Config:
     dst = LocalVolume(slug="dst", path="/dst")
     s1 = SyncConfig(
         slug="s1",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(volume="mid"),
+        source="ep-src",
+        destination="ep-mid",
     )
     s2 = SyncConfig(
         slug="s2",
-        source=SyncEndpoint(volume="mid"),
-        destination=DestinationSyncEndpoint(volume="dst"),
+        source="ep-mid",
+        destination="ep-dst",
     )
     return Config(
         volumes={"src": src, "mid": mid, "dst": dst},
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-mid": SyncEndpoint(slug="ep-mid", volume="mid"),
+            "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+        },
         syncs={"s1": s1, "s2": s2},
     )
 
@@ -371,13 +400,13 @@ def _make_independent_config() -> Config:
     dst2 = LocalVolume(slug="dst2", path="/dst2")
     s1 = SyncConfig(
         slug="s1",
-        source=SyncEndpoint(volume="src1"),
-        destination=DestinationSyncEndpoint(volume="dst1"),
+        source="ep-src1",
+        destination="ep-dst1",
     )
     s2 = SyncConfig(
         slug="s2",
-        source=SyncEndpoint(volume="src2"),
-        destination=DestinationSyncEndpoint(volume="dst2"),
+        source="ep-src2",
+        destination="ep-dst2",
     )
     return Config(
         volumes={
@@ -385,6 +414,12 @@ def _make_independent_config() -> Config:
             "dst1": dst1,
             "src2": src2,
             "dst2": dst2,
+        },
+        sync_endpoints={
+            "ep-src1": SyncEndpoint(slug="ep-src1", volume="src1"),
+            "ep-dst1": SyncEndpoint(slug="ep-dst1", volume="dst1"),
+            "ep-src2": SyncEndpoint(slug="ep-src2", volume="src2"),
+            "ep-dst2": SyncEndpoint(slug="ep-dst2", volume="dst2"),
         },
         syncs={"s1": s1, "s2": s2},
     )
@@ -464,21 +499,27 @@ class TestFailurePropagation:
                 "v2": v2,
                 "v3": v3,
             },
+            sync_endpoints={
+                "ep-v0": SyncEndpoint(slug="ep-v0", volume="v0"),
+                "ep-v1": SyncEndpoint(slug="ep-v1", volume="v1"),
+                "ep-v2": SyncEndpoint(slug="ep-v2", volume="v2"),
+                "ep-v3": SyncEndpoint(slug="ep-v3", volume="v3"),
+            },
             syncs={
                 "a": SyncConfig(
                     slug="a",
-                    source=SyncEndpoint(volume="v0"),
-                    destination=DestinationSyncEndpoint(volume="v1"),
+                    source="ep-v0",
+                    destination="ep-v1",
                 ),
                 "b": SyncConfig(
                     slug="b",
-                    source=SyncEndpoint(volume="v1"),
-                    destination=DestinationSyncEndpoint(volume="v2"),
+                    source="ep-v1",
+                    destination="ep-v2",
                 ),
                 "c": SyncConfig(
                     slug="c",
-                    source=SyncEndpoint(volume="v2"),
-                    destination=DestinationSyncEndpoint(volume="v3"),
+                    source="ep-v2",
+                    destination="ep-v3",
                 ),
             },
         )

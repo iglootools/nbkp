@@ -177,15 +177,16 @@ class HardLinkSnapshotConfig(_BaseModel):
 
 
 class SyncEndpoint(_BaseModel):
-    """A sync endpoint referencing a volume by slug.
+    """A reusable sync endpoint: volume + optional subdir + snapshots.
 
-    When used as a destination, snapshot config controls how
-    backups are stored (btrfs subvolume snapshots or hard-link
-    copies).  When used as a source, snapshot config tells rsync
-    to read from the ``latest/`` directory instead of the volume
-    root.
+    Defined at the top level of the config under ``sync-endpoints``
+    and referenced by slug from ``syncs``.  When used as a
+    destination, snapshot config controls how backups are stored.
+    When used as a source, snapshot config tells rsync to read
+    from the ``latest/`` directory instead of the volume root.
     """
 
+    slug: Slug
     volume: str = Field(..., min_length=1)
     subdir: Optional[str] = None
     btrfs_snapshots: BtrfsSnapshotConfig = Field(
@@ -218,11 +219,6 @@ class SyncEndpoint(_BaseModel):
             return "none"
 
 
-# Backwards-compatible alias — existing code that imports
-# DestinationSyncEndpoint continues to work unchanged.
-DestinationSyncEndpoint = SyncEndpoint
-
-
 class RsyncOptions(_BaseModel):
     """Rsync flag configuration for a sync operation."""
 
@@ -237,8 +233,8 @@ class SyncConfig(_BaseModel):
     """Configuration for a single sync operation."""
 
     slug: Slug
-    source: SyncEndpoint
-    destination: SyncEndpoint
+    source: str = Field(..., min_length=1)
+    destination: str = Field(..., min_length=1)
     enabled: bool = True
     rsync_options: RsyncOptions = Field(default_factory=lambda: RsyncOptions())
     filters: List[str] = Field(default_factory=list)
@@ -359,8 +355,6 @@ class Config(_BaseModel):
 
     volumes: Dict[str, Volume] = Field(default_factory=dict)
 
-    # The volume slug is the key in the volumes dict,
-    # but we also want it as a field in the Volume objects.
     @field_validator("volumes", mode="before")
     @classmethod
     def inject_volume_slugs(cls, v: Any, info: ValidationInfo) -> Any:
@@ -373,10 +367,22 @@ class Config(_BaseModel):
             for slug, data in v.items()
         }
 
+    sync_endpoints: Dict[str, SyncEndpoint] = Field(default_factory=dict)
+
+    @field_validator("sync_endpoints", mode="before")
+    @classmethod
+    def inject_sync_endpoint_slugs(cls, v: Any, info: ValidationInfo) -> Any:
+        return {
+            slug: (
+                {**data, "slug": slug}
+                if isinstance(data, dict) and "slug" not in data
+                else data
+            )
+            for slug, data in v.items()
+        }
+
     syncs: Dict[str, SyncConfig] = Field(default_factory=dict)
 
-    # The sync slug is the key in the syncs dict,
-    # but we also want it as a field in the SyncConfig objects.
     @field_validator("syncs", mode="before")
     @classmethod
     def inject_sync_slugs(cls, v: Any, info: ValidationInfo) -> Any:
@@ -388,6 +394,14 @@ class Config(_BaseModel):
             )
             for slug, data in v.items()
         }
+
+    def source_endpoint(self, sync: SyncConfig) -> SyncEndpoint:
+        """Resolve the source sync endpoint for a sync."""
+        return self.sync_endpoints[sync.source]
+
+    def destination_endpoint(self, sync: SyncConfig) -> SyncEndpoint:
+        """Resolve the destination sync endpoint for a sync."""
+        return self.sync_endpoints[sync.destination]
 
     def resolve_endpoint_for_volume(
         self,
@@ -495,21 +509,62 @@ class Config(_BaseModel):
                                     f" ssh-endpoint"
                                     f" '{ep_ref}'"
                                 )
+        # Sync endpoint volume references
+        for ep_slug, ep in self.sync_endpoints.items():
+            if ep.volume not in self.volumes:
+                raise ValueError(
+                    f"Sync endpoint '{ep_slug}' references"
+                    f" unknown volume '{ep.volume}'"
+                )
+
+        # Unique (volume, subdir) per sync endpoint
+        seen_locations: dict[tuple[str, str | None], str] = {}
+        for ep_slug, ep in self.sync_endpoints.items():
+            loc = (ep.volume, ep.subdir)
+            if loc in seen_locations:
+                other = seen_locations[loc]
+                subdir_msg = f" subdir '{ep.subdir}'" if ep.subdir else ""
+                raise ValueError(
+                    f"Sync endpoints '{other}' and"
+                    f" '{ep_slug}' both target volume"
+                    f" '{ep.volume}'{subdir_msg}"
+                )
+            seen_locations[loc] = ep_slug
+
+        # Sync source/destination endpoint references
         for sync_slug, sync in self.syncs.items():
-            if sync.source.volume not in self.volumes:
-                src = sync.source.volume
+            if sync.source not in self.sync_endpoints:
                 raise ValueError(
-                    f"Sync '{sync_slug}' references "
-                    f"unknown source volume '{src}'"
+                    f"Sync '{sync_slug}' references"
+                    f" unknown source endpoint"
+                    f" '{sync.source}'"
                 )
-            if sync.destination.volume not in self.volumes:
-                dst = sync.destination.volume
+            if sync.destination not in self.sync_endpoints:
                 raise ValueError(
-                    f"Sync '{sync_slug}' references "
-                    f"unknown destination volume '{dst}'"
+                    f"Sync '{sync_slug}' references"
+                    f" unknown destination endpoint"
+                    f" '{sync.destination}'"
                 )
-            src_vol = self.volumes[sync.source.volume]
-            dst_vol = self.volumes[sync.destination.volume]
+
+        # Unique destination per sync
+        dest_owners: dict[str, str] = {}
+        for sync_slug, sync in self.syncs.items():
+            if sync.destination in dest_owners:
+                other = dest_owners[sync.destination]
+                raise ValueError(
+                    f"Syncs '{other}' and"
+                    f" '{sync_slug}' share"
+                    f" destination endpoint"
+                    f" '{sync.destination}'"
+                )
+            dest_owners[sync.destination] = sync_slug
+
+        # Cross-server remote-to-remote check
+        for sync_slug, sync in self.syncs.items():
+            src_ep = self.sync_endpoints[sync.source]
+            dst_ep = self.sync_endpoints[sync.destination]
+            src_vol = self.volumes[src_ep.volume]
+            dst_vol = self.volumes[dst_ep.volume]
             if (
                 isinstance(src_vol, RemoteVolume)
                 and isinstance(dst_vol, RemoteVolume)

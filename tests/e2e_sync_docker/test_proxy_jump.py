@@ -6,7 +6,6 @@ from pathlib import Path
 
 from nbkp.config import (
     Config,
-    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SshEndpoint,
@@ -42,8 +41,8 @@ class TestProxyJump:
         )
         sync = SyncConfig(
             slug="test-sync",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(volume="dst"),
+            source="ep-src",
+            destination="ep-dst",
         )
         config = Config(
             ssh_endpoints={
@@ -51,6 +50,10 @@ class TestProxyJump:
                 "proxied-server": proxied_ssh_endpoint,
             },
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+            },
             syncs={"test-sync": sync},
         )
 

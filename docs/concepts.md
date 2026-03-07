@@ -2,7 +2,7 @@
 
 ## Configuration Model
 
-nbkp backup configuration is expressed in a single YAML file. The config defines three top-level sections: **SSH endpoints**, **volumes**, and **syncs**. See [Usage](./usage.md) for the full configuration reference, examples, and command documentation.
+nbkp backup configuration is expressed in a single YAML file. The config defines four top-level sections: **SSH endpoints**, **volumes**, **sync endpoints**, and **syncs**. See [Usage](./usage.md) for the full configuration reference, examples, and command documentation.
 
 ### Volumes
 
@@ -11,7 +11,7 @@ A volume is a named, reusable reference to a filesystem location. Volumes come i
 - **Local volume** — an absolute path on the local machine (e.g. `/mnt/data`, `/mnt/usb-backup`). Can be on a removable drive.
 - **Remote volume** — an absolute path on a remote host, accessed over SSH. References one or more SSH endpoints (see below).
 
-Volumes are defined once and shared across multiple syncs. A sync's source and destination each reference a volume by slug, with an optional `subdir` to target a subdirectory within the volume.
+Volumes are defined once and shared across multiple sync endpoints.
 
 ### SSH Endpoints
 
@@ -29,9 +29,15 @@ An SSH endpoint defines connection details for a remote host: hostname, port, us
 
 **Host key verification** — Setting `strict-host-key-checking: false` with `known-hosts-file: /dev/null` fully disables host key verification and persistence. This is useful for ephemeral or internal hosts whose keys may change after reprovisioning.
 
+### Sync Endpoints
+
+A sync endpoint is a named, reusable reference to a specific location within a volume. It combines a volume slug with an optional subdirectory and optional snapshot configuration (btrfs or hard-link). Sync endpoints are defined once at the top level and referenced by slug from syncs.
+
+Each sync endpoint must target a unique (volume, subdir) pair — two endpoints cannot point to the same filesystem location. This prevents conflicting snapshot configurations for the same path.
+
 ### Syncs
 
-A sync describes a one-way data transfer from a source endpoint to a destination endpoint. Each endpoint references a volume (by slug) and optionally a subdirectory within it.
+A sync describes a one-way data transfer from a source sync endpoint to a destination sync endpoint. Each sync references its source and destination by endpoint slug.
 
 **Direction combinations** — Both source and destination can be local or remote, supporting local-to-local, local-to-remote, remote-to-local, and remote-to-remote (same server) syncs. Cross-server remote-to-remote syncs are not supported; use two separate syncs through the local machine instead.
 
@@ -43,14 +49,14 @@ A sync describes a one-way data transfer from a source endpoint to a destination
 
 ### Snapshots
 
-Each sync can optionally enable point-in-time snapshots on its destination endpoint. Two mutually exclusive backends are available: `btrfs-snapshots` and `hard-link-snapshots`. Both are configured on the sync's destination (or source) endpoint with two fields:
+Each sync endpoint can optionally enable point-in-time snapshots. Two mutually exclusive backends are available: `btrfs-snapshots` and `hard-link-snapshots`. Both are configured on the sync endpoint with two fields:
 
 - **`enabled`** — Activates snapshot management for this endpoint (default: `false`).
 - **`max-snapshots`** — Maximum number of snapshots to retain. When set, old snapshots are pruned automatically after each `run`. Omit for unlimited retention.
 
 **Btrfs snapshots** require a btrfs filesystem with the `user_subvol_rm_allowed` mount option (for pruning). **Hard-link snapshots** work on any filesystem supporting hard links (ext4, xfs, btrfs, etc.) but not FAT/exFAT.
 
-**Source snapshots** — When snapshots are enabled on a sync's *source* endpoint, rsync reads from the `latest` snapshot directory rather than the volume root. This is used in chained syncs where one sync's snapshot destination feeds another sync's source.
+**Source snapshots** — When snapshots are enabled on a sync endpoint used as a source, rsync reads from the `latest` snapshot directory rather than the volume root. This is used in chained syncs where one sync's destination endpoint is also another sync's source endpoint.
 
 See [Snapshot Lifecycle](#snapshot-lifecycle) for how snapshots are created, managed, and pruned at runtime.
 
@@ -123,7 +129,7 @@ The `troubleshoot` command runs the same checks and displays step-by-step remedi
 
 ### Sync Dependencies and Execution Order
 
-When one sync's destination matches another sync's source (same volume and subdir), a dependency exists between them. The sync whose destination feeds the other is called the **upstream** sync; the one that reads from it is the **downstream** sync.
+When one sync's destination endpoint is the same as another sync's source endpoint (same endpoint slug), a dependency exists between them. The sync whose destination feeds the other is called the **upstream** sync; the one that reads from it is the **downstream** sync.
 
 Syncs are automatically sorted in topological order so that upstream syncs always complete before their downstream dependents begin.
 

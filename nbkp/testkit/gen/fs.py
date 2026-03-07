@@ -11,7 +11,7 @@ from ...config import (
     Config,
     LocalVolume,
     RemoteVolume,
-    SyncConfig,
+    SyncEndpoint,
 )
 from ...sync.btrfs import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
 from ...sync.rsync import resolve_path
@@ -65,29 +65,43 @@ def create_seed_sentinels(
                     remote_exec(f"mkdir -p {vol.path}")
                     remote_exec(f"touch {vol.path}/.nbkp-vol")
 
-    # Sync endpoint sentinels
+    # Sync endpoint sentinels — iterate unique endpoints
+    seen_src: set[str] = set()
+    seen_dst: set[str] = set()
     for sync in config.syncs.values():
-        _create_source_sentinels(config, sync, remote_exec)
-        _create_dest_sentinels(config, sync, remote_exec)
+        if sync.source not in seen_src:
+            seen_src.add(sync.source)
+            src_ep = config.source_endpoint(sync)
+            src_vol = config.volumes[src_ep.volume]
+            _create_endpoint_sentinels(
+                src_vol, src_ep, ".nbkp-src", remote_exec
+            )
+        if sync.destination not in seen_dst:
+            seen_dst.add(sync.destination)
+            dst_ep = config.destination_endpoint(sync)
+            dst_vol = config.volumes[dst_ep.volume]
+            _create_endpoint_sentinels(
+                dst_vol, dst_ep, ".nbkp-dst", remote_exec
+            )
 
 
-def _create_source_sentinels(
-    config: Config,
-    sync: SyncConfig,
+def _create_endpoint_sentinels(
+    vol: LocalVolume | RemoteVolume,
+    ep: SyncEndpoint,
+    sentinel_name: str,
     remote_exec: Callable[[str], None] | None,
 ) -> None:
-    vol = config.volumes[sync.source.volume]
-    subdir = sync.source.subdir
-    btrfs = sync.source.btrfs_snapshots
-    hard_link = sync.source.hard_link_snapshots
+    """Create sentinels and snapshot infrastructure for an endpoint."""
+    btrfs = ep.btrfs_snapshots
+    hard_link = ep.hard_link_snapshots
 
     match vol:
         case LocalVolume():
             path = Path(vol.path)
-            if subdir:
-                path = path / subdir
+            if ep.subdir:
+                path = path / ep.subdir
             path.mkdir(parents=True, exist_ok=True)
-            (path / ".nbkp-src").touch()
+            (path / sentinel_name).touch()
             if hard_link.enabled:
                 (path / SNAPSHOTS_DIR).mkdir(exist_ok=True)
                 latest = path / LATEST_LINK
@@ -111,75 +125,10 @@ def _create_source_sentinels(
         case RemoteVolume():
             if remote_exec is not None:
                 rp = vol.path
-                if subdir:
-                    rp = f"{rp}/{subdir}"
+                if ep.subdir:
+                    rp = f"{rp}/{ep.subdir}"
                 remote_exec(f"mkdir -p {rp}")
-                remote_exec(f"touch {rp}/.nbkp-src")
-                if hard_link.enabled:
-                    remote_exec(f"mkdir -p {rp}/{SNAPSHOTS_DIR}")
-                    remote_exec(
-                        f"test -e {rp}/{LATEST_LINK}"
-                        f" || ln -sfn {DEVNULL_TARGET}"
-                        f" {rp}/{LATEST_LINK}"
-                    )
-                elif btrfs.enabled:
-                    remote_exec(
-                        f"test -e {rp}/{STAGING_DIR}"
-                        " || btrfs subvolume create"
-                        f" {rp}/{STAGING_DIR}"
-                    )
-                    remote_exec(f"mkdir -p {rp}/{SNAPSHOTS_DIR}")
-                    remote_exec(
-                        f"test -e {rp}/{LATEST_LINK}"
-                        f" || ln -sfn {DEVNULL_TARGET}"
-                        f" {rp}/{LATEST_LINK}"
-                    )
-
-
-def _create_dest_sentinels(
-    config: Config,
-    sync: SyncConfig,
-    remote_exec: Callable[[str], None] | None,
-) -> None:
-    vol = config.volumes[sync.destination.volume]
-    subdir = sync.destination.subdir
-    btrfs = sync.destination.btrfs_snapshots
-    hard_link = sync.destination.hard_link_snapshots
-
-    match vol:
-        case LocalVolume():
-            path = Path(vol.path)
-            if subdir:
-                path = path / subdir
-            path.mkdir(parents=True, exist_ok=True)
-            (path / ".nbkp-dst").touch()
-            if hard_link.enabled:
-                (path / SNAPSHOTS_DIR).mkdir(exist_ok=True)
-                latest = path / LATEST_LINK
-                if not latest.exists():
-                    latest.symlink_to(DEVNULL_TARGET)
-            elif btrfs.enabled:
-                if not (path / STAGING_DIR).exists():
-                    subprocess.run(
-                        [
-                            "btrfs",
-                            "subvolume",
-                            "create",
-                            str(path / STAGING_DIR),
-                        ],
-                        check=True,
-                    )
-                (path / SNAPSHOTS_DIR).mkdir(exist_ok=True)
-                latest = path / LATEST_LINK
-                if not latest.exists():
-                    latest.symlink_to(DEVNULL_TARGET)
-        case RemoteVolume():
-            if remote_exec is not None:
-                rp = vol.path
-                if subdir:
-                    rp = f"{rp}/{subdir}"
-                remote_exec(f"mkdir -p {rp}")
-                remote_exec(f"touch {rp}/.nbkp-dst")
+                remote_exec(f"touch {rp}/{sentinel_name}")
                 if hard_link.enabled:
                     remote_exec(f"mkdir -p {rp}/{SNAPSHOTS_DIR}")
                     remote_exec(
@@ -218,16 +167,16 @@ def create_seed_data(
     """
     size_bytes = big_file_size_mb * 1024 * 1024
 
-    unique_sources = {
-        resolve_path(
-            config.volumes[s.source.volume],
-            s.source.subdir,
-        ): (
-            config.volumes[s.source.volume],
-            s.source.subdir,
-        )
-        for s in config.syncs.values()
-    }
+    unique_sources: dict[
+        str, tuple[LocalVolume | RemoteVolume, str | None]
+    ] = {}
+    for s in config.syncs.values():
+        src_ep = config.source_endpoint(s)
+        src_vol = config.volumes[src_ep.volume]
+        key = resolve_path(src_vol, src_ep.subdir)
+        if key not in unique_sources:
+            unique_sources[key] = (src_vol, src_ep.subdir)
+
     for vol, subdir in unique_sources.values():
         seed_volume(
             vol,
