@@ -19,7 +19,7 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.sync import ProgressMode, SyncResult
-from nbkp.check import (
+from nbkp.preflight import (
     SyncReason,
     SyncStatus,
     VolumeReason,

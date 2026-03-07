@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
 )
 
-from nbkp.check import VolumeReason, check_volume
+from nbkp.preflight import VolumeReason, check_volume
 from nbkp.config import (
     Config,
     LocalVolume,

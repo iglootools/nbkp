@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ...check import (
+from ...preflight import (
     SyncReason,
     SyncStatus,
     VolumeReason,

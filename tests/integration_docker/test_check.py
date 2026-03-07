@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nbkp.check import (
+from nbkp.preflight import (
     SyncReason,
     _check_btrfs_filesystem,
     _check_btrfs_subvolume,

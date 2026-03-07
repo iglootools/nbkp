@@ -26,7 +26,7 @@ from .config import (
 from .sync import PruneResult, SyncOutcome, SyncResult
 from .sync.btrfs import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
 from .sync.rsync import build_rsync_command
-from .check import SyncReason, SyncStatus, VolumeReason, VolumeStatus
+from .preflight import SyncReason, SyncStatus, VolumeReason, VolumeStatus
 from .remote.ssh import format_proxy_jump_chain
 
 

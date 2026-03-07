@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nbkp.check import check_all_syncs
+from nbkp.preflight import check_all_syncs
 from nbkp.config import (
     SshEndpoint,
     resolve_all_endpoints,

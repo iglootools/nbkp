@@ -13,7 +13,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.check import (
+from nbkp.preflight import (
     SyncReason,
     SyncStatus,
     VolumeReason,

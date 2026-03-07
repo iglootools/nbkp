@@ -22,7 +22,7 @@ from .hardlinks import (
 from .symlink import update_latest_symlink
 from .btrfs import get_latest_snapshot
 from ..config import Config, ResolvedEndpoints
-from ..check import SyncStatus
+from ..preflight import SyncStatus
 from .rsync import ProgressMode, run_rsync
 
 

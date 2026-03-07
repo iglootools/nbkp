@@ -6,7 +6,7 @@ from io import StringIO
 
 from rich.console import Console
 
-from nbkp.check import (
+from nbkp.preflight import (
     SyncReason,
     SyncStatus,
     VolumeReason,
