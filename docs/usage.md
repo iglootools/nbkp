@@ -467,7 +467,7 @@ Slugs must be lowercase alphanumeric with hyphens (e.g. `my-nas`, `usb-drive`). 
 | `extends` | string | `null` | Slug of parent endpoint to inherit from |
 | `connection-options` | object | see below | SSH connection options |
 
-Fields not explicitly set (`port`, `user`, `key`) are automatically filled from `~/.ssh/config`. See [SSH config integration](./concepts.md#ssh-config-integration).
+Fields not explicitly set (`port`, `user`, `key`) are automatically filled from `~/.ssh/config`. See [SSH Endpoints](./concepts.md#ssh-endpoints).
 
 ---
 

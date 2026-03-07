@@ -1,5 +1,10 @@
 # Features
 
+This section provides a high-level overview of nbkp's core capabilities.
+
+To understand how to use these features, refer to the [Usage](./usage.md) documentation. 
+To understand how these features are implemented, refer to the [Concepts](./concepts.md) documentation.
+
 ## Sync Engine
 
 nbkp uses rsync under the hood to synchronize files between volumes. Syncs can flow in any direction between local and remote filesystems, are automatically ordered based on their dependencies, and support fine-grained control over rsync behavior.
