@@ -314,7 +314,9 @@ def print_human_prune_results(
     table.add_column("Status")
 
     for r in results:
-        if r.detail:
+        if r.skipped:
+            status = Text(f"SKIPPED ({r.detail})", style="dim")
+        elif r.detail:
             status = Text("FAILED", style="red")
         else:
             status = Text("OK", style="green")

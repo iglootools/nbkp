@@ -64,6 +64,7 @@ class PruneResult(BaseModel):
     kept: int
     dry_run: bool
     detail: Optional[str] = None
+    skipped: bool = False
 
 
 def run_all_syncs(
