@@ -20,7 +20,7 @@ from .config import (
     load_config,
     resolve_all_endpoints,
 )
-from .check import (
+from .preflight import (
     SyncReason,
     SyncStatus,
     VolumeStatus,

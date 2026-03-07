@@ -19,7 +19,7 @@ nbkp/
     hardlinks.py      Hard-link snapshot creation, orphan cleanup, pruning
     symlink.py        latest symlink management (read/update)
     runner.py         Orchestrator: check → sort → dispatch per snapshot mode
-  check.py            Pre-flight validation (sentinels, SSH, rsync, btrfs, hard-link)
+  preflight.py        Pre-flight validation (sentinels, SSH, rsync, btrfs, hard-link)
   scriptgen.py        Compile config into standalone bash script
   output.py           Rich/JSON formatting for all commands
   cli.py              Typer CLI: check, run, sh, prune, troubleshoot, config show
@@ -41,7 +41,7 @@ flowchart TD
     endpoint filtering"]
 
     Resolve --> Check["check_all_syncs()
-    check.py
+    preflight.py
     ─────────────────────
     Volume sentinels, SSH reachability
     Endpoint sentinels, rsync version
