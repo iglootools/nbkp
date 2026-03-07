@@ -14,6 +14,8 @@ from ..config import (
 from ..remote import run_remote_command
 from .btrfs import LATEST_LINK, SNAPSHOTS_DIR, resolve_dest_path
 
+DEVNULL_TARGET = "/dev/null"
+
 
 def read_latest_symlink(
     sync: SyncConfig,
@@ -23,7 +25,8 @@ def read_latest_symlink(
 ) -> str | None:
     """Read the latest symlink target, returning the snapshot name.
 
-    Returns None if the symlink does not exist.
+    Returns ``None`` if the symlink does not exist or points to
+    ``/dev/null`` (the canonical "no snapshot yet" marker).
     """
     re = resolved_endpoints or {}
     dest_path = resolve_dest_path(sync, config)
@@ -46,6 +49,9 @@ def read_latest_symlink(
             if result.returncode != 0:
                 return None
             target = result.stdout.strip()
+
+    if target == DEVNULL_TARGET:
+        return None
 
     # Target is like "snapshots/{name}" — extract the name
     if "/" in target:

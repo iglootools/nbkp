@@ -310,9 +310,7 @@ def run(
                 typer.echo(json.dumps(data, indent=2))
             case OutputFormat.HUMAN:
                 typer.echo("")
-                print_human_results(
-                    results, dry_run, cfg, resolved
-                )
+                print_human_results(results, dry_run, cfg, resolved)
 
         if any(not r.success for r in results):
             raise typer.Exit(1)
@@ -550,9 +548,7 @@ def prune(
                 and status.config.destination.snapshot_mode != "none"
             ):
                 try:
-                    kept = len(
-                        list_snapshots(status.config, cfg, resolved)
-                    )
+                    kept = len(list_snapshots(status.config, cfg, resolved))
                 except RuntimeError:
                     pass
             results.append(

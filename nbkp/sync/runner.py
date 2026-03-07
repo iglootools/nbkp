@@ -104,7 +104,7 @@ def run_all_syncs(
         if on_sync_start:
             on_sync_start(slug)
 
-        # Check if any predecessor failed
+        # Check if any upstream sync failed
         failed_deps = predecessors.get(slug, set()) & failed
         if failed_deps:
             dep = sorted(failed_deps)[0]
@@ -115,7 +115,7 @@ def run_all_syncs(
                 rsync_exit_code=-1,
                 output="",
                 outcome=SyncOutcome.CANCELLED,
-                detail=f"Cancelled: dependency '{dep}' failed",
+                detail=f"Cancelled: upstream sync '{dep}' failed",
             )
         elif not status.active:
             result = SyncResult(

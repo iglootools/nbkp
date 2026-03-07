@@ -46,8 +46,8 @@ class TestSortSyncs:
         result = sort_syncs(syncs)
         assert set(result) == {"a", "b"}
 
-    def test_dependent_syncs_sorted(self) -> None:
-        # a writes to (usb, None), b reads from (usb, None)
+    def test_upstream_downstream_syncs_sorted(self) -> None:
+        # upstream a writes to (usb, None), downstream b reads from (usb, None)
         syncs = {
             "b": _sync("b", "usb", "nas"),
             "a": _sync("a", "laptop", "usb"),
@@ -55,8 +55,8 @@ class TestSortSyncs:
         result = sort_syncs(syncs)
         assert result.index("a") < result.index("b")
 
-    def test_dependent_syncs_with_subdir(self) -> None:
-        # a writes to (usb, photos), b reads from (usb, photos)
+    def test_upstream_downstream_syncs_with_subdir(self) -> None:
+        # upstream a → (usb, photos), downstream b ← (usb, photos)
         syncs = {
             "b": _sync("b", "usb", "nas", src_sub="photos"),
             "a": _sync("a", "laptop", "usb", dst_sub="photos"),

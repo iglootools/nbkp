@@ -343,7 +343,7 @@ class TestRunAllSyncs:
 
 
 def _make_chain_config() -> Config:
-    """A→B chain: s1 writes to 'mid', s2 reads from 'mid'."""
+    """Upstream s1 writes to 'mid', downstream s2 reads."""
     src = LocalVolume(slug="src", path="/src")
     mid = LocalVolume(slug="mid", path="/mid")
     dst = LocalVolume(slug="dst", path="/dst")
@@ -392,7 +392,7 @@ def _make_independent_config() -> Config:
 
 class TestFailurePropagation:
     @patch("nbkp.sync.runner.run_rsync")
-    def test_dependent_sync_cancelled_on_failure(
+    def test_downstream_sync_cancelled_on_failure(
         self,
         mock_rsync: MagicMock,
     ) -> None:
@@ -452,7 +452,7 @@ class TestFailurePropagation:
         self,
         mock_rsync: MagicMock,
     ) -> None:
-        """A→B→C chain: A fails → both B and C cancelled."""
+        """Upstream A fails → downstream B and C cancelled."""
         v0 = LocalVolume(slug="v0", path="/v0")
         v1 = LocalVolume(slug="v1", path="/v1")
         v2 = LocalVolume(slug="v2", path="/v2")

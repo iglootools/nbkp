@@ -555,25 +555,30 @@ def _print_sync_reason_fix(
             path = _endpoint_path(src, sync.source.subdir)
             console.print(
                 f"{p2}Source has snapshots enabled"
-                f" but {path}/{LATEST_LINK} does not"
-                " exist. Ensure the upstream"
-                " sync has run at least once,"
-                " or create it manually:"
+                f" but {path}/{LATEST_LINK} symlink"
+                " does not exist. Create it:"
             )
-            if sync.source.btrfs_snapshots.enabled:
-                cmds = [
-                    "sudo btrfs subvolume create" f" {path}/{STAGING_DIR}",
-                    "sudo chown <user>:<group>" f" {path}/{STAGING_DIR}",
-                    f"mkdir -p {path}/{SNAPSHOTS_DIR}",
-                    f"ln -sfn {SNAPSHOTS_DIR}/initial"
-                    f" {path}/{LATEST_LINK}",
-                ]
-            else:
-                cmds = [
-                    f"mkdir -p" f" {path}/{SNAPSHOTS_DIR}/initial",
-                    f"ln -sfn {SNAPSHOTS_DIR}/initial"
-                    f" {path}/{LATEST_LINK}",
-                ]
+            cmds = [
+                f"ln -sfn /dev/null" f" {path}/{LATEST_LINK}",
+            ]
+            for cmd in cmds:
+                _print_cmd(
+                    console,
+                    _wrap_cmd(cmd, src, resolved_endpoints),
+                )
+        case SyncReason.SOURCE_LATEST_INVALID:
+            src = config.volumes[sync.source.volume]
+            path = _endpoint_path(src, sync.source.subdir)
+            console.print(
+                f"{p2}Source {path}/{LATEST_LINK}"
+                " symlink points to an invalid"
+                " target. Ensure the upstream"
+                " sync has run at least once,"
+                " or reset it:"
+            )
+            cmds = [
+                f"ln -sfn /dev/null" f" {path}/{LATEST_LINK}",
+            ]
             for cmd in cmds:
                 _print_cmd(
                     console,
@@ -704,6 +709,38 @@ def _print_sync_reason_fix(
                     f"sudo mkdir" f" {path}/{SNAPSHOTS_DIR}",
                     "sudo chown <user>:<group>" f" {path}/{SNAPSHOTS_DIR}",
                 ]
+            for cmd in cmds:
+                _print_cmd(
+                    console,
+                    _wrap_cmd(cmd, dst, resolved_endpoints),
+                )
+        case SyncReason.DESTINATION_LATEST_NOT_FOUND:
+            dst = config.volumes[sync.destination.volume]
+            path = _endpoint_path(dst, sync.destination.subdir)
+            console.print(
+                f"{p2}Destination has snapshots enabled"
+                f" but {path}/{LATEST_LINK} symlink"
+                " does not exist. Create it:"
+            )
+            cmds = [
+                f"ln -sfn /dev/null" f" {path}/{LATEST_LINK}",
+            ]
+            for cmd in cmds:
+                _print_cmd(
+                    console,
+                    _wrap_cmd(cmd, dst, resolved_endpoints),
+                )
+        case SyncReason.DESTINATION_LATEST_INVALID:
+            dst = config.volumes[sync.destination.volume]
+            path = _endpoint_path(dst, sync.destination.subdir)
+            console.print(
+                f"{p2}Destination {path}/{LATEST_LINK}"
+                " symlink points to an invalid"
+                " target. Reset it:"
+            )
+            cmds = [
+                f"ln -sfn /dev/null" f" {path}/{LATEST_LINK}",
+            ]
             for cmd in cmds:
                 _print_cmd(
                     console,
