@@ -520,14 +520,14 @@ def prune(
             return None  # filtered out by --sync, omit entirely
         if not status.active:
             return "inactive"
-        dst = status.config.destination
-        match dst.snapshot_mode:
+        dst_ep = cfg.destination_endpoint(status.config)
+        match dst_ep.snapshot_mode:
             case "btrfs":
-                if dst.btrfs_snapshots.max_snapshots is None:
+                if dst_ep.btrfs_snapshots.max_snapshots is None:
                     return "no max-snapshots limit"
                 return None
             case "hard-link":
-                if dst.hard_link_snapshots.max_snapshots is None:
+                if dst_ep.hard_link_snapshots.max_snapshots is None:
                     return "no max-snapshots limit"
                 return None
             case _:
@@ -545,7 +545,8 @@ def prune(
             kept = 0
             if (
                 status.active
-                and status.config.destination.snapshot_mode != "none"
+                and cfg.destination_endpoint(status.config).snapshot_mode
+                != "none"
             ):
                 try:
                     kept = len(list_snapshots(status.config, cfg, resolved))
@@ -562,24 +563,24 @@ def prune(
                 )
             )
             continue
-        dst = status.config.destination
+        dst_ep = cfg.destination_endpoint(status.config)
         try:
-            match dst.snapshot_mode:
+            match dst_ep.snapshot_mode:
                 case "btrfs":
-                    assert dst.btrfs_snapshots.max_snapshots is not None
+                    assert dst_ep.btrfs_snapshots.max_snapshots is not None
                     deleted = btrfs_prune_snapshots(
                         status.config,
                         cfg,
-                        dst.btrfs_snapshots.max_snapshots,
+                        dst_ep.btrfs_snapshots.max_snapshots,
                         dry_run=dry_run,
                         resolved_endpoints=resolved,
                     )
                 case "hard-link":
-                    assert dst.hard_link_snapshots.max_snapshots is not None
+                    assert dst_ep.hard_link_snapshots.max_snapshots is not None
                     deleted = hl_prune_snapshots(
                         status.config,
                         cfg,
-                        dst.hard_link_snapshots.max_snapshots,
+                        dst_ep.hard_link_snapshots.max_snapshots,
                         dry_run=dry_run,
                         resolved_endpoints=resolved,
                     )

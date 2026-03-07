@@ -48,8 +48,7 @@ def _build_chain_config(tmp_path: Path) -> Config:
     Mirrors the structure of the Docker chain test but
     restricted to local volumes (no SSH/remote).
     """
-    hl_src = HardLinkSnapshotConfig(enabled=True)
-    hl_dst = HardLinkSnapshotConfig(enabled=True)
+    hl = HardLinkSnapshotConfig(enabled=True)
 
     volumes: dict[str, LocalVolume | RemoteVolume] = {
         "src": LocalVolume(
@@ -65,27 +64,40 @@ def _build_chain_config(tmp_path: Path) -> Config:
             path=str(tmp_path / "dst"),
         ),
     }
+    sync_endpoints: dict[str, SyncEndpoint] = {
+        "ep-src": SyncEndpoint(
+            slug="ep-src",
+            volume="src",
+        ),
+        "ep-stage": SyncEndpoint(
+            slug="ep-stage",
+            volume="stage",
+            hard_link_snapshots=hl,
+        ),
+        "ep-dst": SyncEndpoint(
+            slug="ep-dst",
+            volume="dst",
+        ),
+    }
     syncs: dict[str, SyncConfig] = {
         "step-1": SyncConfig(
             slug="step-1",
-            source=SyncEndpoint(volume="src"),
-            destination=SyncEndpoint(
-                volume="stage",
-                hard_link_snapshots=hl_dst,
-            ),
+            source="ep-src",
+            destination="ep-stage",
             filters=SEED_EXCLUDE_FILTERS,
         ),
         "step-2": SyncConfig(
             slug="step-2",
-            source=SyncEndpoint(
-                volume="stage",
-                hard_link_snapshots=hl_src,
-            ),
-            destination=SyncEndpoint(volume="dst"),
+            source="ep-stage",
+            destination="ep-dst",
             filters=SEED_EXCLUDE_FILTERS,
         ),
     }
-    return Config(volumes=volumes, syncs=syncs)
+    return Config(
+        volumes=volumes,
+        sync_endpoints=sync_endpoints,
+        syncs=syncs,
+    )
 
 
 class TestGeneratedScriptSyntax:

@@ -81,78 +81,94 @@ def build_chain_config(
         ),
     }
 
-    hl_src = HardLinkSnapshotConfig(enabled=True)
-    hl_dst = HardLinkSnapshotConfig(enabled=True)
-    btrfs_src = BtrfsSnapshotConfig(enabled=True)
-    btrfs_dst = BtrfsSnapshotConfig(enabled=True)
+    hl = HardLinkSnapshotConfig(enabled=True)
+    btrfs = BtrfsSnapshotConfig(enabled=True)
+
+    # Sync endpoints — when a destination of one step is the source
+    # of the next step, we reuse the SAME endpoint slug so the
+    # dependency detector sees the link.
+    sync_endpoints: dict[str, SyncEndpoint] = {
+        # step-1 source: bare local origin
+        "ep-src-local-bare": SyncEndpoint(
+            slug="ep-src-local-bare",
+            volume="src-local-bare",
+        ),
+        # step-1 dest / step-2 source: local HL snapshots
+        "ep-stage-local-hl": SyncEndpoint(
+            slug="ep-stage-local-hl",
+            volume="stage-local-hl-snapshots",
+            hard_link_snapshots=hl,
+        ),
+        # step-2 dest / step-3 source: remote bare
+        "ep-stage-remote-bare": SyncEndpoint(
+            slug="ep-stage-remote-bare",
+            volume="stage-remote-bare",
+        ),
+        # step-3 dest / step-4 source: remote btrfs snapshots
+        "ep-stage-remote-btrfs": SyncEndpoint(
+            slug="ep-stage-remote-btrfs",
+            volume="stage-remote-btrfs-snapshots",
+            btrfs_snapshots=btrfs,
+        ),
+        # step-4 dest / step-5 source: remote btrfs bare
+        "ep-stage-remote-btrfs-bare": SyncEndpoint(
+            slug="ep-stage-remote-btrfs-bare",
+            volume="stage-remote-btrfs-bare",
+        ),
+        # step-5 dest / step-6 source: remote HL snapshots
+        "ep-stage-remote-hl": SyncEndpoint(
+            slug="ep-stage-remote-hl",
+            volume="stage-remote-hl-snapshots",
+            hard_link_snapshots=hl,
+        ),
+        # step-6 dest: bare local terminus
+        "ep-dst-local-bare": SyncEndpoint(
+            slug="ep-dst-local-bare",
+            volume="dst-local-bare",
+        ),
+    }
 
     syncs: dict[str, SyncConfig] = {
-        # local→local, HL destination
+        # local->local, HL destination
         "step-1": SyncConfig(
             slug="step-1",
-            source=SyncEndpoint(volume="src-local-bare"),
-            destination=SyncEndpoint(
-                volume="stage-local-hl-snapshots",
-                hard_link_snapshots=hl_dst,
-            ),
+            source="ep-src-local-bare",
+            destination="ep-stage-local-hl",
             filters=SEED_EXCLUDE_FILTERS,
         ),
-        # local→remote (bastion), bare destination
+        # local->remote (bastion), bare destination
         "step-2": SyncConfig(
             slug="step-2",
-            source=SyncEndpoint(
-                volume="stage-local-hl-snapshots",
-                hard_link_snapshots=hl_src,
-            ),
-            destination=SyncEndpoint(
-                volume="stage-remote-bare",
-            ),
+            source="ep-stage-local-hl",
+            destination="ep-stage-remote-bare",
             filters=SEED_EXCLUDE_FILTERS,
         ),
-        # remote→remote same-server (bastion), btrfs destination
+        # remote->remote same-server (bastion), btrfs destination
         "step-3": SyncConfig(
             slug="step-3",
-            source=SyncEndpoint(
-                volume="stage-remote-bare",
-            ),
-            destination=SyncEndpoint(
-                volume="stage-remote-btrfs-snapshots",
-                btrfs_snapshots=btrfs_dst,
-            ),
+            source="ep-stage-remote-bare",
+            destination="ep-stage-remote-btrfs",
             filters=SEED_EXCLUDE_FILTERS,
         ),
-        # remote→remote same-server (bastion), bare dest on btrfs
+        # remote->remote same-server (bastion), bare dest on btrfs
         "step-4": SyncConfig(
             slug="step-4",
-            source=SyncEndpoint(
-                volume="stage-remote-btrfs-snapshots",
-                btrfs_snapshots=btrfs_src,
-            ),
-            destination=SyncEndpoint(
-                volume="stage-remote-btrfs-bare",
-            ),
+            source="ep-stage-remote-btrfs",
+            destination="ep-stage-remote-btrfs-bare",
             filters=SEED_EXCLUDE_FILTERS,
         ),
-        # remote→remote same-server (bastion), HL destination
+        # remote->remote same-server (bastion), HL destination
         "step-5": SyncConfig(
             slug="step-5",
-            source=SyncEndpoint(
-                volume="stage-remote-btrfs-bare",
-            ),
-            destination=SyncEndpoint(
-                volume="stage-remote-hl-snapshots",
-                hard_link_snapshots=hl_dst,
-            ),
+            source="ep-stage-remote-btrfs-bare",
+            destination="ep-stage-remote-hl",
             filters=SEED_EXCLUDE_FILTERS,
         ),
-        # remote (bastion)→local, bare destination
+        # remote (bastion)->local, bare destination
         "step-6": SyncConfig(
             slug="step-6",
-            source=SyncEndpoint(
-                volume="stage-remote-hl-snapshots",
-                hard_link_snapshots=hl_src,
-            ),
-            destination=SyncEndpoint(volume="dst-local-bare"),
+            source="ep-stage-remote-hl",
+            destination="ep-dst-local-bare",
             filters=SEED_EXCLUDE_FILTERS,
         ),
     }
@@ -163,6 +179,7 @@ def build_chain_config(
             "via-bastion": proxied_endpoint,
         },
         volumes=volumes,
+        sync_endpoints=sync_endpoints,
         syncs=syncs,
     )
 

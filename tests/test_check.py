@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
-    DestinationSyncEndpoint,
     HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
@@ -122,12 +121,13 @@ class TestRemoteVolume:
 
 class TestSyncEndpoint:
     def test_construction_defaults(self) -> None:
-        ep = SyncEndpoint(volume="data")
+        ep = SyncEndpoint(slug="ep-data", volume="data")
+        assert ep.slug == "ep-data"
         assert ep.volume == "data"
         assert ep.subdir is None
 
     def test_construction_with_subdir(self) -> None:
-        ep = SyncEndpoint(volume="data", subdir="photos")
+        ep = SyncEndpoint(slug="ep-data", volume="data", subdir="photos")
         assert ep.subdir == "photos"
 
 
@@ -135,12 +135,13 @@ class TestSyncConfig:
     def test_construction_defaults(self) -> None:
         sc = SyncConfig(
             slug="sync1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(volume="dst"),
+            source="ep-src",
+            destination="ep-dst",
         )
         assert sc.slug == "sync1"
+        assert sc.source == "ep-src"
+        assert sc.destination == "ep-dst"
         assert sc.enabled is True
-        assert sc.destination.btrfs_snapshots.enabled is False
         assert sc.rsync_options.default_options_override is None
         assert sc.rsync_options.extra_options == []
         assert sc.rsync_options.checksum is True
@@ -151,12 +152,8 @@ class TestSyncConfig:
     def test_construction_full(self) -> None:
         sc = SyncConfig(
             slug="sync1",
-            source=SyncEndpoint(volume="src", subdir="a"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="b",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-src",
+            destination="ep-dst",
             enabled=False,
             rsync_options=RsyncOptions(
                 default_options_override=["-a", "--delete"],
@@ -167,7 +164,6 @@ class TestSyncConfig:
             filter_file="/etc/nbkp/filters.rules",
         )
         assert sc.enabled is False
-        assert sc.destination.btrfs_snapshots.enabled is True
         assert sc.rsync_options.default_options_override == [
             "-a",
             "--delete",
@@ -187,14 +183,21 @@ class TestConfig:
 
     def test_with_data(self) -> None:
         vol = LocalVolume(slug="data", path="/mnt/data")
-        sync = SyncConfig(
-            slug="s1",
-            source=SyncEndpoint(volume="data"),
-            destination=DestinationSyncEndpoint(volume="data"),
-        )
         cfg = Config(
             volumes={"data": vol},
-            syncs={"s1": sync},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="data"),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst", volume="data", subdir="sub"
+                ),
+            },
+            syncs={
+                "s1": SyncConfig(
+                    slug="s1",
+                    source="ep-src",
+                    destination="ep-dst",
+                ),
+            },
         )
         assert "data" in cfg.volumes
         assert "s1" in cfg.syncs
@@ -223,11 +226,15 @@ class TestCrossServerValidation:
                         path="/d",
                     ),
                 },
+                sync_endpoints={
+                    "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                    "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+                },
                 syncs={
                     "x": SyncConfig(
                         slug="x",
-                        source=SyncEndpoint(volume="src"),
-                        destination=DestinationSyncEndpoint(volume="dst"),
+                        source="ep-src",
+                        destination="ep-dst",
                     )
                 },
             )
@@ -249,11 +256,15 @@ class TestCrossServerValidation:
                     path="/dst",
                 ),
             },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+            },
             syncs={
                 "x": SyncConfig(
                     slug="x",
-                    source=SyncEndpoint(volume="src"),
-                    destination=DestinationSyncEndpoint(volume="dst"),
+                    source="ep-src",
+                    destination="ep-dst",
                 )
             },
         )
@@ -290,8 +301,8 @@ class TestSyncStatus:
         )
         sc = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="data"),
-            destination=DestinationSyncEndpoint(volume="data"),
+            source="ep-src",
+            destination="ep-dst",
         )
         ss = SyncStatus(
             slug="s1",
@@ -311,8 +322,8 @@ class TestSyncStatus:
         )
         sc = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="data"),
-            destination=DestinationSyncEndpoint(volume="data"),
+            source="ep-src",
+            destination="ep-dst",
         )
         ss = SyncStatus(
             slug="s1",
@@ -720,11 +731,19 @@ class TestCheckSync:
         dst_vol = LocalVolume(slug="dst", path=str(tmp_dst))
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
+            source="ep-src",
+            destination="ep-dst",
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(
+                    slug="ep-src", volume="src", subdir="data"
+                ),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst", volume="dst", subdir="backup"
+                ),
+            },
             syncs={"s1": sync},
         )
         return config, sync
@@ -779,8 +798,8 @@ class TestCheckSync:
         config, _ = self._make_config(src, dst)
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
+            source="ep-src",
+            destination="ep-dst",
             enabled=False,
         )
         vol_statuses = {
@@ -912,15 +931,24 @@ class TestCheckSync:
         dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-btrfs-src",
+            destination="ep-btrfs-dst",
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-btrfs-src": SyncEndpoint(
+                    slug="ep-btrfs-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-btrfs-dst": SyncEndpoint(
+                    slug="ep-btrfs-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = self._make_active_vol_statuses(config)
@@ -946,15 +974,24 @@ class TestCheckSync:
         dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-stat-src",
+            destination="ep-stat-dst",
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-stat-src": SyncEndpoint(
+                    slug="ep-stat-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-stat-dst": SyncEndpoint(
+                    slug="ep-stat-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = self._make_active_vol_statuses(config)
@@ -992,15 +1029,24 @@ class TestCheckSync:
         dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-findmnt-src",
+            destination="ep-findmnt-dst",
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-findmnt-src": SyncEndpoint(
+                    slug="ep-findmnt-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-findmnt-dst": SyncEndpoint(
+                    slug="ep-findmnt-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = self._make_active_vol_statuses(config)
@@ -1043,15 +1089,24 @@ class TestCheckSync:
         dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-statfm-src",
+            destination="ep-statfm-dst",
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-statfm-src": SyncEndpoint(
+                    slug="ep-statfm-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-statfm-dst": SyncEndpoint(
+                    slug="ep-statfm-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = self._make_active_vol_statuses(config)
@@ -1082,15 +1137,24 @@ class TestCheckSync:
         dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-notbtrfs-src",
+            destination="ep-notbtrfs-dst",
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-notbtrfs-src": SyncEndpoint(
+                    slug="ep-notbtrfs-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-notbtrfs-dst": SyncEndpoint(
+                    slug="ep-notbtrfs-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = self._make_active_vol_statuses(config)
@@ -1126,15 +1190,24 @@ class TestCheckSync:
         dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-notsub-src",
+            destination="ep-notsub-dst",
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-notsub-src": SyncEndpoint(
+                    slug="ep-notsub-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-notsub-dst": SyncEndpoint(
+                    slug="ep-notsub-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = self._make_active_vol_statuses(config)
@@ -1179,15 +1252,24 @@ class TestCheckSync:
         dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-mount-src",
+            destination="ep-mount-dst",
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-mount-src": SyncEndpoint(
+                    slug="ep-mount-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-mount-dst": SyncEndpoint(
+                    slug="ep-mount-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = self._make_active_vol_statuses(config)
@@ -1236,15 +1318,24 @@ class TestCheckSync:
         dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-latest-src",
+            destination="ep-latest-dst",
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-latest-src": SyncEndpoint(
+                    slug="ep-latest-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-latest-dst": SyncEndpoint(
+                    slug="ep-latest-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = self._make_active_vol_statuses(config)
@@ -1298,15 +1389,24 @@ class TestCheckSync:
         dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-snapdir-src",
+            destination="ep-snapdir-dst",
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-snapdir-src": SyncEndpoint(
+                    slug="ep-snapdir-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-snapdir-dst": SyncEndpoint(
+                    slug="ep-snapdir-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = self._make_active_vol_statuses(config)
@@ -1356,15 +1456,24 @@ class TestCheckSync:
         dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-both-src",
+            destination="ep-both-dst",
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-both-src": SyncEndpoint(
+                    slug="ep-both-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-both-dst": SyncEndpoint(
+                    slug="ep-both-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = self._make_active_vol_statuses(config)
@@ -1486,12 +1595,20 @@ class TestCheckSyncRemoteCommands:
         dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
+            source="ep-rsrc",
+            destination="ep-rdst",
         )
         config = Config(
             ssh_endpoints={"src-server": src_server},
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-rsrc": SyncEndpoint(
+                    slug="ep-rsrc", volume="src", subdir="data"
+                ),
+                "ep-rdst": SyncEndpoint(
+                    slug="ep-rdst", volume="dst", subdir="backup"
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = {
@@ -1550,12 +1667,20 @@ class TestCheckSyncRemoteCommands:
         )
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
+            source="ep-rdsrc",
+            destination="ep-rddst",
         )
         config = Config(
             ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-rdsrc": SyncEndpoint(
+                    slug="ep-rdsrc", volume="src", subdir="data"
+                ),
+                "ep-rddst": SyncEndpoint(
+                    slug="ep-rddst", volume="dst", subdir="backup"
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = {
@@ -1620,16 +1745,25 @@ class TestCheckSyncRemoteCommands:
         )
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-rbtrfs-src",
+            destination="ep-rbtrfs-dst",
         )
         config = Config(
             ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-rbtrfs-src": SyncEndpoint(
+                    slug="ep-rbtrfs-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-rbtrfs-dst": SyncEndpoint(
+                    slug="ep-rbtrfs-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = {
@@ -1696,16 +1830,25 @@ class TestCheckSyncRemoteCommands:
         )
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-rnotbtrfs-src",
+            destination="ep-rnotbtrfs-dst",
         )
         config = Config(
             ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-rnotbtrfs-src": SyncEndpoint(
+                    slug="ep-rnotbtrfs-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-rnotbtrfs-dst": SyncEndpoint(
+                    slug="ep-rnotbtrfs-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = {
@@ -1780,16 +1923,25 @@ class TestCheckSyncRemoteCommands:
         )
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="backup"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-rnotsub-src",
+            destination="ep-rnotsub-dst",
         )
         config = Config(
             ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-rnotsub-src": SyncEndpoint(
+                    slug="ep-rnotsub-src",
+                    volume="src",
+                    subdir="backup",
+                ),
+                "ep-rnotsub-dst": SyncEndpoint(
+                    slug="ep-rnotsub-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = {
@@ -1871,16 +2023,25 @@ class TestCheckSyncRemoteCommands:
         )
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-rmount-src",
+            destination="ep-rmount-dst",
         )
         config = Config(
             ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-rmount-src": SyncEndpoint(
+                    slug="ep-rmount-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-rmount-dst": SyncEndpoint(
+                    slug="ep-rmount-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = {
@@ -1972,16 +2133,25 @@ class TestCheckSyncRemoteCommands:
         )
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-rstat-src",
+            destination="ep-rstat-dst",
         )
         config = Config(
             ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-rstat-src": SyncEndpoint(
+                    slug="ep-rstat-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-rstat-dst": SyncEndpoint(
+                    slug="ep-rstat-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = {
@@ -2051,16 +2221,25 @@ class TestCheckSyncRemoteCommands:
         )
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-rfindmnt-src",
+            destination="ep-rfindmnt-dst",
         )
         config = Config(
             ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-rfindmnt-src": SyncEndpoint(
+                    slug="ep-rfindmnt-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-rfindmnt-dst": SyncEndpoint(
+                    slug="ep-rfindmnt-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = {
@@ -2152,16 +2331,25 @@ class TestCheckSyncRemoteCommands:
         )
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-rlatest-src",
+            destination="ep-rlatest-dst",
         )
         config = Config(
             ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-rlatest-src": SyncEndpoint(
+                    slug="ep-rlatest-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-rlatest-dst": SyncEndpoint(
+                    slug="ep-rlatest-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = {
@@ -2270,16 +2458,25 @@ class TestCheckSyncRemoteCommands:
         )
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
+            source="ep-rsnapdir-src",
+            destination="ep-rsnapdir-dst",
         )
         config = Config(
             ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-rsnapdir-src": SyncEndpoint(
+                    slug="ep-rsnapdir-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-rsnapdir-dst": SyncEndpoint(
+                    slug="ep-rsnapdir-dst",
+                    volume="dst",
+                    subdir="backup",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = {
@@ -2383,11 +2580,15 @@ class TestCheckAllSyncs:
         dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(volume="dst"),
+            source="ep-all-src",
+            destination="ep-all-dst",
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-all-src": SyncEndpoint(slug="ep-all-src", volume="src"),
+                "ep-all-dst": SyncEndpoint(slug="ep-all-dst", volume="dst"),
+            },
             syncs={"s1": sync},
         )
 
@@ -2428,16 +2629,22 @@ class TestCheckAllSyncs:
                 "src2": LocalVolume(slug="src2", path=str(src2)),
                 "dst2": LocalVolume(slug="dst2", path=str(dst2)),
             },
+            sync_endpoints={
+                "ep-s1-src": SyncEndpoint(slug="ep-s1-src", volume="src1"),
+                "ep-s1-dst": SyncEndpoint(slug="ep-s1-dst", volume="dst1"),
+                "ep-s2-src": SyncEndpoint(slug="ep-s2-src", volume="src2"),
+                "ep-s2-dst": SyncEndpoint(slug="ep-s2-dst", volume="dst2"),
+            },
             syncs={
                 "s1": SyncConfig(
                     slug="s1",
-                    source=SyncEndpoint(volume="src1"),
-                    destination=DestinationSyncEndpoint(volume="dst1"),
+                    source="ep-s1-src",
+                    destination="ep-s1-dst",
                 ),
                 "s2": SyncConfig(
                     slug="s2",
-                    source=SyncEndpoint(volume="src2"),
-                    destination=DestinationSyncEndpoint(volume="dst2"),
+                    source="ep-s2-src",
+                    destination="ep-s2-dst",
                 ),
             },
         )
@@ -2458,15 +2665,24 @@ class TestCheckHardLinkDest:
         dst_vol = LocalVolume(slug="dst", path=str(tmp_dst))
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-            ),
+            source="ep-hl-src",
+            destination="ep-hl-dst",
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-hl-src": SyncEndpoint(
+                    slug="ep-hl-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-hl-dst": SyncEndpoint(
+                    slug="ep-hl-dst",
+                    volume="dst",
+                    subdir="backup",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         return config, sync
@@ -2667,16 +2883,25 @@ class TestCheckHardLinkDest:
         )
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                subdir="backup",
-                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-            ),
+            source="ep-rhl-src",
+            destination="ep-rhl-dst",
         )
         config = Config(
             ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-rhl-src": SyncEndpoint(
+                    slug="ep-rhl-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-rhl-dst": SyncEndpoint(
+                    slug="ep-rhl-dst",
+                    volume="dst",
+                    subdir="backup",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = {
@@ -2741,14 +2966,16 @@ class TestCheckSourceLatest:
     ) -> tuple[Config, SyncConfig]:
         src_vol = LocalVolume(slug="src", path=str(tmp_src))
         dst_vol = LocalVolume(slug="dst", path=str(tmp_dst))
-        source = (
+        src_ep = (
             SyncEndpoint(
+                slug="ep-srclatest-src",
                 volume="src",
                 subdir="data",
                 btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
             )
             if source_snapshot == "btrfs"
             else SyncEndpoint(
+                slug="ep-srclatest-src",
                 volume="src",
                 subdir="data",
                 hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
@@ -2756,11 +2983,19 @@ class TestCheckSourceLatest:
         )
         sync = SyncConfig(
             slug="s1",
-            source=source,
-            destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
+            source="ep-srclatest-src",
+            destination="ep-srclatest-dst",
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-srclatest-src": src_ep,
+                "ep-srclatest-dst": SyncEndpoint(
+                    slug="ep-srclatest-dst",
+                    volume="dst",
+                    subdir="backup",
+                ),
+            },
             syncs={"s1": sync},
         )
         return config, sync
@@ -2895,11 +3130,23 @@ class TestCheckSourceLatest:
         dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
+            source="ep-nsnap-src",
+            destination="ep-nsnap-dst",
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-nsnap-src": SyncEndpoint(
+                    slug="ep-nsnap-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-nsnap-dst": SyncEndpoint(
+                    slug="ep-nsnap-dst",
+                    volume="dst",
+                    subdir="backup",
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = self._active_vol_statuses(config)
@@ -2919,14 +3166,16 @@ class TestCheckSourceSnapshots:
     ) -> tuple[Config, SyncConfig]:
         src_vol = LocalVolume(slug="src", path=str(tmp_src))
         dst_vol = LocalVolume(slug="dst", path=str(tmp_dst))
-        source = (
+        src_ep = (
             SyncEndpoint(
+                slug="ep-srcsnap-src",
                 volume="src",
                 subdir="data",
                 btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
             )
             if source_snapshot == "btrfs"
             else SyncEndpoint(
+                slug="ep-srcsnap-src",
                 volume="src",
                 subdir="data",
                 hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
@@ -2934,11 +3183,19 @@ class TestCheckSourceSnapshots:
         )
         sync = SyncConfig(
             slug="s1",
-            source=source,
-            destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
+            source="ep-srcsnap-src",
+            destination="ep-srcsnap-dst",
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-srcsnap-src": src_ep,
+                "ep-srcsnap-dst": SyncEndpoint(
+                    slug="ep-srcsnap-dst",
+                    volume="dst",
+                    subdir="backup",
+                ),
+            },
             syncs={"s1": sync},
         )
         return config, sync
@@ -3046,11 +3303,23 @@ class TestCheckSourceSnapshots:
         dst_vol = LocalVolume(slug="dst", path=str(dst))
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src", subdir="data"),
-            destination=DestinationSyncEndpoint(volume="dst", subdir="backup"),
+            source="ep-nsnap2-src",
+            destination="ep-nsnap2-dst",
         )
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-nsnap2-src": SyncEndpoint(
+                    slug="ep-nsnap2-src",
+                    volume="src",
+                    subdir="data",
+                ),
+                "ep-nsnap2-dst": SyncEndpoint(
+                    slug="ep-nsnap2-dst",
+                    volume="dst",
+                    subdir="backup",
+                ),
+            },
             syncs={"s1": sync},
         )
         vol_statuses = self._active_vol_statuses(config)
@@ -3067,18 +3336,19 @@ class TestCheckDevnullLatest:
         tmp_src: Path,
         tmp_dst: Path,
         snapshot_mode: str = "hard-link",
-        extra_syncs: dict[str, SyncConfig] | None = None,
     ) -> tuple[Config, SyncConfig]:
         src_vol = LocalVolume(slug="src", path=str(tmp_src))
         dst_vol = LocalVolume(slug="dst", path=str(tmp_dst))
-        dst_endpoint = (
-            DestinationSyncEndpoint(
+        dst_ep = (
+            SyncEndpoint(
+                slug="ep-devnull-dst",
                 volume="dst",
                 subdir="backup",
                 hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
             )
             if snapshot_mode == "hard-link"
-            else DestinationSyncEndpoint(
+            else SyncEndpoint(
+                slug="ep-devnull-dst",
                 volume="dst",
                 subdir="backup",
                 btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
@@ -3086,31 +3356,22 @@ class TestCheckDevnullLatest:
         )
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(
-                volume="src",
-                subdir="data",
-                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-            ),
-            destination=dst_endpoint,
+            source="ep-devnull-src",
+            destination="ep-devnull-dst",
         )
-        syncs: dict[str, SyncConfig] = {"s1": sync}
-        volumes: dict[str, LocalVolume | RemoteVolume] = {
-            "src": src_vol,
-            "dst": dst_vol,
-        }
-        if extra_syncs:
-            syncs.update(extra_syncs)
-            for s in extra_syncs.values():
-                for vol_name in [
-                    s.source.volume,
-                    s.destination.volume,
-                ]:
-                    if vol_name not in volumes:
-                        volumes[vol_name] = LocalVolume(
-                            slug=vol_name,
-                            path=str(tmp_src.parent / vol_name),
-                        )
-        config = Config(volumes=volumes, syncs=syncs)
+        config = Config(
+            volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-devnull-src": SyncEndpoint(
+                    slug="ep-devnull-src",
+                    volume="src",
+                    subdir="data",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+                "ep-devnull-dst": dst_ep,
+            },
+            syncs={"s1": sync},
+        )
         return config, sync
 
     def _setup_sentinels(self, src: Path, dst: Path) -> None:
@@ -3154,18 +3415,44 @@ class TestCheckDevnullLatest:
         (dst / "backup" / "snapshots").mkdir()
         (dst / "backup" / "latest").symlink_to("/dev/null")
 
-        # upstream sync writes to (src, data)
+        src_vol = LocalVolume(slug="src", path=str(src))
+        dst_vol = LocalVolume(slug="dst", path=str(dst))
+        upstream_vol = LocalVolume(slug="upstream", path=str(upstream_src))
+        sync = SyncConfig(
+            slug="s1",
+            source="ep-up-src",
+            destination="ep-up-dst",
+        )
         upstream = SyncConfig(
             slug="upstream",
-            source=SyncEndpoint(volume="upstream"),
-            destination=DestinationSyncEndpoint(
-                volume="src",
-                subdir="data",
-                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-            ),
+            source="ep-up-usrc",
+            destination="ep-up-src",
         )
-        config, sync = self._make_config(
-            src, dst, extra_syncs={"upstream": upstream}
+        config = Config(
+            volumes={
+                "src": src_vol,
+                "dst": dst_vol,
+                "upstream": upstream_vol,
+            },
+            sync_endpoints={
+                "ep-up-src": SyncEndpoint(
+                    slug="ep-up-src",
+                    volume="src",
+                    subdir="data",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+                "ep-up-dst": SyncEndpoint(
+                    slug="ep-up-dst",
+                    volume="dst",
+                    subdir="backup",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+                "ep-up-usrc": SyncEndpoint(
+                    slug="ep-up-usrc",
+                    volume="upstream",
+                ),
+            },
+            syncs={"s1": sync, "upstream": upstream},
         )
         vol_statuses = self._active_vol_statuses(config)
 

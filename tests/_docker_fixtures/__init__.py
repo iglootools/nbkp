@@ -47,9 +47,10 @@ def assert_sentinels_after_sync(
     - .nbkp-dst must still exist at the destination
       sync endpoint path
     """
-    dst_vol = config.volumes[sync.destination.volume]
+    dst_ep = config.destination_endpoint(sync)
+    dst_vol = config.volumes[dst_ep.volume]
     vol_path = dst_vol.path
-    subdir = sync.destination.subdir
+    subdir = dst_ep.subdir
 
     # Where rsync actually wrote files
     if dest_suffix:

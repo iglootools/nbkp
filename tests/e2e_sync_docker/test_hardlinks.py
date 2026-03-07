@@ -7,7 +7,6 @@ from pathlib import Path
 
 from nbkp.config import (
     Config,
-    DestinationSyncEndpoint,
     HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
@@ -42,19 +41,24 @@ def _make_hl_config(
     src_vol = LocalVolume(slug="src", path=src_path)
     sync = SyncConfig(
         slug="test-sync",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(
-            volume="dst",
-            hard_link_snapshots=HardLinkSnapshotConfig(
-                enabled=True, max_snapshots=max_snapshots
-            ),
-        ),
+        source="ep-src",
+        destination="ep-dst",
     )
     config = Config(
         ssh_endpoints={"test-server": docker_ssh_endpoint},
         volumes={
             "src": src_vol,
             "dst": remote_hl_volume,
+        },
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                hard_link_snapshots=HardLinkSnapshotConfig(
+                    enabled=True, max_snapshots=max_snapshots
+                ),
+            ),
         },
         syncs={"test-sync": sync},
     )

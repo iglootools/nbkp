@@ -12,7 +12,6 @@ from nbkp.cli import app
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
-    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SshEndpoint,
@@ -49,16 +48,17 @@ def _sample_config() -> Config:
         ssh_endpoint="nas-server",
         path="/volume1/backups",
     )
+    ep_src = SyncEndpoint(slug="ep-src", volume="local-data", subdir="photos")
+    ep_dst = SyncEndpoint(slug="ep-dst", volume="nas", subdir="photos-backup")
     sync = SyncConfig(
         slug="photos-to-nas",
-        source=SyncEndpoint(volume="local-data", subdir="photos"),
-        destination=DestinationSyncEndpoint(
-            volume="nas", subdir="photos-backup"
-        ),
+        source="ep-src",
+        destination="ep-dst",
     )
     return Config(
         ssh_endpoints={"nas-server": nas_server},
         volumes={"local-data": src, "nas": dst},
+        sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
         syncs={"photos-to-nas": sync},
     )
 
@@ -659,16 +659,20 @@ class TestRunCommand:
 def _prune_config() -> Config:
     src = LocalVolume(slug="src", path="/src")
     dst = LocalVolume(slug="dst", path="/dst")
+    ep_src = SyncEndpoint(slug="ep-src", volume="src")
+    ep_dst = SyncEndpoint(
+        slug="ep-dst",
+        volume="dst",
+        btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=3),
+    )
     sync = SyncConfig(
         slug="s1",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(
-            volume="dst",
-            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=3),
-        ),
+        source="ep-src",
+        destination="ep-dst",
     )
     return Config(
         volumes={"src": src, "dst": dst},
+        sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
         syncs={"s1": sync},
     )
 
@@ -684,8 +688,12 @@ def _prune_active_statuses(
         name: SyncStatus(
             slug=name,
             config=sync,
-            source_status=vol_statuses[sync.source.volume],
-            destination_status=vol_statuses[sync.destination.volume],
+            source_status=vol_statuses[
+                config.sync_endpoints[sync.source].volume
+            ],
+            destination_status=vol_statuses[
+                config.sync_endpoints[sync.destination].volume
+            ],
             reasons=[],
         )
         for name, sync in config.syncs.items()

@@ -8,7 +8,6 @@ from pathlib import Path
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
-    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     ResolvedEndpoints,
@@ -37,19 +36,26 @@ def _make_btrfs_config(
 ) -> tuple[SyncConfig, Config, ResolvedEndpoints]:
     """Build btrfs config and prepare remote destination."""
     src_vol = LocalVolume(slug="src", path=src_path)
-    sync = SyncConfig(
-        slug="test-sync",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(
-            volume="dst",
-            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-        ),
-    )
     config = Config(
         ssh_endpoints={"test-server": docker_ssh_endpoint},
         volumes={"src": src_vol, "dst": remote_btrfs_volume},
-        syncs={"test-sync": sync},
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+            ),
+        },
+        syncs={
+            "test-sync": SyncConfig(
+                slug="test-sync",
+                source="ep-src",
+                destination="ep-dst",
+            ),
+        },
     )
+    sync = config.syncs["test-sync"]
 
     resolved = resolve_all_endpoints(config)
     return sync, config, resolved

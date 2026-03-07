@@ -6,7 +6,6 @@ from pathlib import Path
 
 from nbkp.config import (
     Config,
-    DestinationSyncEndpoint,
     LocalVolume,
     RemoteVolume,
     SshEndpoint,
@@ -41,12 +40,16 @@ class TestRemoteToLocal:
         dst_vol = LocalVolume(slug="dst", path=str(dst_dir))
         sync = SyncConfig(
             slug="test-sync",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(volume="dst"),
+            source="ep-src",
+            destination="ep-dst",
         )
         config = Config(
             ssh_endpoints={"test-server": docker_ssh_endpoint},
             volumes={"src": docker_remote_volume, "dst": dst_vol},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+            },
             syncs={"test-sync": sync},
         )
 
@@ -92,14 +95,22 @@ class TestRemoteToLocal:
         dst_vol = LocalVolume(slug="dst", path=str(dst_dir))
         sync = SyncConfig(
             slug="test-sync",
-            source=SyncEndpoint(volume="src", subdir="photos"),
-            destination=DestinationSyncEndpoint(
-                volume="dst", subdir="photos-backup"
-            ),
+            source="ep-src",
+            destination="ep-dst",
         )
         config = Config(
             ssh_endpoints={"test-server": docker_ssh_endpoint},
             volumes={"src": docker_remote_volume, "dst": dst_vol},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(
+                    slug="ep-src", volume="src", subdir="photos"
+                ),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="dst",
+                    subdir="photos-backup",
+                ),
+            },
             syncs={"test-sync": sync},
         )
 

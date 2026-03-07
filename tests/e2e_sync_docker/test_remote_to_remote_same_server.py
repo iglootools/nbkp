@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from nbkp.config import (
     Config,
-    DestinationSyncEndpoint,
     RemoteVolume,
     SshEndpoint,
     SyncConfig,
@@ -35,12 +34,16 @@ class TestRemoteToRemoteSameServer:
         )
         sync = SyncConfig(
             slug="test-sync",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(volume="dst"),
+            source="ep-src",
+            destination="ep-dst",
         )
         config = Config(
             ssh_endpoints={"test-server": docker_ssh_endpoint},
             volumes={"src": src_vol, "dst": dst_vol},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+            },
             syncs={"test-sync": sync},
         )
 

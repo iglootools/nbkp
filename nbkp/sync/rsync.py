@@ -152,38 +152,40 @@ def build_rsync_command(
     wrapped in SSH for remote-to-remote syncs.
     """
     re = resolved_endpoints or {}
-    src_vol = config.volumes[sync.source.volume]
-    dst_vol = config.volumes[sync.destination.volume]
+    src_ep = config.source_endpoint(sync)
+    dst_ep = config.destination_endpoint(sync)
+    src_vol = config.volumes[src_ep.volume]
+    dst_vol = config.volumes[dst_ep.volume]
 
-    src_path = resolve_source_path(src_vol, sync.source)
-    dst_path = resolve_path(dst_vol, sync.destination.subdir)
+    src_path = resolve_source_path(src_vol, src_ep)
+    dst_path = resolve_path(dst_vol, dst_ep.subdir)
 
     match (src_vol, dst_vol):
         case (RemoteVolume() as sv, RemoteVolume() as dv):
-            dst_ep = re[dv.slug]
+            dst_re = re[dv.slug]
             return _build_remote_same_server(
                 sync,
-                dst_ep.server,
+                dst_re.server,
                 src_path,
                 dst_path,
                 dry_run,
                 link_dest,
                 progress,
-                proxy_chain=dst_ep.proxy_chain,
+                proxy_chain=dst_re.proxy_chain,
                 dest_suffix=dest_suffix,
             )
         case (RemoteVolume() as sv, LocalVolume()):
-            src_ep = re[sv.slug]
+            src_re = re[sv.slug]
             rsync_args = _base_rsync_args(sync, dry_run, link_dest, progress)
             rsync_args.extend(_filter_args(sync))
             rsync_args.extend(
                 build_ssh_e_option(
-                    src_ep.server,
-                    src_ep.proxy_chain,
+                    src_re.server,
+                    src_re.proxy_chain,
                 )
             )
             rsync_args.append(
-                format_remote_path(src_ep.server, src_path) + "/"
+                format_remote_path(src_re.server, src_path) + "/"
             )
             dst_target = (
                 f"{dst_path}/{dest_suffix}/" if dest_suffix else f"{dst_path}/"
@@ -191,17 +193,17 @@ def build_rsync_command(
             rsync_args.append(dst_target)
             return rsync_args
         case (LocalVolume(), RemoteVolume() as dv):
-            dst_ep = re[dv.slug]
+            dst_re = re[dv.slug]
             rsync_args = _base_rsync_args(sync, dry_run, link_dest, progress)
             rsync_args.extend(_filter_args(sync))
             rsync_args.extend(
                 build_ssh_e_option(
-                    dst_ep.server,
-                    dst_ep.proxy_chain,
+                    dst_re.server,
+                    dst_re.proxy_chain,
                 )
             )
             rsync_args.append(f"{src_path}/")
-            dst_remote = format_remote_path(dst_ep.server, dst_path)
+            dst_remote = format_remote_path(dst_re.server, dst_path)
             dst_target = (
                 f"{dst_remote}/{dest_suffix}/"
                 if dest_suffix

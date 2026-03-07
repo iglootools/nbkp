@@ -5,7 +5,6 @@ from __future__ import annotations
 from ...config import (
     BtrfsSnapshotConfig,
     Config,
-    DestinationSyncEndpoint,
     HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
@@ -76,46 +75,80 @@ def base_ssh_endpoints() -> dict[str, SshEndpoint]:
     }
 
 
+def base_sync_endpoints() -> dict[str, SyncEndpoint]:
+    return {
+        "laptop-photos": SyncEndpoint(
+            slug="laptop-photos",
+            volume="laptop",
+            subdir="photos",
+        ),
+        "usb-photos": SyncEndpoint(
+            slug="usb-photos",
+            volume="usb-drive",
+            subdir="photos",
+            btrfs_snapshots=BtrfsSnapshotConfig(
+                enabled=True, max_snapshots=10
+            ),
+        ),
+        "laptop-docs": SyncEndpoint(
+            slug="laptop-docs",
+            volume="laptop",
+            subdir="documents",
+        ),
+        "nas-docs": SyncEndpoint(
+            slug="nas-docs",
+            volume="nas-backup",
+            subdir="docs",
+            hard_link_snapshots=HardLinkSnapshotConfig(
+                enabled=True, max_snapshots=10
+            ),
+        ),
+        "laptop-music": SyncEndpoint(
+            slug="laptop-music",
+            volume="laptop",
+            subdir="music",
+        ),
+        "usb-music": SyncEndpoint(
+            slug="usb-music",
+            volume="usb-drive",
+            subdir="music",
+            hard_link_snapshots=HardLinkSnapshotConfig(
+                enabled=True, max_snapshots=5
+            ),
+        ),
+        "laptop-root": SyncEndpoint(
+            slug="laptop-root",
+            volume="laptop",
+        ),
+        "usb-root": SyncEndpoint(
+            slug="usb-root",
+            volume="usb-drive",
+        ),
+    }
+
+
 def base_syncs() -> dict[str, SyncConfig]:
     return {
         "photos-to-usb": SyncConfig(
             slug="photos-to-usb",
-            source=SyncEndpoint(volume="laptop", subdir="photos"),
-            destination=DestinationSyncEndpoint(
-                volume="usb-drive",
-                btrfs_snapshots=BtrfsSnapshotConfig(
-                    enabled=True, max_snapshots=10
-                ),
-            ),
+            source="laptop-photos",
+            destination="usb-photos",
             filters=["+ *.jpg", "- *.tmp"],
         ),
         "docs-to-nas": SyncConfig(
             slug="docs-to-nas",
-            source=SyncEndpoint(volume="laptop", subdir="documents"),
-            destination=DestinationSyncEndpoint(
-                volume="nas-backup",
-                subdir="docs",
-                hard_link_snapshots=HardLinkSnapshotConfig(
-                    enabled=True, max_snapshots=10
-                ),
-            ),
+            source="laptop-docs",
+            destination="nas-docs",
         ),
         "music-to-usb": SyncConfig(
             slug="music-to-usb",
-            source=SyncEndpoint(volume="laptop", subdir="music"),
-            destination=DestinationSyncEndpoint(
-                volume="usb-drive",
-                hard_link_snapshots=HardLinkSnapshotConfig(
-                    enabled=True, max_snapshots=5
-                ),
-            ),
+            source="laptop-music",
+            destination="usb-music",
         ),
         "disabled-backup": SyncConfig(
             slug="disabled-backup",
-            source=SyncEndpoint(volume="laptop"),
-            destination=DestinationSyncEndpoint(
-                volume="usb-drive",
-            ),
+            source="laptop-root",
+            destination="usb-root",
             enabled=False,
         ),
     }
@@ -126,5 +159,6 @@ def config_show_config() -> Config:
     return Config(
         ssh_endpoints=base_ssh_endpoints(),
         volumes=base_volumes(),
+        sync_endpoints=base_sync_endpoints(),
         syncs=base_syncs(),
     )

@@ -376,7 +376,6 @@ def seed(
             wait_for_ssh(storage_endpoint)
 
     # Config — chain layout matching integration test
-    hl_src = HardLinkSnapshotConfig(enabled=True)
     hl_dst = HardLinkSnapshotConfig(enabled=True, max_snapshots=5)
 
     ssh_endpoints: dict[str, SshEndpoint] = {}
@@ -394,15 +393,27 @@ def seed(
             path=str(tmp / "dst-local-bare"),
         ),
     }
+    sync_endpoints: dict[str, SyncEndpoint] = {
+        "ep-src-local": SyncEndpoint(
+            slug="ep-src-local",
+            volume="src-local-bare",
+        ),
+        "ep-stage-local-hl": SyncEndpoint(
+            slug="ep-stage-local-hl",
+            volume="stage-local-hl-snapshots",
+            hard_link_snapshots=hl_dst,
+        ),
+        "ep-dst-local": SyncEndpoint(
+            slug="ep-dst-local",
+            volume="dst-local-bare",
+        ),
+    }
     syncs: dict[str, SyncConfig] = {
         # local→local, HL destination
         "step-1": SyncConfig(
             slug="step-1",
-            source=SyncEndpoint(volume="src-local-bare"),
-            destination=SyncEndpoint(
-                volume="stage-local-hl-snapshots",
-                hard_link_snapshots=hl_dst,
-            ),
+            source="ep-src-local",
+            destination="ep-stage-local-hl",
             rsync_options=rsync_opts,
             filters=SEED_EXCLUDE_FILTERS,
         ),
@@ -414,7 +425,6 @@ def seed(
         btrfs_snapshots_path = f"{REMOTE_BTRFS_PATH}/snapshots"
         btrfs_bare_path = f"{REMOTE_BTRFS_PATH}/bare"
         btrfs_dst = BtrfsSnapshotConfig(enabled=True, max_snapshots=5)
-        btrfs_src = BtrfsSnapshotConfig(enabled=True)
 
         ssh_endpoints["bastion"] = bastion_endpoint
         ssh_endpoints["storage"] = storage_endpoint
@@ -449,70 +459,67 @@ def seed(
                 ),
             }
         )
+        sync_endpoints.update(
+            {
+                "ep-remote-bare": SyncEndpoint(
+                    slug="ep-remote-bare",
+                    volume="stage-remote-bare",
+                ),
+                "ep-remote-btrfs": SyncEndpoint(
+                    slug="ep-remote-btrfs",
+                    volume="stage-remote-btrfs-snapshots",
+                    btrfs_snapshots=btrfs_dst,
+                ),
+                "ep-remote-btrfs-bare": SyncEndpoint(
+                    slug="ep-remote-btrfs-bare",
+                    volume="stage-remote-btrfs-bare",
+                ),
+                "ep-remote-hl": SyncEndpoint(
+                    slug="ep-remote-hl",
+                    volume="stage-remote-hl-snapshots",
+                    hard_link_snapshots=hl_dst,
+                ),
+            }
+        )
         syncs.update(
             {
                 # local→remote (bastion), bare dest
                 "step-2": SyncConfig(
                     slug="step-2",
-                    source=SyncEndpoint(
-                        volume="stage-local-hl-snapshots",
-                        hard_link_snapshots=hl_src,
-                    ),
-                    destination=SyncEndpoint(
-                        volume="stage-remote-bare",
-                    ),
+                    source="ep-stage-local-hl",
+                    destination="ep-remote-bare",
                     rsync_options=rsync_opts,
                     filters=SEED_EXCLUDE_FILTERS,
                 ),
                 # remote→remote (bastion), btrfs dest
                 "step-3": SyncConfig(
                     slug="step-3",
-                    source=SyncEndpoint(
-                        volume="stage-remote-bare",
-                    ),
-                    destination=SyncEndpoint(
-                        volume=("stage-remote-btrfs-snapshots"),
-                        btrfs_snapshots=btrfs_dst,
-                    ),
+                    source="ep-remote-bare",
+                    destination="ep-remote-btrfs",
                     rsync_options=rsync_opts,
                     filters=SEED_EXCLUDE_FILTERS,
                 ),
                 # remote→remote (bastion), bare on btrfs
                 "step-4": SyncConfig(
                     slug="step-4",
-                    source=SyncEndpoint(
-                        volume=("stage-remote-btrfs-snapshots"),
-                        btrfs_snapshots=btrfs_src,
-                    ),
-                    destination=SyncEndpoint(
-                        volume="stage-remote-btrfs-bare",
-                    ),
+                    source="ep-remote-btrfs",
+                    destination="ep-remote-btrfs-bare",
                     rsync_options=rsync_opts,
                     filters=SEED_EXCLUDE_FILTERS,
                 ),
                 # remote→remote (bastion), HL dest
                 "step-5": SyncConfig(
                     slug="step-5",
-                    source=SyncEndpoint(
-                        volume="stage-remote-btrfs-bare",
-                    ),
-                    destination=SyncEndpoint(
-                        volume=("stage-remote-hl-snapshots"),
-                        hard_link_snapshots=hl_dst,
-                    ),
+                    source="ep-remote-btrfs-bare",
+                    destination="ep-remote-hl",
                     rsync_options=rsync_opts,
                     filters=SEED_EXCLUDE_FILTERS,
                 ),
                 # remote (bastion)→local, bare dest
                 "step-6": SyncConfig(
                     slug="step-6",
-                    source=SyncEndpoint(
-                        volume=("stage-remote-hl-snapshots"),
-                        hard_link_snapshots=hl_src,
-                    ),
-                    destination=SyncEndpoint(
-                        volume="dst-local-bare",
-                    ),
+                    source="ep-remote-hl",
+                    destination="ep-dst-local",
                     rsync_options=rsync_opts,
                     filters=SEED_EXCLUDE_FILTERS,
                 ),
@@ -522,13 +529,8 @@ def seed(
         # Local-only: step-2 goes directly to dst
         syncs["step-2"] = SyncConfig(
             slug="step-2",
-            source=SyncEndpoint(
-                volume="stage-local-hl-snapshots",
-                hard_link_snapshots=hl_src,
-            ),
-            destination=SyncEndpoint(
-                volume="dst-local-bare",
-            ),
+            source="ep-stage-local-hl",
+            destination="ep-dst-local",
             rsync_options=rsync_opts,
             filters=SEED_EXCLUDE_FILTERS,
         )
@@ -536,6 +538,7 @@ def seed(
     config = Config(
         ssh_endpoints=ssh_endpoints,
         volumes=volumes,
+        sync_endpoints=sync_endpoints,
         syncs=syncs,
     )
 

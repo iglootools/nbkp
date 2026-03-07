@@ -222,17 +222,36 @@ volumes:
       - nas-public
     path: /volume1/backups
 
+sync-endpoints:
+  laptop-photos:
+    volume: laptop
+    subdir: photos
+
+  laptop-documents:
+    volume: laptop
+    subdir: documents
+
+  nas-photos:
+    volume: nas-backups
+    subdir: photos
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  nas-documents:
+    volume: nas-backups
+    subdir: documents
+
+  usb-documents:
+    volume: usb-drive
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 10
+
 syncs:
   photos-to-nas:
-    source:
-      volume: laptop
-      subdir: photos
-    destination:
-      volume: nas-backups
-      subdir: photos
-      hard-link-snapshots:
-        enabled: true
-        max-snapshots: 30
+    source: laptop-photos
+    destination: nas-photos
     filters:
       - include: "*.jpg"
       - include: "*.png"
@@ -242,24 +261,14 @@ syncs:
       - exclude: ".thumbs/"
 
   documents-to-nas:
-    source:
-      volume: laptop
-      subdir: documents
-    destination:
-      volume: nas-backups
-      subdir: documents
+    source: laptop-documents
+    destination: nas-documents
     rsync-options:
       compress: true
 
   documents-to-usb:
-    source:
-      volume: laptop
-      subdir: documents
-    destination:
-      volume: usb-drive
-      hard-link-snapshots:
-        enabled: true
-        max-snapshots: 10
+    source: laptop-documents
+    destination: usb-documents
 ```
 
 Usage:
@@ -341,65 +350,75 @@ volumes:
     ssh-endpoint: storage
     path: /srv/backups/hl
 
+sync-endpoints:
+  ep-src:
+    volume: src-local
+
+  # Hard-link snapshots on local stage — used as destination for step-1
+  # and as source for step-2 (reads from latest/ snapshot)
+  ep-stage-local:
+    volume: stage-local
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 7
+
+  ep-remote-bare:
+    volume: stage-remote-bare
+
+  # Btrfs snapshots on remote — used as destination for step-3
+  # and as source for step-4 (reads from latest/ snapshot)
+  ep-remote-btrfs:
+    volume: stage-remote-btrfs
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 14
+
+  ep-remote-btrfs-bare:
+    volume: stage-remote-btrfs-bare
+
+  # Hard-link snapshots on remote — used as destination for step-5
+  # and as source for step-6 (reads from latest/ snapshot)
+  ep-remote-hl:
+    volume: stage-remote-hl
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 5
+
+  ep-dst:
+    volume: dst-local
+
 syncs:
   # Step 1: local → local with hard-link snapshots
   step-1:
-    source:
-      volume: src-local
-    destination:
-      volume: stage-local
-      hard-link-snapshots:
-        enabled: true
-        max-snapshots: 7
+    source: ep-src
+    destination: ep-stage-local
 
   # Step 2: local → remote (through bastion), bare
   step-2:
-    source:
-      volume: stage-local
-      hard-link-snapshots:       # read from latest/ snapshot
-        enabled: true
-    destination:
-      volume: stage-remote-bare
+    source: ep-stage-local        # reads from latest/ snapshot
+    destination: ep-remote-bare
     rsync-options:
       compress: true
 
   # Step 3: remote → remote (same server), btrfs snapshots
   step-3:
-    source:
-      volume: stage-remote-bare
-    destination:
-      volume: stage-remote-btrfs
-      btrfs-snapshots:
-        enabled: true
-        max-snapshots: 14
+    source: ep-remote-bare
+    destination: ep-remote-btrfs
 
   # Step 4: remote → remote (same server), bare on btrfs
   step-4:
-    source:
-      volume: stage-remote-btrfs
-      btrfs-snapshots:           # read from latest/ snapshot
-        enabled: true
-    destination:
-      volume: stage-remote-btrfs-bare
+    source: ep-remote-btrfs       # reads from latest/ snapshot
+    destination: ep-remote-btrfs-bare
 
   # Step 5: remote → remote (same server), hard-link snapshots
   step-5:
-    source:
-      volume: stage-remote-btrfs-bare
-    destination:
-      volume: stage-remote-hl
-      hard-link-snapshots:
-        enabled: true
-        max-snapshots: 5
+    source: ep-remote-btrfs-bare
+    destination: ep-remote-hl
 
   # Step 6: remote → local, bare
   step-6:
-    source:
-      volume: stage-remote-hl
-      hard-link-snapshots:       # read from latest/ snapshot
-        enabled: true
-    destination:
-      volume: dst-local
+    source: ep-remote-hl          # reads from latest/ snapshot
+    destination: ep-dst
     rsync-options:
       compress: true
 ```
@@ -443,6 +462,9 @@ ssh-endpoints:
 
 volumes:
   <slug>: <LocalVolume | RemoteVolume>
+
+sync-endpoints:
+  <slug>: <SyncEndpoint>
 
 syncs:
   <slug>: <SyncConfig>
@@ -508,20 +530,7 @@ Fields not explicitly set (`port`, `user`, `key`) are automatically filled from 
 
 ---
 
-### `syncs.<slug>` — Sync Config
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `source` | object | **required** | Source endpoint |
-| `destination` | object | **required** | Destination endpoint |
-| `enabled` | boolean | `true` | Whether this sync is active |
-| `rsync-options` | object | see below | Rsync flag configuration |
-| `filters` | list | `[]` | Rsync filter rules (see below) |
-| `filter-file` | string | `null` | Path to external rsync filter file |
-
----
-
-### Sync Endpoint (source / destination)
+### `sync-endpoints.<slug>` — Sync Endpoint
 
 | Field | Type | Default | Description |
 |---|---|---|---|
@@ -530,9 +539,24 @@ Fields not explicitly set (`port`, `user`, `key`) are automatically filled from 
 | `btrfs-snapshots` | object | disabled | Btrfs snapshot config |
 | `hard-link-snapshots` | object | disabled | Hard-link snapshot config |
 
-Only one of `btrfs-snapshots` and `hard-link-snapshots` can be enabled per endpoint.
+Only one of `btrfs-snapshots` and `hard-link-snapshots` can be enabled per endpoint. Each (volume, subdir) pair must be unique across all sync endpoints.
 
 When used as a **source**, enabling snapshots tells rsync to read from the `latest/` directory instead of the volume root. When used as a **destination**, enabling snapshots activates snapshot creation after each successful sync.
+
+---
+
+### `syncs.<slug>` — Sync Config
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `source` | string | **required** | Source sync endpoint slug |
+| `destination` | string | **required** | Destination sync endpoint slug |
+| `enabled` | boolean | `true` | Whether this sync is active |
+| `rsync-options` | object | see below | Rsync flag configuration |
+| `filters` | list | `[]` | Rsync filter rules (see below) |
+| `filter-file` | string | `null` | Path to external rsync filter file |
+
+Each destination endpoint can only be used by one sync (no two syncs may share the same destination).
 
 ---
 

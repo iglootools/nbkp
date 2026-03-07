@@ -421,7 +421,7 @@ def _check_btrfs_mount_option(
 
 def _check_btrfs_dest(
     dst_vol: Volume,
-    sync: SyncConfig,
+    dst_subdir: str | None,
     has_findmnt: bool,
     reasons: list[SyncReason],
     resolved_endpoints: ResolvedEndpoints,
@@ -431,7 +431,7 @@ def _check_btrfs_dest(
         reasons.append(SyncReason.DESTINATION_NOT_BTRFS)
     elif not _check_btrfs_subvolume(
         dst_vol,
-        sync.destination.subdir,
+        dst_subdir,
         resolved_endpoints,
     ):
         reasons.append(SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME)
@@ -442,27 +442,29 @@ def _check_btrfs_dest(
             resolved_endpoints,
         ):
             reasons.append(SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM)
-        ep = _resolve_endpoint(dst_vol, sync.destination.subdir)
+        ep = _resolve_endpoint(dst_vol, dst_subdir)
         if not _check_directory_exists(
             dst_vol, f"{ep}/{STAGING_DIR}", resolved_endpoints
         ):
             reasons.append(SyncReason.DESTINATION_TMP_NOT_FOUND)
         if not _check_directory_exists(
-            dst_vol, f"{ep}/{SNAPSHOTS_DIR}", resolved_endpoints
+            dst_vol,
+            f"{ep}/{SNAPSHOTS_DIR}",
+            resolved_endpoints,
         ):
             reasons.append(SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND)
 
 
 def _check_hard_link_dest(
     dst_vol: Volume,
-    sync: SyncConfig,
+    dst_subdir: str | None,
     reasons: list[SyncReason],
     resolved_endpoints: ResolvedEndpoints,
 ) -> None:
     """Run hard-link snapshot filesystem and directory checks."""
     if not _check_hardlink_support(dst_vol, resolved_endpoints):
         reasons.append(SyncReason.DESTINATION_NO_HARDLINK_SUPPORT)
-    ep = _resolve_endpoint(dst_vol, sync.destination.subdir)
+    ep = _resolve_endpoint(dst_vol, dst_subdir)
     if not _check_directory_exists(
         dst_vol, f"{ep}/{SNAPSHOTS_DIR}", resolved_endpoints
     ):
@@ -475,14 +477,11 @@ def _has_upstream_sync(
 ) -> bool:
     """Check if an enabled upstream sync writes to this sync's source.
 
-    An upstream sync is one whose destination endpoint matches this
-    sync's source endpoint (same volume and subdir).
+    An upstream sync is one whose destination endpoint slug
+    matches this sync's source endpoint slug.
     """
-    from .sync.ordering import endpoint_key
-
-    src_key = endpoint_key(sync.source)
     return any(
-        endpoint_key(other.destination) == src_key
+        other.destination == sync.source
         and other.slug != sync.slug
         and other.enabled
         for other in all_syncs.values()
@@ -533,11 +532,13 @@ def check_sync(
     """Check if a sync is active, accumulating all failure reasons."""
     re = resolved_endpoints or {}
     syncs = all_syncs if all_syncs is not None else config.syncs
-    src_vol_name = sync.source.volume
-    dst_vol_name = sync.destination.volume
+    src_cfg = config.source_endpoint(sync)
+    dst_cfg = config.destination_endpoint(sync)
+    src_vol = config.volumes[src_cfg.volume]
+    dst_vol = config.volumes[dst_cfg.volume]
 
-    src_status = volume_statuses[src_vol_name]
-    dst_status = volume_statuses[dst_vol_name]
+    src_status = volume_statuses[src_cfg.volume]
+    dst_status = volume_statuses[dst_cfg.volume]
 
     if not sync.enabled:
         return SyncStatus(
@@ -550,9 +551,6 @@ def check_sync(
     else:
         reasons: list[SyncReason] = []
 
-        src_vol = config.volumes[src_vol_name]
-        dst_vol = config.volumes[dst_vol_name]
-
         # Volume availability
         if not src_status.active:
             reasons.append(SyncReason.SOURCE_UNAVAILABLE)
@@ -564,7 +562,7 @@ def check_sync(
         if src_status.active:
             if not _check_endpoint_sentinel(
                 src_vol,
-                sync.source.subdir,
+                src_cfg.subdir,
                 ".nbkp-src",
                 re,
             ):
@@ -573,19 +571,19 @@ def check_sync(
                 reasons.append(SyncReason.RSYNC_NOT_FOUND_ON_SOURCE)
             elif not _check_rsync_version(src_vol, re):
                 reasons.append(SyncReason.RSYNC_TOO_OLD_ON_SOURCE)
-            if sync.source.snapshot_mode != "none":
-                src_ep = _resolve_endpoint(src_vol, sync.source.subdir)
+            if src_cfg.snapshot_mode != "none":
+                src_ep = _resolve_endpoint(src_vol, src_cfg.subdir)
                 _check_source_latest(sync, src_vol, src_ep, syncs, reasons, re)
                 if not _check_directory_exists(
                     src_vol, f"{src_ep}/{SNAPSHOTS_DIR}", re
                 ):
                     reasons.append(SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND)
 
-        # Destination checks (only if destination volume is active)
+        # Destination checks (only if dest volume is active)
         if dst_status.active:
             if not _check_endpoint_sentinel(
                 dst_vol,
-                sync.destination.subdir,
+                dst_cfg.subdir,
                 ".nbkp-dst",
                 re,
             ):
@@ -594,7 +592,7 @@ def check_sync(
                 reasons.append(SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION)
             elif not _check_rsync_version(dst_vol, re):
                 reasons.append(SyncReason.RSYNC_TOO_OLD_ON_DESTINATION)
-            if sync.destination.btrfs_snapshots.enabled:
+            if dst_cfg.btrfs_snapshots.enabled:
                 if not _check_command_available(dst_vol, "btrfs", re):
                     reasons.append(SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION)
                 else:
@@ -615,21 +613,26 @@ def check_sync(
                     if has_stat:
                         _check_btrfs_dest(
                             dst_vol,
-                            sync,
+                            dst_cfg.subdir,
                             has_findmnt,
                             reasons,
                             re,
                         )
-            elif sync.destination.hard_link_snapshots.enabled:
+            elif dst_cfg.hard_link_snapshots.enabled:
                 has_stat = _check_command_available(dst_vol, "stat", re)
                 if not has_stat:
                     reasons.append(SyncReason.STAT_NOT_FOUND_ON_DESTINATION)
                 else:
-                    _check_hard_link_dest(dst_vol, sync, reasons, re)
+                    _check_hard_link_dest(
+                        dst_vol,
+                        dst_cfg.subdir,
+                        reasons,
+                        re,
+                    )
 
             # Destination latest symlink check (snapshot modes)
-            if sync.destination.snapshot_mode != "none":
-                dst_ep = _resolve_endpoint(dst_vol, sync.destination.subdir)
+            if dst_cfg.snapshot_mode != "none":
+                dst_ep = _resolve_endpoint(dst_vol, dst_cfg.subdir)
                 _check_latest_symlink(
                     dst_vol,
                     dst_ep,
@@ -667,8 +670,8 @@ def check_all_syncs(
     )
 
     needed_volumes: set[str] = (
-        {sc.source.volume for sc in syncs.values()}
-        | {sc.destination.volume for sc in syncs.values()}
+        {config.source_endpoint(sc).volume for sc in syncs.values()}
+        | {config.destination_endpoint(sc).volume for sc in syncs.values()}
         if only_syncs
         else set(config.volumes.keys())
     )

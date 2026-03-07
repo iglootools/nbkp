@@ -10,7 +10,6 @@ import pytest
 
 from nbkp.config import (
     Config,
-    DestinationSyncEndpoint,
     HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
@@ -37,16 +36,21 @@ def _local_config() -> tuple[SyncConfig, Config]:
     dst = LocalVolume(slug="dst", path="/dst")
     sync = SyncConfig(
         slug="s1",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(
-            volume="dst",
-            hard_link_snapshots=HardLinkSnapshotConfig(
-                enabled=True, max_snapshots=5
-            ),
-        ),
+        source="ep-src",
+        destination="ep-dst",
     )
     config = Config(
         volumes={"src": src, "dst": dst},
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                hard_link_snapshots=HardLinkSnapshotConfig(
+                    enabled=True, max_snapshots=5
+                ),
+            ),
+        },
         syncs={"s1": sync},
     )
     return sync, config
@@ -58,17 +62,22 @@ def _remote_config() -> tuple[SyncConfig, Config, dict[str, ResolvedEndpoint]]:
     dst = RemoteVolume(slug="dst", ssh_endpoint="nas", path="/backup")
     sync = SyncConfig(
         slug="s1",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(
-            volume="dst",
-            hard_link_snapshots=HardLinkSnapshotConfig(
-                enabled=True, max_snapshots=3
-            ),
-        ),
+        source="ep-src",
+        destination="ep-dst",
     )
     config = Config(
         ssh_endpoints={"nas": server},
         volumes={"src": src, "dst": dst},
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                hard_link_snapshots=HardLinkSnapshotConfig(
+                    enabled=True, max_snapshots=3
+                ),
+            ),
+        },
         syncs={"s1": sync},
     )
     re = {"dst": ResolvedEndpoint(server=server)}
@@ -117,14 +126,19 @@ class TestReadLatestSymlink:
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-            ),
+            source="ep-src",
+            destination="ep-dst",
         )
         config = Config(
             volumes={"src": src, "dst": dst},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="dst",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         latest = tmp_path / "latest"
@@ -138,14 +152,19 @@ class TestReadLatestSymlink:
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-            ),
+            source="ep-src",
+            destination="ep-dst",
         )
         config = Config(
             volumes={"src": src, "dst": dst},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="dst",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
 
@@ -177,14 +196,19 @@ class TestReadLatestSymlink:
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-            ),
+            source="ep-src",
+            destination="ep-dst",
         )
         config = Config(
             volumes={"src": src, "dst": dst},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="dst",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         latest = tmp_path / "latest"
@@ -212,14 +236,19 @@ class TestUpdateLatestSymlink:
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-            ),
+            source="ep-src",
+            destination="ep-dst",
         )
         config = Config(
             volumes={"src": src, "dst": dst},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="dst",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
 
@@ -249,14 +278,19 @@ class TestCleanupOrphanedSnapshots:
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-            ),
+            source="ep-src",
+            destination="ep-dst",
         )
         config = Config(
             volumes={"src": src, "dst": dst},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="dst",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
 
@@ -284,14 +318,19 @@ class TestCleanupOrphanedSnapshots:
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-            ),
+            source="ep-src",
+            destination="ep-dst",
         )
         config = Config(
             volumes={"src": src, "dst": dst},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="dst",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
         latest = tmp_path / "latest"
@@ -313,14 +352,19 @@ class TestCleanupOrphanedSnapshots:
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-            ),
+            source="ep-src",
+            destination="ep-dst",
         )
         config = Config(
             volumes={"src": src, "dst": dst},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="dst",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
 
@@ -359,16 +403,21 @@ class TestPruneSnapshots:
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                hard_link_snapshots=HardLinkSnapshotConfig(
-                    enabled=True, max_snapshots=2
-                ),
-            ),
+            source="ep-src",
+            destination="ep-dst",
         )
         config = Config(
             volumes={"src": src, "dst": dst},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="dst",
+                    hard_link_snapshots=HardLinkSnapshotConfig(
+                        enabled=True, max_snapshots=2
+                    ),
+                ),
+            },
             syncs={"s1": sync},
         )
 
@@ -398,16 +447,21 @@ class TestPruneSnapshots:
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                hard_link_snapshots=HardLinkSnapshotConfig(
-                    enabled=True, max_snapshots=1
-                ),
-            ),
+            source="ep-src",
+            destination="ep-dst",
         )
         config = Config(
             volumes={"src": src, "dst": dst},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="dst",
+                    hard_link_snapshots=HardLinkSnapshotConfig(
+                        enabled=True, max_snapshots=1
+                    ),
+                ),
+            },
             syncs={"s1": sync},
         )
 
@@ -435,14 +489,19 @@ class TestPruneSnapshots:
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-            ),
+            source="ep-src",
+            destination="ep-dst",
         )
         config = Config(
             volumes={"src": src, "dst": dst},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="dst",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
 
@@ -471,14 +530,19 @@ class TestPruneSnapshots:
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
             slug="s1",
-            source=SyncEndpoint(volume="src"),
-            destination=DestinationSyncEndpoint(
-                volume="dst",
-                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-            ),
+            source="ep-src",
+            destination="ep-dst",
         )
         config = Config(
             volumes={"src": src, "dst": dst},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="dst",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+            },
             syncs={"s1": sync},
         )
 

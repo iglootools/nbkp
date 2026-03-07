@@ -32,7 +32,8 @@ def read_latest_symlink(
     dest_path = resolve_dest_path(sync, config)
     latest_path = f"{dest_path}/{LATEST_LINK}"
 
-    dst_vol = config.volumes[sync.destination.volume]
+    dst = config.destination_endpoint(sync)
+    dst_vol = config.volumes[dst.volume]
     match dst_vol:
         case LocalVolume():
             p = Path(latest_path)
@@ -73,7 +74,8 @@ def update_latest_symlink(
     latest_path = f"{dest_path}/{LATEST_LINK}"
     target = f"{SNAPSHOTS_DIR}/{snapshot_name}"
 
-    dst_vol = config.volumes[sync.destination.volume]
+    dst = config.destination_endpoint(sync)
+    dst_vol = config.volumes[dst.volume]
     match dst_vol:
         case LocalVolume():
             p = Path(latest_path)

@@ -11,7 +11,7 @@ nbkp uses rsync under the hood to synchronize files between volumes. Syncs can f
 
 - **Rsync-based backups** with configurable flags, filters, and compression
 - **All direction combinations**: local-to-local, local-to-remote, remote-to-local, remote-to-remote (same server)
-- **Sync dependencies**: when one sync's destination feeds another's source, syncs are automatically ordered topologically
+- **Sync dependencies**: when one sync's destination endpoint is another's source endpoint, syncs are automatically ordered topologically
 - **Failure propagation**: a failed sync cancels all downstream dependents; independent syncs continue normally
 - **Dry-run mode**: preview what would happen without making changes
 - **Real-time progress**: four display modes (none, overall, per-file, full)
@@ -68,12 +68,13 @@ Before running any sync, nbkp validates that all required infrastructure is in p
 
 ## Configuration
 
-Backup configuration is expressed in a single YAML file that defines SSH endpoints, volumes, and syncs. The config is validated at load time with detailed error messages.
+Backup configuration is expressed in a single YAML file that defines SSH endpoints, volumes, sync endpoints, and syncs. The config is validated at load time with detailed error messages.
 
 - **YAML config** with standard search order: explicit path, `$XDG_CONFIG_HOME/nbkp/config.yaml`, `/etc/nbkp/config.yaml`
+- **Reusable sync endpoints**: define (volume, subdir, snapshot config) once, reference by slug from syncs — prevents duplication and conflicting configurations
 - **Pydantic validation**: structured errors with context for invalid configs
 - **Config display**: `config show` renders parsed config as tables or JSON
-- **Cross-reference validation**: circular `extends` and `proxy-jump` chains detected at load time
+- **Cross-reference validation**: circular `extends` and `proxy-jump` chains, unique (volume, subdir) per endpoint, unique destination per sync — all detected at load time
 
 ## Shell Script Generation (`sh`)
 

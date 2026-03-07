@@ -22,7 +22,6 @@ import pytest
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
-    DestinationSyncEndpoint,
     LocalVolume,
     SyncConfig,
     SyncEndpoint,
@@ -56,18 +55,25 @@ def _make_btrfs_config(
     """Build local btrfs config."""
     src_vol = LocalVolume(slug="src", path=src_path)
     dst_vol = LocalVolume(slug="dst", path=dst_path)
-    sync = SyncConfig(
-        slug="test-sync",
-        source=SyncEndpoint(volume="src"),
-        destination=DestinationSyncEndpoint(
-            volume="dst",
-            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-        ),
-    )
     config = Config(
         volumes={"src": src_vol, "dst": dst_vol},
-        syncs={"test-sync": sync},
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+            ),
+        },
+        syncs={
+            "test-sync": SyncConfig(
+                slug="test-sync",
+                source="ep-src",
+                destination="ep-dst",
+            ),
+        },
     )
+    sync = config.syncs["test-sync"]
     return sync, config
 
 
