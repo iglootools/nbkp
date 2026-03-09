@@ -94,6 +94,13 @@ class SyncStatus(BaseModel):
     source_status: VolumeStatus
     destination_status: VolumeStatus
     reasons: list[SyncReason]
+    destination_latest_target: str | None = None
+    """Snapshot name from the destination ``latest`` symlink.
+
+    ``None`` when the symlink is absent, invalid, or points to
+    ``/dev/null`` (no snapshot yet).  Otherwise, the snapshot
+    name only (e.g. ``2026-03-06T14:30:00.000Z``).
+    """
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -346,30 +353,39 @@ def _check_latest_symlink(
     not_found_reason: SyncReason,
     invalid_reason: SyncReason,
     resolved_endpoints: ResolvedEndpoints,
-) -> None:
+) -> str | None:
     """Validate the latest symlink at an endpoint.
 
     Checks that the symlink exists and points to either ``/dev/null``
     (valid "no snapshot yet" marker) or an existing relative snapshot
     directory.
+
+    Returns the raw symlink target when valid and not ``/dev/null``,
+    or ``None`` otherwise.
     """
     latest_path = f"{endpoint_path}/{LATEST_LINK}"
     if not _check_symlink_exists(volume, latest_path, resolved_endpoints):
         reasons.append(not_found_reason)
-        return
+        return None
 
-    target = _read_symlink_target(volume, latest_path, resolved_endpoints)
-    if target is None:
+    raw_target = _read_symlink_target(volume, latest_path, resolved_endpoints)
+    if raw_target is None:
         reasons.append(not_found_reason)
-        return
+        return None
 
+    target = str(raw_target)
     if target == DEVNULL_TARGET:
-        return  # Valid "no snapshot yet" marker
+        return None  # Valid "no snapshot yet" marker
 
     # Resolve relative target against endpoint path
     resolved = f"{endpoint_path}/{target}"
     if not _check_directory_exists(volume, resolved, resolved_endpoints):
         reasons.append(invalid_reason)
+        return None
+
+    # Extract snapshot name from relative target
+    # e.g. "snapshots/2026-03-06T14:30:00.000Z" -> "2026-03-06T14:30:00.000Z"
+    return target.rsplit("/", 1)[-1]
 
 
 def _check_btrfs_subvolume(
@@ -550,6 +566,7 @@ def check_sync(
         )
     else:
         reasons: list[SyncReason] = []
+        dst_latest_target: str | None = None
 
         # Volume availability
         if not src_status.active:
@@ -633,7 +650,7 @@ def check_sync(
             # Destination latest symlink check (snapshot modes)
             if dst_cfg.snapshot_mode != "none":
                 dst_ep = _resolve_endpoint(dst_vol, dst_cfg.subdir)
-                _check_latest_symlink(
+                dst_latest_target = _check_latest_symlink(
                     dst_vol,
                     dst_ep,
                     reasons,
@@ -648,6 +665,7 @@ def check_sync(
             source_status=src_status,
             destination_status=dst_status,
             reasons=reasons,
+            destination_latest_target=dst_latest_target,
         )
 
 

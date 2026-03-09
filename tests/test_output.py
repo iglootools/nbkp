@@ -238,6 +238,7 @@ class TestCheckRsyncCommandDisplay:
         )
         output = _render_sections(sections)
         assert "/mnt/dst/staging/" in output
+        assert "--link-dest" not in output
 
     def test_hard_link_shows_snapshots_timestamp_suffix(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/src")
@@ -275,6 +276,48 @@ class TestCheckRsyncCommandDisplay:
         )
         output = _render_sections(sections)
         assert "/mnt/dst/snapshots/<timestamp>/" in output
+        # No previous snapshot: --link-dest is omitted
+        assert "--link-dest" not in output
+
+    def test_hard_link_shows_link_dest_when_previous_exists(self) -> None:
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        ep_src = SyncEndpoint(slug="ep-src", volume="src")
+        ep_dst = SyncEndpoint(
+            slug="ep-dst",
+            volume="dst",
+            hard_link_snapshots=HardLinkSnapshotConfig(
+                enabled=True, max_snapshots=10
+            ),
+        )
+        sync = SyncConfig(
+            slug="hl-sync",
+            source="ep-src",
+            destination="ep-dst",
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
+            syncs={"hl-sync": sync},
+        )
+        vol_s = _make_vol_statuses(config)
+        sync_s = {
+            "hl-sync": SyncStatus(
+                slug="hl-sync",
+                config=sync,
+                source_status=vol_s["src"],
+                destination_status=vol_s["dst"],
+                reasons=[],
+                destination_latest_target="2026-03-06T14:30:00.000Z",
+            )
+        }
+        sections = build_check_sections(
+            vol_s, sync_s, config, resolved_endpoints={}
+        )
+        output = _render_sections(sections)
+        assert "/mnt/dst/snapshots/<timestamp>/" in output
+        assert "--link-dest" in output
+        assert "../2026-03-06T14:30:00.000Z" in output
 
     def test_plain_sync_shows_bare_destination(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/src")

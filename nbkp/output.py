@@ -181,16 +181,20 @@ def build_check_sections(
         for ss in active_syncs:
             dst_ep = config.destination_endpoint(ss.config)
             dest_suffix: str | None = None
+            link_dest: str | None = None
             match dst_ep.snapshot_mode:
                 case "btrfs":
                     dest_suffix = STAGING_DIR
                 case "hard-link":
                     dest_suffix = f"{SNAPSHOTS_DIR}/<timestamp>"
+                    if ss.destination_latest_target:
+                        link_dest = f"../{ss.destination_latest_target}"
             cmd = build_rsync_command(
                 ss.config,
                 config,
                 resolved_endpoints=resolved_endpoints,
                 dest_suffix=dest_suffix,
+                link_dest=link_dest,
             )
             cmd_table.add_row(ss.slug, shlex.join(cmd))
 
@@ -219,7 +223,7 @@ def print_human_check(
         console.print(
             Panel(
                 Group(*sections),
-                title="[bold]Check Results[/bold]",
+                title="[bold]Preflight Checks[/bold]",
                 border_style="cyan",
                 padding=(0, 1),
             )

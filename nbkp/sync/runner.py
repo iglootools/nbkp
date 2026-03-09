@@ -20,7 +20,6 @@ from .hardlinks import (
     prune_snapshots as hl_prune_snapshots,
 )
 from .symlink import update_latest_symlink
-from .btrfs import get_latest_snapshot
 from ..config import Config, ResolvedEndpoints
 from ..preflight import SyncStatus
 from .rsync import ProgressMode, run_rsync
@@ -171,6 +170,7 @@ def _run_single_sync(
             return _run_hard_link_sync(
                 slug,
                 sync,
+                status,
                 config,
                 dry_run,
                 progress,
@@ -358,6 +358,7 @@ def _run_btrfs_sync(
 def _run_hard_link_sync(
     slug: str,
     sync: object,
+    status: SyncStatus,
     config: Config,
     dry_run: bool,
     progress: ProgressMode | None,
@@ -382,10 +383,8 @@ def _run_hard_link_sync(
 
     # 2. Determine link-dest from latest complete snapshot
     link_dest: str | None = None
-    latest = get_latest_snapshot(sync, config, resolved_endpoints)
-    if latest:
-        prev_name = latest.rsplit("/", 1)[-1]
-        link_dest = f"../{prev_name}"
+    if status.destination_latest_target:
+        link_dest = f"../{status.destination_latest_target}"
 
     # 3. Create new snapshot directory
     try:
