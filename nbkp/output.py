@@ -179,10 +179,18 @@ def build_check_sections(
         cmd_table.add_column("Command")
 
         for ss in active_syncs:
+            dst_ep = config.destination_endpoint(ss.config)
+            dest_suffix: str | None = None
+            match dst_ep.snapshot_mode:
+                case "btrfs":
+                    dest_suffix = STAGING_DIR
+                case "hard-link":
+                    dest_suffix = f"{SNAPSHOTS_DIR}/<timestamp>"
             cmd = build_rsync_command(
                 ss.config,
                 config,
                 resolved_endpoints=resolved_endpoints,
+                dest_suffix=dest_suffix,
             )
             cmd_table.add_row(ss.slug, shlex.join(cmd))
 
