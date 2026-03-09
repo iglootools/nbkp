@@ -2,14 +2,17 @@ name: publish
 
 # Test this workflow by making similar changes to `publish-test.yml` and triggering it manually
 #
-# OIDC authentication does not work with shared workflows, 
+# OIDC authentication does not work with shared workflows,
 # so the code essentially needs to be duplicated in the `publish.yml` and `publish-test.yml` workflows.
 
 on:
   push:
     tags:
       - 'v*'
-  # Tags created by a workflow using GITHUB_TOKEN do not trigger other workflows
+  # Tags created by a workflow using GITHUB_TOKEN do not trigger other workflows,
+  # so we use workflow_run to publish after the release workflow creates a tag.
+  # However, workflow_run always checks out the default branch, not the tag.
+  # We resolve the latest tag explicitly in the checkout step below.
   workflow_run:
     workflows: ["release"]
     types:
@@ -26,27 +29,55 @@ env:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    # workflow_run fires on both success and failure; skip if the release workflow failed.
+    # For all other triggers (push, workflow_dispatch, repository_dispatch), always run.
+    if: >-
+      github.event.workflow_run.conclusion == 'success'
+      || github.event_name != 'workflow_run'
     timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.resolve-tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v6
         with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Resolve tag to publish
+        id: resolve-tag
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+          else
+            # workflow_run or workflow_dispatch on a branch: find the latest v* tag
+            tag=$(git tag --list 'v*' --sort=-version:refname | head -n1)
+          fi
+          echo "Publishing from tag: $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.resolve-tag.outputs.tag }}
           fetch-depth: 0
           fetch-tags: true
       - uses: jdx/mise-action@v3
       - run: mise run ci-build
   pypi-publish:
     name: Upload release to PyPI
+    needs: ci
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      # cosmetic URL displayed in the GitHub UI for the environment, 
-      # not to be confused with the repository-url used by the pypa/gh-action-pypi-publish action, 
+      # cosmetic URL displayed in the GitHub UI for the environment,
+      # not to be confused with the repository-url used by the pypa/gh-action-pypi-publish action,
       # which is the actual URL of the repository where the package is published
       url: https://pypi.org/p/nbkp/
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
     steps:
     - uses: actions/checkout@v6
+      with:
+        ref: ${{ needs.ci.outputs.tag }}
+        fetch-depth: 0
+        fetch-tags: true
     - uses: jdx/mise-action@v3
     - run: mise run ci-build
     - name: Publish package distributions to PyPI
