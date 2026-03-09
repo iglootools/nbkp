@@ -1,35 +1,69 @@
-[tool.poetry]
-name = "ssb"
-version = "0.1.0"
-description = "Simple Safe Backup - A secure backup solution"
-authors = ["Sami Dalouche <sami.dalouche@gmail.com>"]
+[project]
+name = "nbkp"
+description = "Nomad Backup: An rsync-based backup tool for nomadic setups where sources and destinations aren't always available — laptops on the move, removable drives, home servers behind changing networks. Sentinel files ensure backups only run when volumes are genuinely present, with optional btrfs or hard-link snapshots for point-in-time recovery."
 readme = "README.md"
-packages = [{include = "ssb"}]
+requires-python = ">=3.14"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Sami Dalouche", email = "sami.dalouche@gmail.com" }]
+dependencies = [
+  "fabric (>=3.0,<4.0)",
+  "jinja2 (>=3.0,<4.0)",
+  "pydantic (>=2.12.5,<3.0.0)",
+  "pyyaml (>=6.0,<7.0)",
+  "typer (>=0.24.0,<1.0.0)",
+]
+dynamic = ["version"]
 
-[tool.poetry.scripts]
-ssb = "ssb.cli:main"
+[tool.poetry]
+packages = [{ include = "nbkp" }]
+version = "0.0.0"
 
-[tool.poetry.dependencies]
-python = "^3.13"
-cryptography = "^46.0.0"
-typer = "^0.24.0"
+[tool.poetry.requires-plugins]
+poetry-dynamic-versioning = { version = ">=1.0.0,<2.0.0", extras = ["plugin"] }
+
+[tool.poetry-dynamic-versioning]
+enable = true
+
+[project.optional-dependencies]
+docker = ["docker (>=7.0,<8.0)"]
+
+[project.scripts]
+nbkp = "nbkp.cli:main"
+nbkp-demo = "nbkp.democli:main"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^9.0.0"
 black = "^26.0.0"
 flake8 = "^7.0.0"
 mypy = "^1.9.0"
+pytest = "^9.0.0"
+testcontainers = "^4.0.0"
+types-docker = "^7.1.0.20260109"
+types-paramiko = "^4.0.0.20250822"
+types-pyyaml = "^6.0"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+build-backend = "poetry_dynamic_versioning.backend"
 
 [tool.black]
 line-length = 79
-target-version = ['py313']
+target-version = ["py314"]
+
+[tool.pytest.ini_options]
+markers = [
+  "e2e_sync_local: End-to-end sync tests (no Docker)",
+  "e2e_sync_docker: End-to-end sync tests requiring Docker",
+  "integration_docker: Component integration tests requiring Docker",
+  "integration_fs: Component integration tests using local filesystem",
+]
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.14"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+
+[virtualenvs]
+# works jointly with mise to ensure the correct Python version is used in the virtualenv
+in-project = true

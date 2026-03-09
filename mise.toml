@@ -1,0 +1,169 @@
+[tools]
+python = "3.14.3"
+poetry = "2.3.2"
+github-cli = "2.87.2"
+"aqua:asciinema/asciinema" = "3.2.0"
+"aqua:asciinema/agg" = "1.7.0"
+
+[env]
+_.python.venv = { path = ".venv", create = true }
+
+[settings]
+lockfile = true
+
+[tasks.install]
+description = "Install dependencies"
+run = "poetry install"
+
+[tasks.test-unit]
+description = "Run unit tests (no Docker, no external dependencies)"
+run = "poetry run pytest tests/ --ignore=tests/e2e_sync_local/ --ignore=tests/e2e_sync_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -v"
+
+[tasks.test-e2e]
+description = "Run end-to-end sync tests (Docker + local)"
+run = [
+  { task = "test-e2e-local" },
+  { task = "test-e2e-docker" },
+]
+
+[tasks.test-e2e-local]
+description = "Run end-to-end sync tests (local)"
+run = "poetry run pytest tests/e2e_sync_local/ -v"
+
+[tasks.test-e2e-docker]
+description = "Run end-to-end sync tests (Docker only)"
+run = "poetry run pytest tests/e2e_sync_docker/ -v"
+
+[tasks.test-integration]
+description = "Run all integration tests (Docker + filesystem)"
+run = [
+  { task = "test-integration-fs" },
+  { task = "test-integration-docker" },
+
+  # Do not automatically. Does not work on CI and can cause issues on local machines due to the privileged Docker requirement.
+  # Useful for local debugging of btrfs-related code changes.
+  # { task = "test-integration-docker-btrfs" },
+]
+
+[tasks.test-integration-docker]
+description = "Run all Docker-based tests (e2e + integration)"
+run = "poetry run pytest tests/integration_docker/ -v"
+
+[tasks.test-integration-docker-btrfs]
+description = "Run local btrfs tests inside Docker (privileged)"
+run = """
+docker build -t nbkp-btrfs-test -f nbkp/testkit/dockerbuild/Dockerfile.btrfs-local-test .
+# The bind mount exposes the host's .venv.  Poetry inside the Linux
+# container sees a macOS venv, considers it broken, and recreates it
+# with Linux binaries — overwriting the host's .venv.  The anonymous
+# volume (-v /app/.venv) shadows the host directory so the container
+# can't touch it.
+docker run --rm --privileged \
+  -v $(pwd):/app -v /app/.venv -w /app nbkp-btrfs-test \
+  poetry run pytest tests/integration_docker/test_btrfs_local.py -v
+"""
+
+[tasks.test-integration-fs]
+description = "Run filesystem integration tests"
+run = "poetry run pytest tests/integration_fs/ -v"
+
+[tasks.test-all]
+description = "Run all tests"
+run = [
+  { task = "test-unit" },
+  { task = "test-integration" },
+  { task = "test-e2e" },
+]
+
+[tasks.format]
+description = "Format code with black"
+run = "poetry run black ."
+
+[tasks.lint]
+description = "Run flake8 linting"
+run = "poetry run flake8 nbkp/ tests/"
+
+[tasks.type-check]
+description = "Run mypy type checking"
+run = "poetry run mypy nbkp/"
+
+[tasks.check]
+description = "Run all checks (format, lint, type-check)"
+run = [
+  { task = "format" },
+  { task = "lint" },
+  { task = "type-check" },
+]
+
+[tasks.check-all]
+description = "Run all checks (format, lint, type-check, test)"
+run = [
+  { task = "check" },
+  { task = "test-all" },
+]
+
+[tasks.clean]
+description = "Clean up build artifacts"
+run = """
+rm -rf build/ dist/ *.egg-info/
+find . -type d -name __pycache__ -delete
+find . -type f -name "*.pyc" -delete
+"""
+
+[tasks.build]
+description = "Build the package"
+run = "poetry build"
+
+[tasks.publish]
+description = "Publish to PyPI (requires authentication)"
+run = "poetry publish"
+
+[tasks.shell]
+description = "Start a Poetry shell"
+run = "poetry shell"
+
+[tasks.demo]
+description = "Record the demo and upload to asciinema.org"
+run = [
+  { task = "demo-record" },
+  { task = "demo-upload" },
+]
+
+[tasks.demo-record]
+description = "Record the demo and convert to GIF"
+run = "./demo/record-demo.sh \"$(poetry version -s)\""
+
+[tasks.demo-upload]
+description = "Upload the recorded demo to asciinema.org"
+run = "asciinema upload demo/demo.cast"
+
+# Tasks used by CI workflows
+[tasks.ci-test]
+description = "Run all checks needed on CI"
+run = [
+  { task = "install" },
+  { task = "build" },
+  { task = "check-all" },
+]
+
+[tasks.ci-build]
+description = "Run all checks needed on CI"
+run = [
+  { task = "install" },
+  { task = "build" },
+]
+
+[tasks.ci-demo-record]
+description = "Record the demo on CI"
+run = [
+  { task = "install" },
+  { task = "demo-record" },
+]
+
+[tasks.ci-demo]
+description = "Record and upload the demo on CI"
+run = [
+  { task = "install" },
+  { task = "demo-record" },
+  { task = "demo-upload" },
+]

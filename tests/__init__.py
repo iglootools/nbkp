@@ -1,1 +1,1 @@
-# Tests package for ssbng
+# Tests package for nbkp

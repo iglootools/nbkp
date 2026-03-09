@@ -1,0 +1,31 @@
+name: release
+on:
+  # Manually trigger the workflow using
+  # gh workflow run release.yml # --ref <branch>
+  # gh run list --workflow release.yml
+  workflow_dispatch:
+  repository_dispatch:
+  # push:
+  #   branches:
+  #     - main
+  
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Fetches all history for all branches and tags (non-shallow clone)
+          # This is required for the mathieudutour/github-tag-action to determine the latest tag and bump it correctly
+          fetch-depth: 0
+      - name: Bump version and push tag
+        id: tag-version
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create a GitHub release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.tag-version.outputs.new_tag }}
+          name: ${{ steps.tag-version.outputs.new_tag }}
+          body: ${{ steps.tag-version.outputs.changelog }}

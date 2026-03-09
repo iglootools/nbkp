@@ -201,6 +201,10 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
+# Demo recordings
+demo/demo.cast
+demo/demo.gif
+
 # Marimo
 marimo/_static/
 marimo/_lsp/

@@ -1,0 +1,50 @@
+name: publish
+
+# Test this workflow by making similar changes to `publish-test.yml` and triggering it manually
+#
+# OIDC authentication does not work with shared workflows, 
+# so the code essentially needs to be duplicated in the `publish.yml` and `publish-test.yml` workflows.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Tags created by a workflow using GITHUB_TOKEN do not trigger other workflows
+  workflow_run:
+    workflows: ["release"]
+    types:
+      - completed
+  # The workflow is usually triggered when the release workflow completes, but it can also be re-triggered manually if needed using
+  # gh workflow run publish.yml --ref <tag>
+  # gh run list --workflow publish.yml
+  workflow_dispatch:
+  repository_dispatch:
+
+env:
+  MISE_EXPERIMENTAL: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v3
+      - run: mise run ci-build
+  pypi-publish:
+    name: Upload release to PyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      # cosmetic URL displayed in the GitHub UI for the environment, 
+      # not to be confused with the repository-url used by the pypa/gh-action-pypi-publish action, 
+      # which is the actual URL of the repository where the package is published
+      url: https://pypi.org/p/nbkp/
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+    steps:
+    - uses: actions/checkout@v6
+    - uses: jdx/mise-action@v3
+    - run: mise run ci-build
+    - name: Publish package distributions to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
