@@ -51,9 +51,11 @@ from .sync import (
     run_all_syncs,
 )
 
-_SENTINEL_ONLY_REASONS = {
+_INACTIVE_REASONS = {
     SyncReason.SOURCE_SENTINEL_NOT_FOUND,
     SyncReason.DESTINATION_SENTINEL_NOT_FOUND,
+    SyncReason.SOURCE_UNAVAILABLE,
+    SyncReason.DESTINATION_UNAVAILABLE,
 }
 
 app = typer.Typer(
@@ -730,8 +732,7 @@ def _check_and_display(
         has_errors = any(not s.active for s in sync_statuses.values())
     else:
         has_errors = any(
-            set(s.reasons) - _SENTINEL_ONLY_REASONS
-            for s in sync_statuses.values()
+            set(s.reasons) - _INACTIVE_REASONS for s in sync_statuses.values()
         )
 
     return vol_statuses, sync_statuses, has_errors

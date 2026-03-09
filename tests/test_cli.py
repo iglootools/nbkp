@@ -95,6 +95,21 @@ def _sample_sync_statuses(
     }
 
 
+def _sample_error_sync_statuses(
+    config: Config,
+    vol_statuses: dict[str, VolumeStatus],
+) -> dict[str, SyncStatus]:
+    return {
+        "photos-to-nas": SyncStatus(
+            slug="photos-to-nas",
+            config=config.syncs["photos-to-nas"],
+            source_status=vol_statuses["local-data"],
+            destination_status=vol_statuses["nas"],
+            reasons=[SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION],
+        ),
+    }
+
+
 def _sample_sentinel_only_sync_statuses(
     config: Config,
     vol_statuses: dict[str, VolumeStatus],
@@ -223,7 +238,8 @@ class TestCheckCommand:
         mock_checks.return_value = (vol_s, sync_s)
 
         result = runner.invoke(app, ["check", "--config", "/fake.yaml"])
-        assert result.exit_code == 1
+        # Unreachable is not an error in non-strict mode
+        assert result.exit_code == 0
         assert "local-data" in result.output
         assert "nas" in result.output
         assert "active" in result.output
@@ -265,7 +281,8 @@ class TestCheckCommand:
                 "json",
             ],
         )
-        assert result.exit_code == 1
+        # Unreachable is not an error in non-strict mode
+        assert result.exit_code == 0
         data = json.loads(result.output)
         assert "volumes" in data
         assert "syncs" in data
@@ -593,7 +610,7 @@ class TestRunCommand:
         config = _sample_config()
         mock_load.return_value = config
         vol_s = _sample_vol_statuses(config)
-        sync_s = _sample_sync_statuses(config, vol_s)
+        sync_s = _sample_error_sync_statuses(config, vol_s)
         mock_checks.return_value = (vol_s, sync_s)
 
         result = runner.invoke(app, ["run", "--config", "/fake.yaml"])
