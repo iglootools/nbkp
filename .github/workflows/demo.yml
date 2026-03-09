@@ -43,7 +43,7 @@ jobs:
           mkdir -p "$HOME/.local/state/asciinema"
           echo "$ASCIINEMA_INSTALL_ID" > "$HOME/.local/state/asciinema/install-id"
       - name: Upload demo
-        if: github.event_name != 'pull_request' && !(github.event_name == 'push' && github.ref == 'refs/heads/main')
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           ASCIINEMA_SERVER_URL: https://asciinema.org
         run: mise run demo-upload
