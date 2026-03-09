@@ -15,14 +15,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          # Fetches all history for all branches and tags (non-shallow clone)
-          # This is required for the mathieudutour/github-tag-action to determine the latest tag and bump it correctly
+          # Full history + tags required for mathieudutour/github-tag-action
+          # to find the previous tag and generate the changelog from commits
           fetch-depth: 0
+          fetch-tags: true
       - name: Bump version and push tag
         id: tag-version
         uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          fetch_all_tags: true
       - name: Create a GitHub release
         uses: ncipollo/release-action@v1
         with:

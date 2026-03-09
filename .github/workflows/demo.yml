@@ -27,6 +27,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - uses: jdx/mise-action@v3
       - name: Install pv (required by demo-magic)
         run: sudo apt-get update && sudo apt-get install -y pv
