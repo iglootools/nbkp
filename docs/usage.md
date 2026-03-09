@@ -208,7 +208,7 @@ ssh-endpoints:
 volumes:
   laptop:
     type: local
-    path: /home/user
+    path: "~"                     # quote ~ (YAML treats bare ~ as null)
 
   usb-drive:
     type: local
@@ -517,7 +517,9 @@ Fields not explicitly set (`port`, `user`, `key`) are automatically filled from 
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `type` | `"local"` | **required** | Volume type discriminator |
-| `path` | string | **required** | Absolute path to the volume |
+| `path` | string | **required** | Absolute path to the volume. `~` is expanded to the user's home directory. Trailing slashes are stripped. |
+
+> **YAML caveat:** Bare `~` is interpreted as `null` by YAML. Always quote it: `path: "~"` or `path: "~/subdir"`.
 
 ### `volumes.<slug>` — Remote Volume
 
@@ -526,7 +528,7 @@ Fields not explicitly set (`port`, `user`, `key`) are automatically filled from 
 | `type` | `"remote"` | **required** | Volume type discriminator |
 | `ssh-endpoint` | string | **required** | Primary SSH endpoint slug |
 | `ssh-endpoints` | list of strings | `null` | Candidate endpoints for auto-selection |
-| `path` | string | **required** | Absolute path on the remote host |
+| `path` | string | **required** | Absolute path on the remote host. Trailing slashes are stripped. `~` is not expanded (it refers to the remote user's home and is resolved by SSH/rsync). |
 
 ---
 
@@ -535,7 +537,7 @@ Fields not explicitly set (`port`, `user`, `key`) are automatically filled from 
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `volume` | string | **required** | Volume slug |
-| `subdir` | string | `null` | Subdirectory within the volume |
+| `subdir` | string | `null` | Subdirectory within the volume. Leading and trailing slashes are stripped. |
 | `btrfs-snapshots` | object | disabled | Btrfs snapshot config |
 | `hard-link-snapshots` | object | disabled | Hard-link snapshot config |
 

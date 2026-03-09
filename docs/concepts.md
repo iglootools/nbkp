@@ -13,6 +13,8 @@ A volume is a named, reusable reference to a filesystem location. Volumes come i
 
 Volumes are defined once and shared across multiple sync endpoints.
 
+**Path normalization** — All volume paths and sync endpoint subdirectories are normalized at config load time: trailing slashes are stripped so that `path: /mnt/data/` and `path: /mnt/data` are equivalent. For local volumes, `~` is expanded to the current user's home directory (e.g. `path: ~/data` becomes `/home/user/data`). Note that bare `~` must be quoted in YAML (`path: "~"`) because YAML interprets unquoted `~` as `null`. Remote volume paths are not subject to `~` expansion because the tilde refers to the remote user's home directory, and expansion is handled by SSH/rsync on the remote side.
+
 ### SSH Endpoints
 
 An SSH endpoint defines connection details for a remote host: hostname, port, user, key, proxy-jump configuration, and structured connection options. Endpoints are defined once and referenced by remote volumes.

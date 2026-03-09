@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from nbkp.config import (
@@ -18,6 +19,8 @@ from nbkp.config import (
     resolve_all_endpoints,
 )
 from nbkp.sync.rsync import ProgressMode, build_rsync_command, run_rsync
+
+_SSH_KEY = str(Path("~/.ssh/key").expanduser())
 
 
 class TestBuildRsyncCommandLocalToLocal:
@@ -150,7 +153,7 @@ class TestBuildRsyncCommandLocalToRemote:
             "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
-            " -p 5022 -i ~/.ssh/key",
+            f" -p 5022 -i {_SSH_KEY}",
             "/mnt/src/photos/",
             "backup@nas.local:/backup/photos/",
         ]
@@ -736,7 +739,7 @@ class TestBuildRsyncCommandProxyJump:
             "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
-            " -p 5022 -i ~/.ssh/key"
+            f" -p 5022 -i {_SSH_KEY}"
             f" -o {quoted}",
             "/mnt/src/",
             "backup@nas.local:/backup/",
@@ -876,7 +879,7 @@ class TestBuildRsyncCommandMultiHopProxy:
             "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
-            " -p 5022 -i ~/.ssh/key"
+            f" -p 5022 -i {_SSH_KEY}"
             f" -o {quoted}",
             "/mnt/src/",
             "backup@nas.local:/backup/",

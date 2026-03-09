@@ -51,6 +51,8 @@
   - Provide both human-readable and JSON output formats for all commands, with human-readable as the default.
   - Provide ability to pass a config file to all commands
   - Provide a dry-run parameter for all data-mutating or long-running operations
+- **Config**
+  - Perform `~` expansion for all file paths in the config
 - **Testing**
   - No real rsync/ssh/btrfs calls in unit tests - use mocks instead. Docker-enabled integration tests cover the real interactions.
   - Generate YAML test data using the Pydantic data models and `model.model_dump()` instead of hardcoding YAML strings.

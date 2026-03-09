@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from nbkp.config import SshEndpoint, SshConnectionOptions
@@ -11,6 +12,8 @@ from nbkp.remote import (
     format_remote_path,
     run_remote_command,
 )
+
+_SSH_KEY = str(Path("~/.ssh/key").expanduser())
 
 _DEFAULT_O_OPTIONS = [
     "-o",
@@ -37,7 +40,7 @@ class TestBuildSshBaseArgs:
             "-p",
             "5022",
             "-i",
-            "~/.ssh/key",
+            _SSH_KEY,
             "backup@nas.example.com",
         ]
 
@@ -257,7 +260,7 @@ class TestBuildSshEOption:
         result = build_ssh_e_option(ssh_endpoint)
         assert result == [
             "-e",
-            f"{_DEFAULT_E_PREFIX} -p 5022 -i ~/.ssh/key",
+            f"{_DEFAULT_E_PREFIX} -p 5022 -i {_SSH_KEY}",
         ]
 
     def test_with_ssh_options(self) -> None:
@@ -367,7 +370,7 @@ class TestRunRemoteCommand:
                 "allow_agent": True,
                 "look_for_keys": True,
                 "compress": False,
-                "key_filename": "~/.ssh/key",
+                "key_filename": _SSH_KEY,
             },
             connect_timeout=10,
             forward_agent=False,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from datetime import datetime, timezone
+from pathlib import Path
 
 from nbkp.config import (
     BtrfsSnapshotConfig,
@@ -574,7 +575,8 @@ class TestFilters:
     def test_filter_file_present(self) -> None:
         config = _filters_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert "--filter=merge ~/.config/nbkp/filters.rules" in script
+        expanded = str(Path("~/.config/nbkp/filters.rules").expanduser())
+        assert f"--filter=merge {expanded}" in script
 
 
 class TestProxyJump:

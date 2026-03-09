@@ -77,7 +77,7 @@ class TestSshEndpoint:
         )
         assert server.port == 2222
         assert server.user == "backup"
-        assert server.key == "~/.ssh/id_rsa"
+        assert server.key == str(Path("~/.ssh/id_rsa").expanduser())
         assert server.connection_options.connect_timeout == 30
 
     def test_construction_with_proxy_jump(self) -> None:

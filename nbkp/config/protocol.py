@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Annotated, Dict, List, Literal, Optional, Union
 
 from pydantic import (
@@ -39,6 +40,13 @@ class LocalVolume(_BaseModel):
     """A local filesystem volume."""
     slug: Slug
     path: str = Field(..., min_length=1)
+
+    @field_validator("path", mode="before")
+    @classmethod
+    def normalize_path(cls, v: Any) -> str:
+        if not isinstance(v, str):
+            return v  # type: ignore[no-any-return, return-value]
+        return str(Path(v).expanduser())
 
 
 class SshConnectionOptions(_BaseModel):
@@ -101,6 +109,14 @@ class SshEndpoint(_BaseModel):
     port: int = Field(default=22, ge=1, le=65535)
     user: Optional[str] = None
     key: Optional[str] = None
+
+    @field_validator("key", mode="before")
+    @classmethod
+    def normalize_key(cls, v: Any) -> str | None:
+        if not isinstance(v, str):
+            return None
+        return str(Path(v).expanduser())
+
     connection_options: SshConnectionOptions = Field(
         default_factory=lambda: SshConnectionOptions()
     )
@@ -154,6 +170,14 @@ class RemoteVolume(_BaseModel):
     ssh_endpoints: Optional[List[str]] = None
     path: str = Field(..., min_length=1)
 
+    @field_validator("path", mode="before")
+    @classmethod
+    def normalize_path(cls, v: Any) -> str:
+        if not isinstance(v, str):
+            return v  # type: ignore[no-any-return, return-value]
+        stripped = v.rstrip("/")
+        return stripped if stripped else "/"
+
 
 Volume = Annotated[
     Union[LocalVolume, RemoteVolume], Field(discriminator="type")
@@ -189,6 +213,15 @@ class SyncEndpoint(_BaseModel):
     slug: Slug
     volume: str = Field(..., min_length=1)
     subdir: Optional[str] = None
+
+    @field_validator("subdir", mode="before")
+    @classmethod
+    def normalize_subdir(cls, v: Any) -> str | None:
+        if not isinstance(v, str):
+            return None
+        stripped = v.strip("/")
+        return stripped if stripped else None
+
     btrfs_snapshots: BtrfsSnapshotConfig = Field(
         default_factory=lambda: BtrfsSnapshotConfig()
     )
@@ -239,6 +272,13 @@ class SyncConfig(_BaseModel):
     rsync_options: RsyncOptions = Field(default_factory=lambda: RsyncOptions())
     filters: List[str] = Field(default_factory=list)
     filter_file: Optional[str] = None
+
+    @field_validator("filter_file", mode="before")
+    @classmethod
+    def normalize_filter_file(cls, v: Any) -> str | None:
+        if not isinstance(v, str):
+            return None
+        return str(Path(v).expanduser())
 
     @field_validator("filters", mode="before")
     @classmethod

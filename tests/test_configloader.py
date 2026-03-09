@@ -70,7 +70,7 @@ class TestLoadConfig:
         assert server.host == "nas.example.com"
         assert server.port == 5022
         assert server.user == "backup"
-        assert server.key == "~/.ssh/key"
+        assert server.key == str(Path("~/.ssh/key").expanduser())
         assert server.connection_options.connect_timeout == 10
         assert "local-data" in cfg.volumes
         assert "nas" in cfg.volumes
@@ -97,7 +97,9 @@ class TestLoadConfig:
         assert sync.rsync_options.checksum is True
         assert sync.rsync_options.compress is False
         assert sync.filters == ["+ *.jpg", "- *.tmp"]
-        assert sync.filter_file == "~/.config/nbkp/filters/photos.rules"
+        assert sync.filter_file == str(
+            Path("~/.config/nbkp/filters/photos.rules").expanduser()
+        )
 
     def test_minimal_config(self, sample_minimal_config_file: Path) -> None:
         cfg = load_config(str(sample_minimal_config_file))
@@ -1112,3 +1114,111 @@ class TestLoadConfig:
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "unknown volume" in str(cause)
+
+
+class TestPathNormalization:
+    """Trailing-slash stripping and tilde expansion."""
+
+    def test_local_volume_trailing_slash(self) -> None:
+        vol = LocalVolume(slug="v", path="/mnt/data/")
+        assert vol.path == "/mnt/data"
+
+    def test_local_volume_tilde_expansion(self) -> None:
+        vol = LocalVolume(slug="v", path="~/data")
+        assert vol.path == str(Path("~/data").expanduser())
+
+    def test_local_volume_tilde_only(self) -> None:
+        vol = LocalVolume(slug="v", path="~")
+        assert vol.path == str(Path("~").expanduser())
+
+    def test_local_volume_tilde_trailing_slash(self) -> None:
+        vol = LocalVolume(slug="v", path="~/data/")
+        assert vol.path == str(Path("~/data").expanduser())
+
+    def test_local_volume_no_trailing_slash(self) -> None:
+        vol = LocalVolume(slug="v", path="/mnt/data")
+        assert vol.path == "/mnt/data"
+
+    def test_remote_volume_trailing_slash(self) -> None:
+        vol = RemoteVolume(
+            slug="v", ssh_endpoint="ep", path="/volume1/backups/"
+        )
+        assert vol.path == "/volume1/backups"
+
+    def test_remote_volume_no_trailing_slash(self) -> None:
+        vol = RemoteVolume(
+            slug="v", ssh_endpoint="ep", path="/volume1/backups"
+        )
+        assert vol.path == "/volume1/backups"
+
+    def test_remote_volume_root_slash(self) -> None:
+        vol = RemoteVolume(slug="v", ssh_endpoint="ep", path="/")
+        assert vol.path == "/"
+
+    def test_remote_volume_no_tilde_expansion(self) -> None:
+        vol = RemoteVolume(slug="v", ssh_endpoint="ep", path="~/backups")
+        assert vol.path == "~/backups"
+
+    def test_subdir_trailing_slash(self) -> None:
+        ep = SyncEndpoint(slug="ep", volume="v", subdir="photos/")
+        assert ep.subdir == "photos"
+
+    def test_subdir_leading_slash(self) -> None:
+        ep = SyncEndpoint(slug="ep", volume="v", subdir="/photos")
+        assert ep.subdir == "photos"
+
+    def test_subdir_both_slashes(self) -> None:
+        ep = SyncEndpoint(slug="ep", volume="v", subdir="/photos/")
+        assert ep.subdir == "photos"
+
+    def test_subdir_nested_trailing_slash(self) -> None:
+        ep = SyncEndpoint(slug="ep", volume="v", subdir="backups/docs/")
+        assert ep.subdir == "backups/docs"
+
+    def test_subdir_slash_only_becomes_none(self) -> None:
+        ep = SyncEndpoint(slug="ep", volume="v", subdir="/")
+        assert ep.subdir is None
+
+    def test_subdir_none_stays_none(self) -> None:
+        ep = SyncEndpoint(slug="ep", volume="v")
+        assert ep.subdir is None
+
+    def test_filter_file_tilde_expansion(self) -> None:
+        sync = SyncConfig(
+            slug="s",
+            source="src",
+            destination="dst",
+            filter_file="~/.config/nbkp/filters.rules",
+        )
+        assert sync.filter_file == str(
+            Path("~/.config/nbkp/filters.rules").expanduser()
+        )
+
+    def test_filter_file_no_tilde(self) -> None:
+        sync = SyncConfig(
+            slug="s",
+            source="src",
+            destination="dst",
+            filter_file="/etc/nbkp/filters.rules",
+        )
+        assert sync.filter_file == "/etc/nbkp/filters.rules"
+
+    def test_filter_file_none(self) -> None:
+        sync = SyncConfig(
+            slug="s",
+            source="src",
+            destination="dst",
+        )
+        assert sync.filter_file is None
+
+    def test_ssh_key_tilde_expansion(self) -> None:
+        ep = SshEndpoint(slug="s", host="example.com", key="~/.ssh/id_rsa")
+        assert ep.key == str(Path("~/.ssh/id_rsa").expanduser())
+
+    def test_ssh_key_no_tilde(self) -> None:
+        ep = SshEndpoint(slug="s", host="example.com", key="/etc/ssh/key")
+        assert ep.key == "/etc/ssh/key"
+
+    def test_ssh_key_none(self) -> None:
+        ep = SshEndpoint(slug="s", host="example.com")
+        assert ep.key is None
