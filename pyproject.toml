@@ -2,7 +2,7 @@
 name = "nbkp"
 description = "Nomad Backup: An rsync-based backup tool for nomadic setups where sources and destinations aren't always available — laptops on the move, removable drives, home servers behind changing networks. Sentinel files ensure backups only run when volumes are genuinely present, with optional btrfs or hard-link snapshots for point-in-time recovery."
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Sami Dalouche", email = "sami.dalouche@gmail.com" }]
