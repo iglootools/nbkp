@@ -96,12 +96,20 @@ def check(
             help=("Exit non-zero on any inactive sync, including missing sentinels"),
         ),
     ] = False,
-    locations: Annotated[
+    location: Annotated[
         Optional[list[str]],
         typer.Option(
-            "--locations",
+            "--location",
             "-l",
             help="Prefer endpoints at these locations",
+        ),
+    ] = None,
+    exclude_location: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--exclude-location",
+            "-L",
+            help="Exclude endpoints at these locations",
         ),
     ] = None,
     private: Annotated[
@@ -121,7 +129,7 @@ def check(
 ) -> None:
     """Check status of volumes and syncs."""
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, locations, private, public)
+    resolved = _resolve_endpoints(cfg, location, exclude_location, private, public)
     output_format = output
     vol_statuses, sync_statuses, has_errors = _check_and_display(
         cfg,
@@ -203,12 +211,20 @@ def run(
             help=("Exit non-zero on any inactive sync, including missing sentinels"),
         ),
     ] = False,
-    locations: Annotated[
+    location: Annotated[
         Optional[list[str]],
         typer.Option(
-            "--locations",
+            "--location",
             "-l",
             help="Prefer endpoints at these locations",
+        ),
+    ] = None,
+    exclude_location: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--exclude-location",
+            "-L",
+            help="Exclude endpoints at these locations",
         ),
     ] = None,
     private: Annotated[
@@ -228,7 +244,7 @@ def run(
 ) -> None:
     """Run backup syncs."""
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, locations, private, public)
+    resolved = _resolve_endpoints(cfg, location, exclude_location, private, public)
     output_format = output
     vol_statuses, sync_statuses, has_errors = _check_and_display(
         cfg,
@@ -352,12 +368,20 @@ def sh(
             ),
         ),
     ] = False,
-    locations: Annotated[
+    location: Annotated[
         Optional[list[str]],
         typer.Option(
-            "--locations",
+            "--location",
             "-l",
             help="Prefer endpoints at these locations",
+        ),
+    ] = None,
+    exclude_location: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--exclude-location",
+            "-L",
+            help="Exclude endpoints at these locations",
         ),
     ] = None,
     private: Annotated[
@@ -395,7 +419,7 @@ def sh(
         raise typer.Exit(2)
 
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, locations, private, public)
+    resolved = _resolve_endpoints(cfg, location, exclude_location, private, public)
     script = generate_script(
         cfg,
         ScriptOptions(
@@ -422,12 +446,20 @@ def troubleshoot(
         Optional[str],
         typer.Option("--config", "-c", help="Path to config file"),
     ] = None,
-    locations: Annotated[
+    location: Annotated[
         Optional[list[str]],
         typer.Option(
-            "--locations",
+            "--location",
             "-l",
             help="Prefer endpoints at these locations",
+        ),
+    ] = None,
+    exclude_location: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--exclude-location",
+            "-L",
+            help="Exclude endpoints at these locations",
         ),
     ] = None,
     private: Annotated[
@@ -447,7 +479,7 @@ def troubleshoot(
 ) -> None:
     """Diagnose issues and show how to fix them."""
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, locations, private, public)
+    resolved = _resolve_endpoints(cfg, location, exclude_location, private, public)
     vol_statuses, sync_statuses = _check_all_with_progress(
         cfg,
         use_progress=True,
@@ -479,12 +511,20 @@ def prune(
         OutputFormat,
         typer.Option("--output", "-o", help="Output format"),
     ] = OutputFormat.HUMAN,
-    locations: Annotated[
+    location: Annotated[
         Optional[list[str]],
         typer.Option(
-            "--locations",
+            "--location",
             "-l",
             help="Prefer endpoints at these locations",
+        ),
+    ] = None,
+    exclude_location: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--exclude-location",
+            "-L",
+            help="Exclude endpoints at these locations",
         ),
     ] = None,
     private: Annotated[
@@ -504,7 +544,7 @@ def prune(
 ) -> None:
     """Prune old snapshots beyond max-snapshots limit."""
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, locations, private, public)
+    resolved = _resolve_endpoints(cfg, location, exclude_location, private, public)
     output_format = output
     _, sync_statuses = _check_all_with_progress(
         cfg,
@@ -631,6 +671,7 @@ def _load_config_or_exit(
 
 def _build_endpoint_filter(
     locations: list[str] | None,
+    exclude_locations: list[str] | None,
     private: bool,
     public: bool,
 ) -> EndpointFilter | None:
@@ -641,19 +682,25 @@ def _build_endpoint_filter(
     elif public:
         network = "public"
     locs = locations or []
-    if not locs and network is None:
+    excl = exclude_locations or []
+    if not locs and not excl and network is None:
         return None
-    return EndpointFilter(locations=locs, network=network)
+    return EndpointFilter(
+        locations=locs,
+        exclude_locations=excl,
+        network=network,
+    )
 
 
 def _resolve_endpoints(
     cfg: Config,
     locations: list[str] | None,
+    exclude_locations: list[str] | None,
     private: bool,
     public: bool,
 ) -> ResolvedEndpoints:
     """Build filter and resolve all endpoints once."""
-    ef = _build_endpoint_filter(locations, private, public)
+    ef = _build_endpoint_filter(locations, exclude_locations, private, public)
     return resolve_all_endpoints(cfg, ef)
 
 

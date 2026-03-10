@@ -301,6 +301,7 @@ class EndpointFilter(_BaseModel):
 
     model_config = ConfigDict(frozen=True)
     locations: List[str] = Field(default_factory=list)
+    exclude_locations: List[str] = Field(default_factory=list)
     network: Optional[Literal["private", "public"]] = None
 
 
@@ -465,7 +466,18 @@ class Config(_BaseModel):
         if not reachable:
             return self.ssh_endpoints[vol.ssh_endpoint]
 
-        # Location filter
+        # Exclude locations
+        if ef.exclude_locations:
+            excl = set(ef.exclude_locations)
+            filtered = [
+                slug
+                for slug in reachable
+                if not (excl & set(self.ssh_endpoints[slug].location_list))
+            ]
+            if filtered:
+                reachable = filtered
+
+        # Include locations
         if ef.locations:
             filter_locs = set(ef.locations)
             by_loc = [

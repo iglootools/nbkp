@@ -934,6 +934,124 @@ class TestLoadConfig:
         )
         assert result.slug == "multi-server"
 
+    def test_resolve_endpoint_exclude_location(
+        self,
+    ) -> None:
+        config = Config(
+            ssh_endpoints={
+                "home-server": SshEndpoint(
+                    slug="home-server",
+                    host="192.168.1.10",
+                    location="home",
+                ),
+                "travel-server": SshEndpoint(
+                    slug="travel-server",
+                    host="10.0.0.5",
+                    location="travel",
+                ),
+                "office-server": SshEndpoint(
+                    slug="office-server",
+                    host="10.1.0.5",
+                    location="office",
+                ),
+            },
+            volumes={
+                "remote": RemoteVolume(
+                    slug="remote",
+                    ssh_endpoint="home-server",
+                    ssh_endpoints=[
+                        "home-server",
+                        "travel-server",
+                        "office-server",
+                    ],
+                    path="/data",
+                ),
+            },
+            syncs={},
+        )
+        # Exclude "home" — should pick travel-server (first non-excluded)
+        ef = EndpointFilter(exclude_locations=["home"])
+        result = config.resolve_endpoint_for_volume(
+            config.volumes["remote"],
+            ef,  # type: ignore[arg-type]
+        )
+        assert result.slug == "travel-server"
+
+    def test_resolve_endpoint_exclude_and_include_location(
+        self,
+    ) -> None:
+        config = Config(
+            ssh_endpoints={
+                "home-server": SshEndpoint(
+                    slug="home-server",
+                    host="192.168.1.10",
+                    location="home",
+                ),
+                "travel-server": SshEndpoint(
+                    slug="travel-server",
+                    host="10.0.0.5",
+                    location="travel",
+                ),
+                "office-server": SshEndpoint(
+                    slug="office-server",
+                    host="10.1.0.5",
+                    location="office",
+                ),
+            },
+            volumes={
+                "remote": RemoteVolume(
+                    slug="remote",
+                    ssh_endpoint="home-server",
+                    ssh_endpoints=[
+                        "home-server",
+                        "travel-server",
+                        "office-server",
+                    ],
+                    path="/data",
+                ),
+            },
+            syncs={},
+        )
+        # Exclude "home", include "office" — should pick office-server
+        ef = EndpointFilter(
+            locations=["office"],
+            exclude_locations=["home"],
+        )
+        result = config.resolve_endpoint_for_volume(
+            config.volumes["remote"],
+            ef,  # type: ignore[arg-type]
+        )
+        assert result.slug == "office-server"
+
+    def test_resolve_endpoint_exclude_all_falls_back(
+        self,
+    ) -> None:
+        config = Config(
+            ssh_endpoints={
+                "home-server": SshEndpoint(
+                    slug="home-server",
+                    host="192.168.1.10",
+                    location="home",
+                ),
+            },
+            volumes={
+                "remote": RemoteVolume(
+                    slug="remote",
+                    ssh_endpoint="home-server",
+                    ssh_endpoints=["home-server"],
+                    path="/data",
+                ),
+            },
+            syncs={},
+        )
+        # Excluding all candidates falls back (keeps original list)
+        ef = EndpointFilter(exclude_locations=["home"])
+        result = config.resolve_endpoint_for_volume(
+            config.volumes["remote"],
+            ef,  # type: ignore[arg-type]
+        )
+        assert result.slug == "home-server"
+
     def test_source_btrfs_snapshots(self, tmp_path: Path) -> None:
         config = Config(
             volumes={
