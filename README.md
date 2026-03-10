@@ -13,7 +13,7 @@ home servers behind changing networks.
 
 Sentinel files ensure backups only run when volumes are genuinely present, with optional btrfs or hard-link snapshots for point-in-time recovery.
 
-[![asciicast](https://asciinema.org/a/km9UuWa5TGjy9ldg.svg)](https://asciinema.org/a/km9UuWa5TGjy9ldg)
+[![asciicast](https://asciinema.org/a/2IZXgMdnSj6tNak8.svg)](https://asciinema.org/a/2IZXgMdnSj6tNak8)
 
 ## Installation
 
