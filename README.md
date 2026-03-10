@@ -13,6 +13,8 @@ home servers behind changing networks.
 
 Sentinel files ensure backups only run when volumes are genuinely present, with optional btrfs or hard-link snapshots for point-in-time recovery.
 
+Files are backed up as-is in plain directories: no obscure storage formats and restoring is just a copy.
+
 [![asciicast](https://asciinema.org/a/2IZXgMdnSj6tNak8.svg)](https://asciinema.org/a/2IZXgMdnSj6tNak8)
 
 ## Installation
@@ -69,7 +71,7 @@ If you need server-to-server replication:
 
 No custom storage format, protocol, or encryption — just proven tools composed together:
 - **rsync + SSH** — handles the actual file transfer, locally or remotely
-- **Plain directories** — files are stored as-is; restoring is just a copy
+- **Plain directories** — no obscure storage formats; files are stored as-is and restoring is just a copy
 - **Btrfs snapshots (optional)** — space-efficient point-in-time copies via copy-on-write, with automatic pruning. Each snapshot is a read-only subvolume exposing a plain directory tree
 - **Hard-link snapshots (optional)** — alternative to btrfs snapshots, works on any filesystem that supports hard links, but less efficient and more fragile
 - **cryptsetup (optional)** — full-volume encryption for backup destinations
