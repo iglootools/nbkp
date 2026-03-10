@@ -196,6 +196,18 @@ def troubleshoot_config() -> Config:
             volume="nas-backup",
             subdir="src-latest",
         ),
+        # Dry-run pending snapshot scenario: HL source with upstream
+        "hl-stage": SyncEndpoint(
+            slug="hl-stage",
+            volume="usb-drive",
+            subdir="stage",
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+        ),
+        "dst-dry-run-pending": SyncEndpoint(
+            slug="dst-dry-run-pending",
+            volume="nas-backup",
+            subdir="dry-run-pending",
+        ),
     }
     return Config(
         ssh_endpoints=base_ssh_endpoints(),
@@ -252,6 +264,19 @@ def troubleshoot_config() -> Config:
                 slug="source-latest-missing",
                 source="usb-btrfs-src",
                 destination="dst-src-latest",
+            ),
+            # Upstream writes to hl-stage (HL snapshots)
+            "dry-run-upstream": SyncConfig(
+                slug="dry-run-upstream",
+                source="laptop-src",
+                destination="hl-stage",
+            ),
+            # Downstream reads from hl-stage; in dry-run,
+            # latest → /dev/null because upstream didn't snapshot
+            "dry-run-pending": SyncConfig(
+                slug="dry-run-pending",
+                source="hl-stage",
+                destination="dst-dry-run-pending",
             ),
         },
     )
@@ -382,6 +407,20 @@ def troubleshoot_data(
                 SyncReason.SOURCE_LATEST_NOT_FOUND,
                 SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND,
             ],
+        ),
+        "dry-run-upstream": SyncStatus(
+            slug="dry-run-upstream",
+            config=config.syncs["dry-run-upstream"],
+            source_status=laptop_vs,
+            destination_status=usb_vs,
+            reasons=[],
+        ),
+        "dry-run-pending": SyncStatus(
+            slug="dry-run-pending",
+            config=config.syncs["dry-run-pending"],
+            source_status=usb_vs,
+            destination_status=nas_vs,
+            reasons=[SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING],
         ),
     }
 

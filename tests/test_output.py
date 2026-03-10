@@ -339,3 +339,30 @@ class TestCheckRsyncCommandDisplay:
         assert "/mnt/dst/" in output
         assert "staging" not in output
         assert "snapshots" not in output
+
+
+class TestTroubleshootDryRunPendingSnapshot:
+    def test_dry_run_pending_snapshot_text(self) -> None:
+        """Troubleshoot output explains dry-run snapshot skip."""
+        config = _btrfs_config()
+        vol_statuses = _make_vol_statuses(config)
+        sync_statuses = {
+            "btrfs-sync": SyncStatus(
+                slug="btrfs-sync",
+                config=config.syncs["btrfs-sync"],
+                source_status=vol_statuses["src"],
+                destination_status=vol_statuses["dst"],
+                reasons=[SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING],
+            )
+        }
+        console, buf = _make_console()
+        print_human_troubleshoot(
+            vol_statuses,
+            sync_statuses,
+            config,
+            console=console,
+        )
+        output = buf.getvalue()
+        assert "dry-run" in output
+        assert "upstream" in output
+        assert SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING.value in output

@@ -59,6 +59,9 @@ class SyncReason(str, enum.Enum):
     DESTINATION_NO_HARDLINK_SUPPORT = (
         "destination filesystem does not support hard links"
     )
+    DRY_RUN_SOURCE_SNAPSHOT_PENDING = (
+        "source snapshot not yet available (dry-run; upstream has not run)"
+    )
 
 
 class VolumeStatus(BaseModel):
@@ -489,11 +492,15 @@ def _check_source_latest(
     all_syncs: dict[str, SyncConfig],
     reasons: list[SyncReason],
     resolved_endpoints: ResolvedEndpoints,
+    dry_run: bool = False,
 ) -> None:
     """Validate the source latest symlink.
 
     ``/dev/null`` is accepted only when an enabled upstream sync writes
     to this source endpoint (it will populate the snapshot).
+
+    In dry-run mode, ``/dev/null`` with an upstream sync marks the sync
+    as inactive because the upstream dry-run won't create a real snapshot.
     """
     latest_path = f"{endpoint_path}/{LATEST_LINK}"
     if not _check_symlink_exists(src_vol, latest_path, resolved_endpoints):
@@ -508,6 +515,8 @@ def _check_source_latest(
     if target == DEVNULL_TARGET:
         if not _has_upstream_sync(sync, all_syncs):
             reasons.append(SyncReason.SOURCE_LATEST_INVALID)
+        elif dry_run:
+            reasons.append(SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING)
         return
 
     # Resolve relative target against endpoint path
@@ -522,6 +531,7 @@ def check_sync(
     volume_statuses: dict[str, VolumeStatus],
     resolved_endpoints: ResolvedEndpoints | None = None,
     all_syncs: dict[str, SyncConfig] | None = None,
+    dry_run: bool = False,
 ) -> SyncStatus:
     """Check if a sync is active, accumulating all failure reasons."""
     re = resolved_endpoints or {}
@@ -568,7 +578,9 @@ def check_sync(
                 reasons.append(SyncReason.RSYNC_TOO_OLD_ON_SOURCE)
             if src_cfg.snapshot_mode != "none":
                 src_ep = _resolve_endpoint(src_vol, src_cfg.subdir)
-                _check_source_latest(sync, src_vol, src_ep, syncs, reasons, re)
+                _check_source_latest(
+                    sync, src_vol, src_ep, syncs, reasons, re, dry_run=dry_run
+                )
                 if not _check_directory_exists(
                     src_vol, f"{src_ep}/{SNAPSHOTS_DIR}", re
                 ):
@@ -646,6 +658,7 @@ def check_all_syncs(
     on_progress: Callable[[str], None] | None = None,
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    dry_run: bool = False,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     """Check volumes and syncs, caching volume checks.
 
@@ -676,7 +689,7 @@ def check_all_syncs(
     sync_statuses: dict[str, SyncStatus] = {}
     for slug, sync in syncs.items():
         sync_statuses[slug] = check_sync(
-            sync, config, volume_statuses, re, config.syncs
+            sync, config, volume_statuses, re, config.syncs, dry_run=dry_run
         )
         if on_progress:
             on_progress(slug)

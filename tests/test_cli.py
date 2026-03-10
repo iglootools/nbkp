@@ -472,6 +472,9 @@ class TestRunCommand:
         )
         assert result.exit_code == 0
         assert "dry run" in result.output
+        # Verify dry_run=True is propagated to check_all_syncs
+        check_kwargs = mock_checks.call_args
+        assert check_kwargs.kwargs.get("dry_run") is True
 
     @patch("nbkp.cli.run_all_syncs")
     @patch("nbkp.cli.check_all_syncs")

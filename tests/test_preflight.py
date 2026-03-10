@@ -3383,6 +3383,81 @@ class TestCheckDevnullLatest:
         assert SyncReason.SOURCE_LATEST_INVALID not in status.reasons
         assert SyncReason.SOURCE_LATEST_NOT_FOUND not in status.reasons
 
+    # ── Source latest → /dev/null with upstream sync (dry-run) ────
+
+    @patch("nbkp.preflight._check_rsync_version", return_value=True)
+    @patch(
+        "nbkp.preflight.shutil.which",
+        return_value="/usr/bin/fake",
+    )
+    def test_source_devnull_inactive_in_dry_run_with_upstream(
+        self,
+        mock_which: MagicMock,
+        _mock_rsync_ver: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Source latest → /dev/null with upstream sync is marked
+        inactive in dry-run mode because the upstream won't create
+        a real snapshot."""
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        upstream_src = tmp_path / "upstream"
+        src.mkdir()
+        dst.mkdir()
+        upstream_src.mkdir()
+        self._setup_sentinels(src, dst)
+        (src / "data" / "snapshots").mkdir()
+        (src / "data" / "latest").symlink_to("/dev/null")
+        (dst / "backup" / "snapshots").mkdir()
+        (dst / "backup" / "latest").symlink_to("/dev/null")
+
+        src_vol = LocalVolume(slug="src", path=str(src))
+        dst_vol = LocalVolume(slug="dst", path=str(dst))
+        upstream_vol = LocalVolume(slug="upstream", path=str(upstream_src))
+        sync = SyncConfig(
+            slug="s1",
+            source="ep-up-src",
+            destination="ep-up-dst",
+        )
+        upstream = SyncConfig(
+            slug="upstream",
+            source="ep-up-usrc",
+            destination="ep-up-src",
+        )
+        config = Config(
+            volumes={
+                "src": src_vol,
+                "dst": dst_vol,
+                "upstream": upstream_vol,
+            },
+            sync_endpoints={
+                "ep-up-src": SyncEndpoint(
+                    slug="ep-up-src",
+                    volume="src",
+                    subdir="data",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+                "ep-up-dst": SyncEndpoint(
+                    slug="ep-up-dst",
+                    volume="dst",
+                    subdir="backup",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+                "ep-up-usrc": SyncEndpoint(
+                    slug="ep-up-usrc",
+                    volume="upstream",
+                ),
+            },
+            syncs={"s1": sync, "upstream": upstream},
+        )
+        vol_statuses = self._active_vol_statuses(config)
+
+        status = check_sync(
+            sync, config, vol_statuses, all_syncs=config.syncs, dry_run=True
+        )
+        assert SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING in status.reasons
+        assert not status.active
+
     # ── Source latest → /dev/null without upstream sync ────
 
     @patch("nbkp.preflight._check_rsync_version", return_value=True)

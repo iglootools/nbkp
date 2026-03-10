@@ -734,6 +734,15 @@ def _print_sync_reason_fix(
                 " Use a filesystem like ext4, xfs, or"
                 " btrfs, or use btrfs-snapshots instead."
             )
+        case SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING:
+            console.print(
+                f"{p2}The source endpoint's latest symlink"
+                " points to /dev/null (no snapshot yet)."
+                " In dry-run mode, the upstream sync does"
+                " not create a real snapshot, so this sync"
+                " is skipped. Run without --dry-run to"
+                " execute the full chain."
+            )
 
 
 def print_human_troubleshoot(

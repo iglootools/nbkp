@@ -56,6 +56,7 @@ _INACTIVE_REASONS = {
     SyncReason.DESTINATION_SENTINEL_NOT_FOUND,
     SyncReason.SOURCE_UNAVAILABLE,
     SyncReason.DESTINATION_UNAVAILABLE,
+    SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING,
 }
 
 app = typer.Typer(
@@ -235,6 +236,7 @@ def run(
         strict,
         only_syncs=sync,
         resolved_endpoints=resolved,
+        dry_run=dry_run,
     )
 
     if has_errors:
@@ -306,7 +308,13 @@ def run(
                 typer.echo("")
                 print_human_results(results, dry_run, cfg, resolved)
 
-        if any(not r.success for r in results):
+        def _is_expected_skip(r: SyncResult) -> bool:
+            ss = sync_statuses.get(r.sync_slug)
+            if ss is None:
+                return False
+            return bool(ss.reasons) and set(ss.reasons) <= _INACTIVE_REASONS
+
+        if any(not r.success and not _is_expected_skip(r) for r in results):
             raise typer.Exit(1)
 
 
@@ -654,6 +662,7 @@ def _check_all_with_progress(
     use_progress: bool,
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    dry_run: bool = False,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     """Run check_all_syncs with an optional progress bar."""
     total = len(cfg.volumes) + len(cfg.syncs)
@@ -662,6 +671,7 @@ def _check_all_with_progress(
             cfg,
             only_syncs=only_syncs,
             resolved_endpoints=resolved_endpoints,
+            dry_run=dry_run,
         )
 
     with Progress(
@@ -680,6 +690,7 @@ def _check_all_with_progress(
             on_progress=on_progress,
             only_syncs=only_syncs,
             resolved_endpoints=resolved_endpoints,
+            dry_run=dry_run,
         )
 
 
@@ -689,6 +700,7 @@ def _check_and_display(
     strict: bool,
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    dry_run: bool = False,
 ) -> tuple[
     dict[str, VolumeStatus],
     dict[str, SyncStatus],
@@ -705,6 +717,7 @@ def _check_and_display(
         use_progress=output_format is OutputFormat.HUMAN,
         only_syncs=only_syncs,
         resolved_endpoints=resolved_endpoints,
+        dry_run=dry_run,
     )
 
     if output_format is OutputFormat.HUMAN:

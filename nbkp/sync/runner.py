@@ -21,7 +21,7 @@ from .hardlinks import (
 )
 from .symlink import update_latest_symlink
 from ..config import Config, ResolvedEndpoints
-from ..preflight import SyncStatus
+from ..preflight import SyncReason, SyncStatus
 from .rsync import ProgressMode, run_rsync
 
 
@@ -87,11 +87,7 @@ def run_all_syncs(
 
     from .ordering import sort_syncs, sync_predecessors
 
-    selected = (
-        {s: st for s, st in sync_statuses.items() if s in only_syncs}
-        if only_syncs
-        else sync_statuses
-    )
+    selected = {s: st for s, st in sync_statuses.items() if s in only_syncs} if only_syncs else sync_statuses
 
     selected_syncs = {s: config.syncs[s] for s in selected}
     ordered_slugs = sort_syncs(selected_syncs)
@@ -124,9 +120,7 @@ def run_all_syncs(
                 rsync_exit_code=-1,
                 output="",
                 outcome=SyncOutcome.SKIPPED,
-                detail=(
-                    "Sync not active: " + ", ".join(r.value for r in status.reasons)
-                ),
+                detail=("Sync not active: " + ", ".join(r.value for r in status.reasons)),
             )
         else:
             result = _run_single_sync(
@@ -140,7 +134,12 @@ def run_all_syncs(
                 resolved_endpoints,
             )
 
-        if not result.success:
+        # Dry-run-pending skips (skipped syncs because of DRY_RUN_SOURCE_SNAPSHOT_PENDING) should not cascade to downstream syncs:
+        # the chain would succeed in a real run.
+        is_dry_run_pending = result.outcome == SyncOutcome.SKIPPED and status.reasons == [
+            SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING
+        ]
+        if not result.success and not is_dry_run_pending:
             failed.add(slug)
 
         results.append(result)
@@ -385,9 +384,7 @@ def _run_hard_link_sync(
 
     # 3. Create new snapshot directory
     try:
-        snapshot_path = create_snapshot_dir(
-            sync, config, resolved_endpoints=resolved_endpoints
-        )
+        snapshot_path = create_snapshot_dir(sync, config, resolved_endpoints=resolved_endpoints)
     except RuntimeError as e:
         return SyncResult(
             sync_slug=slug,
