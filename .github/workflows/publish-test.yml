@@ -7,7 +7,7 @@ name: publish-test
 # - It publishes to https://test.pypi.org/ instead of https://pypi.org/,
 #   which is a separate instance of the Python Package Index that allows trying distribution tools and processes without affecting the real index
 # - It enables verbose: true in the pypa/gh-action-pypi-publish action to get more detailed logs for debugging
-# - It derives the version from poetry-dynamic-versioning and strips the local segment (+hash) that PyPI rejects.
+# - It derives the version from poetry-dynamic-versioning and adds a .devYYYYMMDDHHMMSS suffix to avoid version clashes on repeated publishes to Test PyPI, whereas the publish workflow relies on the tag name for the version and thus does not need a timestamp suffix
 #
 # Also keep in mind that OIDC authentication does not work with shared workflows,
 # so the code essentially needs to be duplicated in the `publish.yml` and `publish-test.yml` workflows.
@@ -23,26 +23,6 @@ env:
   MISE_EXPERIMENTAL: true
 
 jobs:
-  ci:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-      - uses: jdx/mise-action@v3
-      - name: Resolve PyPI-compatible version
-        # poetry-dynamic-versioning may produce versions with a local segment
-        # (e.g. 1.2.3+gabcdef) that PyPI rejects. Strip the +... suffix and
-        # append a .devYYYYMMDDHHMMSS timestamp to avoid version clashes on
-        # repeated publishes to Test PyPI.
-        run: |
-          raw=$(poetry version --short)
-          clean=${raw%%+*}
-          ts=$(date -u +%Y%m%d%H%M%S)
-          echo "POETRY_DYNAMIC_VERSIONING_BYPASS=${clean}.dev${ts}" >> "$GITHUB_ENV"
-      - run: mise run ci-build
   pypi-publish:
     name: Upload release to Test PyPI
     runs-on: ubuntu-latest
