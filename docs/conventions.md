@@ -36,7 +36,7 @@
   - Other data classes should also be frozen.
 - **Formatting**: 
   - 79 characters (black + flake8).
-- **Python Version**: 3.14 (mypy target and black target).
+- **Python Version**: 3.12 (mypy target and black target).
 - **Control Flow**
   - Prefer match-case over if-elif-else chains
   - Prefer comprehensions and built-ins (map, filter) over manual loops when appropriate. 

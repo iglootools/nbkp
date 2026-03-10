@@ -48,7 +48,7 @@ build-backend = "poetry_dynamic_versioning.backend"
 
 [tool.black]
 line-length = 79
-target-version = ["py314"]
+target-version = ["py312"]
 
 [tool.pytest.ini_options]
 markers = [
@@ -59,7 +59,7 @@ markers = [
 ]
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

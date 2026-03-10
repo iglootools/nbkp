@@ -1816,5 +1816,5 @@ docker = ["docker"]
 
 [metadata]
 lock-version = "2.1"
-python-versions = ">=3.14"
-content-hash = "bf125716508950325cd9eaebc588ef1cbed98802b4f5192adf6398a69978e7e7"
+python-versions = ">=3.12"
+content-hash = "2bc4d69bd4c467856016747a301932b116be7bbf60f7000e3b4d02a3d20fb802"
