@@ -80,7 +80,9 @@ def format_volume_display(
     """Format a volume for human display."""
     match vol:
         case RemoteVolume():
-            ep = resolved_endpoints[vol.slug]
+            ep = resolved_endpoints.get(vol.slug)
+            if ep is None:
+                return f"{vol.ssh_endpoint}:{vol.path}"
             if ep.server.user:
                 host_part = f"{ep.server.user}@{ep.server.host}"
             else:
@@ -528,12 +530,20 @@ def _print_sync_reason_fix(
         case SyncReason.SOURCE_UNAVAILABLE:
             match src_vol:
                 case RemoteVolume():
-                    ep = resolved_endpoints[src_vol.slug]
-                    _print_ssh_troubleshoot(
-                        console,
-                        ep.server,
-                        ep.proxy_chain,
-                    )
+                    ep = resolved_endpoints.get(src_vol.slug)
+                    if ep is not None:
+                        _print_ssh_troubleshoot(
+                            console,
+                            ep.server,
+                            ep.proxy_chain,
+                        )
+                    else:
+                        console.print(
+                            f"{p2}Source volume"
+                            f" '{src_ep.volume}'"
+                            " excluded by location"
+                            " filter."
+                        )
                 case LocalVolume():
                     console.print(
                         f"{p2}Source volume '{src_ep.volume}' is not available."
@@ -541,12 +551,20 @@ def _print_sync_reason_fix(
         case SyncReason.DESTINATION_UNAVAILABLE:
             match dst_vol:
                 case RemoteVolume():
-                    ep = resolved_endpoints[dst_vol.slug]
-                    _print_ssh_troubleshoot(
-                        console,
-                        ep.server,
-                        ep.proxy_chain,
-                    )
+                    ep = resolved_endpoints.get(dst_vol.slug)
+                    if ep is not None:
+                        _print_ssh_troubleshoot(
+                            console,
+                            ep.server,
+                            ep.proxy_chain,
+                        )
+                    else:
+                        console.print(
+                            f"{p2}Destination volume"
+                            f" '{dst_ep.volume}'"
+                            " excluded by location"
+                            " filter."
+                        )
                 case LocalVolume():
                     console.print(
                         f"{p2}Destination volume '{dst_ep.volume}' is not available."
@@ -786,6 +804,16 @@ def print_human_troubleshoot(
                                 ep.server,
                                 ep.proxy_chain,
                             )
+                case VolumeReason.LOCATION_EXCLUDED:
+                    p2 = _INDENT * 2
+                    console.print(
+                        f"{p2}All SSH endpoints for this"
+                        " volume are at an excluded"
+                        " location. Remove"
+                        " --exclude-location or add an"
+                        " endpoint at a different"
+                        " location."
+                    )
 
     for ss in failed_syncs:
         console.print(f"\n[bold]Sync {ss.slug!r}:[/bold]")

@@ -17,6 +17,8 @@ from nbkp.config import (
     Config,
     HardLinkSnapshotConfig,
     LocalVolume,
+    RemoteVolume,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
 )
@@ -366,3 +368,41 @@ class TestTroubleshootDryRunPendingSnapshot:
         assert "dry-run" in output
         assert "upstream" in output
         assert SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING.value in output
+
+
+class TestTroubleshootLocationExcluded:
+    def test_location_excluded_volume_text(self) -> None:
+        """Troubleshoot output explains location-excluded volume."""
+        vol = RemoteVolume(
+            slug="remote",
+            ssh_endpoint="server",
+            path="/data",
+        )
+        config = Config(
+            ssh_endpoints={
+                "server": SshEndpoint(
+                    slug="server",
+                    host="10.0.0.1",
+                    location="home",
+                ),
+            },
+            volumes={"remote": vol},
+            syncs={},
+        )
+        vol_statuses = {
+            "remote": VolumeStatus(
+                slug="remote",
+                config=vol,
+                reasons=[VolumeReason.LOCATION_EXCLUDED],
+            ),
+        }
+        console, buf = _make_console()
+        print_human_troubleshoot(
+            vol_statuses,
+            {},
+            config,
+            console=console,
+        )
+        output = buf.getvalue()
+        assert VolumeReason.LOCATION_EXCLUDED.value in output
+        assert "--exclude-location" in output

@@ -497,6 +497,16 @@ class TestCheckRemoteVolume:
         assert status.reasons == [VolumeReason.UNREACHABLE]
 
 
+class TestCheckRemoteVolumeLocationExcluded:
+    def test_excluded_volume_no_ssh(self) -> None:
+        """Volume excluded by location is marked without SSH."""
+        vol, _config = _remote_config()
+        # Empty resolved_endpoints means volume was excluded
+        status = check_volume(vol, {})
+        assert status.active is False
+        assert status.reasons == [VolumeReason.LOCATION_EXCLUDED]
+
+
 class TestCheckCommandAvailableLocal:
     @patch("nbkp.preflight.shutil.which")
     def test_command_found(self, mock_which: MagicMock) -> None:

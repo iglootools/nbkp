@@ -13,6 +13,8 @@ from ...config import (
     Config,
     HardLinkSnapshotConfig,
     LocalVolume,
+    RemoteVolume,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
 )
@@ -135,7 +137,22 @@ def troubleshoot_config() -> Config:
     """
     base_vols = base_volumes()
     extra_vols = _troubleshoot_volumes()
-    volumes = {**base_vols, **extra_vols}
+    volumes = {
+        **base_vols,
+        **extra_vols,
+        "home-nas": RemoteVolume(
+            slug="home-nas",
+            ssh_endpoint="home-only",
+            path="/mnt/nas",
+        ),
+    }
+
+    ssh_eps = base_ssh_endpoints()
+    ssh_eps["home-only"] = SshEndpoint(
+        slug="home-only",
+        host="192.168.1.50",
+        location="home",
+    )
 
     sync_endpoints: dict[str, SyncEndpoint] = {
         # Source endpoints
@@ -208,9 +225,13 @@ def troubleshoot_config() -> Config:
             volume="nas-backup",
             subdir="dry-run-pending",
         ),
+        "dst-loc-excluded": SyncEndpoint(
+            slug="dst-loc-excluded",
+            volume="home-nas",
+        ),
     }
     return Config(
-        ssh_endpoints=base_ssh_endpoints(),
+        ssh_endpoints=ssh_eps,
         volumes=volumes,
         sync_endpoints=sync_endpoints,
         syncs={
@@ -278,6 +299,11 @@ def troubleshoot_config() -> Config:
                 source="hl-stage",
                 destination="dst-dry-run-pending",
             ),
+            "location-excluded": SyncConfig(
+                slug="location-excluded",
+                source="laptop-src",
+                destination="dst-loc-excluded",
+            ),
         },
     )
 
@@ -301,11 +327,17 @@ def troubleshoot_data(
         config=config.volumes["nas-backup"],
         reasons=[VolumeReason.UNREACHABLE],
     )
+    home_nas_vs = VolumeStatus(
+        slug="home-nas",
+        config=config.volumes["home-nas"],
+        reasons=[VolumeReason.LOCATION_EXCLUDED],
+    )
 
     vol_statuses = {
         "laptop": laptop_vs,
         "usb-drive": usb_vs,
         "nas-backup": nas_vs,
+        "home-nas": home_nas_vs,
     }
 
     sync_statuses = {
@@ -421,6 +453,13 @@ def troubleshoot_data(
             source_status=usb_vs,
             destination_status=nas_vs,
             reasons=[SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING],
+        ),
+        "location-excluded": SyncStatus(
+            slug="location-excluded",
+            config=config.syncs["location-excluded"],
+            source_status=laptop_vs,
+            destination_status=home_nas_vs,
+            reasons=[SyncReason.DESTINATION_UNAVAILABLE],
         ),
     }
 

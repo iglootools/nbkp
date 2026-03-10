@@ -27,6 +27,7 @@ from .sync.symlink import DEVNULL_TARGET
 class VolumeReason(str, enum.Enum):
     SENTINEL_NOT_FOUND = ".nbkp-vol volume sentinel not found"
     UNREACHABLE = "unreachable"
+    LOCATION_EXCLUDED = "excluded by location filter"
 
 
 class SyncReason(str, enum.Enum):
@@ -130,6 +131,12 @@ def _check_remote_volume(
     resolved_endpoints: ResolvedEndpoints,
 ) -> VolumeStatus:
     """Check if a remote volume is active (SSH + .nbkp-vol sentinel)."""
+    if volume.slug not in resolved_endpoints:
+        return VolumeStatus(
+            slug=volume.slug,
+            config=volume,
+            reasons=[VolumeReason.LOCATION_EXCLUDED],
+        )
     ep = resolved_endpoints[volume.slug]
     sentinel_path = f"{volume.path}/.nbkp-vol"
     try:

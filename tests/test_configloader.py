@@ -1052,6 +1052,44 @@ class TestLoadConfig:
         )
         assert result.slug == "home-server"
 
+    def test_resolve_all_endpoints_skips_excluded_volumes(
+        self,
+    ) -> None:
+        from nbkp.config.resolution import resolve_all_endpoints
+
+        config = Config(
+            ssh_endpoints={
+                "home-server": SshEndpoint(
+                    slug="home-server",
+                    host="192.168.1.10",
+                    location="home",
+                ),
+                "travel-server": SshEndpoint(
+                    slug="travel-server",
+                    host="10.0.0.5",
+                    location="travel",
+                ),
+            },
+            volumes={
+                "home-vol": RemoteVolume(
+                    slug="home-vol",
+                    ssh_endpoint="home-server",
+                    path="/data",
+                ),
+                "travel-vol": RemoteVolume(
+                    slug="travel-vol",
+                    ssh_endpoint="travel-server",
+                    path="/backup",
+                ),
+            },
+            syncs={},
+        )
+        ef = EndpointFilter(exclude_locations=["home"])
+        result = resolve_all_endpoints(config, ef)
+        # home-vol should be excluded (not resolved)
+        assert "home-vol" not in result
+        assert "travel-vol" in result
+
     def test_source_btrfs_snapshots(self, tmp_path: Path) -> None:
         config = Config(
             volumes={
