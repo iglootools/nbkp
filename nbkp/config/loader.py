@@ -6,40 +6,52 @@ import os
 from pathlib import Path
 
 import yaml
+from platformdirs import site_config_dir, user_config_dir
 
 from .protocol import Config
+
+_APP = "nbkp"
+_FILENAME = "config.yaml"
 
 
 class ConfigError(Exception):
     """Raised when configuration is invalid."""
 
 
+def _config_search_paths() -> list[Path]:
+    """Config file search paths in priority order.
+
+    Order: XDG > platform user config > platform site config.
+    On Linux, XDG and platform user config resolve to the same path
+    and are deduped (dict.fromkeys preserves insertion order).
+    Added explicitly so that ~/.config/nbkp/config.yml works on Mac OS X
+    (for which user_config_dir(_APP) defaults to ~/Library/Application Support/nbkp).
+    """
+    xdg = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+    candidates = [
+        Path(xdg) / _APP / _FILENAME,  # XDG (all platforms)
+        Path(user_config_dir(_APP)) / _FILENAME,  # platform user config
+        Path(site_config_dir(_APP)) / _FILENAME,  # platform site config
+    ]
+    return list(dict.fromkeys(candidates))
+
+
 def find_config_file(config_path: str | None = None) -> Path:
     """Find the configuration file using search order.
 
-    Order: explicit path > XDG_CONFIG_HOME > /etc/nbkp/
+    Order: explicit path > XDG > platform user config > platform site config
     """
     if config_path is not None:
         p = Path(config_path)
         if not p.is_file():
             raise ConfigError(f"Config file not found: {config_path}")
-        else:
-            return p
-    else:
-        xdg = os.environ.get(
-            "XDG_CONFIG_HOME",
-            os.path.expanduser("~/.config"),
-        )
-        xdg_path = Path(xdg) / "nbkp" / "config.yaml"
-        etc_path = Path("/etc/nbkp/config.yaml")
-        if xdg_path.is_file():
-            return xdg_path
-        elif etc_path.is_file():
-            return etc_path
-        else:
-            raise ConfigError(
-                f"No config file found. Searched: {xdg_path}, /etc/nbkp/config.yaml"
-            )
+        return p
+
+    search = _config_search_paths()
+    found = next((p for p in search if p.is_file()), None)
+    if found is not None:
+        return found
+    raise ConfigError(f"No config file found. Searched: {', '.join(str(p) for p in search)}")
 
 
 def load_config(config_path: str | None = None) -> Config:
