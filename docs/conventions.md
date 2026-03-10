@@ -30,6 +30,8 @@
   - Avoid silent failures and ensure that all errors are surfaced with clear messages. This includes validating inputs and configurations early, and providing informative error messages when something goes wrong.
 
 ## General Python Coding Conventions
+- **String Literals**:
+  - Prefer `dedent("""\...""")` multiline strings over concatenated single-line strings with `\n` escapes when the content has meaningful structure (e.g. YAML, config snippets, multi-line templates). Short single-line strings (e.g. `"key: value\n"`) are fine as-is.
 - **Typing**: Use type annotations for all functions and methods, including return types. Use `mypy` for static type checking.
 - **Data Classes**: 
   - All serialized model objects are frozen pydantic dataclasses, immutable once created.

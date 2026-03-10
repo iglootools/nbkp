@@ -97,7 +97,5 @@ def load_config(config_path: str | None = None) -> Config:
         try:
             config = Config.model_validate(raw)
         except Exception as e:
-            raise ConfigError(
-                str(e), reason=ConfigErrorReason.VALIDATION
-            ) from e
+            raise ConfigError(str(e), reason=ConfigErrorReason.VALIDATION) from e
         return config

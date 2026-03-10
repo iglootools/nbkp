@@ -908,9 +908,7 @@ class TestConfigError:
         try:
             Config.model_validate({"volumes": {"v": {"type": "ftp", "path": "/x"}}})
         except ValidationError as ve:
-            err = ConfigError(
-                str(ve), reason=ConfigErrorReason.VALIDATION
-            )
+            err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
             err.__cause__ = ve
 
         with patch("nbkp.cli.load_config", side_effect=err):

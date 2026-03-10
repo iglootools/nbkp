@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 import yaml
@@ -133,7 +134,13 @@ class TestLoadConfig:
 
     def test_invalid_volume_type(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_type.yaml"
-        p.write_text("volumes:\n  v:\n    type: ftp\n    path: /x\nsyncs: {}\n")
+        p.write_text(dedent("""\
+            volumes:
+              v:
+                type: ftp
+                path: /x
+            syncs: {}
+        """))
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         assert excinfo.value.reason == ConfigErrorReason.VALIDATION
@@ -143,7 +150,12 @@ class TestLoadConfig:
 
     def test_missing_local_path(self, tmp_path: Path) -> None:
         p = tmp_path / "no_path.yaml"
-        p.write_text("volumes:\n  v:\n    type: local\nsyncs: {}\n")
+        p.write_text(dedent("""\
+            volumes:
+              v:
+                type: local
+            syncs: {}
+        """))
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         assert excinfo.value.reason == ConfigErrorReason.VALIDATION
@@ -157,13 +169,17 @@ class TestLoadConfig:
 
     def test_missing_remote_host(self, tmp_path: Path) -> None:
         p = tmp_path / "no_host.yaml"
-        p.write_text(
-            "ssh-endpoints:\n  s:\n    port: 22\n"
-            "volumes:\n  v:\n    type: remote\n"
-            "    ssh-endpoint: s\n"
-            "    path: /x\n"
-            "syncs: {}\n"
-        )
+        p.write_text(dedent("""\
+            ssh-endpoints:
+              s:
+                port: 22
+            volumes:
+              v:
+                type: remote
+                ssh-endpoint: s
+                path: /x
+            syncs: {}
+        """))
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         assert excinfo.value.reason == ConfigErrorReason.VALIDATION
@@ -176,13 +192,15 @@ class TestLoadConfig:
 
     def test_unknown_ssh_endpoint_reference(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_server_ref.yaml"
-        p.write_text(
-            "ssh-endpoints: {}\n"
-            "volumes:\n  v:\n    type: remote\n"
-            "    ssh-endpoint: missing\n"
-            "    path: /x\n"
-            "syncs: {}\n"
-        )
+        p.write_text(dedent("""\
+            ssh-endpoints: {}
+            volumes:
+              v:
+                type: remote
+                ssh-endpoint: missing
+                path: /x
+            syncs: {}
+        """))
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         assert excinfo.value.reason == ConfigErrorReason.VALIDATION
@@ -192,14 +210,21 @@ class TestLoadConfig:
 
     def test_unknown_volume_reference(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_ref.yaml"
-        p.write_text(
-            "volumes:\n  v:\n    type: local\n    path: /x\n"
-            "sync-endpoints:\n"
-            "  ep-src:\n    volume: v\n"
-            "  ep-dst:\n    volume: missing\n"
-            "syncs:\n  s:\n    source: ep-src\n"
-            "    destination: ep-dst\n"
-        )
+        p.write_text(dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep-src:
+                volume: v
+              ep-dst:
+                volume: missing
+            syncs:
+              s:
+                source: ep-src
+                destination: ep-dst
+        """))
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         assert excinfo.value.reason == ConfigErrorReason.VALIDATION
@@ -209,14 +234,21 @@ class TestLoadConfig:
 
     def test_missing_source_volume(self, tmp_path: Path) -> None:
         p = tmp_path / "no_src_vol.yaml"
-        p.write_text(
-            "volumes:\n  v:\n    type: local\n    path: /x\n"
-            "sync-endpoints:\n"
-            "  ep-src:\n    volume: missing\n"
-            "  ep-dst:\n    volume: v\n"
-            "syncs:\n  s:\n    source: ep-src\n"
-            "    destination: ep-dst\n"
-        )
+        p.write_text(dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep-src:
+                volume: missing
+              ep-dst:
+                volume: v
+            syncs:
+              s:
+                source: ep-src
+                destination: ep-dst
+        """))
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         assert excinfo.value.reason == ConfigErrorReason.VALIDATION
@@ -226,12 +258,18 @@ class TestLoadConfig:
 
     def test_sync_missing_source(self, tmp_path: Path) -> None:
         p = tmp_path / "no_src.yaml"
-        p.write_text(
-            "volumes:\n  v:\n    type: local\n    path: /x\n"
-            "sync-endpoints:\n"
-            "  ep-dst:\n    volume: v\n"
-            "syncs:\n  s:\n    destination: ep-dst\n"
-        )
+        p.write_text(dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep-dst:
+                volume: v
+            syncs:
+              s:
+                destination: ep-dst
+        """))
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         assert excinfo.value.reason == ConfigErrorReason.VALIDATION
@@ -245,21 +283,26 @@ class TestLoadConfig:
 
     def test_filter_normalization(self, tmp_path: Path) -> None:
         p = tmp_path / "filters.yaml"
-        p.write_text(
-            "volumes:\n"
-            "  v:\n    type: local\n    path: /x\n"
-            "sync-endpoints:\n"
-            "  ep-src:\n    volume: v\n"
-            "  ep-dst:\n    volume: v\n    subdir: dst\n"
-            "syncs:\n"
-            "  s:\n"
-            "    source: ep-src\n"
-            "    destination: ep-dst\n"
-            "    filters:\n"
-            '      - include: "*.jpg"\n'
-            '      - exclude: "*.tmp"\n'
-            '      - "H .git"\n'
-        )
+        p.write_text(dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep-src:
+                volume: v
+              ep-dst:
+                volume: v
+                subdir: dst
+            syncs:
+              s:
+                source: ep-src
+                destination: ep-dst
+                filters:
+                  - include: "*.jpg"
+                  - exclude: "*.tmp"
+                  - "H .git"
+        """))
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
         assert sync.filters == ["+ *.jpg", "- *.tmp", "H .git"]
@@ -701,19 +744,24 @@ class TestLoadConfig:
 
     def test_invalid_filter_entry(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_filter.yaml"
-        p.write_text(
-            "volumes:\n"
-            "  v:\n    type: local\n    path: /x\n"
-            "sync-endpoints:\n"
-            "  ep-src:\n    volume: v\n"
-            "  ep-dst:\n    volume: v\n    subdir: dst\n"
-            "syncs:\n"
-            "  s:\n"
-            "    source: ep-src\n"
-            "    destination: ep-dst\n"
-            "    filters:\n"
-            "      - badkey: value\n"
-        )
+        p.write_text(dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep-src:
+                volume: v
+              ep-dst:
+                volume: v
+                subdir: dst
+            syncs:
+              s:
+                source: ep-src
+                destination: ep-dst
+                filters:
+                  - badkey: value
+        """))
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         assert excinfo.value.reason == ConfigErrorReason.VALIDATION
@@ -1180,13 +1228,19 @@ class TestLoadConfig:
 
     def test_unknown_source_endpoint_reference(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_src_ep.yaml"
-        p.write_text(
-            "volumes:\n  v:\n    type: local\n    path: /x\n"
-            "sync-endpoints:\n"
-            "  ep-dst:\n    volume: v\n"
-            "syncs:\n  s:\n    source: missing\n"
-            "    destination: ep-dst\n"
-        )
+        p.write_text(dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep-dst:
+                volume: v
+            syncs:
+              s:
+                source: missing
+                destination: ep-dst
+        """))
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         assert excinfo.value.reason == ConfigErrorReason.VALIDATION
@@ -1196,13 +1250,19 @@ class TestLoadConfig:
 
     def test_unknown_destination_endpoint_reference(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_dst_ep.yaml"
-        p.write_text(
-            "volumes:\n  v:\n    type: local\n    path: /x\n"
-            "sync-endpoints:\n"
-            "  ep-src:\n    volume: v\n"
-            "syncs:\n  s:\n    source: ep-src\n"
-            "    destination: missing\n"
-        )
+        p.write_text(dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep-src:
+                volume: v
+            syncs:
+              s:
+                source: ep-src
+                destination: missing
+        """))
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         assert excinfo.value.reason == ConfigErrorReason.VALIDATION
@@ -1212,19 +1272,29 @@ class TestLoadConfig:
 
     def test_duplicate_destination_endpoint(self, tmp_path: Path) -> None:
         p = tmp_path / "dup_dst.yaml"
-        p.write_text(
-            "volumes:\n"
-            "  v:\n    type: local\n    path: /x\n"
-            "sync-endpoints:\n"
-            "  ep-src1:\n    volume: v\n    subdir: src1\n"
-            "  ep-src2:\n    volume: v\n    subdir: src2\n"
-            "  ep-dst:\n    volume: v\n    subdir: dst\n"
-            "syncs:\n"
-            "  s1:\n    source: ep-src1\n"
-            "    destination: ep-dst\n"
-            "  s2:\n    source: ep-src2\n"
-            "    destination: ep-dst\n"
-        )
+        p.write_text(dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep-src1:
+                volume: v
+                subdir: src1
+              ep-src2:
+                volume: v
+                subdir: src2
+              ep-dst:
+                volume: v
+                subdir: dst
+            syncs:
+              s1:
+                source: ep-src1
+                destination: ep-dst
+              s2:
+                source: ep-src2
+                destination: ep-dst
+        """))
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         assert excinfo.value.reason == ConfigErrorReason.VALIDATION
@@ -1234,14 +1304,20 @@ class TestLoadConfig:
 
     def test_duplicate_volume_subdir_in_endpoints(self, tmp_path: Path) -> None:
         p = tmp_path / "dup_loc.yaml"
-        p.write_text(
-            "volumes:\n"
-            "  v:\n    type: local\n    path: /x\n"
-            "sync-endpoints:\n"
-            "  ep1:\n    volume: v\n    subdir: data\n"
-            "  ep2:\n    volume: v\n    subdir: data\n"
-            "syncs: {}\n"
-        )
+        p.write_text(dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep1:
+                volume: v
+                subdir: data
+              ep2:
+                volume: v
+                subdir: data
+            syncs: {}
+        """))
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         assert excinfo.value.reason == ConfigErrorReason.VALIDATION
@@ -1251,12 +1327,16 @@ class TestLoadConfig:
 
     def test_sync_endpoint_unknown_volume(self, tmp_path: Path) -> None:
         p = tmp_path / "ep_bad_vol.yaml"
-        p.write_text(
-            "volumes:\n  v:\n    type: local\n    path: /x\n"
-            "sync-endpoints:\n"
-            "  ep:\n    volume: nonexistent\n"
-            "syncs: {}\n"
-        )
+        p.write_text(dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep:
+                volume: nonexistent
+            syncs: {}
+        """))
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         assert excinfo.value.reason == ConfigErrorReason.VALIDATION
