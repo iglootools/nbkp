@@ -35,8 +35,8 @@
   - All serialized model objects are frozen pydantic dataclasses, immutable once created.
   - Other data classes should also be frozen.
 - **Formatting**: 
-  - 79 characters (black + flake8).
-- **Python Version**: 3.12 (mypy target and black target).
+  - 88 characters (ruff default).
+- **Python Version**: 3.12 (mypy and ruff target).
 - **Control Flow**
   - Prefer match-case over if-elif-else chains
   - Prefer comprehensions and built-ins (map, filter) over manual loops when appropriate. 

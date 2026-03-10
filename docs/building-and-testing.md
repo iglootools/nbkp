@@ -23,8 +23,8 @@ mise run test-integration-docker  # All Docker-based tests (e2e + integration)
 mise run test-integration-docker-btrfs   # Local btrfs tests inside Docker (privileged)
 mise run test-integration-fs     # Filesystem integration tests
 
-mise run format             # black
-mise run lint               # flake8
+mise run format             # ruff format
+mise run lint               # ruff check
 mise run type-check         # mypy (strict: disallow_untyped_defs)
 
 # Using Poetry syntax directly
@@ -32,8 +32,8 @@ poetry run pytest tests/ --ignore=tests/e2e_sync_local/ --ignore=tests/e2e_sync_
 poetry run pytest tests/e2e_sync_local/ tests/e2e_sync_docker/ -v             # End-to-end sync tests
 poetry run pytest tests/integration_docker/ tests/integration_fs/ -v    # Integration tests
 poetry run pytest tests/ -v                                             # All tests
-poetry run black .                                                      # formatting
-poetry run flake8 nbkp/ tests/                                          # linting
+poetry run ruff format .                                                # formatting
+poetry run ruff check nbkp/ tests/                                      # linting
 poetry run mypy nbkp/ tests/                                            # type-checking
 poetry run pytest tests/test_ssh.py::TestBuildSshBaseArgs::test_full -v # run a single test
 ```

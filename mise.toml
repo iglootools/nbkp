@@ -76,12 +76,12 @@ run = [
 ]
 
 [tasks.format]
-description = "Format code with black"
-run = "poetry run black ."
+description = "Format code with ruff"
+run = "poetry run ruff format ."
 
 [tasks.lint]
-description = "Run flake8 linting"
-run = "poetry run flake8 nbkp/ tests/"
+description = "Run ruff linting"
+run = "poetry run ruff check nbkp/ tests/"
 
 [tasks.type-check]
 description = "Run mypy type checking"
