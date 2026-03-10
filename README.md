@@ -129,6 +129,7 @@ If you believe that the representation is inaccurate or if there are other tools
 - **[rsync-time-backup](https://github.com/laurent22/rsync-time-backup)** — Time Machine-style shell script using rsync `--link-dest`. Single script, no config file; uses hard links instead of btrfs snapshots; no volume detection.
 - **[rdiff-backup](https://rdiff-backup.net/)** — keeps the latest backup as a plain mirror, stores reverse diffs for older versions. Older versions require the tool to reconstruct; no removable-drive awareness.
 - **[Dirvish](https://dirvish.org/)** — rotating network backup system using rsync + hard links. Oriented toward server-pull workflows; no removable-drive detection or btrfs support.
+- **[VaultSync](https://github.com/ATAC-Helicopter/VaultSync)** — cross-platform desktop and CLI backup tool using rsync (macOS/Linux) and robocopy (Windows). Provides a GUI, scheduled backups, snapshot history, encryption, and retention policies. Stores backups as plain directories; no btrfs integration or sentinel-file mechanism.
 - **[Duplicity](https://duplicity.us/)** — GPG-encrypted tar volumes with librsync incremental transfers. Not browsable as plain directories; full+incremental chain model; no btrfs integration.
 
 #### Deduplicating
@@ -162,6 +163,10 @@ If you believe that the representation is inaccurate or if there are other tools
 - **[Amanda](https://www.amanda.org/)** — network backup orchestrating multiple clients from a central server. Designed for tape and disk pools; uses native dump/tar; heavier infrastructure than nbkp targets.
 - **[UrBackup](https://www.urbackup.org/)** — client-server backup system with a web UI for managing image and file backups across multiple machines. Requires a dedicated server process; proprietary transfer protocol; no rsync or btrfs integration.
 - **[Velero](https://velero.io/)** — backup and disaster recovery for Kubernetes clusters, snapshotting persistent volumes and cluster resources. Kubernetes-specific; not applicable to general-purpose file backups.
+
+### Community
+
+- **[r/Backup](https://www.reddit.com/r/Backup/)** — Reddit community for discussing backup strategies, tools, and best practices.
 
 ## License
 
