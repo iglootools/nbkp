@@ -66,57 +66,17 @@ class TestFindConfigFile:
 
 
 class TestLoadConfig:
-    def test_full_config(self, sample_config_file: Path) -> None:
+    def test_full_config(
+        self, sample_config: Config, sample_config_file: Path
+    ) -> None:
         cfg = load_config(str(sample_config_file))
-        assert "nas-server" in cfg.ssh_endpoints
-        server = cfg.ssh_endpoints["nas-server"]
-        assert server.slug == "nas-server"
-        assert server.host == "nas.example.com"
-        assert server.port == 5022
-        assert server.user == "backup"
-        assert server.key == str(Path("~/.ssh/key").expanduser())
-        assert server.connection_options.connect_timeout == 10
-        assert "local-data" in cfg.volumes
-        assert "nas" in cfg.volumes
-        assert "photos-to-nas" in cfg.syncs
-        local = cfg.volumes["local-data"]
-        assert isinstance(local, LocalVolume)
-        assert local.path == "/mnt/data"
-        remote = cfg.volumes["nas"]
-        assert isinstance(remote, RemoteVolume)
-        assert remote.ssh_endpoint == "nas-server"
-        sync = cfg.syncs["photos-to-nas"]
-        assert sync.source == "local-photos"
-        assert sync.destination == "nas-photos"
-        src_ep = cfg.source_endpoint(sync)
-        dst_ep = cfg.destination_endpoint(sync)
-        assert src_ep.volume == "local-data"
-        assert src_ep.subdir == "photos"
-        assert dst_ep.volume == "nas"
-        assert dst_ep.subdir == "photos-backup"
-        assert sync.enabled is True
-        assert dst_ep.btrfs_snapshots.enabled is False
-        assert sync.rsync_options.default_options_override is None
-        assert sync.rsync_options.extra_options == []
-        assert sync.rsync_options.checksum is True
-        assert sync.rsync_options.compress is False
-        assert sync.filters == ["+ *.jpg", "- *.tmp"]
-        assert sync.filter_file == str(
-            Path("~/.config/nbkp/filters/photos.rules").expanduser()
-        )
+        assert cfg == sample_config
 
-    def test_minimal_config(self, sample_minimal_config_file: Path) -> None:
+    def test_minimal_config(
+        self, sample_minimal_config: Config, sample_minimal_config_file: Path
+    ) -> None:
         cfg = load_config(str(sample_minimal_config_file))
-        sync = cfg.syncs["s1"]
-        assert sync.enabled is True
-        dst_ep = cfg.destination_endpoint(sync)
-        src_ep = cfg.source_endpoint(sync)
-        assert dst_ep.btrfs_snapshots.enabled is False
-        assert src_ep.subdir is None
-        assert sync.rsync_options.default_options_override is None
-        assert sync.rsync_options.extra_options == []
-        assert sync.filters == []
-        assert sync.filter_file is None
+        assert cfg == sample_minimal_config
 
     def test_invalid_yaml(self, tmp_path: Path) -> None:
         p = tmp_path / "bad.yaml"
