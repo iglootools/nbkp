@@ -49,7 +49,11 @@ jobs:
           mkdir -p "$HOME/.local/state/asciinema"
           echo "$ASCIINEMA_INSTALL_ID" > "$HOME/.local/state/asciinema/install-id"
       - name: Upload demo
-        if: startsWith(github.ref, 'refs/tags/')
+        # Trigger on release workflow runs or on tag pushes
+        if: >-
+          startsWith(github.ref, 'refs/tags/')
+          || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+        
         env:
           ASCIINEMA_SERVER_URL: https://asciinema.org
         run: mise run demo-upload
