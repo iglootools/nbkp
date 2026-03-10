@@ -1,17 +1,23 @@
 name: demo
 
 on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+  # Tags created by a workflow using GITHUB_TOKEN do not trigger other workflows,
+  # so we use workflow_run to run the demo after the release workflow creates a tag.
+  workflow_run:
+    workflows: ["release"]
+    types:
+      - completed
   # Manually trigger the workflow using
   # gh workflow run demo.yml # --ref <branch>
   # gh run list --workflow demo.yml # --branch <branch>
   workflow_dispatch:
   repository_dispatch:
   pull_request:
-  push:
-    tags:
-      - "*"
-    branches:
-      - "main"
 
 concurrency:
   group: ${{ github.workflow }}-${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/release' ) && format('{0}-main-{1}', github.workflow, github.sha) || format('{0}-main-{1}', github.workflow, github.ref) }}
