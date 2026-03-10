@@ -35,12 +35,8 @@ class TestBuildRsyncCommandLocalToLocal:
         config = Config(
             volumes={"src": src, "dst": dst},
             sync_endpoints={
-                "ep-src": SyncEndpoint(
-                    slug="ep-src", volume="src", subdir="photos"
-                ),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst", volume="dst", subdir="backup"
-                ),
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="photos"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst", subdir="backup"),
             },
             syncs={"s1": sync},
         )
@@ -129,12 +125,8 @@ class TestBuildRsyncCommandLocalToRemote:
             ssh_endpoints={"nas-server": nas_server},
             volumes={"src": src, "dst": dst},
             sync_endpoints={
-                "ep-src": SyncEndpoint(
-                    slug="ep-src", volume="src", subdir="photos"
-                ),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst", volume="dst", subdir="photos"
-                ),
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="photos"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst", subdir="photos"),
             },
             syncs={"s1": sync},
         )
@@ -152,8 +144,7 @@ class TestBuildRsyncCommandLocalToRemote:
             "--filter=P .nbkp-*",
             "--checksum",
             "-e",
-            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
-            f" -p 5022 -i {_SSH_KEY}",
+            f"ssh -o ConnectTimeout=10 -o BatchMode=yes -p 5022 -i {_SSH_KEY}",
             "/mnt/src/photos/",
             "backup@nas.local:/backup/photos/",
         ]
@@ -182,9 +173,7 @@ class TestBuildRsyncCommandRemoteToLocal:
             volumes={"src": src, "dst": dst},
             sync_endpoints={
                 "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst", volume="dst", subdir="backup"
-                ),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst", subdir="backup"),
             },
             syncs={"s1": sync},
         )
@@ -252,21 +241,15 @@ class TestBuildRsyncCommandRemoteToRemoteSameServer:
             ssh_endpoints=endpoints,
             volumes={"src": src, "dst": dst},
             sync_endpoints={
-                "ep-src": SyncEndpoint(
-                    slug="ep-src", volume="src", subdir=src_subdir
-                ),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst", volume="dst", subdir=dst_subdir
-                ),
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir=src_subdir),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst", subdir=dst_subdir),
             },
             syncs={"s1": sync},
         )
         return sync, config
 
     def test_basic(self) -> None:
-        sync, config = self._simple_config(
-            src_subdir="photos", dst_subdir="backup"
-        )
+        sync, config = self._simple_config(src_subdir="photos", dst_subdir="backup")
         resolved = resolve_all_endpoints(config)
 
         cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
@@ -801,7 +784,7 @@ class TestBuildRsyncCommandProxyJump:
             "--filter=P .nbkp-*",
             "--checksum",
             "-e",
-            "ssh -o ConnectTimeout=10 -o BatchMode=yes" f" -o {quoted}",
+            f"ssh -o ConnectTimeout=10 -o BatchMode=yes -o {quoted}",
             "backup@server.internal:/data/",
             "/mnt/dst/",
         ]
@@ -898,12 +881,8 @@ class TestBuildRsyncCommandSpacesInPaths:
         config = Config(
             volumes={"src": src, "dst": dst},
             sync_endpoints={
-                "ep-src": SyncEndpoint(
-                    slug="ep-src", volume="src", subdir="my photos"
-                ),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst", volume="dst", subdir="my backup"
-                ),
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="my photos"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst", subdir="my backup"),
             },
             syncs={"s1": sync},
         )
@@ -1007,9 +986,7 @@ class TestSourceSnapshotPath:
                     subdir="photos",
                     btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
                 ),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst", volume="dst", subdir="backup"
-                ),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst", subdir="backup"),
             },
             syncs={"s1": sync},
         )
@@ -1111,9 +1088,7 @@ class TestSourceSnapshotPath:
         config = Config(
             volumes={"src": src, "dst": dst},
             sync_endpoints={
-                "ep-src": SyncEndpoint(
-                    slug="ep-src", volume="src", subdir="photos"
-                ),
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="photos"),
                 "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
             },
             syncs={"s1": sync},
@@ -1281,9 +1256,7 @@ class TestDestSuffix:
 class TestRunRsync:
     @patch("nbkp.sync.rsync.subprocess.run")
     def test_run_rsync(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0, stdout="done", stderr=""
-        )
+        mock_run.return_value = MagicMock(returncode=0, stdout="done", stderr="")
         src = LocalVolume(slug="src", path="/src")
         dst = LocalVolume(slug="dst", path="/dst")
         sync = SyncConfig(

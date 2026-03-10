@@ -42,9 +42,7 @@ class TestFindConfigFile:
         with pytest.raises(ConfigError, match="not found"):
             find_config_file("/nonexistent/config.yaml")
 
-    def test_xdg_config(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_xdg_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         xdg = tmp_path / "xdg"
         cfg = xdg / "nbkp" / "config.yaml"
         cfg.parent.mkdir(parents=True)
@@ -128,9 +126,7 @@ class TestLoadConfig:
 
     def test_invalid_volume_type(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_type.yaml"
-        p.write_text(
-            "volumes:\n  v:\n    type: ftp\n    path: /x\n" "syncs: {}\n"
-        )
+        p.write_text("volumes:\n  v:\n    type: ftp\n    path: /x\nsyncs: {}\n")
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         cause = excinfo.value.__cause__
@@ -146,8 +142,7 @@ class TestLoadConfig:
         assert cause is not None
         errors = cause.errors()
         assert any(
-            err["loc"] == ("volumes", "v", "local", "path")
-            and err["type"] == "missing"
+            err["loc"] == ("volumes", "v", "local", "path") and err["type"] == "missing"
             for err in errors
         )
 
@@ -166,8 +161,7 @@ class TestLoadConfig:
         assert cause is not None
         errors = cause.errors()
         assert any(
-            "host" in str(err["loc"]) and err["type"] == "missing"
-            for err in errors
+            "host" in str(err["loc"]) and err["type"] == "missing" for err in errors
         )
 
     def test_unknown_ssh_endpoint_reference(self, tmp_path: Path) -> None:
@@ -262,12 +256,8 @@ class TestLoadConfig:
                 "v": LocalVolume(slug="v", path="/x"),
             },
             sync_endpoints={
-                "ep-src": SyncEndpoint(
-                    slug="ep-src", volume="v", subdir="src"
-                ),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst", volume="v", subdir="dst"
-                ),
+                "ep-src": SyncEndpoint(slug="ep-src", volume="v", subdir="src"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="v", subdir="dst"),
             },
             syncs={
                 "s": SyncConfig(
@@ -296,12 +286,8 @@ class TestLoadConfig:
                 "v": LocalVolume(slug="v", path="/x"),
             },
             sync_endpoints={
-                "ep-src": SyncEndpoint(
-                    slug="ep-src", volume="v", subdir="src"
-                ),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst", volume="v", subdir="dst"
-                ),
+                "ep-src": SyncEndpoint(slug="ep-src", volume="v", subdir="src"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="v", subdir="dst"),
             },
             syncs={
                 "s": SyncConfig(
@@ -349,9 +335,7 @@ class TestLoadConfig:
         assert opts.strict_host_key_checking is False
         assert opts.known_hosts_file == "/dev/null"
 
-    def test_connection_options_server_alive_interval(
-        self, tmp_path: Path
-    ) -> None:
+    def test_connection_options_server_alive_interval(self, tmp_path: Path) -> None:
         config = Config(
             ssh_endpoints={
                 "keepalive": SshEndpoint(
@@ -387,9 +371,7 @@ class TestLoadConfig:
         opts = cfg.ssh_endpoints["ch-timeout"].connection_options
         assert opts.channel_timeout == 30.0
 
-    def test_connection_options_disabled_algorithms(
-        self, tmp_path: Path
-    ) -> None:
+    def test_connection_options_disabled_algorithms(self, tmp_path: Path) -> None:
         config = Config(
             ssh_endpoints={
                 "restricted": SshEndpoint(
@@ -725,9 +707,7 @@ class TestLoadConfig:
                 "v": LocalVolume(slug="v", path="/x"),
             },
             sync_endpoints={
-                "ep-src": SyncEndpoint(
-                    slug="ep-src", volume="v", subdir="src"
-                ),
+                "ep-src": SyncEndpoint(slug="ep-src", volume="v", subdir="src"),
                 "ep-dst": SyncEndpoint(
                     slug="ep-dst",
                     volume="v",
@@ -761,9 +741,7 @@ class TestLoadConfig:
                 "v": LocalVolume(slug="v", path="/x"),
             },
             sync_endpoints={
-                "ep-src": SyncEndpoint(
-                    slug="ep-src", volume="v", subdir="src"
-                ),
+                "ep-src": SyncEndpoint(slug="ep-src", volume="v", subdir="src"),
                 "ep-dst": SyncEndpoint(
                     slug="ep-dst",
                     volume="v",
@@ -787,9 +765,7 @@ class TestLoadConfig:
         assert dst_ep.hard_link_snapshots.enabled is True
         assert dst_ep.hard_link_snapshots.max_snapshots is None
 
-    def test_mutual_exclusivity_btrfs_and_hardlink(
-        self, tmp_path: Path
-    ) -> None:
+    def test_mutual_exclusivity_btrfs_and_hardlink(self, tmp_path: Path) -> None:
         with pytest.raises(Exception, match="mutually exclusive"):
             SyncEndpoint(
                 slug="ep",
@@ -818,9 +794,7 @@ class TestLoadConfig:
         )
         assert ep.snapshot_mode == "hard-link"
 
-    def test_location_and_locations_mutual_exclusivity(
-        self, tmp_path: Path
-    ) -> None:
+    def test_location_and_locations_mutual_exclusivity(self, tmp_path: Path) -> None:
         p = tmp_path / "exclusive_loc.yaml"
         p.write_text(
             yaml.safe_dump(
@@ -865,9 +839,7 @@ class TestLoadConfig:
         )
         assert ep_none.location_list == []
 
-    def test_extends_locations_overrides_parent_location(
-        self, tmp_path: Path
-    ) -> None:
+    def test_extends_locations_overrides_parent_location(self, tmp_path: Path) -> None:
         p = tmp_path / "extends_locs.yaml"
         p.write_text(
             yaml.safe_dump(
@@ -892,9 +864,7 @@ class TestLoadConfig:
             "travel",
         ]
 
-    def test_extends_location_overrides_parent_locations(
-        self, tmp_path: Path
-    ) -> None:
+    def test_extends_location_overrides_parent_locations(self, tmp_path: Path) -> None:
         p = tmp_path / "extends_loc.yaml"
         p.write_text(
             yaml.safe_dump(
@@ -959,7 +929,8 @@ class TestLoadConfig:
         # Filter for "travel" should match multi-server
         ef = EndpointFilter(locations=["travel"])
         result = config.resolve_endpoint_for_volume(
-            config.volumes["remote"], ef  # type: ignore[arg-type]
+            config.volumes["remote"],
+            ef,  # type: ignore[arg-type]
         )
         assert result.slug == "multi-server"
 
@@ -975,9 +946,7 @@ class TestLoadConfig:
                     subdir="src",
                     btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
                 ),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst", volume="v", subdir="dst"
-                ),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="v", subdir="dst"),
             },
             syncs={
                 "s": SyncConfig(
@@ -1009,9 +978,7 @@ class TestLoadConfig:
                     subdir="src",
                     hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
                 ),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst", volume="v", subdir="dst"
-                ),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="v", subdir="dst"),
             },
             syncs={
                 "s": SyncConfig(
@@ -1045,9 +1012,7 @@ class TestLoadConfig:
         assert cause is not None
         assert "unknown source endpoint" in str(cause)
 
-    def test_unknown_destination_endpoint_reference(
-        self, tmp_path: Path
-    ) -> None:
+    def test_unknown_destination_endpoint_reference(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_dst_ep.yaml"
         p.write_text(
             "volumes:\n  v:\n    type: local\n    path: /x\n"
@@ -1083,9 +1048,7 @@ class TestLoadConfig:
         assert cause is not None
         assert "share destination endpoint" in str(cause)
 
-    def test_duplicate_volume_subdir_in_endpoints(
-        self, tmp_path: Path
-    ) -> None:
+    def test_duplicate_volume_subdir_in_endpoints(self, tmp_path: Path) -> None:
         p = tmp_path / "dup_loc.yaml"
         p.write_text(
             "volumes:\n"
@@ -1140,15 +1103,11 @@ class TestPathNormalization:
         assert vol.path == "/mnt/data"
 
     def test_remote_volume_trailing_slash(self) -> None:
-        vol = RemoteVolume(
-            slug="v", ssh_endpoint="ep", path="/volume1/backups/"
-        )
+        vol = RemoteVolume(slug="v", ssh_endpoint="ep", path="/volume1/backups/")
         assert vol.path == "/volume1/backups"
 
     def test_remote_volume_no_trailing_slash(self) -> None:
-        vol = RemoteVolume(
-            slug="v", ssh_endpoint="ep", path="/volume1/backups"
-        )
+        vol = RemoteVolume(slug="v", ssh_endpoint="ep", path="/volume1/backups")
         assert vol.path == "/volume1/backups"
 
     def test_remote_volume_root_slash(self) -> None:

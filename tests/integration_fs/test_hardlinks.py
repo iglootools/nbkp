@@ -206,9 +206,7 @@ class TestPruneSnapshots:
         dst.mkdir()
         (src / "data.txt").write_text("prune test")
 
-        sync, config, names = self._create_snapshots(
-            src, dst, 5, max_snapshots=3
-        )
+        sync, config, names = self._create_snapshots(src, dst, 5, max_snapshots=3)
 
         deleted = prune_snapshots(sync, config, 3)
         assert len(deleted) == 2
@@ -237,9 +235,7 @@ class TestPruneSnapshots:
         assert len(remaining) == 1
         assert names[-1] in remaining[0]
 
-    def test_dry_run_returns_paths_without_deleting(
-        self, tmp_path: Path
-    ) -> None:
+    def test_dry_run_returns_paths_without_deleting(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()

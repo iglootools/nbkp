@@ -493,8 +493,7 @@ def _print_ssh_troubleshoot(
         console.print(f"{p3}2. Copy it to the server:")
         _print_cmd(
             console,
-            f"ssh-copy-id {proxy_opt}{port_flag}"
-            f"-i {server.key} {user_host}",
+            f"ssh-copy-id {proxy_opt}{port_flag}-i {server.key} {user_host}",
             indent=4,
         )
     else:
@@ -503,7 +502,7 @@ def _print_ssh_troubleshoot(
         console.print(f"{p3}2. Copy it to the server:")
         _print_cmd(
             console,
-            f"ssh-copy-id {proxy_opt}{port_flag}" f"{user_host}",
+            f"ssh-copy-id {proxy_opt}{port_flag}{user_host}",
             indent=4,
         )
     console.print(f"{p3}3. Verify passwordless login:")
@@ -525,7 +524,7 @@ def _print_sync_reason_fix(
     dst_vol = config.volumes[dst_ep.volume]
     match reason:
         case SyncReason.DISABLED:
-            console.print(f"{p2}Enable the sync in the" " configuration file.")
+            console.print(f"{p2}Enable the sync in the configuration file.")
         case SyncReason.SOURCE_UNAVAILABLE:
             match src_vol:
                 case RemoteVolume():
@@ -537,9 +536,7 @@ def _print_sync_reason_fix(
                     )
                 case LocalVolume():
                     console.print(
-                        f"{p2}Source volume"
-                        f" '{src_ep.volume}'"
-                        " is not available."
+                        f"{p2}Source volume '{src_ep.volume}' is not available."
                     )
         case SyncReason.DESTINATION_UNAVAILABLE:
             match dst_vol:
@@ -552,9 +549,7 @@ def _print_sync_reason_fix(
                     )
                 case LocalVolume():
                     console.print(
-                        f"{p2}Destination volume"
-                        f" '{dst_ep.volume}'"
-                        " is not available."
+                        f"{p2}Destination volume '{dst_ep.volume}' is not available."
                     )
         case SyncReason.SOURCE_SENTINEL_NOT_FOUND:
             path = _endpoint_path(src_vol, src_ep.subdir)
@@ -573,7 +568,7 @@ def _print_sync_reason_fix(
                 " does not exist. Create it:"
             )
             cmds = [
-                f"ln -sfn /dev/null" f" {path}/{LATEST_LINK}",
+                f"ln -sfn /dev/null {path}/{LATEST_LINK}",
             ]
             for cmd in cmds:
                 _print_cmd(
@@ -590,7 +585,7 @@ def _print_sync_reason_fix(
                 " or reset it:"
             )
             cmds = [
-                f"ln -sfn /dev/null" f" {path}/{LATEST_LINK}",
+                f"ln -sfn /dev/null {path}/{LATEST_LINK}",
             ]
             for cmd in cmds:
                 _print_cmd(
@@ -602,7 +597,7 @@ def _print_sync_reason_fix(
             if src_ep.btrfs_snapshots.enabled:
                 cmds = [
                     f"sudo mkdir {path}/{SNAPSHOTS_DIR}",
-                    "sudo chown <user>:<group>" f" {path}/{SNAPSHOTS_DIR}",
+                    f"sudo chown <user>:<group> {path}/{SNAPSHOTS_DIR}",
                 ]
             else:
                 cmds = [f"mkdir -p {path}/{SNAPSHOTS_DIR}"]
@@ -630,15 +625,11 @@ def _print_sync_reason_fix(
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
         case SyncReason.RSYNC_TOO_OLD_ON_SOURCE:
             host = _host_label(src_vol, resolved_endpoints)
-            console.print(
-                f"{p2}rsync 3.0+ is required on {host}." " Install or upgrade:"
-            )
+            console.print(f"{p2}rsync 3.0+ is required on {host}. Install or upgrade:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
         case SyncReason.RSYNC_TOO_OLD_ON_DESTINATION:
             host = _host_label(dst_vol, resolved_endpoints)
-            console.print(
-                f"{p2}rsync 3.0+ is required on {host}." " Install or upgrade:"
-            )
+            console.print(f"{p2}rsync 3.0+ is required on {host}. Install or upgrade:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
         case SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION:
             host = _host_label(dst_vol, resolved_endpoints)
@@ -646,20 +637,18 @@ def _print_sync_reason_fix(
             _print_cmd(console, _BTRFS_INSTALL, indent=3)
         case SyncReason.STAT_NOT_FOUND_ON_DESTINATION:
             host = _host_label(dst_vol, resolved_endpoints)
-            console.print(f"{p2}Install coreutils (stat)" f" on {host}:")
+            console.print(f"{p2}Install coreutils (stat) on {host}:")
             _print_cmd(console, _COREUTILS_INSTALL, indent=3)
         case SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION:
             host = _host_label(dst_vol, resolved_endpoints)
-            console.print(f"{p2}Install util-linux (findmnt)" f" on {host}:")
+            console.print(f"{p2}Install util-linux (findmnt) on {host}:")
             _print_cmd(console, _UTIL_LINUX_INSTALL, indent=3)
         case SyncReason.DESTINATION_NOT_BTRFS:
-            console.print(
-                f"{p2}The destination is not on" " a btrfs filesystem."
-            )
+            console.print(f"{p2}The destination is not on a btrfs filesystem.")
         case SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME:
             path = _endpoint_path(dst_vol, dst_ep.subdir)
             cmds = [
-                "sudo btrfs subvolume create" f" {path}/{STAGING_DIR}",
+                f"sudo btrfs subvolume create {path}/{STAGING_DIR}",
                 f"sudo mkdir {path}/{SNAPSHOTS_DIR}",
                 "sudo chown <user>:<group>"
                 f" {path}/{STAGING_DIR}"
@@ -671,14 +660,8 @@ def _print_sync_reason_fix(
                     _wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
         case SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM:
-            console.print(
-                f"{p2}Remount the btrfs volume" " with user_subvol_rm_allowed:"
-            )
-            cmd = (
-                "sudo mount -o"
-                " remount,user_subvol_rm_allowed"
-                f" {dst_vol.path}"
-            )
+            console.print(f"{p2}Remount the btrfs volume with user_subvol_rm_allowed:")
+            cmd = f"sudo mount -o remount,user_subvol_rm_allowed {dst_vol.path}"
             _print_cmd(
                 console,
                 _wrap_cmd(cmd, dst_vol, resolved_endpoints),
@@ -692,8 +675,8 @@ def _print_sync_reason_fix(
         case SyncReason.DESTINATION_TMP_NOT_FOUND:
             path = _endpoint_path(dst_vol, dst_ep.subdir)
             cmds = [
-                "sudo btrfs subvolume create" f" {path}/{STAGING_DIR}",
-                "sudo chown <user>:<group>" f" {path}/{STAGING_DIR}",
+                f"sudo btrfs subvolume create {path}/{STAGING_DIR}",
+                f"sudo chown <user>:<group> {path}/{STAGING_DIR}",
             ]
             for cmd in cmds:
                 _print_cmd(
@@ -706,8 +689,8 @@ def _print_sync_reason_fix(
                 cmds = [f"mkdir -p {path}/{SNAPSHOTS_DIR}"]
             else:
                 cmds = [
-                    f"sudo mkdir" f" {path}/{SNAPSHOTS_DIR}",
-                    "sudo chown <user>:<group>" f" {path}/{SNAPSHOTS_DIR}",
+                    f"sudo mkdir {path}/{SNAPSHOTS_DIR}",
+                    f"sudo chown <user>:<group> {path}/{SNAPSHOTS_DIR}",
                 ]
             for cmd in cmds:
                 _print_cmd(
@@ -722,7 +705,7 @@ def _print_sync_reason_fix(
                 " does not exist. Create it:"
             )
             cmds = [
-                f"ln -sfn /dev/null" f" {path}/{LATEST_LINK}",
+                f"ln -sfn /dev/null {path}/{LATEST_LINK}",
             ]
             for cmd in cmds:
                 _print_cmd(
@@ -737,7 +720,7 @@ def _print_sync_reason_fix(
                 " target. Reset it:"
             )
             cmds = [
-                f"ln -sfn /dev/null" f" {path}/{LATEST_LINK}",
+                f"ln -sfn /dev/null {path}/{LATEST_LINK}",
             ]
             for cmd in cmds:
                 _print_cmd(
@@ -808,7 +791,7 @@ def print_human_troubleshoot(
             )
 
     if not has_issues:
-        console.print("No issues found." " All volumes and syncs are active.")
+        console.print("No issues found. All volumes and syncs are active.")
 
 
 def _sync_endpoint_display(endpoint: SyncEndpoint) -> str:
@@ -888,9 +871,7 @@ def print_human_config(
 
     for sync in config.syncs.values():
         enabled = (
-            Text("yes", style="green")
-            if sync.enabled
-            else Text("no", style="red")
+            Text("yes", style="green") if sync.enabled else Text("no", style="red")
         )
         sync_table.add_row(
             sync.slug,

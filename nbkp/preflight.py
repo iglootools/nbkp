@@ -37,37 +37,25 @@ class SyncReason(str, enum.Enum):
     DESTINATION_SENTINEL_NOT_FOUND = ".nbkp-dst destination sentinel not found"
     SOURCE_LATEST_NOT_FOUND = f"source {LATEST_LINK} symlink not found"
     SOURCE_LATEST_INVALID = f"source {LATEST_LINK} symlink target is invalid"
-    SOURCE_SNAPSHOTS_DIR_NOT_FOUND = (
-        f"source {SNAPSHOTS_DIR}/ directory not found"
-    )
+    SOURCE_SNAPSHOTS_DIR_NOT_FOUND = f"source {SNAPSHOTS_DIR}/ directory not found"
     RSYNC_NOT_FOUND_ON_SOURCE = "rsync not found on source"
     RSYNC_NOT_FOUND_ON_DESTINATION = "rsync not found on destination"
     RSYNC_TOO_OLD_ON_SOURCE = "rsync too old on source (3.0+ required)"
-    RSYNC_TOO_OLD_ON_DESTINATION = (
-        "rsync too old on destination (3.0+ required)"
-    )
+    RSYNC_TOO_OLD_ON_DESTINATION = "rsync too old on destination (3.0+ required)"
     BTRFS_NOT_FOUND_ON_DESTINATION = "btrfs not found on destination"
     STAT_NOT_FOUND_ON_DESTINATION = "stat not found on destination"
     FINDMNT_NOT_FOUND_ON_DESTINATION = "findmnt not found on destination"
     DESTINATION_NOT_BTRFS = "destination not on btrfs filesystem"
-    DESTINATION_NOT_BTRFS_SUBVOLUME = (
-        "destination endpoint is not a btrfs subvolume"
-    )
+    DESTINATION_NOT_BTRFS_SUBVOLUME = "destination endpoint is not a btrfs subvolume"
     DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM = (
         "destination not mounted with user_subvol_rm_allowed"
     )
-    DESTINATION_TMP_NOT_FOUND = (
-        f"destination {STAGING_DIR}/ directory not found"
-    )
+    DESTINATION_TMP_NOT_FOUND = f"destination {STAGING_DIR}/ directory not found"
     DESTINATION_SNAPSHOTS_DIR_NOT_FOUND = (
         f"destination {SNAPSHOTS_DIR}/ directory not found"
     )
-    DESTINATION_LATEST_NOT_FOUND = (
-        f"destination {LATEST_LINK} symlink not found"
-    )
-    DESTINATION_LATEST_INVALID = (
-        f"destination {LATEST_LINK} symlink target is invalid"
-    )
+    DESTINATION_LATEST_NOT_FOUND = f"destination {LATEST_LINK} symlink not found"
+    DESTINATION_LATEST_INVALID = f"destination {LATEST_LINK} symlink target is invalid"
     DESTINATION_NO_HARDLINK_SUPPORT = (
         "destination filesystem does not support hard links"
     )
@@ -191,9 +179,7 @@ def _check_command_available(
             return shutil.which(command) is not None
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(
-                ep.server, ["which", command], ep.proxy_chain
-            )
+            result = run_remote_command(ep.server, ["which", command], ep.proxy_chain)
             return result.returncode == 0
 
 
@@ -301,9 +287,7 @@ def _check_directory_exists(
             return Path(path).is_dir()
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(
-                ep.server, ["test", "-d", path], ep.proxy_chain
-            )
+            result = run_remote_command(ep.server, ["test", "-d", path], ep.proxy_chain)
             return result.returncode == 0
 
 
@@ -318,9 +302,7 @@ def _check_symlink_exists(
             return Path(path).is_symlink()
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(
-                ep.server, ["test", "-L", path], ep.proxy_chain
-            )
+            result = run_remote_command(ep.server, ["test", "-L", path], ep.proxy_chain)
             return result.returncode == 0
 
 
@@ -338,9 +320,7 @@ def _read_symlink_target(
             return str(p.readlink())
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(
-                ep.server, ["readlink", path], ep.proxy_chain
-            )
+            result = run_remote_command(ep.server, ["readlink", path], ep.proxy_chain)
             if result.returncode != 0:
                 return None
             return result.stdout.strip()
@@ -497,9 +477,7 @@ def _has_upstream_sync(
     matches this sync's source endpoint slug.
     """
     return any(
-        other.destination == sync.source
-        and other.slug != sync.slug
-        and other.enabled
+        other.destination == sync.source and other.slug != sync.slug and other.enabled
         for other in all_syncs.values()
     )
 
@@ -614,18 +592,12 @@ def check_sync(
                     reasons.append(SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION)
                 else:
                     has_stat = _check_command_available(dst_vol, "stat", re)
-                    has_findmnt = _check_command_available(
-                        dst_vol, "findmnt", re
-                    )
+                    has_findmnt = _check_command_available(dst_vol, "findmnt", re)
 
                     if not has_stat:
-                        reasons.append(
-                            SyncReason.STAT_NOT_FOUND_ON_DESTINATION
-                        )
+                        reasons.append(SyncReason.STAT_NOT_FOUND_ON_DESTINATION)
                     if not has_findmnt:
-                        reasons.append(
-                            SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION
-                        )
+                        reasons.append(SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION)
 
                     if has_stat:
                         _check_btrfs_dest(

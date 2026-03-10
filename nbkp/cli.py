@@ -92,10 +92,7 @@ def check(
         bool,
         typer.Option(
             "--strict/--no-strict",
-            help=(
-                "Exit non-zero on any inactive sync,"
-                " including missing sentinels"
-            ),
+            help=("Exit non-zero on any inactive sync, including missing sentinels"),
         ),
     ] = False,
     locations: Annotated[
@@ -188,7 +185,7 @@ def run(
         typer.Option(
             "--progress",
             "-p",
-            help=("Progress mode: none, overall," " per-file, or full"),
+            help=("Progress mode: none, overall, per-file, or full"),
         ),
     ] = None,
     prune: Annotated[
@@ -202,10 +199,7 @@ def run(
         bool,
         typer.Option(
             "--strict/--no-strict",
-            help=(
-                "Exit non-zero on any inactive sync,"
-                " including missing sentinels"
-            ),
+            help=("Exit non-zero on any inactive sync, including missing sentinels"),
         ),
     ] = False,
     locations: Annotated[
@@ -296,9 +290,7 @@ def run(
             on_sync_start=(
                 on_sync_start if output_format is OutputFormat.HUMAN else None
             ),
-            on_sync_end=(
-                on_sync_end if output_format is OutputFormat.HUMAN else None
-            ),
+            on_sync_end=(on_sync_end if output_format is OutputFormat.HUMAN else None),
             resolved_endpoints=resolved,
         )
 
@@ -337,9 +329,7 @@ def sh(
         typer.Option(
             "--relative-src",
             help=(
-                "Make source paths relative to"
-                " script location"
-                " (requires --output-file)"
+                "Make source paths relative to script location (requires --output-file)"
             ),
         ),
     ] = False,
@@ -380,7 +370,7 @@ def sh(
         bool,
         typer.Option(
             "--portable/--no-portable",
-            help=("Generate bash 3.2-compatible script" " (default: enabled)"),
+            help=("Generate bash 3.2-compatible script (default: enabled)"),
         ),
     ] = True,
 ) -> None:
@@ -391,7 +381,7 @@ def sh(
     """
     if (relative_src or relative_dst) and output_file is None:
         typer.echo(
-            "Error: --relative-src/--relative-dst" " require --output-file",
+            "Error: --relative-src/--relative-dst require --output-file",
             err=True,
         )
         raise typer.Exit(2)
@@ -402,9 +392,7 @@ def sh(
         cfg,
         ScriptOptions(
             config_path=config,
-            output_file=(
-                os.path.abspath(output_file) if output_file else None
-            ),
+            output_file=(os.path.abspath(output_file) if output_file else None),
             relative_src=relative_src,
             relative_dst=relative_dst,
             portable=portable,
@@ -547,8 +535,7 @@ def prune(
             kept = 0
             if (
                 status.active
-                and cfg.destination_endpoint(status.config).snapshot_mode
-                != "none"
+                and cfg.destination_endpoint(status.config).snapshot_mode != "none"
             ):
                 try:
                     kept = len(list_snapshots(status.config, cfg, resolved))

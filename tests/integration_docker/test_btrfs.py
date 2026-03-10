@@ -82,7 +82,7 @@ def _seed_staging(
     """Put some data in the staging subvolume."""
     ssh_exec(
         docker_ssh_endpoint,
-        f"echo '{content}'" f" > {REMOTE_BTRFS_PATH}/staging/data.txt",
+        f"echo '{content}' > {REMOTE_BTRFS_PATH}/staging/data.txt",
     )
 
 
@@ -99,9 +99,7 @@ class TestCreateSnapshot:
         _create_staging_subvolume(docker_ssh_endpoint)
         _seed_staging(docker_ssh_endpoint)
 
-        snapshot_path = create_snapshot(
-            sync, config, resolved_endpoints=resolved
-        )
+        snapshot_path = create_snapshot(sync, config, resolved_endpoints=resolved)
 
         # Verify snapshot exists
         check = ssh_exec(docker_ssh_endpoint, f"test -d {snapshot_path}")
@@ -190,9 +188,7 @@ class TestDeleteSnapshot:
         _create_staging_subvolume(docker_ssh_endpoint)
         _seed_staging(docker_ssh_endpoint)
 
-        snapshot_path = create_snapshot(
-            sync, config, resolved_endpoints=resolved
-        )
+        snapshot_path = create_snapshot(sync, config, resolved_endpoints=resolved)
 
         # Delete it
         delete_snapshot(snapshot_path, remote_btrfs_volume, resolved)
@@ -233,9 +229,7 @@ class TestPruneSnapshots:
             names.append(name)
 
         # Point latest to the newest
-        update_latest_symlink(
-            sync, config, names[-1], resolved_endpoints=resolved
-        )
+        update_latest_symlink(sync, config, names[-1], resolved_endpoints=resolved)
 
         # Prune to keep 1
         deleted = prune_snapshots(sync, config, 1, resolved_endpoints=resolved)

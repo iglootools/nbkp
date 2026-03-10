@@ -27,9 +27,7 @@ from .config import (
 def check_config() -> Config:
     """Config with local + remote volumes and varied syncs."""
     volumes = base_volumes()
-    volumes["external-drive"] = LocalVolume(
-        slug="external-drive", path="/mnt/external"
-    )
+    volumes["external-drive"] = LocalVolume(slug="external-drive", path="/mnt/external")
     sync_endpoints = base_sync_endpoints()
     sync_endpoints["external-root"] = SyncEndpoint(
         slug="external-root",
@@ -187,9 +185,7 @@ def troubleshoot_config() -> Config:
         "dst-hardlink": SyncEndpoint(
             slug="dst-hardlink",
             volume="usb-5",
-            hard_link_snapshots=HardLinkSnapshotConfig(
-                enabled=True, max_snapshots=5
-            ),
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True, max_snapshots=5),
         ),
         "dst-rsync-old": SyncEndpoint(
             slug="dst-rsync-old",

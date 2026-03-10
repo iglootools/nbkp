@@ -81,21 +81,21 @@ def assert_sentinels_after_sync(
                 return _remote_exists(path)
 
     # 1. .nbkp-src must NOT be at the rsync target
-    assert not _check_exists(
-        f"{rsync_target}/.nbkp-src"
-    ), f".nbkp-src was copied to rsync target {rsync_target}"
+    assert not _check_exists(f"{rsync_target}/.nbkp-src"), (
+        f".nbkp-src was copied to rsync target {rsync_target}"
+    )
 
     # 2. .nbkp-vol must NOT be at the rsync target
     #    (unless rsync target IS the volume root)
     if rsync_target != vol_path:
-        assert not _check_exists(
-            f"{rsync_target}/.nbkp-vol"
-        ), f".nbkp-vol found at rsync target {rsync_target}"
+        assert not _check_exists(f"{rsync_target}/.nbkp-vol"), (
+            f".nbkp-vol found at rsync target {rsync_target}"
+        )
 
     # 3. .nbkp-dst must still exist at the sentinel dir
-    assert _check_exists(
-        f"{sentinel_dir}/.nbkp-dst"
-    ), f".nbkp-dst missing from {sentinel_dir}"
+    assert _check_exists(f"{sentinel_dir}/.nbkp-dst"), (
+        f".nbkp-dst missing from {sentinel_dir}"
+    )
 
 
 def _docker_available() -> bool:
@@ -108,9 +108,7 @@ def _docker_available() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(
-    not _docker_available(), reason="Docker not available"
-)
+pytestmark = pytest.mark.skipif(not _docker_available(), reason="Docker not available")
 
 
 @pytest.fixture(scope="session")
@@ -325,7 +323,7 @@ def _cleanup_remote(
     # Clean /srv/backups (glob * skips dotfiles, so also remove
     # sentinels)
     run(f"rm -rf {REMOTE_BACKUP_PATH}/*")
-    run(f"find {REMOTE_BACKUP_PATH}" " -name '.nbkp-*' -delete")
+    run(f"find {REMOTE_BACKUP_PATH} -name '.nbkp-*' -delete")
 
     # Clean btrfs paths — delete snapshot subvolumes first,
     # then staging subvolume and latest symlink
@@ -350,14 +348,10 @@ def _cleanup_remote(
                 )
 
     # Delete staging subvolume if it exists
-    run(
-        "btrfs subvolume delete"
-        f" {REMOTE_BTRFS_PATH}/staging"
-        " 2>/dev/null || true"
-    )
+    run(f"btrfs subvolume delete {REMOTE_BTRFS_PATH}/staging 2>/dev/null || true")
     # Remove latest symlink
-    run(f"rm -f {REMOTE_BTRFS_PATH}/latest" " 2>/dev/null || true")
-    run(f"rm -rf {REMOTE_BTRFS_PATH}/snapshots" " 2>/dev/null || true")
+    run(f"rm -f {REMOTE_BTRFS_PATH}/latest 2>/dev/null || true")
+    run(f"rm -rf {REMOTE_BTRFS_PATH}/snapshots 2>/dev/null || true")
 
     # Clean chain subpath (btrfs subvolume with its own
     # staging + snapshots + latest symlink, used by chain test)
@@ -381,11 +375,11 @@ def _cleanup_remote(
                     f" {chain}/snapshots/{snap}"
                     " 2>/dev/null || true"
                 )
-    run(f"btrfs subvolume delete {chain}/staging" " 2>/dev/null || true")
-    run(f"rm -f {chain}/latest" " 2>/dev/null || true")
-    run(f"btrfs subvolume delete {chain}" " 2>/dev/null || true")
+    run(f"btrfs subvolume delete {chain}/staging 2>/dev/null || true")
+    run(f"rm -f {chain}/latest 2>/dev/null || true")
+    run(f"btrfs subvolume delete {chain} 2>/dev/null || true")
 
     # Clean bare subpath on btrfs (regular dir, used by chain test)
-    run(f"rm -rf {REMOTE_BTRFS_PATH}/bare" " 2>/dev/null || true")
+    run(f"rm -rf {REMOTE_BTRFS_PATH}/bare 2>/dev/null || true")
 
-    run(f"find {REMOTE_BTRFS_PATH}" " -name '.nbkp-*' -delete")
+    run(f"find {REMOTE_BTRFS_PATH} -name '.nbkp-*' -delete")

@@ -166,9 +166,7 @@ class TestConfigShowCommand:
         config = _sample_config()
         mock_load.return_value = config
 
-        result = runner.invoke(
-            app, ["config", "show", "--config", "/fake.yaml"]
-        )
+        result = runner.invoke(app, ["config", "show", "--config", "/fake.yaml"])
         assert result.exit_code == 0
         assert "Volumes:" in result.output
         assert "Syncs:" in result.output
@@ -181,9 +179,7 @@ class TestConfigShowCommand:
         config = _sample_config()
         mock_load.return_value = config
 
-        result = runner.invoke(
-            app, ["config", "show", "--config", "/fake.yaml"]
-        )
+        result = runner.invoke(app, ["config", "show", "--config", "/fake.yaml"])
         assert result.exit_code == 0
         assert "SSH Endpoints:" in result.output
         assert "nas-server" in result.output
@@ -213,9 +209,9 @@ class TestConfigShowCommand:
 
     @patch(
         "nbkp.cli.load_config",
-        side_effect=__import__(
-            "nbkp.config", fromlist=["ConfigError"]
-        ).ConfigError("bad config"),
+        side_effect=__import__("nbkp.config", fromlist=["ConfigError"]).ConfigError(
+            "bad config"
+        ),
     )
     def test_config_error(self, mock_load: MagicMock) -> None:
         result = runner.invoke(
@@ -705,9 +701,7 @@ def _prune_active_statuses(
         name: SyncStatus(
             slug=name,
             config=sync,
-            source_status=vol_statuses[
-                config.sync_endpoints[sync.source].volume
-            ],
+            source_status=vol_statuses[config.sync_endpoints[sync.source].volume],
             destination_status=vol_statuses[
                 config.sync_endpoints[sync.destination].volume
             ],
@@ -787,9 +781,7 @@ class TestPruneCommand:
             "/dst/snapshots/s3",
         ]
 
-        result = runner.invoke(
-            app, ["prune", "--config", "/fake.yaml", "--dry-run"]
-        )
+        result = runner.invoke(app, ["prune", "--config", "/fake.yaml", "--dry-run"])
         assert result.exit_code == 0
         assert "dry run" in result.output
         mock_prune.assert_called_once()
@@ -863,9 +855,9 @@ class TestPruneCommand:
 class TestConfigError:
     @patch(
         "nbkp.cli.load_config",
-        side_effect=__import__(
-            "nbkp.config", fromlist=["ConfigError"]
-        ).ConfigError("bad config"),
+        side_effect=__import__("nbkp.config", fromlist=["ConfigError"]).ConfigError(
+            "bad config"
+        ),
     )
     def test_check_config_error(self, mock_load: MagicMock) -> None:
         result = runner.invoke(app, ["check", "--config", "/bad.yaml"])
@@ -873,9 +865,9 @@ class TestConfigError:
 
     @patch(
         "nbkp.cli.load_config",
-        side_effect=__import__(
-            "nbkp.config", fromlist=["ConfigError"]
-        ).ConfigError("bad config"),
+        side_effect=__import__("nbkp.config", fromlist=["ConfigError"]).ConfigError(
+            "bad config"
+        ),
     )
     def test_run_config_error(self, mock_load: MagicMock) -> None:
         result = runner.invoke(app, ["run", "--config", "/bad.yaml"])
@@ -897,9 +889,7 @@ class TestConfigError:
         from nbkp.config.protocol import Config
 
         try:
-            Config.model_validate(
-                {"volumes": {"v": {"type": "ftp", "path": "/x"}}}
-            )
+            Config.model_validate({"volumes": {"v": {"type": "ftp", "path": "/x"}}})
         except ValidationError as ve:
             err = ConfigError(str(ve))
             err.__cause__ = ve
@@ -1039,9 +1029,9 @@ class TestShCommand:
 
     @patch(
         "nbkp.cli.load_config",
-        side_effect=__import__(
-            "nbkp.config", fromlist=["ConfigError"]
-        ).ConfigError("bad config"),
+        side_effect=__import__("nbkp.config", fromlist=["ConfigError"]).ConfigError(
+            "bad config"
+        ),
     )
     def test_config_error(self, mock_load: MagicMock) -> None:
         result = runner.invoke(app, ["sh", "--config", "/bad.yaml"])

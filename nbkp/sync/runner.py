@@ -125,8 +125,7 @@ def run_all_syncs(
                 output="",
                 outcome=SyncOutcome.SKIPPED,
                 detail=(
-                    "Sync not active: "
-                    + ", ".join(r.value for r in status.reasons)
+                    "Sync not active: " + ", ".join(r.value for r in status.reasons)
                 ),
             )
         else:
@@ -375,9 +374,7 @@ def _run_hard_link_sync(
 
     # 1. Clean up orphaned snapshots from failed syncs
     try:
-        cleanup_orphaned_snapshots(
-            sync, config, resolved_endpoints=resolved_endpoints
-        )
+        cleanup_orphaned_snapshots(sync, config, resolved_endpoints=resolved_endpoints)
     except Exception:
         pass  # Best-effort cleanup
 

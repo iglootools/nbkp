@@ -38,8 +38,7 @@ def find_config_file(config_path: str | None = None) -> Path:
             return etc_path
         else:
             raise ConfigError(
-                "No config file found. Searched: "
-                f"{xdg_path}, /etc/nbkp/config.yaml"
+                f"No config file found. Searched: {xdg_path}, /etc/nbkp/config.yaml"
             )
 
 

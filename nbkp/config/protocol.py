@@ -129,9 +129,7 @@ class SshEndpoint(_BaseModel):
     @model_validator(mode="after")
     def validate_proxy_exclusivity(self) -> SshEndpoint:
         if self.proxy_jump is not None and self.proxy_jumps is not None:
-            raise ValueError(
-                "proxy-jump and proxy-jumps are mutually exclusive"
-            )
+            raise ValueError("proxy-jump and proxy-jumps are mutually exclusive")
         return self
 
     @model_validator(mode="after")
@@ -179,9 +177,7 @@ class RemoteVolume(_BaseModel):
         return stripped if stripped else "/"
 
 
-Volume = Annotated[
-    Union[LocalVolume, RemoteVolume], Field(discriminator="type")
-]
+Volume = Annotated[Union[LocalVolume, RemoteVolume], Field(discriminator="type")]
 
 
 class BtrfsSnapshotConfig(_BaseModel):
@@ -235,8 +231,7 @@ class SyncEndpoint(_BaseModel):
     ) -> SyncEndpoint:
         if self.btrfs_snapshots.enabled and self.hard_link_snapshots.enabled:
             raise ValueError(
-                "btrfs-snapshots and hard-link-snapshots"
-                " are mutually exclusive"
+                "btrfs-snapshots and hard-link-snapshots are mutually exclusive"
             )
         return self
 
@@ -320,9 +315,7 @@ class Config(_BaseModel):
         """Resolve `extends` inheritance on ssh-endpoints."""
         if not isinstance(data, dict):
             return data
-        endpoints = (
-            data.get("ssh-endpoints") or data.get("ssh_endpoints") or {}
-        )
+        endpoints = data.get("ssh-endpoints") or data.get("ssh_endpoints") or {}
         if not isinstance(endpoints, dict):
             return data
 
@@ -344,8 +337,7 @@ class Config(_BaseModel):
                 raise ValueError(f"Circular extends chain: {chain_str}")
             if parent_slug not in endpoints:
                 raise ValueError(
-                    f"Endpoint '{slug}' extends "
-                    f"unknown endpoint '{parent_slug}'"
+                    f"Endpoint '{slug}' extends unknown endpoint '{parent_slug}'"
                 )
             parent = _resolve(parent_slug, chain + [slug])
             if not isinstance(parent, dict):
@@ -456,9 +448,7 @@ class Config(_BaseModel):
         from ..remote.resolution import is_private_host
 
         candidates = (
-            list(vol.ssh_endpoints)
-            if vol.ssh_endpoints
-            else [vol.ssh_endpoint]
+            list(vol.ssh_endpoints) if vol.ssh_endpoints else [vol.ssh_endpoint]
         )
 
         ef = endpoint_filter
@@ -492,8 +482,7 @@ class Config(_BaseModel):
             by_net = [
                 slug
                 for slug in reachable
-                if is_private_host(self.ssh_endpoints[slug].host)
-                == want_private
+                if is_private_host(self.ssh_endpoints[slug].host) == want_private
             ]
             if by_net:
                 reachable = by_net
@@ -512,9 +501,7 @@ class Config(_BaseModel):
             for hop in chain:
                 if hop not in self.ssh_endpoints:
                     raise ValueError(
-                        f"Server '{slug}' references "
-                        f"unknown proxy-jump server "
-                        f"'{hop}'"
+                        f"Server '{slug}' references unknown proxy-jump server '{hop}'"
                     )
             # Circular detection via BFS through transitive
             # proxy chains
@@ -553,8 +540,7 @@ class Config(_BaseModel):
         for ep_slug, ep in self.sync_endpoints.items():
             if ep.volume not in self.volumes:
                 raise ValueError(
-                    f"Sync endpoint '{ep_slug}' references"
-                    f" unknown volume '{ep.volume}'"
+                    f"Sync endpoint '{ep_slug}' references unknown volume '{ep.volume}'"
                 )
 
         # Unique (volume, subdir) per sync endpoint

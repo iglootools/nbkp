@@ -39,9 +39,7 @@ class TestChainSync:
         """Data seeded in src-local-bare arrives at
         dst-local-bare after traversing the full chain."""
         # 1. Build config
-        config = build_chain_config(
-            tmp_path, bastion_container, proxied_ssh_endpoint
-        )
+        config = build_chain_config(tmp_path, bastion_container, proxied_ssh_endpoint)
 
         # 2-4. Setup: btrfs subvolume, sentinels, seed data
         src = setup_chain(config, tmp_path, docker_ssh_endpoint)
@@ -50,9 +48,7 @@ class TestChainSync:
         resolved = resolve_all_endpoints(config)
         _, sync_statuses = check_all_syncs(config, resolved_endpoints=resolved)
         for slug, status in sync_statuses.items():
-            assert status.active, (
-                f"{slug}: " f"{[r.value for r in status.reasons]}"
-            )
+            assert status.active, f"{slug}: {[r.value for r in status.reasons]}"
 
         # 6. Run all syncs (topologically ordered)
         results = run_all_syncs(

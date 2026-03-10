@@ -35,9 +35,7 @@ from nbkp.sync.btrfs import (
 )
 from nbkp.sync.symlink import update_latest_symlink
 
-_btrfs_available = (
-    platform.system() == "Linux" and shutil.which("btrfs") is not None
-)
+_btrfs_available = platform.system() == "Linux" and shutil.which("btrfs") is not None
 
 _skip_no_btrfs = pytest.mark.skipif(
     not _btrfs_available,
@@ -146,9 +144,7 @@ def _seed_staging(dst: Path, content: str = "test data") -> None:
 
 @_skip_no_btrfs
 class TestCreateSnapshot:
-    def test_creates_readonly_snapshot(
-        self, tmp_path: Path, btrfs_dst: Path
-    ) -> None:
+    def test_creates_readonly_snapshot(self, tmp_path: Path, btrfs_dst: Path) -> None:
         src = tmp_path / "src"
         src.mkdir()
 
@@ -171,9 +167,7 @@ class TestCreateSnapshot:
 
 @_skip_no_btrfs
 class TestListSnapshots:
-    def test_lists_sorted_oldest_first(
-        self, tmp_path: Path, btrfs_dst: Path
-    ) -> None:
+    def test_lists_sorted_oldest_first(self, tmp_path: Path, btrfs_dst: Path) -> None:
         src = tmp_path / "src"
         src.mkdir()
 
@@ -195,9 +189,7 @@ class TestListSnapshots:
 
 @_skip_no_btrfs
 class TestGetLatestSnapshot:
-    def test_returns_most_recent(
-        self, tmp_path: Path, btrfs_dst: Path
-    ) -> None:
+    def test_returns_most_recent(self, tmp_path: Path, btrfs_dst: Path) -> None:
         src = tmp_path / "src"
         src.mkdir()
 
@@ -237,9 +229,7 @@ class TestDeleteSnapshot:
 
 @_skip_no_btrfs
 class TestPruneSnapshots:
-    def test_prunes_oldest_beyond_limit(
-        self, tmp_path: Path, btrfs_dst: Path
-    ) -> None:
+    def test_prunes_oldest_beyond_limit(self, tmp_path: Path, btrfs_dst: Path) -> None:
         src = tmp_path / "src"
         src.mkdir()
 
@@ -262,9 +252,7 @@ class TestPruneSnapshots:
         assert len(remaining) == 1
         assert names[-1] in remaining[0]
 
-    def test_dry_run_preserves_all(
-        self, tmp_path: Path, btrfs_dst: Path
-    ) -> None:
+    def test_dry_run_preserves_all(self, tmp_path: Path, btrfs_dst: Path) -> None:
         src = tmp_path / "src"
         src.mkdir()
 

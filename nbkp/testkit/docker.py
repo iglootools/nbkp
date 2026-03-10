@@ -281,9 +281,7 @@ def create_sentinels(
     for sentinel in sentinels:
         result = ssh_exec(server, f"touch {path}/{sentinel}", check=False)
         if result.returncode != 0:
-            raise RuntimeError(
-                f"Failed to create sentinel {sentinel}:" f" {result.stderr}"
-            )
+            raise RuntimeError(f"Failed to create sentinel {sentinel}: {result.stderr}")
 
 
 def prepare_btrfs_snapshot_based_backup_dst(

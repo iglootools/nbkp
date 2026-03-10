@@ -151,9 +151,7 @@ def _make_snapshot_writable(
             )
 
     if result.returncode != 0:
-        raise RuntimeError(
-            f"btrfs property set ro=false failed: {result.stderr}"
-        )
+        raise RuntimeError(f"btrfs property set ro=false failed: {result.stderr}")
 
 
 def delete_snapshot(

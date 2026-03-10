@@ -178,24 +178,18 @@ def _show_results() -> None:
     config = config_show_config()
     re = resolve_all_endpoints(config)
     console, buf = _capture_console()
-    print_human_results(
-        run_results(config), False, config, re, console=console
-    )
+    print_human_results(run_results(config), False, config, re, console=console)
     _print_panel("print_human_results (run)", buf)
 
     console, buf = _capture_console()
-    print_human_results(
-        dry_run_results(config), True, config, re, console=console
-    )
+    print_human_results(dry_run_results(config), True, config, re, console=console)
     _print_panel("print_human_results (dry run)", buf)
 
 
 def _show_prune() -> None:
     config = config_show_config()
     console, buf = _capture_console()
-    print_human_prune_results(
-        prune_results(config), dry_run=False, console=console
-    )
+    print_human_prune_results(prune_results(config), dry_run=False, console=console)
     _print_panel("print_human_prune_results (prune)", buf)
 
     console, buf = _capture_console()
@@ -241,9 +235,7 @@ def _show_config_errors() -> None:
 
     console, buf = _capture_console()
     try:
-        ConfigModel.model_validate(
-            {"volumes": {"v": {"type": "ftp", "path": "/x"}}}
-        )
+        ConfigModel.model_validate({"volumes": {"v": {"type": "ftp", "path": "/x"}}})
     except ValidationError as ve:
         err = ConfigError(str(ve))
         err.__cause__ = ve
@@ -273,9 +265,7 @@ def _show_config_errors() -> None:
 
     console, buf = _capture_console()
     try:
-        ConfigModel.model_validate(
-            {"volumes": {"v": {"type": "local"}}, "syncs": {}}
-        )
+        ConfigModel.model_validate({"volumes": {"v": {"type": "local"}}, "syncs": {}})
     except ValidationError as ve:
         err = ConfigError(str(ve))
         err.__cause__ = ve
@@ -332,7 +322,7 @@ def seed(
         check_docker()
         if not DOCKER_DIR.is_dir():  # type: ignore[possibly-undefined]
             typer.echo(
-                "Error: Docker directory not found:" f" {DOCKER_DIR}",
+                f"Error: Docker directory not found: {DOCKER_DIR}",
                 err=True,
             )
             raise typer.Exit(1)
@@ -555,7 +545,7 @@ def seed(
         with _console.status("Creating btrfs subvolume..."):
             ssh_exec(
                 storage_endpoint,
-                "btrfs subvolume create" f" {btrfs_snapshots_path}",
+                f"btrfs subvolume create {btrfs_snapshots_path}",
             )
         remote_exec = _run_remote
 
@@ -588,13 +578,13 @@ def seed(
         rows.append(
             (
                 "Bastion",
-                f"{BASTION_CONTAINER_NAME}" f" (port {bastion_endpoint.port})",
+                f"{BASTION_CONTAINER_NAME} (port {bastion_endpoint.port})",
             )
         )
         rows.append(
             (
                 "Storage",
-                f"{STORAGE_CONTAINER_NAME}" f" (port {storage_endpoint.port})",
+                f"{STORAGE_CONTAINER_NAME} (port {storage_endpoint.port})",
             )
         )
     label_w = max(len(r[0]) for r in rows)
@@ -639,8 +629,7 @@ def seed(
         "  && $SH",
         "",
         "# With relative paths (src and dst)",
-        f"{pfx}nbkp sh --config $CFG -o $SH"
-        " --relative-src --relative-dst \\",
+        f"{pfx}nbkp sh --config $CFG -o $SH --relative-src --relative-dst \\",
         "  && bash -n $SH \\",
         "  && $SH --dry-run \\",
         "  && $SH",
@@ -649,8 +638,7 @@ def seed(
         lines += [
             "",
             "# Teardown containers and network",
-            f"docker rm -f {STORAGE_CONTAINER_NAME}"
-            f" {BASTION_CONTAINER_NAME}",
+            f"docker rm -f {STORAGE_CONTAINER_NAME} {BASTION_CONTAINER_NAME}",
             "docker network rm nbkp-demo-net",
         ]
     commands = "\n".join(lines)

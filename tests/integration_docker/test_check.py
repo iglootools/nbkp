@@ -53,9 +53,7 @@ class TestRemoteVolumeCheck:
         docker_ssh_endpoint: SshEndpoint,
         docker_remote_volume: RemoteVolume,
     ) -> None:
-        create_sentinels(
-            docker_ssh_endpoint, REMOTE_BACKUP_PATH, [".nbkp-vol"]
-        )
+        create_sentinels(docker_ssh_endpoint, REMOTE_BACKUP_PATH, [".nbkp-vol"])
         config = Config(
             ssh_endpoints={"test-server": docker_ssh_endpoint},
             volumes={"test-remote": docker_remote_volume},

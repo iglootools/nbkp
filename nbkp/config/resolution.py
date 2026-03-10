@@ -40,14 +40,10 @@ def resolve_all_endpoints(
     for vol in config.volumes.values():
         match vol:
             case RemoteVolume():
-                server = config.resolve_endpoint_for_volume(
-                    vol, endpoint_filter
-                )
+                server = config.resolve_endpoint_for_volume(vol, endpoint_filter)
                 server = enrich_from_ssh_config(server)
                 proxy_chain = config.resolve_proxy_chain(server)
-                proxy_chain = [
-                    enrich_from_ssh_config(ep) for ep in proxy_chain
-                ]
+                proxy_chain = [enrich_from_ssh_config(ep) for ep in proxy_chain]
                 result[vol.slug] = ResolvedEndpoint(
                     server=server,
                     proxy_chain=proxy_chain,

@@ -246,9 +246,9 @@ def assert_trees_equal(
         f"  extra:   {set(actual_files) - set(expected_files)}"
     )
     for rel, exp_path in expected_files.items():
-        assert (
-            actual_files[rel].read_bytes() == exp_path.read_bytes()
-        ), f"content mismatch: {rel}"
+        assert actual_files[rel].read_bytes() == exp_path.read_bytes(), (
+            f"content mismatch: {rel}"
+        )
 
 
 def assert_chain_results(

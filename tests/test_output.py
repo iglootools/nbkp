@@ -233,9 +233,7 @@ class TestCheckRsyncCommandDisplay:
                 reasons=[],
             )
         }
-        sections = build_check_sections(
-            vol_s, sync_s, config, resolved_endpoints={}
-        )
+        sections = build_check_sections(vol_s, sync_s, config, resolved_endpoints={})
         output = _render_sections(sections)
         assert "/mnt/dst/staging/" in output
         assert "--link-dest" not in output
@@ -247,9 +245,7 @@ class TestCheckRsyncCommandDisplay:
         ep_dst = SyncEndpoint(
             slug="ep-dst",
             volume="dst",
-            hard_link_snapshots=HardLinkSnapshotConfig(
-                enabled=True, max_snapshots=10
-            ),
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
         )
         sync = SyncConfig(
             slug="hl-sync",
@@ -271,9 +267,7 @@ class TestCheckRsyncCommandDisplay:
                 reasons=[],
             )
         }
-        sections = build_check_sections(
-            vol_s, sync_s, config, resolved_endpoints={}
-        )
+        sections = build_check_sections(vol_s, sync_s, config, resolved_endpoints={})
         output = _render_sections(sections)
         assert "/mnt/dst/snapshots/<timestamp>/" in output
         # No previous snapshot: --link-dest is omitted
@@ -286,9 +280,7 @@ class TestCheckRsyncCommandDisplay:
         ep_dst = SyncEndpoint(
             slug="ep-dst",
             volume="dst",
-            hard_link_snapshots=HardLinkSnapshotConfig(
-                enabled=True, max_snapshots=10
-            ),
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
         )
         sync = SyncConfig(
             slug="hl-sync",
@@ -311,9 +303,7 @@ class TestCheckRsyncCommandDisplay:
                 destination_latest_target="2026-03-06T14:30:00.000Z",
             )
         }
-        sections = build_check_sections(
-            vol_s, sync_s, config, resolved_endpoints={}
-        )
+        sections = build_check_sections(vol_s, sync_s, config, resolved_endpoints={})
         output = _render_sections(sections)
         assert "/mnt/dst/snapshots/<timestamp>/" in output
         assert "--link-dest" in output
@@ -344,9 +334,7 @@ class TestCheckRsyncCommandDisplay:
                 reasons=[],
             )
         }
-        sections = build_check_sections(
-            vol_s, sync_s, config, resolved_endpoints={}
-        )
+        sections = build_check_sections(vol_s, sync_s, config, resolved_endpoints={})
         output = _render_sections(sections)
         assert "/mnt/dst/" in output
         assert "staging" not in output

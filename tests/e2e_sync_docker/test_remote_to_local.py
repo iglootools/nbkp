@@ -30,8 +30,7 @@ class TestRemoteToLocal:
         # Create test file on remote source
         ssh_exec(
             docker_ssh_endpoint,
-            "echo 'hello from remote'"
-            f" > {REMOTE_BACKUP_PATH}/remote-file.txt",
+            f"echo 'hello from remote' > {REMOTE_BACKUP_PATH}/remote-file.txt",
         )
 
         dst_dir = tmp_path / "dst"
@@ -86,7 +85,7 @@ class TestRemoteToLocal:
         )
         ssh_exec(
             docker_ssh_endpoint,
-            "echo 'image-data'" f" > {REMOTE_BACKUP_PATH}/photos/img.jpg",
+            f"echo 'image-data' > {REMOTE_BACKUP_PATH}/photos/img.jpg",
         )
 
         dst_dir = tmp_path / "dst"
@@ -102,9 +101,7 @@ class TestRemoteToLocal:
             ssh_endpoints={"test-server": docker_ssh_endpoint},
             volumes={"src": docker_remote_volume, "dst": dst_vol},
             sync_endpoints={
-                "ep-src": SyncEndpoint(
-                    slug="ep-src", volume="src", subdir="photos"
-                ),
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="photos"),
                 "ep-dst": SyncEndpoint(
                     slug="ep-dst",
                     volume="dst",
