@@ -87,12 +87,17 @@ run = "poetry run ruff check nbkp/ tests/"
 description = "Run mypy type checking"
 run = "poetry run mypy nbkp/"
 
+[tasks.compat-check]
+description = "Verify no Python features above 3.12 are used"
+run = "poetry run vermin --target=3.12- --no-tips --no-parse-comments nbkp/ tests/"
+
 [tasks.check]
-description = "Run all checks (format, lint, type-check)"
+description = "Run all checks (format, lint, type-check, compat-check)"
 run = [
   { task = "format" },
   { task = "lint" },
   { task = "type-check" },
+  { task = "compat-check" },
 ]
 
 [tasks.check-all]
