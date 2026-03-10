@@ -22,6 +22,8 @@ from nbkp.config import (
     SyncEndpoint,
     find_config_file,
     load_config,
+    resolve_endpoint_for_volume,
+    resolve_proxy_chain,
 )
 
 
@@ -411,7 +413,7 @@ class TestLoadConfig:
         p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
         assert cfg.ssh_endpoints["target"].proxy_jump == "bastion"
-        chain = cfg.resolve_proxy_chain(cfg.ssh_endpoints["target"])
+        chain = resolve_proxy_chain(cfg, cfg.ssh_endpoints["target"])
         assert len(chain) == 1
         assert chain[0].host == "bastion.example.com"
 
@@ -480,7 +482,7 @@ class TestLoadConfig:
         p = tmp_path / "proxy_jumps.yaml"
         p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
-        chain = cfg.resolve_proxy_chain(cfg.ssh_endpoints["target"])
+        chain = resolve_proxy_chain(cfg, cfg.ssh_endpoints["target"])
         assert len(chain) == 2
         assert chain[0].host == "bastion1.example.com"
         assert chain[1].host == "bastion2.example.com"
@@ -502,7 +504,7 @@ class TestLoadConfig:
         p = tmp_path / "proxy_jumps_single.yaml"
         p.write_text(_config_to_yaml(config))
         cfg = load_config(str(p))
-        chain = cfg.resolve_proxy_chain(cfg.ssh_endpoints["target"])
+        chain = resolve_proxy_chain(cfg, cfg.ssh_endpoints["target"])
         assert len(chain) == 1
         assert chain[0].host == "bastion.example.com"
 
@@ -610,7 +612,7 @@ class TestLoadConfig:
             )
         )
         cfg = load_config(str(p))
-        chain = cfg.resolve_proxy_chain(cfg.ssh_endpoints["child"])
+        chain = resolve_proxy_chain(cfg, cfg.ssh_endpoints["child"])
         assert len(chain) == 2
         assert chain[0].host == "bastion2.example.com"
         assert chain[1].host == "bastion3.example.com"
@@ -649,7 +651,7 @@ class TestLoadConfig:
             )
         )
         cfg = load_config(str(p))
-        chain = cfg.resolve_proxy_chain(cfg.ssh_endpoints["child"])
+        chain = resolve_proxy_chain(cfg, cfg.ssh_endpoints["child"])
         assert len(chain) == 1
         assert chain[0].host == "bastion3.example.com"
 
@@ -928,7 +930,8 @@ class TestLoadConfig:
         )
         # Filter for "travel" should match multi-server
         ef = EndpointFilter(locations=["travel"])
-        result = config.resolve_endpoint_for_volume(
+        result = resolve_endpoint_for_volume(
+            config,
             config.volumes["remote"],
             ef,  # type: ignore[arg-type]
         )
@@ -971,7 +974,8 @@ class TestLoadConfig:
         )
         # Exclude "home" — should pick travel-server (first non-excluded)
         ef = EndpointFilter(exclude_locations=["home"])
-        result = config.resolve_endpoint_for_volume(
+        result = resolve_endpoint_for_volume(
+            config,
             config.volumes["remote"],
             ef,  # type: ignore[arg-type]
         )
@@ -1017,7 +1021,8 @@ class TestLoadConfig:
             locations=["office"],
             exclude_locations=["home"],
         )
-        result = config.resolve_endpoint_for_volume(
+        result = resolve_endpoint_for_volume(
+            config,
             config.volumes["remote"],
             ef,  # type: ignore[arg-type]
         )
@@ -1046,7 +1051,8 @@ class TestLoadConfig:
         )
         # Excluding all candidates falls back (keeps original list)
         ef = EndpointFilter(exclude_locations=["home"])
-        result = config.resolve_endpoint_for_volume(
+        result = resolve_endpoint_for_volume(
+            config,
             config.volumes["remote"],
             ef,  # type: ignore[arg-type]
         )

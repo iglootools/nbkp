@@ -6,10 +6,11 @@ from pydantic import ConfigDict
 
 from pydantic import Field
 
-from ..remote.resolution import enrich_from_ssh_config
+from ..remote.resolution import enrich_from_ssh_config, is_private_host
 from .protocol import (
     Config,
     EndpointFilter,
+    NetworkType,
     RemoteVolume,
     SshEndpoint,
     _BaseModel,
@@ -25,6 +26,77 @@ class ResolvedEndpoint(_BaseModel):
 
 
 ResolvedEndpoints = dict[str, ResolvedEndpoint]
+
+
+def resolve_endpoint_for_volume(
+    config: Config,
+    vol: RemoteVolume,
+    endpoint_filter: EndpointFilter | None = None,
+) -> SshEndpoint:
+    """Select the best SSH endpoint for a remote volume.
+
+    Uses ``endpoint_filter`` (location, network) to narrow
+    candidates.  Falls back to the primary ``ssh_endpoint``.
+    """
+    candidates = list(vol.ssh_endpoints) if vol.ssh_endpoints else [vol.ssh_endpoint]
+
+    ef = endpoint_filter
+    if ef is None:
+        return config.ssh_endpoints[candidates[0]]
+
+    # DNS reachability: drop endpoints whose host
+    # cannot be resolved
+    reachable = [
+        slug
+        for slug in candidates
+        if is_private_host(config.ssh_endpoints[slug].host) is not None
+    ]
+    if not reachable:
+        return config.ssh_endpoints[vol.ssh_endpoint]
+
+    # Exclude locations
+    if ef.exclude_locations:
+        excl = set(ef.exclude_locations)
+        filtered = [
+            slug
+            for slug in reachable
+            if not (excl & set(config.ssh_endpoints[slug].location_list))
+        ]
+        if filtered:
+            reachable = filtered
+
+    # Include locations
+    if ef.locations:
+        filter_locs = set(ef.locations)
+        by_loc = [
+            slug
+            for slug in reachable
+            if filter_locs & set(config.ssh_endpoints[slug].location_list)
+        ]
+        if by_loc:
+            reachable = by_loc
+
+    # Network filter (private / public)
+    if ef.network is not None:
+        want_private = ef.network == NetworkType.PRIVATE
+        by_net = [
+            slug
+            for slug in reachable
+            if is_private_host(config.ssh_endpoints[slug].host) == want_private
+        ]
+        if by_net:
+            reachable = by_net
+
+    # Deterministic pick: first candidate in original order
+    return config.ssh_endpoints[reachable[0]]
+
+
+def resolve_proxy_chain(
+    config: Config,
+    server: SshEndpoint,
+) -> list[SshEndpoint]:
+    """Resolve the proxy-jump chain as a list of SshEndpoints."""
+    return [config.ssh_endpoints[slug] for slug in server.proxy_jump_chain]
 
 
 def _is_volume_excluded(
@@ -64,9 +136,9 @@ def resolve_all_endpoints(
             case RemoteVolume():
                 if _is_volume_excluded(config, vol, endpoint_filter):
                     continue
-                server = config.resolve_endpoint_for_volume(vol, endpoint_filter)
+                server = resolve_endpoint_for_volume(config, vol, endpoint_filter)
                 server = enrich_from_ssh_config(server)
-                proxy_chain = config.resolve_proxy_chain(server)
+                proxy_chain = resolve_proxy_chain(config, server)
                 proxy_chain = [enrich_from_ssh_config(ep) for ep in proxy_chain]
                 result[vol.slug] = ResolvedEndpoint(
                     server=server,

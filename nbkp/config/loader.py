@@ -51,7 +51,9 @@ def find_config_file(config_path: str | None = None) -> Path:
     found = next((p for p in search if p.is_file()), None)
     if found is not None:
         return found
-    raise ConfigError(f"No config file found. Searched: {', '.join(str(p) for p in search)}")
+    raise ConfigError(
+        f"No config file found. Searched: {', '.join(str(p) for p in search)}"
+    )
 
 
 def load_config(config_path: str | None = None) -> Config:

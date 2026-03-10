@@ -21,6 +21,8 @@ from .resolution import (
     ResolvedEndpoint,
     ResolvedEndpoints,
     resolve_all_endpoints,
+    resolve_endpoint_for_volume,
+    resolve_proxy_chain,
 )
 
 __all__ = [
@@ -44,4 +46,6 @@ __all__ = [
     "find_config_file",
     "load_config",
     "resolve_all_endpoints",
+    "resolve_endpoint_for_volume",
+    "resolve_proxy_chain",
 ]
