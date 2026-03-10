@@ -101,7 +101,7 @@ run = [
 ]
 
 [tasks.check-all]
-description = "Run all checks (format, lint, type-check, test)"
+description = "Run all checks (format, lint, type-check, compat-check, test)"
 run = [
   { task = "check" },
   { task = "test-all" },
