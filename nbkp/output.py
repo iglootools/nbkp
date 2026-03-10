@@ -946,4 +946,5 @@ def print_config_error(
             body = "\n".join(lines)
         case _:
             body = str(e)
-    console.print(Panel(body, title="Config error", style="red"))
+    title = f"Config error [{e.reason}]"
+    console.print(Panel(body, title=title, style="red"))

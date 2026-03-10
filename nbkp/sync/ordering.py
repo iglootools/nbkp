@@ -6,6 +6,7 @@ from collections import defaultdict
 from graphlib import CycleError, TopologicalSorter
 
 from ..config import ConfigError
+from ..config.loader import ConfigErrorReason
 from ..config.protocol import SyncConfig
 
 
@@ -60,5 +61,6 @@ def sort_syncs(syncs: dict[str, SyncConfig]) -> list[str]:
     except CycleError as exc:
         cycle = exc.args[1]
         raise ConfigError(
-            "Cyclic sync dependency detected: " + " -> ".join(cycle)
+            "Cyclic sync dependency detected: " + " -> ".join(cycle),
+            reason=ConfigErrorReason.CYCLIC_DEPENDENCY,
         ) from exc

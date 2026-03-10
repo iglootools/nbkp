@@ -11,6 +11,7 @@ from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     ConfigError,
+    ConfigErrorReason,
     EndpointFilter,
     HardLinkSnapshotConfig,
     LocalVolume,
@@ -41,8 +42,9 @@ class TestFindConfigFile:
         assert result == sample_config_file
 
     def test_explicit_path_missing(self) -> None:
-        with pytest.raises(ConfigError, match="not found"):
+        with pytest.raises(ConfigError) as excinfo:
             find_config_file("/nonexistent/config.yaml")
+        assert excinfo.value.reason == ConfigErrorReason.FILE_NOT_FOUND
 
     def test_xdg_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         xdg = tmp_path / "xdg"
@@ -57,8 +59,9 @@ class TestFindConfigFile:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "empty"))
-        with pytest.raises(ConfigError, match="No config file found"):
+        with pytest.raises(ConfigError) as excinfo:
             find_config_file()
+        assert excinfo.value.reason == ConfigErrorReason.NO_CONFIG_FOUND
 
 
 class TestLoadConfig:
@@ -117,20 +120,23 @@ class TestLoadConfig:
     def test_invalid_yaml(self, tmp_path: Path) -> None:
         p = tmp_path / "bad.yaml"
         p.write_text("not_a_list:\n  - [invalid")
-        with pytest.raises(ConfigError, match="Invalid YAML"):
+        with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.INVALID_YAML
 
     def test_not_a_mapping(self, tmp_path: Path) -> None:
         p = tmp_path / "list.yaml"
         p.write_text("- item1\n- item2\n")
-        with pytest.raises(ConfigError, match="must be a YAML mapping"):
+        with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.NOT_A_MAPPING
 
     def test_invalid_volume_type(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_type.yaml"
         p.write_text("volumes:\n  v:\n    type: ftp\n    path: /x\nsyncs: {}\n")
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "does not match any of the expected tags" in str(cause)
@@ -140,6 +146,7 @@ class TestLoadConfig:
         p.write_text("volumes:\n  v:\n    type: local\nsyncs: {}\n")
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         errors = cause.errors()
@@ -159,6 +166,7 @@ class TestLoadConfig:
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         errors = cause.errors()
@@ -177,6 +185,7 @@ class TestLoadConfig:
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "unknown ssh-endpoint 'missing'" in str(cause)
@@ -193,6 +202,7 @@ class TestLoadConfig:
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "unknown volume" in str(cause)
@@ -209,6 +219,7 @@ class TestLoadConfig:
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "unknown volume" in str(cause)
@@ -223,6 +234,7 @@ class TestLoadConfig:
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         errors = cause.errors()
@@ -433,6 +445,7 @@ class TestLoadConfig:
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "unknown proxy-jump server" in str(cause)
@@ -457,6 +470,7 @@ class TestLoadConfig:
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "Circular proxy-jump chain" in str(cause)
@@ -530,6 +544,7 @@ class TestLoadConfig:
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "mutually exclusive" in str(cause)
@@ -550,6 +565,7 @@ class TestLoadConfig:
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "unknown proxy-jump server" in str(cause)
@@ -574,6 +590,7 @@ class TestLoadConfig:
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "Circular proxy-jump chain" in str(cause)
@@ -699,6 +716,7 @@ class TestLoadConfig:
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "include" in str(cause) or "exclude" in str(cause)
@@ -813,6 +831,7 @@ class TestLoadConfig:
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "mutually exclusive" in str(cause)
@@ -1170,6 +1189,7 @@ class TestLoadConfig:
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "unknown source endpoint" in str(cause)
@@ -1185,6 +1205,7 @@ class TestLoadConfig:
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "unknown destination endpoint" in str(cause)
@@ -1206,6 +1227,7 @@ class TestLoadConfig:
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "share destination endpoint" in str(cause)
@@ -1222,6 +1244,7 @@ class TestLoadConfig:
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "both target volume" in str(cause)
@@ -1236,6 +1259,7 @@ class TestLoadConfig:
         )
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "unknown volume" in str(cause)

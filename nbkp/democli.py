@@ -20,6 +20,7 @@ from .config import (
     BtrfsSnapshotConfig,
     Config,
     ConfigError,
+    ConfigErrorReason,
     HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
@@ -219,7 +220,10 @@ def _show_troubleshoot() -> None:
 def _show_config_errors() -> None:
     console, buf = _capture_console()
     print_config_error(
-        ConfigError("Config file not found: /etc/nbkp/config.yaml"),
+        ConfigError(
+            "Config file not found: /etc/nbkp/config.yaml",
+            reason=ConfigErrorReason.FILE_NOT_FOUND,
+        ),
         console=console,
     )
     _print_panel("print_config_error (file not found)", buf)
@@ -228,7 +232,10 @@ def _show_config_errors() -> None:
     try:
         yaml.safe_load("not_a_list:\n  - [invalid")
     except yaml.YAMLError as ye:
-        err = ConfigError(f"Invalid YAML in /etc/nbkp/config.yaml: {ye}")
+        err = ConfigError(
+            f"Invalid YAML in /etc/nbkp/config.yaml: {ye}",
+            reason=ConfigErrorReason.INVALID_YAML,
+        )
         err.__cause__ = ye
         print_config_error(err, console=console)
     _print_panel("print_config_error (invalid YAML)", buf)
@@ -237,7 +244,7 @@ def _show_config_errors() -> None:
     try:
         ConfigModel.model_validate({"volumes": {"v": {"type": "ftp", "path": "/x"}}})
     except ValidationError as ve:
-        err = ConfigError(str(ve))
+        err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
         err.__cause__ = ve
         print_config_error(err, console=console)
     _print_panel("print_config_error (invalid volume type)", buf)
@@ -258,7 +265,7 @@ def _show_config_errors() -> None:
             }
         )
     except ValidationError as ve:
-        err = ConfigError(str(ve))
+        err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
         err.__cause__ = ve
         print_config_error(err, console=console)
     _print_panel("print_config_error (unknown server reference)", buf)
@@ -267,7 +274,7 @@ def _show_config_errors() -> None:
     try:
         ConfigModel.model_validate({"volumes": {"v": {"type": "local"}}, "syncs": {}})
     except ValidationError as ve:
-        err = ConfigError(str(ve))
+        err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
         err.__cause__ = ve
         print_config_error(err, console=console)
     _print_panel("print_config_error (missing required field)", buf)
