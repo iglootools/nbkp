@@ -147,14 +147,17 @@ Inactive (skipped) syncs also trigger cancellation of their downstream dependent
 
 When a remote volume declares multiple SSH endpoints, nbkp selects the best reachable one at runtime. This enables nomadic usage where the same config works across different network contexts (e.g. home LAN vs public internet).
 
-Selection logic:
+**Volume-level exclusion** — When `--exclude-location` is set and *all* candidate endpoints for a volume have a matching location tag, the volume is skipped entirely (no SSH connection is attempted). Syncs referencing the skipped volume are marked inactive with a `LOCATION_EXCLUDED` reason. This is the only hard filter — it prevents slow SSH timeouts when a location is known to be unreachable.
+
+**Per-endpoint selection** — For volumes that are not excluded, the best endpoint is selected using a soft filter chain:
 
 1. Gather candidate endpoints from the volume's endpoint list
 2. Exclude endpoints whose host cannot be DNS-resolved
 3. If `--exclude-location` is set, remove endpoints with a matching location tag
 4. If `--location` is set, prefer endpoints with a matching location tag
 5. If `--network` is set, prefer endpoints with matching network type (`private` for LAN, `public` for WAN)
-6. If no candidates remain after any filter step, fall back to the candidates from the previous step
+
+Each filter step is a **soft filter**: if it would eliminate all remaining candidates, it is silently skipped and the previous candidate list is preserved. This means filters degrade gracefully — `--location office` has no effect if no endpoint is tagged `office`, rather than causing a failure.
 
 Both `--location` and `--exclude-location` can be used together. Exclude is applied first, then include narrows further. This is useful when most endpoints lack location tags — instead of listing every location to include, you can exclude the ones you want to skip (e.g. `--exclude-location home`).
 
