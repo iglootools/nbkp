@@ -20,9 +20,8 @@ from .hardlinks import (
     prune_snapshots as hl_prune_snapshots,
 )
 from .symlink import update_latest_symlink
-from .btrfs import get_latest_snapshot
 from ..config import Config, ResolvedEndpoints
-from ..preflight import SyncStatus
+from ..preflight import SyncReason, SyncStatus
 from .rsync import ProgressMode, run_rsync
 
 
@@ -126,8 +125,7 @@ def run_all_syncs(
                 output="",
                 outcome=SyncOutcome.SKIPPED,
                 detail=(
-                    "Sync not active: "
-                    + ", ".join(r.value for r in status.reasons)
+                    "Sync not active: " + ", ".join(r.value for r in status.reasons)
                 ),
             )
         else:
@@ -142,7 +140,13 @@ def run_all_syncs(
                 resolved_endpoints,
             )
 
-        if not result.success:
+        # Dry-run-pending skips (skipped syncs because of DRY_RUN_SOURCE_SNAPSHOT_PENDING) should not cascade to downstream syncs:
+        # the chain would succeed in a real run.
+        is_dry_run_pending = (
+            result.outcome == SyncOutcome.SKIPPED
+            and status.reasons == [SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING]
+        )
+        if not result.success and not is_dry_run_pending:
             failed.add(slug)
 
         results.append(result)
@@ -171,6 +175,7 @@ def _run_single_sync(
             return _run_hard_link_sync(
                 slug,
                 sync,
+                status,
                 config,
                 dry_run,
                 progress,
@@ -358,6 +363,7 @@ def _run_btrfs_sync(
 def _run_hard_link_sync(
     slug: str,
     sync: object,
+    status: SyncStatus,
     config: Config,
     dry_run: bool,
     progress: ProgressMode | None,
@@ -374,18 +380,14 @@ def _run_hard_link_sync(
 
     # 1. Clean up orphaned snapshots from failed syncs
     try:
-        cleanup_orphaned_snapshots(
-            sync, config, resolved_endpoints=resolved_endpoints
-        )
+        cleanup_orphaned_snapshots(sync, config, resolved_endpoints=resolved_endpoints)
     except Exception:
         pass  # Best-effort cleanup
 
     # 2. Determine link-dest from latest complete snapshot
     link_dest: str | None = None
-    latest = get_latest_snapshot(sync, config, resolved_endpoints)
-    if latest:
-        prev_name = latest.rsplit("/", 1)[-1]
-        link_dest = f"../{prev_name}"
+    if status.destination_latest_target:
+        link_dest = f"../{status.destination_latest_target}"
 
     # 3. Create new snapshot directory
     try:

@@ -2,7 +2,7 @@
 name = "nbkp"
 description = "Nomad Backup: An rsync-based backup tool for nomadic setups where sources and destinations aren't always available — laptops on the move, removable drives, home servers behind changing networks. Sentinel files ensure backups only run when volumes are genuinely present, with optional btrfs or hard-link snapshots for point-in-time recovery."
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Sami Dalouche", email = "sami.dalouche@gmail.com" }]
@@ -33,22 +33,21 @@ nbkp = "nbkp.cli:main"
 nbkp-demo = "nbkp.democli:main"
 
 [tool.poetry.group.dev.dependencies]
-black = "^26.0.0"
-flake8 = "^7.0.0"
+ruff = "^0.15"
 mypy = "^1.9.0"
 pytest = "^9.0.0"
 testcontainers = "^4.0.0"
 types-docker = "^7.1.0.20260109"
 types-paramiko = "^4.0.0.20250822"
 types-pyyaml = "^6.0"
+vermin = "^1.8.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
 build-backend = "poetry_dynamic_versioning.backend"
 
-[tool.black]
-line-length = 79
-target-version = ["py314"]
+[tool.ruff]
+target-version = "py312"
 
 [tool.pytest.ini_options]
 markers = [
@@ -59,7 +58,7 @@ markers = [
 ]
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

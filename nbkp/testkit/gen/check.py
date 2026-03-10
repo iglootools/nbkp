@@ -13,6 +13,8 @@ from ...config import (
     Config,
     HardLinkSnapshotConfig,
     LocalVolume,
+    RemoteVolume,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
 )
@@ -27,9 +29,7 @@ from .config import (
 def check_config() -> Config:
     """Config with local + remote volumes and varied syncs."""
     volumes = base_volumes()
-    volumes["external-drive"] = LocalVolume(
-        slug="external-drive", path="/mnt/external"
-    )
+    volumes["external-drive"] = LocalVolume(slug="external-drive", path="/mnt/external")
     sync_endpoints = base_sync_endpoints()
     sync_endpoints["external-root"] = SyncEndpoint(
         slug="external-root",
@@ -137,7 +137,22 @@ def troubleshoot_config() -> Config:
     """
     base_vols = base_volumes()
     extra_vols = _troubleshoot_volumes()
-    volumes = {**base_vols, **extra_vols}
+    volumes = {
+        **base_vols,
+        **extra_vols,
+        "home-nas": RemoteVolume(
+            slug="home-nas",
+            ssh_endpoint="home-only",
+            path="/mnt/nas",
+        ),
+    }
+
+    ssh_eps = base_ssh_endpoints()
+    ssh_eps["home-only"] = SshEndpoint(
+        slug="home-only",
+        host="192.168.1.50",
+        location="home",
+    )
 
     sync_endpoints: dict[str, SyncEndpoint] = {
         # Source endpoints
@@ -187,9 +202,7 @@ def troubleshoot_config() -> Config:
         "dst-hardlink": SyncEndpoint(
             slug="dst-hardlink",
             volume="usb-5",
-            hard_link_snapshots=HardLinkSnapshotConfig(
-                enabled=True, max_snapshots=5
-            ),
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True, max_snapshots=5),
         ),
         "dst-rsync-old": SyncEndpoint(
             slug="dst-rsync-old",
@@ -200,9 +213,25 @@ def troubleshoot_config() -> Config:
             volume="nas-backup",
             subdir="src-latest",
         ),
+        # Dry-run pending snapshot scenario: HL source with upstream
+        "hl-stage": SyncEndpoint(
+            slug="hl-stage",
+            volume="usb-drive",
+            subdir="stage",
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+        ),
+        "dst-dry-run-pending": SyncEndpoint(
+            slug="dst-dry-run-pending",
+            volume="nas-backup",
+            subdir="dry-run-pending",
+        ),
+        "dst-loc-excluded": SyncEndpoint(
+            slug="dst-loc-excluded",
+            volume="home-nas",
+        ),
     }
     return Config(
-        ssh_endpoints=base_ssh_endpoints(),
+        ssh_endpoints=ssh_eps,
         volumes=volumes,
         sync_endpoints=sync_endpoints,
         syncs={
@@ -257,6 +286,24 @@ def troubleshoot_config() -> Config:
                 source="usb-btrfs-src",
                 destination="dst-src-latest",
             ),
+            # Upstream writes to hl-stage (HL snapshots)
+            "dry-run-upstream": SyncConfig(
+                slug="dry-run-upstream",
+                source="laptop-src",
+                destination="hl-stage",
+            ),
+            # Downstream reads from hl-stage; in dry-run,
+            # latest → /dev/null because upstream didn't snapshot
+            "dry-run-pending": SyncConfig(
+                slug="dry-run-pending",
+                source="hl-stage",
+                destination="dst-dry-run-pending",
+            ),
+            "location-excluded": SyncConfig(
+                slug="location-excluded",
+                source="laptop-src",
+                destination="dst-loc-excluded",
+            ),
         },
     )
 
@@ -280,11 +327,17 @@ def troubleshoot_data(
         config=config.volumes["nas-backup"],
         reasons=[VolumeReason.UNREACHABLE],
     )
+    home_nas_vs = VolumeStatus(
+        slug="home-nas",
+        config=config.volumes["home-nas"],
+        reasons=[VolumeReason.LOCATION_EXCLUDED],
+    )
 
     vol_statuses = {
         "laptop": laptop_vs,
         "usb-drive": usb_vs,
         "nas-backup": nas_vs,
+        "home-nas": home_nas_vs,
     }
 
     sync_statuses = {
@@ -386,6 +439,27 @@ def troubleshoot_data(
                 SyncReason.SOURCE_LATEST_NOT_FOUND,
                 SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND,
             ],
+        ),
+        "dry-run-upstream": SyncStatus(
+            slug="dry-run-upstream",
+            config=config.syncs["dry-run-upstream"],
+            source_status=laptop_vs,
+            destination_status=usb_vs,
+            reasons=[],
+        ),
+        "dry-run-pending": SyncStatus(
+            slug="dry-run-pending",
+            config=config.syncs["dry-run-pending"],
+            source_status=usb_vs,
+            destination_status=nas_vs,
+            reasons=[SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING],
+        ),
+        "location-excluded": SyncStatus(
+            slug="location-excluded",
+            config=config.syncs["location-excluded"],
+            source_status=laptop_vs,
+            destination_status=home_nas_vs,
+            reasons=[SyncReason.DESTINATION_UNAVAILABLE],
         ),
     }
 

@@ -70,8 +70,7 @@ class TestLocalToRemoteFilters:
         # excluded/ should NOT arrive
         check_exc = ssh_exec(
             docker_ssh_endpoint,
-            f"test -d {REMOTE_BACKUP_PATH}/excluded"
-            " && echo EXISTS || echo MISSING",
+            f"test -d {REMOTE_BACKUP_PATH}/excluded && echo EXISTS || echo MISSING",
         )
         assert check_exc.stdout.strip() == "MISSING"
 
@@ -148,9 +147,7 @@ class TestLocalToRemote:
             ssh_endpoints={"test-server": docker_ssh_endpoint},
             volumes={"src": src_vol, "dst": docker_remote_volume},
             sync_endpoints={
-                "ep-src": SyncEndpoint(
-                    slug="ep-src", volume="src", subdir="photos"
-                ),
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="photos"),
                 "ep-dst": SyncEndpoint(
                     slug="ep-dst",
                     volume="dst",

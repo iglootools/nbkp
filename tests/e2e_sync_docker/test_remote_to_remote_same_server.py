@@ -55,8 +55,7 @@ class TestRemoteToRemoteSameServer:
         # Create test file on remote source
         ssh_exec(
             docker_ssh_endpoint,
-            "echo 'hello from remote'"
-            f" > {REMOTE_BACKUP_PATH}/src/remote-file.txt",
+            f"echo 'hello from remote' > {REMOTE_BACKUP_PATH}/src/remote-file.txt",
         )
 
         resolved = resolve_all_endpoints(config)

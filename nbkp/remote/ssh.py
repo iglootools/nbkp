@@ -17,7 +17,7 @@ def _ssh_o_options(opts: SshConnectionOptions) -> list[str]:
     if opts.compress:
         result.append("Compression=yes")
     if opts.server_alive_interval is not None:
-        result.append(f"ServerAliveInterval=" f"{opts.server_alive_interval}")
+        result.append(f"ServerAliveInterval={opts.server_alive_interval}")
     if not opts.strict_host_key_checking:
         result.append("StrictHostKeyChecking=no")
     if opts.known_hosts_file is not None:

@@ -37,9 +37,7 @@ class TestResolveHostname:
         assert resolve_hostname("mynas") == "mynas"
 
     def test_not_in_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        ssh_config = paramiko.SSHConfig.from_text(
-            "Host other\n  HostName 10.0.0.1\n"
-        )
+        ssh_config = paramiko.SSHConfig.from_text("Host other\n  HostName 10.0.0.1\n")
         monkeypatch.setattr(
             "nbkp.remote.resolution._load_ssh_config",
             lambda: ssh_config,
@@ -48,10 +46,7 @@ class TestResolveHostname:
 
     def test_with_port_and_user(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ssh_config = paramiko.SSHConfig.from_text(
-            "Host mynas\n"
-            "  HostName 192.168.1.100\n"
-            "  Port 2222\n"
-            "  User backup\n"
+            "Host mynas\n  HostName 192.168.1.100\n  Port 2222\n  User backup\n"
         )
         monkeypatch.setattr(
             "nbkp.remote.resolution._load_ssh_config",
@@ -65,9 +60,7 @@ class TestResolveHost:
     """Tests for resolve_host (SSH config + DNS)."""
 
     def test_via_ssh_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        ssh_config = paramiko.SSHConfig.from_text(
-            "Host mynas\n  HostName 127.0.0.1\n"
-        )
+        ssh_config = paramiko.SSHConfig.from_text("Host mynas\n  HostName 127.0.0.1\n")
         monkeypatch.setattr(
             "nbkp.remote.resolution._load_ssh_config",
             lambda: ssh_config,
@@ -100,9 +93,7 @@ class TestResolveHost:
 class TestIsPrivateHost:
     """Tests for is_private_host (SSH config + DNS + IP)."""
 
-    def test_private_via_ssh_config(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_private_via_ssh_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ssh_config = paramiko.SSHConfig.from_text(
             "Host mynas\n  HostName 192.168.1.100\n"
         )
@@ -112,18 +103,12 @@ class TestIsPrivateHost:
         )
         monkeypatch.setattr(
             "nbkp.remote.resolution.socket.getaddrinfo",
-            lambda host, port: [
-                (None, None, None, None, ("192.168.1.100", 0))
-            ],
+            lambda host, port: [(None, None, None, None, ("192.168.1.100", 0))],
         )
         assert is_private_host("mynas") is True
 
-    def test_public_via_ssh_config(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        ssh_config = paramiko.SSHConfig.from_text(
-            "Host mypublic\n  HostName 8.8.8.8\n"
-        )
+    def test_public_via_ssh_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        ssh_config = paramiko.SSHConfig.from_text("Host mypublic\n  HostName 8.8.8.8\n")
         monkeypatch.setattr(
             "nbkp.remote.resolution._load_ssh_config",
             lambda: ssh_config,
@@ -190,25 +175,19 @@ def _mock_ssh_config(
 class TestEnrichFromSshConfig:
     """Tests for enrich_from_ssh_config."""
 
-    def test_fills_port_from_ssh_config(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_fills_port_from_ssh_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _mock_ssh_config(monkeypatch)
         ep = SshEndpoint(slug="nas", host="mynas")
         enriched = enrich_from_ssh_config(ep)
         assert enriched.port == 5022
 
-    def test_fills_user_from_ssh_config(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_fills_user_from_ssh_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _mock_ssh_config(monkeypatch)
         ep = SshEndpoint(slug="nas", host="mynas")
         enriched = enrich_from_ssh_config(ep)
         assert enriched.user == "backup"
 
-    def test_fills_key_from_ssh_config(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_fills_key_from_ssh_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _mock_ssh_config(monkeypatch)
         ep = SshEndpoint(slug="nas", host="mynas")
         enriched = enrich_from_ssh_config(ep)
@@ -251,9 +230,7 @@ class TestEnrichFromSshConfig:
         assert enriched.user is None
         assert enriched.key is None
 
-    def test_host_not_in_ssh_config(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_host_not_in_ssh_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _mock_ssh_config(monkeypatch)
         ep = SshEndpoint(slug="other", host="unknown")
         enriched = enrich_from_ssh_config(ep)
@@ -261,18 +238,14 @@ class TestEnrichFromSshConfig:
         assert enriched.user is None
         assert enriched.key is None
 
-    def test_host_preserved_as_alias(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_host_preserved_as_alias(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """host should stay as the alias, not resolved."""
         _mock_ssh_config(monkeypatch)
         ep = SshEndpoint(slug="nas", host="mynas")
         enriched = enrich_from_ssh_config(ep)
         assert enriched.host == "mynas"
 
-    def test_unrelated_fields_preserved(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_unrelated_fields_preserved(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _mock_ssh_config(monkeypatch)
         ep = SshEndpoint(
             slug="nas",
@@ -289,9 +262,7 @@ class TestEnrichFromSshConfig:
         assert enriched.port == 5022
         assert enriched.user == "backup"
 
-    def test_fills_all_fields_at_once(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_fills_all_fields_at_once(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _mock_ssh_config(monkeypatch)
         ep = SshEndpoint(slug="nas", host="mynas")
         enriched = enrich_from_ssh_config(ep)

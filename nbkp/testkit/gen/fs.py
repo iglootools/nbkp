@@ -73,16 +73,12 @@ def create_seed_sentinels(
             seen_src.add(sync.source)
             src_ep = config.source_endpoint(sync)
             src_vol = config.volumes[src_ep.volume]
-            _create_endpoint_sentinels(
-                src_vol, src_ep, ".nbkp-src", remote_exec
-            )
+            _create_endpoint_sentinels(src_vol, src_ep, ".nbkp-src", remote_exec)
         if sync.destination not in seen_dst:
             seen_dst.add(sync.destination)
             dst_ep = config.destination_endpoint(sync)
             dst_vol = config.volumes[dst_ep.volume]
-            _create_endpoint_sentinels(
-                dst_vol, dst_ep, ".nbkp-dst", remote_exec
-            )
+            _create_endpoint_sentinels(dst_vol, dst_ep, ".nbkp-dst", remote_exec)
 
 
 def _create_endpoint_sentinels(
@@ -167,9 +163,7 @@ def create_seed_data(
     """
     size_bytes = big_file_size_mb * 1024 * 1024
 
-    unique_sources: dict[
-        str, tuple[LocalVolume | RemoteVolume, str | None]
-    ] = {}
+    unique_sources: dict[str, tuple[LocalVolume | RemoteVolume, str | None]] = {}
     for s in config.syncs.values():
         src_ep = config.source_endpoint(s)
         src_vol = config.volumes[src_ep.volume]
@@ -219,11 +213,6 @@ def seed_volume(
                 if "/" in name:
                     parent = name.rsplit("/", 1)[0]
                     remote_exec(f"mkdir -p {rp}/{parent}")
-                remote_exec(
-                    f"printf %s {shlex.quote(content)}" f" > {rp}/{name}"
-                )
+                remote_exec(f"printf %s {shlex.quote(content)} > {rp}/{name}")
             if big_file_size_bytes:
-                remote_exec(
-                    f"truncate -s {big_file_size_bytes}"
-                    f" {rp}/large-file.bin"
-                )
+                remote_exec(f"truncate -s {big_file_size_bytes} {rp}/large-file.bin")

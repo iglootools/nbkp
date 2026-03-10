@@ -78,9 +78,7 @@ def _make_btrfs_config_with_max() -> Config:
             "ep-dst": SyncEndpoint(
                 slug="ep-dst",
                 volume="dst",
-                btrfs_snapshots=BtrfsSnapshotConfig(
-                    enabled=True, max_snapshots=5
-                ),
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=5),
             ),
         },
         syncs={"s1": sync},
@@ -135,9 +133,7 @@ def _active_statuses(
             slug=name,
             config=sync,
             source_status=vol_statuses[config.source_endpoint(sync).volume],
-            destination_status=vol_statuses[
-                config.destination_endpoint(sync).volume
-            ],
+            destination_status=vol_statuses[config.destination_endpoint(sync).volume],
             reasons=[],
         )
         for name, sync in config.syncs.items()
@@ -161,9 +157,7 @@ def _inactive_statuses(
             slug=name,
             config=sync,
             source_status=vol_statuses[config.source_endpoint(sync).volume],
-            destination_status=vol_statuses[
-                config.destination_endpoint(sync).volume
-            ],
+            destination_status=vol_statuses[config.destination_endpoint(sync).volume],
             reasons=[SyncReason.SOURCE_UNAVAILABLE],
         )
         for name, sync in config.syncs.items()
@@ -176,9 +170,7 @@ class TestRunAllSyncs:
     def test_successful_sync(self, mock_rsync: MagicMock) -> None:
         config = _make_local_config()
         _, sync_statuses = _active_statuses(config)
-        mock_rsync.return_value = MagicMock(
-            returncode=0, stdout="done\n", stderr=""
-        )
+        mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
 
         results = run_all_syncs(config, sync_statuses)
         assert len(results) == 1
@@ -198,9 +190,7 @@ class TestRunAllSyncs:
     def test_rsync_failure(self, mock_rsync: MagicMock) -> None:
         config = _make_local_config()
         _, sync_statuses = _active_statuses(config)
-        mock_rsync.return_value = MagicMock(
-            returncode=23, stdout="", stderr="error"
-        )
+        mock_rsync.return_value = MagicMock(returncode=23, stdout="", stderr="error")
 
         results = run_all_syncs(config, sync_statuses)
         assert results[0].success is False
@@ -210,13 +200,9 @@ class TestRunAllSyncs:
     def test_filter_by_sync_slug(self, mock_rsync: MagicMock) -> None:
         config = _make_local_config()
         _, sync_statuses = _active_statuses(config)
-        mock_rsync.return_value = MagicMock(
-            returncode=0, stdout="done\n", stderr=""
-        )
+        mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
 
-        results = run_all_syncs(
-            config, sync_statuses, only_syncs=["nonexistent"]
-        )
+        results = run_all_syncs(config, sync_statuses, only_syncs=["nonexistent"])
         assert len(results) == 0
 
     @patch("nbkp.sync.runner.update_latest_symlink")
@@ -230,9 +216,7 @@ class TestRunAllSyncs:
     ) -> None:
         config = _make_btrfs_config()
         _, sync_statuses = _active_statuses(config)
-        mock_rsync.return_value = MagicMock(
-            returncode=0, stdout="done\n", stderr=""
-        )
+        mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
         mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
 
         results = run_all_syncs(config, sync_statuses)
@@ -248,9 +232,7 @@ class TestRunAllSyncs:
     ) -> None:
         config = _make_btrfs_config()
         _, sync_statuses = _active_statuses(config)
-        mock_rsync.return_value = MagicMock(
-            returncode=0, stdout="done\n", stderr=""
-        )
+        mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
 
         results = run_all_syncs(config, sync_statuses, dry_run=True)
         assert results[0].success is True
@@ -267,9 +249,7 @@ class TestRunAllSyncs:
     ) -> None:
         config = _make_btrfs_config()
         _, sync_statuses = _active_statuses(config)
-        mock_rsync.return_value = MagicMock(
-            returncode=0, stdout="done\n", stderr=""
-        )
+        mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
         mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
 
         run_all_syncs(config, sync_statuses)
@@ -289,9 +269,7 @@ class TestRunAllSyncs:
     ) -> None:
         config = _make_remote_same_server_btrfs_config()
         _, sync_statuses = _active_statuses(config)
-        mock_rsync.return_value = MagicMock(
-            returncode=0, stdout="done\n", stderr=""
-        )
+        mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
         mock_snap.return_value = "/backup/snapshots/20240115T120000Z"
 
         results = run_all_syncs(config, sync_statuses)
@@ -309,9 +287,7 @@ class TestRunAllSyncs:
     ) -> None:
         config = _make_btrfs_config()
         _, sync_statuses = _active_statuses(config)
-        mock_rsync.return_value = MagicMock(
-            returncode=0, stdout="done\n", stderr=""
-        )
+        mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
         mock_snap.side_effect = RuntimeError("btrfs failed")
 
         results = run_all_syncs(config, sync_statuses)
@@ -331,9 +307,7 @@ class TestRunAllSyncs:
     ) -> None:
         config = _make_btrfs_config_with_max()
         _, sync_statuses = _active_statuses(config)
-        mock_rsync.return_value = MagicMock(
-            returncode=0, stdout="done\n", stderr=""
-        )
+        mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
         mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
         mock_prune.return_value = ["/dst/snapshots/old"]
 
@@ -355,9 +329,7 @@ class TestRunAllSyncs:
     ) -> None:
         config = _make_btrfs_config()
         _, sync_statuses = _active_statuses(config)
-        mock_rsync.return_value = MagicMock(
-            returncode=0, stdout="done\n", stderr=""
-        )
+        mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
         mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
 
         results = run_all_syncs(config, sync_statuses)
@@ -433,9 +405,7 @@ class TestFailurePropagation:
     ) -> None:
         config = _make_chain_config()
         _, sync_statuses = _active_statuses(config)
-        mock_rsync.return_value = MagicMock(
-            returncode=23, stdout="", stderr="error"
-        )
+        mock_rsync.return_value = MagicMock(returncode=23, stdout="", stderr="error")
 
         results = run_all_syncs(config, sync_statuses)
         assert len(results) == 2
@@ -524,9 +494,7 @@ class TestFailurePropagation:
             },
         )
         _, sync_statuses = _active_statuses(config)
-        mock_rsync.return_value = MagicMock(
-            returncode=23, stdout="", stderr="error"
-        )
+        mock_rsync.return_value = MagicMock(returncode=23, stdout="", stderr="error")
 
         results = run_all_syncs(config, sync_statuses)
         assert len(results) == 3

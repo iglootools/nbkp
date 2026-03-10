@@ -2,7 +2,7 @@
 
 ## System Requirements
 
-- Python 3.14+
+- Python 3.12+
 - rsync 3.0+ (macOS ships with openrsync which is not supported — install GNU rsync via `brew install rsync`)
 - `btrfs-progs` (only if using btrfs snapshots)
 

@@ -6,7 +6,7 @@ import json
 import os
 import stat
 from pathlib import Path
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Optional
 
 import typer
 from rich.console import Console
@@ -16,6 +16,7 @@ from .config import (
     Config,
     ConfigError,
     EndpointFilter,
+    NetworkType,
     ResolvedEndpoints,
     load_config,
     resolve_all_endpoints,
@@ -56,6 +57,7 @@ _INACTIVE_REASONS = {
     SyncReason.DESTINATION_SENTINEL_NOT_FOUND,
     SyncReason.SOURCE_UNAVAILABLE,
     SyncReason.DESTINATION_UNAVAILABLE,
+    SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING,
 }
 
 app = typer.Typer(
@@ -92,38 +94,37 @@ def check(
         bool,
         typer.Option(
             "--strict/--no-strict",
-            help=(
-                "Exit non-zero on any inactive sync,"
-                " including missing sentinels"
-            ),
+            help=("Exit non-zero on any inactive sync, including missing sentinels"),
         ),
     ] = False,
-    locations: Annotated[
+    location: Annotated[
         Optional[list[str]],
         typer.Option(
-            "--locations",
+            "--location",
             "-l",
             help="Prefer endpoints at these locations",
         ),
     ] = None,
-    private: Annotated[
-        bool,
+    exclude_location: Annotated[
+        Optional[list[str]],
         typer.Option(
-            "--private",
-            help="Prefer private (LAN) endpoints",
+            "--exclude-location",
+            "-L",
+            help="Exclude endpoints at these locations",
         ),
-    ] = False,
-    public: Annotated[
-        bool,
+    ] = None,
+    network: Annotated[
+        Optional[NetworkType],
         typer.Option(
-            "--public",
-            help="Prefer public (WAN) endpoints",
+            "--network",
+            "-N",
+            help="Prefer private (LAN) or public (WAN) endpoints",
         ),
-    ] = False,
+    ] = None,
 ) -> None:
     """Check status of volumes and syncs."""
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, locations, private, public)
+    resolved = _resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
     vol_statuses, sync_statuses, has_errors = _check_and_display(
         cfg,
@@ -188,7 +189,7 @@ def run(
         typer.Option(
             "--progress",
             "-p",
-            help=("Progress mode: none, overall," " per-file, or full"),
+            help=("Progress mode: none, overall, per-file, or full"),
         ),
     ] = None,
     prune: Annotated[
@@ -202,38 +203,37 @@ def run(
         bool,
         typer.Option(
             "--strict/--no-strict",
-            help=(
-                "Exit non-zero on any inactive sync,"
-                " including missing sentinels"
-            ),
+            help=("Exit non-zero on any inactive sync, including missing sentinels"),
         ),
     ] = False,
-    locations: Annotated[
+    location: Annotated[
         Optional[list[str]],
         typer.Option(
-            "--locations",
+            "--location",
             "-l",
             help="Prefer endpoints at these locations",
         ),
     ] = None,
-    private: Annotated[
-        bool,
+    exclude_location: Annotated[
+        Optional[list[str]],
         typer.Option(
-            "--private",
-            help="Prefer private (LAN) endpoints",
+            "--exclude-location",
+            "-L",
+            help="Exclude endpoints at these locations",
         ),
-    ] = False,
-    public: Annotated[
-        bool,
+    ] = None,
+    network: Annotated[
+        Optional[NetworkType],
         typer.Option(
-            "--public",
-            help="Prefer public (WAN) endpoints",
+            "--network",
+            "-N",
+            help="Prefer private (LAN) or public (WAN) endpoints",
         ),
-    ] = False,
+    ] = None,
 ) -> None:
     """Run backup syncs."""
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, locations, private, public)
+    resolved = _resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
     vol_statuses, sync_statuses, has_errors = _check_and_display(
         cfg,
@@ -241,6 +241,7 @@ def run(
         strict,
         only_syncs=sync,
         resolved_endpoints=resolved,
+        dry_run=dry_run,
     )
 
     if has_errors:
@@ -296,9 +297,7 @@ def run(
             on_sync_start=(
                 on_sync_start if output_format is OutputFormat.HUMAN else None
             ),
-            on_sync_end=(
-                on_sync_end if output_format is OutputFormat.HUMAN else None
-            ),
+            on_sync_end=(on_sync_end if output_format is OutputFormat.HUMAN else None),
             resolved_endpoints=resolved,
         )
 
@@ -314,7 +313,13 @@ def run(
                 typer.echo("")
                 print_human_results(results, dry_run, cfg, resolved)
 
-        if any(not r.success for r in results):
+        def _is_expected_skip(r: SyncResult) -> bool:
+            ss = sync_statuses.get(r.sync_slug)
+            if ss is None:
+                return False
+            return bool(ss.reasons) and set(ss.reasons) <= _INACTIVE_REASONS
+
+        if any(not r.success and not _is_expected_skip(r) for r in results):
             raise typer.Exit(1)
 
 
@@ -337,9 +342,7 @@ def sh(
         typer.Option(
             "--relative-src",
             help=(
-                "Make source paths relative to"
-                " script location"
-                " (requires --output-file)"
+                "Make source paths relative to script location (requires --output-file)"
             ),
         ),
     ] = False,
@@ -354,33 +357,35 @@ def sh(
             ),
         ),
     ] = False,
-    locations: Annotated[
+    location: Annotated[
         Optional[list[str]],
         typer.Option(
-            "--locations",
+            "--location",
             "-l",
             help="Prefer endpoints at these locations",
         ),
     ] = None,
-    private: Annotated[
-        bool,
+    exclude_location: Annotated[
+        Optional[list[str]],
         typer.Option(
-            "--private",
-            help="Prefer private (LAN) endpoints",
+            "--exclude-location",
+            "-L",
+            help="Exclude endpoints at these locations",
         ),
-    ] = False,
-    public: Annotated[
-        bool,
+    ] = None,
+    network: Annotated[
+        Optional[NetworkType],
         typer.Option(
-            "--public",
-            help="Prefer public (WAN) endpoints",
+            "--network",
+            "-N",
+            help="Prefer private (LAN) or public (WAN) endpoints",
         ),
-    ] = False,
+    ] = None,
     portable: Annotated[
         bool,
         typer.Option(
             "--portable/--no-portable",
-            help=("Generate bash 3.2-compatible script" " (default: enabled)"),
+            help=("Generate bash 3.2-compatible script (default: enabled)"),
         ),
     ] = True,
 ) -> None:
@@ -391,20 +396,18 @@ def sh(
     """
     if (relative_src or relative_dst) and output_file is None:
         typer.echo(
-            "Error: --relative-src/--relative-dst" " require --output-file",
+            "Error: --relative-src/--relative-dst require --output-file",
             err=True,
         )
         raise typer.Exit(2)
 
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, locations, private, public)
+    resolved = _resolve_endpoints(cfg, location, exclude_location, network)
     script = generate_script(
         cfg,
         ScriptOptions(
             config_path=config,
-            output_file=(
-                os.path.abspath(output_file) if output_file else None
-            ),
+            output_file=(os.path.abspath(output_file) if output_file else None),
             relative_src=relative_src,
             relative_dst=relative_dst,
             portable=portable,
@@ -426,32 +429,34 @@ def troubleshoot(
         Optional[str],
         typer.Option("--config", "-c", help="Path to config file"),
     ] = None,
-    locations: Annotated[
+    location: Annotated[
         Optional[list[str]],
         typer.Option(
-            "--locations",
+            "--location",
             "-l",
             help="Prefer endpoints at these locations",
         ),
     ] = None,
-    private: Annotated[
-        bool,
+    exclude_location: Annotated[
+        Optional[list[str]],
         typer.Option(
-            "--private",
-            help="Prefer private (LAN) endpoints",
+            "--exclude-location",
+            "-L",
+            help="Exclude endpoints at these locations",
         ),
-    ] = False,
-    public: Annotated[
-        bool,
+    ] = None,
+    network: Annotated[
+        Optional[NetworkType],
         typer.Option(
-            "--public",
-            help="Prefer public (WAN) endpoints",
+            "--network",
+            "-N",
+            help="Prefer private (LAN) or public (WAN) endpoints",
         ),
-    ] = False,
+    ] = None,
 ) -> None:
     """Diagnose issues and show how to fix them."""
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, locations, private, public)
+    resolved = _resolve_endpoints(cfg, location, exclude_location, network)
     vol_statuses, sync_statuses = _check_all_with_progress(
         cfg,
         use_progress=True,
@@ -483,32 +488,34 @@ def prune(
         OutputFormat,
         typer.Option("--output", "-o", help="Output format"),
     ] = OutputFormat.HUMAN,
-    locations: Annotated[
+    location: Annotated[
         Optional[list[str]],
         typer.Option(
-            "--locations",
+            "--location",
             "-l",
             help="Prefer endpoints at these locations",
         ),
     ] = None,
-    private: Annotated[
-        bool,
+    exclude_location: Annotated[
+        Optional[list[str]],
         typer.Option(
-            "--private",
-            help="Prefer private (LAN) endpoints",
+            "--exclude-location",
+            "-L",
+            help="Exclude endpoints at these locations",
         ),
-    ] = False,
-    public: Annotated[
-        bool,
+    ] = None,
+    network: Annotated[
+        Optional[NetworkType],
         typer.Option(
-            "--public",
-            help="Prefer public (WAN) endpoints",
+            "--network",
+            "-N",
+            help="Prefer private (LAN) or public (WAN) endpoints",
         ),
-    ] = False,
+    ] = None,
 ) -> None:
     """Prune old snapshots beyond max-snapshots limit."""
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, locations, private, public)
+    resolved = _resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
     _, sync_statuses = _check_all_with_progress(
         cfg,
@@ -547,8 +554,7 @@ def prune(
             kept = 0
             if (
                 status.active
-                and cfg.destination_endpoint(status.config).snapshot_mode
-                != "none"
+                and cfg.destination_endpoint(status.config).snapshot_mode != "none"
             ):
                 try:
                     kept = len(list_snapshots(status.config, cfg, resolved))
@@ -636,29 +642,29 @@ def _load_config_or_exit(
 
 def _build_endpoint_filter(
     locations: list[str] | None,
-    private: bool,
-    public: bool,
+    exclude_locations: list[str] | None,
+    network: NetworkType | None,
 ) -> EndpointFilter | None:
     """Build an EndpointFilter from CLI options."""
-    network: Literal["private", "public"] | None = None
-    if private:
-        network = "private"
-    elif public:
-        network = "public"
     locs = locations or []
-    if not locs and network is None:
+    excl = exclude_locations or []
+    if not locs and not excl and network is None:
         return None
-    return EndpointFilter(locations=locs, network=network)
+    return EndpointFilter(
+        locations=locs,
+        exclude_locations=excl,
+        network=network,
+    )
 
 
 def _resolve_endpoints(
     cfg: Config,
     locations: list[str] | None,
-    private: bool,
-    public: bool,
+    exclude_locations: list[str] | None,
+    network: NetworkType | None,
 ) -> ResolvedEndpoints:
     """Build filter and resolve all endpoints once."""
-    ef = _build_endpoint_filter(locations, private, public)
+    ef = _build_endpoint_filter(locations, exclude_locations, network)
     return resolve_all_endpoints(cfg, ef)
 
 
@@ -667,6 +673,7 @@ def _check_all_with_progress(
     use_progress: bool,
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    dry_run: bool = False,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     """Run check_all_syncs with an optional progress bar."""
     total = len(cfg.volumes) + len(cfg.syncs)
@@ -675,6 +682,7 @@ def _check_all_with_progress(
             cfg,
             only_syncs=only_syncs,
             resolved_endpoints=resolved_endpoints,
+            dry_run=dry_run,
         )
 
     with Progress(
@@ -693,6 +701,7 @@ def _check_all_with_progress(
             on_progress=on_progress,
             only_syncs=only_syncs,
             resolved_endpoints=resolved_endpoints,
+            dry_run=dry_run,
         )
 
 
@@ -702,6 +711,7 @@ def _check_and_display(
     strict: bool,
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    dry_run: bool = False,
 ) -> tuple[
     dict[str, VolumeStatus],
     dict[str, SyncStatus],
@@ -718,6 +728,7 @@ def _check_and_display(
         use_progress=output_format is OutputFormat.HUMAN,
         only_syncs=only_syncs,
         resolved_endpoints=resolved_endpoints,
+        dry_run=dry_run,
     )
 
     if output_format is OutputFormat.HUMAN:

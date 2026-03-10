@@ -34,9 +34,7 @@ class TestChainSyncSh:
         """Generated script propagates data through the
         full 6-hop chain, same as the Python runner."""
         # 1. Build config
-        config = build_chain_config(
-            tmp_path, bastion_container, proxied_ssh_endpoint
-        )
+        config = build_chain_config(tmp_path, bastion_container, proxied_ssh_endpoint)
 
         # 2-4. Setup: btrfs subvolume, sentinels, seed data
         src = setup_chain(config, tmp_path, docker_ssh_endpoint)

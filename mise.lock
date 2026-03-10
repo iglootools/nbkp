@@ -3,40 +3,111 @@
 [[tools."aqua:asciinema/agg"]]
 version = "1.7.0"
 backend = "aqua:asciinema/agg"
-"platforms.linux-arm64" = { checksum = "sha256:4b22399a4a0882f8ac9585a27c5bda1dfd755e04a7a989505bc434d49f25434a", url = "https://github.com/asciinema/agg/releases/download/v1.7.0/agg-aarch64-unknown-linux-gnu"}
-"platforms.linux-x64" = { checksum = "sha256:593122aced7f11b367e397c06061eaadb7bd6ef7acde16832a3138d70105d26c", url = "https://github.com/asciinema/agg/releases/download/v1.7.0/agg-x86_64-unknown-linux-musl"}
-"platforms.macos-arm64" = { checksum = "sha256:61b1d56fbdf6aa6e2367eeab287764971ea5560b2df9600ae420c83fbdb2c33a", url = "https://github.com/asciinema/agg/releases/download/v1.7.0/agg-aarch64-apple-darwin"}
-"platforms.macos-x64" = { checksum = "sha256:049ac882748837a8717bbc99ceccad427e8d838a24181b9694e2ff587e62193e", url = "https://github.com/asciinema/agg/releases/download/v1.7.0/agg-x86_64-apple-darwin"}
-"platforms.windows-x64" = { checksum = "sha256:f5a85d6ec09cfeea5938093a6364c5de8a88948ef241563b16a5de66da7b7d32", url = "https://github.com/asciinema/agg/releases/download/v1.7.0/agg-x86_64-pc-windows-msvc.exe"}
+
+[tools."aqua:asciinema/agg"."platforms.linux-arm64"]
+checksum = "sha256:4b22399a4a0882f8ac9585a27c5bda1dfd755e04a7a989505bc434d49f25434a"
+url = "https://github.com/asciinema/agg/releases/download/v1.7.0/agg-aarch64-unknown-linux-gnu"
+
+[tools."aqua:asciinema/agg"."platforms.linux-x64"]
+checksum = "sha256:593122aced7f11b367e397c06061eaadb7bd6ef7acde16832a3138d70105d26c"
+url = "https://github.com/asciinema/agg/releases/download/v1.7.0/agg-x86_64-unknown-linux-musl"
+
+[tools."aqua:asciinema/agg"."platforms.macos-arm64"]
+checksum = "sha256:61b1d56fbdf6aa6e2367eeab287764971ea5560b2df9600ae420c83fbdb2c33a"
+url = "https://github.com/asciinema/agg/releases/download/v1.7.0/agg-aarch64-apple-darwin"
+
+[tools."aqua:asciinema/agg"."platforms.macos-x64"]
+checksum = "sha256:049ac882748837a8717bbc99ceccad427e8d838a24181b9694e2ff587e62193e"
+url = "https://github.com/asciinema/agg/releases/download/v1.7.0/agg-x86_64-apple-darwin"
+
+[tools."aqua:asciinema/agg"."platforms.windows-x64"]
+checksum = "sha256:f5a85d6ec09cfeea5938093a6364c5de8a88948ef241563b16a5de66da7b7d32"
+url = "https://github.com/asciinema/agg/releases/download/v1.7.0/agg-x86_64-pc-windows-msvc.exe"
 
 [[tools."aqua:asciinema/asciinema"]]
 version = "3.2.0"
 backend = "aqua:asciinema/asciinema"
-"platforms.linux-arm64" = { checksum = "sha256:f7f92769f7b4150df2835ddd4eda067b0786d0d734284a0f9c2aaa2514e8beb6", url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-aarch64-unknown-linux-gnu"}
-"platforms.linux-x64" = { checksum = "sha256:34cf9ddb54df166878a213d5173af4d5f9df9564ab8b1054a080408bce0b720e", url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-x86_64-unknown-linux-musl"}
-"platforms.macos-arm64" = { checksum = "sha256:bdde8367f343ed61fdc7fd942657bcd050b15cce67005f72e1a54b7fda20e5ea", url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-aarch64-apple-darwin"}
-"platforms.macos-x64" = { checksum = "sha256:a76ef31773c7f0f0e2fa18c0517dca571968b509156e6771df02c35f4279791f", url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-x86_64-apple-darwin"}
+
+[tools."aqua:asciinema/asciinema"."platforms.linux-arm64"]
+checksum = "sha256:f7f92769f7b4150df2835ddd4eda067b0786d0d734284a0f9c2aaa2514e8beb6"
+url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-aarch64-unknown-linux-gnu"
+
+[tools."aqua:asciinema/asciinema"."platforms.linux-x64"]
+checksum = "sha256:34cf9ddb54df166878a213d5173af4d5f9df9564ab8b1054a080408bce0b720e"
+url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-x86_64-unknown-linux-musl"
+
+[tools."aqua:asciinema/asciinema"."platforms.macos-arm64"]
+checksum = "sha256:bdde8367f343ed61fdc7fd942657bcd050b15cce67005f72e1a54b7fda20e5ea"
+url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-aarch64-apple-darwin"
+
+[tools."aqua:asciinema/asciinema"."platforms.macos-x64"]
+checksum = "sha256:a76ef31773c7f0f0e2fa18c0517dca571968b509156e6771df02c35f4279791f"
+url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-x86_64-apple-darwin"
 
 [[tools.github-cli]]
 version = "2.87.3"
 backend = "aqua:cli/cli"
-"platforms.linux-arm64" = { checksum = "sha256:5f5d89563bf26751e2173b37e594065504e85b6b781c1f1832d24bf2c2b4554f", url = "https://github.com/cli/cli/releases/download/v2.87.3/gh_2.87.3_linux_arm64.tar.gz"}
-"platforms.linux-arm64-musl" = { checksum = "sha256:5f5d89563bf26751e2173b37e594065504e85b6b781c1f1832d24bf2c2b4554f", url = "https://github.com/cli/cli/releases/download/v2.87.3/gh_2.87.3_linux_arm64.tar.gz"}
-"platforms.linux-x64" = { checksum = "sha256:c6e5537631fca45f277ef405ce8751d139b491e9402cc20891a003525a8773b2", url = "https://github.com/cli/cli/releases/download/v2.87.3/gh_2.87.3_linux_amd64.tar.gz"}
-"platforms.linux-x64-musl" = { checksum = "sha256:c6e5537631fca45f277ef405ce8751d139b491e9402cc20891a003525a8773b2", url = "https://github.com/cli/cli/releases/download/v2.87.3/gh_2.87.3_linux_amd64.tar.gz"}
-"platforms.macos-arm64" = { checksum = "sha256:dedfc6f569e9dbc5b92d47dce44acadbdf5b6b7a861510db0c748dfac55002f6", url = "https://github.com/cli/cli/releases/download/v2.87.3/gh_2.87.3_macOS_arm64.zip"}
-"platforms.macos-x64" = { checksum = "sha256:7b8d5495fe9689494b1c69559c0d28209bc057bb028008e903ec4b3e19bd8c75", url = "https://github.com/cli/cli/releases/download/v2.87.3/gh_2.87.3_macOS_amd64.zip"}
-"platforms.windows-x64" = { checksum = "sha256:c590bcb488f80a85c8febd5cde27edd68fdd481bd004aaf9adc50dcf1b21c09c", url = "https://github.com/cli/cli/releases/download/v2.87.3/gh_2.87.3_windows_amd64.zip"}
+
+[tools.github-cli."platforms.linux-arm64"]
+checksum = "sha256:5f5d89563bf26751e2173b37e594065504e85b6b781c1f1832d24bf2c2b4554f"
+url = "https://github.com/cli/cli/releases/download/v2.87.3/gh_2.87.3_linux_arm64.tar.gz"
+
+[tools.github-cli."platforms.linux-arm64-musl"]
+checksum = "sha256:5f5d89563bf26751e2173b37e594065504e85b6b781c1f1832d24bf2c2b4554f"
+url = "https://github.com/cli/cli/releases/download/v2.87.3/gh_2.87.3_linux_arm64.tar.gz"
+
+[tools.github-cli."platforms.linux-x64"]
+checksum = "sha256:c6e5537631fca45f277ef405ce8751d139b491e9402cc20891a003525a8773b2"
+url = "https://github.com/cli/cli/releases/download/v2.87.3/gh_2.87.3_linux_amd64.tar.gz"
+
+[tools.github-cli."platforms.linux-x64-musl"]
+checksum = "sha256:c6e5537631fca45f277ef405ce8751d139b491e9402cc20891a003525a8773b2"
+url = "https://github.com/cli/cli/releases/download/v2.87.3/gh_2.87.3_linux_amd64.tar.gz"
+
+[tools.github-cli."platforms.macos-arm64"]
+checksum = "sha256:dedfc6f569e9dbc5b92d47dce44acadbdf5b6b7a861510db0c748dfac55002f6"
+url = "https://github.com/cli/cli/releases/download/v2.87.3/gh_2.87.3_macOS_arm64.zip"
+
+[tools.github-cli."platforms.macos-x64"]
+checksum = "sha256:7b8d5495fe9689494b1c69559c0d28209bc057bb028008e903ec4b3e19bd8c75"
+url = "https://github.com/cli/cli/releases/download/v2.87.3/gh_2.87.3_macOS_amd64.zip"
+
+[tools.github-cli."platforms.windows-x64"]
+checksum = "sha256:c590bcb488f80a85c8febd5cde27edd68fdd481bd004aaf9adc50dcf1b21c09c"
+url = "https://github.com/cli/cli/releases/download/v2.87.3/gh_2.87.3_windows_amd64.zip"
 
 [[tools.poetry]]
 version = "2.3.2"
 backend = "vfox:mise-plugins/vfox-poetry"
 
 [[tools.python]]
-version = "3.14.3"
+version = "3.12.13"
 backend = "core:python"
-"platforms.linux-arm64" = { checksum = "sha256:e9b0aef9baafb6b9e7a4d47b82d6d9778eeafb2c95d23fb5247d3a5f8e52c5a5", url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260211/cpython-3.14.3+20260211-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz"}
-"platforms.linux-x64" = { checksum = "sha256:759457004082459a402f369225b82565d88ca8257d9fd11c642a1c76ab0cb1cc", url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260211/cpython-3.14.3+20260211-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"}
-"platforms.macos-arm64" = { checksum = "sha256:348647e4c13b662f7b0d218ccf472688038679815fb1a429ca664b7dce324237", url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260211/cpython-3.14.3+20260211-aarch64-apple-darwin-install_only_stripped.tar.gz"}
-"platforms.macos-x64" = { checksum = "sha256:107c71b272b5eeecd7b7b607c4fac0796b0f221bc3391e6155a349789cc7eb17", url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260211/cpython-3.14.3+20260211-x86_64-apple-darwin-install_only_stripped.tar.gz"}
-"platforms.windows-x64" = { checksum = "sha256:dc5feea0e16807e7c7b2d20af3f2c18c7153f9cbd4b54063172553fda60c5a1f", url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260211/cpython-3.14.3+20260211-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"}
+
+[tools.python."platforms.linux-arm64"]
+checksum = "sha256:9e0349ac08f40e33151bb9693de762101541f07633dea61dbaca17d03290cb58"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260303/cpython-3.12.13+20260303-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz"
+
+[tools.python."platforms.linux-arm64-musl"]
+checksum = "sha256:9e0349ac08f40e33151bb9693de762101541f07633dea61dbaca17d03290cb58"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260303/cpython-3.12.13+20260303-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz"
+
+[tools.python."platforms.linux-x64"]
+checksum = "sha256:c710dd6b63e4df92f4c5b7b29ccad4276226a024a9017d5018f15321c7854af4"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260303/cpython-3.12.13+20260303-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+
+[tools.python."platforms.linux-x64-musl"]
+checksum = "sha256:c710dd6b63e4df92f4c5b7b29ccad4276226a024a9017d5018f15321c7854af4"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260303/cpython-3.12.13+20260303-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+
+[tools.python."platforms.macos-arm64"]
+checksum = "sha256:377234f346fce41b6d3112b5ead89cb6af2d5596244f9edc1a739065770dde1f"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260303/cpython-3.12.13+20260303-aarch64-apple-darwin-install_only_stripped.tar.gz"
+
+[tools.python."platforms.macos-x64"]
+checksum = "sha256:b7ad42eef6a5729af319ba8a89eedd155e4d7c2a9884beff174a4c13e1286e68"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260303/cpython-3.12.13+20260303-x86_64-apple-darwin-install_only_stripped.tar.gz"
+
+[tools.python."platforms.windows-x64"]
+checksum = "sha256:10b7a95b928e551fc78cac665999e1ae1f08fb738b255adb0a8d3b9c2824a9c0"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260303/cpython-3.12.13+20260303-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"

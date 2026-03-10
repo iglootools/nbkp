@@ -24,9 +24,7 @@ def _build_graph(
     graph: dict[str, set[str]] = {}
     for sync_slug, sync in syncs.items():
         deps = {
-            writer
-            for writer in writers.get(sync.source, [])
-            if writer != sync_slug
+            writer for writer in writers.get(sync.source, []) if writer != sync_slug
         }
         graph[sync_slug] = deps
 

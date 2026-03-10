@@ -27,6 +27,7 @@ from .sync.symlink import DEVNULL_TARGET
 class VolumeReason(str, enum.Enum):
     SENTINEL_NOT_FOUND = ".nbkp-vol volume sentinel not found"
     UNREACHABLE = "unreachable"
+    LOCATION_EXCLUDED = "excluded by location filter"
 
 
 class SyncReason(str, enum.Enum):
@@ -37,39 +38,30 @@ class SyncReason(str, enum.Enum):
     DESTINATION_SENTINEL_NOT_FOUND = ".nbkp-dst destination sentinel not found"
     SOURCE_LATEST_NOT_FOUND = f"source {LATEST_LINK} symlink not found"
     SOURCE_LATEST_INVALID = f"source {LATEST_LINK} symlink target is invalid"
-    SOURCE_SNAPSHOTS_DIR_NOT_FOUND = (
-        f"source {SNAPSHOTS_DIR}/ directory not found"
-    )
+    SOURCE_SNAPSHOTS_DIR_NOT_FOUND = f"source {SNAPSHOTS_DIR}/ directory not found"
     RSYNC_NOT_FOUND_ON_SOURCE = "rsync not found on source"
     RSYNC_NOT_FOUND_ON_DESTINATION = "rsync not found on destination"
     RSYNC_TOO_OLD_ON_SOURCE = "rsync too old on source (3.0+ required)"
-    RSYNC_TOO_OLD_ON_DESTINATION = (
-        "rsync too old on destination (3.0+ required)"
-    )
+    RSYNC_TOO_OLD_ON_DESTINATION = "rsync too old on destination (3.0+ required)"
     BTRFS_NOT_FOUND_ON_DESTINATION = "btrfs not found on destination"
     STAT_NOT_FOUND_ON_DESTINATION = "stat not found on destination"
     FINDMNT_NOT_FOUND_ON_DESTINATION = "findmnt not found on destination"
     DESTINATION_NOT_BTRFS = "destination not on btrfs filesystem"
-    DESTINATION_NOT_BTRFS_SUBVOLUME = (
-        "destination endpoint is not a btrfs subvolume"
-    )
+    DESTINATION_NOT_BTRFS_SUBVOLUME = "destination endpoint is not a btrfs subvolume"
     DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM = (
         "destination not mounted with user_subvol_rm_allowed"
     )
-    DESTINATION_TMP_NOT_FOUND = (
-        f"destination {STAGING_DIR}/ directory not found"
-    )
+    DESTINATION_TMP_NOT_FOUND = f"destination {STAGING_DIR}/ directory not found"
     DESTINATION_SNAPSHOTS_DIR_NOT_FOUND = (
         f"destination {SNAPSHOTS_DIR}/ directory not found"
     )
-    DESTINATION_LATEST_NOT_FOUND = (
-        f"destination {LATEST_LINK} symlink not found"
-    )
-    DESTINATION_LATEST_INVALID = (
-        f"destination {LATEST_LINK} symlink target is invalid"
-    )
+    DESTINATION_LATEST_NOT_FOUND = f"destination {LATEST_LINK} symlink not found"
+    DESTINATION_LATEST_INVALID = f"destination {LATEST_LINK} symlink target is invalid"
     DESTINATION_NO_HARDLINK_SUPPORT = (
         "destination filesystem does not support hard links"
+    )
+    DRY_RUN_SOURCE_SNAPSHOT_PENDING = (
+        "source snapshot not yet available (dry-run; upstream has not run)"
     )
 
 
@@ -94,6 +86,13 @@ class SyncStatus(BaseModel):
     source_status: VolumeStatus
     destination_status: VolumeStatus
     reasons: list[SyncReason]
+    destination_latest_target: str | None = None
+    """Snapshot name from the destination ``latest`` symlink.
+
+    ``None`` when the symlink is absent, invalid, or points to
+    ``/dev/null`` (no snapshot yet).  Otherwise, the snapshot
+    name only (e.g. ``2026-03-06T14:30:00.000Z``).
+    """
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -132,6 +131,12 @@ def _check_remote_volume(
     resolved_endpoints: ResolvedEndpoints,
 ) -> VolumeStatus:
     """Check if a remote volume is active (SSH + .nbkp-vol sentinel)."""
+    if volume.slug not in resolved_endpoints:
+        return VolumeStatus(
+            slug=volume.slug,
+            config=volume,
+            reasons=[VolumeReason.LOCATION_EXCLUDED],
+        )
     ep = resolved_endpoints[volume.slug]
     sentinel_path = f"{volume.path}/.nbkp-vol"
     try:
@@ -184,9 +189,7 @@ def _check_command_available(
             return shutil.which(command) is not None
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(
-                ep.server, ["which", command], ep.proxy_chain
-            )
+            result = run_remote_command(ep.server, ["which", command], ep.proxy_chain)
             return result.returncode == 0
 
 
@@ -294,9 +297,7 @@ def _check_directory_exists(
             return Path(path).is_dir()
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(
-                ep.server, ["test", "-d", path], ep.proxy_chain
-            )
+            result = run_remote_command(ep.server, ["test", "-d", path], ep.proxy_chain)
             return result.returncode == 0
 
 
@@ -311,9 +312,7 @@ def _check_symlink_exists(
             return Path(path).is_symlink()
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(
-                ep.server, ["test", "-L", path], ep.proxy_chain
-            )
+            result = run_remote_command(ep.server, ["test", "-L", path], ep.proxy_chain)
             return result.returncode == 0
 
 
@@ -331,9 +330,7 @@ def _read_symlink_target(
             return str(p.readlink())
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(
-                ep.server, ["readlink", path], ep.proxy_chain
-            )
+            result = run_remote_command(ep.server, ["readlink", path], ep.proxy_chain)
             if result.returncode != 0:
                 return None
             return result.stdout.strip()
@@ -346,30 +343,39 @@ def _check_latest_symlink(
     not_found_reason: SyncReason,
     invalid_reason: SyncReason,
     resolved_endpoints: ResolvedEndpoints,
-) -> None:
+) -> str | None:
     """Validate the latest symlink at an endpoint.
 
     Checks that the symlink exists and points to either ``/dev/null``
     (valid "no snapshot yet" marker) or an existing relative snapshot
     directory.
+
+    Returns the raw symlink target when valid and not ``/dev/null``,
+    or ``None`` otherwise.
     """
     latest_path = f"{endpoint_path}/{LATEST_LINK}"
     if not _check_symlink_exists(volume, latest_path, resolved_endpoints):
         reasons.append(not_found_reason)
-        return
+        return None
 
-    target = _read_symlink_target(volume, latest_path, resolved_endpoints)
-    if target is None:
+    raw_target = _read_symlink_target(volume, latest_path, resolved_endpoints)
+    if raw_target is None:
         reasons.append(not_found_reason)
-        return
+        return None
 
+    target = str(raw_target)
     if target == DEVNULL_TARGET:
-        return  # Valid "no snapshot yet" marker
+        return None  # Valid "no snapshot yet" marker
 
     # Resolve relative target against endpoint path
     resolved = f"{endpoint_path}/{target}"
     if not _check_directory_exists(volume, resolved, resolved_endpoints):
         reasons.append(invalid_reason)
+        return None
+
+    # Extract snapshot name from relative target
+    # e.g. "snapshots/2026-03-06T14:30:00.000Z" -> "2026-03-06T14:30:00.000Z"
+    return target.rsplit("/", 1)[-1]
 
 
 def _check_btrfs_subvolume(
@@ -481,9 +487,7 @@ def _has_upstream_sync(
     matches this sync's source endpoint slug.
     """
     return any(
-        other.destination == sync.source
-        and other.slug != sync.slug
-        and other.enabled
+        other.destination == sync.source and other.slug != sync.slug and other.enabled
         for other in all_syncs.values()
     )
 
@@ -495,11 +499,15 @@ def _check_source_latest(
     all_syncs: dict[str, SyncConfig],
     reasons: list[SyncReason],
     resolved_endpoints: ResolvedEndpoints,
+    dry_run: bool = False,
 ) -> None:
     """Validate the source latest symlink.
 
     ``/dev/null`` is accepted only when an enabled upstream sync writes
     to this source endpoint (it will populate the snapshot).
+
+    In dry-run mode, ``/dev/null`` with an upstream sync marks the sync
+    as inactive because the upstream dry-run won't create a real snapshot.
     """
     latest_path = f"{endpoint_path}/{LATEST_LINK}"
     if not _check_symlink_exists(src_vol, latest_path, resolved_endpoints):
@@ -514,6 +522,8 @@ def _check_source_latest(
     if target == DEVNULL_TARGET:
         if not _has_upstream_sync(sync, all_syncs):
             reasons.append(SyncReason.SOURCE_LATEST_INVALID)
+        elif dry_run:
+            reasons.append(SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING)
         return
 
     # Resolve relative target against endpoint path
@@ -528,6 +538,7 @@ def check_sync(
     volume_statuses: dict[str, VolumeStatus],
     resolved_endpoints: ResolvedEndpoints | None = None,
     all_syncs: dict[str, SyncConfig] | None = None,
+    dry_run: bool = False,
 ) -> SyncStatus:
     """Check if a sync is active, accumulating all failure reasons."""
     re = resolved_endpoints or {}
@@ -550,6 +561,7 @@ def check_sync(
         )
     else:
         reasons: list[SyncReason] = []
+        dst_latest_target: str | None = None
 
         # Volume availability
         if not src_status.active:
@@ -573,7 +585,9 @@ def check_sync(
                 reasons.append(SyncReason.RSYNC_TOO_OLD_ON_SOURCE)
             if src_cfg.snapshot_mode != "none":
                 src_ep = _resolve_endpoint(src_vol, src_cfg.subdir)
-                _check_source_latest(sync, src_vol, src_ep, syncs, reasons, re)
+                _check_source_latest(
+                    sync, src_vol, src_ep, syncs, reasons, re, dry_run=dry_run
+                )
                 if not _check_directory_exists(
                     src_vol, f"{src_ep}/{SNAPSHOTS_DIR}", re
                 ):
@@ -597,18 +611,12 @@ def check_sync(
                     reasons.append(SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION)
                 else:
                     has_stat = _check_command_available(dst_vol, "stat", re)
-                    has_findmnt = _check_command_available(
-                        dst_vol, "findmnt", re
-                    )
+                    has_findmnt = _check_command_available(dst_vol, "findmnt", re)
 
                     if not has_stat:
-                        reasons.append(
-                            SyncReason.STAT_NOT_FOUND_ON_DESTINATION
-                        )
+                        reasons.append(SyncReason.STAT_NOT_FOUND_ON_DESTINATION)
                     if not has_findmnt:
-                        reasons.append(
-                            SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION
-                        )
+                        reasons.append(SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION)
 
                     if has_stat:
                         _check_btrfs_dest(
@@ -633,7 +641,7 @@ def check_sync(
             # Destination latest symlink check (snapshot modes)
             if dst_cfg.snapshot_mode != "none":
                 dst_ep = _resolve_endpoint(dst_vol, dst_cfg.subdir)
-                _check_latest_symlink(
+                dst_latest_target = _check_latest_symlink(
                     dst_vol,
                     dst_ep,
                     reasons,
@@ -648,6 +656,7 @@ def check_sync(
             source_status=src_status,
             destination_status=dst_status,
             reasons=reasons,
+            destination_latest_target=dst_latest_target,
         )
 
 
@@ -656,6 +665,7 @@ def check_all_syncs(
     on_progress: Callable[[str], None] | None = None,
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    dry_run: bool = False,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     """Check volumes and syncs, caching volume checks.
 
@@ -686,7 +696,7 @@ def check_all_syncs(
     sync_statuses: dict[str, SyncStatus] = {}
     for slug, sync in syncs.items():
         sync_statuses[slug] = check_sync(
-            sync, config, volume_statuses, re, config.syncs
+            sync, config, volume_statuses, re, config.syncs, dry_run=dry_run
         )
         if on_progress:
             on_progress(slug)

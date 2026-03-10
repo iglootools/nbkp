@@ -102,18 +102,14 @@ class TestCreateSnapshotDir:
         mock_remote.return_value = MagicMock(returncode=0, stderr="")
         sync, config, re = _remote_config()
 
-        path = create_snapshot_dir(
-            sync, config, now=_NOW, resolved_endpoints=re
-        )
+        path = create_snapshot_dir(sync, config, now=_NOW, resolved_endpoints=re)
 
         assert path == f"/backup/snapshots/{_TS}"
         mock_remote.assert_called_once()
 
     @patch("nbkp.sync.hardlinks.subprocess.run")
     def test_failure_raises(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=1, stderr="permission denied"
-        )
+        mock_run.return_value = MagicMock(returncode=1, stderr="permission denied")
         sync, config = _local_config()
 
         with pytest.raises(RuntimeError, match="mkdir"):
@@ -271,9 +267,7 @@ class TestUpdateLatestSymlink:
 
 class TestCleanupOrphanedSnapshots:
     @patch("nbkp.sync.hardlinks.list_snapshots")
-    def test_deletes_orphans(
-        self, mock_list: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_deletes_orphans(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
@@ -345,9 +339,7 @@ class TestCleanupOrphanedSnapshots:
         assert deleted == []
 
     @patch("nbkp.sync.hardlinks.list_snapshots")
-    def test_no_latest_symlink(
-        self, mock_list: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_no_latest_symlink(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
@@ -440,9 +432,7 @@ class TestPruneSnapshots:
         assert "T1" in deleted[0]
 
     @patch("nbkp.sync.hardlinks.list_snapshots")
-    def test_never_prunes_latest(
-        self, mock_list: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_never_prunes_latest(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(

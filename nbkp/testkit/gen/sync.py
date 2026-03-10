@@ -66,9 +66,7 @@ def run_results(config: Config) -> list[SyncResult]:
 
 def dry_run_results(config: Config) -> list[SyncResult]:
     """Same results as run_results but flagged as dry run."""
-    return [
-        r.model_copy(update={"dry_run": True}) for r in run_results(config)
-    ]
+    return [r.model_copy(update={"dry_run": True}) for r in run_results(config)]
 
 
 def prune_results(config: Config) -> list[PruneResult]:
@@ -96,7 +94,7 @@ def prune_results(config: Config) -> list[PruneResult]:
             deleted=[],
             kept=0,
             dry_run=False,
-            detail="btrfs delete failed:" " Permission denied",
+            detail="btrfs delete failed: Permission denied",
         ),
     ]
 

@@ -274,7 +274,7 @@ class TestBuildSshEOption:
         result = build_ssh_e_option(server)
         assert result == [
             "-e",
-            f"{_DEFAULT_E_PREFIX}" " -o StrictHostKeyChecking=no",
+            f"{_DEFAULT_E_PREFIX} -o StrictHostKeyChecking=no",
         ]
 
     def test_proxy_jump(self) -> None:

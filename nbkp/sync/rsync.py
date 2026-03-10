@@ -44,9 +44,7 @@ _DEFAULT_RSYNC_OPTIONS: list[str] = [
 ]
 
 
-def resolve_path(
-    volume: LocalVolume | RemoteVolume, subdir: str | None
-) -> str:
+def resolve_path(volume: LocalVolume | RemoteVolume, subdir: str | None) -> str:
     """Resolve the full path for a volume with optional subdir."""
     if subdir:
         return f"{volume.path}/{subdir}"
@@ -184,12 +182,8 @@ def build_rsync_command(
                     src_re.proxy_chain,
                 )
             )
-            rsync_args.append(
-                format_remote_path(src_re.server, src_path) + "/"
-            )
-            dst_target = (
-                f"{dst_path}/{dest_suffix}/" if dest_suffix else f"{dst_path}/"
-            )
+            rsync_args.append(format_remote_path(src_re.server, src_path) + "/")
+            dst_target = f"{dst_path}/{dest_suffix}/" if dest_suffix else f"{dst_path}/"
             rsync_args.append(dst_target)
             return rsync_args
         case (LocalVolume(), RemoteVolume() as dv):
@@ -205,9 +199,7 @@ def build_rsync_command(
             rsync_args.append(f"{src_path}/")
             dst_remote = format_remote_path(dst_re.server, dst_path)
             dst_target = (
-                f"{dst_remote}/{dest_suffix}/"
-                if dest_suffix
-                else f"{dst_remote}/"
+                f"{dst_remote}/{dest_suffix}/" if dest_suffix else f"{dst_remote}/"
             )
             rsync_args.append(dst_target)
             return rsync_args
@@ -215,9 +207,7 @@ def build_rsync_command(
             rsync_args = _base_rsync_args(sync, dry_run, link_dest, progress)
             rsync_args.extend(_filter_args(sync))
             rsync_args.append(f"{src_path}/")
-            dst_target = (
-                f"{dst_path}/{dest_suffix}/" if dest_suffix else f"{dst_path}/"
-            )
+            dst_target = f"{dst_path}/{dest_suffix}/" if dest_suffix else f"{dst_path}/"
             rsync_args.append(dst_target)
             return rsync_args
 
@@ -240,9 +230,7 @@ def _build_remote_same_server(
     rsync_args = _base_rsync_args(sync, dry_run, link_dest, progress)
     rsync_args.extend(_filter_args(sync))
     rsync_args.append(f"{src_path}/")
-    dst_target = (
-        f"{dst_path}/{dest_suffix}/" if dest_suffix else f"{dst_path}/"
-    )
+    dst_target = f"{dst_path}/{dest_suffix}/" if dest_suffix else f"{dst_path}/"
     rsync_args.append(dst_target)
 
     inner_command = shlex.join(rsync_args)

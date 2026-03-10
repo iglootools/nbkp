@@ -86,9 +86,7 @@ def base_sync_endpoints() -> dict[str, SyncEndpoint]:
             slug="usb-photos",
             volume="usb-drive",
             subdir="photos",
-            btrfs_snapshots=BtrfsSnapshotConfig(
-                enabled=True, max_snapshots=10
-            ),
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=10),
         ),
         "laptop-docs": SyncEndpoint(
             slug="laptop-docs",
@@ -99,9 +97,7 @@ def base_sync_endpoints() -> dict[str, SyncEndpoint]:
             slug="nas-docs",
             volume="nas-backup",
             subdir="docs",
-            hard_link_snapshots=HardLinkSnapshotConfig(
-                enabled=True, max_snapshots=10
-            ),
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
         ),
         "laptop-music": SyncEndpoint(
             slug="laptop-music",
@@ -112,9 +108,7 @@ def base_sync_endpoints() -> dict[str, SyncEndpoint]:
             slug="usb-music",
             volume="usb-drive",
             subdir="music",
-            hard_link_snapshots=HardLinkSnapshotConfig(
-                enabled=True, max_snapshots=5
-            ),
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True, max_snapshots=5),
         ),
         "laptop-root": SyncEndpoint(
             slug="laptop-root",

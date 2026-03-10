@@ -31,12 +31,8 @@ def _local_to_local_config() -> Config:
     return Config(
         volumes={"src": src, "dst": dst},
         sync_endpoints={
-            "ep-src": SyncEndpoint(
-                slug="ep-src", volume="src", subdir="photos"
-            ),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst", volume="dst", subdir="backup"
-            ),
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="photos"),
+            "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst", subdir="backup"),
         },
         syncs={
             "my-sync": SyncConfig(
@@ -64,9 +60,7 @@ def _local_to_remote_config() -> Config:
         ssh_endpoints={"nas": server},
         volumes={"src": src, "nas-vol": dst},
         sync_endpoints={
-            "ep-src": SyncEndpoint(
-                slug="ep-src", volume="src", subdir="photos"
-            ),
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="photos"),
             "ep-dst": SyncEndpoint(
                 slug="ep-dst",
                 volume="nas-vol",
@@ -122,9 +116,7 @@ def _btrfs_config() -> Config:
             "ep-dst": SyncEndpoint(
                 slug="ep-dst",
                 volume="dst",
-                btrfs_snapshots=BtrfsSnapshotConfig(
-                    enabled=True, max_snapshots=5
-                ),
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=5),
             ),
         },
         syncs={
@@ -172,16 +164,12 @@ def _btrfs_chain_config() -> Config:
             "ep-mid": SyncEndpoint(
                 slug="ep-mid",
                 volume="mid",
-                btrfs_snapshots=BtrfsSnapshotConfig(
-                    enabled=True, max_snapshots=5
-                ),
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=5),
             ),
             "ep-dst": SyncEndpoint(
                 slug="ep-dst",
                 volume="dst",
-                btrfs_snapshots=BtrfsSnapshotConfig(
-                    enabled=True, max_snapshots=5
-                ),
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=5),
             ),
         },
         syncs={
@@ -405,9 +393,7 @@ class TestLocalToLocal:
     def test_sync_invocation(self) -> None:
         config = _local_to_local_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert (
-            "sync_my_sync" ' || { NBKP_FAILED="${NBKP_FAILED}' 'sync_my_sync "'
-        ) in script
+        assert ('sync_my_sync || { NBKP_FAILED="${NBKP_FAILED}sync_my_sync "') in script
 
 
 class TestLocalToRemote:
@@ -774,9 +760,7 @@ class TestEdgeCases:
             sync_endpoints={
                 "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
                 "ep-dst1": SyncEndpoint(slug="ep-dst1", volume="dst"),
-                "ep-dst2": SyncEndpoint(
-                    slug="ep-dst2", volume="dst", subdir="two"
-                ),
+                "ep-dst2": SyncEndpoint(slug="ep-dst2", volume="dst", subdir="two"),
             },
             syncs={
                 "s-one": SyncConfig(
@@ -873,9 +857,7 @@ class TestEdgeCases:
             sync_endpoints={
                 "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
                 "ep-dst1": SyncEndpoint(slug="ep-dst1", volume="dst"),
-                "ep-dst2": SyncEndpoint(
-                    slug="ep-dst2", volume="dst", subdir="off"
-                ),
+                "ep-dst2": SyncEndpoint(slug="ep-dst2", volume="dst", subdir="off"),
             },
             syncs={
                 "active-sync": SyncConfig(
@@ -895,9 +877,7 @@ class TestEdgeCases:
         assert "sync_active_sync()" in script
         assert "# : disabled — off-sync" in script
         assert (
-            "sync_active_sync"
-            ' || { NBKP_FAILED="${NBKP_FAILED}'
-            'sync_active_sync "'
+            'sync_active_sync || { NBKP_FAILED="${NBKP_FAILED}sync_active_sync "'
         ) in script
         assert "# sync_off_sync  # disabled" in script
         result = subprocess.run(
@@ -939,9 +919,7 @@ class TestRemoteBtrfs:
                 "ep-dst": SyncEndpoint(
                     slug="ep-dst",
                     volume="nas-vol",
-                    btrfs_snapshots=BtrfsSnapshotConfig(
-                        enabled=True, max_snapshots=3
-                    ),
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=3),
                 ),
             },
             syncs={
@@ -1213,9 +1191,7 @@ class TestRelativePaths:
             output_file="/mnt/data/backup.sh",
             relative_src=True,
         )
-        script = generate_script(
-            config, options, now=_NOW, resolved_endpoints=resolved
-        )
+        script = generate_script(config, options, now=_NOW, resolved_endpoints=resolved)
         # Local source relativized
         assert "${NBKP_SCRIPT_DIR}" in script
         # Remote dest stays absolute
@@ -1229,9 +1205,7 @@ class TestRelativePaths:
             output_file="/mnt/backup/backup.sh",
             relative_dst=True,
         )
-        script = generate_script(
-            config, options, now=_NOW, resolved_endpoints=resolved
-        )
+        script = generate_script(config, options, now=_NOW, resolved_endpoints=resolved)
         # Local dest relativized
         assert "${NBKP_SCRIPT_DIR}" in script
         # Remote source stays absolute

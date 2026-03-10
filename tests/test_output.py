@@ -17,6 +17,8 @@ from nbkp.config import (
     Config,
     HardLinkSnapshotConfig,
     LocalVolume,
+    RemoteVolume,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
 )
@@ -233,11 +235,10 @@ class TestCheckRsyncCommandDisplay:
                 reasons=[],
             )
         }
-        sections = build_check_sections(
-            vol_s, sync_s, config, resolved_endpoints={}
-        )
+        sections = build_check_sections(vol_s, sync_s, config, resolved_endpoints={})
         output = _render_sections(sections)
         assert "/mnt/dst/staging/" in output
+        assert "--link-dest" not in output
 
     def test_hard_link_shows_snapshots_timestamp_suffix(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/src")
@@ -246,9 +247,7 @@ class TestCheckRsyncCommandDisplay:
         ep_dst = SyncEndpoint(
             slug="ep-dst",
             volume="dst",
-            hard_link_snapshots=HardLinkSnapshotConfig(
-                enabled=True, max_snapshots=10
-            ),
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
         )
         sync = SyncConfig(
             slug="hl-sync",
@@ -270,11 +269,47 @@ class TestCheckRsyncCommandDisplay:
                 reasons=[],
             )
         }
-        sections = build_check_sections(
-            vol_s, sync_s, config, resolved_endpoints={}
-        )
+        sections = build_check_sections(vol_s, sync_s, config, resolved_endpoints={})
         output = _render_sections(sections)
         assert "/mnt/dst/snapshots/<timestamp>/" in output
+        # No previous snapshot: --link-dest is omitted
+        assert "--link-dest" not in output
+
+    def test_hard_link_shows_link_dest_when_previous_exists(self) -> None:
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        ep_src = SyncEndpoint(slug="ep-src", volume="src")
+        ep_dst = SyncEndpoint(
+            slug="ep-dst",
+            volume="dst",
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
+        )
+        sync = SyncConfig(
+            slug="hl-sync",
+            source="ep-src",
+            destination="ep-dst",
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
+            syncs={"hl-sync": sync},
+        )
+        vol_s = _make_vol_statuses(config)
+        sync_s = {
+            "hl-sync": SyncStatus(
+                slug="hl-sync",
+                config=sync,
+                source_status=vol_s["src"],
+                destination_status=vol_s["dst"],
+                reasons=[],
+                destination_latest_target="2026-03-06T14:30:00.000Z",
+            )
+        }
+        sections = build_check_sections(vol_s, sync_s, config, resolved_endpoints={})
+        output = _render_sections(sections)
+        assert "/mnt/dst/snapshots/<timestamp>/" in output
+        assert "--link-dest" in output
+        assert "../2026-03-06T14:30:00.000Z" in output
 
     def test_plain_sync_shows_bare_destination(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/src")
@@ -301,10 +336,73 @@ class TestCheckRsyncCommandDisplay:
                 reasons=[],
             )
         }
-        sections = build_check_sections(
-            vol_s, sync_s, config, resolved_endpoints={}
-        )
+        sections = build_check_sections(vol_s, sync_s, config, resolved_endpoints={})
         output = _render_sections(sections)
         assert "/mnt/dst/" in output
         assert "staging" not in output
         assert "snapshots" not in output
+
+
+class TestTroubleshootDryRunPendingSnapshot:
+    def test_dry_run_pending_snapshot_text(self) -> None:
+        """Troubleshoot output explains dry-run snapshot skip."""
+        config = _btrfs_config()
+        vol_statuses = _make_vol_statuses(config)
+        sync_statuses = {
+            "btrfs-sync": SyncStatus(
+                slug="btrfs-sync",
+                config=config.syncs["btrfs-sync"],
+                source_status=vol_statuses["src"],
+                destination_status=vol_statuses["dst"],
+                reasons=[SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING],
+            )
+        }
+        console, buf = _make_console()
+        print_human_troubleshoot(
+            vol_statuses,
+            sync_statuses,
+            config,
+            console=console,
+        )
+        output = buf.getvalue()
+        assert "dry-run" in output
+        assert "upstream" in output
+        assert SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING.value in output
+
+
+class TestTroubleshootLocationExcluded:
+    def test_location_excluded_volume_text(self) -> None:
+        """Troubleshoot output explains location-excluded volume."""
+        vol = RemoteVolume(
+            slug="remote",
+            ssh_endpoint="server",
+            path="/data",
+        )
+        config = Config(
+            ssh_endpoints={
+                "server": SshEndpoint(
+                    slug="server",
+                    host="10.0.0.1",
+                    location="home",
+                ),
+            },
+            volumes={"remote": vol},
+            syncs={},
+        )
+        vol_statuses = {
+            "remote": VolumeStatus(
+                slug="remote",
+                config=vol,
+                reasons=[VolumeReason.LOCATION_EXCLUDED],
+            ),
+        }
+        console, buf = _make_console()
+        print_human_troubleshoot(
+            vol_statuses,
+            {},
+            config,
+            console=console,
+        )
+        output = buf.getvalue()
+        assert VolumeReason.LOCATION_EXCLUDED.value in output
+        assert "--exclude-location" in output

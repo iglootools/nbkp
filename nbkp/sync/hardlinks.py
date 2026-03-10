@@ -101,9 +101,7 @@ def delete_snapshot(
     match volume:
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(
-                ep.server, ["rm", "-rf", path], ep.proxy_chain
-            )
+            result = run_remote_command(ep.server, ["rm", "-rf", path], ep.proxy_chain)
             if result.returncode != 0:
                 raise RuntimeError(f"rm -rf snapshot failed: {result.stderr}")
         case LocalVolume():

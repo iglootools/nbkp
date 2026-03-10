@@ -106,9 +106,7 @@ class TestCreateSnapshotLocal:
 
     @patch("nbkp.sync.btrfs.subprocess.run")
     def test_failure(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=1, stderr="permission denied"
-        )
+        mock_run.return_value = MagicMock(returncode=1, stderr="permission denied")
         config, sync = _local_config()
         from datetime import datetime, timezone
 
@@ -126,9 +124,7 @@ class TestCreateSnapshotRemote:
         from datetime import datetime, timezone
 
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
-        path = create_snapshot(
-            sync, config, now=fixed_now, resolved_endpoints=resolved
-        )
+        path = create_snapshot(sync, config, now=fixed_now, resolved_endpoints=resolved)
         assert path == ("/backup/data/snapshots/2024-01-15T12:00:00.000Z")
         mock_run.assert_called_once()
         call_args = mock_run.call_args
@@ -258,9 +254,7 @@ class TestCreateSnapshotLocalSpaces:
 
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
         path = create_snapshot(sync, config, now=fixed_now)
-        assert path == (
-            "/mnt/my dst/my backup/snapshots/" "2024-01-15T12:00:00.000Z"
-        )
+        assert path == ("/mnt/my dst/my backup/snapshots/2024-01-15T12:00:00.000Z")
         call_args = mock_run.call_args[0][0]
         assert call_args == [
             "btrfs",
@@ -268,7 +262,7 @@ class TestCreateSnapshotLocalSpaces:
             "snapshot",
             "-r",
             "/mnt/my dst/my backup/staging",
-            "/mnt/my dst/my backup/snapshots/" "2024-01-15T12:00:00.000Z",
+            "/mnt/my dst/my backup/snapshots/2024-01-15T12:00:00.000Z",
         ]
 
 
@@ -281,12 +275,8 @@ class TestCreateSnapshotRemoteSpaces:
         from datetime import datetime, timezone
 
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
-        path = create_snapshot(
-            sync, config, now=fixed_now, resolved_endpoints=resolved
-        )
-        assert path == (
-            "/my backup/my data/snapshots/" "2024-01-15T12:00:00.000Z"
-        )
+        path = create_snapshot(sync, config, now=fixed_now, resolved_endpoints=resolved)
+        assert path == ("/my backup/my data/snapshots/2024-01-15T12:00:00.000Z")
         call_args = mock_run.call_args
         assert call_args[0][1] == [
             "btrfs",
@@ -294,7 +284,7 @@ class TestCreateSnapshotRemoteSpaces:
             "snapshot",
             "-r",
             "/my backup/my data/staging",
-            "/my backup/my data/snapshots/" "2024-01-15T12:00:00.000Z",
+            "/my backup/my data/snapshots/2024-01-15T12:00:00.000Z",
         ]
 
 
@@ -393,9 +383,7 @@ class TestDeleteSnapshotLocal:
 
     @patch("nbkp.sync.btrfs.subprocess.run")
     def test_failure_on_property_set(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=1, stderr="permission denied"
-        )
+        mock_run.return_value = MagicMock(returncode=1, stderr="permission denied")
         config, _ = _local_config()
         dst_vol = config.volumes["dst"]
 
@@ -457,9 +445,7 @@ class TestPruneSnapshotsLocal:
         return_value=None,
     )
     @patch("nbkp.sync.btrfs.subprocess.run")
-    def test_prunes_oldest(
-        self, mock_run: MagicMock, mock_latest: MagicMock
-    ) -> None:
+    def test_prunes_oldest(self, mock_run: MagicMock, mock_latest: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="20240101T000000Z\n20240102T000000Z\n20240103T000000Z\n",
@@ -500,9 +486,7 @@ class TestPruneSnapshotsLocal:
         return_value=None,
     )
     @patch("nbkp.sync.btrfs.subprocess.run")
-    def test_dry_run(
-        self, mock_run: MagicMock, mock_latest: MagicMock
-    ) -> None:
+    def test_dry_run(self, mock_run: MagicMock, mock_latest: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="20240101T000000Z\n20240102T000000Z\n20240103T000000Z\n",
@@ -526,9 +510,7 @@ class TestPruneSnapshotsLocal:
         """The snapshot that latest points to must not be pruned."""
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout=(
-                "20240101T000000Z\n" "20240102T000000Z\n" "20240103T000000Z\n"
-            ),
+            stdout=("20240101T000000Z\n20240102T000000Z\n20240103T000000Z\n"),
             stderr="",
         )
         # latest points to the second-oldest snapshot
@@ -551,9 +533,7 @@ class TestPruneSnapshotsLocal:
 class TestPruneSnapshotsRemote:
     @patch("nbkp.sync.symlink.read_latest_symlink", return_value=None)
     @patch("nbkp.sync.btrfs.run_remote_command")
-    def test_prunes_oldest(
-        self, mock_run: MagicMock, mock_latest: MagicMock
-    ) -> None:
+    def test_prunes_oldest(self, mock_run: MagicMock, mock_latest: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="20240101T000000Z\n20240102T000000Z\n20240103T000000Z\n",
@@ -579,9 +559,7 @@ class TestPruneSnapshotsRemote:
         """The snapshot that latest points to must not be pruned."""
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout=(
-                "20240101T000000Z\n" "20240102T000000Z\n" "20240103T000000Z\n"
-            ),
+            stdout=("20240101T000000Z\n20240102T000000Z\n20240103T000000Z\n"),
             stderr="",
         )
         # latest points to the oldest snapshot

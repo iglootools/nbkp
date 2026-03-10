@@ -90,9 +90,7 @@ class TestBtrfsSnapshots:
         assert result.returncode == 0
 
         # Create snapshot
-        snapshot_path = create_snapshot(
-            sync, config, resolved_endpoints=resolved
-        )
+        snapshot_path = create_snapshot(sync, config, resolved_endpoints=resolved)
 
         # Verify snapshot exists
         check = ssh_exec(docker_ssh_endpoint, f"test -d {snapshot_path}")
@@ -100,9 +98,7 @@ class TestBtrfsSnapshots:
 
         # Update latest symlink
         snap_name = snapshot_path.rsplit("/", 1)[-1]
-        update_latest_symlink(
-            sync, config, snap_name, resolved_endpoints=resolved
-        )
+        update_latest_symlink(sync, config, snap_name, resolved_endpoints=resolved)
 
         # Verify latest symlink
         link = ssh_exec(
@@ -128,12 +124,8 @@ class TestBtrfsSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
-        run_rsync(
-            sync, config, resolved_endpoints=resolved, dest_suffix="staging"
-        )
-        snapshot_path = create_snapshot(
-            sync, config, resolved_endpoints=resolved
-        )
+        run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="staging")
+        snapshot_path = create_snapshot(sync, config, resolved_endpoints=resolved)
 
         # Check readonly property
         check = ssh_exec(
@@ -158,14 +150,10 @@ class TestBtrfsSnapshots:
         )
 
         # First sync + snapshot + symlink
-        run_rsync(
-            sync, config, resolved_endpoints=resolved, dest_suffix="staging"
-        )
+        run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="staging")
         first_snap = create_snapshot(sync, config, resolved_endpoints=resolved)
         first_name = first_snap.rsplit("/", 1)[-1]
-        update_latest_symlink(
-            sync, config, first_name, resolved_endpoints=resolved
-        )
+        update_latest_symlink(sync, config, first_name, resolved_endpoints=resolved)
 
         # Small delay to ensure distinct timestamp
         time.sleep(0.1)
@@ -189,16 +177,12 @@ class TestBtrfsSnapshots:
         assert result.returncode == 0
 
         # Create second snapshot + symlink
-        snapshot_path = create_snapshot(
-            sync, config, resolved_endpoints=resolved
-        )
+        snapshot_path = create_snapshot(sync, config, resolved_endpoints=resolved)
         check = ssh_exec(docker_ssh_endpoint, f"test -d {snapshot_path}")
         assert check.returncode == 0
 
         snap_name = snapshot_path.rsplit("/", 1)[-1]
-        update_latest_symlink(
-            sync, config, snap_name, resolved_endpoints=resolved
-        )
+        update_latest_symlink(sync, config, snap_name, resolved_endpoints=resolved)
 
         # Verify latest symlink points to second snapshot
         link = ssh_exec(
@@ -222,9 +206,7 @@ class TestBtrfsSnapshots:
             docker_ssh_endpoint,
             f"ls {REMOTE_BTRFS_PATH}/snapshots 2>/dev/null || true",
         )
-        count_before = len(
-            [s for s in before.stdout.strip().split("\n") if s.strip()]
-        )
+        count_before = len([s for s in before.stdout.strip().split("\n") if s.strip()])
 
         src = tmp_path / "src"
         src.mkdir()
@@ -249,9 +231,7 @@ class TestBtrfsSnapshots:
             docker_ssh_endpoint,
             f"ls {REMOTE_BTRFS_PATH}/snapshots 2>/dev/null || true",
         )
-        count_after = len(
-            [s for s in after.stdout.strip().split("\n") if s.strip()]
-        )
+        count_after = len([s for s in after.stdout.strip().split("\n") if s.strip()])
         assert count_after == count_before
 
 
@@ -272,9 +252,7 @@ class TestPruneSnapshots:
                 resolved_endpoints=resolved,
             )
             name = path.rsplit("/", 1)[-1]
-            update_latest_symlink(
-                sync, config, name, resolved_endpoints=resolved
-            )
+            update_latest_symlink(sync, config, name, resolved_endpoints=resolved)
             paths.append(path)
             time.sleep(0.1)  # distinct timestamps
         return paths
@@ -292,9 +270,7 @@ class TestPruneSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
-        run_rsync(
-            sync, config, resolved_endpoints=resolved, dest_suffix="staging"
-        )
+        run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="staging")
 
         self._create_snapshots(sync, config, resolved, 3)
 
@@ -328,9 +304,7 @@ class TestPruneSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
-        run_rsync(
-            sync, config, resolved_endpoints=resolved, dest_suffix="staging"
-        )
+        run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="staging")
 
         self._create_snapshots(sync, config, resolved, 3)
 
@@ -365,9 +339,7 @@ class TestPruneSnapshots:
         sync, config, resolved = _make_btrfs_config(
             str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
-        run_rsync(
-            sync, config, resolved_endpoints=resolved, dest_suffix="staging"
-        )
+        run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="staging")
 
         self._create_snapshots(sync, config, resolved, 2)
 

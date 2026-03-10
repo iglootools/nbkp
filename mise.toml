@@ -1,5 +1,5 @@
 [tools]
-python = "3.14.3"
+python = "3.12.13"
 poetry = "2.3.2"
 github-cli = "2.87.3"
 "aqua:asciinema/asciinema" = "3.2.0"
@@ -76,23 +76,28 @@ run = [
 ]
 
 [tasks.format]
-description = "Format code with black"
-run = "poetry run black ."
+description = "Format code with ruff"
+run = "poetry run ruff format ."
 
 [tasks.lint]
-description = "Run flake8 linting"
-run = "poetry run flake8 nbkp/ tests/"
+description = "Run ruff linting"
+run = "poetry run ruff check nbkp/ tests/"
 
 [tasks.type-check]
 description = "Run mypy type checking"
 run = "poetry run mypy nbkp/"
 
+[tasks.compat-check]
+description = "Verify no Python features above 3.12 are used"
+run = "poetry run vermin --target=3.12- --no-tips --no-parse-comments nbkp/ tests/"
+
 [tasks.check]
-description = "Run all checks (format, lint, type-check)"
+description = "Run all checks (format, lint, type-check, compat-check)"
 run = [
   { task = "format" },
   { task = "lint" },
   { task = "type-check" },
+  { task = "compat-check" },
 ]
 
 [tasks.check-all]

@@ -117,12 +117,8 @@ def _build_vol_paths(
     options: ScriptOptions,
 ) -> dict[str, str]:
     """Compute volume slug -> effective path."""
-    src_slugs = {
-        config.source_endpoint(s).volume for s in config.syncs.values()
-    }
-    dst_slugs = {
-        config.destination_endpoint(s).volume for s in config.syncs.values()
-    }
+    src_slugs = {config.source_endpoint(s).volume for s in config.syncs.values()}
+    dst_slugs = {config.destination_endpoint(s).volume for s in config.syncs.values()}
 
     vol_paths: dict[str, str] = {}
     for slug, vol in config.volumes.items():
@@ -130,9 +126,9 @@ def _build_vol_paths(
             case RemoteVolume():
                 vol_paths[slug] = vol.path
             case LocalVolume():
-                should_relativize = (
-                    slug in src_slugs and options.relative_src
-                ) or (slug in dst_slugs and options.relative_dst)
+                should_relativize = (slug in src_slugs and options.relative_src) or (
+                    slug in dst_slugs and options.relative_dst
+                )
                 if should_relativize and options.output_file:
                     output_dir = os.path.dirname(options.output_file)
                     rel = os.path.relpath(vol.path, output_dir)
@@ -219,10 +215,7 @@ def _format_remote_check(
     ssh_args = build_ssh_base_args(server, proxy_chain)
     remote_cmd = " ".join(shlex.quote(a) for a in cmd)
     return (
-        " ".join(_sq(a) for a in ssh_args)
-        + " "
-        + _sq(remote_cmd)
-        + " >/dev/null 2>&1"
+        " ".join(_sq(a) for a in ssh_args) + " " + _sq(remote_cmd) + " >/dev/null 2>&1"
     )
 
 
@@ -264,9 +257,7 @@ def _which_cmd(
             return f"command -v {_sq(command)} >/dev/null 2>&1"
         case RemoteVolume():
             ep = resolved_endpoints[vol.slug]
-            return _format_remote_check(
-                ep.server, ep.proxy_chain, ["which", command]
-            )
+            return _format_remote_check(ep.server, ep.proxy_chain, ["which", command])
 
 
 def _ls_snapshots_cmd(
@@ -309,9 +300,7 @@ def _snapshot_cmd(
                 _sq(a) for a in build_ssh_base_args(ep.server, ep.proxy_chain)
             )
             return (
-                f'{ssh_pfx} "btrfs subvolume snapshot'
-                f" -r {latest}"
-                f' {snaps_dir}/$NBKP_TS"'
+                f'{ssh_pfx} "btrfs subvolume snapshot -r {latest} {snaps_dir}/$NBKP_TS"'
             )
 
 
@@ -323,9 +312,7 @@ def _btrfs_prop_cmd(
     """Shell command to set ro=false on $snap."""
     match dst_vol:
         case LocalVolume():
-            return (
-                f"btrfs property set" f' {_qp(snaps_dir)}/"$snap"' f" ro false"
-            )
+            return f'btrfs property set {_qp(snaps_dir)}/"$snap" ro false'
         case RemoteVolume():
             ep = resolved_endpoints[dst_vol.slug]
             return _format_remote_command_str(
@@ -350,7 +337,7 @@ def _btrfs_del_cmd(
     """Shell command to delete $snap."""
     match dst_vol:
         case LocalVolume():
-            return f"btrfs subvolume delete" f' {_qp(snaps_dir)}/"$snap"'
+            return f'btrfs subvolume delete {_qp(snaps_dir)}/"$snap"'
         case RemoteVolume():
             ep = resolved_endpoints[dst_vol.slug]
             return _format_remote_command_str(
@@ -426,10 +413,7 @@ def _ln_sfn_cmd(
     """Shell command for ln -sfn."""
     match dst_vol:
         case LocalVolume():
-            return (
-                f'ln -sfn "{SNAPSHOTS_DIR}/$NBKP_TS"'
-                f" {_qp(dest_path)}/{LATEST_LINK}"
-            )
+            return f'ln -sfn "{SNAPSHOTS_DIR}/$NBKP_TS" {_qp(dest_path)}/{LATEST_LINK}'
         case RemoteVolume():
             ep = resolved_endpoints[dst_vol.slug]
             ssh_pfx = " ".join(
@@ -452,7 +436,7 @@ def _build_check_line(
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     cmd = _test_cmd(vol, test_args, resolved_endpoints)
-    return f"{cmd}" f' || {{ nbkp_log "ERROR: {error_msg}"; return 1; }}'
+    return f'{cmd} || {{ nbkp_log "ERROR: {error_msg}"; return 1; }}'
 
 
 def _build_which_line(
@@ -462,7 +446,7 @@ def _build_which_line(
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     check = _which_cmd(vol, command, resolved_endpoints)
-    return f"{check}" f' || {{ nbkp_log "ERROR: {error_msg}"; return 1; }}'
+    return f'{check} || {{ nbkp_log "ERROR: {error_msg}"; return 1; }}'
 
 
 def _build_preflight_block(
@@ -499,7 +483,7 @@ def _build_preflight_block(
             _build_check_line(
                 src_vol,
                 ["-L", src_latest],
-                (f"source {LATEST_LINK} symlink not found" f" ({src_latest})"),
+                (f"source {LATEST_LINK} symlink not found ({src_latest})"),
                 resolved_endpoints,
             )
         )
@@ -508,7 +492,7 @@ def _build_preflight_block(
             _build_check_line(
                 src_vol,
                 ["-d", src_snapshots],
-                (f"source {SNAPSHOTS_DIR}/ not found" f" ({src_snapshots})"),
+                (f"source {SNAPSHOTS_DIR}/ not found ({src_snapshots})"),
                 resolved_endpoints,
             )
         )
@@ -559,8 +543,7 @@ def _build_preflight_block(
             _build_check_line(
                 dst_vol,
                 ["-d", tmp_dir],
-                f"destination {STAGING_DIR}/ directory not found"
-                f" ({tmp_dir})",
+                f"destination {STAGING_DIR}/ directory not found ({tmp_dir})",
                 resolved_endpoints,
             )
         )
@@ -569,8 +552,7 @@ def _build_preflight_block(
             _build_check_line(
                 dst_vol,
                 ["-d", snaps_dir],
-                f"destination {SNAPSHOTS_DIR}/ directory"
-                f" not found ({snaps_dir})",
+                f"destination {SNAPSHOTS_DIR}/ directory not found ({snaps_dir})",
                 resolved_endpoints,
             )
         )
@@ -582,8 +564,7 @@ def _build_preflight_block(
             _build_check_line(
                 dst_vol,
                 ["-d", snaps_dir],
-                f"destination {SNAPSHOTS_DIR}/ directory"
-                f" not found ({snaps_dir})",
+                f"destination {SNAPSHOTS_DIR}/ directory not found ({snaps_dir})",
                 resolved_endpoints,
             )
         )
@@ -876,9 +857,7 @@ def _build_volume_check(
             test_cmd = f"test -f {_qp(sentinel)}"
         case RemoteVolume():
             ep = resolved_endpoints[vol.slug]
-            test_cmd = _format_remote_test(
-                ep.server, ep.proxy_chain, ["-f", sentinel]
-            )
+            test_cmd = _format_remote_test(ep.server, ep.proxy_chain, ["-f", sentinel])
     return (
         f"{test_cmd}"
         f" || {{ nbkp_log"
@@ -918,9 +897,7 @@ def _build_disabled_body(
 
     # Render the function body the same way the template would
     lines = _render_enabled_function(ctx)
-    return "\n".join(
-        f"# {line}" if line.strip() else "#" for line in lines.split("\n")
-    )
+    return "\n".join(f"# {line}" if line.strip() else "#" for line in lines.split("\n"))
 
 
 def _render_enabled_function(ctx: _SyncContext) -> str:
@@ -940,8 +917,7 @@ def _render_enabled_function(ctx: _SyncContext) -> str:
             parts.append(f"    {line}" if line else "")
         parts.append("")
         parts.append(
-            "    # Link-dest resolution"
-            " (latest snapshot for incremental backup)"
+            "    # Link-dest resolution (latest snapshot for incremental backup)"
         )
         for line in ctx.link_dest.split("\n"):
             parts.append(f"    {line}" if line else "")
@@ -952,8 +928,7 @@ def _render_enabled_function(ctx: _SyncContext) -> str:
     if ctx.has_btrfs:
         parts.append("")
         parts.append(
-            "    # Link-dest resolution"
-            " (latest snapshot for incremental backup)"
+            "    # Link-dest resolution (latest snapshot for incremental backup)"
         )
         for line in ctx.link_dest.split("\n"):
             parts.append(f"    {line}" if line else "")
@@ -972,9 +947,7 @@ def _render_enabled_function(ctx: _SyncContext) -> str:
             parts.append(f"    {line}" if line else "")
         if ctx.has_prune:
             parts.append("")
-            parts.append(
-                f"    # Prune old snapshots" f" (max: {ctx.max_snapshots})"
-            )
+            parts.append(f"    # Prune old snapshots (max: {ctx.max_snapshots})")
             for line in ctx.prune.split("\n"):
                 parts.append(f"    {line}" if line else "")
     if ctx.has_hard_link:
@@ -984,9 +957,7 @@ def _render_enabled_function(ctx: _SyncContext) -> str:
             parts.append(f"    {line}" if line else "")
         if ctx.has_prune:
             parts.append("")
-            parts.append(
-                f"    # Prune old snapshots" f" (max: {ctx.max_snapshots})"
-            )
+            parts.append(f"    # Prune old snapshots (max: {ctx.max_snapshots})")
             for line in ctx.hl_prune.split("\n"):
                 parts.append(f"    {line}" if line else "")
     parts.append("")
@@ -1018,12 +989,12 @@ def _build_sync_context(
     max_snaps = (
         btrfs_cfg.max_snapshots
         if has_btrfs
-        else hl_cfg.max_snapshots if has_hard_link else None
+        else hl_cfg.max_snapshots
+        if has_hard_link
+        else None
     )
 
-    preflight = _build_preflight_block(
-        sync, config, vol_paths, resolved_endpoints
-    )
+    preflight = _build_preflight_block(sync, config, vol_paths, resolved_endpoints)
 
     # Link-dest: only for hard-link (removed from btrfs)
     link_dest = (
@@ -1092,16 +1063,12 @@ def _build_sync_context(
         else ""
     )
     hl_mkdir = (
-        _build_hard_link_mkdir_block(
-            sync, config, vol_paths, resolved_endpoints
-        )
+        _build_hard_link_mkdir_block(sync, config, vol_paths, resolved_endpoints)
         if has_hard_link
         else ""
     )
     symlink = (
-        _build_hard_link_symlink_block(
-            sync, config, vol_paths, resolved_endpoints
-        )
+        _build_hard_link_symlink_block(sync, config, vol_paths, resolved_endpoints)
         if has_hard_link or has_btrfs
         else ""
     )
@@ -1165,12 +1132,8 @@ def _build_script_context(
     syncs: list[_SyncContext] = []
     for slug in sort_syncs(config.syncs):
         sync = config.syncs[slug]
-        ctx = _build_sync_context(
-            slug, sync, config, vol_paths, resolved_endpoints
-        )
-        pred_fns = tuple(
-            _slug_to_fn(p) for p in sorted(pred_map.get(slug, set()))
-        )
+        ctx = _build_sync_context(slug, sync, config, vol_paths, resolved_endpoints)
+        pred_fns = tuple(_slug_to_fn(p) for p in sorted(pred_map.get(slug, set())))
         if sync.enabled:
             syncs.append(replace(ctx, predecessors=pred_fns))
         else:

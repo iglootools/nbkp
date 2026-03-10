@@ -51,7 +51,7 @@ class TestLocalVolume:
         try:
             vol.slug = "other"  # type: ignore[misc]
             assert False, "Should be frozen"
-        except AttributeError, pydantic.ValidationError:
+        except (AttributeError, pydantic.ValidationError):
             pass
 
 
@@ -115,7 +115,7 @@ class TestRemoteVolume:
         try:
             vol.path = "other"  # type: ignore[misc]
             assert False, "Should be frozen"
-        except AttributeError, pydantic.ValidationError:
+        except (AttributeError, pydantic.ValidationError):
             pass
 
 
@@ -187,9 +187,7 @@ class TestConfig:
             volumes={"data": vol},
             sync_endpoints={
                 "ep-src": SyncEndpoint(slug="ep-src", volume="data"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst", volume="data", subdir="sub"
-                ),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="data", subdir="sub"),
             },
             syncs={
                 "s1": SyncConfig(
@@ -456,9 +454,7 @@ def _make_resolved(config: Config) -> ResolvedEndpoints:
         if isinstance(vol, RemoteVolume):
             server = config.ssh_endpoints[vol.ssh_endpoint]
             proxy_chain = config.resolve_proxy_chain(server)
-            result[slug] = ResolvedEndpoint(
-                server=server, proxy_chain=proxy_chain
-            )
+            result[slug] = ResolvedEndpoint(server=server, proxy_chain=proxy_chain)
     return result
 
 
@@ -499,6 +495,16 @@ class TestCheckRemoteVolume:
         status = check_volume(vol, resolved)
         assert status.active is False
         assert status.reasons == [VolumeReason.UNREACHABLE]
+
+
+class TestCheckRemoteVolumeLocationExcluded:
+    def test_excluded_volume_no_ssh(self) -> None:
+        """Volume excluded by location is marked without SSH."""
+        vol, _config = _remote_config()
+        # Empty resolved_endpoints means volume was excluded
+        status = check_volume(vol, {})
+        assert status.active is False
+        assert status.reasons == [VolumeReason.LOCATION_EXCLUDED]
 
 
 class TestCheckCommandAvailableLocal:
@@ -663,10 +669,7 @@ class TestCheckBtrfsMountOptionLocal:
             stdout="rw,relatime,user_subvol_rm_allowed\n",
         )
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert (
-            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {})
-            is True
-        )
+        assert _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}) is True
         mock_run.assert_called_once_with(
             ["findmnt", "-T", "/mnt/data", "-n", "-o", "OPTIONS"],
             capture_output=True,
@@ -677,19 +680,13 @@ class TestCheckBtrfsMountOptionLocal:
     def test_option_missing(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="rw,relatime\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert (
-            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {})
-            is False
-        )
+        assert _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}) is False
 
     @patch("nbkp.preflight.subprocess.run")
     def test_findmnt_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert (
-            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {})
-            is False
-        )
+        assert _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}) is False
 
 
 class TestCheckBtrfsMountOptionRemote:
@@ -702,8 +699,7 @@ class TestCheckBtrfsMountOptionRemote:
         vol, config = _remote_config()
         resolved = _make_resolved(config)
         assert (
-            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved)
-            is True
+            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved) is True
         )
         server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
@@ -718,15 +714,12 @@ class TestCheckBtrfsMountOptionRemote:
         vol, config = _remote_config()
         resolved = _make_resolved(config)
         assert (
-            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved)
-            is False
+            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved) is False
         )
 
 
 class TestCheckSync:
-    def _make_config(
-        self, tmp_src: Path, tmp_dst: Path
-    ) -> tuple[Config, SyncConfig]:
+    def _make_config(self, tmp_src: Path, tmp_dst: Path) -> tuple[Config, SyncConfig]:
         src_vol = LocalVolume(slug="src", path=str(tmp_src))
         dst_vol = LocalVolume(slug="dst", path=str(tmp_dst))
         sync = SyncConfig(
@@ -737,12 +730,8 @@ class TestCheckSync:
         config = Config(
             volumes={"src": src_vol, "dst": dst_vol},
             sync_endpoints={
-                "ep-src": SyncEndpoint(
-                    slug="ep-src", volume="src", subdir="data"
-                ),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst", volume="dst", subdir="backup"
-                ),
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="data"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst", subdir="backup"),
             },
             syncs={"s1": sync},
         )
@@ -878,9 +867,7 @@ class TestCheckSync:
         (dst / "backup").mkdir(exist_ok=True)
         (dst / "backup" / ".nbkp-dst").touch()
 
-    def _make_active_vol_statuses(
-        self, config: Config
-    ) -> dict[str, VolumeStatus]:
+    def _make_active_vol_statuses(self, config: Config) -> dict[str, VolumeStatus]:
         return {
             "src": VolumeStatus(
                 slug="src",
@@ -914,9 +901,7 @@ class TestCheckSync:
 
     @patch(
         "nbkp.preflight.shutil.which",
-        side_effect=lambda cmd: (
-            None if cmd == "btrfs" else f"/usr/bin/{cmd}"
-        ),
+        side_effect=lambda cmd: None if cmd == "btrfs" else f"/usr/bin/{cmd}",
     )
     def test_rsync_found_btrfs_not_found_on_destination(
         self, mock_which: MagicMock, tmp_path: Path
@@ -959,7 +944,7 @@ class TestCheckSync:
 
     @patch(
         "nbkp.preflight.shutil.which",
-        side_effect=lambda cmd: (None if cmd == "stat" else f"/usr/bin/{cmd}"),
+        side_effect=lambda cmd: None if cmd == "stat" else f"/usr/bin/{cmd}",
     )
     def test_stat_not_found_on_destination(
         self, mock_which: MagicMock, tmp_path: Path
@@ -1006,9 +991,7 @@ class TestCheckSync:
     @patch("nbkp.preflight.subprocess.run")
     @patch(
         "nbkp.preflight.shutil.which",
-        side_effect=lambda cmd: (
-            None if cmd == "findmnt" else f"/usr/bin/{cmd}"
-        ),
+        side_effect=lambda cmd: None if cmd == "findmnt" else f"/usr/bin/{cmd}",
     )
     def test_findmnt_not_found_on_destination(
         self,
@@ -1051,9 +1034,7 @@ class TestCheckSync:
         )
         vol_statuses = self._make_active_vol_statuses(config)
 
-        def subprocess_side_effect(
-            cmd: list[str], **kwargs: object
-        ) -> MagicMock:
+        def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
             if cmd[:4] == ["stat", "-f", "-c", "%T"]:
                 return MagicMock(returncode=0, stdout="btrfs\n")
             if cmd[:3] == ["stat", "-c", "%i"]:
@@ -1065,10 +1046,7 @@ class TestCheckSync:
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
         assert SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION in status.reasons
-        assert (
-            SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM
-            not in status.reasons
-        )
+        assert SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM not in status.reasons
 
     @patch(
         "nbkp.preflight.shutil.which",
@@ -1159,9 +1137,7 @@ class TestCheckSync:
         )
         vol_statuses = self._make_active_vol_statuses(config)
 
-        mock_subprocess.return_value = MagicMock(
-            returncode=0, stdout="ext2/ext3\n"
-        )
+        mock_subprocess.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
@@ -1212,9 +1188,7 @@ class TestCheckSync:
         )
         vol_statuses = self._make_active_vol_statuses(config)
 
-        def subprocess_side_effect(
-            cmd: list[str], **kwargs: object
-        ) -> MagicMock:
+        def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
             if cmd[:4] == ["stat", "-f", "-c", "%T"]:
                 return MagicMock(returncode=0, stdout="btrfs\n")
             if cmd[:3] == ["stat", "-c", "%i"]:
@@ -1274,9 +1248,7 @@ class TestCheckSync:
         )
         vol_statuses = self._make_active_vol_statuses(config)
 
-        def subprocess_side_effect(
-            cmd: list[str], **kwargs: object
-        ) -> MagicMock:
+        def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
             if cmd[:4] == ["stat", "-f", "-c", "%T"]:
                 return MagicMock(returncode=0, stdout="btrfs\n")
             if cmd[:3] == ["stat", "-c", "%i"]:
@@ -1289,9 +1261,7 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert (
-            SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.reasons
-        )
+        assert SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.reasons
 
     @patch("nbkp.preflight._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.subprocess.run")
@@ -1340,9 +1310,7 @@ class TestCheckSync:
         )
         vol_statuses = self._make_active_vol_statuses(config)
 
-        def subprocess_side_effect(
-            cmd: list[str], **kwargs: object
-        ) -> MagicMock:
+        def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
             if cmd[:4] == ["stat", "-f", "-c", "%T"]:
                 return MagicMock(returncode=0, stdout="btrfs\n")
             if cmd[:3] == ["stat", "-c", "%i"]:
@@ -1359,10 +1327,7 @@ class TestCheckSync:
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
         assert SyncReason.DESTINATION_TMP_NOT_FOUND in status.reasons
-        assert (
-            SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND
-            not in status.reasons
-        )
+        assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND not in status.reasons
 
     @patch("nbkp.preflight._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.subprocess.run")
@@ -1411,9 +1376,7 @@ class TestCheckSync:
         )
         vol_statuses = self._make_active_vol_statuses(config)
 
-        def subprocess_side_effect(
-            cmd: list[str], **kwargs: object
-        ) -> MagicMock:
+        def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
             if cmd[:4] == ["stat", "-f", "-c", "%T"]:
                 return MagicMock(returncode=0, stdout="btrfs\n")
             if cmd[:3] == ["stat", "-c", "%i"]:
@@ -1478,9 +1441,7 @@ class TestCheckSync:
         )
         vol_statuses = self._make_active_vol_statuses(config)
 
-        def subprocess_side_effect(
-            cmd: list[str], **kwargs: object
-        ) -> MagicMock:
+        def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
             if cmd[:4] == ["stat", "-f", "-c", "%T"]:
                 return MagicMock(returncode=0, stdout="btrfs\n")
             if cmd[:3] == ["stat", "-c", "%i"]:
@@ -1602,12 +1563,8 @@ class TestCheckSyncRemoteCommands:
             ssh_endpoints={"src-server": src_server},
             volumes={"src": src_vol, "dst": dst_vol},
             sync_endpoints={
-                "ep-rsrc": SyncEndpoint(
-                    slug="ep-rsrc", volume="src", subdir="data"
-                ),
-                "ep-rdst": SyncEndpoint(
-                    slug="ep-rdst", volume="dst", subdir="backup"
-                ),
+                "ep-rsrc": SyncEndpoint(slug="ep-rsrc", volume="src", subdir="data"),
+                "ep-rdst": SyncEndpoint(slug="ep-rdst", volume="dst", subdir="backup"),
             },
             syncs={"s1": sync},
         )
@@ -1674,9 +1631,7 @@ class TestCheckSyncRemoteCommands:
             ssh_endpoints={"dst-server": dst_server},
             volumes={"src": src_vol, "dst": dst_vol},
             sync_endpoints={
-                "ep-rdsrc": SyncEndpoint(
-                    slug="ep-rdsrc", volume="src", subdir="data"
-                ),
+                "ep-rdsrc": SyncEndpoint(slug="ep-rdsrc", volume="src", subdir="data"),
                 "ep-rddst": SyncEndpoint(
                     slug="ep-rddst", volume="dst", subdir="backup"
                 ),
@@ -2101,9 +2056,7 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert (
-            SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.reasons
-        )
+        assert SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.reasons
 
     @patch("nbkp.preflight._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.run_remote_command")
@@ -2298,10 +2251,7 @@ class TestCheckSyncRemoteCommands:
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
         assert SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION in status.reasons
-        assert (
-            SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM
-            not in status.reasons
-        )
+        assert SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM not in status.reasons
 
     @patch("nbkp.preflight._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.run_remote_command")
@@ -2425,10 +2375,7 @@ class TestCheckSyncRemoteCommands:
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
         assert SyncReason.DESTINATION_TMP_NOT_FOUND in status.reasons
-        assert (
-            SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND
-            not in status.reasons
-        )
+        assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND not in status.reasons
 
     @patch("nbkp.preflight._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.run_remote_command")
@@ -2649,9 +2596,7 @@ class TestCheckAllSyncs:
             },
         )
 
-        vol_statuses, sync_statuses = check_all_syncs(
-            config, only_syncs=["s1"]
-        )
+        vol_statuses, sync_statuses = check_all_syncs(config, only_syncs=["s1"])
         assert set(sync_statuses.keys()) == {"s1"}
         assert set(vol_statuses.keys()) == {"src1", "dst1"}
         assert sync_statuses["s1"].active is True
@@ -2695,9 +2640,7 @@ class TestCheckHardLinkDest:
         (dst / "backup").mkdir(exist_ok=True)
         (dst / "backup" / ".nbkp-dst").touch()
 
-    def _make_active_vol_statuses(
-        self, config: Config
-    ) -> dict[str, VolumeStatus]:
+    def _make_active_vol_statuses(self, config: Config) -> dict[str, VolumeStatus]:
         return {
             "src": VolumeStatus(
                 slug="src",
@@ -2732,9 +2675,7 @@ class TestCheckHardLinkDest:
         config, sync = self._make_hl_config(src, dst)
         vol_statuses = self._make_active_vol_statuses(config)
 
-        mock_subprocess.return_value = MagicMock(
-            returncode=0, stdout="ext2/ext3\n"
-        )
+        mock_subprocess.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
@@ -2791,9 +2732,7 @@ class TestCheckHardLinkDest:
         config, sync = self._make_hl_config(src, dst)
         vol_statuses = self._make_active_vol_statuses(config)
 
-        mock_subprocess.return_value = MagicMock(
-            returncode=0, stdout="ext2/ext3\n"
-        )
+        mock_subprocess.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is True
@@ -2801,7 +2740,7 @@ class TestCheckHardLinkDest:
 
     @patch(
         "nbkp.preflight.shutil.which",
-        side_effect=lambda cmd: (None if cmd == "stat" else f"/usr/bin/{cmd}"),
+        side_effect=lambda cmd: None if cmd == "stat" else f"/usr/bin/{cmd}",
     )
     def test_stat_not_found(
         self,
@@ -2845,9 +2784,7 @@ class TestCheckHardLinkDest:
         config, sync = self._make_hl_config(src, dst)
         vol_statuses = self._make_active_vol_statuses(config)
 
-        mock_subprocess.return_value = MagicMock(
-            returncode=0, stdout="ext2/ext3\n"
-        )
+        mock_subprocess.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
 
         status = check_sync(sync, config, vol_statuses)
         assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION not in status.reasons
@@ -3077,9 +3014,7 @@ class TestCheckSourceLatest:
         (src / "data" / "snapshots").mkdir(exist_ok=True)
         snap = src / "data" / "snapshots" / "2026-01-01T00:00:00.000Z"
         snap.mkdir()
-        (src / "data" / "latest").symlink_to(
-            "snapshots/2026-01-01T00:00:00.000Z"
-        )
+        (src / "data" / "latest").symlink_to("snapshots/2026-01-01T00:00:00.000Z")
 
         config, sync = self._make_config(src, dst, "btrfs")
         vol_statuses = self._active_vol_statuses(config)
@@ -3102,9 +3037,7 @@ class TestCheckSourceLatest:
         self._setup_sentinels(src, dst)
         snap = src / "data" / "snapshots" / "2024-01-01T00:00:00.000Z"
         snap.mkdir(parents=True)
-        (src / "data" / "latest").symlink_to(
-            "snapshots/2024-01-01T00:00:00.000Z"
-        )
+        (src / "data" / "latest").symlink_to("snapshots/2024-01-01T00:00:00.000Z")
 
         config, sync = self._make_config(src, dst, "hard-link")
         vol_statuses = self._active_vol_statuses(config)
@@ -3460,6 +3393,81 @@ class TestCheckDevnullLatest:
         assert SyncReason.SOURCE_LATEST_INVALID not in status.reasons
         assert SyncReason.SOURCE_LATEST_NOT_FOUND not in status.reasons
 
+    # ── Source latest → /dev/null with upstream sync (dry-run) ────
+
+    @patch("nbkp.preflight._check_rsync_version", return_value=True)
+    @patch(
+        "nbkp.preflight.shutil.which",
+        return_value="/usr/bin/fake",
+    )
+    def test_source_devnull_inactive_in_dry_run_with_upstream(
+        self,
+        mock_which: MagicMock,
+        _mock_rsync_ver: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Source latest → /dev/null with upstream sync is marked
+        inactive in dry-run mode because the upstream won't create
+        a real snapshot."""
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        upstream_src = tmp_path / "upstream"
+        src.mkdir()
+        dst.mkdir()
+        upstream_src.mkdir()
+        self._setup_sentinels(src, dst)
+        (src / "data" / "snapshots").mkdir()
+        (src / "data" / "latest").symlink_to("/dev/null")
+        (dst / "backup" / "snapshots").mkdir()
+        (dst / "backup" / "latest").symlink_to("/dev/null")
+
+        src_vol = LocalVolume(slug="src", path=str(src))
+        dst_vol = LocalVolume(slug="dst", path=str(dst))
+        upstream_vol = LocalVolume(slug="upstream", path=str(upstream_src))
+        sync = SyncConfig(
+            slug="s1",
+            source="ep-up-src",
+            destination="ep-up-dst",
+        )
+        upstream = SyncConfig(
+            slug="upstream",
+            source="ep-up-usrc",
+            destination="ep-up-src",
+        )
+        config = Config(
+            volumes={
+                "src": src_vol,
+                "dst": dst_vol,
+                "upstream": upstream_vol,
+            },
+            sync_endpoints={
+                "ep-up-src": SyncEndpoint(
+                    slug="ep-up-src",
+                    volume="src",
+                    subdir="data",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+                "ep-up-dst": SyncEndpoint(
+                    slug="ep-up-dst",
+                    volume="dst",
+                    subdir="backup",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+                "ep-up-usrc": SyncEndpoint(
+                    slug="ep-up-usrc",
+                    volume="upstream",
+                ),
+            },
+            syncs={"s1": sync, "upstream": upstream},
+        )
+        vol_statuses = self._active_vol_statuses(config)
+
+        status = check_sync(
+            sync, config, vol_statuses, all_syncs=config.syncs, dry_run=True
+        )
+        assert SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING in status.reasons
+        assert not status.active
+
     # ── Source latest → /dev/null without upstream sync ────
 
     @patch("nbkp.preflight._check_rsync_version", return_value=True)
@@ -3512,9 +3520,7 @@ class TestCheckDevnullLatest:
         dst.mkdir()
         self._setup_sentinels(src, dst)
         (src / "data" / "snapshots").mkdir()
-        (src / "data" / "latest").symlink_to(
-            "snapshots/2099-01-01T00:00:00.000Z"
-        )
+        (src / "data" / "latest").symlink_to("snapshots/2099-01-01T00:00:00.000Z")
         (dst / "backup" / "snapshots").mkdir()
         (dst / "backup" / "latest").symlink_to("/dev/null")
 
@@ -3549,9 +3555,7 @@ class TestCheckDevnullLatest:
         (dst / "backup" / "snapshots").mkdir()
         (dst / "backup" / "latest").symlink_to("/dev/null")
 
-        mock_subprocess.return_value = MagicMock(
-            returncode=0, stdout="ext2/ext3\n"
-        )
+        mock_subprocess.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
 
         config, sync = self._make_config(src, dst)
         vol_statuses = self._active_vol_statuses(config)
@@ -3584,9 +3588,7 @@ class TestCheckDevnullLatest:
         (dst / "backup" / "snapshots").mkdir()
         # No latest symlink
 
-        mock_subprocess.return_value = MagicMock(
-            returncode=0, stdout="ext2/ext3\n"
-        )
+        mock_subprocess.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
 
         config, sync = self._make_config(src, dst)
         vol_statuses = self._active_vol_statuses(config)
@@ -3617,13 +3619,9 @@ class TestCheckDevnullLatest:
         dst.mkdir()
         self._setup_sentinels(src, dst)
         (dst / "backup" / "snapshots").mkdir()
-        (dst / "backup" / "latest").symlink_to(
-            "snapshots/2099-01-01T00:00:00.000Z"
-        )
+        (dst / "backup" / "latest").symlink_to("snapshots/2099-01-01T00:00:00.000Z")
 
-        mock_subprocess.return_value = MagicMock(
-            returncode=0, stdout="ext2/ext3\n"
-        )
+        mock_subprocess.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
 
         config, sync = self._make_config(src, dst)
         vol_statuses = self._active_vol_statuses(config)
@@ -3665,10 +3663,7 @@ class TestParseRsyncVersion:
         assert parse_rsync_version(output) == (2, 6, 9)
 
     def test_openrsync(self) -> None:
-        output = (
-            "openrsync: protocol version 29\n"
-            "rsync version 2.6.9 compatible\n"
-        )
+        output = "openrsync: protocol version 29\nrsync version 2.6.9 compatible\n"
         assert parse_rsync_version(output) == (0, 0, 0)
 
     def test_empty(self) -> None:
@@ -3701,10 +3696,7 @@ class TestCheckRsyncVersionLocal:
     def test_openrsync(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout=(
-                "openrsync: protocol version 29\n"
-                "rsync version 2.6.9 compatible\n"
-            ),
+            stdout=("openrsync: protocol version 29\nrsync version 2.6.9 compatible\n"),
         )
         vol = LocalVolume(slug="data", path="/mnt/data")
         assert _check_rsync_version(vol, {}) is False

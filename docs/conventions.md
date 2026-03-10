@@ -35,8 +35,8 @@
   - All serialized model objects are frozen pydantic dataclasses, immutable once created.
   - Other data classes should also be frozen.
 - **Formatting**: 
-  - 79 characters (black + flake8).
-- **Python Version**: 3.14 (mypy target and black target).
+  - 88 characters (ruff default).
+- **Python Version**: 3.12 (mypy and ruff target).
 - **Control Flow**
   - Prefer match-case over if-elif-else chains
   - Prefer comprehensions and built-ins (map, filter) over manual loops when appropriate. 
@@ -58,13 +58,16 @@
   - Generate YAML test data using the Pydantic data models and `model.model_dump()` instead of hardcoding YAML strings.
     This ensures the test data is always valid and consistent with the models.
 - **Domain Logic Consistency**
-  - When making changes to the config schema/models or status checks, make sure to update:
-    - The demo CLI (`nbkp/democli.py`) to generate new test data that reflects the changes, and update the expected outputs in `testdata.py` if necessary.
-    - The `cli` CLI app to support the new functionality, and update the formatting logic in `outputs.py` if necessary.
-      - `sh` command: 
+  - When making changes to the config schema/models or status checks, make sure to update **all** of the following:
+    - **Troubleshoot output** (`nbkp/output.py`): add a `case` in the troubleshoot match-case for every new `SyncReason` or `VolumeReason`, with actionable remediation text.
+    - **Seed / demo test data** (`nbkp/testkit/gen/check.py`): add a scenario to `troubleshoot_config` + `troubleshoot_data` that exercises the new reason, so `nbkp-demo output` renders it.
+    - **CLI inactive-reasons set** (`nbkp/cli.py`, `_INACTIVE_REASONS`): if the new reason should be treated as a non-fatal skip (like missing sentinels), add it here.
+    - The demo CLI (`nbkp/democli.py`) to generate new test data that reflects the changes.
+    - The `cli` CLI app to support the new functionality, and update the formatting logic in `output.py` if necessary.
+      - `sh` command:
       - Ensure to add comments in the codebase to describe which choices have been made with regard to which of the original (`run`) functionality has been preserved vs dropped
       - When adding functionality to the `run` command, make sure to also add it to the `sh` command, or explicitly document why it's not applicable.
-  - When adding a dependency on an external tool (e.g. `stat`, `findfmt`), add a check for the tool in the CLI app and provide a clear error message if it's not found. 
+  - When adding a dependency on an external tool (e.g. `stat`, `findfmt`), add a check for the tool in the CLI app and provide a clear error message if it's not found.
 - **Documentation Consistency**
   - When making changes to the CLI or config schema, make sure to update the documentation in `docs/` to reflect the changes, especially in `features.md`, `usage.md` and `conventions.md`.
 
