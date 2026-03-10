@@ -70,7 +70,7 @@ nbkp check --output json
 nbkp check --strict              # exit non-zero on any inactive sync
 nbkp check --location home       # prefer endpoints tagged "home"
 nbkp check --exclude-location home  # skip endpoints tagged "home"
-nbkp check --private             # prefer LAN endpoints
+nbkp check --network private     # prefer LAN endpoints
 ```
 
 | Option | Short | Description |
@@ -80,8 +80,7 @@ nbkp check --private             # prefer LAN endpoints
 | `--strict` / `--no-strict` | | Exit non-zero on any inactive sync (default: `--no-strict`) |
 | `--location` | `-l` | Prefer endpoints at these locations (repeatable) |
 | `--exclude-location` | `-L` | Exclude endpoints at these locations (repeatable) |
-| `--private` | | Prefer private (LAN) endpoints |
-| `--public` | | Prefer public (WAN) endpoints |
+| `--network` | `-N` | Prefer `private` (LAN) or `public` (WAN) endpoints |
 
 ### `run` — Run backup syncs
 
@@ -93,7 +92,7 @@ nbkp run --dry-run
 nbkp run --sync photos-to-nas    # run only this sync
 nbkp run --progress overall      # show overall progress
 nbkp run --no-prune              # skip snapshot pruning
-nbkp run --location travel --public
+nbkp run --location travel --network public
 nbkp run --exclude-location home
 ```
 
@@ -108,8 +107,7 @@ nbkp run --exclude-location home
 | `--strict` / `--no-strict` | | Exit non-zero on any inactive sync (default: `--no-strict`) |
 | `--location` | `-l` | Prefer endpoints at these locations (repeatable) |
 | `--exclude-location` | `-L` | Exclude endpoints at these locations (repeatable) |
-| `--private` | | Prefer private (LAN) endpoints |
-| `--public` | | Prefer public (WAN) endpoints |
+| `--network` | `-N` | Prefer `private` (LAN) or `public` (WAN) endpoints |
 
 ### `sh` — Generate a standalone backup shell script
 
@@ -131,8 +129,7 @@ The generated script supports `--dry-run` (`-n`) and `--verbose` (`-v`, `-vv`, `
 | `--relative-dst` | | Make destination paths relative to script location (requires `-o`) |
 | `--location` | `-l` | Prefer endpoints at these locations (repeatable) |
 | `--exclude-location` | `-L` | Exclude endpoints at these locations (repeatable) |
-| `--private` | | Prefer private (LAN) endpoints |
-| `--public` | | Prefer public (WAN) endpoints |
+| `--network` | `-N` | Prefer `private` (LAN) or `public` (WAN) endpoints |
 | `--portable/--no-portable` | | Generate bash 3.2-compatible script (default: enabled) |
 
 ### `prune` — Prune old snapshots
@@ -153,8 +150,7 @@ nbkp prune --sync photos-to-usb  # prune only this sync
 | `--output` | `-o` | Output format: `human` (default) or `json` |
 | `--location` | `-l` | Prefer endpoints at these locations (repeatable) |
 | `--exclude-location` | `-L` | Exclude endpoints at these locations (repeatable) |
-| `--private` | | Prefer private (LAN) endpoints |
-| `--public` | | Prefer public (WAN) endpoints |
+| `--network` | `-N` | Prefer `private` (LAN) or `public` (WAN) endpoints |
 
 ### `troubleshoot` — Diagnose issues
 
@@ -170,8 +166,7 @@ nbkp troubleshoot --config backup.yaml
 | `--config` | `-c` | Path to config file |
 | `--location` | `-l` | Prefer endpoints at these locations (repeatable) |
 | `--exclude-location` | `-L` | Exclude endpoints at these locations (repeatable) |
-| `--private` | | Prefer private (LAN) endpoints |
-| `--public` | | Prefer public (WAN) endpoints |
+| `--network` | `-N` | Prefer `private` (LAN) or `public` (WAN) endpoints |
 
 ### `config show` — Display parsed configuration
 
@@ -283,11 +278,11 @@ Usage:
 ```bash
 # At home
 nbkp run --location home
-nbkp run --private
+nbkp run --network private
 
 # On the road — include travel endpoints
 nbkp run --location travel
-nbkp run --public
+nbkp run --network public
 
 # On the road — exclude home endpoints
 nbkp run --exclude-location home

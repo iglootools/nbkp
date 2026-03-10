@@ -40,15 +40,10 @@ def _is_volume_excluded(
     """
     if not endpoint_filter or not endpoint_filter.exclude_locations:
         return False
-    candidates = (
-        list(vol.ssh_endpoints)
-        if vol.ssh_endpoints
-        else [vol.ssh_endpoint]
-    )
+    candidates = list(vol.ssh_endpoints) if vol.ssh_endpoints else [vol.ssh_endpoint]
     excl = set(endpoint_filter.exclude_locations)
     return all(
-        excl & set(config.ssh_endpoints[slug].location_list)
-        for slug in candidates
+        excl & set(config.ssh_endpoints[slug].location_list) for slug in candidates
     )
 
 
@@ -69,15 +64,10 @@ def resolve_all_endpoints(
             case RemoteVolume():
                 if _is_volume_excluded(config, vol, endpoint_filter):
                     continue
-                server = config.resolve_endpoint_for_volume(
-                    vol, endpoint_filter
-                )
+                server = config.resolve_endpoint_for_volume(vol, endpoint_filter)
                 server = enrich_from_ssh_config(server)
                 proxy_chain = config.resolve_proxy_chain(server)
-                proxy_chain = [
-                    enrich_from_ssh_config(ep)
-                    for ep in proxy_chain
-                ]
+                proxy_chain = [enrich_from_ssh_config(ep) for ep in proxy_chain]
                 result[vol.slug] = ResolvedEndpoint(
                     server=server,
                     proxy_chain=proxy_chain,

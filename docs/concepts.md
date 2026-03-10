@@ -153,7 +153,7 @@ Selection logic:
 2. Exclude endpoints whose host cannot be DNS-resolved
 3. If `--exclude-location` is set, remove endpoints with a matching location tag
 4. If `--location` is set, prefer endpoints with a matching location tag
-5. If `--private` or `--public` is set, prefer endpoints with matching network type (LAN vs WAN)
+5. If `--network` is set, prefer endpoints with matching network type (`private` for LAN, `public` for WAN)
 6. If no candidates remain after any filter step, fall back to the candidates from the previous step
 
 Both `--location` and `--exclude-location` can be used together. Exclude is applied first, then include narrows further. This is useful when most endpoints lack location tags — instead of listing every location to include, you can exclude the ones you want to skip (e.g. `--exclude-location home`).

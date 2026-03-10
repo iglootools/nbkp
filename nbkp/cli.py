@@ -6,7 +6,7 @@ import json
 import os
 import stat
 from pathlib import Path
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Optional
 
 import typer
 from rich.console import Console
@@ -16,6 +16,7 @@ from .config import (
     Config,
     ConfigError,
     EndpointFilter,
+    NetworkType,
     ResolvedEndpoints,
     load_config,
     resolve_all_endpoints,
@@ -112,24 +113,18 @@ def check(
             help="Exclude endpoints at these locations",
         ),
     ] = None,
-    private: Annotated[
-        bool,
+    network: Annotated[
+        Optional[NetworkType],
         typer.Option(
-            "--private",
-            help="Prefer private (LAN) endpoints",
+            "--network",
+            "-N",
+            help="Prefer private (LAN) or public (WAN) endpoints",
         ),
-    ] = False,
-    public: Annotated[
-        bool,
-        typer.Option(
-            "--public",
-            help="Prefer public (WAN) endpoints",
-        ),
-    ] = False,
+    ] = None,
 ) -> None:
     """Check status of volumes and syncs."""
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, location, exclude_location, private, public)
+    resolved = _resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
     vol_statuses, sync_statuses, has_errors = _check_and_display(
         cfg,
@@ -227,24 +222,18 @@ def run(
             help="Exclude endpoints at these locations",
         ),
     ] = None,
-    private: Annotated[
-        bool,
+    network: Annotated[
+        Optional[NetworkType],
         typer.Option(
-            "--private",
-            help="Prefer private (LAN) endpoints",
+            "--network",
+            "-N",
+            help="Prefer private (LAN) or public (WAN) endpoints",
         ),
-    ] = False,
-    public: Annotated[
-        bool,
-        typer.Option(
-            "--public",
-            help="Prefer public (WAN) endpoints",
-        ),
-    ] = False,
+    ] = None,
 ) -> None:
     """Run backup syncs."""
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, location, exclude_location, private, public)
+    resolved = _resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
     vol_statuses, sync_statuses, has_errors = _check_and_display(
         cfg,
@@ -384,20 +373,14 @@ def sh(
             help="Exclude endpoints at these locations",
         ),
     ] = None,
-    private: Annotated[
-        bool,
+    network: Annotated[
+        Optional[NetworkType],
         typer.Option(
-            "--private",
-            help="Prefer private (LAN) endpoints",
+            "--network",
+            "-N",
+            help="Prefer private (LAN) or public (WAN) endpoints",
         ),
-    ] = False,
-    public: Annotated[
-        bool,
-        typer.Option(
-            "--public",
-            help="Prefer public (WAN) endpoints",
-        ),
-    ] = False,
+    ] = None,
     portable: Annotated[
         bool,
         typer.Option(
@@ -419,7 +402,7 @@ def sh(
         raise typer.Exit(2)
 
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, location, exclude_location, private, public)
+    resolved = _resolve_endpoints(cfg, location, exclude_location, network)
     script = generate_script(
         cfg,
         ScriptOptions(
@@ -462,24 +445,18 @@ def troubleshoot(
             help="Exclude endpoints at these locations",
         ),
     ] = None,
-    private: Annotated[
-        bool,
+    network: Annotated[
+        Optional[NetworkType],
         typer.Option(
-            "--private",
-            help="Prefer private (LAN) endpoints",
+            "--network",
+            "-N",
+            help="Prefer private (LAN) or public (WAN) endpoints",
         ),
-    ] = False,
-    public: Annotated[
-        bool,
-        typer.Option(
-            "--public",
-            help="Prefer public (WAN) endpoints",
-        ),
-    ] = False,
+    ] = None,
 ) -> None:
     """Diagnose issues and show how to fix them."""
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, location, exclude_location, private, public)
+    resolved = _resolve_endpoints(cfg, location, exclude_location, network)
     vol_statuses, sync_statuses = _check_all_with_progress(
         cfg,
         use_progress=True,
@@ -527,24 +504,18 @@ def prune(
             help="Exclude endpoints at these locations",
         ),
     ] = None,
-    private: Annotated[
-        bool,
+    network: Annotated[
+        Optional[NetworkType],
         typer.Option(
-            "--private",
-            help="Prefer private (LAN) endpoints",
+            "--network",
+            "-N",
+            help="Prefer private (LAN) or public (WAN) endpoints",
         ),
-    ] = False,
-    public: Annotated[
-        bool,
-        typer.Option(
-            "--public",
-            help="Prefer public (WAN) endpoints",
-        ),
-    ] = False,
+    ] = None,
 ) -> None:
     """Prune old snapshots beyond max-snapshots limit."""
     cfg = _load_config_or_exit(config)
-    resolved = _resolve_endpoints(cfg, location, exclude_location, private, public)
+    resolved = _resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
     _, sync_statuses = _check_all_with_progress(
         cfg,
@@ -672,15 +643,9 @@ def _load_config_or_exit(
 def _build_endpoint_filter(
     locations: list[str] | None,
     exclude_locations: list[str] | None,
-    private: bool,
-    public: bool,
+    network: NetworkType | None,
 ) -> EndpointFilter | None:
     """Build an EndpointFilter from CLI options."""
-    network: Literal["private", "public"] | None = None
-    if private:
-        network = "private"
-    elif public:
-        network = "public"
     locs = locations or []
     excl = exclude_locations or []
     if not locs and not excl and network is None:
@@ -696,11 +661,10 @@ def _resolve_endpoints(
     cfg: Config,
     locations: list[str] | None,
     exclude_locations: list[str] | None,
-    private: bool,
-    public: bool,
+    network: NetworkType | None,
 ) -> ResolvedEndpoints:
     """Build filter and resolve all endpoints once."""
-    ef = _build_endpoint_filter(locations, exclude_locations, private, public)
+    ef = _build_endpoint_filter(locations, exclude_locations, network)
     return resolve_all_endpoints(cfg, ef)
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum
 from pathlib import Path
 from typing import Any, Annotated, Dict, List, Literal, Optional, Union
 
@@ -296,13 +297,20 @@ class SyncConfig(_BaseModel):
         return result
 
 
+class NetworkType(str, Enum):
+    """Network type for endpoint filtering."""
+
+    PRIVATE = "private"
+    PUBLIC = "public"
+
+
 class EndpointFilter(_BaseModel):
     """Endpoint selection filter (not serialized)."""
 
     model_config = ConfigDict(frozen=True)
     locations: List[str] = Field(default_factory=list)
     exclude_locations: List[str] = Field(default_factory=list)
-    network: Optional[Literal["private", "public"]] = None
+    network: Optional[NetworkType] = None
 
 
 class Config(_BaseModel):
@@ -490,7 +498,7 @@ class Config(_BaseModel):
 
         # Network filter (private / public)
         if ef.network is not None:
-            want_private = ef.network == "private"
+            want_private = ef.network == NetworkType.PRIVATE
             by_net = [
                 slug
                 for slug in reachable
