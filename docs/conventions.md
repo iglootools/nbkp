@@ -41,9 +41,13 @@
 - **Python Version**: 3.12 (mypy and ruff target).
 - **Control Flow**
   - Prefer match-case over if-elif-else chains
-  - Prefer comprehensions and built-ins (map, filter) over manual loops when appropriate. 
+  - Prefer comprehensions and built-ins (map, filter) over manual loops when appropriate.
   - Avoid `continue` in loops, and prefer filtering with comprehensions or built-ins instead.
-  - Prefer explicit if/else syntax over implicit else 
+  - Prefer single-expression returns over early returns when the logic can be expressed concisely
+    (e.g. `return bool(x) and all(...)` over guard clauses with `return False`).
+  - Prefer explicit if/else syntax over implicit else
+  - Prefer dict unpacking with a filtered comprehension over if-chains when conditionally
+    including keys (e.g. `**{k: v for k, v in {...}.items() if v is not None}`).
 
 ## Application-Specific Coding Conventions
 - **Naming Conventions**
