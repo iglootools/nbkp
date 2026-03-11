@@ -16,7 +16,7 @@ from .protocol import (
     SyncEndpoint,
     Volume,
 )
-from .resolution import (
+from nbkp.remote.resolution import (
     EndpointFilter,
     NetworkType,
     ResolvedEndpoint,

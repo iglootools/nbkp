@@ -54,7 +54,7 @@ try:
 except ImportError:
     _HAS_DOCKER = False
 from .config.protocol import Config as ConfigModel
-from .config.resolution import resolve_all_endpoints
+from .remote.resolution import resolve_all_endpoints
 from .output import (
     print_config_error,
     print_human_check,
