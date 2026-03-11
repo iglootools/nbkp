@@ -127,9 +127,7 @@ def prune_snapshots(
     latest_name = read_latest_symlink(sync, config, resolved_endpoints=re)
 
     # Candidates: oldest first, skip the latest target, take up to excess
-    to_delete = [
-        p for p in snapshots if p.rsplit("/", 1)[-1] != latest_name
-    ][:excess]
+    to_delete = [p for p in snapshots if p.rsplit("/", 1)[-1] != latest_name][:excess]
 
     if not dry_run:
         dst = config.destination_endpoint(sync)

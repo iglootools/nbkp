@@ -82,9 +82,7 @@ def cleanup_orphaned_snapshots(
     all_snapshots = list_snapshots(sync, config, re)
     dst = config.destination_endpoint(sync)
     dst_vol = config.volumes[dst.volume]
-    orphans = [
-        p for p in all_snapshots if p.rsplit("/", 1)[-1] > latest_name
-    ]
+    orphans = [p for p in all_snapshots if p.rsplit("/", 1)[-1] > latest_name]
     for path in orphans:
         delete_snapshot(path, dst_vol, re)
     return orphans
@@ -128,9 +126,7 @@ def prune_snapshots(
     latest_name = read_latest_symlink(sync, config, resolved_endpoints=re)
 
     # Candidates: oldest first, skip the latest target, take up to excess
-    to_delete = [
-        p for p in snapshots if p.rsplit("/", 1)[-1] != latest_name
-    ][:excess]
+    to_delete = [p for p in snapshots if p.rsplit("/", 1)[-1] != latest_name][:excess]
 
     if not dry_run:
         dst = config.destination_endpoint(sync)
