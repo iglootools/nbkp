@@ -2,7 +2,7 @@
 
 from .base import Slug, _BaseModel
 from .config import Config
-from .ssh import SshConnectionOptions, SshEndpoint
+from .ssh_endpoint import SshConnectionOptions, SshEndpoint
 from .sync import RsyncOptions, SyncConfig
 from .sync_endpoint import (
     BtrfsSnapshotConfig,

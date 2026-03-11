@@ -7,7 +7,7 @@ from typing import Any, Dict
 from pydantic import Field, ValidationInfo, field_validator, model_validator
 
 from .base import _BaseModel
-from .ssh import SshEndpoint
+from .ssh_endpoint import SshEndpoint
 from .sync import SyncConfig
 from .sync_endpoint import SyncEndpoint
 from .volume import RemoteVolume, Volume
