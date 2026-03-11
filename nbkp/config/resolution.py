@@ -2,19 +2,34 @@
 
 from __future__ import annotations
 
-from pydantic import ConfigDict
+from enum import Enum
+from typing import List, Optional
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from ..remote.resolution import enrich_from_ssh_config, is_private_host
 from .protocol import (
     Config,
-    EndpointFilter,
-    NetworkType,
     RemoteVolume,
     SshEndpoint,
     _BaseModel,
 )
+
+
+class NetworkType(str, Enum):
+    """Network type for endpoint filtering."""
+
+    PRIVATE = "private"
+    PUBLIC = "public"
+
+
+class EndpointFilter(_BaseModel):
+    """Endpoint selection filter (not serialized)."""
+
+    model_config = ConfigDict(frozen=True)
+    locations: List[str] = Field(default_factory=list)
+    exclude_locations: List[str] = Field(default_factory=list)
+    network: Optional[NetworkType] = None
 
 
 class ResolvedEndpoint(_BaseModel):

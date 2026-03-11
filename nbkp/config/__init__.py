@@ -4,10 +4,8 @@ from .loader import ConfigError, ConfigErrorReason, find_config_file, load_confi
 from .protocol import (
     BtrfsSnapshotConfig,
     Config,
-    EndpointFilter,
     HardLinkSnapshotConfig,
     LocalVolume,
-    NetworkType,
     RemoteVolume,
     RsyncOptions,
     SshEndpoint,
@@ -18,6 +16,8 @@ from .protocol import (
     Volume,
 )
 from .resolution import (
+    EndpointFilter,
+    NetworkType,
     ResolvedEndpoint,
     ResolvedEndpoints,
     resolve_all_endpoints,
