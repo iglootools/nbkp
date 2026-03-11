@@ -125,6 +125,9 @@ def _troubleshoot_volumes() -> dict[str, LocalVolume]:
         "usb-4": LocalVolume(slug="usb-4", path="/mnt/usb-4"),
         "usb-5": LocalVolume(slug="usb-5", path="/mnt/usb-5"),
         "usb-6": LocalVolume(slug="usb-6", path="/mnt/usb-6"),
+        "usb-7": LocalVolume(slug="usb-7", path="/mnt/usb-7"),
+        "usb-8": LocalVolume(slug="usb-8", path="/mnt/usb-8"),
+        "usb-9": LocalVolume(slug="usb-9", path="/mnt/usb-9"),
     }
 
 
@@ -229,6 +232,20 @@ def troubleshoot_config() -> Config:
             slug="dst-loc-excluded",
             volume="home-nas",
         ),
+        "dst-btrfs-perms": SyncEndpoint(
+            slug="dst-btrfs-perms",
+            volume="usb-7",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+        ),
+        "dst-hardlink-perms": SyncEndpoint(
+            slug="dst-hardlink-perms",
+            volume="usb-8",
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+        ),
+        "dst-no-snap-perms": SyncEndpoint(
+            slug="dst-no-snap-perms",
+            volume="usb-9",
+        ),
     }
     return Config(
         ssh_endpoints=ssh_eps,
@@ -304,6 +321,21 @@ def troubleshoot_config() -> Config:
                 source="laptop-src",
                 destination="dst-loc-excluded",
             ),
+            "btrfs-permissions": SyncConfig(
+                slug="btrfs-permissions",
+                source="laptop-src",
+                destination="dst-btrfs-perms",
+            ),
+            "hardlink-permissions": SyncConfig(
+                slug="hardlink-permissions",
+                source="laptop-src",
+                destination="dst-hardlink-perms",
+            ),
+            "no-snap-permissions": SyncConfig(
+                slug="no-snap-permissions",
+                source="laptop-src",
+                destination="dst-no-snap-perms",
+            ),
         },
     )
 
@@ -332,12 +364,30 @@ def troubleshoot_data(
         config=config.volumes["home-nas"],
         reasons=[VolumeReason.LOCATION_EXCLUDED],
     )
+    usb7_vs = VolumeStatus(
+        slug="usb-7",
+        config=config.volumes["usb-7"],
+        reasons=[],
+    )
+    usb8_vs = VolumeStatus(
+        slug="usb-8",
+        config=config.volumes["usb-8"],
+        reasons=[],
+    )
+    usb9_vs = VolumeStatus(
+        slug="usb-9",
+        config=config.volumes["usb-9"],
+        reasons=[],
+    )
 
     vol_statuses = {
         "laptop": laptop_vs,
         "usb-drive": usb_vs,
         "nas-backup": nas_vs,
         "home-nas": home_nas_vs,
+        "usb-7": usb7_vs,
+        "usb-8": usb8_vs,
+        "usb-9": usb9_vs,
     }
 
     sync_statuses = {
@@ -460,6 +510,36 @@ def troubleshoot_data(
             source_status=laptop_vs,
             destination_status=home_nas_vs,
             reasons=[SyncReason.DESTINATION_UNAVAILABLE],
+        ),
+        "btrfs-permissions": SyncStatus(
+            slug="btrfs-permissions",
+            config=config.syncs["btrfs-permissions"],
+            source_status=laptop_vs,
+            destination_status=usb7_vs,
+            reasons=[
+                SyncReason.DESTINATION_ENDPOINT_NOT_WRITABLE,
+                SyncReason.DESTINATION_STAGING_DIR_NOT_WRITABLE,
+                SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE,
+            ],
+        ),
+        "hardlink-permissions": SyncStatus(
+            slug="hardlink-permissions",
+            config=config.syncs["hardlink-permissions"],
+            source_status=laptop_vs,
+            destination_status=usb8_vs,
+            reasons=[
+                SyncReason.DESTINATION_ENDPOINT_NOT_WRITABLE,
+                SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE,
+            ],
+        ),
+        "no-snap-permissions": SyncStatus(
+            slug="no-snap-permissions",
+            config=config.syncs["no-snap-permissions"],
+            source_status=laptop_vs,
+            destination_status=usb9_vs,
+            reasons=[
+                SyncReason.DESTINATION_ENDPOINT_NOT_WRITABLE,
+            ],
         ),
     }
 

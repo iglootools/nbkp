@@ -26,14 +26,16 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.sync.btrfs import (
+from nbkp.sync.snapshots.btrfs import (
     create_snapshot,
     delete_snapshot,
-    get_latest_snapshot,
-    list_snapshots,
     prune_snapshots,
 )
-from nbkp.sync.symlink import update_latest_symlink
+from nbkp.sync.snapshots.common import (
+    get_latest_snapshot,
+    list_snapshots,
+    update_latest_symlink,
+)
 
 _btrfs_available = platform.system() == "Linux" and shutil.which("btrfs") is not None
 

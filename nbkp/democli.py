@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from textwrap import dedent
 from io import StringIO
 from pathlib import Path
 from typing import Annotated
@@ -20,6 +21,7 @@ from .config import (
     BtrfsSnapshotConfig,
     Config,
     ConfigError,
+    ConfigErrorReason,
     HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
@@ -52,8 +54,7 @@ try:
     _HAS_DOCKER = True
 except ImportError:
     _HAS_DOCKER = False
-from .config.protocol import Config as ConfigModel
-from .config.resolution import resolve_all_endpoints
+from .remote.resolution import resolve_all_endpoints
 from .output import (
     print_config_error,
     print_human_check,
@@ -219,7 +220,10 @@ def _show_troubleshoot() -> None:
 def _show_config_errors() -> None:
     console, buf = _capture_console()
     print_config_error(
-        ConfigError("Config file not found: /etc/nbkp/config.yaml"),
+        ConfigError(
+            "Config file not found: /etc/nbkp/config.yaml",
+            reason=ConfigErrorReason.FILE_NOT_FOUND,
+        ),
         console=console,
     )
     _print_panel("print_config_error (file not found)", buf)
@@ -228,23 +232,26 @@ def _show_config_errors() -> None:
     try:
         yaml.safe_load("not_a_list:\n  - [invalid")
     except yaml.YAMLError as ye:
-        err = ConfigError(f"Invalid YAML in /etc/nbkp/config.yaml: {ye}")
+        err = ConfigError(
+            f"Invalid YAML in /etc/nbkp/config.yaml: {ye}",
+            reason=ConfigErrorReason.INVALID_YAML,
+        )
         err.__cause__ = ye
         print_config_error(err, console=console)
     _print_panel("print_config_error (invalid YAML)", buf)
 
     console, buf = _capture_console()
     try:
-        ConfigModel.model_validate({"volumes": {"v": {"type": "ftp", "path": "/x"}}})
+        Config.model_validate({"volumes": {"v": {"type": "ftp", "path": "/x"}}})
     except ValidationError as ve:
-        err = ConfigError(str(ve))
+        err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
         err.__cause__ = ve
         print_config_error(err, console=console)
     _print_panel("print_config_error (invalid volume type)", buf)
 
     console, buf = _capture_console()
     try:
-        ConfigModel.model_validate(
+        Config.model_validate(
             {
                 "ssh-endpoints": {},
                 "volumes": {
@@ -258,16 +265,16 @@ def _show_config_errors() -> None:
             }
         )
     except ValidationError as ve:
-        err = ConfigError(str(ve))
+        err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
         err.__cause__ = ve
         print_config_error(err, console=console)
     _print_panel("print_config_error (unknown server reference)", buf)
 
     console, buf = _capture_console()
     try:
-        ConfigModel.model_validate({"volumes": {"v": {"type": "local"}}, "syncs": {}})
+        Config.model_validate({"volumes": {"v": {"type": "local"}}, "syncs": {}})
     except ValidationError as ve:
-        err = ConfigError(str(ve))
+        err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
         err.__cause__ = ve
         print_config_error(err, console=console)
     _print_panel("print_config_error (missing required field)", buf)
@@ -575,18 +582,10 @@ def seed(
     if docker:
         assert storage_endpoint is not None
         assert bastion_endpoint is not None
-        rows.append(
-            (
-                "Bastion",
-                f"{BASTION_CONTAINER_NAME} (port {bastion_endpoint.port})",
-            )
-        )
-        rows.append(
-            (
-                "Storage",
-                f"{STORAGE_CONTAINER_NAME} (port {storage_endpoint.port})",
-            )
-        )
+        rows += [
+            ("Bastion", f"{BASTION_CONTAINER_NAME} (port {bastion_endpoint.port})"),
+            ("Storage", f"{STORAGE_CONTAINER_NAME} (port {storage_endpoint.port})"),
+        ]
     label_w = max(len(r[0]) for r in rows)
     summary = Text()
     for i, (label, value) in enumerate(rows):
@@ -597,51 +596,48 @@ def seed(
     _console.print(Panel(summary, border_style="blue", padding=(0, 1)))
 
     pfx = _cmd_prefix()
-    lines = [
-        f'CFG="{config_path}"',
-        f'SH="{backup_sh}"',
-        "",
-        "# Show parsed configuration",
-        f"{pfx}nbkp config show --config $CFG",
-        "",
-        "# Show configuration as JSON",
-        f"{pfx}nbkp config show --config $CFG --output json",
-        "",
-        "# Volume and sync health checks",
-        f"{pfx}nbkp check --config $CFG",
-        "",
-        "# Preview what rsync would do without changes",
-        f"{pfx}nbkp run --config $CFG --dry-run",
-        "",
-        "# Execute backup syncs",
-        f"{pfx}nbkp run --config $CFG",
-        "",
-        "# Prune old btrfs snapshots",
-        f"{pfx}nbkp prune --config $CFG",
-        "",
-        "# Generate standalone bash script to stdout",
-        f"{pfx}nbkp sh --config $CFG",
-        "",
-        "# Write script to file, validate, and run",
-        f"{pfx}nbkp sh --config $CFG -o $SH \\",
-        "  && bash -n $SH \\",
-        "  && $SH --dry-run \\",
-        "  && $SH",
-        "",
-        "# With relative paths (src and dst)",
-        f"{pfx}nbkp sh --config $CFG -o $SH --relative-src --relative-dst \\",
-        "  && bash -n $SH \\",
-        "  && $SH --dry-run \\",
-        "  && $SH",
-    ]
+    commands = dedent(f"""\
+        CFG="{config_path}"
+        SH="{backup_sh}"
+
+        # Show parsed configuration
+        {pfx}nbkp config show --config $CFG
+
+        # Show configuration as JSON
+        {pfx}nbkp config show --config $CFG --output json
+
+        # Volume and sync health checks
+        {pfx}nbkp check --config $CFG
+
+        # Preview what rsync would do without changes
+        {pfx}nbkp run --config $CFG --dry-run
+
+        # Execute backup syncs
+        {pfx}nbkp run --config $CFG
+
+        # Prune old btrfs snapshots
+        {pfx}nbkp prune --config $CFG
+
+        # Generate standalone bash script to stdout
+        {pfx}nbkp sh --config $CFG
+
+        # Write script to file, validate, and run
+        {pfx}nbkp sh --config $CFG -o $SH \\
+          && bash -n $SH \\
+          && $SH --dry-run \\
+          && $SH
+
+        # With relative paths (src and dst)
+        {pfx}nbkp sh --config $CFG -o $SH --relative-src --relative-dst \\
+          && bash -n $SH \\
+          && $SH --dry-run \\
+          && $SH""")
     if docker:
-        lines += [
-            "",
-            "# Teardown containers and network",
-            f"docker rm -f {STORAGE_CONTAINER_NAME} {BASTION_CONTAINER_NAME}",
-            "docker network rm nbkp-demo-net",
-        ]
-    commands = "\n".join(lines)
+        commands += dedent(f"""
+
+            # Teardown containers and network
+            docker rm -f {STORAGE_CONTAINER_NAME} {BASTION_CONTAINER_NAME}
+            docker network rm nbkp-demo-net""")
     _console.print(
         Panel(
             Syntax(

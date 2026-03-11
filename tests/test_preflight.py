@@ -18,6 +18,7 @@ from nbkp.config import (
     SshConnectionOptions,
     SyncConfig,
     SyncEndpoint,
+    resolve_proxy_chain,
 )
 from nbkp.output import OutputFormat
 from nbkp.sync import SyncResult
@@ -453,7 +454,7 @@ def _make_resolved(config: Config) -> ResolvedEndpoints:
     for slug, vol in config.volumes.items():
         if isinstance(vol, RemoteVolume):
             server = config.ssh_endpoints[vol.ssh_endpoint]
-            proxy_chain = config.resolve_proxy_chain(server)
+            proxy_chain = resolve_proxy_chain(config, server)
             result[slug] = ResolvedEndpoint(server=server, proxy_chain=proxy_chain)
     return result
 

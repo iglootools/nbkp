@@ -13,15 +13,14 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.sync.btrfs import list_snapshots
-from nbkp.sync.hardlinks import (
+from nbkp.sync.snapshots.common import list_snapshots, update_latest_symlink
+from nbkp.sync.snapshots.hardlinks import (
     cleanup_orphaned_snapshots,
     create_snapshot_dir,
     delete_snapshot,
     prune_snapshots,
 )
 from nbkp.sync.rsync import run_rsync
-from nbkp.sync.symlink import update_latest_symlink
 
 
 def _make_config(

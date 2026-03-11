@@ -6,7 +6,7 @@ import shutil
 import subprocess
 from datetime import datetime, timezone
 
-from ..config import (
+from ...config import (
     Config,
     LocalVolume,
     RemoteVolume,
@@ -14,11 +14,12 @@ from ..config import (
     SyncConfig,
     Volume,
 )
-from ..remote import run_remote_command
-from .btrfs import SNAPSHOTS_DIR, list_snapshots, resolve_dest_path
-from .symlink import (  # noqa: F401 — re-exported
+from ...remote import run_remote_command
+from .common import (
+    SNAPSHOTS_DIR,
+    list_snapshots,
     read_latest_symlink,
-    update_latest_symlink,
+    resolve_dest_path,
 )
 
 
@@ -81,15 +82,10 @@ def cleanup_orphaned_snapshots(
     all_snapshots = list_snapshots(sync, config, re)
     dst = config.destination_endpoint(sync)
     dst_vol = config.volumes[dst.volume]
-    deleted: list[str] = []
-
-    for snap_path in all_snapshots:
-        snap_name = snap_path.rsplit("/", 1)[-1]
-        if snap_name > latest_name:
-            delete_snapshot(snap_path, dst_vol, re)
-            deleted.append(snap_path)
-
-    return deleted
+    orphans = [p for p in all_snapshots if p.rsplit("/", 1)[-1] > latest_name]
+    for path in orphans:
+        delete_snapshot(path, dst_vol, re)
+    return orphans
 
 
 def delete_snapshot(
@@ -129,15 +125,8 @@ def prune_snapshots(
 
     latest_name = read_latest_symlink(sync, config, resolved_endpoints=re)
 
-    # Candidates are oldest first, but skip the latest target
-    to_delete: list[str] = []
-    for snap_path in snapshots:
-        if len(to_delete) >= excess:
-            break
-        snap_name = snap_path.rsplit("/", 1)[-1]
-        if snap_name == latest_name:
-            continue
-        to_delete.append(snap_path)
+    # Candidates: oldest first, skip the latest target, take up to excess
+    to_delete = [p for p in snapshots if p.rsplit("/", 1)[-1] != latest_name][:excess]
 
     if not dry_run:
         dst = config.destination_endpoint(sync)

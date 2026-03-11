@@ -24,17 +24,18 @@ def _build_single_connection(
         "allow_agent": opts.allow_agent,
         "look_for_keys": opts.look_for_keys,
         "compress": opts.compress,
+        **{
+            k: v
+            for k, v in {
+                "banner_timeout": opts.banner_timeout,
+                "auth_timeout": opts.auth_timeout,
+                "channel_timeout": opts.channel_timeout,
+                "disabled_algorithms": opts.disabled_algorithms,
+                "key_filename": server.key,
+            }.items()
+            if v is not None
+        },
     }
-    if opts.banner_timeout is not None:
-        connect_kwargs["banner_timeout"] = opts.banner_timeout
-    if opts.auth_timeout is not None:
-        connect_kwargs["auth_timeout"] = opts.auth_timeout
-    if opts.channel_timeout is not None:
-        connect_kwargs["channel_timeout"] = opts.channel_timeout
-    if opts.disabled_algorithms is not None:
-        connect_kwargs["disabled_algorithms"] = opts.disabled_algorithms
-    if server.key:
-        connect_kwargs["key_filename"] = server.key
 
     conn = Connection(
         host=server.host,

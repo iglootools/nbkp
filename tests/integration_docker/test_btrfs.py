@@ -16,14 +16,16 @@ from nbkp.config import (
     SyncEndpoint,
     resolve_all_endpoints,
 )
-from nbkp.sync.btrfs import (
+from nbkp.sync.snapshots.btrfs import (
     create_snapshot,
     delete_snapshot,
-    get_latest_snapshot,
-    list_snapshots,
     prune_snapshots,
 )
-from nbkp.sync.symlink import update_latest_symlink
+from nbkp.sync.snapshots.common import (
+    get_latest_snapshot,
+    list_snapshots,
+    update_latest_symlink,
+)
 from nbkp.testkit.docker import REMOTE_BTRFS_PATH
 
 from tests._docker_fixtures import ssh_exec

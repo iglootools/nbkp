@@ -2,28 +2,55 @@
 
 ## Module Overview
 
-```
-nbkp/
-  config/
-    protocol.py      Config model: volumes, SSH endpoints, sync endpoints, syncs
-    loader.py         YAML loading, search order, validation
-    resolution.py     SSH endpoint resolution (enrichment, proxy chains)
-  remote/
-    ssh.py            SSH CLI argument building (-e "ssh -p PORT -i KEY ...")
-    fabricssh.py      Fabric/Paramiko connections for status checks and btrfs ops
-    resolution.py     Endpoint filtering (location, private/public, DNS)
-  sync/
-    ordering.py       Topological sort, dependency graph, failure propagation
-    rsync.py          Rsync command building and execution
-    btrfs.py          Btrfs snapshot creation, listing, pruning
-    hardlinks.py      Hard-link snapshot creation, orphan cleanup, pruning
-    symlink.py        latest symlink management (read/update)
-    runner.py         Orchestrator: check → sort → dispatch per snapshot mode
-  preflight.py        Pre-flight validation (sentinels, SSH, rsync, btrfs, hard-link)
-  scriptgen.py        Compile config into standalone bash script
-  output.py           Rich/JSON formatting for all commands
-  cli.py              Typer CLI: check, run, sh, prune, troubleshoot, config show
-  democli.py          Demo/QA helpers: seed environments, render sample output
+Simplified dependencies between top-level modules:
+```mermaid
+graph TD
+    cli["cli"]
+    democli["democli"]
+    output["output"]
+    preflight["preflight"]
+    scriptgen["scriptgen"]
+    config["config/"]
+    remote["remote/"]
+    sync["sync/"]
+    testkit["testkit/"]
+
+    cli --> config
+    cli --> preflight
+    cli --> sync
+    cli --> output
+    cli --> scriptgen
+    cli --> democli
+
+    democli --> config
+    democli --> output
+    democli --> remote
+    democli --> testkit
+
+    output --> config
+    output --> preflight
+    output --> sync
+    output --> remote
+
+    preflight --> config
+    preflight --> remote
+    preflight --> sync
+
+    scriptgen --> config
+    scriptgen --> remote
+    scriptgen --> sync
+
+    sync --> config
+    sync --> remote
+    sync --> preflight
+
+    remote --> config
+    config -.-> remote
+
+    testkit --> config
+    testkit --> preflight
+    testkit --> sync
+    testkit --> remote
 ```
 
 ## Execution Flow

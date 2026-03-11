@@ -2,7 +2,11 @@
 
 ## Configuration Model
 
-nbkp backup configuration is expressed in a single YAML file. The config defines four top-level sections: **SSH endpoints**, **volumes**, **sync endpoints**, and **syncs**. The config file is searched in order: explicit `--config` path → `$XDG_CONFIG_HOME/nbkp/config.yaml` → `/etc/nbkp/config.yaml`. See [Usage](./usage.md) for the full configuration reference, examples, and command documentation.
+nbkp backup configuration is expressed in a single YAML file. The config defines four top-level sections: **SSH endpoints**, **volumes**, **sync endpoints**, and **syncs**. 
+
+The config file is searched in order: explicit `--config` path → `$XDG_CONFIG_HOME/nbkp/config.yaml` → platform user config dir → platform site config dir. On Linux, the XDG and platform user paths are the same (`~/.config/nbkp`). On macOS, the platform paths are `~/Library/Application Support/nbkp` and `/Library/Application Support/nbkp`. Platform directories are resolved using [platformdirs](https://github.com/tox-dev/platformdirs). 
+
+See [Usage](./usage.md) for the full configuration reference, examples, and command documentation.
 
 ### Volumes
 

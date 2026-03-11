@@ -210,7 +210,10 @@ class TestConfigShowCommand:
     @patch(
         "nbkp.cli.load_config",
         side_effect=__import__("nbkp.config", fromlist=["ConfigError"]).ConfigError(
-            "bad config"
+            "bad config",
+            reason=__import__(
+                "nbkp.config", fromlist=["ConfigErrorReason"]
+            ).ConfigErrorReason.VALIDATION,
         ),
     )
     def test_config_error(self, mock_load: MagicMock) -> None:
@@ -859,7 +862,10 @@ class TestConfigError:
     @patch(
         "nbkp.cli.load_config",
         side_effect=__import__("nbkp.config", fromlist=["ConfigError"]).ConfigError(
-            "bad config"
+            "bad config",
+            reason=__import__(
+                "nbkp.config", fromlist=["ConfigErrorReason"]
+            ).ConfigErrorReason.VALIDATION,
         ),
     )
     def test_check_config_error(self, mock_load: MagicMock) -> None:
@@ -869,7 +875,10 @@ class TestConfigError:
     @patch(
         "nbkp.cli.load_config",
         side_effect=__import__("nbkp.config", fromlist=["ConfigError"]).ConfigError(
-            "bad config"
+            "bad config",
+            reason=__import__(
+                "nbkp.config", fromlist=["ConfigErrorReason"]
+            ).ConfigErrorReason.VALIDATION,
         ),
     )
     def test_run_config_error(self, mock_load: MagicMock) -> None:
@@ -879,7 +888,12 @@ class TestConfigError:
     def test_plain_error_message(self) -> None:
         from nbkp.config import ConfigError
 
-        err = ConfigError("Config file not found: /bad.yaml")
+        from nbkp.config import ConfigErrorReason
+
+        err = ConfigError(
+            "Config file not found: /bad.yaml",
+            reason=ConfigErrorReason.FILE_NOT_FOUND,
+        )
         with patch("nbkp.cli.load_config", side_effect=err):
             result = runner.invoke(app, ["check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
@@ -887,14 +901,14 @@ class TestConfigError:
         assert "Config file not found: /bad.yaml" in out
 
     def test_validation_error_message(self) -> None:
-        from nbkp.config import ConfigError
+        from nbkp.config import ConfigError, ConfigErrorReason
         from pydantic import ValidationError
         from nbkp.config.protocol import Config
 
         try:
             Config.model_validate({"volumes": {"v": {"type": "ftp", "path": "/x"}}})
         except ValidationError as ve:
-            err = ConfigError(str(ve))
+            err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
             err.__cause__ = ve
 
         with patch("nbkp.cli.load_config", side_effect=err):
@@ -906,12 +920,15 @@ class TestConfigError:
 
     def test_yaml_error_message(self) -> None:
         import yaml
-        from nbkp.config import ConfigError
+        from nbkp.config import ConfigError, ConfigErrorReason
 
         try:
             yaml.safe_load("not_a_list:\n  - [invalid")
         except yaml.YAMLError as ye:
-            err = ConfigError(f"Invalid YAML in /bad.yaml: {ye}")
+            err = ConfigError(
+                f"Invalid YAML in /bad.yaml: {ye}",
+                reason=ConfigErrorReason.INVALID_YAML,
+            )
             err.__cause__ = ye
 
         with patch("nbkp.cli.load_config", side_effect=err):
@@ -921,7 +938,7 @@ class TestConfigError:
         assert "Invalid YAML" in out
 
     def test_cross_reference_error_message(self) -> None:
-        from nbkp.config import ConfigError
+        from nbkp.config import ConfigError, ConfigErrorReason
         from pydantic import ValidationError
         from nbkp.config.protocol import Config
 
@@ -940,7 +957,7 @@ class TestConfigError:
                 }
             )
         except ValidationError as ve:
-            err = ConfigError(str(ve))
+            err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
             err.__cause__ = ve
 
         with patch("nbkp.cli.load_config", side_effect=err):
@@ -1033,7 +1050,10 @@ class TestShCommand:
     @patch(
         "nbkp.cli.load_config",
         side_effect=__import__("nbkp.config", fromlist=["ConfigError"]).ConfigError(
-            "bad config"
+            "bad config",
+            reason=__import__(
+                "nbkp.config", fromlist=["ConfigErrorReason"]
+            ).ConfigErrorReason.VALIDATION,
         ),
     )
     def test_config_error(self, mock_load: MagicMock) -> None:

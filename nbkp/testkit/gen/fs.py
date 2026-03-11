@@ -13,9 +13,9 @@ from ...config import (
     RemoteVolume,
     SyncEndpoint,
 )
-from ...sync.btrfs import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
+from ...sync.snapshots.btrfs import STAGING_DIR
 from ...sync.rsync import resolve_path
-from ...sync.symlink import DEVNULL_TARGET
+from ...sync.snapshots.common import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR
 
 _CHUNK_SIZE = 1024 * 1024  # 1 MB
 

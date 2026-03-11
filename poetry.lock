@@ -930,6 +930,18 @@ re2 = ["google-re2 (>=1.1)"]
 tests = ["pytest (>=9)", "typing-extensions (>=4.15)"]
 
 [[package]]
+name = "platformdirs"
+version = "4.9.4"
+description = "A small Python package for determining appropriate platform-specific dirs, e.g. a `user data dir`."
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "platformdirs-4.9.4-py3-none-any.whl", hash = "sha256:68a9a4619a666ea6439f2ff250c12a853cd1cbd5158d258bd824a7df6be2f868"},
+    {file = "platformdirs-4.9.4.tar.gz", hash = "sha256:1ec356301b7dc906d83f371c8f487070e99d3ccf9e501686456394622a01a934"},
+]
+
+[[package]]
 name = "pluggy"
 version = "1.6.0"
 description = "plugin and hook calling mechanisms for python"
@@ -1702,4 +1714,4 @@ docker = ["docker"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12"
-content-hash = "4a9da0153f3ddffdf01c682671698b9c36624eb980a0c3247981137153a8681f"
+content-hash = "2a927a6be3b5c48686fc5836165cd8fd24f34f0f96966c95d03ae2dca872b14a"

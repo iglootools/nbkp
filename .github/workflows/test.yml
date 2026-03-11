@@ -13,14 +13,9 @@ on:
     branches:
       - "main"
 
-# concurrency:
-#   group: ${{ github.workflow }}-${{ github.ref }}
-#   cancel-in-progress: true
-
 concurrency:
   # On main/release, we don't want any jobs cancelled so the sha is used to name the group
   # On PR branches, we cancel the job if new commits are pushed
-  # Additionally, we want the workflow for each aggregate project to run independently
   # More info: https://stackoverflow.com/a/68422069/253468
   group: ${{ github.workflow }}-${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/release' ) && format('{0}-main-{1}', github.workflow, github.sha) || format('{0}-main-{1}', github.workflow, github.ref) }}
   cancel-in-progress: true
@@ -32,7 +27,13 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      max-parallel: 2
+      matrix:
+        python-version: ["3.12.13", "3.14.3"]
+    name: test (python ${{ matrix.python-version }})
     steps:
       - uses: actions/checkout@v6
       - uses: jdx/mise-action@v3
+      - run: mise use python@${{ matrix.python-version }}
       - run: mise run ci-test

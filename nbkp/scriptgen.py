@@ -26,7 +26,8 @@ from .config import (
     SyncConfig,
 )
 from .remote.ssh import build_ssh_base_args
-from .sync.btrfs import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
+from .sync.snapshots.btrfs import STAGING_DIR
+from .sync.snapshots.common import LATEST_LINK, SNAPSHOTS_DIR
 from .sync.rsync import build_rsync_command
 
 # ── Public API ────────────────────────────────────────────────
@@ -144,9 +145,7 @@ def _vol_path(
     subdir: str | None = None,
 ) -> str:
     base = vol_paths[slug]
-    if subdir:
-        return f"{base}/{subdir}"
-    return base
+    return f"{base}/{subdir}" if subdir else base
 
 
 def _substitute_vol_path(
@@ -173,9 +172,7 @@ def _sq(s: str) -> str:
 
 def _qp(s: str) -> str:
     """Quote a path; double-quote if it contains $."""
-    if "$" not in s:
-        return _sq(s)
-    return f'"{s}"'
+    return f'"{s}"' if "$" in s else _sq(s)
 
 
 def _slug_to_fn(slug: str) -> str:
@@ -547,12 +544,28 @@ def _build_preflight_block(
                 resolved_endpoints,
             )
         )
+        lines.append(
+            _build_check_line(
+                dst_vol,
+                ["-w", tmp_dir],
+                f"destination {STAGING_DIR}/ directory not writable ({tmp_dir})",
+                resolved_endpoints,
+            )
+        )
         snaps_dir = f"{dst_path}/{SNAPSHOTS_DIR}"
         lines.append(
             _build_check_line(
                 dst_vol,
                 ["-d", snaps_dir],
                 f"destination {SNAPSHOTS_DIR}/ directory not found ({snaps_dir})",
+                resolved_endpoints,
+            )
+        )
+        lines.append(
+            _build_check_line(
+                dst_vol,
+                ["-w", snaps_dir],
+                f"destination {SNAPSHOTS_DIR}/ directory not writable ({snaps_dir})",
                 resolved_endpoints,
             )
         )
@@ -568,6 +581,24 @@ def _build_preflight_block(
                 resolved_endpoints,
             )
         )
+        lines.append(
+            _build_check_line(
+                dst_vol,
+                ["-w", snaps_dir],
+                f"destination {SNAPSHOTS_DIR}/ directory not writable ({snaps_dir})",
+                resolved_endpoints,
+            )
+        )
+
+    # Destination endpoint writability
+    lines.append(
+        _build_check_line(
+            dst_vol,
+            ["-w", dst_path],
+            f"destination endpoint {dst_path} not writable",
+            resolved_endpoints,
+        )
+    )
 
     return "\n".join(lines)
 
@@ -900,69 +931,76 @@ def _build_disabled_body(
     return "\n".join(f"# {line}" if line.strip() else "#" for line in lines.split("\n"))
 
 
+def _indent_lines(text: str, indent: str = "    ") -> list[str]:
+    """Indent each non-empty line of text."""
+    return [f"{indent}{line}" if line else "" for line in text.split("\n")]
+
+
 def _render_enabled_function(ctx: _SyncContext) -> str:
     """Render a sync function body (for disabled commenting)."""
-    parts: list[str] = []
-    parts.append("")
-    parts.append(f"{ctx.fn_name}() {{")
-    parts.append(f'    nbkp_log "Starting sync: {ctx.slug}"')
-    parts.append("")
-    parts.append("    # Pre-flight checks")
-    for line in ctx.preflight.split("\n"):
-        parts.append(f"    {line}" if line else "")
+    parts: list[str] = [
+        "",
+        f"{ctx.fn_name}() {{",
+        f'    nbkp_log "Starting sync: {ctx.slug}"',
+        "",
+        "    # Pre-flight checks",
+        *_indent_lines(ctx.preflight),
+    ]
     if ctx.has_hard_link:
-        parts.append("")
-        parts.append("    # Cleanup orphaned snapshots")
-        for line in ctx.orphan_cleanup.split("\n"):
-            parts.append(f"    {line}" if line else "")
-        parts.append("")
-        parts.append(
-            "    # Link-dest resolution (latest snapshot for incremental backup)"
-        )
-        for line in ctx.link_dest.split("\n"):
-            parts.append(f"    {line}" if line else "")
-        parts.append("")
-        parts.append("    # Create snapshot directory")
-        for line in ctx.hl_mkdir.split("\n"):
-            parts.append(f"    {line}" if line else "")
+        parts += [
+            "",
+            "    # Cleanup orphaned snapshots",
+            *_indent_lines(ctx.orphan_cleanup),
+            "",
+            "    # Link-dest resolution (latest snapshot for incremental backup)",
+            *_indent_lines(ctx.link_dest),
+            "",
+            "    # Create snapshot directory",
+            *_indent_lines(ctx.hl_mkdir),
+        ]
     if ctx.has_btrfs:
-        parts.append("")
-        parts.append(
-            "    # Link-dest resolution (latest snapshot for incremental backup)"
-        )
-        for line in ctx.link_dest.split("\n"):
-            parts.append(f"    {line}" if line else "")
-    parts.append("")
-    parts.append("    # Rsync")
-    for line in ctx.rsync.split("\n"):
-        parts.append(f"    {line}" if line else "")
+        parts += [
+            "",
+            "    # Link-dest resolution (latest snapshot for incremental backup)",
+            *_indent_lines(ctx.link_dest),
+        ]
+    parts += [
+        "",
+        "    # Rsync",
+        *_indent_lines(ctx.rsync),
+    ]
     if ctx.has_btrfs:
-        parts.append("")
-        parts.append("    # Btrfs snapshot (skip if dry-run)")
-        for line in ctx.snapshot.split("\n"):
-            parts.append(f"    {line}" if line else "")
-        parts.append("")
-        parts.append("    # Update latest symlink (skip if dry-run)")
-        for line in ctx.symlink.split("\n"):
-            parts.append(f"    {line}" if line else "")
+        parts += [
+            "",
+            "    # Btrfs snapshot (skip if dry-run)",
+            *_indent_lines(ctx.snapshot),
+            "",
+            "    # Update latest symlink (skip if dry-run)",
+            *_indent_lines(ctx.symlink),
+        ]
         if ctx.has_prune:
-            parts.append("")
-            parts.append(f"    # Prune old snapshots (max: {ctx.max_snapshots})")
-            for line in ctx.prune.split("\n"):
-                parts.append(f"    {line}" if line else "")
+            parts += [
+                "",
+                f"    # Prune old snapshots (max: {ctx.max_snapshots})",
+                *_indent_lines(ctx.prune),
+            ]
     if ctx.has_hard_link:
-        parts.append("")
-        parts.append("    # Update latest symlink (skip if dry-run)")
-        for line in ctx.symlink.split("\n"):
-            parts.append(f"    {line}" if line else "")
+        parts += [
+            "",
+            "    # Update latest symlink (skip if dry-run)",
+            *_indent_lines(ctx.symlink),
+        ]
         if ctx.has_prune:
-            parts.append("")
-            parts.append(f"    # Prune old snapshots (max: {ctx.max_snapshots})")
-            for line in ctx.hl_prune.split("\n"):
-                parts.append(f"    {line}" if line else "")
-    parts.append("")
-    parts.append(f'    nbkp_log "Completed sync: {ctx.slug}"')
-    parts.append("}")
+            parts += [
+                "",
+                f"    # Prune old snapshots (max: {ctx.max_snapshots})",
+                *_indent_lines(ctx.hl_prune),
+            ]
+    parts += [
+        "",
+        f'    nbkp_log "Completed sync: {ctx.slug}"',
+        "}",
+    ]
     return "\n".join(parts)
 
 
@@ -1010,31 +1048,32 @@ def _build_sync_context(
     )
 
     # Rsync block
-    if has_hard_link:
-        rsync = _build_rsync_block(
-            sync,
-            config,
-            vol_paths,
-            resolved_endpoints,
-            dest_suffix=f"{SNAPSHOTS_DIR}/$NBKP_TS",
-            has_link_dest=True,
-        )
-    elif has_btrfs:
-        rsync = _build_rsync_block(
-            sync,
-            config,
-            vol_paths,
-            resolved_endpoints,
-            dest_suffix=STAGING_DIR,
-        )
-    else:
-        rsync = _build_rsync_block(
-            sync,
-            config,
-            vol_paths,
-            resolved_endpoints,
-            dest_suffix=None,
-        )
+    match dst_ep.snapshot_mode:
+        case "hard-link":
+            rsync = _build_rsync_block(
+                sync,
+                config,
+                vol_paths,
+                resolved_endpoints,
+                dest_suffix=f"{SNAPSHOTS_DIR}/$NBKP_TS",
+                has_link_dest=True,
+            )
+        case "btrfs":
+            rsync = _build_rsync_block(
+                sync,
+                config,
+                vol_paths,
+                resolved_endpoints,
+                dest_suffix=STAGING_DIR,
+            )
+        case _:
+            rsync = _build_rsync_block(
+                sync,
+                config,
+                vol_paths,
+                resolved_endpoints,
+                dest_suffix=None,
+            )
 
     # Btrfs blocks
     snapshot = (

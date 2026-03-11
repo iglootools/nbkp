@@ -1,15 +1,14 @@
 """Configuration types and loading."""
 
-from .loader import ConfigError, find_config_file, load_config
+from .loader import ConfigError, ConfigErrorReason, find_config_file, load_config
 from .protocol import (
     BtrfsSnapshotConfig,
     Config,
-    EndpointFilter,
     HardLinkSnapshotConfig,
     LocalVolume,
-    NetworkType,
     RemoteVolume,
     RsyncOptions,
+    SnapshotMode,
     SshEndpoint,
     Slug,
     SshConnectionOptions,
@@ -17,16 +16,21 @@ from .protocol import (
     SyncEndpoint,
     Volume,
 )
-from .resolution import (
+from nbkp.remote.resolution import (
+    EndpointFilter,
+    NetworkType,
     ResolvedEndpoint,
     ResolvedEndpoints,
     resolve_all_endpoints,
+    resolve_endpoint_for_volume,
+    resolve_proxy_chain,
 )
 
 __all__ = [
     "BtrfsSnapshotConfig",
     "Config",
     "ConfigError",
+    "ConfigErrorReason",
     "EndpointFilter",
     "HardLinkSnapshotConfig",
     "LocalVolume",
@@ -37,6 +41,7 @@ __all__ = [
     "ResolvedEndpoints",
     "SshEndpoint",
     "Slug",
+    "SnapshotMode",
     "SshConnectionOptions",
     "SyncConfig",
     "SyncEndpoint",
@@ -44,4 +49,6 @@ __all__ = [
     "find_config_file",
     "load_config",
     "resolve_all_endpoints",
+    "resolve_endpoint_for_volume",
+    "resolve_proxy_chain",
 ]

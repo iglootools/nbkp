@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ...config import Config
 from ...sync import PruneResult, SyncResult
-from ...sync.btrfs import SNAPSHOTS_DIR
+from ...sync.snapshots.common import SNAPSHOTS_DIR
 
 
 def _snap_base(config: Config, sync_slug: str) -> str:

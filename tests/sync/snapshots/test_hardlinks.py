@@ -1,4 +1,4 @@
-"""Tests for nbkp.sync.hardlinks."""
+"""Tests for nbkp.sync.snapshots.hardlinks."""
 
 from __future__ import annotations
 
@@ -18,13 +18,11 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.sync.hardlinks import (
+from nbkp.sync.snapshots.hardlinks import (
     cleanup_orphaned_snapshots,
     create_snapshot_dir,
     delete_snapshot,
     prune_snapshots,
-    read_latest_symlink,
-    update_latest_symlink,
 )
 
 _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=timezone.utc)
@@ -85,7 +83,7 @@ def _remote_config() -> tuple[SyncConfig, Config, dict[str, ResolvedEndpoint]]:
 
 
 class TestCreateSnapshotDir:
-    @patch("nbkp.sync.hardlinks.subprocess.run")
+    @patch("nbkp.sync.snapshots.hardlinks.subprocess.run")
     def test_local(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         sync, config = _local_config()
@@ -97,7 +95,7 @@ class TestCreateSnapshotDir:
         cmd = mock_run.call_args[0][0]
         assert cmd == ["mkdir", "-p", f"/dst/snapshots/{_TS}"]
 
-    @patch("nbkp.sync.hardlinks.run_remote_command")
+    @patch("nbkp.sync.snapshots.hardlinks.run_remote_command")
     def test_remote(self, mock_remote: MagicMock) -> None:
         mock_remote.return_value = MagicMock(returncode=0, stderr="")
         sync, config, re = _remote_config()
@@ -107,7 +105,7 @@ class TestCreateSnapshotDir:
         assert path == f"/backup/snapshots/{_TS}"
         mock_remote.assert_called_once()
 
-    @patch("nbkp.sync.hardlinks.subprocess.run")
+    @patch("nbkp.sync.snapshots.hardlinks.subprocess.run")
     def test_failure_raises(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stderr="permission denied")
         sync, config = _local_config()
@@ -116,157 +114,8 @@ class TestCreateSnapshotDir:
             create_snapshot_dir(sync, config, now=_NOW)
 
 
-class TestReadLatestSymlink:
-    def test_local_exists(self, tmp_path: Path) -> None:
-        dst = LocalVolume(slug="dst", path=str(tmp_path))
-        src = LocalVolume(slug="src", path="/src")
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
-        )
-        latest = tmp_path / "latest"
-        latest.symlink_to("snapshots/2026-02-21T12:00:00.000Z")
-
-        result = read_latest_symlink(sync, config)
-        assert result == "2026-02-21T12:00:00.000Z"
-
-    def test_local_missing(self, tmp_path: Path) -> None:
-        dst = LocalVolume(slug="dst", path=str(tmp_path))
-        src = LocalVolume(slug="src", path="/src")
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
-        )
-
-        result = read_latest_symlink(sync, config)
-        assert result is None
-
-    @patch("nbkp.sync.symlink.run_remote_command")
-    def test_remote_exists(self, mock_remote: MagicMock) -> None:
-        mock_remote.return_value = MagicMock(
-            returncode=0,
-            stdout="snapshots/2026-02-21T12:00:00.000Z\n",
-        )
-        sync, config, re = _remote_config()
-
-        result = read_latest_symlink(sync, config, resolved_endpoints=re)
-        assert result == "2026-02-21T12:00:00.000Z"
-
-    @patch("nbkp.sync.symlink.run_remote_command")
-    def test_remote_missing(self, mock_remote: MagicMock) -> None:
-        mock_remote.return_value = MagicMock(returncode=1, stdout="")
-        sync, config, re = _remote_config()
-
-        result = read_latest_symlink(sync, config, resolved_endpoints=re)
-        assert result is None
-
-    def test_local_devnull(self, tmp_path: Path) -> None:
-        """latest → /dev/null returns None."""
-        dst = LocalVolume(slug="dst", path=str(tmp_path))
-        src = LocalVolume(slug="src", path="/src")
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
-        )
-        latest = tmp_path / "latest"
-        latest.symlink_to("/dev/null")
-
-        result = read_latest_symlink(sync, config)
-        assert result is None
-
-    @patch("nbkp.sync.symlink.run_remote_command")
-    def test_remote_devnull(self, mock_remote: MagicMock) -> None:
-        """Remote latest → /dev/null returns None."""
-        mock_remote.return_value = MagicMock(
-            returncode=0,
-            stdout="/dev/null\n",
-        )
-        sync, config, re = _remote_config()
-
-        result = read_latest_symlink(sync, config, resolved_endpoints=re)
-        assert result is None
-
-
-class TestUpdateLatestSymlink:
-    def test_local(self, tmp_path: Path) -> None:
-        dst = LocalVolume(slug="dst", path=str(tmp_path))
-        src = LocalVolume(slug="src", path="/src")
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
-        )
-
-        update_latest_symlink(sync, config, _TS)
-        link = tmp_path / "latest"
-        assert link.is_symlink()
-        assert str(link.readlink()) == f"snapshots/{_TS}"
-
-    @patch("nbkp.sync.symlink.run_remote_command")
-    def test_remote(self, mock_remote: MagicMock) -> None:
-        mock_remote.return_value = MagicMock(returncode=0, stderr="")
-        sync, config, re = _remote_config()
-
-        update_latest_symlink(sync, config, _TS, resolved_endpoints=re)
-        mock_remote.assert_called_once()
-        cmd = mock_remote.call_args[0][1]
-        assert "ln" in cmd
-        assert f"snapshots/{_TS}" in cmd
-
-
 class TestCleanupOrphanedSnapshots:
-    @patch("nbkp.sync.hardlinks.list_snapshots")
+    @patch("nbkp.sync.snapshots.hardlinks.list_snapshots")
     def test_deletes_orphans(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
@@ -306,7 +155,7 @@ class TestCleanupOrphanedSnapshots:
         assert "T2" in deleted[0]
         assert not (snaps / "T2").exists()
 
-    @patch("nbkp.sync.hardlinks.list_snapshots")
+    @patch("nbkp.sync.snapshots.hardlinks.list_snapshots")
     def test_no_orphans(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
@@ -338,7 +187,7 @@ class TestCleanupOrphanedSnapshots:
         deleted = cleanup_orphaned_snapshots(sync, config)
         assert deleted == []
 
-    @patch("nbkp.sync.hardlinks.list_snapshots")
+    @patch("nbkp.sync.snapshots.hardlinks.list_snapshots")
     def test_no_latest_symlink(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
@@ -375,7 +224,7 @@ class TestDeleteSnapshot:
         delete_snapshot(str(snap), vol, {})
         assert not snap.exists()
 
-    @patch("nbkp.sync.hardlinks.run_remote_command")
+    @patch("nbkp.sync.snapshots.hardlinks.run_remote_command")
     def test_remote(self, mock_remote: MagicMock) -> None:
         mock_remote.return_value = MagicMock(returncode=0, stderr="")
         server = SshEndpoint(slug="nas", host="nas.local", user="backup")
@@ -389,7 +238,7 @@ class TestDeleteSnapshot:
 
 
 class TestPruneSnapshots:
-    @patch("nbkp.sync.hardlinks.list_snapshots")
+    @patch("nbkp.sync.snapshots.hardlinks.list_snapshots")
     def test_prune_excess(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
@@ -431,7 +280,7 @@ class TestPruneSnapshots:
         assert len(deleted) == 1
         assert "T1" in deleted[0]
 
-    @patch("nbkp.sync.hardlinks.list_snapshots")
+    @patch("nbkp.sync.snapshots.hardlinks.list_snapshots")
     def test_never_prunes_latest(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
@@ -473,7 +322,7 @@ class TestPruneSnapshots:
         assert "T2" in deleted[0]
         assert (snaps / "T1").exists()
 
-    @patch("nbkp.sync.hardlinks.list_snapshots")
+    @patch("nbkp.sync.snapshots.hardlinks.list_snapshots")
     def test_dry_run(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
@@ -514,7 +363,7 @@ class TestPruneSnapshots:
         assert (snaps / "T1").exists()
         assert (snaps / "T2").exists()
 
-    @patch("nbkp.sync.hardlinks.list_snapshots")
+    @patch("nbkp.sync.snapshots.hardlinks.list_snapshots")
     def test_no_excess(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")

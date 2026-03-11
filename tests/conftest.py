@@ -155,3 +155,8 @@ def remote_volume_minimal() -> RemoteVolume:
 @pytest.fixture()
 def sample_config() -> Config:
     return _sample_config()
+
+
+@pytest.fixture()
+def sample_minimal_config() -> Config:
+    return _sample_minimal_config()

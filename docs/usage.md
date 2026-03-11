@@ -455,7 +455,8 @@ nbkp searches for config in this order:
 
 1. Explicit `--config` path
 2. `$XDG_CONFIG_HOME/nbkp/config.yaml` (typically `~/.config/nbkp/config.yaml`)
-3. `/etc/nbkp/config.yaml`
+3. Platform user config dir (Linux: same as above; macOS: `~/Library/Application Support/nbkp/config.yaml`)
+4. Platform site config dir (Linux: `/etc/xdg/nbkp/config.yaml`; macOS: `/Library/Application Support/nbkp/config.yaml`)
 
 ## Configuration Reference
 
