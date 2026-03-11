@@ -57,6 +57,10 @@ If you need server-to-server replication:
 - **Compile a standalone script** with `nbkp sh` and deploy it to the server — no Python or nbkp installation required on the target server.
 - **Use tools designed for multi-server topologies**: check the [Similar Tools](#similar-tools) section for options that support enterpris-y / multi-host setups.
 
+## Known Limitations
+
+- No Windows support
+
 ## Philosophy
 
 **Design Principles**
