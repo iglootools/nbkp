@@ -1285,9 +1285,7 @@ class TestPathNormalization:
             destination="dst",
             filters=[{"merge": "~/rules.txt"}],  # type: ignore[list-item]
         )
-        assert sync.filters == [
-            f"merge {Path('~/rules.txt').expanduser()}"
-        ]
+        assert sync.filters == [f"merge {Path('~/rules.txt').expanduser()}"]
 
     def test_merge_filter_no_tilde(self) -> None:
         sync = SyncConfig(

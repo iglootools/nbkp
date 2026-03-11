@@ -74,6 +74,7 @@ Backup configuration is expressed in a single YAML file that defines SSH endpoin
 - **Reusable sync endpoints**: define (volume, subdir, snapshot config) once, reference by slug from syncs — prevents duplication and conflicting configurations
 - **Pydantic validation**: structured errors with context for invalid configs
 - **Config display**: `config show` renders parsed config as tables or JSON
+- **Graph visualization**: `config graph` displays the backup chain as a Rich tree, ASCII art (mermaid-ascii), raw mermaid syntax, or JSON
 - **Cross-reference validation**: circular `extends` and `proxy-jump` chains, unique (volume, subdir) per endpoint, unique destination per sync — all detected at load time
 
 ## Shell Script Generation (`sh`)

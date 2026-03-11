@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import enum
 import json
 import os
 import stat
@@ -34,12 +35,16 @@ from .sync.snapshots.hardlinks import (
 )
 from .output import (
     OutputFormat,
+    build_graph_json,
     print_config_error,
     print_human_config,
     print_human_prune_results,
     print_human_results,
     print_human_check,
     print_human_troubleshoot,
+    print_mermaid_ascii_graph,
+    print_mermaid_graph,
+    print_rich_tree_graph,
 )
 from .democli import app as demo_app
 from .scriptgen import ScriptOptions, generate_script
@@ -164,6 +169,44 @@ def show(
             print_human_config(cfg, resolved_endpoints=resolved)
 
 
+class GraphFormat(str, enum.Enum):
+    """Graph output format."""
+
+    RICH_TREE = "rich-tree"
+    MERMAID_ASCII = "mermaid-ascii"
+    MERMAID = "mermaid"
+
+
+@config_app.command()
+def graph(
+    config: Annotated[
+        Optional[str],
+        typer.Option("--config", "-c", help="Path to config file"),
+    ] = None,
+    output: Annotated[
+        OutputFormat,
+        typer.Option("--output", "-o", help="Output format"),
+    ] = OutputFormat.HUMAN,
+    format: Annotated[
+        GraphFormat,
+        typer.Option("--format", "-f", help="Graph format (human output only)"),
+    ] = GraphFormat.RICH_TREE,
+) -> None:
+    """Display the backup chain as a graph."""
+    cfg = _load_config_or_exit(config)
+    match output:
+        case OutputFormat.JSON:
+            typer.echo(json.dumps(build_graph_json(cfg), indent=2))
+        case OutputFormat.HUMAN:
+            match format:
+                case GraphFormat.RICH_TREE:
+                    print_rich_tree_graph(cfg)
+                case GraphFormat.MERMAID_ASCII:
+                    print_mermaid_ascii_graph(cfg)
+                case GraphFormat.MERMAID:
+                    print_mermaid_graph(cfg)
+
+
 @app.command()
 def run(
     config: Annotated[
@@ -253,6 +296,8 @@ def run(
         raise typer.Exit(1)
     else:
         if output_format is OutputFormat.HUMAN:
+            typer.echo("")
+            print_rich_tree_graph(cfg)
             typer.echo("")
 
         use_spinner = output_format is OutputFormat.HUMAN and progress in (

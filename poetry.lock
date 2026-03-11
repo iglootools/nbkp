@@ -806,6 +806,21 @@ files = [
 ]
 
 [[package]]
+name = "mermaid-ascii-diagrams"
+version = "0.1.1"
+description = "Render Mermaid diagrams to ASCII/Unicode art"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "mermaid_ascii_diagrams-0.1.1-py3-none-any.whl", hash = "sha256:6098969993011fa989998ee6c7f6c8021f27ddf8f9556f6b5b82361039d2b4ad"},
+    {file = "mermaid_ascii_diagrams-0.1.1.tar.gz", hash = "sha256:e0bd8dcf3b57361a37d9c10853b3190bf7916b7c8f12cec2dd37bfaad23de485"},
+]
+
+[package.extras]
+dev = ["build (>=1)", "pytest (>=7)", "ruff (>=0.5)", "twine (>=5)"]
+
+[[package]]
 name = "mypy"
 version = "1.19.1"
 description = "Optional static typing for Python"
@@ -1714,4 +1729,4 @@ docker = ["docker"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12"
-content-hash = "2a927a6be3b5c48686fc5836165cd8fd24f34f0f96966c95d03ae2dca872b14a"
+content-hash = "1b5f1c53711374c6d05af3e96e08e98c9c021f6b7534c71c192085132b794070"

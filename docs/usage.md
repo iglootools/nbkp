@@ -182,6 +182,23 @@ nbkp config show --output json
 | `--config` | `-c` | Path to config file |
 | `--output` | `-o` | Output format: `human` (default) or `json` |
 
+### `config graph` — Display the backup chain as a graph
+
+Visualizes the sync dependency graph showing how data flows between endpoints. Useful for understanding and documenting the backup topology.
+
+```bash
+nbkp config graph                           # Rich tree (default)
+nbkp config graph --format mermaid-ascii    # ASCII art via mermaid-ascii-diagrams
+nbkp config graph --format mermaid          # raw mermaid syntax (for docs/GitHub)
+nbkp config graph --output json             # machine-readable nodes + edges
+```
+
+| Option | Short | Description |
+|---|---|---|
+| `--config` | `-c` | Path to config file |
+| `--output` | `-o` | Output format: `human` (default) or `json` |
+| `--format` | `-f` | Graph format (human output only): `rich-tree` (default), `mermaid-ascii`, `mermaid` |
+
 ### `demo` — Testing and QA helpers
 
 ```bash
