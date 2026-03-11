@@ -2,10 +2,9 @@
 
 from .base import Slug, _BaseModel
 from .config import Config
-from .snapshot import BtrfsSnapshotConfig, HardLinkSnapshotConfig
 from .ssh import SshConnectionOptions, SshEndpoint
 from .sync import RsyncOptions, SyncConfig
-from .sync_endpoint import SyncEndpoint
+from .sync_endpoint import BtrfsSnapshotConfig, HardLinkSnapshotConfig, SyncEndpoint
 from .volume import LocalVolume, RemoteVolume, Volume
 
 __all__ = [

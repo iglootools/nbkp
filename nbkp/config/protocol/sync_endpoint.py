@@ -4,10 +4,25 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from .base import Slug, _BaseModel
-from .snapshot import BtrfsSnapshotConfig, HardLinkSnapshotConfig
+
+
+class BtrfsSnapshotConfig(_BaseModel):
+    """Configuration for btrfs snapshot management."""
+
+    model_config = ConfigDict(frozen=True)
+    enabled: bool = False
+    max_snapshots: Optional[int] = Field(default=None, ge=1)
+
+
+class HardLinkSnapshotConfig(_BaseModel):
+    """Configuration for hard-link-based snapshot management."""
+
+    model_config = ConfigDict(frozen=True)
+    enabled: bool = False
+    max_snapshots: Optional[int] = Field(default=None, ge=1)
 
 
 class SyncEndpoint(_BaseModel):
