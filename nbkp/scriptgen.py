@@ -26,7 +26,8 @@ from .config import (
     SyncConfig,
 )
 from .remote.ssh import build_ssh_base_args
-from .sync.btrfs import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
+from .sync.snapshots.btrfs import STAGING_DIR
+from .sync.snapshots.common import LATEST_LINK, SNAPSHOTS_DIR
 from .sync.rsync import build_rsync_command
 
 # ── Public API ────────────────────────────────────────────────

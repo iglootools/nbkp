@@ -5,13 +5,15 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from nbkp.sync.btrfs import (
+from nbkp.sync.snapshots.btrfs import (
     create_snapshot,
-    get_latest_snapshot,
-    list_snapshots,
     prune_snapshots,
 )
-from nbkp.sync.symlink import update_latest_symlink
+from nbkp.sync.snapshots.common import (
+    get_latest_snapshot,
+    list_snapshots,
+    update_latest_symlink,
+)
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,

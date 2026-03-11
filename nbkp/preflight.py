@@ -20,8 +20,8 @@ from .config import (
     Volume,
 )
 from .remote import run_remote_command
-from .sync.btrfs import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
-from .sync.symlink import DEVNULL_TARGET
+from .sync.snapshots.btrfs import STAGING_DIR
+from .sync.snapshots.common import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR
 
 
 class VolumeReason(str, enum.Enum):

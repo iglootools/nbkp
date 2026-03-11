@@ -6,11 +6,9 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from nbkp.sync.btrfs import (
+from nbkp.sync.snapshots.btrfs import (
     create_snapshot,
     delete_snapshot,
-    get_latest_snapshot,
-    list_snapshots,
     prune_snapshots,
 )
 from nbkp.config import (
@@ -84,7 +82,7 @@ def _remote_config() -> tuple[Config, SyncConfig]:
 
 
 class TestCreateSnapshotLocal:
-    @patch("nbkp.sync.btrfs.subprocess.run")
+    @patch("nbkp.sync.snapshots.btrfs.subprocess.run")
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _local_config()
@@ -104,7 +102,7 @@ class TestCreateSnapshotLocal:
             "/mnt/dst/backup/snapshots/2024-01-15T12:00:00.000Z",
         ]
 
-    @patch("nbkp.sync.btrfs.subprocess.run")
+    @patch("nbkp.sync.snapshots.btrfs.subprocess.run")
     def test_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stderr="permission denied")
         config, sync = _local_config()
@@ -116,7 +114,7 @@ class TestCreateSnapshotLocal:
 
 
 class TestCreateSnapshotRemote:
-    @patch("nbkp.sync.btrfs.run_remote_command")
+    @patch("nbkp.sync.snapshots.btrfs.run_remote_command")
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _remote_config()
@@ -137,54 +135,6 @@ class TestCreateSnapshotRemote:
             "/backup/data/staging",
             "/backup/data/snapshots/2024-01-15T12:00:00.000Z",
         ]
-
-
-class TestGetLatestSnapshotLocal:
-    @patch("nbkp.sync.btrfs.subprocess.run")
-    def test_found(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="20240101T000000Z\n20240115T120000Z\n",
-        )
-        config, sync = _local_config()
-
-        result = get_latest_snapshot(sync, config)
-        assert result == ("/mnt/dst/backup/snapshots/20240115T120000Z")
-
-    @patch("nbkp.sync.btrfs.subprocess.run")
-    def test_empty(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="")
-        config, sync = _local_config()
-
-        result = get_latest_snapshot(sync, config)
-        assert result is None
-
-    @patch("nbkp.sync.btrfs.subprocess.run")
-    def test_dir_missing(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=2, stdout="")
-        config, sync = _local_config()
-
-        result = get_latest_snapshot(sync, config)
-        assert result is None
-
-
-class TestGetLatestSnapshotRemote:
-    @patch("nbkp.sync.btrfs.run_remote_command")
-    def test_found(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="20240101T000000Z\n20240115T120000Z\n",
-        )
-        config, sync = _remote_config()
-        resolved = resolve_all_endpoints(config)
-
-        result = get_latest_snapshot(sync, config, resolved)
-        assert result == ("/backup/data/snapshots/20240115T120000Z")
-        mock_run.assert_called_once_with(
-            config.ssh_endpoints["nas-server"],
-            ["ls", "/backup/data/snapshots"],
-            [],
-        )
 
 
 def _local_config_spaces() -> tuple[Config, SyncConfig]:
@@ -246,7 +196,7 @@ def _remote_config_spaces() -> tuple[Config, SyncConfig]:
 
 
 class TestCreateSnapshotLocalSpaces:
-    @patch("nbkp.sync.btrfs.subprocess.run")
+    @patch("nbkp.sync.snapshots.btrfs.subprocess.run")
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _local_config_spaces()
@@ -267,7 +217,7 @@ class TestCreateSnapshotLocalSpaces:
 
 
 class TestCreateSnapshotRemoteSpaces:
-    @patch("nbkp.sync.btrfs.run_remote_command")
+    @patch("nbkp.sync.snapshots.btrfs.run_remote_command")
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _remote_config_spaces()
@@ -288,76 +238,8 @@ class TestCreateSnapshotRemoteSpaces:
         ]
 
 
-class TestGetLatestSnapshotRemoteSpaces:
-    @patch("nbkp.sync.btrfs.run_remote_command")
-    def test_found(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="20240101T000000Z\n20240115T120000Z\n",
-        )
-        config, sync = _remote_config_spaces()
-        resolved = resolve_all_endpoints(config)
-
-        result = get_latest_snapshot(sync, config, resolved)
-        assert result == ("/my backup/my data/snapshots/20240115T120000Z")
-        mock_run.assert_called_once_with(
-            config.ssh_endpoints["nas-server"],
-            ["ls", "/my backup/my data/snapshots"],
-            [],
-        )
-
-
-class TestListSnapshotsLocal:
-    @patch("nbkp.sync.btrfs.subprocess.run")
-    def test_found(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="20240101T000000Z\n20240115T120000Z\n",
-        )
-        config, sync = _local_config()
-
-        result = list_snapshots(sync, config)
-        assert result == [
-            "/mnt/dst/backup/snapshots/20240101T000000Z",
-            "/mnt/dst/backup/snapshots/20240115T120000Z",
-        ]
-
-    @patch("nbkp.sync.btrfs.subprocess.run")
-    def test_empty(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="")
-        config, sync = _local_config()
-
-        result = list_snapshots(sync, config)
-        assert result == []
-
-    @patch("nbkp.sync.btrfs.subprocess.run")
-    def test_dir_missing(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=2, stdout="")
-        config, sync = _local_config()
-
-        result = list_snapshots(sync, config)
-        assert result == []
-
-
-class TestListSnapshotsRemote:
-    @patch("nbkp.sync.btrfs.run_remote_command")
-    def test_found(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="20240101T000000Z\n20240115T120000Z\n",
-        )
-        config, sync = _remote_config()
-        resolved = resolve_all_endpoints(config)
-
-        result = list_snapshots(sync, config, resolved)
-        assert result == [
-            "/backup/data/snapshots/20240101T000000Z",
-            "/backup/data/snapshots/20240115T120000Z",
-        ]
-
-
 class TestDeleteSnapshotLocal:
-    @patch("nbkp.sync.btrfs.subprocess.run")
+    @patch("nbkp.sync.snapshots.btrfs.subprocess.run")
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, _ = _local_config()
@@ -381,7 +263,7 @@ class TestDeleteSnapshotLocal:
             ]
         )
 
-    @patch("nbkp.sync.btrfs.subprocess.run")
+    @patch("nbkp.sync.snapshots.btrfs.subprocess.run")
     def test_failure_on_property_set(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stderr="permission denied")
         config, _ = _local_config()
@@ -394,7 +276,7 @@ class TestDeleteSnapshotLocal:
                 {},
             )
 
-    @patch("nbkp.sync.btrfs.subprocess.run")
+    @patch("nbkp.sync.snapshots.btrfs.subprocess.run")
     def test_failure_on_delete(self, mock_run: MagicMock) -> None:
         mock_run.side_effect = [
             MagicMock(returncode=0, stderr=""),
@@ -412,7 +294,7 @@ class TestDeleteSnapshotLocal:
 
 
 class TestDeleteSnapshotRemote:
-    @patch("nbkp.sync.btrfs.run_remote_command")
+    @patch("nbkp.sync.snapshots.btrfs.run_remote_command")
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, _ = _remote_config()
@@ -441,10 +323,10 @@ class TestDeleteSnapshotRemote:
 
 class TestPruneSnapshotsLocal:
     @patch(
-        "nbkp.sync.symlink.read_latest_symlink",
+        "nbkp.sync.snapshots.common.read_latest_symlink",
         return_value=None,
     )
-    @patch("nbkp.sync.btrfs.subprocess.run")
+    @patch("nbkp.sync.snapshots.common.subprocess.run")
     def test_prunes_oldest(self, mock_run: MagicMock, mock_latest: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -462,10 +344,10 @@ class TestPruneSnapshotsLocal:
         assert mock_run.call_count == 5
 
     @patch(
-        "nbkp.sync.symlink.read_latest_symlink",
+        "nbkp.sync.snapshots.common.read_latest_symlink",
         return_value=None,
     )
-    @patch("nbkp.sync.btrfs.subprocess.run")
+    @patch("nbkp.sync.snapshots.common.subprocess.run")
     def test_nothing_to_prune(
         self, mock_run: MagicMock, mock_latest: MagicMock
     ) -> None:
@@ -482,10 +364,10 @@ class TestPruneSnapshotsLocal:
         assert mock_run.call_count == 1
 
     @patch(
-        "nbkp.sync.symlink.read_latest_symlink",
+        "nbkp.sync.snapshots.common.read_latest_symlink",
         return_value=None,
     )
-    @patch("nbkp.sync.btrfs.subprocess.run")
+    @patch("nbkp.sync.snapshots.common.subprocess.run")
     def test_dry_run(self, mock_run: MagicMock, mock_latest: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -502,8 +384,8 @@ class TestPruneSnapshotsLocal:
         # Only the ls call, no delete calls
         assert mock_run.call_count == 1
 
-    @patch("nbkp.sync.symlink.read_latest_symlink")
-    @patch("nbkp.sync.btrfs.subprocess.run")
+    @patch("nbkp.sync.snapshots.common.read_latest_symlink")
+    @patch("nbkp.sync.snapshots.common.subprocess.run")
     def test_protects_latest_snapshot(
         self, mock_run: MagicMock, mock_latest: MagicMock
     ) -> None:
@@ -531,14 +413,22 @@ class TestPruneSnapshotsLocal:
 
 
 class TestPruneSnapshotsRemote:
-    @patch("nbkp.sync.symlink.read_latest_symlink", return_value=None)
-    @patch("nbkp.sync.btrfs.run_remote_command")
-    def test_prunes_oldest(self, mock_run: MagicMock, mock_latest: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
+    @patch("nbkp.sync.snapshots.common.read_latest_symlink", return_value=None)
+    @patch("nbkp.sync.snapshots.btrfs.run_remote_command")
+    @patch("nbkp.sync.snapshots.common.run_remote_command")
+    def test_prunes_oldest(
+        self,
+        mock_snap_rrc: MagicMock,
+        mock_btrfs_rrc: MagicMock,
+        mock_latest: MagicMock,
+    ) -> None:
+        shared_return = MagicMock(
             returncode=0,
             stdout="20240101T000000Z\n20240102T000000Z\n20240103T000000Z\n",
             stderr="",
         )
+        mock_snap_rrc.return_value = shared_return
+        mock_btrfs_rrc.return_value = shared_return
         config, sync = _remote_config()
         resolved = resolve_all_endpoints(config)
 
@@ -548,20 +438,27 @@ class TestPruneSnapshotsRemote:
         assert deleted == [
             "/backup/data/snapshots/20240101T000000Z",
         ]
-        # ls call + 1 × (property set + delete) calls
-        assert mock_run.call_count == 3
+        # ls call (snapshots) + 1 × (property set + delete) calls (btrfs)
+        assert mock_snap_rrc.call_count == 1
+        assert mock_btrfs_rrc.call_count == 2
 
-    @patch("nbkp.sync.symlink.read_latest_symlink")
-    @patch("nbkp.sync.btrfs.run_remote_command")
+    @patch("nbkp.sync.snapshots.common.read_latest_symlink")
+    @patch("nbkp.sync.snapshots.btrfs.run_remote_command")
+    @patch("nbkp.sync.snapshots.common.run_remote_command")
     def test_protects_latest_snapshot(
-        self, mock_run: MagicMock, mock_latest: MagicMock
+        self,
+        mock_snap_rrc: MagicMock,
+        mock_btrfs_rrc: MagicMock,
+        mock_latest: MagicMock,
     ) -> None:
         """The snapshot that latest points to must not be pruned."""
-        mock_run.return_value = MagicMock(
+        shared_return = MagicMock(
             returncode=0,
             stdout=("20240101T000000Z\n20240102T000000Z\n20240103T000000Z\n"),
             stderr="",
         )
+        mock_snap_rrc.return_value = shared_return
+        mock_btrfs_rrc.return_value = shared_return
         # latest points to the oldest snapshot
         mock_latest.return_value = "20240101T000000Z"
         config, sync = _remote_config()

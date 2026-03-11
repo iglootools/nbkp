@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from datetime import datetime, timezone
 
-from ..config import (
+from ...config import (
     Config,
     LocalVolume,
     RemoteVolume,
@@ -13,28 +13,12 @@ from ..config import (
     SyncConfig,
     Volume,
 )
-from ..remote import run_remote_command
+from ...remote import run_remote_command
+from .common import SNAPSHOTS_DIR, list_snapshots, resolve_dest_path
 
 #: Directory name for the writable btrfs subvolume that rsync
 #: syncs into before a read-only snapshot is created.
 STAGING_DIR = "staging"
-
-#: Directory name that holds timestamped snapshots (both btrfs
-#: and hard-link).
-SNAPSHOTS_DIR = "snapshots"
-
-#: Symlink name that points to the most recent complete snapshot.
-LATEST_LINK = "latest"
-
-
-def resolve_dest_path(sync: SyncConfig, config: Config) -> str:
-    """Resolve the destination path for a sync."""
-    dst = config.destination_endpoint(sync)
-    vol = config.volumes[dst.volume]
-    if dst.subdir:
-        return f"{vol.path}/{dst.subdir}"
-    else:
-        return vol.path
 
 
 def create_snapshot(
@@ -83,53 +67,6 @@ def create_snapshot(
         raise RuntimeError(f"btrfs snapshot failed: {result.stderr}")
     else:
         return snapshot_path
-
-
-def list_snapshots(
-    sync: SyncConfig,
-    config: Config,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-) -> list[str]:
-    """List all snapshot paths sorted oldest-first."""
-    re = resolved_endpoints or {}
-    dest_path = resolve_dest_path(sync, config)
-    snapshots_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
-
-    dst = config.destination_endpoint(sync)
-    dst_vol = config.volumes[dst.volume]
-    match dst_vol:
-        case RemoteVolume():
-            ep = re[dst_vol.slug]
-            result = run_remote_command(
-                ep.server,
-                ["ls", snapshots_dir],
-                ep.proxy_chain,
-            )
-        case LocalVolume():
-            result = subprocess.run(
-                ["ls", snapshots_dir],
-                capture_output=True,
-                text=True,
-            )
-
-    if result.returncode != 0 or not result.stdout.strip():
-        return []
-    else:
-        entries = sorted(result.stdout.strip().split("\n"))
-        return [f"{snapshots_dir}/{e}" for e in entries]
-
-
-def get_latest_snapshot(
-    sync: SyncConfig,
-    config: Config,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-) -> str | None:
-    """Get the path to the most recent snapshot, or None."""
-    snapshots = list_snapshots(sync, config, resolved_endpoints)
-    if snapshots:
-        return snapshots[-1]
-    else:
-        return None
 
 
 def _make_snapshot_writable(
@@ -196,7 +133,7 @@ def prune_snapshots(
     Never prunes the snapshot that the latest symlink points to.
     Returns list of deleted (or would-be-deleted) paths.
     """
-    from .symlink import read_latest_symlink
+    from .common import read_latest_symlink
 
     re = resolved_endpoints or {}
     snapshots = list_snapshots(sync, config, re)

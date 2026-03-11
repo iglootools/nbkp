@@ -21,7 +21,7 @@ from ..remote import (
     build_ssh_e_option,
     format_remote_path,
 )
-from .btrfs import LATEST_LINK
+from .snapshots.common import LATEST_LINK
 
 
 class ProgressMode(str, Enum):

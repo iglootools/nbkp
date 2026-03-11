@@ -27,11 +27,9 @@ from .preflight import (
     VolumeStatus,
     check_all_syncs,
 )
-from .sync.btrfs import (
-    list_snapshots,
-    prune_snapshots as btrfs_prune_snapshots,
-)
-from .sync.hardlinks import (
+from .sync.snapshots.btrfs import prune_snapshots as btrfs_prune_snapshots
+from .sync.snapshots.common import list_snapshots
+from .sync.snapshots.hardlinks import (
     prune_snapshots as hl_prune_snapshots,
 )
 from .output import (

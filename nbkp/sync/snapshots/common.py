@@ -1,20 +1,87 @@
-"""Latest-symlink management (shared by hard-link and btrfs)."""
+"""Snapshot constants, shared helpers, and latest-symlink management.
+
+Items shared by both hard-link and btrfs snapshot backends.
+"""
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
-from ..config import (
+from ...config import (
     Config,
     LocalVolume,
     RemoteVolume,
     ResolvedEndpoints,
     SyncConfig,
 )
-from ..remote import run_remote_command
-from .btrfs import LATEST_LINK, SNAPSHOTS_DIR, resolve_dest_path
+from ...remote import run_remote_command
+
+#: Directory name that holds timestamped snapshots (both btrfs
+#: and hard-link).
+SNAPSHOTS_DIR = "snapshots"
+
+#: Symlink name that points to the most recent complete snapshot.
+LATEST_LINK = "latest"
 
 DEVNULL_TARGET = "/dev/null"
+
+
+def resolve_dest_path(sync: SyncConfig, config: Config) -> str:
+    """Resolve the destination path for a sync."""
+    dst = config.destination_endpoint(sync)
+    vol = config.volumes[dst.volume]
+    if dst.subdir:
+        return f"{vol.path}/{dst.subdir}"
+    else:
+        return vol.path
+
+
+def list_snapshots(
+    sync: SyncConfig,
+    config: Config,
+    resolved_endpoints: ResolvedEndpoints | None = None,
+) -> list[str]:
+    """List all snapshot paths sorted oldest-first."""
+    re = resolved_endpoints or {}
+    dest_path = resolve_dest_path(sync, config)
+    snapshots_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
+
+    dst = config.destination_endpoint(sync)
+    dst_vol = config.volumes[dst.volume]
+    match dst_vol:
+        case RemoteVolume():
+            ep = re[dst_vol.slug]
+            result = run_remote_command(
+                ep.server,
+                ["ls", snapshots_dir],
+                ep.proxy_chain,
+            )
+        case LocalVolume():
+            result = subprocess.run(
+                ["ls", snapshots_dir],
+                capture_output=True,
+                text=True,
+            )
+
+    if result.returncode != 0 or not result.stdout.strip():
+        return []
+    else:
+        entries = sorted(result.stdout.strip().split("\n"))
+        return [f"{snapshots_dir}/{e}" for e in entries]
+
+
+def get_latest_snapshot(
+    sync: SyncConfig,
+    config: Config,
+    resolved_endpoints: ResolvedEndpoints | None = None,
+) -> str | None:
+    """Get the path to the most recent snapshot, or None."""
+    snapshots = list_snapshots(sync, config, resolved_endpoints)
+    if snapshots:
+        return snapshots[-1]
+    else:
+        return None
 
 
 def read_latest_symlink(

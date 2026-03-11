@@ -6,7 +6,7 @@ import shutil
 import subprocess
 from datetime import datetime, timezone
 
-from ..config import (
+from ...config import (
     Config,
     LocalVolume,
     RemoteVolume,
@@ -14,11 +14,12 @@ from ..config import (
     SyncConfig,
     Volume,
 )
-from ..remote import run_remote_command
-from .btrfs import SNAPSHOTS_DIR, list_snapshots, resolve_dest_path
-from .symlink import (  # noqa: F401 — re-exported
+from ...remote import run_remote_command
+from .common import (
+    SNAPSHOTS_DIR,
+    list_snapshots,
     read_latest_symlink,
-    update_latest_symlink,
+    resolve_dest_path,
 )
 
 
