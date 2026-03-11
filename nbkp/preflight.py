@@ -60,6 +60,13 @@ class SyncReason(str, enum.Enum):
     DESTINATION_NO_HARDLINK_SUPPORT = (
         "destination filesystem does not support hard links"
     )
+    DESTINATION_ENDPOINT_NOT_WRITABLE = "destination endpoint directory not writable"
+    DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE = (
+        f"destination {SNAPSHOTS_DIR}/ directory not writable"
+    )
+    DESTINATION_STAGING_DIR_NOT_WRITABLE = (
+        f"destination {STAGING_DIR}/ directory not writable"
+    )
     DRY_RUN_SOURCE_SNAPSHOT_PENDING = (
         "source snapshot not yet available (dry-run; upstream has not run)"
     )
@@ -185,9 +192,12 @@ def _check_endpoint_sentinel(
         case LocalVolume():
             return Path(rel_path).exists()
         case RemoteVolume():
-            return _run_on_volume(
-                ["test", "-f", rel_path], volume, resolved_endpoints
-            ).returncode == 0
+            return (
+                _run_on_volume(
+                    ["test", "-f", rel_path], volume, resolved_endpoints
+                ).returncode
+                == 0
+            )
 
 
 def _check_command_available(
@@ -200,9 +210,12 @@ def _check_command_available(
         case LocalVolume():
             return shutil.which(command) is not None
         case RemoteVolume():
-            return _run_on_volume(
-                ["which", command], volume, resolved_endpoints
-            ).returncode == 0
+            return (
+                _run_on_volume(
+                    ["which", command], volume, resolved_endpoints
+                ).returncode
+                == 0
+            )
 
 
 _MIN_RSYNC_VERSION = (3, 0, 0)
@@ -219,11 +232,7 @@ def parse_rsync_version(output: str) -> tuple[int, ...]:
     Returns ``(0, 0, 0)`` for openrsync or unparseable output.
     """
     m = _GNU_RSYNC_RE.search(output) if "openrsync" not in output else None
-    return (
-        (int(m.group(1)), int(m.group(2)), int(m.group(3)))
-        if m
-        else (0, 0, 0)
-    )
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else (0, 0, 0)
 
 
 def _check_rsync_version(
@@ -274,6 +283,17 @@ def _resolve_endpoint(volume: Volume, subdir: str | None) -> str:
     return f"{volume.path}/{subdir}" if subdir else volume.path
 
 
+def _check_directory_writable(
+    volume: Volume,
+    path: str,
+    resolved_endpoints: ResolvedEndpoints,
+) -> bool:
+    """Check if a directory is writable on the volume's host."""
+    return (
+        _run_on_volume(["test", "-w", path], volume, resolved_endpoints).returncode == 0
+    )
+
+
 def _check_directory_exists(
     volume: Volume,
     path: str,
@@ -284,9 +304,12 @@ def _check_directory_exists(
         case LocalVolume():
             return Path(path).is_dir()
         case RemoteVolume():
-            return _run_on_volume(
-                ["test", "-d", path], volume, resolved_endpoints
-            ).returncode == 0
+            return (
+                _run_on_volume(
+                    ["test", "-d", path], volume, resolved_endpoints
+                ).returncode
+                == 0
+            )
 
 
 def _check_symlink_exists(
@@ -299,9 +322,12 @@ def _check_symlink_exists(
         case LocalVolume():
             return Path(path).is_symlink()
         case RemoteVolume():
-            return _run_on_volume(
-                ["test", "-L", path], volume, resolved_endpoints
-            ).returncode == 0
+            return (
+                _run_on_volume(
+                    ["test", "-L", path], volume, resolved_endpoints
+                ).returncode
+                == 0
+            )
 
 
 def _read_symlink_target(
@@ -315,9 +341,7 @@ def _read_symlink_target(
             p = Path(path)
             return str(p.readlink()) if p.is_symlink() else None
         case RemoteVolume():
-            result = _run_on_volume(
-                ["readlink", path], volume, resolved_endpoints
-            )
+            result = _run_on_volume(["readlink", path], volume, resolved_endpoints)
             return result.stdout.strip() if result.returncode == 0 else None
 
 
@@ -415,16 +439,16 @@ def _check_btrfs_dest(
         ):
             reasons.append(SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM)
         ep = _resolve_endpoint(dst_vol, dst_subdir)
-        if not _check_directory_exists(
-            dst_vol, f"{ep}/{STAGING_DIR}", resolved_endpoints
-        ):
+        staging_path = f"{ep}/{STAGING_DIR}"
+        if not _check_directory_exists(dst_vol, staging_path, resolved_endpoints):
             reasons.append(SyncReason.DESTINATION_TMP_NOT_FOUND)
-        if not _check_directory_exists(
-            dst_vol,
-            f"{ep}/{SNAPSHOTS_DIR}",
-            resolved_endpoints,
-        ):
+        elif not _check_directory_writable(dst_vol, staging_path, resolved_endpoints):
+            reasons.append(SyncReason.DESTINATION_STAGING_DIR_NOT_WRITABLE)
+        snaps_path = f"{ep}/{SNAPSHOTS_DIR}"
+        if not _check_directory_exists(dst_vol, snaps_path, resolved_endpoints):
             reasons.append(SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND)
+        elif not _check_directory_writable(dst_vol, snaps_path, resolved_endpoints):
+            reasons.append(SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE)
 
 
 def _check_hard_link_dest(
@@ -437,10 +461,11 @@ def _check_hard_link_dest(
     if not _check_hardlink_support(dst_vol, resolved_endpoints):
         reasons.append(SyncReason.DESTINATION_NO_HARDLINK_SUPPORT)
     ep = _resolve_endpoint(dst_vol, dst_subdir)
-    if not _check_directory_exists(
-        dst_vol, f"{ep}/{SNAPSHOTS_DIR}", resolved_endpoints
-    ):
+    snaps_path = f"{ep}/{SNAPSHOTS_DIR}"
+    if not _check_directory_exists(dst_vol, snaps_path, resolved_endpoints):
         reasons.append(SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND)
+    elif not _check_directory_writable(dst_vol, snaps_path, resolved_endpoints):
+        reasons.append(SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE)
 
 
 def _has_upstream_sync(
@@ -554,9 +579,7 @@ def check_sync(
             _check_source_latest(
                 sync, src_vol, src_ep, syncs, reasons, re, dry_run=dry_run
             )
-            if not _check_directory_exists(
-                src_vol, f"{src_ep}/{SNAPSHOTS_DIR}", re
-            ):
+            if not _check_directory_exists(src_vol, f"{src_ep}/{SNAPSHOTS_DIR}", re):
                 reasons.append(SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND)
 
     # Destination checks (only if dest volume is active)
@@ -603,6 +626,11 @@ def check_sync(
                     reasons,
                     re,
                 )
+
+        # Destination endpoint writability
+        dst_ep = _resolve_endpoint(dst_vol, dst_cfg.subdir)
+        if not _check_directory_writable(dst_vol, dst_ep, re):
+            reasons.append(SyncReason.DESTINATION_ENDPOINT_NOT_WRITABLE)
 
         # Destination latest symlink check (snapshot modes)
         if dst_cfg.snapshot_mode != "none":

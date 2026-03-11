@@ -716,6 +716,50 @@ def _print_sync_reason_fix(
                     console,
                     _wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
+        case SyncReason.DESTINATION_ENDPOINT_NOT_WRITABLE:
+            path = _endpoint_path(dst_vol, dst_ep.subdir)
+            console.print(
+                f"{p2}The destination endpoint directory"
+                f" {path}/ is not writable. Fix permissions:"
+            )
+            cmds = [
+                f"sudo chown <user>:<group> {path}",
+            ]
+            for cmd in cmds:
+                _print_cmd(
+                    console,
+                    _wrap_cmd(cmd, dst_vol, resolved_endpoints),
+                )
+        case SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE:
+            path = _endpoint_path(dst_vol, dst_ep.subdir)
+            console.print(
+                f"{p2}The destination {SNAPSHOTS_DIR}/"
+                f" directory ({path}/{SNAPSHOTS_DIR})"
+                " is not writable. Fix permissions:"
+            )
+            cmds = [
+                f"sudo chown <user>:<group> {path}/{SNAPSHOTS_DIR}",
+            ]
+            for cmd in cmds:
+                _print_cmd(
+                    console,
+                    _wrap_cmd(cmd, dst_vol, resolved_endpoints),
+                )
+        case SyncReason.DESTINATION_STAGING_DIR_NOT_WRITABLE:
+            path = _endpoint_path(dst_vol, dst_ep.subdir)
+            console.print(
+                f"{p2}The destination {STAGING_DIR}/"
+                f" directory ({path}/{STAGING_DIR})"
+                " is not writable. Fix permissions:"
+            )
+            cmds = [
+                f"sudo chown <user>:<group> {path}/{STAGING_DIR}",
+            ]
+            for cmd in cmds:
+                _print_cmd(
+                    console,
+                    _wrap_cmd(cmd, dst_vol, resolved_endpoints),
+                )
         case SyncReason.DESTINATION_LATEST_NOT_FOUND:
             path = _endpoint_path(dst_vol, dst_ep.subdir)
             console.print(

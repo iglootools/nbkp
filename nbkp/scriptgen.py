@@ -544,12 +544,28 @@ def _build_preflight_block(
                 resolved_endpoints,
             )
         )
+        lines.append(
+            _build_check_line(
+                dst_vol,
+                ["-w", tmp_dir],
+                f"destination {STAGING_DIR}/ directory not writable ({tmp_dir})",
+                resolved_endpoints,
+            )
+        )
         snaps_dir = f"{dst_path}/{SNAPSHOTS_DIR}"
         lines.append(
             _build_check_line(
                 dst_vol,
                 ["-d", snaps_dir],
                 f"destination {SNAPSHOTS_DIR}/ directory not found ({snaps_dir})",
+                resolved_endpoints,
+            )
+        )
+        lines.append(
+            _build_check_line(
+                dst_vol,
+                ["-w", snaps_dir],
+                f"destination {SNAPSHOTS_DIR}/ directory not writable ({snaps_dir})",
                 resolved_endpoints,
             )
         )
@@ -565,6 +581,24 @@ def _build_preflight_block(
                 resolved_endpoints,
             )
         )
+        lines.append(
+            _build_check_line(
+                dst_vol,
+                ["-w", snaps_dir],
+                f"destination {SNAPSHOTS_DIR}/ directory not writable ({snaps_dir})",
+                resolved_endpoints,
+            )
+        )
+
+    # Destination endpoint writability
+    lines.append(
+        _build_check_line(
+            dst_vol,
+            ["-w", dst_path],
+            f"destination endpoint {dst_path} not writable",
+            resolved_endpoints,
+        )
+    )
 
     return "\n".join(lines)
 

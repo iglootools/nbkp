@@ -538,9 +538,7 @@ def prune(
                     else dst_ep.hard_link_snapshots
                 )
                 return (
-                    "no max-snapshots limit"
-                    if snap_cfg.max_snapshots is None
-                    else None
+                    "no max-snapshots limit" if snap_cfg.max_snapshots is None else None
                 )
             case _:
                 return "no snapshots configured"
@@ -558,8 +556,7 @@ def prune(
                 kept = 0
                 if (
                     status.active
-                    and cfg.destination_endpoint(status.config).snapshot_mode
-                    != "none"
+                    and cfg.destination_endpoint(status.config).snapshot_mode != "none"
                 ):
                     try:
                         kept = len(list_snapshots(status.config, cfg, resolved))
@@ -589,9 +586,7 @@ def prune(
                                 resolved_endpoints=resolved,
                             )
                         case "hard-link":
-                            assert (
-                                dst_ep.hard_link_snapshots.max_snapshots is not None
-                            )
+                            assert dst_ep.hard_link_snapshots.max_snapshots is not None
                             deleted = hl_prune_snapshots(
                                 status.config,
                                 cfg,
@@ -606,10 +601,7 @@ def prune(
                         PruneResult(
                             sync_slug=slug,
                             deleted=deleted,
-                            kept=(
-                                len(remaining)
-                                + (len(deleted) if dry_run else 0)
-                            ),
+                            kept=(len(remaining) + (len(deleted) if dry_run else 0)),
                             dry_run=dry_run,
                         )
                     )
@@ -750,9 +742,7 @@ def _check_and_display(
     has_errors = (
         any(not s.active for s in sync_statuses.values())
         if strict
-        else any(
-            set(s.reasons) - _INACTIVE_REASONS for s in sync_statuses.values()
-        )
+        else any(set(s.reasons) - _INACTIVE_REASONS for s in sync_statuses.values())
     )
 
     return vol_statuses, sync_statuses, has_errors
