@@ -21,6 +21,20 @@ from .common import SNAPSHOTS_DIR, list_snapshots, resolve_dest_path
 STAGING_DIR = "staging"
 
 
+def _run_on_volume(
+    cmd: list[str],
+    volume: Volume,
+    resolved_endpoints: ResolvedEndpoints,
+) -> subprocess.CompletedProcess[str]:
+    """Run a command on the volume's host (local or remote)."""
+    match volume:
+        case RemoteVolume():
+            ep = resolved_endpoints[volume.slug]
+            return run_remote_command(ep.server, cmd, ep.proxy_chain)
+        case LocalVolume():
+            return subprocess.run(cmd, capture_output=True, text=True)
+
+
 def create_snapshot(
     sync: SyncConfig,
     config: Config,
@@ -41,32 +55,16 @@ def create_snapshot(
     snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{timestamp}"
     tmp_path = f"{dest_path}/{STAGING_DIR}"
 
-    cmd = [
-        "btrfs",
-        "subvolume",
-        "snapshot",
-        "-r",
-        tmp_path,
-        snapshot_path,
-    ]
-
     dst = config.destination_endpoint(sync)
     dst_vol = config.volumes[dst.volume]
-    match dst_vol:
-        case RemoteVolume():
-            ep = re[dst_vol.slug]
-            result = run_remote_command(ep.server, cmd, ep.proxy_chain)
-        case LocalVolume():
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-            )
-
+    result = _run_on_volume(
+        ["btrfs", "subvolume", "snapshot", "-r", tmp_path, snapshot_path],
+        dst_vol,
+        re,
+    )
     if result.returncode != 0:
         raise RuntimeError(f"btrfs snapshot failed: {result.stderr}")
-    else:
-        return snapshot_path
+    return snapshot_path
 
 
 def _make_snapshot_writable(
@@ -75,18 +73,11 @@ def _make_snapshot_writable(
     resolved_endpoints: ResolvedEndpoints,
 ) -> None:
     """Unset the readonly property so the snapshot can be deleted."""
-    cmd = ["btrfs", "property", "set", path, "ro", "false"]
-    match volume:
-        case RemoteVolume():
-            ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(ep.server, cmd, ep.proxy_chain)
-        case LocalVolume():
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-            )
-
+    result = _run_on_volume(
+        ["btrfs", "property", "set", path, "ro", "false"],
+        volume,
+        resolved_endpoints,
+    )
     if result.returncode != 0:
         raise RuntimeError(f"btrfs property set ro=false failed: {result.stderr}")
 
@@ -103,19 +94,11 @@ def delete_snapshot(
     CAP_SYS_ADMIN), then deletes the subvolume.
     """
     _make_snapshot_writable(path, volume, resolved_endpoints)
-
-    cmd = ["btrfs", "subvolume", "delete", path]
-    match volume:
-        case RemoteVolume():
-            ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(ep.server, cmd, ep.proxy_chain)
-        case LocalVolume():
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-            )
-
+    result = _run_on_volume(
+        ["btrfs", "subvolume", "delete", path],
+        volume,
+        resolved_endpoints,
+    )
     if result.returncode != 0:
         raise RuntimeError(f"btrfs delete failed: {result.stderr}")
 
@@ -143,15 +126,10 @@ def prune_snapshots(
 
     latest_name = read_latest_symlink(sync, config, resolved_endpoints=re)
 
-    # Candidates are oldest first, but skip the latest target
-    to_delete: list[str] = []
-    for snap_path in snapshots:
-        if len(to_delete) >= excess:
-            break
-        snap_name = snap_path.rsplit("/", 1)[-1]
-        if snap_name == latest_name:
-            continue
-        to_delete.append(snap_path)
+    # Candidates: oldest first, skip the latest target, take up to excess
+    to_delete = [
+        p for p in snapshots if p.rsplit("/", 1)[-1] != latest_name
+    ][:excess]
 
     if not dry_run:
         dst = config.destination_endpoint(sync)
