@@ -9,6 +9,9 @@ from pydantic import ConfigDict, Field, field_validator, model_validator
 from .base import Slug, _BaseModel
 
 
+SnapshotMode = Literal["none", "btrfs", "hard-link"]
+
+
 class BtrfsSnapshotConfig(_BaseModel):
     """Configuration for btrfs snapshot management."""
 
@@ -67,7 +70,7 @@ class SyncEndpoint(_BaseModel):
     @property
     def snapshot_mode(
         self,
-    ) -> Literal["none", "btrfs", "hard-link"]:
+    ) -> SnapshotMode:
         if self.btrfs_snapshots.enabled:
             return "btrfs"
         elif self.hard_link_snapshots.enabled:
