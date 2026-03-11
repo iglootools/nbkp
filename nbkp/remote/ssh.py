@@ -5,41 +5,87 @@ from __future__ import annotations
 import shlex
 import subprocess
 
-from ..config import SshEndpoint, SshConnectionOptions
+from ..config import SshConnectionOptions, SshEndpoint
+
+
+def _format_host(endpoint: SshEndpoint) -> str:
+    """Format [user@]host for an SSH endpoint."""
+    return f"{endpoint.user}@{endpoint.host}" if endpoint.user else endpoint.host
+
+
+def _format_host_port(endpoint: SshEndpoint) -> str:
+    """Format [user@]host[:port] for proxy-jump notation."""
+    host = _format_host(endpoint)
+    return f"{host}:{endpoint.port}" if endpoint.port != 22 else host
 
 
 def _ssh_o_options(opts: SshConnectionOptions) -> list[str]:
     """Derive SSH -o option values from structured options."""
-    result = [
-        f"ConnectTimeout={opts.connect_timeout}",
-        "BatchMode=yes",
+    return [
+        opt
+        for opt in [
+            f"ConnectTimeout={opts.connect_timeout}",
+            "BatchMode=yes",
+            "Compression=yes" if opts.compress else None,
+            (
+                f"ServerAliveInterval={opts.server_alive_interval}"
+                if opts.server_alive_interval is not None
+                else None
+            ),
+            "StrictHostKeyChecking=no" if not opts.strict_host_key_checking else None,
+            (
+                f"UserKnownHostsFile={opts.known_hosts_file}"
+                if opts.known_hosts_file is not None
+                else None
+            ),
+            # Suppress "Permanently added ... to the list of known hosts"
+            # warnings when host-key verification is fully disabled.
+            (
+                "LogLevel=ERROR"
+                if not opts.strict_host_key_checking and opts.known_hosts_file
+                else None
+            ),
+            "ForwardAgent=yes" if opts.forward_agent else None,
+        ]
+        if opt is not None
     ]
-    if opts.compress:
-        result.append("Compression=yes")
-    if opts.server_alive_interval is not None:
-        result.append(f"ServerAliveInterval={opts.server_alive_interval}")
-    if not opts.strict_host_key_checking:
-        result.append("StrictHostKeyChecking=no")
-    if opts.known_hosts_file is not None:
-        result.append(f"UserKnownHostsFile={opts.known_hosts_file}")
-    # Suppress "Permanently added ... to the list of known hosts"
-    # warnings when host-key verification is fully disabled.
-    if not opts.strict_host_key_checking and opts.known_hosts_file:
-        result.append("LogLevel=ERROR")
-    if opts.forward_agent:
-        result.append("ForwardAgent=yes")
-    return result
+
+
+def _ssh_endpoint_args(endpoint: SshEndpoint) -> list[str]:
+    """Build SSH args for a single endpoint: -o options, -p port, -i key."""
+    o_args = [
+        arg
+        for opt in _ssh_o_options(endpoint.connection_options)
+        for arg in ["-o", opt]
+    ]
+    return [
+        *o_args,
+        *(["-p", str(endpoint.port)] if endpoint.port != 22 else []),
+        *(["-i", endpoint.key] if endpoint.key else []),
+    ]
 
 
 def format_proxy_jump_chain(proxies: list[SshEndpoint]) -> str:
     """Format proxy chain as comma-separated [user@]host[:port] for -J."""
-    parts: list[str] = []
-    for proxy in proxies:
-        host = f"{proxy.user}@{proxy.host}" if proxy.user else proxy.host
-        if proxy.port != 22:
-            host += f":{proxy.port}"
-        parts.append(host)
-    return ",".join(parts)
+    return ",".join(_format_host_port(p) for p in proxies)
+
+
+def _build_proxy_hop(proxy: SshEndpoint, inner_cmd: str | None) -> str:
+    """Build the SSH command string for a single proxy hop."""
+    o_args = [
+        arg for opt in _ssh_o_options(proxy.connection_options) for arg in ["-o", opt]
+    ]
+    parts = [
+        "ssh",
+        *o_args,
+        *(["-o", f"ProxyCommand={inner_cmd.replace('%', '%%')}"] if inner_cmd else []),
+        *(["-p", str(proxy.port)] if proxy.port != 22 else []),
+        *(["-i", proxy.key] if proxy.key else []),
+        "-W",
+        "%h:%p",
+        _format_host(proxy),
+    ]
+    return " ".join(parts)
 
 
 def _build_proxy_command(
@@ -51,38 +97,26 @@ def _build_proxy_command(
     options (e.g. StrictHostKeyChecking) are propagated to
     each hop.
     """
-    proxy = proxies[0]
-    parts: list[str] = ["ssh"]
-    for opt in _ssh_o_options(proxy.connection_options):
-        parts.extend(["-o", opt])
-    if proxy.port != 22:
-        parts.extend(["-p", str(proxy.port)])
-    if proxy.key:
-        parts.extend(["-i", proxy.key])
-    parts.append("-W")
-    parts.append("%h:%p")
-    host = f"{proxy.user}@{proxy.host}" if proxy.user else proxy.host
-    parts.append(host)
-
-    inner_cmd = " ".join(parts)
-
-    for proxy in proxies[1:]:
-        escaped_inner = inner_cmd.replace("%", "%%")
-        parts = ["ssh"]
-        for opt in _ssh_o_options(proxy.connection_options):
-            parts.extend(["-o", opt])
-        parts.extend(["-o", f"ProxyCommand={escaped_inner}"])
-        if proxy.port != 22:
-            parts.extend(["-p", str(proxy.port)])
-        if proxy.key:
-            parts.extend(["-i", proxy.key])
-        parts.append("-W")
-        parts.append("%h:%p")
-        host = f"{proxy.user}@{proxy.host}" if proxy.user else proxy.host
-        parts.append(host)
-        inner_cmd = " ".join(parts)
-
+    inner_cmd: str | None = None
+    for proxy in proxies:
+        inner_cmd = _build_proxy_hop(proxy, inner_cmd)
+    assert inner_cmd is not None
     return inner_cmd
+
+
+def _build_ssh_core_args(
+    server: SshEndpoint,
+    proxy_chain: list[SshEndpoint] | None = None,
+) -> list[str]:
+    """Build common SSH args: -o options, port, key, proxy command."""
+    return [
+        *_ssh_endpoint_args(server),
+        *(
+            ["-o", f"ProxyCommand={_build_proxy_command(proxy_chain)}"]
+            if proxy_chain
+            else []
+        ),
+    ]
 
 
 def build_ssh_base_args(
@@ -94,20 +128,7 @@ def build_ssh_base_args(
     Returns args like:
         ssh -o ConnectTimeout=10 -o BatchMode=yes [opts] host
     """
-    args = ["ssh"]
-    for opt in _ssh_o_options(server.connection_options):
-        args.extend(["-o", opt])
-    if server.port != 22:
-        args.extend(["-p", str(server.port)])
-    if server.key:
-        args.extend(["-i", server.key])
-    if proxy_chain:
-        proxy_cmd = _build_proxy_command(proxy_chain)
-        args.extend(["-o", f"ProxyCommand={proxy_cmd}"])
-
-    host = f"{server.user}@{server.host}" if server.user else server.host
-    args.append(host)
-    return args
+    return ["ssh", *_build_ssh_core_args(server, proxy_chain), _format_host(server)]
 
 
 def run_remote_command(
@@ -117,9 +138,8 @@ def run_remote_command(
 ) -> subprocess.CompletedProcess[str]:
     """Run a command on a remote host via SSH."""
     cmd_string = " ".join(shlex.quote(arg) for arg in command)
-    args = build_ssh_base_args(server, proxy_chain) + [cmd_string]
     return subprocess.run(
-        args,
+        [*build_ssh_base_args(server, proxy_chain), cmd_string],
         capture_output=True,
         text=True,
     )
@@ -134,22 +154,17 @@ def build_ssh_e_option(
     Returns a list like:
         ["-e", "ssh -o ConnectTimeout=10 -o BatchMode=yes ..."]
     """
-    ssh_cmd_parts = ["ssh"]
-    for opt in _ssh_o_options(server.connection_options):
-        ssh_cmd_parts.extend(["-o", opt])
-    if server.port != 22:
-        ssh_cmd_parts.extend(["-p", str(server.port)])
-    if server.key:
-        ssh_cmd_parts.extend(["-i", server.key])
-    if proxy_chain:
-        proxy_cmd = _build_proxy_command(proxy_chain)
-        quoted = shlex.quote(f"ProxyCommand={proxy_cmd}")
-        ssh_cmd_parts.extend(["-o", quoted])
-
-    return ["-e", " ".join(ssh_cmd_parts)]
+    core = _build_ssh_core_args(server, proxy_chain)
+    # For -e, the ProxyCommand value needs shell quoting
+    parts = ["ssh"]
+    for arg in core:
+        if arg.startswith("ProxyCommand="):
+            parts.append(shlex.quote(arg))
+        else:
+            parts.append(arg)
+    return ["-e", " ".join(parts)]
 
 
 def format_remote_path(server: SshEndpoint, path: str) -> str:
     """Format a remote path as [user@]host:path."""
-    host = f"{server.user}@{server.host}" if server.user else server.host
-    return f"{host}:{path}"
+    return f"{_format_host(server)}:{path}"

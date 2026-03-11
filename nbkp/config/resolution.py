@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import Enum
 from typing import List, Optional
 
@@ -43,6 +44,12 @@ class ResolvedEndpoint(_BaseModel):
 ResolvedEndpoints = dict[str, ResolvedEndpoint]
 
 
+def _soft_filter(slugs: list[str], predicate: Callable[[str], bool]) -> list[str]:
+    """Apply a filter, keeping the original list if it would eliminate all candidates."""
+    filtered = [s for s in slugs if predicate(s)]
+    return filtered if filtered else slugs
+
+
 def resolve_endpoint_for_volume(
     config: Config,
     vol: RemoteVolume,
@@ -54,56 +61,40 @@ def resolve_endpoint_for_volume(
     candidates.  Falls back to the primary ``ssh_endpoint``.
     """
     candidates = list(vol.ssh_endpoints) if vol.ssh_endpoints else [vol.ssh_endpoint]
+    eps = config.ssh_endpoints
+
+    if endpoint_filter is None:
+        return eps[candidates[0]]
 
     ef = endpoint_filter
-    if ef is None:
-        return config.ssh_endpoints[candidates[0]]
 
-    # DNS reachability: drop endpoints whose host
-    # cannot be resolved
-    reachable = [
-        slug
-        for slug in candidates
-        if is_private_host(config.ssh_endpoints[slug].host) is not None
-    ]
-    if not reachable:
-        return config.ssh_endpoints[vol.ssh_endpoint]
+    # DNS reachability
+    reachable = _soft_filter(
+        candidates, lambda s: is_private_host(eps[s].host) is not None
+    )
 
     # Exclude locations
     if ef.exclude_locations:
         excl = set(ef.exclude_locations)
-        filtered = [
-            slug
-            for slug in reachable
-            if not (excl & set(config.ssh_endpoints[slug].location_list))
-        ]
-        if filtered:
-            reachable = filtered
+        reachable = _soft_filter(
+            reachable, lambda s: not (excl & set(eps[s].location_list))
+        )
 
     # Include locations
     if ef.locations:
-        filter_locs = set(ef.locations)
-        by_loc = [
-            slug
-            for slug in reachable
-            if filter_locs & set(config.ssh_endpoints[slug].location_list)
-        ]
-        if by_loc:
-            reachable = by_loc
+        locs = set(ef.locations)
+        reachable = _soft_filter(
+            reachable, lambda s: bool(locs & set(eps[s].location_list))
+        )
 
     # Network filter (private / public)
     if ef.network is not None:
         want_private = ef.network == NetworkType.PRIVATE
-        by_net = [
-            slug
-            for slug in reachable
-            if is_private_host(config.ssh_endpoints[slug].host) == want_private
-        ]
-        if by_net:
-            reachable = by_net
+        reachable = _soft_filter(
+            reachable, lambda s: is_private_host(eps[s].host) == want_private
+        )
 
-    # Deterministic pick: first candidate in original order
-    return config.ssh_endpoints[reachable[0]]
+    return eps[reachable[0]]
 
 
 def resolve_proxy_chain(
@@ -119,19 +110,27 @@ def _is_volume_excluded(
     vol: RemoteVolume,
     endpoint_filter: EndpointFilter | None,
 ) -> bool:
-    """Check if all SSH endpoints for a volume are at excluded locations.
-
-    Returns True when every candidate endpoint has a location tag
-    matching the exclude list — meaning the volume should be skipped
-    entirely.
-    """
-    if not endpoint_filter or not endpoint_filter.exclude_locations:
-        return False
+    """Check if all SSH endpoints for a volume are at excluded locations."""
     candidates = list(vol.ssh_endpoints) if vol.ssh_endpoints else [vol.ssh_endpoint]
-    excl = set(endpoint_filter.exclude_locations)
-    return all(
+    excl = set(endpoint_filter.exclude_locations) if endpoint_filter else set()
+    return bool(excl) and all(
         excl & set(config.ssh_endpoints[slug].location_list) for slug in candidates
     )
+
+
+def _resolve_volume(
+    config: Config,
+    vol: RemoteVolume,
+    endpoint_filter: EndpointFilter | None,
+) -> ResolvedEndpoint:
+    """Resolve the SSH endpoint and proxy chain for a single remote volume."""
+    server = enrich_from_ssh_config(
+        resolve_endpoint_for_volume(config, vol, endpoint_filter)
+    )
+    proxy_chain = [
+        enrich_from_ssh_config(ep) for ep in resolve_proxy_chain(config, server)
+    ]
+    return ResolvedEndpoint(server=server, proxy_chain=proxy_chain)
 
 
 def resolve_all_endpoints(
@@ -145,18 +144,9 @@ def resolve_all_endpoints(
     Volumes whose endpoints are all at excluded locations
     are omitted (no SSH attempt).
     """
-    result: dict[str, ResolvedEndpoint] = {}
-    for vol in config.volumes.values():
-        match vol:
-            case RemoteVolume():
-                if _is_volume_excluded(config, vol, endpoint_filter):
-                    continue
-                server = resolve_endpoint_for_volume(config, vol, endpoint_filter)
-                server = enrich_from_ssh_config(server)
-                proxy_chain = resolve_proxy_chain(config, server)
-                proxy_chain = [enrich_from_ssh_config(ep) for ep in proxy_chain]
-                result[vol.slug] = ResolvedEndpoint(
-                    server=server,
-                    proxy_chain=proxy_chain,
-                )
-    return result
+    return {
+        vol.slug: _resolve_volume(config, vol, endpoint_filter)
+        for vol in config.volumes.values()
+        if isinstance(vol, RemoteVolume)
+        and not _is_volume_excluded(config, vol, endpoint_filter)
+    }

@@ -63,6 +63,30 @@ def is_private_host(hostname: str) -> bool | None:
         return all(ipaddress.ip_address(a).is_private for a in addrs)
 
 
+def _ssh_config_updates(
+    endpoint: SshEndpoint,
+    result: paramiko.SSHConfigDict,
+) -> dict[str, object]:
+    """Extract enrichment updates from an SSH config lookup result.
+
+    Only fields NOT explicitly set on the endpoint are candidates.
+    """
+    fields_set = endpoint.model_fields_set
+    return {
+        k: v
+        for k, v in {
+            "port": int(result["port"]) if "port" in result else None,
+            "user": result.get("user"),
+            "key": (
+                str(Path(result["identityfile"][0]).expanduser())
+                if "identityfile" in result
+                else None
+            ),
+        }.items()
+        if v is not None and k not in fields_set
+    }
+
+
 def enrich_from_ssh_config(
     endpoint: SshEndpoint,
 ) -> SshEndpoint:
@@ -79,21 +103,5 @@ def enrich_from_ssh_config(
     if ssh_config is None:
         return endpoint
 
-    result = ssh_config.lookup(endpoint.host)
-    fields_set = endpoint.model_fields_set
-    updates: dict[str, object] = {}
-
-    if "port" not in fields_set and "port" in result:
-        updates["port"] = int(result["port"])
-
-    if "user" not in fields_set and "user" in result:
-        updates["user"] = result["user"]
-
-    if "key" not in fields_set and "identityfile" in result:
-        raw = result["identityfile"][0]
-        updates["key"] = str(Path(raw).expanduser())
-
-    if not updates:
-        return endpoint
-
-    return endpoint.model_copy(update=updates)
+    updates = _ssh_config_updates(endpoint, ssh_config.lookup(endpoint.host))
+    return endpoint.model_copy(update=updates) if updates else endpoint
