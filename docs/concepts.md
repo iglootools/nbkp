@@ -51,7 +51,7 @@ A sync describes a one-way data transfer from a source sync endpoint to a destin
 
 **Rsync options** — Each sync uses a set of default rsync flags (`-a --delete --delete-excluded --partial-dir=.rsync-partial --safe-links --checksum`). These can be customized per sync: `compress` and `checksum` toggle specific flags, `default-options-override` replaces the defaults entirely, and `extra-options` appends additional flags.
 
-**Filters** — Each sync can define rsync filter rules to control which files are included or excluded. Three mechanisms are available: structured `include`/`exclude` rules, raw rsync filter strings, and external filter files. They can be combined and are applied in order.
+**Filters** — Each sync can define rsync filter rules to control which files are included or excluded. Structured `include`/`exclude` rules, `merge` (global filter file) and `dir-merge` (per-directory filter file discovery, like rsync's `-F`), raw rsync filter strings, and external filter files are all supported. They can be combined and are applied in order.
 
 ### Snapshots
 

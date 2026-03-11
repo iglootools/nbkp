@@ -16,7 +16,7 @@ nbkp uses rsync under the hood to synchronize files between volumes. Syncs can f
 - **Dry-run mode**: preview what would happen without making changes
 - **Real-time progress**: four display modes (none, overall, per-file, full)
 - **Per-sync rsync options**: checksum, compression, custom flags, default overrides, extra options
-- **Rsync filters**: structured include/exclude rules, raw rsync filter strings, and external filter files
+- **Rsync filters**: structured include/exclude rules, `merge`/`dir-merge` directives (per-directory filter files), raw rsync filter strings, and external filter files
 
 ## Snapshots
 

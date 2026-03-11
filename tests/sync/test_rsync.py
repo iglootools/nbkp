@@ -464,6 +464,46 @@ class TestBuildRsyncCommandFilters:
             "/mnt/dst/",
         ]
 
+    def test_dir_merge_filter(self) -> None:
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            slug="s1",
+            source="ep-src",
+            destination="ep-dst",
+            filters=[
+                "dir-merge .rsync-filter",
+                "- .rsync-filter",
+                "merge /etc/nbkp/rules.txt",
+            ],
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+            },
+            syncs={"s1": sync},
+        )
+
+        cmd = build_rsync_command(sync, config)
+        assert cmd == [
+            "rsync",
+            "-a",
+            "--delete",
+            "--delete-excluded",
+            "--partial-dir=.rsync-partial",
+            "--safe-links",
+            "--filter=H .nbkp-*",
+            "--filter=P .nbkp-*",
+            "--checksum",
+            "--filter=dir-merge .rsync-filter",
+            "--filter=- .rsync-filter",
+            "--filter=merge /etc/nbkp/rules.txt",
+            "/mnt/src/",
+            "/mnt/dst/",
+        ]
+
     def test_no_filters(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/src")
         dst = LocalVolume(slug="dst", path="/mnt/dst")

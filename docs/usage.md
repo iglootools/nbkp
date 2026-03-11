@@ -600,13 +600,31 @@ Filters can be specified as structured rules or raw rsync filter strings, mixed 
 
 ```yaml
 filters:
-  # Structured rules
+  # Structured include/exclude rules
   - include: "*.jpg"          # becomes "+ *.jpg"
   - exclude: "*.tmp"          # becomes "- *.tmp"
 
-  # Raw rsync filter strings
+  # Merge: read rules from an external file (applied globally)
+  - merge: /etc/nbkp/extra-rules.txt
+  - merge: ~/my-rules.txt    # tilde is expanded
+
+  # Dir-merge: per-directory filter files (rsync discovers them as it walks the tree)
+  - dir-merge: .rsync-filter
+
+  # Dir-merge with exclude-self: equivalent to rsync's -FF
+  # (use per-directory filters, but don't transfer the filter files themselves)
+  - dir-merge:
+      path: .rsync-filter
+      exclude-self: true
+
+  # Raw rsync filter strings (for advanced modifiers like ,e or ,n)
   - "H .git"                  # hide .git from transfer
   - "- __pycache__/"          # exclude __pycache__
+  - "dir-merge,e /.rsync-filter"  # dir-merge with word-splitting
 ```
+
+**`merge`** reads a file of filter rules once and applies them at the point where they appear in the list. Tilde (`~`) is expanded in merge paths. This is similar to `filter-file`, but `filter-file` is always appended after all inline filters, while `merge` respects its position in the list.
+
+**`dir-merge`** tells rsync to look for the named file in each directory as it walks the source tree. Rules from each file apply only to that directory and its subdirectories. The `exclude-self` option appends a `- <filename>` rule to prevent the filter files from being transferred (equivalent to rsync's `-FF` flag). Dir-merge paths are not tilde-expanded (they are relative filenames resolved by rsync per-directory).
 
 Filters are applied in order as `--filter=RULE` arguments. When `filter-file` is also set, inline filters are applied first.
