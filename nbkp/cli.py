@@ -28,11 +28,6 @@ from .preflight import (
     VolumeStatus,
     check_all_syncs,
 )
-from .sync.snapshots.btrfs import prune_snapshots as btrfs_prune_snapshots
-from .sync.snapshots.common import list_snapshots
-from .sync.snapshots.hardlinks import (
-    prune_snapshots as hl_prune_snapshots,
-)
 from .ordering.output import (
     build_graph_json,
     print_mermaid_ascii_graph,
@@ -43,19 +38,21 @@ from .output import (
     OutputFormat,
     print_config_error,
     print_human_config,
-    print_human_prune_results,
-    print_human_results,
     print_human_check,
     print_human_troubleshoot,
+)
+from .sync.output import (
+    print_human_prune_results,
+    print_human_results,
 )
 from .democli import app as demo_app
 from .scriptgen import ScriptOptions, generate_script
 from .sync import (
     ProgressMode,
-    PruneResult,
     SyncResult,
     run_all_syncs,
 )
+from .sync.pruner import prune_all_syncs
 
 _INACTIVE_REASONS = {
     SyncReason.SOURCE_SENTINEL_NOT_FOUND,
@@ -570,98 +567,13 @@ def prune(
         resolved_endpoints=resolved,
     )
 
-    def _skip_reason(slug: str, status: SyncStatus) -> str | None:
-        """Return skip reason, or None if prunable."""
-        if sync and slug not in sync:
-            return None  # filtered out by --sync, omit entirely
-        if not status.active:
-            return "inactive"
-        dst_ep = cfg.destination_endpoint(status.config)
-        match dst_ep.snapshot_mode:
-            case "btrfs" | "hard-link":
-                snap_cfg = (
-                    dst_ep.btrfs_snapshots
-                    if dst_ep.snapshot_mode == "btrfs"
-                    else dst_ep.hard_link_snapshots
-                )
-                return (
-                    "no max-snapshots limit" if snap_cfg.max_snapshots is None else None
-                )
-            case _:
-                return "no snapshots configured"
-
-    candidates = [
-        (slug, status, _skip_reason(slug, status))
-        for slug, status in sync_statuses.items()
-        if not (sync and slug not in sync)
-    ]
-
-    results: list[PruneResult] = []
-    for slug, status, skip in candidates:
-        match skip:
-            case str():
-                kept = 0
-                if (
-                    status.active
-                    and cfg.destination_endpoint(status.config).snapshot_mode != "none"
-                ):
-                    try:
-                        kept = len(list_snapshots(status.config, cfg, resolved))
-                    except RuntimeError:
-                        pass
-                results.append(
-                    PruneResult(
-                        sync_slug=slug,
-                        deleted=[],
-                        kept=kept,
-                        dry_run=dry_run,
-                        detail=skip,
-                        skipped=True,
-                    )
-                )
-            case None:
-                dst_ep = cfg.destination_endpoint(status.config)
-                try:
-                    match dst_ep.snapshot_mode:
-                        case "btrfs":
-                            assert dst_ep.btrfs_snapshots.max_snapshots is not None
-                            deleted = btrfs_prune_snapshots(
-                                status.config,
-                                cfg,
-                                dst_ep.btrfs_snapshots.max_snapshots,
-                                dry_run=dry_run,
-                                resolved_endpoints=resolved,
-                            )
-                        case "hard-link":
-                            assert dst_ep.hard_link_snapshots.max_snapshots is not None
-                            deleted = hl_prune_snapshots(
-                                status.config,
-                                cfg,
-                                dst_ep.hard_link_snapshots.max_snapshots,
-                                dry_run=dry_run,
-                                resolved_endpoints=resolved,
-                            )
-                        case _:
-                            deleted = []
-                    remaining = list_snapshots(status.config, cfg, resolved)
-                    results.append(
-                        PruneResult(
-                            sync_slug=slug,
-                            deleted=deleted,
-                            kept=(len(remaining) + (len(deleted) if dry_run else 0)),
-                            dry_run=dry_run,
-                        )
-                    )
-                except RuntimeError as e:
-                    results.append(
-                        PruneResult(
-                            sync_slug=slug,
-                            deleted=[],
-                            kept=0,
-                            dry_run=dry_run,
-                            detail=str(e),
-                        )
-                    )
+    results = prune_all_syncs(
+        cfg,
+        sync_statuses,
+        dry_run=dry_run,
+        only_syncs=sync,
+        resolved_endpoints=resolved,
+    )
 
     match output_format:
         case OutputFormat.JSON:

@@ -64,9 +64,11 @@ from .output import (
     print_config_error,
     print_human_check,
     print_human_config,
+    print_human_troubleshoot,
+)
+from .sync.output import (
     print_human_prune_results,
     print_human_results,
-    print_human_troubleshoot,
 )
 from .testkit.gen.check import (
     check_config,

@@ -65,7 +65,7 @@
     This ensures the test data is always valid and consistent with the models.
 - **Domain Logic Consistency**
   - When making changes to the config schema/models or status checks, make sure to update **all** of the following:
-    - **Troubleshoot output** (`nbkp/output.py`): add a `case` in the troubleshoot match-case for every new `SyncReason` or `VolumeReason`, with actionable remediation text.
+    - **Troubleshoot output** (`nbkp/preflight/output.py`): add a `case` in the troubleshoot match-case for every new `SyncReason` or `VolumeReason`, with actionable remediation text.
     - **Seed / demo test data** (`nbkp/testkit/gen/check.py`): add a scenario to `troubleshoot_config` + `troubleshoot_data` that exercises the new reason, so `nbkp-demo output` renders it.
     - **CLI inactive-reasons set** (`nbkp/cli.py`, `_INACTIVE_REASONS`): if the new reason should be treated as a non-fatal skip (like missing sentinels), add it here.
     - The demo CLI (`nbkp/democli.py`) to generate new test data that reflects the changes.

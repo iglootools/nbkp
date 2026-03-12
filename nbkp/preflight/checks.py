@@ -11,7 +11,7 @@ from typing import Callable
 
 from pydantic import BaseModel, computed_field
 
-from .config import (
+from ..config import (
     Config,
     LocalVolume,
     RemoteVolume,
@@ -19,9 +19,9 @@ from .config import (
     SyncConfig,
     Volume,
 )
-from .remote import run_remote_command
-from .sync.snapshots.btrfs import STAGING_DIR
-from .sync.snapshots.common import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR
+from ..remote import run_remote_command
+from ..sync.snapshots.btrfs import STAGING_DIR
+from ..sync.snapshots.common import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR
 
 
 class VolumeReason(str, enum.Enum):
