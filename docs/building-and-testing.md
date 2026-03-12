@@ -25,7 +25,7 @@ mise run test-integration-fs     # Filesystem integration tests
 
 mise run format             # ruff format
 mise run lint               # ruff check
-mise run type-check         # mypy (strict: disallow_untyped_defs)
+mise run type-check         # pyright
 mise run compat-check       # vermin (enforce Python >=3.12 compatibility)
 
 # Using Poetry syntax directly
@@ -35,7 +35,7 @@ poetry run pytest tests/integration_docker/ tests/integration_fs/ -v    # Integr
 poetry run pytest tests/ -v                                             # All tests
 poetry run ruff format .                                                # formatting
 poetry run ruff check nbkp/ tests/                                      # linting
-poetry run mypy nbkp/ tests/                                            # type-checking
+poetry run pyright nbkp/                                                # type-checking
 poetry run vermin --target=3.12- --no-tips --no-parse-comments nbkp/ tests/  # compat check
 poetry run pytest tests/test_ssh.py::TestBuildSshBaseArgs::test_full -v # run a single test
 ```

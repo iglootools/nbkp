@@ -1,4 +1,7 @@
 """NBKP demo CLI: sample output rendering and seed data."""
+# pyright: reportPossiblyUnboundVariable=false
+# Docker imports are conditionally available (try/except ImportError),
+# guarded at runtime by _require_docker_extra().
 
 from __future__ import annotations
 

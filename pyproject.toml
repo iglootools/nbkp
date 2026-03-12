@@ -36,12 +36,9 @@ nbkp-demo = "nbkp.democli:main"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.15"
-mypy = "^1.9.0"
+pyright = "^1.1"
 pytest = "^9.0.0"
 testcontainers = "^4.0.0"
-types-docker = "^7.1.0.20260109"
-types-paramiko = "^4.0.0.20250822"
-types-pyyaml = "^6.0"
 vermin = "^1.8.0"
 pydeps = {version = ">=3.0.2", python = ">=3.12,<4.0"}
 
@@ -60,11 +57,8 @@ markers = [
   "integration_fs: Component integration tests using local filesystem",
 ]
 
-[tool.mypy]
-python_version = "3.12"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
+[tool.pyright]
+pythonVersion = "3.12"
 
 [virtualenvs]
 # works jointly with mise to ensure the correct Python version is used in the virtualenv

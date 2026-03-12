@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 import docker as dockerlib
+import docker.errors as docker_errors
 import typer
 
 from ..config import SshConnectionOptions, SshEndpoint
@@ -66,7 +67,7 @@ def check_docker() -> None:
     try:
         client = dockerlib.from_env()
         client.ping()
-    except dockerlib.errors.DockerException as exc:
+    except docker_errors.DockerException as exc:
         typer.echo(
             f"Error: Docker is not available: {exc}",
             err=True,
@@ -115,10 +116,10 @@ def create_docker_network() -> str:
         for cid in list(old.attrs.get("Containers") or {}):
             try:
                 old.disconnect(cid, force=True)
-            except dockerlib.errors.APIError:
+            except docker_errors.APIError:
                 pass
         old.remove()
-    except dockerlib.errors.NotFound:
+    except docker_errors.NotFound:
         pass
     client.networks.create(_NETWORK_NAME, driver="bridge")
     return _NETWORK_NAME
@@ -130,7 +131,7 @@ def remove_docker_network() -> None:
     try:
         network = client.networks.get(_NETWORK_NAME)
         network.remove()
-    except dockerlib.errors.NotFound:
+    except docker_errors.NotFound:
         pass
 
 
@@ -143,7 +144,7 @@ def build_docker_image() -> None:
             tag=_IMAGE_TAG,
             nocache=True,
         )
-    except dockerlib.errors.BuildError as exc:
+    except docker_errors.BuildError as exc:
         typer.echo(
             f"Error: Docker image build failed: {exc}",
             err=True,
@@ -166,7 +167,7 @@ def start_storage_container(
     try:
         old = client.containers.get(STORAGE_CONTAINER_NAME)
         old.remove(force=True)
-    except dockerlib.errors.NotFound:
+    except docker_errors.NotFound:
         pass
 
     # Start container
@@ -206,7 +207,7 @@ def start_bastion_container(
     try:
         old = client.containers.get(BASTION_CONTAINER_NAME)
         old.remove(force=True)
-    except dockerlib.errors.NotFound:
+    except docker_errors.NotFound:
         pass
 
     container = client.containers.run(
