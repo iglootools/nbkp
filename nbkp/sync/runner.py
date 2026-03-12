@@ -9,7 +9,6 @@ from typing import Callable, Optional
 from pydantic import BaseModel, model_validator
 
 from .snapshots.btrfs import (
-    STAGING_DIR,
     create_snapshot,
     prune_snapshots as btrfs_prune_snapshots,
 )
@@ -18,8 +17,9 @@ from .snapshots.hardlinks import (
     create_snapshot_dir,
     prune_snapshots as hl_prune_snapshots,
 )
-from .snapshots.common import SNAPSHOTS_DIR, update_latest_symlink
+from .snapshots.common import update_latest_symlink
 from ..config import Config, ResolvedEndpoints
+from ..conventions import SNAPSHOTS_DIR, STAGING_DIR
 from ..preflight import SyncReason, SyncStatus
 from .rsync import ProgressMode, run_rsync
 

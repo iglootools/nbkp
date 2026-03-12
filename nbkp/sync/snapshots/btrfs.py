@@ -13,17 +13,13 @@ from ...config import (
     SyncConfig,
     Volume,
 )
+from ...conventions import SNAPSHOTS_DIR, STAGING_DIR
 from ...remote import run_remote_command
 from .common import (
-    SNAPSHOTS_DIR,
     format_snapshot_timestamp,
     list_snapshots,
     resolve_dest_path,
 )
-
-#: Directory name for the writable btrfs subvolume that rsync
-#: syncs into before a read-only snapshot is created.
-STAGING_DIR = "staging"
 
 
 def _run_on_volume(

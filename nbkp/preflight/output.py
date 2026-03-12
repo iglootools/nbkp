@@ -32,8 +32,14 @@ from ..remote.ssh import (
     wrap_cmd,
 )
 from ..sync.rsync import build_rsync_command
-from ..sync.snapshots.btrfs import STAGING_DIR
-from ..sync.snapshots.common import LATEST_LINK, SNAPSHOTS_DIR
+from ..conventions import (
+    DESTINATION_SENTINEL,
+    LATEST_LINK,
+    SNAPSHOTS_DIR,
+    SOURCE_SENTINEL,
+    STAGING_DIR,
+    VOLUME_SENTINEL,
+)
 from .status import SyncReason, SyncStatus, VolumeReason, VolumeStatus
 
 
@@ -366,7 +372,7 @@ def _print_sync_reason_fix(
                 console,
                 src_vol,
                 path,
-                ".nbkp-src",
+                SOURCE_SENTINEL,
                 resolved_endpoints,
             )
         case SyncReason.SOURCE_LATEST_NOT_FOUND:
@@ -421,7 +427,7 @@ def _print_sync_reason_fix(
                 console,
                 dst_vol,
                 path,
-                ".nbkp-dst",
+                DESTINATION_SENTINEL,
                 resolved_endpoints,
             )
         case SyncReason.SOURCE_RSYNC_NOT_FOUND:
@@ -627,7 +633,7 @@ def print_human_troubleshoot(
                         console,
                         vol,
                         vol.path,
-                        ".nbkp-vol",
+                        VOLUME_SENTINEL,
                         re,
                     )
                 case VolumeReason.UNREACHABLE:

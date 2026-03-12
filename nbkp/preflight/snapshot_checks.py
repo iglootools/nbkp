@@ -10,7 +10,7 @@ from ..config import (
     SyncConfig,
     Volume,
 )
-from ..sync.snapshots.common import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR
+from ..conventions import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
 from .queries import (
     _check_directory_exists,
     _check_directory_writable,
@@ -114,8 +114,6 @@ def _check_btrfs_dest(
         ):
             reasons.append(SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM)
         ep = _resolve_endpoint(dst_vol, dst_subdir)
-        from ..sync.snapshots.btrfs import STAGING_DIR
-
         staging_path = f"{ep}/{STAGING_DIR}"
         if not _check_directory_exists(dst_vol, staging_path, resolved_endpoints):
             reasons.append(SyncReason.DESTINATION_TMP_NOT_FOUND)

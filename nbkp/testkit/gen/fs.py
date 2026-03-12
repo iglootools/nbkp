@@ -13,9 +13,16 @@ from ...config import (
     RemoteVolume,
     SyncEndpoint,
 )
-from ...sync.snapshots.btrfs import STAGING_DIR
+from ...conventions import (
+    DESTINATION_SENTINEL,
+    DEVNULL_TARGET,
+    LATEST_LINK,
+    SNAPSHOTS_DIR,
+    SOURCE_SENTINEL,
+    STAGING_DIR,
+    VOLUME_SENTINEL,
+)
 from ...sync.rsync import resolve_path
-from ...sync.snapshots.common import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR
 
 _CHUNK_SIZE = 1024 * 1024  # 1 MB
 
@@ -59,11 +66,11 @@ def create_seed_sentinels(
             case LocalVolume():
                 vol_path = Path(vol.path)
                 vol_path.mkdir(parents=True, exist_ok=True)
-                (vol_path / ".nbkp-vol").touch()
+                (vol_path / VOLUME_SENTINEL).touch()
             case RemoteVolume():
                 if remote_exec is not None:
                     remote_exec(f"mkdir -p {vol.path}")
-                    remote_exec(f"touch {vol.path}/.nbkp-vol")
+                    remote_exec(f"touch {vol.path}/{VOLUME_SENTINEL}")
 
     # Sync endpoint sentinels — iterate unique endpoints
     seen_src: set[str] = set()
@@ -73,12 +80,14 @@ def create_seed_sentinels(
             seen_src.add(sync.source)
             src_ep = config.source_endpoint(sync)
             src_vol = config.volumes[src_ep.volume]
-            _create_endpoint_sentinels(src_vol, src_ep, ".nbkp-src", remote_exec)
+            _create_endpoint_sentinels(src_vol, src_ep, SOURCE_SENTINEL, remote_exec)
         if sync.destination not in seen_dst:
             seen_dst.add(sync.destination)
             dst_ep = config.destination_endpoint(sync)
             dst_vol = config.volumes[dst_ep.volume]
-            _create_endpoint_sentinels(dst_vol, dst_ep, ".nbkp-dst", remote_exec)
+            _create_endpoint_sentinels(
+                dst_vol, dst_ep, DESTINATION_SENTINEL, remote_exec
+            )
 
 
 def _create_endpoint_sentinels(

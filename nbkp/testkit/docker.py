@@ -13,8 +13,7 @@ import typer
 
 from ..config import SshConnectionOptions, SshEndpoint
 from ..remote.fabricssh import run_remote_command
-from ..sync.snapshots.btrfs import STAGING_DIR
-from ..sync.snapshots.common import SNAPSHOTS_DIR
+from ..conventions import SNAPSHOTS_DIR, STAGING_DIR
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"
 STORAGE_CONTAINER_NAME = "nbkp-demo"

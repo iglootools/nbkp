@@ -26,9 +26,15 @@ from .config import (
     SshEndpoint,
     SyncConfig,
 )
+from .conventions import (
+    DESTINATION_SENTINEL,
+    LATEST_LINK,
+    SNAPSHOTS_DIR,
+    SOURCE_SENTINEL,
+    STAGING_DIR,
+    VOLUME_SENTINEL,
+)
 from .remote.ssh import build_ssh_base_args
-from .sync.snapshots.btrfs import STAGING_DIR
-from .sync.snapshots.common import LATEST_LINK, SNAPSHOTS_DIR
 from .sync.rsync import build_rsync_command
 
 # ── Public API ────────────────────────────────────────────────
@@ -481,7 +487,7 @@ def _build_preflight_block(
     lines: list[str] = []
 
     # Source endpoint sentinel
-    src_sentinel = f"{src_path}/.nbkp-src"
+    src_sentinel = f"{src_path}/{SOURCE_SENTINEL}"
     lines.append(
         _build_check_line(
             src_vol,
@@ -513,7 +519,7 @@ def _build_preflight_block(
         )
 
     # Destination endpoint sentinel
-    dst_sentinel = f"{dst_path}/.nbkp-dst"
+    dst_sentinel = f"{dst_path}/{DESTINATION_SENTINEL}"
     lines.append(
         _build_check_line(
             dst_vol,
@@ -904,7 +910,7 @@ def _build_volume_check(
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     vpath = vol_paths[slug]
-    sentinel = f"{vpath}/.nbkp-vol"
+    sentinel = f"{vpath}/{VOLUME_SENTINEL}"
     match vol:
         case LocalVolume():
             test_cmd = f"test -f {_qp(sentinel)}"

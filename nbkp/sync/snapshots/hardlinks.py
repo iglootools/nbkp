@@ -14,9 +14,9 @@ from ...config import (
     SyncConfig,
     Volume,
 )
+from ...conventions import SNAPSHOTS_DIR
 from ...remote import run_remote_command
 from .common import (
-    SNAPSHOTS_DIR,
     format_snapshot_timestamp,
     list_snapshots,
     read_latest_symlink,

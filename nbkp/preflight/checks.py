@@ -13,7 +13,7 @@ from ..config import (
     ResolvedEndpoints,
     SyncConfig,
 )
-from ..sync.snapshots.common import SNAPSHOTS_DIR
+from ..conventions import DESTINATION_SENTINEL, SNAPSHOTS_DIR, SOURCE_SENTINEL
 from .queries import (
     _check_command_available,
     _check_directory_exists,
@@ -75,7 +75,7 @@ def check_sync(
         if not _check_endpoint_sentinel(
             src_vol,
             src_cfg.subdir,
-            ".nbkp-src",
+            SOURCE_SENTINEL,
             re,
         ):
             reasons.append(SyncReason.SOURCE_SENTINEL_NOT_FOUND)
@@ -96,7 +96,7 @@ def check_sync(
         if not _check_endpoint_sentinel(
             dst_vol,
             dst_cfg.subdir,
-            ".nbkp-dst",
+            DESTINATION_SENTINEL,
             re,
         ):
             reasons.append(SyncReason.DESTINATION_SENTINEL_NOT_FOUND)

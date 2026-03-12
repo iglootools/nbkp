@@ -8,6 +8,7 @@ Dependencies between top-level modules (auto-generated via `mise run depgraph`):
 graph TD
     cli["cli"]
     config["config/"]
+    conventions["conventions"]
     democli["democli"]
     ordering["ordering/"]
     output["output"]
@@ -36,18 +37,22 @@ graph TD
     output --> preflight
     output --> sync
     preflight --> config
+    preflight --> conventions
     preflight --> remote
     preflight --> sync
     remote --> config
     scriptgen --> config
+    scriptgen --> conventions
     scriptgen --> ordering
     scriptgen --> remote
     scriptgen --> sync
     sync --> config
+    sync --> conventions
     sync --> ordering
     sync --> preflight
     sync --> remote
     testkit --> config
+    testkit --> conventions
     testkit --> preflight
     testkit --> remote
     testkit --> sync

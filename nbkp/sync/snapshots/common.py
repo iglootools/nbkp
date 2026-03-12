@@ -1,4 +1,4 @@
-"""Snapshot constants, shared helpers, and latest-symlink management.
+"""Snapshot shared helpers and latest-symlink management.
 
 Items shared by both hard-link and btrfs snapshot backends.
 """
@@ -18,16 +18,8 @@ from ...config import (
     SyncConfig,
     Volume,
 )
+from ...conventions import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR
 from ...remote import run_remote_command
-
-#: Directory name that holds timestamped snapshots (both btrfs
-#: and hard-link).
-SNAPSHOTS_DIR = "snapshots"
-
-#: Symlink name that points to the most recent complete snapshot.
-LATEST_LINK = "latest"
-
-DEVNULL_TARGET = "/dev/null"
 
 
 def format_snapshot_timestamp(

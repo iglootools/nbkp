@@ -10,6 +10,7 @@ from ..config import (
     ResolvedEndpoints,
     Volume,
 )
+from ..conventions import VOLUME_SENTINEL
 from ..remote import run_remote_command
 from .status import VolumeReason, VolumeStatus
 
@@ -29,7 +30,7 @@ def check_volume(
 
 def _check_local_volume(volume: LocalVolume) -> VolumeStatus:
     """Check if a local volume is active (.nbkp-vol sentinel exists)."""
-    sentinel = Path(volume.path) / ".nbkp-vol"
+    sentinel = Path(volume.path) / VOLUME_SENTINEL
     reasons: list[VolumeReason] = (
         [] if sentinel.exists() else [VolumeReason.SENTINEL_NOT_FOUND]
     )
@@ -52,7 +53,7 @@ def _check_remote_volume(
             reasons=[VolumeReason.LOCATION_EXCLUDED],
         )
     ep = resolved_endpoints[volume.slug]
-    sentinel_path = f"{volume.path}/.nbkp-vol"
+    sentinel_path = f"{volume.path}/{VOLUME_SENTINEL}"
     try:
         result = run_remote_command(
             ep.server, ["test", "-f", sentinel_path], ep.proxy_chain
