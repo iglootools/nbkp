@@ -33,7 +33,7 @@ from nbkp.config import (
 from nbkp.remote.fabricssh import (
     run_remote_command as fabric_run_remote,
 )
-from nbkp.remote.ssh import (
+from nbkp.remote.sshexec import (
     run_remote_command as ssh_run_remote,
 )
 from nbkp.sync.rsync import run_rsync

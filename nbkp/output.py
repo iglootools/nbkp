@@ -27,7 +27,12 @@ from .sync.snapshots.btrfs import STAGING_DIR
 from .sync.snapshots.common import LATEST_LINK, SNAPSHOTS_DIR
 from .sync.rsync import build_rsync_command
 from .preflight import SyncReason, SyncStatus, VolumeReason, VolumeStatus
-from .remote.ssh import format_proxy_jump_chain
+from .config.output import endpoint_path, format_volume_display, host_label
+from .remote.ssh import (
+    format_proxy_jump_chain,
+    ssh_prefix,
+    wrap_cmd,
+)
 
 
 class OutputFormat(str, enum.Enum):
@@ -71,27 +76,6 @@ def _sync_options(sync: SyncConfig, config: Config) -> str:
             hl_label += f"(max:{max_snap})"
         opts.append(hl_label)
     return ", ".join(opts)
-
-
-def format_volume_display(
-    vol: LocalVolume | RemoteVolume,
-    resolved_endpoints: ResolvedEndpoints,
-) -> str:
-    """Format a volume for human display."""
-    match vol:
-        case RemoteVolume():
-            ep = resolved_endpoints.get(vol.slug)
-            if ep is None:
-                return f"{vol.ssh_endpoint}:{vol.path}"
-            if ep.server.user:
-                host_part = f"{ep.server.user}@{ep.server.host}"
-            else:
-                host_part = ep.server.host
-            if ep.server.port != 22:
-                host_part += f":{ep.server.port}"
-            return f"{host_part}:{vol.path}"
-        case LocalVolume():
-            return vol.path
 
 
 def build_check_sections(
@@ -347,62 +331,6 @@ def print_human_prune_results(
     console.print(table)
 
 
-def _ssh_prefix(
-    server: SshEndpoint,
-    proxy_chain: list[SshEndpoint] | None = None,
-) -> str:
-    """Build human-friendly SSH command prefix."""
-    parts = ["ssh"]
-    if server.port != 22:
-        parts.extend(["-p", str(server.port)])
-    if server.key:
-        parts.extend(["-i", server.key])
-    if proxy_chain:
-        parts.extend(["-J", format_proxy_jump_chain(proxy_chain)])
-    host = f"{server.user}@{server.host}" if server.user else server.host
-    parts.append(host)
-    return " ".join(parts)
-
-
-def _wrap_cmd(
-    cmd: str,
-    vol: LocalVolume | RemoteVolume,
-    resolved_endpoints: ResolvedEndpoints,
-) -> str:
-    """Wrap a shell command for remote execution."""
-    match vol:
-        case LocalVolume():
-            return cmd
-        case RemoteVolume():
-            ep = resolved_endpoints[vol.slug]
-            prefix = _ssh_prefix(ep.server, ep.proxy_chain)
-            return f"{prefix} '{cmd}'"
-
-
-def _endpoint_path(
-    vol: LocalVolume | RemoteVolume,
-    subdir: str | None,
-) -> str:
-    """Resolve the full endpoint path."""
-    if subdir:
-        return f"{vol.path}/{subdir}"
-    else:
-        return vol.path
-
-
-def _host_label(
-    vol: LocalVolume | RemoteVolume,
-    resolved_endpoints: ResolvedEndpoints,
-) -> str:
-    """Human-readable host label for a volume."""
-    match vol:
-        case LocalVolume():
-            return "this machine"
-        case RemoteVolume():
-            ep = resolved_endpoints[vol.slug]
-            return ep.server.host
-
-
 _INDENT = "  "
 
 _RSYNC_INSTALL = (
@@ -458,11 +386,11 @@ def _print_sentinel_fix(
     console.print(f"{p2}Ensure the volume is mounted, then:")
     _print_cmd(
         console,
-        _wrap_cmd(f"mkdir -p {path}", vol, resolved_endpoints),
+        wrap_cmd(f"mkdir -p {path}", vol, resolved_endpoints),
     )
     _print_cmd(
         console,
-        _wrap_cmd(
+        wrap_cmd(
             f"touch {path}/{sentinel}",
             vol,
             resolved_endpoints,
@@ -478,7 +406,7 @@ def _print_ssh_troubleshoot(
     """Print SSH connectivity troubleshooting instructions."""
     p2 = _INDENT * 2
     p3 = _INDENT * 3
-    ssh_cmd = _ssh_prefix(server, proxy_chain)
+    ssh_cmd = " ".join(ssh_prefix(server, proxy_chain))
     port_flag = f"-p {server.port} " if server.port != 22 else ""
     proxy_opt = ""
     if proxy_chain:
@@ -570,7 +498,7 @@ def _print_sync_reason_fix(
                         f"{p2}Destination volume '{dst_ep.volume}' is not available."
                     )
         case SyncReason.SOURCE_SENTINEL_NOT_FOUND:
-            path = _endpoint_path(src_vol, src_ep.subdir)
+            path = endpoint_path(src_vol, src_ep.subdir)
             _print_sentinel_fix(
                 console,
                 src_vol,
@@ -579,7 +507,7 @@ def _print_sync_reason_fix(
                 resolved_endpoints,
             )
         case SyncReason.SOURCE_LATEST_NOT_FOUND:
-            path = _endpoint_path(src_vol, src_ep.subdir)
+            path = endpoint_path(src_vol, src_ep.subdir)
             console.print(
                 f"{p2}Source has snapshots enabled"
                 f" but {path}/{LATEST_LINK} symlink"
@@ -591,10 +519,10 @@ def _print_sync_reason_fix(
             for cmd in cmds:
                 _print_cmd(
                     console,
-                    _wrap_cmd(cmd, src_vol, resolved_endpoints),
+                    wrap_cmd(cmd, src_vol, resolved_endpoints),
                 )
         case SyncReason.SOURCE_LATEST_INVALID:
-            path = _endpoint_path(src_vol, src_ep.subdir)
+            path = endpoint_path(src_vol, src_ep.subdir)
             console.print(
                 f"{p2}Source {path}/{LATEST_LINK}"
                 " symlink points to an invalid"
@@ -608,10 +536,10 @@ def _print_sync_reason_fix(
             for cmd in cmds:
                 _print_cmd(
                     console,
-                    _wrap_cmd(cmd, src_vol, resolved_endpoints),
+                    wrap_cmd(cmd, src_vol, resolved_endpoints),
                 )
         case SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND:
-            path = _endpoint_path(src_vol, src_ep.subdir)
+            path = endpoint_path(src_vol, src_ep.subdir)
             if src_ep.btrfs_snapshots.enabled:
                 cmds = [
                     f"sudo mkdir {path}/{SNAPSHOTS_DIR}",
@@ -622,10 +550,10 @@ def _print_sync_reason_fix(
             for cmd in cmds:
                 _print_cmd(
                     console,
-                    _wrap_cmd(cmd, src_vol, resolved_endpoints),
+                    wrap_cmd(cmd, src_vol, resolved_endpoints),
                 )
         case SyncReason.DESTINATION_SENTINEL_NOT_FOUND:
-            path = _endpoint_path(dst_vol, dst_ep.subdir)
+            path = endpoint_path(dst_vol, dst_ep.subdir)
             _print_sentinel_fix(
                 console,
                 dst_vol,
@@ -634,37 +562,37 @@ def _print_sync_reason_fix(
                 resolved_endpoints,
             )
         case SyncReason.RSYNC_NOT_FOUND_ON_SOURCE:
-            host = _host_label(src_vol, resolved_endpoints)
+            host = host_label(src_vol, resolved_endpoints)
             console.print(f"{p2}Install rsync on {host}:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
         case SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION:
-            host = _host_label(dst_vol, resolved_endpoints)
+            host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}Install rsync on {host}:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
         case SyncReason.RSYNC_TOO_OLD_ON_SOURCE:
-            host = _host_label(src_vol, resolved_endpoints)
+            host = host_label(src_vol, resolved_endpoints)
             console.print(f"{p2}rsync 3.0+ is required on {host}. Install or upgrade:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
         case SyncReason.RSYNC_TOO_OLD_ON_DESTINATION:
-            host = _host_label(dst_vol, resolved_endpoints)
+            host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}rsync 3.0+ is required on {host}. Install or upgrade:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
         case SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION:
-            host = _host_label(dst_vol, resolved_endpoints)
+            host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}Install btrfs-progs on {host}:")
             _print_cmd(console, _BTRFS_INSTALL, indent=3)
         case SyncReason.STAT_NOT_FOUND_ON_DESTINATION:
-            host = _host_label(dst_vol, resolved_endpoints)
+            host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}Install coreutils (stat) on {host}:")
             _print_cmd(console, _COREUTILS_INSTALL, indent=3)
         case SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION:
-            host = _host_label(dst_vol, resolved_endpoints)
+            host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}Install util-linux (findmnt) on {host}:")
             _print_cmd(console, _UTIL_LINUX_INSTALL, indent=3)
         case SyncReason.DESTINATION_NOT_BTRFS:
             console.print(f"{p2}The destination is not on a btrfs filesystem.")
         case SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME:
-            path = _endpoint_path(dst_vol, dst_ep.subdir)
+            path = endpoint_path(dst_vol, dst_ep.subdir)
             cmds = [
                 f"sudo btrfs subvolume create {path}/{STAGING_DIR}",
                 f"sudo mkdir {path}/{SNAPSHOTS_DIR}",
@@ -675,14 +603,14 @@ def _print_sync_reason_fix(
             for cmd in cmds:
                 _print_cmd(
                     console,
-                    _wrap_cmd(cmd, dst_vol, resolved_endpoints),
+                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
         case SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM:
             console.print(f"{p2}Remount the btrfs volume with user_subvol_rm_allowed:")
             cmd = f"sudo mount -o remount,user_subvol_rm_allowed {dst_vol.path}"
             _print_cmd(
                 console,
-                _wrap_cmd(cmd, dst_vol, resolved_endpoints),
+                wrap_cmd(cmd, dst_vol, resolved_endpoints),
             )
             console.print(
                 f"{p2}To persist, add"
@@ -691,7 +619,7 @@ def _print_sync_reason_fix(
                 f" for {dst_vol.path}."
             )
         case SyncReason.DESTINATION_TMP_NOT_FOUND:
-            path = _endpoint_path(dst_vol, dst_ep.subdir)
+            path = endpoint_path(dst_vol, dst_ep.subdir)
             cmds = [
                 f"sudo btrfs subvolume create {path}/{STAGING_DIR}",
                 f"sudo chown <user>:<group> {path}/{STAGING_DIR}",
@@ -699,10 +627,10 @@ def _print_sync_reason_fix(
             for cmd in cmds:
                 _print_cmd(
                     console,
-                    _wrap_cmd(cmd, dst_vol, resolved_endpoints),
+                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
         case SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND:
-            path = _endpoint_path(dst_vol, dst_ep.subdir)
+            path = endpoint_path(dst_vol, dst_ep.subdir)
             if dst_ep.hard_link_snapshots.enabled:
                 cmds = [f"mkdir -p {path}/{SNAPSHOTS_DIR}"]
             else:
@@ -713,10 +641,10 @@ def _print_sync_reason_fix(
             for cmd in cmds:
                 _print_cmd(
                     console,
-                    _wrap_cmd(cmd, dst_vol, resolved_endpoints),
+                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
         case SyncReason.DESTINATION_ENDPOINT_NOT_WRITABLE:
-            path = _endpoint_path(dst_vol, dst_ep.subdir)
+            path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}The destination endpoint directory"
                 f" {path}/ is not writable. Fix permissions:"
@@ -727,10 +655,10 @@ def _print_sync_reason_fix(
             for cmd in cmds:
                 _print_cmd(
                     console,
-                    _wrap_cmd(cmd, dst_vol, resolved_endpoints),
+                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
         case SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE:
-            path = _endpoint_path(dst_vol, dst_ep.subdir)
+            path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}The destination {SNAPSHOTS_DIR}/"
                 f" directory ({path}/{SNAPSHOTS_DIR})"
@@ -742,10 +670,10 @@ def _print_sync_reason_fix(
             for cmd in cmds:
                 _print_cmd(
                     console,
-                    _wrap_cmd(cmd, dst_vol, resolved_endpoints),
+                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
         case SyncReason.DESTINATION_STAGING_DIR_NOT_WRITABLE:
-            path = _endpoint_path(dst_vol, dst_ep.subdir)
+            path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}The destination {STAGING_DIR}/"
                 f" directory ({path}/{STAGING_DIR})"
@@ -757,10 +685,10 @@ def _print_sync_reason_fix(
             for cmd in cmds:
                 _print_cmd(
                     console,
-                    _wrap_cmd(cmd, dst_vol, resolved_endpoints),
+                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
         case SyncReason.DESTINATION_LATEST_NOT_FOUND:
-            path = _endpoint_path(dst_vol, dst_ep.subdir)
+            path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}Destination has snapshots enabled"
                 f" but {path}/{LATEST_LINK} symlink"
@@ -772,10 +700,10 @@ def _print_sync_reason_fix(
             for cmd in cmds:
                 _print_cmd(
                     console,
-                    _wrap_cmd(cmd, dst_vol, resolved_endpoints),
+                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
         case SyncReason.DESTINATION_LATEST_INVALID:
-            path = _endpoint_path(dst_vol, dst_ep.subdir)
+            path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}Destination {path}/{LATEST_LINK}"
                 " symlink points to an invalid"
@@ -787,7 +715,7 @@ def _print_sync_reason_fix(
             for cmd in cmds:
                 _print_cmd(
                     console,
-                    _wrap_cmd(cmd, dst_vol, resolved_endpoints),
+                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
         case SyncReason.DESTINATION_NO_HARDLINK_SUPPORT:
             console.print(
