@@ -56,6 +56,8 @@ jobs:
         if: >-
           startsWith(github.ref, 'refs/tags/')
           || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+          || github.event_name == 'workflow_dispatch'
+          || github.event_name == 'repository_dispatch'
         
         env:
           ASCIINEMA_SERVER_URL: https://asciinema.org
