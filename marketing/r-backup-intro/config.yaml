@@ -48,9 +48,7 @@ volumes:
   # btrfs: currently formatted as apfs, but we should backup from seagate8tb to this drive and convert it to btrfs (TODO)
   wd6tb:
     type: remote
-    ssh-endpoints:
-      - raspberry-pi4-lan
-      - raspberry-pi4-wan
+    ssh-endpoint: raspberry-pi4-lan
     path: /mnt/wd6tb
     
 sync-endpoints:
@@ -229,17 +227,20 @@ syncs:
   laptop-docs-to-rocketnano1tb:
     source: laptop-docs
     destination: rocketnano1tb-backups-docs
-    dir-merge: .rsync-filter
+    filters:
+      dir-merge: .rsync-filter
 
   laptop-docs-to-rocketnano2tb:
     source: laptop-docs
     destination: rocketnano2tb-backups-docs
-    dir-merge: .rsync-filter
+    filters:
+      dir-merge: .rsync-filter
 
   laptop-docs-to-seagate8tb:
     source: laptop-docs
     destination: seagate8tb-backups-docs
-    dir-merge: .rsync-filter
+    filters:
+      dir-merge: .rsync-filter
   
   # laptop-home
   laptop-home-to-seagate8tb:
