@@ -43,6 +43,8 @@ It replaces the rsync shell scripts you'd normally maintain, adding:
 
 Full feature list: [docs/features.md](https://github.com/iglootools/nbkp/blob/main/docs/features.md).
 
+Also check [Why I wrote Nomad Backup (nbkp) to replace my rsync shell scripts](https://www.reddit.com/r/Backup/comments/1rrf97n/i_wrote_nomad_backup_nbkp_to_replace_my_rsync/) for additional context.
+
 ## Non-Goals
 
 nbkp is designed around a single orchestrator (typically a laptop) that initiates all syncs. 
