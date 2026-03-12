@@ -11,10 +11,82 @@ _.python.venv = { path = ".venv", create = true }
 [settings]
 lockfile = true
 
+# Build and Publishing Tasks
+[tasks.clean]
+description = "Clean up build artifacts"
+run = """
+rm -rf build/ dist/ *.egg-info/
+find . -type d -name __pycache__ -delete
+find . -type f -name "*.pyc" -delete
+"""
+
+[tasks.build]
+description = "Build the package"
+run = "poetry build"
+
+[tasks.publish]
+description = "Publish to PyPI (requires authentication)"
+run = "poetry publish"
+
+[tasks.shell]
+description = "Start a Poetry shell"
+run = "poetry shell"
+
 [tasks.install]
 description = "Install dependencies"
 run = "poetry install"
 
+[tasks.check]
+description = "Run all checks (format, lint, type-check, compat-check, clidocs-check, configdocs-check, depgraph-check)"
+run = [
+  { task = "format" },
+  { task = "lint" },
+  { task = "type-check" },
+  { task = "compat-check" },
+  { task = "clidocs-check" },
+  { task = "configdocs-check" },
+  { task = "depgraph-check" },
+]
+
+[tasks.check-all]
+description = "Run all checks (format, lint, type-check, compat-check, test)"
+run = [
+  { task = "check" },
+  { task = "test-all" },
+]
+
+# CI Workflow Tasks
+[tasks.ci-test]
+description = "Run all checks needed on CI"
+run = [
+  { task = "install" },
+  { task = "build" },
+  { task = "check-all" },
+]
+
+[tasks.ci-build]
+description = "Run all checks needed on CI"
+run = [
+  { task = "install" },
+  { task = "build" },
+]
+
+[tasks.ci-demo-record]
+description = "Record the demo on CI"
+run = [
+  { task = "install" },
+  { task = "demo-record" },
+]
+
+[tasks.ci-demo]
+description = "Record and upload the demo on CI"
+run = [
+  { task = "install" },
+  { task = "demo-record" },
+  { task = "demo-upload" },
+]
+
+# Test Tasks
 [tasks.test-unit]
 description = "Run unit tests (no Docker, no external dependencies)"
 run = "poetry run pytest tests/ --ignore=tests/e2e_sync_local/ --ignore=tests/e2e_sync_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -v"
@@ -75,6 +147,7 @@ run = [
   { task = "test-e2e" },
 ]
 
+# Lint / Formatting Tasks
 [tasks.format]
 description = "Format code with ruff"
 run = "poetry run ruff format ."
@@ -91,61 +164,7 @@ run = "poetry run pyright nbkp/ build-scripts/"
 description = "Verify no Python features above 3.12 are used"
 run = "poetry run vermin --target=3.12- --no-tips --no-parse-comments nbkp/ tests/"
 
-[tasks.clidocs]
-description = "Regenerate CLI reference in docs/usage.md"
-run = "poetry run python build-scripts/clidocs.py"
-
-[tasks.clidocs-check]
-description = "Check that CLI reference in docs/cli-reference.md is up to date"
-run = "poetry run python build-scripts/clidocs.py --check"
-
-[tasks.configdocs]
-description = "Regenerate config reference in docs/config-reference.md"
-run = "poetry run python build-scripts/configdocs.py"
-
-[tasks.configdocs-check]
-description = "Check that config reference in docs/config-reference.md is up to date"
-run = "poetry run python build-scripts/configdocs.py --check"
-
-[tasks.check]
-description = "Run all checks (format, lint, type-check, compat-check, clidocs-check, configdocs-check, depgraph-check)"
-run = [
-  { task = "format" },
-  { task = "lint" },
-  { task = "type-check" },
-  { task = "compat-check" },
-  { task = "clidocs-check" },
-  { task = "configdocs-check" },
-  { task = "depgraph-check" },
-]
-
-[tasks.check-all]
-description = "Run all checks (format, lint, type-check, compat-check, test)"
-run = [
-  { task = "check" },
-  { task = "test-all" },
-]
-
-[tasks.clean]
-description = "Clean up build artifacts"
-run = """
-rm -rf build/ dist/ *.egg-info/
-find . -type d -name __pycache__ -delete
-find . -type f -name "*.pyc" -delete
-"""
-
-[tasks.build]
-description = "Build the package"
-run = "poetry build"
-
-[tasks.publish]
-description = "Publish to PyPI (requires authentication)"
-run = "poetry publish"
-
-[tasks.shell]
-description = "Start a Poetry shell"
-run = "poetry shell"
-
+# Demo Tasks
 [tasks.demo]
 description = "Record the demo and upload to asciinema.org"
 run = [
@@ -162,6 +181,22 @@ description = "Upload the recorded demo to asciinema.org"
 run = "asciinema upload demo/demo.cast"
 
 # Reference Documentation Generation Tasks
+[tasks.clidocs]
+description = "Regenerate CLI reference in docs/usage.md"
+run = "poetry run python build-scripts/clidocs.py"
+
+[tasks.clidocs-check]
+description = "Check that CLI reference in docs/cli-reference.md is up to date"
+run = "poetry run python build-scripts/clidocs.py --check"
+
+[tasks.configdocs]
+description = "Regenerate config reference in docs/config-reference.md"
+run = "poetry run python build-scripts/configdocs.py"
+
+[tasks.configdocs-check]
+description = "Check that config reference in docs/config-reference.md is up to date"
+run = "poetry run python build-scripts/configdocs.py --check"
+
 [tasks.depgraph]
 description = "Regenerate Module Overview in docs/architecture.md"
 run = "poetry run python build-scripts/depgraph.py"
@@ -177,34 +212,3 @@ run = "poetry run python build-scripts/depgraph.py --format ascii"
 [tasks.depgraph-mermaid]
 description = "Print module dependency graph (mermaid syntax) to stdout"
 run = "poetry run python build-scripts/depgraph.py --format mermaid"
-
-# Tasks used by CI workflows
-[tasks.ci-test]
-description = "Run all checks needed on CI"
-run = [
-  { task = "install" },
-  { task = "build" },
-  { task = "check-all" },
-]
-
-[tasks.ci-build]
-description = "Run all checks needed on CI"
-run = [
-  { task = "install" },
-  { task = "build" },
-]
-
-[tasks.ci-demo-record]
-description = "Record the demo on CI"
-run = [
-  { task = "install" },
-  { task = "demo-record" },
-]
-
-[tasks.ci-demo]
-description = "Record and upload the demo on CI"
-run = [
-  { task = "install" },
-  { task = "demo-record" },
-  { task = "demo-upload" },
-]
