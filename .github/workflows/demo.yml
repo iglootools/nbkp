@@ -4,8 +4,8 @@ on:
   push:
     tags:
       - 'v*'
-    branches:
-      - main
+    # branches:
+    #   - main
   # Tags created by a workflow using GITHUB_TOKEN do not trigger other workflows,
   # so we use workflow_run to run the demo after the release workflow creates a tag.
   workflow_run:
@@ -17,7 +17,7 @@ on:
   # gh run list --workflow demo.yml # --branch <branch>
   workflow_dispatch:
   repository_dispatch:
-  pull_request:
+  # pull_request:
 
 concurrency:
   # On main/release, we don't want any jobs cancelled so the sha is used to name the group
