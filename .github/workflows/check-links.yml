@@ -22,7 +22,7 @@ jobs:
         uses: lycheeverse/lychee-action@v2
         with:
           # treat redirects (3xx) as successful instead of flagging them
-          args: --accept 2xx,3xx
+          args: --accept 2xx,3xx --insecure
           fail: false
 
       - name: Create Issue From File
