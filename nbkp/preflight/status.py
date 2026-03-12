@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import enum
+from typing import Literal
 
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, ConfigDict, computed_field
 
 from ..config import (
     SyncConfig,
@@ -18,6 +19,8 @@ from ..conventions import (
     STAGING_DIR,
     VOLUME_SENTINEL,
 )
+
+SyncEndpointRole = Literal["source", "destination"]
 
 
 class VolumeReason(str, enum.Enum):
@@ -73,17 +76,50 @@ class SyncReason(str, enum.Enum):
     )
 
 
+class VolumeCapabilities(BaseModel):
+    """Host- and volume-level capabilities, computed once per active volume."""
+
+    model_config = ConfigDict(frozen=True)
+
+    has_rsync: bool
+    rsync_version_ok: bool
+    has_btrfs: bool
+    has_stat: bool
+    has_findmnt: bool
+    is_btrfs_filesystem: bool
+    hardlink_supported: bool
+    btrfs_user_subvol_rm: bool
+
+
 class VolumeStatus(BaseModel):
     """Runtime status of a volume."""
 
     slug: str
     config: Volume
     reasons: list[VolumeReason]
+    capabilities: VolumeCapabilities | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def active(self) -> bool:
         return not self.reasons
+
+
+class SyncEndpointStatus(BaseModel):
+    """Cached check results for a sync endpoint (source or destination)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    endpoint_slug: str
+    role: SyncEndpointRole
+    reasons: list[SyncReason]
+    latest_target: str | None = None
+    """Snapshot name from the ``latest`` symlink.
+
+    ``None`` when symlink is absent, invalid, or points to ``/dev/null``.
+    For source endpoints, ``/dev/null`` is NOT added to reasons here —
+    that interpretation depends on sync-level context (upstream deps, dry-run).
+    """
 
 
 class SyncStatus(BaseModel):
@@ -93,6 +129,8 @@ class SyncStatus(BaseModel):
     config: SyncConfig
     source_status: VolumeStatus
     destination_status: VolumeStatus
+    source_endpoint_status: SyncEndpointStatus | None = None
+    destination_endpoint_status: SyncEndpointStatus | None = None
     reasons: list[SyncReason]
     destination_latest_target: str | None = None
     """Snapshot name from the destination ``latest`` symlink.

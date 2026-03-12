@@ -742,7 +742,7 @@ class TestCheckSync:
         )
         return config, sync
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch(
         "nbkp.preflight.queries.shutil.which",
         return_value="/usr/bin/rsync",
@@ -992,7 +992,7 @@ class TestCheckSync:
         assert SyncReason.DESTINATION_NOT_BTRFS not in status.reasons
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.reasons
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.subprocess.run")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -1148,7 +1148,7 @@ class TestCheckSync:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS in status.reasons
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.subprocess.run")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -1206,7 +1206,7 @@ class TestCheckSync:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.subprocess.run")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -1268,7 +1268,7 @@ class TestCheckSync:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.reasons
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.subprocess.run")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -1334,7 +1334,7 @@ class TestCheckSync:
         assert SyncReason.DESTINATION_TMP_NOT_FOUND in status.reasons
         assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND not in status.reasons
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.subprocess.run")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -1400,7 +1400,7 @@ class TestCheckSync:
         assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
         assert SyncReason.DESTINATION_TMP_NOT_FOUND not in status.reasons
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.subprocess.run")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -1465,7 +1465,7 @@ class TestCheckSync:
         assert SyncReason.DESTINATION_TMP_NOT_FOUND in status.reasons
         assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch(
         "nbkp.preflight.queries.shutil.which",
         return_value="/usr/bin/rsync",
@@ -1677,7 +1677,7 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.DESTINATION_RSYNC_NOT_FOUND in status.reasons
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -1762,7 +1762,7 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.DESTINATION_BTRFS_NOT_FOUND in status.reasons
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -1855,7 +1855,7 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS in status.reasons
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -1955,7 +1955,7 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -2063,7 +2063,7 @@ class TestCheckSyncRemoteCommands:
         assert status.active is False
         assert SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.reasons
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -2151,7 +2151,7 @@ class TestCheckSyncRemoteCommands:
         assert SyncReason.DESTINATION_STAT_NOT_FOUND in status.reasons
         assert SyncReason.DESTINATION_NOT_BTRFS not in status.reasons
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -2258,7 +2258,7 @@ class TestCheckSyncRemoteCommands:
         assert SyncReason.DESTINATION_FINDMNT_NOT_FOUND in status.reasons
         assert SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM not in status.reasons
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -2382,7 +2382,7 @@ class TestCheckSyncRemoteCommands:
         assert SyncReason.DESTINATION_TMP_NOT_FOUND in status.reasons
         assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND not in status.reasons
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -2508,7 +2508,7 @@ class TestCheckSyncRemoteCommands:
 
 
 class TestCheckAllSyncs:
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch(
         "nbkp.preflight.queries.shutil.which",
         return_value="/usr/bin/rsync",
@@ -2549,7 +2549,7 @@ class TestCheckAllSyncs:
         assert vol_statuses["dst"].active is True
         assert sync_statuses["s1"].active is True
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch(
         "nbkp.preflight.queries.shutil.which",
         return_value="/usr/bin/rsync",
@@ -2713,7 +2713,7 @@ class TestCheckHardLinkDest:
         assert status.active is False
         assert SyncReason.DESTINATION_NO_HARDLINK_SUPPORT in status.reasons
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.subprocess.run")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -2797,7 +2797,7 @@ class TestCheckHardLinkDest:
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.reasons
         assert SyncReason.DESTINATION_TMP_NOT_FOUND not in status.reasons
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -3340,7 +3340,7 @@ class TestCheckDevnullLatest:
 
     # ── Source latest → /dev/null with upstream sync ────
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch(
         "nbkp.preflight.queries.shutil.which",
         return_value="/usr/bin/fake",
@@ -3412,7 +3412,7 @@ class TestCheckDevnullLatest:
 
     # ── Source latest → /dev/null with upstream sync (dry-run) ────
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch(
         "nbkp.preflight.queries.shutil.which",
         return_value="/usr/bin/fake",
@@ -3487,7 +3487,7 @@ class TestCheckDevnullLatest:
 
     # ── Source latest → /dev/null without upstream sync ────
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch(
         "nbkp.preflight.queries.shutil.which",
         return_value="/usr/bin/fake",
@@ -3518,7 +3518,7 @@ class TestCheckDevnullLatest:
 
     # ── Source latest → dangling path ────
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch(
         "nbkp.preflight.queries.shutil.which",
         return_value="/usr/bin/fake",
@@ -3555,7 +3555,7 @@ class TestCheckDevnullLatest:
 
     # ── Destination latest → /dev/null (valid) ────
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.subprocess.run")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -3589,7 +3589,7 @@ class TestCheckDevnullLatest:
 
     # ── Destination latest missing ────
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.subprocess.run")
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -3621,7 +3621,7 @@ class TestCheckDevnullLatest:
 
     # ── Destination latest → dangling path ────
 
-    @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.subprocess.run")
     @patch(
         "nbkp.preflight.queries.shutil.which",
