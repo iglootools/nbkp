@@ -1,0 +1,101 @@
+"""Runtime status types for volumes and syncs."""
+
+from __future__ import annotations
+
+import enum
+
+from pydantic import BaseModel, computed_field
+
+from ..config import (
+    SyncConfig,
+    Volume,
+)
+from ..sync.snapshots.btrfs import STAGING_DIR
+from ..sync.snapshots.common import LATEST_LINK, SNAPSHOTS_DIR
+
+
+class VolumeReason(str, enum.Enum):
+    SENTINEL_NOT_FOUND = ".nbkp-vol volume sentinel not found"
+    UNREACHABLE = "unreachable"
+    LOCATION_EXCLUDED = "excluded by location filter"
+
+
+class SyncReason(str, enum.Enum):
+    DISABLED = "disabled"
+
+    SOURCE_UNAVAILABLE = "source unavailable"
+    SOURCE_SENTINEL_NOT_FOUND = ".nbkp-src source sentinel not found"
+    SOURCE_LATEST_NOT_FOUND = f"source {LATEST_LINK} symlink not found"
+    SOURCE_LATEST_INVALID = f"source {LATEST_LINK} symlink target is invalid"
+    SOURCE_SNAPSHOTS_DIR_NOT_FOUND = f"source {SNAPSHOTS_DIR}/ directory not found"
+    SOURCE_RSYNC_NOT_FOUND = "rsync not found on source"
+    SOURCE_RSYNC_TOO_OLD = "rsync too old on source (3.0+ required)"
+
+    DESTINATION_UNAVAILABLE = "destination unavailable"
+    DESTINATION_SENTINEL_NOT_FOUND = ".nbkp-dst destination sentinel not found"
+    DESTINATION_NOT_BTRFS = "destination not on btrfs filesystem"
+    DESTINATION_NOT_BTRFS_SUBVOLUME = "destination endpoint is not a btrfs subvolume"
+    DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM = (
+        "destination not mounted with user_subvol_rm_allowed"
+    )
+    DESTINATION_TMP_NOT_FOUND = f"destination {STAGING_DIR}/ directory not found"
+    DESTINATION_SNAPSHOTS_DIR_NOT_FOUND = (
+        f"destination {SNAPSHOTS_DIR}/ directory not found"
+    )
+    DESTINATION_LATEST_NOT_FOUND = f"destination {LATEST_LINK} symlink not found"
+    DESTINATION_LATEST_INVALID = f"destination {LATEST_LINK} symlink target is invalid"
+    DESTINATION_NO_HARDLINK_SUPPORT = (
+        "destination filesystem does not support hard links"
+    )
+    DESTINATION_ENDPOINT_NOT_WRITABLE = "destination endpoint directory not writable"
+    DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE = (
+        f"destination {SNAPSHOTS_DIR}/ directory not writable"
+    )
+    DESTINATION_STAGING_DIR_NOT_WRITABLE = (
+        f"destination {STAGING_DIR}/ directory not writable"
+    )
+    DESTINATION_RSYNC_NOT_FOUND = "rsync not found on destination"
+    DESTINATION_RSYNC_TOO_OLD = "rsync too old on destination (3.0+ required)"
+    DESTINATION_BTRFS_NOT_FOUND = "btrfs not found on destination"
+    DESTINATION_STAT_NOT_FOUND = "stat not found on destination"
+    DESTINATION_FINDMNT_NOT_FOUND = "findmnt not found on destination"
+
+    DRY_RUN_SOURCE_SNAPSHOT_PENDING = (
+        "source snapshot not yet available (dry-run; upstream has not run)"
+    )
+
+
+class VolumeStatus(BaseModel):
+    """Runtime status of a volume."""
+
+    slug: str
+    config: Volume
+    reasons: list[VolumeReason]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def active(self) -> bool:
+        return not self.reasons
+
+
+class SyncStatus(BaseModel):
+    """Runtime status of a sync."""
+
+    slug: str
+    config: SyncConfig
+    source_status: VolumeStatus
+    destination_status: VolumeStatus
+    reasons: list[SyncReason]
+    destination_latest_target: str | None = None
+    """Snapshot name from the destination ``latest`` symlink.
+
+    ``None`` when the symlink is absent, invalid, or points to
+    ``/dev/null`` (no snapshot yet).  Otherwise, the snapshot
+    name only (e.g. ``2026-03-06T14:30:00.000Z`` or
+    ``2026-03-06T14-30-00.000Z`` on macOS local volumes).
+    """
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def active(self) -> bool:
+        return not self.reasons

@@ -6,10 +6,12 @@ from pathlib import Path
 
 from nbkp.preflight import (
     SyncReason,
-    _check_btrfs_filesystem,
-    _check_btrfs_subvolume,
     check_sync,
     check_volume,
+)
+from nbkp.preflight.snapshot_checks import (
+    _check_btrfs_filesystem,
+    _check_btrfs_subvolume,
 )
 from nbkp.config import (
     BtrfsSnapshotConfig,

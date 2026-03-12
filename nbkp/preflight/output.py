@@ -34,7 +34,7 @@ from ..remote.ssh import (
 from ..sync.rsync import build_rsync_command
 from ..sync.snapshots.btrfs import STAGING_DIR
 from ..sync.snapshots.common import LATEST_LINK, SNAPSHOTS_DIR
-from .checks import SyncReason, SyncStatus, VolumeReason, VolumeStatus
+from .status import SyncReason, SyncStatus, VolumeReason, VolumeStatus
 
 
 def _status_text(
