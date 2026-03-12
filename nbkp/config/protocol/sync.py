@@ -68,6 +68,11 @@ class SyncConfig(_BaseModel):
     @field_validator("filters", mode="before")
     @classmethod
     def normalize_filters(cls, v: Any) -> list[str]:
+        if isinstance(v, dict):
+            raise ValueError(
+                "filters must be a list, not a mapping. Add '- ' before each"
+                f" filter rule. Got: {v!r}"
+            )
         result: list[str] = []
         for item in v:
             match item:

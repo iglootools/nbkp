@@ -228,19 +228,19 @@ syncs:
     source: laptop-docs
     destination: rocketnano1tb-backups-docs
     filters:
-      dir-merge: .rsync-filter
+      - dir-merge: .rsync-filter
 
   laptop-docs-to-rocketnano2tb:
     source: laptop-docs
     destination: rocketnano2tb-backups-docs
     filters:
-      dir-merge: .rsync-filter
+      - dir-merge: .rsync-filter
 
   laptop-docs-to-seagate8tb:
     source: laptop-docs
     destination: seagate8tb-backups-docs
     filters:
-      dir-merge: .rsync-filter
+      - dir-merge: .rsync-filter
   
   # laptop-home
   laptop-home-to-seagate8tb:
