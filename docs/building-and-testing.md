@@ -66,7 +66,7 @@ It is scheduled to run weekly, but can also be triggered manually using `gh work
         1. Execute `asciinema auth` in your terminal
         2. Click the suggested link
         3. store the content of `~/.local/state/asciinema/install-id` in the `ASCIINEMA_INSTALL_ID` secret
-
+- Settings > Advanced Security > Enable Dependency graph
 
 ## Renovate
 - Added the [iglootools](https://github.com/iglootools) org to [developer.mend.io](https://developer.mend.io/)
