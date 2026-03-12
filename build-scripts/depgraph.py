@@ -145,9 +145,7 @@ def _splice_section(file_content: str, section: str) -> str:
         )
         sys.exit(1)
     return (
-        file_content[:begin_idx]
-        + section
-        + file_content[end_idx + len(END_MARKER) :]
+        file_content[:begin_idx] + section + file_content[end_idx + len(END_MARKER) :]
     )
 
 
