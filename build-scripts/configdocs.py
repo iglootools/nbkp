@@ -7,6 +7,16 @@ docs are up to date.
 Usage:
     python build-scripts/configdocs.py          # regenerate docs/config-reference.md
     python build-scripts/configdocs.py --check  # exit non-zero if out of date
+
+Why hand-rolled instead of a library?
+    Existing Pydantic doc-gen tools (docdantic, mdantic, settings-doc,
+    pydantic-settings-export) are MkDocs/Sphinx plugins designed to run inside
+    a documentation build pipeline. They can't be invoked as a standalone
+    function to produce a .md file with a --check mode. Our requirements
+    (kebab-case aliases, hidden fields, discriminator overrides, interleaved
+    prose sections) are too specific for any of them. The introspection code
+    is ~120 lines and unlikely to need changes unless the model structure
+    fundamentally changes.
 """
 
 from __future__ import annotations
