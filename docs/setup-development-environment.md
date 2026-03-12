@@ -1,5 +1,6 @@
 # Setup Development Environment
 
+## System Setup
 1. [Install and activate mise](https://mise.jdx.dev/installing-mise.html)
 
 2. Install Docker Desktop (or Docker Engine on Linux)
@@ -32,3 +33,16 @@
    ```bash
    brew install pv
    ```
+
+## VSCode Setup
+
+Install the following extensions:
+
+- [Ruff](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff) — formatting and linting (format-on-save is enabled in `.vscode/settings.json`)
+- [Pylance](https://marketplace.visualstudio.com/items?itemName=ms-python.pylance) — type checking (uses pyright, configured via `[tool.pyright]` in `pyproject.toml`)
+
+Select the Python interpreter from the `.venv` created by Poetry:
+
+1. Open the Command Palette (`Cmd+Shift+P`)
+2. Run **Python: Select Interpreter**
+3. Choose the `.venv` entry (e.g., `./.venv/bin/python`)
