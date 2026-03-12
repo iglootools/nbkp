@@ -1,4 +1,4 @@
-"""Tests for nbkp.preflight and nbkp.output."""
+"""Tests for nbkp.preflight.checks."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from nbkp.config import (
 )
 from nbkp.output import OutputFormat
 from nbkp.sync import SyncResult
-from nbkp.preflight import (
+from nbkp.preflight.checks import (
     SyncReason,
     SyncStatus,
     VolumeReason,
