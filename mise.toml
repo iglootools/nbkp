@@ -81,11 +81,11 @@ run = "poetry run ruff format ."
 
 [tasks.lint]
 description = "Run ruff linting"
-run = "poetry run ruff check nbkp/ tests/"
+run = "poetry run ruff check nbkp/ tests/ build-scripts/"
 
 [tasks.type-check]
 description = "Run pyright type checking"
-run = "poetry run pyright nbkp/"
+run = "poetry run pyright nbkp/ build-sripts/"
 
 [tasks.compat-check]
 description = "Verify no Python features above 3.12 are used"
