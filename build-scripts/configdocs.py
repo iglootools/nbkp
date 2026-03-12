@@ -5,8 +5,8 @@ with field tables and hand-written prose sections. Use --check to verify the
 docs are up to date.
 
 Usage:
-    python scripts/configdocs.py          # regenerate docs/config-reference.md
-    python scripts/configdocs.py --check  # exit non-zero if out of date
+    python build-scripts/configdocs.py          # regenerate docs/config-reference.md
+    python build-scripts/configdocs.py --check  # exit non-zero if out of date
 """
 
 from __future__ import annotations

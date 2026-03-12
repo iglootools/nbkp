@@ -93,19 +93,19 @@ run = "poetry run vermin --target=3.12- --no-tips --no-parse-comments nbkp/ test
 
 [tasks.clidocs]
 description = "Regenerate CLI reference in docs/usage.md"
-run = "poetry run python scripts/clidocs.py"
+run = "poetry run python build-scripts/clidocs.py"
 
 [tasks.clidocs-check]
 description = "Check that CLI reference in docs/cli-reference.md is up to date"
-run = "poetry run python scripts/clidocs.py --check"
+run = "poetry run python build-scripts/clidocs.py --check"
 
 [tasks.configdocs]
 description = "Regenerate config reference in docs/config-reference.md"
-run = "poetry run python scripts/configdocs.py"
+run = "poetry run python build-scripts/configdocs.py"
 
 [tasks.configdocs-check]
 description = "Check that config reference in docs/config-reference.md is up to date"
-run = "poetry run python scripts/configdocs.py --check"
+run = "poetry run python build-scripts/configdocs.py --check"
 
 [tasks.check]
 description = "Run all checks (format, lint, type-check, compat-check, clidocs-check, configdocs-check)"
@@ -162,11 +162,11 @@ run = "asciinema upload demo/demo.cast"
 
 [tasks.depgraph]
 description = "Generate module dependency graph (mermaid syntax)"
-run = "poetry run python scripts/depgraph.py"
+run = "poetry run python build-scripts/depgraph.py"
 
 [tasks.depgraph-ascii]
 description = "Generate module dependency graph (ASCII art)"
-run = "poetry run python scripts/depgraph.py --format ascii"
+run = "poetry run python build-scripts/depgraph.py --format ascii"
 
 # Tasks used by CI workflows
 [tasks.ci-test]

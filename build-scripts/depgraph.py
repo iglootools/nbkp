@@ -3,7 +3,7 @@
 Requires: pydeps (dev dependency), graphviz (system: brew install graphviz).
 
 Usage:
-    python scripts/depgraph.py [--format mermaid|ascii]
+    python build-scripts/depgraph.py [--format mermaid|ascii]
 """
 
 from __future__ import annotations

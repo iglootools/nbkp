@@ -4,8 +4,8 @@ Runs `typer nbkp.cli utils docs` and writes the output to docs/cli-reference.md.
 Use --check to verify the docs are up to date.
 
 Usage:
-    python scripts/clidocs.py          # regenerate docs/cli-reference.md
-    python scripts/clidocs.py --check  # exit non-zero if out of date
+    python build-scripts/clidocs.py          # regenerate docs/cli-reference.md
+    python build-scripts/clidocs.py --check  # exit non-zero if out of date
 """
 
 from __future__ import annotations
