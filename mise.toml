@@ -142,6 +142,14 @@ run = "./demo/record-demo.sh \"$(poetry version -s)\""
 description = "Upload the recorded demo to asciinema.org"
 run = "asciinema upload demo/demo.cast"
 
+[tasks.depgraph]
+description = "Generate module dependency graph (mermaid syntax)"
+run = "poetry run python scripts/depgraph.py"
+
+[tasks.depgraph-ascii]
+description = "Generate module dependency graph (ASCII art)"
+run = "poetry run python scripts/depgraph.py --format ascii"
+
 # Tasks used by CI workflows
 [tasks.ci-test]
 description = "Run all checks needed on CI"

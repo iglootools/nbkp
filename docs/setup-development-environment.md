@@ -6,7 +6,11 @@
 
 3. Configure github CLI with `gh auth login` and ensure you have access to the repository (optional, for convenience).
 
-4. Activate the virtual environment:
+4. Install the graphviz dependency
+   - macOS: `brew install graphviz`
+   - Linux: `apt install graphviz`
+
+5. Activate the virtual environment:
    ```bash
    # - Install all the tools defined in mise.toml
    # - Set up the .venv with the correct Python version
@@ -19,12 +23,12 @@
    poetry env remove --all
    ```
 
-5. Upgrade rsync if you're on macOS, as the default version is too old and lacks some features nbkp relies on:
+6. Upgrade rsync if you're on macOS, as the default version is too old and lacks some features nbkp relies on:
    ```bash
    brew install rsync
    ```
 
-6. (Optional) If you want to record the demo, install pv:
+7. (Optional) If you want to record the demo, install pv:
    ```bash
    brew install pv
    ```

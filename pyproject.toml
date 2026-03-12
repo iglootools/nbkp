@@ -43,6 +43,7 @@ types-docker = "^7.1.0.20260109"
 types-paramiko = "^4.0.0.20250822"
 types-pyyaml = "^6.0"
 vermin = "^1.8.0"
+pydeps = {version = ">=3.0.2", python = ">=3.12,<4.0"}
 
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
