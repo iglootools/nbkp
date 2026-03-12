@@ -96,17 +96,26 @@ description = "Regenerate CLI reference in docs/usage.md"
 run = "poetry run python scripts/clidocs.py"
 
 [tasks.clidocs-check]
-description = "Check that CLI reference in docs/usage.md is up to date"
+description = "Check that CLI reference in docs/cli-reference.md is up to date"
 run = "poetry run python scripts/clidocs.py --check"
 
+[tasks.configdocs]
+description = "Regenerate config reference in docs/config-reference.md"
+run = "poetry run python scripts/configdocs.py"
+
+[tasks.configdocs-check]
+description = "Check that config reference in docs/config-reference.md is up to date"
+run = "poetry run python scripts/configdocs.py --check"
+
 [tasks.check]
-description = "Run all checks (format, lint, type-check, compat-check, clidocs-check)"
+description = "Run all checks (format, lint, type-check, compat-check, clidocs-check, configdocs-check)"
 run = [
   { task = "format" },
   { task = "lint" },
   { task = "type-check" },
   { task = "compat-check" },
   { task = "clidocs-check" },
+  { task = "configdocs-check" },
 ]
 
 [tasks.check-all]

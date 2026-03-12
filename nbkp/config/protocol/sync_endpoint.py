@@ -16,16 +16,24 @@ class BtrfsSnapshotConfig(_BaseModel):
     """Configuration for btrfs snapshot management."""
 
     model_config = ConfigDict(frozen=True)
-    enabled: bool = False
-    max_snapshots: Optional[int] = Field(default=None, ge=1)
+    enabled: bool = Field(default=False, description="Enable snapshot management")
+    max_snapshots: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="Maximum snapshots to keep (`null` = unlimited)",
+    )
 
 
 class HardLinkSnapshotConfig(_BaseModel):
     """Configuration for hard-link-based snapshot management."""
 
     model_config = ConfigDict(frozen=True)
-    enabled: bool = False
-    max_snapshots: Optional[int] = Field(default=None, ge=1)
+    enabled: bool = Field(default=False, description="Enable snapshot management")
+    max_snapshots: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="Maximum snapshots to keep (`null` = unlimited)",
+    )
 
 
 class SyncEndpoint(_BaseModel):
@@ -39,8 +47,13 @@ class SyncEndpoint(_BaseModel):
     """
 
     slug: Slug
-    volume: str = Field(..., min_length=1)
-    subdir: Optional[str] = None
+    volume: str = Field(..., min_length=1, description="Volume slug")
+    subdir: Optional[str] = Field(
+        default=None,
+        description=(
+            "Subdirectory within the volume. Leading and trailing slashes are stripped."
+        ),
+    )
 
     @field_validator("subdir", mode="before")
     @classmethod
@@ -51,10 +64,12 @@ class SyncEndpoint(_BaseModel):
         return stripped if stripped else None
 
     btrfs_snapshots: BtrfsSnapshotConfig = Field(
-        default_factory=lambda: BtrfsSnapshotConfig()
+        default_factory=lambda: BtrfsSnapshotConfig(),
+        description="Btrfs snapshot config",
     )
     hard_link_snapshots: HardLinkSnapshotConfig = Field(
-        default_factory=lambda: HardLinkSnapshotConfig()
+        default_factory=lambda: HardLinkSnapshotConfig(),
+        description="Hard-link snapshot config",
     )
 
     @model_validator(mode="after")
