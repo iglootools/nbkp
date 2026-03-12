@@ -124,7 +124,7 @@ def check(
         ),
     ] = None,
 ) -> None:
-    """Check status of volumes and syncs."""
+    """Verify that volumes are reachable, sentinel files exist, SSH connectivity works, and required tools are available. Use this before `run` to confirm everything is ready."""
     cfg = _load_config_or_exit(config)
     resolved = _resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
@@ -157,7 +157,7 @@ def show(
         typer.Option("--output", "-o", help="Output format"),
     ] = OutputFormat.HUMAN,
 ) -> None:
-    """Show parsed configuration."""
+    """Load, validate, and render the config as tables or JSON. Useful for verifying that inheritance, filters, and cross-references resolve correctly."""
     cfg = _load_config_or_exit(config)
     output_format = output
     match output_format:
@@ -271,7 +271,7 @@ def run(
         ),
     ] = None,
 ) -> None:
-    """Run backup syncs."""
+    """Execute all active syncs in dependency order. Supports dry-run, progress display, snapshot creation, and automatic pruning."""
     cfg = _load_config_or_exit(config)
     resolved = _resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
@@ -433,10 +433,9 @@ def sh(
         ),
     ] = True,
 ) -> None:
-    """Generate a standalone backup shell script.
+    """Compile the config into a self-contained bash script. The generated script performs the same operations as `run` without requiring Python or the config file at runtime.
 
-    This is useful for deploying to systems without Python,
-    or auditing what commands will run.
+    This is useful for deploying to systems without Python, or eyeballing the actual commands before letting anything touch your data.
     """
     if (relative_src or relative_dst) and output_file is None:
         typer.echo(
@@ -498,7 +497,7 @@ def troubleshoot(
         ),
     ] = None,
 ) -> None:
-    """Diagnose issues and show how to fix them."""
+    """Run the same checks as `check` but displays step-by-step fix instructions for every failure. Useful when `check` reports problems."""
     cfg = _load_config_or_exit(config)
     resolved = _resolve_endpoints(cfg, location, exclude_location, network)
     vol_statuses, sync_statuses = _check_all_with_progress(
@@ -557,7 +556,7 @@ def prune(
         ),
     ] = None,
 ) -> None:
-    """Prune old snapshots beyond max-snapshots limit."""
+    """Remove snapshots beyond the `max-snapshots` limit. Normally handled automatically by `run`, but can be invoked manually."""
     cfg = _load_config_or_exit(config)
     resolved = _resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output

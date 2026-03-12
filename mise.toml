@@ -91,13 +91,22 @@ run = "poetry run pyright nbkp/"
 description = "Verify no Python features above 3.12 are used"
 run = "poetry run vermin --target=3.12- --no-tips --no-parse-comments nbkp/ tests/"
 
+[tasks.clidocs]
+description = "Regenerate CLI reference in docs/usage.md"
+run = "poetry run python scripts/clidocs.py"
+
+[tasks.clidocs-check]
+description = "Check that CLI reference in docs/usage.md is up to date"
+run = "poetry run python scripts/clidocs.py --check"
+
 [tasks.check]
-description = "Run all checks (format, lint, type-check, compat-check)"
+description = "Run all checks (format, lint, type-check, compat-check, clidocs-check)"
 run = [
   { task = "format" },
   { task = "lint" },
   { task = "type-check" },
   { task = "compat-check" },
+  { task = "clidocs-check" },
 ]
 
 [tasks.check-all]
