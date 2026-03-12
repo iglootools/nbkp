@@ -101,7 +101,8 @@ class SyncStatus(BaseModel):
 
     ``None`` when the symlink is absent, invalid, or points to
     ``/dev/null`` (no snapshot yet).  Otherwise, the snapshot
-    name only (e.g. ``2026-03-06T14:30:00.000Z``).
+    name only (e.g. ``2026-03-06T14:30:00.000Z`` or
+    ``2026-03-06T14-30-00.000Z`` on macOS local volumes).
     """
 
     @computed_field  # type: ignore[prop-decorator]

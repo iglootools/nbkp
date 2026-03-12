@@ -14,7 +14,12 @@ from ...config import (
     Volume,
 )
 from ...remote import run_remote_command
-from .common import SNAPSHOTS_DIR, list_snapshots, resolve_dest_path
+from .common import (
+    SNAPSHOTS_DIR,
+    format_snapshot_timestamp,
+    list_snapshots,
+    resolve_dest_path,
+)
 
 #: Directory name for the writable btrfs subvolume that rsync
 #: syncs into before a read-only snapshot is created.
@@ -49,14 +54,12 @@ def create_snapshot(
     re = resolved_endpoints or {}
     if now is None:
         now = datetime.now(timezone.utc)
-    dest_path = resolve_dest_path(sync, config)
-    # isoformat uses +00:00, but Z is more conventional for UTC.
-    timestamp = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
-    snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{timestamp}"
-    tmp_path = f"{dest_path}/{STAGING_DIR}"
-
     dst = config.destination_endpoint(sync)
     dst_vol = config.volumes[dst.volume]
+    dest_path = resolve_dest_path(sync, config)
+    timestamp = format_snapshot_timestamp(now, dst_vol)
+    snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{timestamp}"
+    tmp_path = f"{dest_path}/{STAGING_DIR}"
     result = _run_on_volume(
         ["btrfs", "subvolume", "snapshot", "-r", tmp_path, snapshot_path],
         dst_vol,

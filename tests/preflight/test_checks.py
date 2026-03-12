@@ -22,6 +22,7 @@ from nbkp.config import (
 )
 from nbkp.output import OutputFormat
 from nbkp.sync import SyncResult
+from nbkp.sync.snapshots.common import format_snapshot_timestamp
 from nbkp.preflight.checks import (
     SyncReason,
     SyncStatus,
@@ -3012,10 +3013,16 @@ class TestCheckSourceLatest:
         src.mkdir()
         dst.mkdir()
         self._setup_sentinels(src, dst)
+        from datetime import datetime, timezone
+
+        _ts = format_snapshot_timestamp(
+            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            LocalVolume(slug="x", path="/x"),
+        )
         (src / "data" / "snapshots").mkdir(exist_ok=True)
-        snap = src / "data" / "snapshots" / "2026-01-01T00:00:00.000Z"
+        snap = src / "data" / "snapshots" / _ts
         snap.mkdir()
-        (src / "data" / "latest").symlink_to("snapshots/2026-01-01T00:00:00.000Z")
+        (src / "data" / "latest").symlink_to(f"snapshots/{_ts}")
 
         config, sync = self._make_config(src, dst, "btrfs")
         vol_statuses = self._active_vol_statuses(config)
@@ -3036,9 +3043,15 @@ class TestCheckSourceLatest:
         src.mkdir()
         dst.mkdir()
         self._setup_sentinels(src, dst)
-        snap = src / "data" / "snapshots" / "2024-01-01T00:00:00.000Z"
+        from datetime import datetime, timezone
+
+        _ts = format_snapshot_timestamp(
+            datetime(2024, 1, 1, tzinfo=timezone.utc),
+            LocalVolume(slug="x", path="/x"),
+        )
+        snap = src / "data" / "snapshots" / _ts
         snap.mkdir(parents=True)
-        (src / "data" / "latest").symlink_to("snapshots/2024-01-01T00:00:00.000Z")
+        (src / "data" / "latest").symlink_to(f"snapshots/{_ts}")
 
         config, sync = self._make_config(src, dst, "hard-link")
         vol_statuses = self._active_vol_statuses(config)
@@ -3520,8 +3533,14 @@ class TestCheckDevnullLatest:
         src.mkdir()
         dst.mkdir()
         self._setup_sentinels(src, dst)
+        from datetime import datetime, timezone
+
+        _ts = format_snapshot_timestamp(
+            datetime(2099, 1, 1, tzinfo=timezone.utc),
+            LocalVolume(slug="x", path="/x"),
+        )
         (src / "data" / "snapshots").mkdir()
-        (src / "data" / "latest").symlink_to("snapshots/2099-01-01T00:00:00.000Z")
+        (src / "data" / "latest").symlink_to(f"snapshots/{_ts}")
         (dst / "backup" / "snapshots").mkdir()
         (dst / "backup" / "latest").symlink_to("/dev/null")
 
@@ -3619,8 +3638,14 @@ class TestCheckDevnullLatest:
         src.mkdir()
         dst.mkdir()
         self._setup_sentinels(src, dst)
+        from datetime import datetime, timezone
+
+        _ts = format_snapshot_timestamp(
+            datetime(2099, 1, 1, tzinfo=timezone.utc),
+            LocalVolume(slug="x", path="/x"),
+        )
         (dst / "backup" / "snapshots").mkdir()
-        (dst / "backup" / "latest").symlink_to("snapshots/2099-01-01T00:00:00.000Z")
+        (dst / "backup" / "latest").symlink_to(f"snapshots/{_ts}")
 
         mock_subprocess.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
 

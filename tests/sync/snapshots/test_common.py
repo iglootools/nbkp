@@ -19,6 +19,7 @@ from nbkp.config import (
     resolve_all_endpoints,
 )
 from nbkp.sync.snapshots.common import (
+    format_snapshot_timestamp,
     get_latest_snapshot,
     list_snapshots,
     read_latest_symlink,
@@ -199,7 +200,30 @@ def _hl_remote_config() -> tuple[SyncConfig, Config, dict[str, ResolvedEndpoint]
 
 
 _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=timezone.utc)
-_TS = "2026-02-21T12:00:00.000Z"
+_LOCAL_VOL = LocalVolume(slug="dummy", path="/dummy")
+_REMOTE_VOL = RemoteVolume(slug="dummy", ssh_endpoint="dummy", path="/dummy")
+_TS_LOCAL = format_snapshot_timestamp(_NOW, _LOCAL_VOL)
+_TS_REMOTE = format_snapshot_timestamp(_NOW, _REMOTE_VOL)
+
+
+# ── format_snapshot_timestamp ────────────────────────────────
+
+
+class TestFormatSnapshotTimestamp:
+    def test_remote_volume_uses_colons(self) -> None:
+        vol = RemoteVolume(slug="r", ssh_endpoint="s", path="/p")
+        result = format_snapshot_timestamp(_NOW, vol, platform="linux")
+        assert result == "2026-02-21T12:00:00.000Z"
+
+    def test_local_volume_darwin_uses_hyphens(self) -> None:
+        vol = LocalVolume(slug="l", path="/p")
+        result = format_snapshot_timestamp(_NOW, vol, platform="darwin")
+        assert result == "2026-02-21T12-00-00.000Z"
+
+    def test_local_volume_linux_uses_colons(self) -> None:
+        vol = LocalVolume(slug="l", path="/p")
+        result = format_snapshot_timestamp(_NOW, vol, platform="linux")
+        assert result == "2026-02-21T12:00:00.000Z"
 
 
 # ── get_latest_snapshot ──────────────────────────────────────
@@ -349,10 +373,10 @@ class TestReadLatestSymlink:
             syncs={"s1": sync},
         )
         latest = tmp_path / "latest"
-        latest.symlink_to("snapshots/2026-02-21T12:00:00.000Z")
+        latest.symlink_to(f"snapshots/{_TS_LOCAL}")
 
         result = read_latest_symlink(sync, config)
-        assert result == "2026-02-21T12:00:00.000Z"
+        assert result == _TS_LOCAL
 
     def test_local_missing(self, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
@@ -382,12 +406,12 @@ class TestReadLatestSymlink:
     def test_remote_exists(self, mock_remote: MagicMock) -> None:
         mock_remote.return_value = MagicMock(
             returncode=0,
-            stdout="snapshots/2026-02-21T12:00:00.000Z\n",
+            stdout=f"snapshots/{_TS_REMOTE}\n",
         )
         sync, config, re = _hl_remote_config()
 
         result = read_latest_symlink(sync, config, resolved_endpoints=re)
-        assert result == "2026-02-21T12:00:00.000Z"
+        assert result == _TS_REMOTE
 
     @patch("nbkp.sync.snapshots.common.run_remote_command")
     def test_remote_missing(self, mock_remote: MagicMock) -> None:
@@ -462,18 +486,18 @@ class TestUpdateLatestSymlink:
             syncs={"s1": sync},
         )
 
-        update_latest_symlink(sync, config, _TS)
+        update_latest_symlink(sync, config, _TS_LOCAL)
         link = tmp_path / "latest"
         assert link.is_symlink()
-        assert str(link.readlink()) == f"snapshots/{_TS}"
+        assert str(link.readlink()) == f"snapshots/{_TS_LOCAL}"
 
     @patch("nbkp.sync.snapshots.common.run_remote_command")
     def test_remote(self, mock_remote: MagicMock) -> None:
         mock_remote.return_value = MagicMock(returncode=0, stderr="")
         sync, config, re = _hl_remote_config()
 
-        update_latest_symlink(sync, config, _TS, resolved_endpoints=re)
+        update_latest_symlink(sync, config, _TS_REMOTE, resolved_endpoints=re)
         mock_remote.assert_called_once()
         cmd = mock_remote.call_args[0][1]
         assert "ln" in cmd
-        assert f"snapshots/{_TS}" in cmd
+        assert f"snapshots/{_TS_REMOTE}" in cmd

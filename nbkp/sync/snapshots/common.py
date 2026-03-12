@@ -6,6 +6,8 @@ Items shared by both hard-link and btrfs snapshot backends.
 from __future__ import annotations
 
 import subprocess
+import sys
+from datetime import datetime
 from pathlib import Path
 
 from ...config import (
@@ -14,6 +16,7 @@ from ...config import (
     RemoteVolume,
     ResolvedEndpoints,
     SyncConfig,
+    Volume,
 )
 from ...remote import run_remote_command
 
@@ -25,6 +28,25 @@ SNAPSHOTS_DIR = "snapshots"
 LATEST_LINK = "latest"
 
 DEVNULL_TARGET = "/dev/null"
+
+
+def format_snapshot_timestamp(
+    now: datetime,
+    volume: Volume,
+    platform: str = sys.platform,
+) -> str:
+    """Format a UTC timestamp for use as a snapshot directory name.
+
+    Uses standard ISO 8601 with colons on filesystems that support them
+    (Linux local, all remote). Uses hyphens instead of colons on macOS
+    local volumes because APFS/HFS+ forbids colons in filenames.
+    """
+    ts = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    match volume:
+        case LocalVolume() if platform == "darwin":
+            return ts.replace(":", "-")
+        case _:
+            return ts
 
 
 def resolve_dest_path(sync: SyncConfig, config: Config) -> str:

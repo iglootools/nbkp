@@ -17,6 +17,7 @@ from ...config import (
 from ...remote import run_remote_command
 from .common import (
     SNAPSHOTS_DIR,
+    format_snapshot_timestamp,
     list_snapshots,
     read_latest_symlink,
     resolve_dest_path,
@@ -37,12 +38,11 @@ def create_snapshot_dir(
     re = resolved_endpoints or {}
     if now is None:
         now = datetime.now(timezone.utc)
-    dest_path = resolve_dest_path(sync, config)
-    timestamp = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
-    snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{timestamp}"
-
     dst = config.destination_endpoint(sync)
     dst_vol = config.volumes[dst.volume]
+    dest_path = resolve_dest_path(sync, config)
+    timestamp = format_snapshot_timestamp(now, dst_vol)
+    snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{timestamp}"
     match dst_vol:
         case RemoteVolume():
             ep = re[dst_vol.slug]

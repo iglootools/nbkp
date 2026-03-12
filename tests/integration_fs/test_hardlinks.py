@@ -13,7 +13,11 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.sync.snapshots.common import list_snapshots, update_latest_symlink
+from nbkp.sync.snapshots.common import (
+    format_snapshot_timestamp,
+    list_snapshots,
+    update_latest_symlink,
+)
 from nbkp.sync.snapshots.hardlinks import (
     cleanup_orphaned_snapshots,
     create_snapshot_dir,
@@ -124,12 +128,16 @@ class TestCleanupOrphanedSnapshots:
         sync, config, snap_name = _do_sync(src, dst)
 
         # Create an orphaned snapshot (newer than latest)
-        orphan = Path(str(dst)) / "snapshots" / "9999-01-01T00:00:00.000Z"
+        dst_vol = config.volumes["dst"]
+        orphan_ts = format_snapshot_timestamp(
+            datetime(9999, 1, 1, tzinfo=timezone.utc), dst_vol
+        )
+        orphan = Path(str(dst)) / "snapshots" / orphan_ts
         orphan.mkdir(parents=True)
 
         deleted = cleanup_orphaned_snapshots(sync, config)
         assert len(deleted) == 1
-        assert "9999-01-01T00:00:00.000Z" in deleted[0]
+        assert orphan_ts in deleted[0]
         assert not orphan.exists()
 
     def test_preserves_latest_target(self, tmp_path: Path) -> None:
@@ -165,11 +173,14 @@ class TestDeleteSnapshot:
         src.mkdir()
         dst.mkdir()
 
-        snap_dir = dst / "snapshots" / "2024-01-01T00:00:00.000Z"
+        dst_vol = LocalVolume(slug="dst", path=str(dst))
+        snap_ts = format_snapshot_timestamp(
+            datetime(2024, 1, 1, tzinfo=timezone.utc), dst_vol
+        )
+        snap_dir = dst / "snapshots" / snap_ts
         snap_dir.mkdir(parents=True)
         (snap_dir / "file.txt").write_text("delete me")
 
-        dst_vol = LocalVolume(slug="dst", path=str(dst))
         delete_snapshot(str(snap_dir), dst_vol, {})
         assert not snap_dir.exists()
 

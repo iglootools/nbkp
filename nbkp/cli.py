@@ -6,6 +6,7 @@ import enum
 import json
 import os
 import stat
+import sys
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -432,6 +433,16 @@ def sh(
             help=("Generate bash 3.2-compatible script (default: enabled)"),
         ),
     ] = True,
+    platform: Annotated[
+        str,
+        typer.Option(
+            "--platform",
+            help=(
+                "Target platform for snapshot timestamp format"
+                " (e.g. 'darwin', 'linux'). Defaults to the current OS."
+            ),
+        ),
+    ] = sys.platform,
 ) -> None:
     """Compile the config into a self-contained bash script. The generated script performs the same operations as `run` without requiring Python or the config file at runtime.
 
@@ -454,6 +465,7 @@ def sh(
             relative_src=relative_src,
             relative_dst=relative_dst,
             portable=portable,
+            platform=platform,
         ),
         resolved_endpoints=resolved,
     )

@@ -18,6 +18,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.sync.snapshots.common import format_snapshot_timestamp
 from nbkp.sync.snapshots.hardlinks import (
     cleanup_orphaned_snapshots,
     create_snapshot_dir,
@@ -26,7 +27,10 @@ from nbkp.sync.snapshots.hardlinks import (
 )
 
 _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=timezone.utc)
-_TS = "2026-02-21T12:00:00.000Z"
+_LOCAL_VOL = LocalVolume(slug="dummy", path="/dummy")
+_REMOTE_VOL = RemoteVolume(slug="dummy", ssh_endpoint="dummy", path="/dummy")
+_TS_LOCAL = format_snapshot_timestamp(_NOW, _LOCAL_VOL)
+_TS_REMOTE = format_snapshot_timestamp(_NOW, _REMOTE_VOL)
 
 
 def _local_config() -> tuple[SyncConfig, Config]:
@@ -90,10 +94,10 @@ class TestCreateSnapshotDir:
 
         path = create_snapshot_dir(sync, config, now=_NOW)
 
-        assert path == f"/dst/snapshots/{_TS}"
+        assert path == f"/dst/snapshots/{_TS_LOCAL}"
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
-        assert cmd == ["mkdir", "-p", f"/dst/snapshots/{_TS}"]
+        assert cmd == ["mkdir", "-p", f"/dst/snapshots/{_TS_LOCAL}"]
 
     @patch("nbkp.sync.snapshots.hardlinks.run_remote_command")
     def test_remote(self, mock_remote: MagicMock) -> None:
@@ -102,7 +106,7 @@ class TestCreateSnapshotDir:
 
         path = create_snapshot_dir(sync, config, now=_NOW, resolved_endpoints=re)
 
-        assert path == f"/backup/snapshots/{_TS}"
+        assert path == f"/backup/snapshots/{_TS_REMOTE}"
         mock_remote.assert_called_once()
 
     @patch("nbkp.sync.snapshots.hardlinks.subprocess.run")

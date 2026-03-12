@@ -9,7 +9,7 @@
   - UTC for all timestamps
   - Do not generate the current timestamps directly inside the core logic: pass the timestamps from the higher-level functions, tests, and other entry points.
 - **Mocks**
-  - Avoid use of mocks when the values can be passed as a parameter (e.g. time)
+  - Prefer passing values as explicit parameters (with sensible defaults) over reading global/ambient state internally. This makes functions testable without mocking. For example, pass `now: datetime` instead of calling `datetime.now()` internally, pass `platform: str = sys.platform` instead of reading `sys.platform` internally. Tests should pass these values explicitly rather than patching modules.
 - **Console Output**
   - Do not hardcode indents in strings, compute the indent at the call site
 - **Version Management**

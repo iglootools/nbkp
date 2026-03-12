@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib.resources
 import os
 import shlex
+import sys
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from textwrap import dedent
@@ -42,6 +43,7 @@ class ScriptOptions:
     relative_src: bool = False
     relative_dst: bool = False
     portable: bool = True
+    platform: str = sys.platform
 
 
 def generate_script(
@@ -271,6 +273,22 @@ def _ls_snapshots_cmd(
             return _format_remote_command_str(
                 ep.server, ep.proxy_chain, ["ls", snaps_dir]
             )
+
+
+def _snapshot_date_format(
+    dst_vol: LocalVolume | RemoteVolume,
+    platform: str = sys.platform,
+) -> str:
+    """Return the shell date format string for snapshot timestamps.
+
+    Uses colons (standard ISO 8601) on Linux/remote, hyphens on macOS local
+    volumes where APFS/HFS+ forbids colons in filenames.
+    """
+    match dst_vol:
+        case LocalVolume() if platform == "darwin":
+            return "%Y-%m-%dT%H-%M-%S.000Z"
+        case _:
+            return "%Y-%m-%dT%H:%M:%S.000Z"
 
 
 def _snapshot_cmd(
@@ -691,6 +709,7 @@ def _build_snapshot_block(
     config: Config,
     vol_paths: dict[str, str],
     resolved_endpoints: ResolvedEndpoints,
+    platform: str = sys.platform,
 ) -> str:
     """Build btrfs snapshot block at indent 0."""
     dst_ep = config.destination_endpoint(sync)
@@ -700,9 +719,10 @@ def _build_snapshot_block(
     snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     snap = _snapshot_cmd(dst_vol, tmp, snaps_dir, resolved_endpoints)
 
+    date_fmt = _snapshot_date_format(dst_vol, platform)
     return dedent(f"""\
         if [ "$NBKP_DRY_RUN" = false ]; then
-            NBKP_TS=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+            NBKP_TS=$(date -u +{date_fmt})
             {snap}
         fi""")
 
@@ -795,6 +815,7 @@ def _build_hard_link_mkdir_block(
     config: Config,
     vol_paths: dict[str, str],
     resolved_endpoints: ResolvedEndpoints,
+    platform: str = sys.platform,
 ) -> str:
     """Build snapshot directory creation block."""
     dst_ep = config.destination_endpoint(sync)
@@ -803,8 +824,9 @@ def _build_hard_link_mkdir_block(
     snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     mkdir_cmd = _mkdir_snap_cmd(dst_vol, snaps_dir, resolved_endpoints)
 
+    date_fmt = _snapshot_date_format(dst_vol, platform)
     return dedent(f"""\
-        NBKP_TS=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+        NBKP_TS=$(date -u +{date_fmt})
         {mkdir_cmd}""")
 
 
@@ -907,6 +929,7 @@ def _build_disabled_body(
     config: Config,
     vol_paths: dict[str, str],
     resolved_endpoints: ResolvedEndpoints,
+    platform: str = sys.platform,
 ) -> str:
     """Build the commented-out function body for a disabled sync."""
     enabled_sync = SyncConfig(
@@ -924,6 +947,7 @@ def _build_disabled_body(
         config,
         vol_paths,
         resolved_endpoints,
+        platform,
     )
 
     # Render the function body the same way the template would
@@ -1013,6 +1037,7 @@ def _build_sync_context(
     config: Config,
     vol_paths: dict[str, str],
     resolved_endpoints: ResolvedEndpoints,
+    platform: str = sys.platform,
 ) -> _SyncContext:
     """Build a _SyncContext with all pre-computed blocks."""
     dst_ep = config.destination_endpoint(sync)
@@ -1077,7 +1102,7 @@ def _build_sync_context(
 
     # Btrfs blocks
     snapshot = (
-        _build_snapshot_block(sync, config, vol_paths, resolved_endpoints)
+        _build_snapshot_block(sync, config, vol_paths, resolved_endpoints, platform)
         if has_btrfs
         else ""
     )
@@ -1102,7 +1127,9 @@ def _build_sync_context(
         else ""
     )
     hl_mkdir = (
-        _build_hard_link_mkdir_block(sync, config, vol_paths, resolved_endpoints)
+        _build_hard_link_mkdir_block(
+            sync, config, vol_paths, resolved_endpoints, platform
+        )
         if has_hard_link
         else ""
     )
@@ -1171,7 +1198,9 @@ def _build_script_context(
     syncs: list[_SyncContext] = []
     for slug in sort_syncs(config.syncs):
         sync = config.syncs[slug]
-        ctx = _build_sync_context(slug, sync, config, vol_paths, resolved_endpoints)
+        ctx = _build_sync_context(
+            slug, sync, config, vol_paths, resolved_endpoints, options.platform
+        )
         pred_fns = tuple(_slug_to_fn(p) for p in sorted(pred_map.get(slug, set())))
         if sync.enabled:
             syncs.append(replace(ctx, predecessors=pred_fns))
@@ -1182,6 +1211,7 @@ def _build_script_context(
                 config,
                 vol_paths,
                 resolved_endpoints,
+                options.platform,
             )
             syncs.append(
                 _SyncContext(
