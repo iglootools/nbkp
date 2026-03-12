@@ -85,7 +85,7 @@ run = "poetry run ruff check nbkp/ tests/ build-scripts/"
 
 [tasks.type-check]
 description = "Run pyright type checking"
-run = "poetry run pyright nbkp/ build-sripts/"
+run = "poetry run pyright nbkp/ build-scripts/"
 
 [tasks.compat-check]
 description = "Verify no Python features above 3.12 are used"
@@ -108,7 +108,7 @@ description = "Check that config reference in docs/config-reference.md is up to 
 run = "poetry run python build-scripts/configdocs.py --check"
 
 [tasks.check]
-description = "Run all checks (format, lint, type-check, compat-check, clidocs-check, configdocs-check)"
+description = "Run all checks (format, lint, type-check, compat-check, clidocs-check, configdocs-check, depgraph-check)"
 run = [
   { task = "format" },
   { task = "lint" },
@@ -116,6 +116,7 @@ run = [
   { task = "compat-check" },
   { task = "clidocs-check" },
   { task = "configdocs-check" },
+  { task = "depgraph-check" },
 ]
 
 [tasks.check-all]
@@ -160,13 +161,22 @@ run = "./demo/record-demo.sh \"$(poetry version -s)\""
 description = "Upload the recorded demo to asciinema.org"
 run = "asciinema upload demo/demo.cast"
 
+# Reference Documentation Generation Tasks
 [tasks.depgraph]
-description = "Generate module dependency graph (mermaid syntax)"
+description = "Regenerate Module Overview in docs/architecture.md"
 run = "poetry run python build-scripts/depgraph.py"
+
+[tasks.depgraph-check]
+description = "Check that Module Overview in docs/architecture.md is up to date"
+run = "poetry run python build-scripts/depgraph.py --check"
 
 [tasks.depgraph-ascii]
 description = "Generate module dependency graph (ASCII art)"
 run = "poetry run python build-scripts/depgraph.py --format ascii"
+
+[tasks.depgraph-mermaid]
+description = "Print module dependency graph (mermaid syntax) to stdout"
+run = "poetry run python build-scripts/depgraph.py --format mermaid"
 
 # Tasks used by CI workflows
 [tasks.ci-test]

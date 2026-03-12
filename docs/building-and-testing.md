@@ -7,7 +7,7 @@ Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/Q
 Run automated tests and checks (no external dependencies):
 ```bash
 # mise tasks
-mise run check              # Run all checks: format + lint + type-check + clidocs-check + configdocs-check
+mise run check              # Run all checks: format + lint + type-check + clidocs-check + configdocs-check + depgraph-check
 mise run check-all          # Run all checks: regular checks + all tests
 
 mise run test-all           # All tests
@@ -27,10 +27,13 @@ mise run format             # ruff format
 mise run lint               # ruff check
 mise run type-check         # pyright
 mise run compat-check       # vermin (enforce Python >=3.12 compatibility)
+
 mise run clidocs            # regenerate CLI reference in docs/cli-reference.md
 mise run clidocs-check      # check CLI reference is up to date
 mise run configdocs         # regenerate config reference in docs/config-reference.md
 mise run configdocs-check   # check config reference is up to date
+mise run depgraph           # regenerate Module Overview in docs/architecture.md
+mise run depgraph-check     # check Module Overview is up to date
 
 # Using Poetry syntax directly
 poetry run pytest tests/ --ignore=tests/e2e_sync_local/ --ignore=tests/e2e_sync_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -v  # Unit tests only
