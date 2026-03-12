@@ -2,55 +2,54 @@
 
 ## Module Overview
 
-Simplified dependencies between top-level modules:
+Dependencies between top-level modules (auto-generated via `mise run depgraph`):
 ```mermaid
 graph TD
     cli["cli"]
-    democli["democli"]
-    output["output"]
-    preflight["preflight"]
-    scriptgen["scriptgen"]
     config["config/"]
+    democli["democli"]
+    ordering["ordering/"]
+    output["output"]
+    preflight["preflight/"]
     remote["remote/"]
+    scriptgen["scriptgen"]
     sync["sync/"]
     testkit["testkit/"]
 
     cli --> config
-    cli --> preflight
-    cli --> sync
-    cli --> output
-    cli --> scriptgen
     cli --> democli
-
+    cli --> ordering
+    cli --> output
+    cli --> preflight
+    cli --> scriptgen
+    cli --> sync
+    config --> remote
     democli --> config
+    democli --> ordering
     democli --> output
     democli --> remote
+    democli --> sync
     democli --> testkit
-
+    ordering --> config
     output --> config
     output --> preflight
     output --> sync
-    output --> remote
-
     preflight --> config
     preflight --> remote
     preflight --> sync
-
+    remote --> config
     scriptgen --> config
+    scriptgen --> ordering
     scriptgen --> remote
     scriptgen --> sync
-
     sync --> config
-    sync --> remote
+    sync --> ordering
     sync --> preflight
-
-    remote --> config
-    config -.-> remote
-
+    sync --> remote
     testkit --> config
     testkit --> preflight
-    testkit --> sync
     testkit --> remote
+    testkit --> sync
 ```
 
 ## Execution Flow

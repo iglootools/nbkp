@@ -1,22 +1,20 @@
-"""SSH command building and remote command execution helpers."""
+"""SSH CLI command building helpers."""
 
 from __future__ import annotations
 
 import shlex
-import subprocess
+from typing import TYPE_CHECKING
 
 from ..config import SshConnectionOptions, SshEndpoint
 
+if TYPE_CHECKING:
+    from ..config import LocalVolume, RemoteVolume, ResolvedEndpoints
 
+
+# Kept in `ssh` instead of `output` as this is core to remote command execution, not just display formatting.
 def _format_host(endpoint: SshEndpoint) -> str:
     """Format [user@]host for an SSH endpoint."""
     return f"{endpoint.user}@{endpoint.host}" if endpoint.user else endpoint.host
-
-
-def _format_host_port(endpoint: SshEndpoint) -> str:
-    """Format [user@]host[:port] for proxy-jump notation."""
-    host = _format_host(endpoint)
-    return f"{host}:{endpoint.port}" if endpoint.port != 22 else host
 
 
 def _ssh_o_options(opts: SshConnectionOptions) -> list[str]:
@@ -63,11 +61,6 @@ def _ssh_endpoint_args(endpoint: SshEndpoint) -> list[str]:
         *(["-p", str(endpoint.port)] if endpoint.port != 22 else []),
         *(["-i", endpoint.key] if endpoint.key else []),
     ]
-
-
-def format_proxy_jump_chain(proxies: list[SshEndpoint]) -> str:
-    """Format proxy chain as comma-separated [user@]host[:port] for -J."""
-    return ",".join(_format_host_port(p) for p in proxies)
 
 
 def _build_proxy_hop(proxy: SshEndpoint, inner_cmd: str | None) -> str:
@@ -131,20 +124,6 @@ def build_ssh_base_args(
     return ["ssh", *_build_ssh_core_args(server, proxy_chain), _format_host(server)]
 
 
-def run_remote_command(
-    server: SshEndpoint,
-    command: list[str],
-    proxy_chain: list[SshEndpoint] | None = None,
-) -> subprocess.CompletedProcess[str]:
-    """Run a command on a remote host via SSH."""
-    cmd_string = " ".join(shlex.quote(arg) for arg in command)
-    return subprocess.run(
-        [*build_ssh_base_args(server, proxy_chain), cmd_string],
-        capture_output=True,
-        text=True,
-    )
-
-
 def build_ssh_e_option(
     server: SshEndpoint,
     proxy_chain: list[SshEndpoint] | None = None,
@@ -168,3 +147,50 @@ def build_ssh_e_option(
 def format_remote_path(server: SshEndpoint, path: str) -> str:
     """Format a remote path as [user@]host:path."""
     return f"{_format_host(server)}:{path}"
+
+
+# ---------------------------------------------------------------------------
+# Human-friendly SSH CLI helpers (for troubleshooting / display)
+# ---------------------------------------------------------------------------
+
+
+def _format_host_port(endpoint: SshEndpoint) -> str:
+    """Format [user@]host[:port] for proxy-jump notation."""
+    host = _format_host(endpoint)
+    return f"{host}:{endpoint.port}" if endpoint.port != 22 else host
+
+
+def format_proxy_jump_chain(proxies: list[SshEndpoint]) -> str:
+    """Format proxy chain as comma-separated [user@]host[:port] for -J."""
+    return ",".join(_format_host_port(p) for p in proxies)
+
+
+def ssh_prefix(
+    server: SshEndpoint,
+    proxy_chain: list[SshEndpoint] | None = None,
+) -> list[str]:
+    """Build human-friendly SSH command prefix as a list of arguments."""
+    return [
+        "ssh",
+        *(["-p", str(server.port)] if server.port != 22 else []),
+        *(["-i", server.key] if server.key else []),
+        *(["-J", format_proxy_jump_chain(proxy_chain)] if proxy_chain else []),
+        _format_host(server),
+    ]
+
+
+def wrap_cmd(
+    cmd: str,
+    vol: LocalVolume | RemoteVolume,
+    resolved_endpoints: ResolvedEndpoints,
+) -> str:
+    """Wrap a shell command for remote execution."""
+    from ..config import LocalVolume, RemoteVolume  # noqa: PLC0415 — deferred to avoid circular import
+
+    match vol:
+        case LocalVolume():
+            return cmd
+        case RemoteVolume():
+            ep = resolved_endpoints[vol.slug]
+            prefix = " ".join(ssh_prefix(ep.server, ep.proxy_chain))
+            return f"{prefix} '{cmd}'"

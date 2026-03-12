@@ -279,6 +279,67 @@ class TestLoadConfig:
         sync = cfg.syncs["s"]
         assert sync.filters == ["+ *.jpg", "- *.tmp", "H .git"]
 
+    def test_filter_merge_normalization(self, tmp_path: Path) -> None:
+        p = tmp_path / "merge-filters.yaml"
+        p.write_text(
+            dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep-src:
+                volume: v
+              ep-dst:
+                volume: v
+                subdir: dst
+            syncs:
+              s:
+                source: ep-src
+                destination: ep-dst
+                filters:
+                  - merge: /etc/nbkp/rules.txt
+                  - dir-merge: .rsync-filter
+        """)
+        )
+        cfg = load_config(str(p))
+        sync = cfg.syncs["s"]
+        assert sync.filters == [
+            "merge /etc/nbkp/rules.txt",
+            "dir-merge .rsync-filter",
+        ]
+
+    def test_filter_dir_merge_exclude_self(self, tmp_path: Path) -> None:
+        p = tmp_path / "dir-merge-exclude.yaml"
+        p.write_text(
+            dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep-src:
+                volume: v
+              ep-dst:
+                volume: v
+                subdir: dst
+            syncs:
+              s:
+                source: ep-src
+                destination: ep-dst
+                filters:
+                  - dir-merge:
+                      path: .rsync-filter
+                      exclude-self: true
+        """)
+        )
+        cfg = load_config(str(p))
+        sync = cfg.syncs["s"]
+        assert sync.filters == [
+            "dir-merge .rsync-filter",
+            "- .rsync-filter",
+        ]
+
     def test_rsync_options_override(self, tmp_path: Path) -> None:
         config = Config(
             volumes={
@@ -1216,6 +1277,42 @@ class TestPathNormalization:
             destination="dst",
         )
         assert sync.filter_file is None
+
+    def test_merge_filter_tilde_expansion(self) -> None:
+        sync = SyncConfig(
+            slug="s",
+            source="src",
+            destination="dst",
+            filters=[{"merge": "~/rules.txt"}],  # type: ignore[list-item]
+        )
+        assert sync.filters == [f"merge {Path('~/rules.txt').expanduser()}"]
+
+    def test_merge_filter_no_tilde(self) -> None:
+        sync = SyncConfig(
+            slug="s",
+            source="src",
+            destination="dst",
+            filters=[{"merge": "/etc/rules.txt"}],  # type: ignore[list-item]
+        )
+        assert sync.filters == ["merge /etc/rules.txt"]
+
+    def test_dir_merge_no_tilde_expansion(self) -> None:
+        sync = SyncConfig(
+            slug="s",
+            source="src",
+            destination="dst",
+            filters=[{"dir-merge": ".rsync-filter"}],  # type: ignore[list-item]
+        )
+        assert sync.filters == ["dir-merge .rsync-filter"]
+
+    def test_dir_merge_unknown_option_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unknown dir-merge option"):
+            SyncConfig(
+                slug="s",
+                source="src",
+                destination="dst",
+                filters=[{"dir-merge": {"path": ".rsync-filter", "bad": True}}],  # type: ignore[list-item]
+            )
 
     def test_ssh_key_tilde_expansion(self) -> None:
         ep = SshEndpoint(slug="s", host="example.com", key="~/.ssh/id_rsa")

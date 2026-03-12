@@ -64,3 +64,25 @@ def sort_syncs(syncs: dict[str, SyncConfig]) -> list[str]:
             "Cyclic sync dependency detected: " + " -> ".join(cycle),
             reason=ConfigErrorReason.CYCLIC_DEPENDENCY,
         ) from exc
+
+
+def build_adjacency(
+    syncs: dict[str, SyncConfig],
+) -> tuple[dict[str, list[SyncConfig]], set[str]]:
+    """Build endpoint adjacency list and root set.
+
+    Returns (children, roots) where:
+    - children maps source endpoint slug → list of SyncConfig
+    - roots is the set of endpoint slugs that are never destinations
+    """
+    children: dict[str, list[SyncConfig]] = defaultdict(list)
+    all_sources: set[str] = set()
+    all_destinations: set[str] = set()
+
+    for sync in syncs.values():
+        children[sync.source].append(sync)
+        all_sources.add(sync.source)
+        all_destinations.add(sync.destination)
+
+    roots = all_sources - all_destinations
+    return dict(children), roots

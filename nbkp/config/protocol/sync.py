@@ -20,6 +20,19 @@ class RsyncOptions(_BaseModel):
     extra_options: List[str] = Field(default_factory=list)
 
 
+_DIR_MERGE_OPTS = {"path", "exclude-self"}
+
+
+def _validate_dir_merge_opts(opts: dict[str, Any]) -> None:
+    """Raise ValueError for unknown keys in a dir-merge dict."""
+    unknown = set(opts) - _DIR_MERGE_OPTS
+    if unknown:
+        raise ValueError(
+            f"Unknown dir-merge option(s): {', '.join(sorted(unknown))}."
+            f" Allowed: {', '.join(sorted(_DIR_MERGE_OPTS))}"
+        )
+
+
 class SyncConfig(_BaseModel):
     """Configuration for a single sync operation."""
 
@@ -50,10 +63,19 @@ class SyncConfig(_BaseModel):
                     result.append(f"+ {pattern}")
                 case {"exclude": str() as pattern}:
                     result.append(f"- {pattern}")
+                case {"merge": str() as path}:
+                    result.append(f"merge {Path(path).expanduser()}")
+                case {"dir-merge": str() as path}:
+                    result.append(f"dir-merge {path}")
+                case {"dir-merge": dict() as opts} if "path" in opts:
+                    _validate_dir_merge_opts(opts)
+                    result.append(f"dir-merge {opts['path']}")
+                    if opts.get("exclude-self"):
+                        result.append(f"- {opts['path']}")
                 case _:
                     raise ValueError(
-                        f"Filter must be a string or a dict"
-                        f" with 'include'/'exclude' key,"
-                        f" got: {item!r}"
+                        f"Filter must be a string or a dict with"
+                        f" 'include'/'exclude'/'merge'/'dir-merge'"
+                        f" key, got: {item!r}"
                     )
         return result

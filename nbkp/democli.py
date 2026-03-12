@@ -1,4 +1,7 @@
 """NBKP demo CLI: sample output rendering and seed data."""
+# pyright: reportPossiblyUnboundVariable=false
+# Docker imports are conditionally available (try/except ImportError),
+# guarded at runtime by _require_docker_extra().
 
 from __future__ import annotations
 
@@ -55,13 +58,20 @@ try:
 except ImportError:
     _HAS_DOCKER = False
 from .remote.resolution import resolve_all_endpoints
+from .ordering.output import (
+    build_mermaid_graph,
+    print_mermaid_ascii_graph,
+    print_rich_tree_graph,
+)
 from .output import (
     print_config_error,
     print_human_check,
     print_human_config,
+    print_human_troubleshoot,
+)
+from .sync.output import (
     print_human_prune_results,
     print_human_results,
-    print_human_troubleshoot,
 )
 from .testkit.gen.check import (
     check_config,
@@ -144,6 +154,7 @@ def _print_panel(title: str, buf: StringIO) -> None:
 def output() -> None:
     """Render all human output functions with fake data."""
     _show_config_show()
+    _show_config_graph()
     _show_check()
     _show_results()
     _show_prune()
@@ -157,6 +168,23 @@ def _show_config_show() -> None:
     re = resolve_all_endpoints(config)
     print_human_config(config, console=console, resolved_endpoints=re)
     _print_panel("print_human_config", buf)
+
+
+def _show_config_graph() -> None:
+    config = config_show_config()
+
+    console, buf = _capture_console()
+    print_rich_tree_graph(config, console=console)
+    _print_panel("print_rich_tree_graph", buf)
+
+    console, buf = _capture_console()
+    print_mermaid_ascii_graph(config, console=console)
+    _print_panel("print_mermaid_ascii_graph", buf)
+
+    console, buf = _capture_console()
+    mermaid_src = build_mermaid_graph(config)
+    console.print(mermaid_src, highlight=False)
+    _print_panel("build_mermaid_graph (mermaid syntax)", buf)
 
 
 def _show_check() -> None:

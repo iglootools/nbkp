@@ -32,13 +32,13 @@
 ## General Python Coding Conventions
 - **String Literals**:
   - Prefer `dedent("""\...""")` multiline strings over concatenated single-line strings with `\n` escapes when the content has meaningful structure (e.g. YAML, config snippets, multi-line templates). Short single-line strings (e.g. `"key: value\n"`) are fine as-is.
-- **Typing**: Use type annotations for all functions and methods, including return types. Use `mypy` for static type checking.
+- **Typing**: Use type annotations for all functions and methods, including return types. Use `pyright` for static type checking.
 - **Data Classes**: 
   - All serialized model objects are frozen pydantic dataclasses, immutable once created.
   - Other data classes should also be frozen.
 - **Formatting**: 
   - 88 characters (ruff default).
-- **Python Version**: 3.12 (mypy and ruff target).
+- **Python Version**: 3.12 (pyright and ruff target).
 - **Control Flow**
   - Prefer match-case over if-elif-else chains
   - Prefer comprehensions and built-ins (map, filter) over manual loops when appropriate.
@@ -65,7 +65,7 @@
     This ensures the test data is always valid and consistent with the models.
 - **Domain Logic Consistency**
   - When making changes to the config schema/models or status checks, make sure to update **all** of the following:
-    - **Troubleshoot output** (`nbkp/output.py`): add a `case` in the troubleshoot match-case for every new `SyncReason` or `VolumeReason`, with actionable remediation text.
+    - **Troubleshoot output** (`nbkp/preflight/output.py`): add a `case` in the troubleshoot match-case for every new `SyncReason` or `VolumeReason`, with actionable remediation text.
     - **Seed / demo test data** (`nbkp/testkit/gen/check.py`): add a scenario to `troubleshoot_config` + `troubleshoot_data` that exercises the new reason, so `nbkp-demo output` renders it.
     - **CLI inactive-reasons set** (`nbkp/cli.py`, `_INACTIVE_REASONS`): if the new reason should be treated as a non-fatal skip (like missing sentinels), add it here.
     - The demo CLI (`nbkp/democli.py`) to generate new test data that reflects the changes.

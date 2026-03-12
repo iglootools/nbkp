@@ -48,7 +48,7 @@ def _build_single_connection(
     )
 
     if not opts.strict_host_key_checking:
-        conn.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        conn.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # pyright: ignore[reportOptionalMemberAccess]
 
     return conn
 
@@ -73,7 +73,7 @@ def run_remote_command(
     cmd_string = " ".join(shlex.quote(arg) for arg in command)
     with _build_connection(server, proxy_chain) as conn:
         if server.connection_options.server_alive_interval is not None:
-            conn.transport.set_keepalive(
+            conn.transport.set_keepalive(  # pyright: ignore[reportOptionalMemberAccess]
                 server.connection_options.server_alive_interval
             )
         result = conn.run(cmd_string, warn=True, hide=True, in_stream=False)

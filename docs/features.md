@@ -16,7 +16,7 @@ nbkp uses rsync under the hood to synchronize files between volumes. Syncs can f
 - **Dry-run mode**: preview what would happen without making changes
 - **Real-time progress**: four display modes (none, overall, per-file, full)
 - **Per-sync rsync options**: checksum, compression, custom flags, default overrides, extra options
-- **Rsync filters**: structured include/exclude rules, raw rsync filter strings, and external filter files
+- **Rsync filters**: structured include/exclude rules, `merge`/`dir-merge` directives (per-directory filter files), raw rsync filter strings, and external filter files
 
 ## Snapshots
 
@@ -74,6 +74,7 @@ Backup configuration is expressed in a single YAML file that defines SSH endpoin
 - **Reusable sync endpoints**: define (volume, subdir, snapshot config) once, reference by slug from syncs — prevents duplication and conflicting configurations
 - **Pydantic validation**: structured errors with context for invalid configs
 - **Config display**: `config show` renders parsed config as tables or JSON
+- **Graph visualization**: `config graph` displays the backup chain as a Rich tree, ASCII art (mermaid-ascii), raw mermaid syntax, or JSON
 - **Cross-reference validation**: circular `extends` and `proxy-jump` chains, unique (volume, subdir) per endpoint, unique destination per sync — all detected at load time
 
 ## Shell Script Generation (`sh`)

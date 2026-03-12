@@ -84,8 +84,8 @@ description = "Run ruff linting"
 run = "poetry run ruff check nbkp/ tests/"
 
 [tasks.type-check]
-description = "Run mypy type checking"
-run = "poetry run mypy nbkp/"
+description = "Run pyright type checking"
+run = "poetry run pyright nbkp/"
 
 [tasks.compat-check]
 description = "Verify no Python features above 3.12 are used"
@@ -141,6 +141,14 @@ run = "./demo/record-demo.sh \"$(poetry version -s)\""
 [tasks.demo-upload]
 description = "Upload the recorded demo to asciinema.org"
 run = "asciinema upload demo/demo.cast"
+
+[tasks.depgraph]
+description = "Generate module dependency graph (mermaid syntax)"
+run = "poetry run python scripts/depgraph.py"
+
+[tasks.depgraph-ascii]
+description = "Generate module dependency graph (ASCII art)"
+run = "poetry run python scripts/depgraph.py --format ascii"
 
 # Tasks used by CI workflows
 [tasks.ci-test]

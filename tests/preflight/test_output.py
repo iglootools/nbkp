@@ -1,4 +1,4 @@
-"""Tests for nbkp.output (troubleshoot and check formatting)."""
+"""Tests for nbkp.preflight.output (troubleshoot and check formatting)."""
 
 from __future__ import annotations
 
@@ -6,12 +6,6 @@ from io import StringIO
 
 from rich.console import Console
 
-from nbkp.preflight import (
-    SyncReason,
-    SyncStatus,
-    VolumeReason,
-    VolumeStatus,
-)
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
@@ -22,7 +16,13 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.output import build_check_sections, print_human_troubleshoot
+from nbkp.preflight import (
+    SyncReason,
+    SyncStatus,
+    VolumeReason,
+    VolumeStatus,
+)
+from nbkp.preflight.output import build_check_sections, print_human_troubleshoot
 
 
 def _make_console() -> tuple[Console, StringIO]:
