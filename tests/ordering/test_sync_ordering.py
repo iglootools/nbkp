@@ -9,7 +9,7 @@ from nbkp.config import (
     ConfigErrorReason,
     SyncConfig,
 )
-from nbkp.sync.ordering import sort_syncs, sync_predecessors
+from nbkp.ordering.graph import sort_syncs, sync_predecessors
 
 
 def _sync(

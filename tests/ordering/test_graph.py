@@ -15,7 +15,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.output import (
+from nbkp.ordering.output import (
     build_graph_json,
     build_mermaid_graph,
     print_mermaid_ascii_graph,

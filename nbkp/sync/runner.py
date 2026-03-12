@@ -84,7 +84,7 @@ def run_all_syncs(
 
     results: list[SyncResult] = []
 
-    from .ordering import sort_syncs, sync_predecessors
+    from ..ordering.graph import sort_syncs, sync_predecessors
 
     selected = (
         {s: st for s, st in sync_statuses.items() if s in only_syncs}

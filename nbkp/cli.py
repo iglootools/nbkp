@@ -33,18 +33,20 @@ from .sync.snapshots.common import list_snapshots
 from .sync.snapshots.hardlinks import (
     prune_snapshots as hl_prune_snapshots,
 )
+from .ordering.output import (
+    build_graph_json,
+    print_mermaid_ascii_graph,
+    print_mermaid_graph,
+    print_rich_tree_graph,
+)
 from .output import (
     OutputFormat,
-    build_graph_json,
     print_config_error,
     print_human_config,
     print_human_prune_results,
     print_human_results,
     print_human_check,
     print_human_troubleshoot,
-    print_mermaid_ascii_graph,
-    print_mermaid_graph,
-    print_rich_tree_graph,
 )
 from .democli import app as demo_app
 from .scriptgen import ScriptOptions, generate_script

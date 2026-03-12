@@ -1164,7 +1164,7 @@ def _build_script_context(
         for slug, vol in config.volumes.items()
     ]
 
-    from .sync.ordering import sort_syncs, sync_predecessors
+    from .ordering.graph import sort_syncs, sync_predecessors
 
     pred_map = sync_predecessors(config.syncs)
 

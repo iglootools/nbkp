@@ -55,16 +55,18 @@ try:
 except ImportError:
     _HAS_DOCKER = False
 from .remote.resolution import resolve_all_endpoints
-from .output import (
+from .ordering.output import (
     build_mermaid_graph,
+    print_mermaid_ascii_graph,
+    print_rich_tree_graph,
+)
+from .output import (
     print_config_error,
     print_human_check,
     print_human_config,
     print_human_prune_results,
     print_human_results,
     print_human_troubleshoot,
-    print_mermaid_ascii_graph,
-    print_rich_tree_graph,
 )
 from .testkit.gen.check import (
     check_config,
