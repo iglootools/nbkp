@@ -424,8 +424,8 @@ def troubleshoot_data(
             source_status=laptop_vs,
             destination_status=nas_vs,
             reasons=[
-                SyncReason.RSYNC_NOT_FOUND_ON_SOURCE,
-                SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION,
+                SyncReason.SOURCE_RSYNC_NOT_FOUND,
+                SyncReason.DESTINATION_RSYNC_NOT_FOUND,
             ],
         ),
         "btrfs-not-detected": SyncStatus(
@@ -434,7 +434,7 @@ def troubleshoot_data(
             source_status=laptop_vs,
             destination_status=usb_vs,
             reasons=[
-                SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION,
+                SyncReason.DESTINATION_BTRFS_NOT_FOUND,
                 SyncReason.DESTINATION_NOT_BTRFS,
                 SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME,
             ],
@@ -456,8 +456,8 @@ def troubleshoot_data(
             source_status=laptop_vs,
             destination_status=usb_vs,
             reasons=[
-                SyncReason.STAT_NOT_FOUND_ON_DESTINATION,
-                SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION,
+                SyncReason.DESTINATION_STAT_NOT_FOUND,
+                SyncReason.DESTINATION_FINDMNT_NOT_FOUND,
             ],
         ),
         "hardlink-issues": SyncStatus(
@@ -476,8 +476,8 @@ def troubleshoot_data(
             source_status=laptop_vs,
             destination_status=nas_vs,
             reasons=[
-                SyncReason.RSYNC_TOO_OLD_ON_SOURCE,
-                SyncReason.RSYNC_TOO_OLD_ON_DESTINATION,
+                SyncReason.SOURCE_RSYNC_TOO_OLD,
+                SyncReason.DESTINATION_RSYNC_TOO_OLD,
             ],
         ),
         "source-latest-missing": SyncStatus(

@@ -897,8 +897,8 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.RSYNC_NOT_FOUND_ON_SOURCE in status.reasons
-        assert SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION in status.reasons
+        assert SyncReason.SOURCE_RSYNC_NOT_FOUND in status.reasons
+        assert SyncReason.DESTINATION_RSYNC_NOT_FOUND in status.reasons
 
     @patch(
         "nbkp.preflight.checks.shutil.which",
@@ -941,7 +941,7 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION in status.reasons
+        assert SyncReason.DESTINATION_BTRFS_NOT_FOUND in status.reasons
 
     @patch(
         "nbkp.preflight.checks.shutil.which",
@@ -984,7 +984,7 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.STAT_NOT_FOUND_ON_DESTINATION in status.reasons
+        assert SyncReason.DESTINATION_STAT_NOT_FOUND in status.reasons
         assert SyncReason.DESTINATION_NOT_BTRFS not in status.reasons
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.reasons
 
@@ -1046,7 +1046,7 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION in status.reasons
+        assert SyncReason.DESTINATION_FINDMNT_NOT_FOUND in status.reasons
         assert SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM not in status.reasons
 
     @patch(
@@ -1092,8 +1092,8 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.STAT_NOT_FOUND_ON_DESTINATION in status.reasons
-        assert SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION in status.reasons
+        assert SyncReason.DESTINATION_STAT_NOT_FOUND in status.reasons
+        assert SyncReason.DESTINATION_FINDMNT_NOT_FOUND in status.reasons
 
     @patch("nbkp.preflight.checks.subprocess.run")
     @patch(
@@ -1507,8 +1507,8 @@ class TestCheckSync:
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
         assert SyncReason.SOURCE_SENTINEL_NOT_FOUND in status.reasons
-        assert SyncReason.RSYNC_NOT_FOUND_ON_SOURCE in status.reasons
-        assert SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION in status.reasons
+        assert SyncReason.SOURCE_RSYNC_NOT_FOUND in status.reasons
+        assert SyncReason.DESTINATION_RSYNC_NOT_FOUND in status.reasons
 
     def test_both_volumes_unavailable(self, tmp_path: Path) -> None:
         """Both source and destination unavailable."""
@@ -1597,7 +1597,7 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert SyncReason.RSYNC_NOT_FOUND_ON_SOURCE in status.reasons
+        assert SyncReason.SOURCE_RSYNC_NOT_FOUND in status.reasons
 
     @patch("nbkp.preflight.checks.run_remote_command")
     @patch(
@@ -1671,7 +1671,7 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION in status.reasons
+        assert SyncReason.DESTINATION_RSYNC_NOT_FOUND in status.reasons
 
     @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.checks.run_remote_command")
@@ -1756,7 +1756,7 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION in status.reasons
+        assert SyncReason.DESTINATION_BTRFS_NOT_FOUND in status.reasons
 
     @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.checks.run_remote_command")
@@ -2144,7 +2144,7 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert SyncReason.STAT_NOT_FOUND_ON_DESTINATION in status.reasons
+        assert SyncReason.DESTINATION_STAT_NOT_FOUND in status.reasons
         assert SyncReason.DESTINATION_NOT_BTRFS not in status.reasons
 
     @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
@@ -2251,7 +2251,7 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION in status.reasons
+        assert SyncReason.DESTINATION_FINDMNT_NOT_FOUND in status.reasons
         assert SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM not in status.reasons
 
     @patch("nbkp.preflight.checks._check_rsync_version", return_value=True)
@@ -2759,7 +2759,7 @@ class TestCheckHardLinkDest:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.STAT_NOT_FOUND_ON_DESTINATION in status.reasons
+        assert SyncReason.DESTINATION_STAT_NOT_FOUND in status.reasons
         # No hardlink support check when stat is missing
         assert SyncReason.DESTINATION_NO_HARDLINK_SUPPORT not in status.reasons
 
@@ -2788,7 +2788,7 @@ class TestCheckHardLinkDest:
         mock_subprocess.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
 
         status = check_sync(sync, config, vol_statuses)
-        assert SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION not in status.reasons
+        assert SyncReason.DESTINATION_BTRFS_NOT_FOUND not in status.reasons
         assert SyncReason.DESTINATION_NOT_BTRFS not in status.reasons
         assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.reasons
         assert SyncReason.DESTINATION_TMP_NOT_FOUND not in status.reasons

@@ -424,31 +424,31 @@ def _print_sync_reason_fix(
                 ".nbkp-dst",
                 resolved_endpoints,
             )
-        case SyncReason.RSYNC_NOT_FOUND_ON_SOURCE:
+        case SyncReason.SOURCE_RSYNC_NOT_FOUND:
             host = host_label(src_vol, resolved_endpoints)
             console.print(f"{p2}Install rsync on {host}:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
-        case SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION:
+        case SyncReason.DESTINATION_RSYNC_NOT_FOUND:
             host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}Install rsync on {host}:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
-        case SyncReason.RSYNC_TOO_OLD_ON_SOURCE:
+        case SyncReason.SOURCE_RSYNC_TOO_OLD:
             host = host_label(src_vol, resolved_endpoints)
             console.print(f"{p2}rsync 3.0+ is required on {host}. Install or upgrade:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
-        case SyncReason.RSYNC_TOO_OLD_ON_DESTINATION:
+        case SyncReason.DESTINATION_RSYNC_TOO_OLD:
             host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}rsync 3.0+ is required on {host}. Install or upgrade:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
-        case SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION:
+        case SyncReason.DESTINATION_BTRFS_NOT_FOUND:
             host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}Install btrfs-progs on {host}:")
             _print_cmd(console, _BTRFS_INSTALL, indent=3)
-        case SyncReason.STAT_NOT_FOUND_ON_DESTINATION:
+        case SyncReason.DESTINATION_STAT_NOT_FOUND:
             host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}Install coreutils (stat) on {host}:")
             _print_cmd(console, _COREUTILS_INSTALL, indent=3)
-        case SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION:
+        case SyncReason.DESTINATION_FINDMNT_NOT_FOUND:
             host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}Install util-linux (findmnt) on {host}:")
             _print_cmd(console, _UTIL_LINUX_INSTALL, indent=3)

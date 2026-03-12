@@ -32,20 +32,17 @@ class VolumeReason(str, enum.Enum):
 
 class SyncReason(str, enum.Enum):
     DISABLED = "disabled"
+
     SOURCE_UNAVAILABLE = "source unavailable"
-    DESTINATION_UNAVAILABLE = "destination unavailable"
     SOURCE_SENTINEL_NOT_FOUND = ".nbkp-src source sentinel not found"
-    DESTINATION_SENTINEL_NOT_FOUND = ".nbkp-dst destination sentinel not found"
     SOURCE_LATEST_NOT_FOUND = f"source {LATEST_LINK} symlink not found"
     SOURCE_LATEST_INVALID = f"source {LATEST_LINK} symlink target is invalid"
     SOURCE_SNAPSHOTS_DIR_NOT_FOUND = f"source {SNAPSHOTS_DIR}/ directory not found"
-    RSYNC_NOT_FOUND_ON_SOURCE = "rsync not found on source"
-    RSYNC_NOT_FOUND_ON_DESTINATION = "rsync not found on destination"
-    RSYNC_TOO_OLD_ON_SOURCE = "rsync too old on source (3.0+ required)"
-    RSYNC_TOO_OLD_ON_DESTINATION = "rsync too old on destination (3.0+ required)"
-    BTRFS_NOT_FOUND_ON_DESTINATION = "btrfs not found on destination"
-    STAT_NOT_FOUND_ON_DESTINATION = "stat not found on destination"
-    FINDMNT_NOT_FOUND_ON_DESTINATION = "findmnt not found on destination"
+    SOURCE_RSYNC_NOT_FOUND = "rsync not found on source"
+    SOURCE_RSYNC_TOO_OLD = "rsync too old on source (3.0+ required)"
+
+    DESTINATION_UNAVAILABLE = "destination unavailable"
+    DESTINATION_SENTINEL_NOT_FOUND = ".nbkp-dst destination sentinel not found"
     DESTINATION_NOT_BTRFS = "destination not on btrfs filesystem"
     DESTINATION_NOT_BTRFS_SUBVOLUME = "destination endpoint is not a btrfs subvolume"
     DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM = (
@@ -67,6 +64,12 @@ class SyncReason(str, enum.Enum):
     DESTINATION_STAGING_DIR_NOT_WRITABLE = (
         f"destination {STAGING_DIR}/ directory not writable"
     )
+    DESTINATION_RSYNC_NOT_FOUND = "rsync not found on destination"
+    DESTINATION_RSYNC_TOO_OLD = "rsync too old on destination (3.0+ required)"
+    DESTINATION_BTRFS_NOT_FOUND = "btrfs not found on destination"
+    DESTINATION_STAT_NOT_FOUND = "stat not found on destination"
+    DESTINATION_FINDMNT_NOT_FOUND = "findmnt not found on destination"
+
     DRY_RUN_SOURCE_SNAPSHOT_PENDING = (
         "source snapshot not yet available (dry-run; upstream has not run)"
     )
@@ -571,9 +574,9 @@ def check_sync(
         ):
             reasons.append(SyncReason.SOURCE_SENTINEL_NOT_FOUND)
         if not _check_command_available(src_vol, "rsync", re):
-            reasons.append(SyncReason.RSYNC_NOT_FOUND_ON_SOURCE)
+            reasons.append(SyncReason.SOURCE_RSYNC_NOT_FOUND)
         elif not _check_rsync_version(src_vol, re):
-            reasons.append(SyncReason.RSYNC_TOO_OLD_ON_SOURCE)
+            reasons.append(SyncReason.SOURCE_RSYNC_TOO_OLD)
         if src_cfg.snapshot_mode != "none":
             src_ep = _resolve_endpoint(src_vol, src_cfg.subdir)
             _check_source_latest(
@@ -592,20 +595,20 @@ def check_sync(
         ):
             reasons.append(SyncReason.DESTINATION_SENTINEL_NOT_FOUND)
         if not _check_command_available(dst_vol, "rsync", re):
-            reasons.append(SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION)
+            reasons.append(SyncReason.DESTINATION_RSYNC_NOT_FOUND)
         elif not _check_rsync_version(dst_vol, re):
-            reasons.append(SyncReason.RSYNC_TOO_OLD_ON_DESTINATION)
+            reasons.append(SyncReason.DESTINATION_RSYNC_TOO_OLD)
         if dst_cfg.btrfs_snapshots.enabled:
             if not _check_command_available(dst_vol, "btrfs", re):
-                reasons.append(SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION)
+                reasons.append(SyncReason.DESTINATION_BTRFS_NOT_FOUND)
             else:
                 has_stat = _check_command_available(dst_vol, "stat", re)
                 has_findmnt = _check_command_available(dst_vol, "findmnt", re)
 
                 if not has_stat:
-                    reasons.append(SyncReason.STAT_NOT_FOUND_ON_DESTINATION)
+                    reasons.append(SyncReason.DESTINATION_STAT_NOT_FOUND)
                 if not has_findmnt:
-                    reasons.append(SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION)
+                    reasons.append(SyncReason.DESTINATION_FINDMNT_NOT_FOUND)
 
                 if has_stat:
                     _check_btrfs_dest(
@@ -618,7 +621,7 @@ def check_sync(
         elif dst_cfg.hard_link_snapshots.enabled:
             has_stat = _check_command_available(dst_vol, "stat", re)
             if not has_stat:
-                reasons.append(SyncReason.STAT_NOT_FOUND_ON_DESTINATION)
+                reasons.append(SyncReason.DESTINATION_STAT_NOT_FOUND)
             else:
                 _check_hard_link_dest(
                     dst_vol,

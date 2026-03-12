@@ -105,7 +105,7 @@ def _sample_error_sync_statuses(
             config=config.syncs["photos-to-nas"],
             source_status=vol_statuses["local-data"],
             destination_status=vol_statuses["nas"],
-            reasons=[SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION],
+            reasons=[SyncReason.DESTINATION_RSYNC_NOT_FOUND],
         ),
     }
 
