@@ -33,6 +33,19 @@ def _format_snapshot_display(
             return snapshot_path
 
 
+def _outcome_text(outcome: SyncOutcome) -> Text:
+    """Map a sync outcome to a styled Rich Text label."""
+    match outcome:
+        case SyncOutcome.SUCCESS:
+            return Text("OK", style="green")
+        case SyncOutcome.CANCELLED:
+            return Text("CANCELLED", style="yellow")
+        case SyncOutcome.SKIPPED:
+            return Text("SKIPPED", style="dim")
+        case SyncOutcome.FAILED:
+            return Text("FAILED", style="red")
+
+
 def print_human_results(
     results: list[SyncResult],
     dry_run: bool,
@@ -42,8 +55,7 @@ def print_human_results(
     console: Console | None = None,
 ) -> None:
     """Print human-readable run results."""
-    if console is None:
-        console = Console()
+    c = console or Console()
     mode = " (dry run)" if dry_run else ""
 
     table = Table(
@@ -54,32 +66,19 @@ def print_human_results(
     table.add_column("Details")
 
     for r in results:
-        match r.outcome:
-            case SyncOutcome.SUCCESS:
-                status = Text("OK", style="green")
-            case SyncOutcome.CANCELLED:
-                status = Text("CANCELLED", style="yellow")
-            case SyncOutcome.SKIPPED:
-                status = Text("SKIPPED", style="dim")
-            case SyncOutcome.FAILED:
-                status = Text("FAILED", style="red")
-
-        details_parts: list[str] = []
-        if r.detail:
-            details_parts.append(f"Error: {r.detail}")
-        if r.snapshot_path:
-            display = _format_snapshot_display(
-                r.snapshot_path,
-                r.sync_slug,
-                config,
-                resolved_endpoints,
-            )
-            details_parts.append(f"Snapshot: {display}")
-        if r.pruned_paths:
-            details_parts.append(f"Pruned: {len(r.pruned_paths)} snapshot(s)")
-        if r.output and not r.success:
-            lines = r.output.strip().split("\n")[:5]
-            details_parts.extend(lines)
+        status = _outcome_text(r.outcome)
+        details_parts = [
+            *([f"Error: {r.detail}"] if r.detail else []),
+            *(
+                [
+                    f"Snapshot: {_format_snapshot_display(r.snapshot_path, r.sync_slug, config, resolved_endpoints)}"
+                ]
+                if r.snapshot_path
+                else []
+            ),
+            *([f"Pruned: {len(r.pruned_paths)} snapshot(s)"] if r.pruned_paths else []),
+            *(r.output.strip().split("\n")[:5] if r.output and not r.success else []),
+        ]
 
         table.add_row(
             r.sync_slug,
@@ -87,7 +86,7 @@ def print_human_results(
             "\n".join(details_parts),
         )
 
-    console.print(table)
+    c.print(table)
 
 
 def print_human_prune_results(
@@ -97,8 +96,7 @@ def print_human_prune_results(
     console: Console | None = None,
 ) -> None:
     """Print human-readable prune results."""
-    if console is None:
-        console = Console()
+    c = console or Console()
     mode = " (dry run)" if dry_run else ""
 
     table = Table(
@@ -110,13 +108,7 @@ def print_human_prune_results(
     table.add_column("Status")
 
     for r in results:
-        if r.skipped:
-            status = Text(f"SKIPPED ({r.detail})", style="dim")
-        elif r.detail:
-            status = Text("FAILED", style="red")
-        else:
-            status = Text("OK", style="green")
-
+        status = _prune_status_text(r)
         table.add_row(
             r.sync_slug,
             str(len(r.deleted)),
@@ -124,4 +116,14 @@ def print_human_prune_results(
             status,
         )
 
-    console.print(table)
+    c.print(table)
+
+
+def _prune_status_text(r: PruneResult) -> Text:
+    """Map a prune result to a styled Rich Text label."""
+    if r.skipped:
+        return Text(f"SKIPPED ({r.detail})", style="dim")
+    elif r.detail:
+        return Text("FAILED", style="red")
+    else:
+        return Text("OK", style="green")

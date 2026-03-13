@@ -48,12 +48,11 @@ def create_snapshot(
     Returns the snapshot path.
     """
     re = resolved_endpoints or {}
-    if now is None:
-        now = datetime.now(timezone.utc)
+    ts = now or datetime.now(timezone.utc)
     dst = config.destination_endpoint(sync)
     dst_vol = config.volumes[dst.volume]
     dest_path = resolve_dest_path(sync, config)
-    timestamp = format_snapshot_timestamp(now, dst_vol)
+    timestamp = format_snapshot_timestamp(ts, dst_vol)
     snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{timestamp}"
     tmp_path = f"{dest_path}/{STAGING_DIR}"
     result = _run_on_volume(
@@ -63,7 +62,8 @@ def create_snapshot(
     )
     if result.returncode != 0:
         raise RuntimeError(f"btrfs snapshot failed: {result.stderr}")
-    return snapshot_path
+    else:
+        return snapshot_path
 
 
 def _make_snapshot_writable(
@@ -122,16 +122,18 @@ def prune_snapshots(
     excess = len(snapshots) - max_snapshots
     if excess <= 0:
         return []
+    else:
+        latest_name = read_latest_symlink(sync, config, resolved_endpoints=re)
 
-    latest_name = read_latest_symlink(sync, config, resolved_endpoints=re)
+        # Candidates: oldest first, skip the latest target, take up to excess
+        to_delete = [p for p in snapshots if p.rsplit("/", 1)[-1] != latest_name][
+            :excess
+        ]
 
-    # Candidates: oldest first, skip the latest target, take up to excess
-    to_delete = [p for p in snapshots if p.rsplit("/", 1)[-1] != latest_name][:excess]
+        if not dry_run:
+            dst = config.destination_endpoint(sync)
+            dst_vol = config.volumes[dst.volume]
+            for path in to_delete:
+                delete_snapshot(path, dst_vol, re)
 
-    if not dry_run:
-        dst = config.destination_endpoint(sync)
-        dst_vol = config.volumes[dst.volume]
-        for path in to_delete:
-            delete_snapshot(path, dst_vol, re)
-
-    return to_delete
+        return to_delete

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
 from datetime import datetime, timezone
 
 from ...config import (
@@ -15,8 +14,8 @@ from ...config import (
     Volume,
 )
 from ...conventions import SNAPSHOTS_DIR
-from ...remote import run_remote_command
 from .common import (
+    _run_on_volume,
     format_snapshot_timestamp,
     list_snapshots,
     read_latest_symlink,
@@ -36,31 +35,18 @@ def create_snapshot_dir(
     Returns the full snapshot path.
     """
     re = resolved_endpoints or {}
-    if now is None:
-        now = datetime.now(timezone.utc)
+    ts = now or datetime.now(timezone.utc)
     dst = config.destination_endpoint(sync)
     dst_vol = config.volumes[dst.volume]
     dest_path = resolve_dest_path(sync, config)
-    timestamp = format_snapshot_timestamp(now, dst_vol)
+    timestamp = format_snapshot_timestamp(ts, dst_vol)
     snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{timestamp}"
-    match dst_vol:
-        case RemoteVolume():
-            ep = re[dst_vol.slug]
-            result = run_remote_command(
-                ep.server,
-                ["mkdir", "-p", snapshot_path],
-                ep.proxy_chain,
-            )
-        case LocalVolume():
-            result = subprocess.run(
-                ["mkdir", "-p", snapshot_path],
-                capture_output=True,
-                text=True,
-            )
+    result = _run_on_volume(["mkdir", "-p", snapshot_path], dst_vol, re)
 
     if result.returncode != 0:
         raise RuntimeError(f"mkdir snapshot dir failed: {result.stderr}")
-    return snapshot_path
+    else:
+        return snapshot_path
 
 
 def cleanup_orphaned_snapshots(
@@ -78,14 +64,14 @@ def cleanup_orphaned_snapshots(
     latest_name = read_latest_symlink(sync, config, resolved_endpoints=re)
     if latest_name is None:
         return []
-
-    all_snapshots = list_snapshots(sync, config, re)
-    dst = config.destination_endpoint(sync)
-    dst_vol = config.volumes[dst.volume]
-    orphans = [p for p in all_snapshots if p.rsplit("/", 1)[-1] > latest_name]
-    for path in orphans:
-        delete_snapshot(path, dst_vol, re)
-    return orphans
+    else:
+        all_snapshots = list_snapshots(sync, config, re)
+        dst = config.destination_endpoint(sync)
+        dst_vol = config.volumes[dst.volume]
+        orphans = [p for p in all_snapshots if p.rsplit("/", 1)[-1] > latest_name]
+        for path in orphans:
+            delete_snapshot(path, dst_vol, re)
+        return orphans
 
 
 def delete_snapshot(
@@ -96,8 +82,7 @@ def delete_snapshot(
     """Delete a hard-link snapshot directory."""
     match volume:
         case RemoteVolume():
-            ep = resolved_endpoints[volume.slug]
-            result = run_remote_command(ep.server, ["rm", "-rf", path], ep.proxy_chain)
+            result = _run_on_volume(["rm", "-rf", path], volume, resolved_endpoints)
             if result.returncode != 0:
                 raise RuntimeError(f"rm -rf snapshot failed: {result.stderr}")
         case LocalVolume():
@@ -122,16 +107,18 @@ def prune_snapshots(
     excess = len(snapshots) - max_snapshots
     if excess <= 0:
         return []
+    else:
+        latest_name = read_latest_symlink(sync, config, resolved_endpoints=re)
 
-    latest_name = read_latest_symlink(sync, config, resolved_endpoints=re)
+        # Candidates: oldest first, skip the latest target, take up to excess
+        to_delete = [p for p in snapshots if p.rsplit("/", 1)[-1] != latest_name][
+            :excess
+        ]
 
-    # Candidates: oldest first, skip the latest target, take up to excess
-    to_delete = [p for p in snapshots if p.rsplit("/", 1)[-1] != latest_name][:excess]
+        if not dry_run:
+            dst = config.destination_endpoint(sync)
+            dst_vol = config.volumes[dst.volume]
+            for path in to_delete:
+                delete_snapshot(path, dst_vol, re)
 
-    if not dry_run:
-        dst = config.destination_endpoint(sync)
-        dst_vol = config.volumes[dst.volume]
-        for path in to_delete:
-            delete_snapshot(path, dst_vol, re)
-
-    return to_delete
+        return to_delete

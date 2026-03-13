@@ -51,6 +51,20 @@ def resolve_dest_path(sync: SyncConfig, config: Config) -> str:
         return vol.path
 
 
+def _run_on_volume(
+    cmd: list[str],
+    volume: Volume,
+    resolved_endpoints: ResolvedEndpoints,
+) -> subprocess.CompletedProcess[str]:
+    """Run a command on the volume's host (local or remote)."""
+    match volume:
+        case RemoteVolume():
+            ep = resolved_endpoints[volume.slug]
+            return run_remote_command(ep.server, cmd, ep.proxy_chain)
+        case LocalVolume():
+            return subprocess.run(cmd, capture_output=True, text=True)
+
+
 def list_snapshots(
     sync: SyncConfig,
     config: Config,
@@ -60,23 +74,9 @@ def list_snapshots(
     re = resolved_endpoints or {}
     dest_path = resolve_dest_path(sync, config)
     snapshots_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
-
     dst = config.destination_endpoint(sync)
     dst_vol = config.volumes[dst.volume]
-    match dst_vol:
-        case RemoteVolume():
-            ep = re[dst_vol.slug]
-            result = run_remote_command(
-                ep.server,
-                ["ls", snapshots_dir],
-                ep.proxy_chain,
-            )
-        case LocalVolume():
-            result = subprocess.run(
-                ["ls", snapshots_dir],
-                capture_output=True,
-                text=True,
-            )
+    result = _run_on_volume(["ls", snapshots_dir], dst_vol, re)
 
     if result.returncode != 0 or not result.stdout.strip():
         return []
@@ -98,6 +98,32 @@ def get_latest_snapshot(
         return None
 
 
+def _read_raw_symlink_target(
+    volume: Volume,
+    latest_path: str,
+    resolved_endpoints: ResolvedEndpoints,
+) -> str | None:
+    """Read the raw symlink target string, or None if not found."""
+    match volume:
+        case LocalVolume():
+            p = Path(latest_path)
+            if not p.is_symlink():
+                return None
+            else:
+                return str(p.readlink())
+        case RemoteVolume():
+            ep = resolved_endpoints[volume.slug]
+            result = run_remote_command(
+                ep.server,
+                ["readlink", latest_path],
+                ep.proxy_chain,
+            )
+            if result.returncode != 0:
+                return None
+            else:
+                return result.stdout.strip()
+
+
 def read_latest_symlink(
     sync: SyncConfig,
     config: Config,
@@ -112,31 +138,13 @@ def read_latest_symlink(
     re = resolved_endpoints or {}
     dest_path = resolve_dest_path(sync, config)
     latest_path = f"{dest_path}/{LATEST_LINK}"
-
     dst = config.destination_endpoint(sync)
     dst_vol = config.volumes[dst.volume]
-    match dst_vol:
-        case LocalVolume():
-            p = Path(latest_path)
-            if not p.is_symlink():
-                return None
-            target = str(p.readlink())
-        case RemoteVolume():
-            ep = re[dst_vol.slug]
-            result = run_remote_command(
-                ep.server,
-                ["readlink", latest_path],
-                ep.proxy_chain,
-            )
-            if result.returncode != 0:
-                return None
-            target = result.stdout.strip()
+    target = _read_raw_symlink_target(dst_vol, latest_path, re)
 
-    if target == DEVNULL_TARGET:
+    if target is None or target == DEVNULL_TARGET:
         return None
-
-    # Target is like "snapshots/{name}" — extract the name
-    if "/" in target:
+    elif "/" in target:
         return target.rsplit("/", 1)[-1]
     else:
         return target
@@ -163,11 +171,6 @@ def update_latest_symlink(
             p.unlink(missing_ok=True)
             p.symlink_to(target)
         case RemoteVolume():
-            ep = re[dst_vol.slug]
-            result = run_remote_command(
-                ep.server,
-                ["ln", "-sfn", target, latest_path],
-                ep.proxy_chain,
-            )
+            result = _run_on_volume(["ln", "-sfn", target, latest_path], dst_vol, re)
             if result.returncode != 0:
                 raise RuntimeError(f"symlink update failed: {result.stderr}")
