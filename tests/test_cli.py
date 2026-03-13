@@ -20,9 +20,9 @@ from nbkp.config import (
 )
 from nbkp.sync import ProgressMode, SyncResult
 from nbkp.preflight import (
-    SyncReason,
+    SyncError,
     SyncStatus,
-    VolumeReason,
+    VolumeError,
     VolumeStatus,
 )
 
@@ -70,12 +70,12 @@ def _sample_vol_statuses(
         "local-data": VolumeStatus(
             slug="local-data",
             config=config.volumes["local-data"],
-            reasons=[],
+            errors=[],
         ),
         "nas": VolumeStatus(
             slug="nas",
             config=config.volumes["nas"],
-            reasons=[VolumeReason.UNREACHABLE],
+            errors=[VolumeError.UNREACHABLE],
         ),
     }
 
@@ -90,7 +90,7 @@ def _sample_sync_statuses(
             config=config.syncs["photos-to-nas"],
             source_status=vol_statuses["local-data"],
             destination_status=vol_statuses["nas"],
-            reasons=[SyncReason.DESTINATION_UNAVAILABLE],
+            errors=[SyncError.DESTINATION_UNAVAILABLE],
         ),
     }
 
@@ -105,7 +105,7 @@ def _sample_error_sync_statuses(
             config=config.syncs["photos-to-nas"],
             source_status=vol_statuses["local-data"],
             destination_status=vol_statuses["nas"],
-            reasons=[SyncReason.DESTINATION_RSYNC_NOT_FOUND],
+            errors=[SyncError.DESTINATION_RSYNC_NOT_FOUND],
         ),
     }
 
@@ -120,9 +120,9 @@ def _sample_sentinel_only_sync_statuses(
             config=config.syncs["photos-to-nas"],
             source_status=vol_statuses["local-data"],
             destination_status=vol_statuses["nas"],
-            reasons=[
-                SyncReason.SOURCE_SENTINEL_NOT_FOUND,
-                SyncReason.DESTINATION_SENTINEL_NOT_FOUND,
+            errors=[
+                SyncError.SOURCE_SENTINEL_NOT_FOUND,
+                SyncError.DESTINATION_SENTINEL_NOT_FOUND,
             ],
         ),
     }
@@ -135,12 +135,12 @@ def _sample_all_active_vol_statuses(
         "local-data": VolumeStatus(
             slug="local-data",
             config=config.volumes["local-data"],
-            reasons=[],
+            errors=[],
         ),
         "nas": VolumeStatus(
             slug="nas",
             config=config.volumes["nas"],
-            reasons=[],
+            errors=[],
         ),
     }
 
@@ -155,7 +155,7 @@ def _sample_all_active_sync_statuses(
             config=config.syncs["photos-to-nas"],
             source_status=vol_statuses["local-data"],
             destination_status=vol_statuses["nas"],
-            reasons=[],
+            errors=[],
         ),
     }
 
@@ -700,7 +700,7 @@ def _prune_active_statuses(
     config: Config,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     vol_statuses = {
-        name: VolumeStatus(slug=name, config=vol, reasons=[])
+        name: VolumeStatus(slug=name, config=vol, errors=[])
         for name, vol in config.volumes.items()
     }
     sync_statuses = {
@@ -711,7 +711,7 @@ def _prune_active_statuses(
             destination_status=vol_statuses[
                 config.sync_endpoints[sync.destination].volume
             ],
-            reasons=[],
+            errors=[],
         )
         for name, sync in config.syncs.items()
     }
@@ -738,7 +738,7 @@ class TestPruneCommand:
                 name: VolumeStatus(
                     slug=name,
                     config=config.volumes[name],
-                    reasons=[],
+                    errors=[],
                 )
                 for name in config.volumes
             },
@@ -774,7 +774,7 @@ class TestPruneCommand:
                 name: VolumeStatus(
                     slug=name,
                     config=config.volumes[name],
-                    reasons=[],
+                    errors=[],
                 )
                 for name in config.volumes
             },
@@ -813,7 +813,7 @@ class TestPruneCommand:
                 name: VolumeStatus(
                     slug=name,
                     config=config.volumes[name],
-                    reasons=[],
+                    errors=[],
                 )
                 for name in config.volumes
             },

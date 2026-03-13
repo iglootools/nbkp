@@ -12,7 +12,7 @@ Four-phase check hierarchy (each level caches results for the next):
    ``DestinationEndpointDiagnostics`` (sentinels, directories,
    symlinks — pure observation, no error interpretation)
 4. **Syncs** — ``SyncStatus`` (translates diagnostics + capabilities
-   into ``SyncReason`` values based on each sync's configuration)
+   into ``SyncError`` values based on each sync's configuration)
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from .snapshot_checks import _has_upstream_sync
 from .status import (
     DestinationEndpointDiagnostics,
     SourceEndpointDiagnostics,
-    SyncReason,
+    SyncError,
     SyncStatus,
     VolumeCapabilities,
     VolumeStatus,
@@ -53,7 +53,7 @@ def check_sync(
         dict[str, DestinationEndpointDiagnostics] | None
     ) = None,
 ) -> SyncStatus:
-    """Check if a sync is active, accumulating all failure reasons.
+    """Check if a sync is active, accumulating all failure errors.
 
     When caches are provided, pre-computed results are reused.
     When ``None``, checks run inline (standalone usage).
@@ -74,19 +74,19 @@ def check_sync(
             config=sync,
             source_status=src_status,
             destination_status=dst_status,
-            reasons=[SyncReason.DISABLED],
+            errors=[SyncError.DISABLED],
         )
 
-    reasons: list[SyncReason] = []
+    errors: list[SyncError] = []
     src_diag: SourceEndpointDiagnostics | None = None
     dst_diag: DestinationEndpointDiagnostics | None = None
 
     # Volume availability
     if not src_status.active:
-        reasons.append(SyncReason.SOURCE_UNAVAILABLE)
+        errors.append(SyncError.SOURCE_UNAVAILABLE)
 
     if not dst_status.active:
-        reasons.append(SyncReason.DESTINATION_UNAVAILABLE)
+        errors.append(SyncError.DESTINATION_UNAVAILABLE)
 
     # Source checks (only if source volume is active)
     if src_status.active:
@@ -96,9 +96,7 @@ def check_sync(
         src_diag = _get_or_check_source(
             src_cfg, src_vol, src_caps, re, source_diagnostics_cache
         )
-        reasons.extend(
-            _source_reasons(src_diag, src_caps, src_cfg, sync, syncs, dry_run)
-        )
+        errors.extend(_source_errors(src_diag, src_caps, src_cfg, sync, syncs, dry_run))
 
     # Destination checks (only if dest volume is active)
     if dst_status.active:
@@ -108,7 +106,7 @@ def check_sync(
         dst_diag = _get_or_check_destination(
             dst_cfg, dst_vol, dst_caps, re, destination_diagnostics_cache
         )
-        reasons.extend(_destination_reasons(dst_diag, dst_caps, dst_cfg))
+        errors.extend(_destination_errors(dst_diag, dst_caps, dst_cfg))
 
     dst_latest = dst_diag.latest.snapshot_name if dst_diag and dst_diag.latest else None
 
@@ -119,170 +117,170 @@ def check_sync(
         destination_status=dst_status,
         source_diagnostics=src_diag,
         destination_diagnostics=dst_diag,
-        reasons=reasons,
+        errors=errors,
         destination_latest_target=dst_latest,
     )
 
 
-# ── Diagnostics → reasons translation ──────────────────────
+# ── Diagnostics → errors translation ──────────────────────
 
 
-def _source_reasons(
+def _source_errors(
     diag: SourceEndpointDiagnostics,
     caps: VolumeCapabilities,
     endpoint: SyncEndpoint,
     sync: SyncConfig,
     all_syncs: dict[str, SyncConfig],
     dry_run: bool,
-) -> list[SyncReason]:
-    """Translate source diagnostics + capabilities into SyncReasons."""
-    reasons: list[SyncReason] = []
+) -> list[SyncError]:
+    """Translate source diagnostics + capabilities into SyncErrors."""
+    errors: list[SyncError] = []
 
     if not diag.sentinel_exists:
-        reasons.append(SyncReason.SOURCE_SENTINEL_NOT_FOUND)
+        errors.append(SyncError.SOURCE_SENTINEL_NOT_FOUND)
 
     if not caps.has_rsync:
-        reasons.append(SyncReason.SOURCE_RSYNC_NOT_FOUND)
+        errors.append(SyncError.SOURCE_RSYNC_NOT_FOUND)
     elif not caps.rsync_version_ok:
-        reasons.append(SyncReason.SOURCE_RSYNC_TOO_OLD)
+        errors.append(SyncError.SOURCE_RSYNC_TOO_OLD)
 
     if endpoint.snapshot_mode != "none":
         if diag.snapshot_dirs is not None and not diag.snapshot_dirs.exists:
-            reasons.append(SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND)
-        reasons.extend(_source_latest_reasons(diag, sync, all_syncs, dry_run))
+            errors.append(SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND)
+        errors.extend(_source_latest_errors(diag, sync, all_syncs, dry_run))
 
-    return reasons
+    return errors
 
 
-def _source_latest_reasons(
+def _source_latest_errors(
     diag: SourceEndpointDiagnostics,
     sync: SyncConfig,
     all_syncs: dict[str, SyncConfig],
     dry_run: bool,
-) -> list[SyncReason]:
+) -> list[SyncError]:
     """Interpret the source latest symlink state."""
     latest = diag.latest
     if latest is None or not latest.exists:
-        return [SyncReason.SOURCE_LATEST_NOT_FOUND]
+        return [SyncError.SOURCE_LATEST_NOT_FOUND]
 
     if latest.raw_target == DEVNULL_TARGET:
         # /dev/null interpretation depends on sync-level context
         if not _has_upstream_sync(sync, all_syncs):
-            return [SyncReason.SOURCE_LATEST_INVALID]
+            return [SyncError.SOURCE_LATEST_INVALID]
         elif dry_run:
-            return [SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING]
+            return [SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING]
         return []
 
     if latest.target_valid is False:
-        return [SyncReason.SOURCE_LATEST_INVALID]
+        return [SyncError.SOURCE_LATEST_INVALID]
 
     return []
 
 
-def _destination_reasons(
+def _destination_errors(
     diag: DestinationEndpointDiagnostics,
     caps: VolumeCapabilities,
     endpoint: SyncEndpoint,
-) -> list[SyncReason]:
-    """Translate destination diagnostics + capabilities into SyncReasons."""
-    reasons: list[SyncReason] = []
+) -> list[SyncError]:
+    """Translate destination diagnostics + capabilities into SyncErrors."""
+    errors: list[SyncError] = []
 
     if not diag.sentinel_exists:
-        reasons.append(SyncReason.DESTINATION_SENTINEL_NOT_FOUND)
+        errors.append(SyncError.DESTINATION_SENTINEL_NOT_FOUND)
 
     if not caps.has_rsync:
-        reasons.append(SyncReason.DESTINATION_RSYNC_NOT_FOUND)
+        errors.append(SyncError.DESTINATION_RSYNC_NOT_FOUND)
     elif not caps.rsync_version_ok:
-        reasons.append(SyncReason.DESTINATION_RSYNC_TOO_OLD)
+        errors.append(SyncError.DESTINATION_RSYNC_TOO_OLD)
 
     if endpoint.btrfs_snapshots.enabled:
-        reasons.extend(_btrfs_destination_reasons(diag, caps))
+        errors.extend(_btrfs_destination_errors(diag, caps))
     elif endpoint.hard_link_snapshots.enabled:
-        reasons.extend(_hardlink_destination_reasons(diag, caps))
+        errors.extend(_hardlink_destination_errors(diag, caps))
 
     if not diag.endpoint_writable:
-        reasons.append(SyncReason.DESTINATION_ENDPOINT_NOT_WRITABLE)
+        errors.append(SyncError.DESTINATION_ENDPOINT_NOT_WRITABLE)
 
     if endpoint.snapshot_mode != "none":
-        reasons.extend(_destination_latest_reasons(diag))
+        errors.extend(_destination_latest_errors(diag))
 
-    return reasons
+    return errors
 
 
-def _btrfs_destination_reasons(
+def _btrfs_destination_errors(
     diag: DestinationEndpointDiagnostics,
     caps: VolumeCapabilities,
-) -> list[SyncReason]:
-    """Translate btrfs-specific diagnostics into SyncReasons."""
-    reasons: list[SyncReason] = []
+) -> list[SyncError]:
+    """Translate btrfs-specific diagnostics into SyncErrors."""
+    errors: list[SyncError] = []
 
     if not caps.has_btrfs:
-        reasons.append(SyncReason.DESTINATION_BTRFS_NOT_FOUND)
-        return reasons
+        errors.append(SyncError.DESTINATION_BTRFS_NOT_FOUND)
+        return errors
 
     if not caps.has_stat:
-        reasons.append(SyncReason.DESTINATION_STAT_NOT_FOUND)
+        errors.append(SyncError.DESTINATION_STAT_NOT_FOUND)
     if not caps.has_findmnt:
-        reasons.append(SyncReason.DESTINATION_FINDMNT_NOT_FOUND)
+        errors.append(SyncError.DESTINATION_FINDMNT_NOT_FOUND)
 
     if caps.has_stat:
         if not caps.is_btrfs_filesystem:
-            reasons.append(SyncReason.DESTINATION_NOT_BTRFS)
+            errors.append(SyncError.DESTINATION_NOT_BTRFS)
         elif diag.btrfs is None or not diag.btrfs.is_subvolume:
-            reasons.append(SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME)
+            errors.append(SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME)
         else:
             if caps.has_findmnt and not caps.btrfs_user_subvol_rm:
-                reasons.append(SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM)
+                errors.append(SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM)
             if not diag.btrfs.staging_dir_exists:
-                reasons.append(SyncReason.DESTINATION_TMP_NOT_FOUND)
+                errors.append(SyncError.DESTINATION_TMP_NOT_FOUND)
             elif diag.btrfs.staging_dir_writable is False:
-                reasons.append(SyncReason.DESTINATION_STAGING_DIR_NOT_WRITABLE)
-            reasons.extend(_snapshot_dirs_reasons(diag))
+                errors.append(SyncError.DESTINATION_STAGING_DIR_NOT_WRITABLE)
+            errors.extend(_snapshot_dirs_errors(diag))
 
-    return reasons
+    return errors
 
 
-def _hardlink_destination_reasons(
+def _hardlink_destination_errors(
     diag: DestinationEndpointDiagnostics,
     caps: VolumeCapabilities,
-) -> list[SyncReason]:
-    """Translate hard-link-specific diagnostics into SyncReasons."""
-    reasons: list[SyncReason] = []
+) -> list[SyncError]:
+    """Translate hard-link-specific diagnostics into SyncErrors."""
+    errors: list[SyncError] = []
 
     if not caps.has_stat:
-        reasons.append(SyncReason.DESTINATION_STAT_NOT_FOUND)
-        return reasons
+        errors.append(SyncError.DESTINATION_STAT_NOT_FOUND)
+        return errors
 
     if not caps.hardlink_supported:
-        reasons.append(SyncReason.DESTINATION_NO_HARDLINK_SUPPORT)
-    reasons.extend(_snapshot_dirs_reasons(diag))
+        errors.append(SyncError.DESTINATION_NO_HARDLINK_SUPPORT)
+    errors.extend(_snapshot_dirs_errors(diag))
 
-    return reasons
+    return errors
 
 
-def _snapshot_dirs_reasons(
+def _snapshot_dirs_errors(
     diag: DestinationEndpointDiagnostics,
-) -> list[SyncReason]:
-    """Translate snapshot directory diagnostics into SyncReasons."""
+) -> list[SyncError]:
+    """Translate snapshot directory diagnostics into SyncErrors."""
     sd = diag.snapshot_dirs
     if sd is None:
         return []
     if not sd.exists:
-        return [SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND]
+        return [SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND]
     if sd.writable is False:
-        return [SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE]
+        return [SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE]
     return []
 
 
-def _destination_latest_reasons(
+def _destination_latest_errors(
     diag: DestinationEndpointDiagnostics,
-) -> list[SyncReason]:
+) -> list[SyncError]:
     """Interpret the destination latest symlink state."""
     latest = diag.latest
     if latest is None or not latest.exists:
-        return [SyncReason.DESTINATION_LATEST_NOT_FOUND]
+        return [SyncError.DESTINATION_LATEST_NOT_FOUND]
     if latest.target_valid is False:
-        return [SyncReason.DESTINATION_LATEST_INVALID]
+        return [SyncError.DESTINATION_LATEST_INVALID]
     return []
 
 
@@ -345,7 +343,7 @@ def check_all_syncs(
     1. Volume reachability → ``volume_statuses``
     2. Volume capabilities → ``volume_capabilities`` (skip inactive)
     3. Sync endpoints → diagnostics caches (skip inactive volumes)
-    4. Syncs → ``sync_statuses`` (translates diagnostics into reasons)
+    4. Syncs → ``sync_statuses`` (translates diagnostics into errors)
 
     When *only_syncs* is given, only those syncs (and the
     volumes/endpoints they reference) are checked.
@@ -381,7 +379,7 @@ def check_all_syncs(
             volume_statuses[slug] = VolumeStatus(
                 slug=vs.slug,
                 config=vs.config,
-                reasons=vs.reasons,
+                errors=vs.errors,
                 capabilities=caps,
             )
 
@@ -412,7 +410,7 @@ def check_all_syncs(
                 dst_cfg, dst_vol, caps, re
             )
 
-    # Phase 4: Sync checks (translates diagnostics + capabilities into reasons)
+    # Phase 4: Sync checks (translates diagnostics + capabilities into errors)
     sync_statuses: dict[str, SyncStatus] = {}
     for slug, sync in syncs.items():
         sync_statuses[slug] = check_sync(

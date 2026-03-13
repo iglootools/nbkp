@@ -24,7 +24,7 @@ from .config import (
     resolve_all_endpoints,
 )
 from .preflight import (
-    SyncReason,
+    SyncError,
     SyncStatus,
     VolumeStatus,
     check_all_syncs,
@@ -55,12 +55,12 @@ from .sync import (
 )
 from .sync.pruner import prune_all_syncs
 
-_INACTIVE_REASONS = {
-    SyncReason.SOURCE_SENTINEL_NOT_FOUND,
-    SyncReason.DESTINATION_SENTINEL_NOT_FOUND,
-    SyncReason.SOURCE_UNAVAILABLE,
-    SyncReason.DESTINATION_UNAVAILABLE,
-    SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING,
+_INACTIVE_ERRORS = {
+    SyncError.SOURCE_SENTINEL_NOT_FOUND,
+    SyncError.DESTINATION_SENTINEL_NOT_FOUND,
+    SyncError.SOURCE_UNAVAILABLE,
+    SyncError.DESTINATION_UNAVAILABLE,
+    SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING,
 }
 
 app = typer.Typer(
@@ -360,8 +360,8 @@ def run(
             ss = sync_statuses.get(r.sync_slug)
             return (
                 ss is not None
-                and bool(ss.reasons)
-                and set(ss.reasons) <= _INACTIVE_REASONS
+                and bool(ss.errors)
+                and set(ss.errors) <= _INACTIVE_ERRORS
             )
 
         if any(not r.success and not _is_expected_skip(r) for r in results):
@@ -712,7 +712,7 @@ def _check_and_display(
     has_errors = (
         any(not s.active for s in sync_statuses.values())
         if strict
-        else any(set(s.reasons) - _INACTIVE_REASONS for s in sync_statuses.values())
+        else any(set(s.errors) - _INACTIVE_ERRORS for s in sync_statuses.values())
     )
 
     return vol_statuses, sync_statuses, has_errors

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from ...preflight import (
-    SyncReason,
+    SyncError,
     SyncStatus,
-    VolumeReason,
+    VolumeError,
     VolumeStatus,
 )
 from ...config import (
@@ -57,22 +57,22 @@ def check_data(
     laptop_vs = VolumeStatus(
         slug="laptop",
         config=config.volumes["laptop"],
-        reasons=[],
+        errors=[],
     )
     usb_vs = VolumeStatus(
         slug="usb-drive",
         config=config.volumes["usb-drive"],
-        reasons=[],
+        errors=[],
     )
     nas_vs = VolumeStatus(
         slug="nas-backup",
         config=config.volumes["nas-backup"],
-        reasons=[VolumeReason.UNREACHABLE],
+        errors=[VolumeError.UNREACHABLE],
     )
     external_vs = VolumeStatus(
         slug="external-drive",
         config=config.volumes["external-drive"],
-        reasons=[VolumeReason.SENTINEL_NOT_FOUND],
+        errors=[VolumeError.SENTINEL_NOT_FOUND],
     )
 
     vol_statuses = {
@@ -88,28 +88,28 @@ def check_data(
             config=config.syncs["photos-to-usb"],
             source_status=laptop_vs,
             destination_status=usb_vs,
-            reasons=[],
+            errors=[],
         ),
         "docs-to-nas": SyncStatus(
             slug="docs-to-nas",
             config=config.syncs["docs-to-nas"],
             source_status=laptop_vs,
             destination_status=nas_vs,
-            reasons=[SyncReason.DESTINATION_UNAVAILABLE],
+            errors=[SyncError.DESTINATION_UNAVAILABLE],
         ),
         "music-to-usb": SyncStatus(
             slug="music-to-usb",
             config=config.syncs["music-to-usb"],
             source_status=laptop_vs,
             destination_status=usb_vs,
-            reasons=[],
+            errors=[],
         ),
         "disabled-backup": SyncStatus(
             slug="disabled-backup",
             config=config.syncs["disabled-backup"],
             source_status=laptop_vs,
             destination_status=external_vs,
-            reasons=[SyncReason.DISABLED],
+            errors=[SyncError.DISABLED],
         ),
     }
 
@@ -132,7 +132,7 @@ def _troubleshoot_volumes() -> dict[str, LocalVolume]:
 
 
 def troubleshoot_config() -> Config:
-    """Config designed to trigger every troubleshoot reason.
+    """Config designed to trigger every troubleshoot error.
 
     Each sync needs a unique destination endpoint, and each
     endpoint needs a unique (volume, subdir) pair.  We use
@@ -343,41 +343,41 @@ def troubleshoot_config() -> Config:
 def troubleshoot_data(
     config: Config,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
-    """Statuses covering every VolumeReason and SyncReason."""
+    """Statuses covering every VolumeError and SyncError."""
     laptop_vs = VolumeStatus(
         slug="laptop",
         config=config.volumes["laptop"],
-        reasons=[VolumeReason.SENTINEL_NOT_FOUND],
+        errors=[VolumeError.SENTINEL_NOT_FOUND],
     )
     usb_vs = VolumeStatus(
         slug="usb-drive",
         config=config.volumes["usb-drive"],
-        reasons=[],
+        errors=[],
     )
     nas_vs = VolumeStatus(
         slug="nas-backup",
         config=config.volumes["nas-backup"],
-        reasons=[VolumeReason.UNREACHABLE],
+        errors=[VolumeError.UNREACHABLE],
     )
     home_nas_vs = VolumeStatus(
         slug="home-nas",
         config=config.volumes["home-nas"],
-        reasons=[VolumeReason.LOCATION_EXCLUDED],
+        errors=[VolumeError.LOCATION_EXCLUDED],
     )
     usb7_vs = VolumeStatus(
         slug="usb-7",
         config=config.volumes["usb-7"],
-        reasons=[],
+        errors=[],
     )
     usb8_vs = VolumeStatus(
         slug="usb-8",
         config=config.volumes["usb-8"],
-        reasons=[],
+        errors=[],
     )
     usb9_vs = VolumeStatus(
         slug="usb-9",
         config=config.volumes["usb-9"],
-        reasons=[],
+        errors=[],
     )
 
     vol_statuses = {
@@ -396,16 +396,16 @@ def troubleshoot_data(
             config=config.syncs["disabled-sync"],
             source_status=laptop_vs,
             destination_status=usb_vs,
-            reasons=[SyncReason.DISABLED],
+            errors=[SyncError.DISABLED],
         ),
         "unavailable-volumes": SyncStatus(
             slug="unavailable-volumes",
             config=config.syncs["unavailable-volumes"],
             source_status=laptop_vs,
             destination_status=nas_vs,
-            reasons=[
-                SyncReason.SOURCE_UNAVAILABLE,
-                SyncReason.DESTINATION_UNAVAILABLE,
+            errors=[
+                SyncError.SOURCE_UNAVAILABLE,
+                SyncError.DESTINATION_UNAVAILABLE,
             ],
         ),
         "missing-sentinels": SyncStatus(
@@ -413,9 +413,9 @@ def troubleshoot_data(
             config=config.syncs["missing-sentinels"],
             source_status=laptop_vs,
             destination_status=usb_vs,
-            reasons=[
-                SyncReason.SOURCE_SENTINEL_NOT_FOUND,
-                SyncReason.DESTINATION_SENTINEL_NOT_FOUND,
+            errors=[
+                SyncError.SOURCE_SENTINEL_NOT_FOUND,
+                SyncError.DESTINATION_SENTINEL_NOT_FOUND,
             ],
         ),
         "rsync-missing": SyncStatus(
@@ -423,9 +423,9 @@ def troubleshoot_data(
             config=config.syncs["rsync-missing"],
             source_status=laptop_vs,
             destination_status=nas_vs,
-            reasons=[
-                SyncReason.SOURCE_RSYNC_NOT_FOUND,
-                SyncReason.DESTINATION_RSYNC_NOT_FOUND,
+            errors=[
+                SyncError.SOURCE_RSYNC_NOT_FOUND,
+                SyncError.DESTINATION_RSYNC_NOT_FOUND,
             ],
         ),
         "btrfs-not-detected": SyncStatus(
@@ -433,10 +433,10 @@ def troubleshoot_data(
             config=config.syncs["btrfs-not-detected"],
             source_status=laptop_vs,
             destination_status=usb_vs,
-            reasons=[
-                SyncReason.DESTINATION_BTRFS_NOT_FOUND,
-                SyncReason.DESTINATION_NOT_BTRFS,
-                SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME,
+            errors=[
+                SyncError.DESTINATION_BTRFS_NOT_FOUND,
+                SyncError.DESTINATION_NOT_BTRFS,
+                SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME,
             ],
         ),
         "btrfs-mount-issues": SyncStatus(
@@ -444,10 +444,10 @@ def troubleshoot_data(
             config=config.syncs["btrfs-mount-issues"],
             source_status=laptop_vs,
             destination_status=nas_vs,
-            reasons=[
-                SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM,
-                SyncReason.DESTINATION_TMP_NOT_FOUND,
-                SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND,
+            errors=[
+                SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM,
+                SyncError.DESTINATION_TMP_NOT_FOUND,
+                SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND,
             ],
         ),
         "tools-missing": SyncStatus(
@@ -455,9 +455,9 @@ def troubleshoot_data(
             config=config.syncs["tools-missing"],
             source_status=laptop_vs,
             destination_status=usb_vs,
-            reasons=[
-                SyncReason.DESTINATION_STAT_NOT_FOUND,
-                SyncReason.DESTINATION_FINDMNT_NOT_FOUND,
+            errors=[
+                SyncError.DESTINATION_STAT_NOT_FOUND,
+                SyncError.DESTINATION_FINDMNT_NOT_FOUND,
             ],
         ),
         "hardlink-issues": SyncStatus(
@@ -465,9 +465,9 @@ def troubleshoot_data(
             config=config.syncs["hardlink-issues"],
             source_status=laptop_vs,
             destination_status=usb_vs,
-            reasons=[
-                SyncReason.DESTINATION_NO_HARDLINK_SUPPORT,
-                SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND,
+            errors=[
+                SyncError.DESTINATION_NO_HARDLINK_SUPPORT,
+                SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND,
             ],
         ),
         "rsync-too-old": SyncStatus(
@@ -475,9 +475,9 @@ def troubleshoot_data(
             config=config.syncs["rsync-too-old"],
             source_status=laptop_vs,
             destination_status=nas_vs,
-            reasons=[
-                SyncReason.SOURCE_RSYNC_TOO_OLD,
-                SyncReason.DESTINATION_RSYNC_TOO_OLD,
+            errors=[
+                SyncError.SOURCE_RSYNC_TOO_OLD,
+                SyncError.DESTINATION_RSYNC_TOO_OLD,
             ],
         ),
         "source-latest-missing": SyncStatus(
@@ -485,9 +485,9 @@ def troubleshoot_data(
             config=config.syncs["source-latest-missing"],
             source_status=usb_vs,
             destination_status=nas_vs,
-            reasons=[
-                SyncReason.SOURCE_LATEST_NOT_FOUND,
-                SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND,
+            errors=[
+                SyncError.SOURCE_LATEST_NOT_FOUND,
+                SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND,
             ],
         ),
         "dry-run-upstream": SyncStatus(
@@ -495,31 +495,31 @@ def troubleshoot_data(
             config=config.syncs["dry-run-upstream"],
             source_status=laptop_vs,
             destination_status=usb_vs,
-            reasons=[],
+            errors=[],
         ),
         "dry-run-pending": SyncStatus(
             slug="dry-run-pending",
             config=config.syncs["dry-run-pending"],
             source_status=usb_vs,
             destination_status=nas_vs,
-            reasons=[SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING],
+            errors=[SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING],
         ),
         "location-excluded": SyncStatus(
             slug="location-excluded",
             config=config.syncs["location-excluded"],
             source_status=laptop_vs,
             destination_status=home_nas_vs,
-            reasons=[SyncReason.DESTINATION_UNAVAILABLE],
+            errors=[SyncError.DESTINATION_UNAVAILABLE],
         ),
         "btrfs-permissions": SyncStatus(
             slug="btrfs-permissions",
             config=config.syncs["btrfs-permissions"],
             source_status=laptop_vs,
             destination_status=usb7_vs,
-            reasons=[
-                SyncReason.DESTINATION_ENDPOINT_NOT_WRITABLE,
-                SyncReason.DESTINATION_STAGING_DIR_NOT_WRITABLE,
-                SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE,
+            errors=[
+                SyncError.DESTINATION_ENDPOINT_NOT_WRITABLE,
+                SyncError.DESTINATION_STAGING_DIR_NOT_WRITABLE,
+                SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE,
             ],
         ),
         "hardlink-permissions": SyncStatus(
@@ -527,9 +527,9 @@ def troubleshoot_data(
             config=config.syncs["hardlink-permissions"],
             source_status=laptop_vs,
             destination_status=usb8_vs,
-            reasons=[
-                SyncReason.DESTINATION_ENDPOINT_NOT_WRITABLE,
-                SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE,
+            errors=[
+                SyncError.DESTINATION_ENDPOINT_NOT_WRITABLE,
+                SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE,
             ],
         ),
         "no-snap-permissions": SyncStatus(
@@ -537,8 +537,8 @@ def troubleshoot_data(
             config=config.syncs["no-snap-permissions"],
             source_status=laptop_vs,
             destination_status=usb9_vs,
-            reasons=[
-                SyncReason.DESTINATION_ENDPOINT_NOT_WRITABLE,
+            errors=[
+                SyncError.DESTINATION_ENDPOINT_NOT_WRITABLE,
             ],
         ),
     }

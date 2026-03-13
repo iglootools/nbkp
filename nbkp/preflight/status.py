@@ -20,13 +20,13 @@ from ..conventions import (
 )
 
 
-class VolumeReason(str, enum.Enum):
+class VolumeError(str, enum.Enum):
     SENTINEL_NOT_FOUND = f"{VOLUME_SENTINEL} volume sentinel not found"
     UNREACHABLE = "unreachable"
     LOCATION_EXCLUDED = "excluded by location filter"
 
 
-class SyncReason(str, enum.Enum):
+class SyncError(str, enum.Enum):
     DISABLED = "disabled"
 
     SOURCE_UNAVAILABLE = "source unavailable"
@@ -93,13 +93,13 @@ class VolumeStatus(BaseModel):
 
     slug: str
     config: Volume
-    reasons: list[VolumeReason]
+    errors: list[VolumeError]
     capabilities: VolumeCapabilities | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def active(self) -> bool:
-        return not self.reasons
+        return not self.errors
 
 
 class LatestSymlinkState(BaseModel):
@@ -156,7 +156,7 @@ class SourceEndpointDiagnostics(BaseModel):
     """Observed state of a source sync endpoint.
 
     Pure diagnostics — no interpretation of what constitutes an error.
-    The sync layer translates these into ``SyncReason`` values based
+    The sync layer translates these into ``SyncError`` values based
     on the sync's configuration and context.
     """
 
@@ -172,7 +172,7 @@ class DestinationEndpointDiagnostics(BaseModel):
     """Observed state of a destination sync endpoint.
 
     Pure diagnostics — no interpretation of what constitutes an error.
-    The sync layer translates these into ``SyncReason`` values based
+    The sync layer translates these into ``SyncError`` values based
     on the sync's configuration and context.
     """
 
@@ -195,7 +195,7 @@ class SyncStatus(BaseModel):
     destination_status: VolumeStatus
     source_diagnostics: SourceEndpointDiagnostics | None = None
     destination_diagnostics: DestinationEndpointDiagnostics | None = None
-    reasons: list[SyncReason]
+    errors: list[SyncError]
     destination_latest_target: str | None = None
     """Snapshot name from the destination ``latest`` symlink.
 
@@ -208,4 +208,4 @@ class SyncStatus(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def active(self) -> bool:
-        return not self.reasons
+        return not self.errors

@@ -21,7 +21,7 @@ from .snapshot_checks import (
     _check_btrfs_mount_option,
     _check_hardlink_support,
 )
-from .status import VolumeCapabilities, VolumeReason, VolumeStatus
+from .status import VolumeCapabilities, VolumeError, VolumeStatus
 
 
 def check_volume_capabilities(
@@ -75,13 +75,13 @@ def check_volume(
 def _check_local_volume(volume: LocalVolume) -> VolumeStatus:
     """Check if a local volume is active (.nbkp-vol sentinel exists)."""
     sentinel = Path(volume.path) / VOLUME_SENTINEL
-    reasons: list[VolumeReason] = (
-        [] if sentinel.exists() else [VolumeReason.SENTINEL_NOT_FOUND]
+    errors: list[VolumeError] = (
+        [] if sentinel.exists() else [VolumeError.SENTINEL_NOT_FOUND]
     )
     return VolumeStatus(
         slug=volume.slug,
         config=volume,
-        reasons=reasons,
+        errors=errors,
     )
 
 
@@ -94,7 +94,7 @@ def _check_remote_volume(
         return VolumeStatus(
             slug=volume.slug,
             config=volume,
-            reasons=[VolumeReason.LOCATION_EXCLUDED],
+            errors=[VolumeError.LOCATION_EXCLUDED],
         )
     ep = resolved_endpoints[volume.slug]
     sentinel_path = f"{volume.path}/{VOLUME_SENTINEL}"
@@ -102,13 +102,13 @@ def _check_remote_volume(
         result = run_remote_command(
             ep.server, ["test", "-f", sentinel_path], ep.proxy_chain
         )
-        reasons: list[VolumeReason] = (
-            [] if result.returncode == 0 else [VolumeReason.UNREACHABLE]
+        errors: list[VolumeError] = (
+            [] if result.returncode == 0 else [VolumeError.UNREACHABLE]
         )
     except Exception:
-        reasons = [VolumeReason.UNREACHABLE]
+        errors = [VolumeError.UNREACHABLE]
     return VolumeStatus(
         slug=volume.slug,
         config=volume,
-        reasons=reasons,
+        errors=errors,
     )

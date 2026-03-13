@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from nbkp.preflight import (
-    SyncReason,
+    SyncError,
     check_sync,
     check_volume,
 )
@@ -125,7 +125,7 @@ class TestSyncCheck:
             resolved_endpoints=resolved,
         )
         assert status.active is True
-        assert status.reasons == []
+        assert status.errors == []
 
 
 class TestBtrfsFilesystemCheck:
@@ -283,7 +283,7 @@ class TestSyncCheckBtrfs:
             resolved_endpoints=resolved,
         )
         assert status.active is False
-        assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
+        assert SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME in status.errors
 
         # Cleanup
         ssh_exec(

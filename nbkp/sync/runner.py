@@ -20,7 +20,7 @@ from .snapshots.hardlinks import (
 from .snapshots.common import update_latest_symlink
 from ..config import Config, ResolvedEndpoints
 from ..conventions import SNAPSHOTS_DIR, STAGING_DIR
-from ..preflight import SyncReason, SyncStatus
+from ..preflight import SyncError, SyncStatus
 from .rsync import ProgressMode, run_rsync
 
 
@@ -124,7 +124,7 @@ def run_all_syncs(
                 output="",
                 outcome=SyncOutcome.SKIPPED,
                 detail=(
-                    "Sync not active: " + ", ".join(r.value for r in status.reasons)
+                    "Sync not active: " + ", ".join(r.value for r in status.errors)
                 ),
             )
         else:
@@ -143,7 +143,7 @@ def run_all_syncs(
         # the chain would succeed in a real run.
         is_dry_run_pending = (
             result.outcome == SyncOutcome.SKIPPED
-            and status.reasons == [SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING]
+            and status.errors == [SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING]
         )
         if not result.success and not is_dry_run_pending:
             failed.add(slug)

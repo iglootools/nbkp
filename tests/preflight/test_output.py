@@ -19,9 +19,9 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.preflight import (
-    SyncReason,
+    SyncError,
     SyncStatus,
-    VolumeReason,
+    VolumeError,
     VolumeStatus,
 )
 from nbkp.preflight.output import build_check_sections, print_human_troubleshoot
@@ -58,19 +58,19 @@ def _btrfs_config() -> Config:
 
 def _make_vol_statuses(
     config: Config,
-    src_reasons: list[VolumeReason] | None = None,
-    dst_reasons: list[VolumeReason] | None = None,
+    src_errors: list[VolumeError] | None = None,
+    dst_errors: list[VolumeError] | None = None,
 ) -> dict[str, VolumeStatus]:
     return {
         "src": VolumeStatus(
             slug="src",
             config=config.volumes["src"],
-            reasons=src_reasons or [],
+            errors=src_errors or [],
         ),
         "dst": VolumeStatus(
             slug="dst",
             config=config.volumes["dst"],
-            reasons=dst_reasons or [],
+            errors=dst_errors or [],
         ),
     }
 
@@ -86,7 +86,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 config=config.syncs["btrfs-sync"],
                 source_status=vol_statuses["src"],
                 destination_status=vol_statuses["dst"],
-                reasons=[SyncReason.DESTINATION_TMP_NOT_FOUND],
+                errors=[SyncError.DESTINATION_TMP_NOT_FOUND],
             )
         }
         console, buf = _make_console()
@@ -111,7 +111,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 config=config.syncs["btrfs-sync"],
                 source_status=vol_statuses["src"],
                 destination_status=vol_statuses["dst"],
-                reasons=[SyncReason.DESTINATION_TMP_NOT_FOUND],
+                errors=[SyncError.DESTINATION_TMP_NOT_FOUND],
             )
         }
         console, buf = _make_console()
@@ -126,7 +126,7 @@ class TestTroubleshootBtrfsStagingNotFound:
         assert "btrfs subvolume create /mnt/dst/staging" in output
 
     def test_destination_staging_not_found_reason_label(self) -> None:
-        """SyncReason label for TMP_NOT_FOUND appears."""
+        """SyncError label for TMP_NOT_FOUND appears."""
         config = _btrfs_config()
         vol_statuses = _make_vol_statuses(config)
         sync_statuses = {
@@ -135,7 +135,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 config=config.syncs["btrfs-sync"],
                 source_status=vol_statuses["src"],
                 destination_status=vol_statuses["dst"],
-                reasons=[SyncReason.DESTINATION_TMP_NOT_FOUND],
+                errors=[SyncError.DESTINATION_TMP_NOT_FOUND],
             )
         }
         console, buf = _make_console()
@@ -146,7 +146,7 @@ class TestTroubleshootBtrfsStagingNotFound:
             console=console,
         )
         output = buf.getvalue()
-        assert SyncReason.DESTINATION_TMP_NOT_FOUND.value in output
+        assert SyncError.DESTINATION_TMP_NOT_FOUND.value in output
 
     def test_no_issues_message(self) -> None:
         """When all statuses are active, prints no-issues message."""
@@ -158,7 +158,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 config=config.syncs["btrfs-sync"],
                 source_status=vol_statuses["src"],
                 destination_status=vol_statuses["dst"],
-                reasons=[],
+                errors=[],
             )
         }
         console, buf = _make_console()
@@ -193,8 +193,8 @@ class TestTroubleshootBtrfsStagingNotFound:
             syncs={"btrfs-sync": sync},
         )
         vol_statuses = {
-            "src": VolumeStatus(slug="src", config=src, reasons=[]),
-            "dst": VolumeStatus(slug="dst", config=dst, reasons=[]),
+            "src": VolumeStatus(slug="src", config=src, errors=[]),
+            "dst": VolumeStatus(slug="dst", config=dst, errors=[]),
         }
         sync_statuses = {
             "btrfs-sync": SyncStatus(
@@ -202,7 +202,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 config=sync,
                 source_status=vol_statuses["src"],
                 destination_status=vol_statuses["dst"],
-                reasons=[SyncReason.DESTINATION_TMP_NOT_FOUND],
+                errors=[SyncError.DESTINATION_TMP_NOT_FOUND],
             )
         }
         console, buf = _make_console()
@@ -235,7 +235,7 @@ class TestCheckRsyncCommandDisplay:
                 config=config.syncs["btrfs-sync"],
                 source_status=vol_s["src"],
                 destination_status=vol_s["dst"],
-                reasons=[],
+                errors=[],
             )
         }
         sections = build_check_sections(vol_s, sync_s, config, resolved_endpoints={})
@@ -269,7 +269,7 @@ class TestCheckRsyncCommandDisplay:
                 config=sync,
                 source_status=vol_s["src"],
                 destination_status=vol_s["dst"],
-                reasons=[],
+                errors=[],
             )
         }
         sections = build_check_sections(vol_s, sync_s, config, resolved_endpoints={})
@@ -304,7 +304,7 @@ class TestCheckRsyncCommandDisplay:
                 config=sync,
                 source_status=vol_s["src"],
                 destination_status=vol_s["dst"],
-                reasons=[],
+                errors=[],
                 destination_latest_target=format_snapshot_timestamp(
                     datetime(2026, 3, 6, 14, 30, 0, tzinfo=timezone.utc),
                     dst,
@@ -342,7 +342,7 @@ class TestCheckRsyncCommandDisplay:
                 config=sync,
                 source_status=vol_s["src"],
                 destination_status=vol_s["dst"],
-                reasons=[],
+                errors=[],
             )
         }
         sections = build_check_sections(vol_s, sync_s, config, resolved_endpoints={})
@@ -363,7 +363,7 @@ class TestTroubleshootDryRunPendingSnapshot:
                 config=config.syncs["btrfs-sync"],
                 source_status=vol_statuses["src"],
                 destination_status=vol_statuses["dst"],
-                reasons=[SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING],
+                errors=[SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING],
             )
         }
         console, buf = _make_console()
@@ -376,7 +376,7 @@ class TestTroubleshootDryRunPendingSnapshot:
         output = buf.getvalue()
         assert "dry-run" in output
         assert "upstream" in output
-        assert SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING.value in output
+        assert SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING.value in output
 
 
 class TestTroubleshootLocationExcluded:
@@ -402,7 +402,7 @@ class TestTroubleshootLocationExcluded:
             "remote": VolumeStatus(
                 slug="remote",
                 config=vol,
-                reasons=[VolumeReason.LOCATION_EXCLUDED],
+                errors=[VolumeError.LOCATION_EXCLUDED],
             ),
         }
         console, buf = _make_console()
@@ -413,5 +413,5 @@ class TestTroubleshootLocationExcluded:
             console=console,
         )
         output = buf.getvalue()
-        assert VolumeReason.LOCATION_EXCLUDED.value in output
+        assert VolumeError.LOCATION_EXCLUDED.value in output
         assert "--exclude-location" in output

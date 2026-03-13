@@ -1,9 +1,9 @@
 """Sync-endpoint-level diagnostics (source and destination).
 
 Each function observes subdir-dependent state of an endpoint and
-returns a diagnostics model.  No ``SyncReason`` interpretation
+returns a diagnostics model.  No ``SyncError`` interpretation
 happens here — the sync layer translates diagnostics + capabilities
-into reasons.
+into errors.
 
 ``VolumeCapabilities`` is accepted to decide *which* checks to run
 (e.g. btrfs subvolume only when the filesystem is btrfs), avoiding

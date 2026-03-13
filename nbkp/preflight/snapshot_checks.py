@@ -1,6 +1,6 @@
 """Snapshot, btrfs, hard-link, and symlink validation checks.
 
-All functions return reasons rather than mutating a passed-in list.
+All functions return error lists rather than mutating a passed-in list.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from .queries import (
     _resolve_endpoint,
     _run_on_volume,
 )
-from .status import SyncReason
+from .status import SyncError
 
 
 # ── Filesystem detection ────────────────────────────────────
@@ -95,54 +95,54 @@ def _check_btrfs_dest(
     dst_subdir: str | None,
     has_findmnt: bool,
     resolved_endpoints: ResolvedEndpoints,
-) -> list[SyncReason]:
+) -> list[SyncError]:
     """Run btrfs filesystem, subvolume, and directory checks."""
-    reasons: list[SyncReason] = []
+    errors: list[SyncError] = []
     if not _check_btrfs_filesystem(dst_vol, resolved_endpoints):
-        reasons.append(SyncReason.DESTINATION_NOT_BTRFS)
+        errors.append(SyncError.DESTINATION_NOT_BTRFS)
     elif not _check_btrfs_subvolume(
         dst_vol,
         dst_subdir,
         resolved_endpoints,
     ):
-        reasons.append(SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME)
+        errors.append(SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME)
     else:
         if has_findmnt and not _check_btrfs_mount_option(
             dst_vol,
             "user_subvol_rm_allowed",
             resolved_endpoints,
         ):
-            reasons.append(SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM)
+            errors.append(SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM)
         ep = _resolve_endpoint(dst_vol, dst_subdir)
         staging_path = f"{ep}/{STAGING_DIR}"
         if not _check_directory_exists(dst_vol, staging_path, resolved_endpoints):
-            reasons.append(SyncReason.DESTINATION_TMP_NOT_FOUND)
+            errors.append(SyncError.DESTINATION_TMP_NOT_FOUND)
         elif not _check_directory_writable(dst_vol, staging_path, resolved_endpoints):
-            reasons.append(SyncReason.DESTINATION_STAGING_DIR_NOT_WRITABLE)
+            errors.append(SyncError.DESTINATION_STAGING_DIR_NOT_WRITABLE)
         snaps_path = f"{ep}/{SNAPSHOTS_DIR}"
         if not _check_directory_exists(dst_vol, snaps_path, resolved_endpoints):
-            reasons.append(SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND)
+            errors.append(SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND)
         elif not _check_directory_writable(dst_vol, snaps_path, resolved_endpoints):
-            reasons.append(SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE)
-    return reasons
+            errors.append(SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE)
+    return errors
 
 
 def _check_hard_link_dest(
     dst_vol: Volume,
     dst_subdir: str | None,
     resolved_endpoints: ResolvedEndpoints,
-) -> list[SyncReason]:
+) -> list[SyncError]:
     """Run hard-link snapshot filesystem and directory checks."""
-    reasons: list[SyncReason] = []
+    errors: list[SyncError] = []
     if not _check_hardlink_support(dst_vol, resolved_endpoints):
-        reasons.append(SyncReason.DESTINATION_NO_HARDLINK_SUPPORT)
+        errors.append(SyncError.DESTINATION_NO_HARDLINK_SUPPORT)
     ep = _resolve_endpoint(dst_vol, dst_subdir)
     snaps_path = f"{ep}/{SNAPSHOTS_DIR}"
     if not _check_directory_exists(dst_vol, snaps_path, resolved_endpoints):
-        reasons.append(SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND)
+        errors.append(SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND)
     elif not _check_directory_writable(dst_vol, snaps_path, resolved_endpoints):
-        reasons.append(SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE)
-    return reasons
+        errors.append(SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE)
+    return errors
 
 
 # ── Latest symlink validation ───────────────────────────────
@@ -151,42 +151,42 @@ def _check_hard_link_dest(
 def _check_latest_symlink(
     volume: Volume,
     endpoint_path: str,
-    not_found_reason: SyncReason,
-    invalid_reason: SyncReason,
+    not_found_reason: SyncError,
+    invalid_reason: SyncError,
     resolved_endpoints: ResolvedEndpoints,
-) -> tuple[str | None, list[SyncReason]]:
+) -> tuple[str | None, list[SyncError]]:
     """Validate the latest symlink at an endpoint.
 
     Checks that the symlink exists and points to either ``/dev/null``
     (valid "no snapshot yet" marker) or an existing relative snapshot
     directory.
 
-    Returns a tuple of (snapshot_name_or_None, reasons).
+    Returns a tuple of (snapshot_name_or_None, errors).
     """
-    reasons: list[SyncReason] = []
+    errors: list[SyncError] = []
     latest_path = f"{endpoint_path}/{LATEST_LINK}"
     if not _check_symlink_exists(volume, latest_path, resolved_endpoints):
-        reasons.append(not_found_reason)
-        return None, reasons
+        errors.append(not_found_reason)
+        return None, errors
 
     raw_target = _read_symlink_target(volume, latest_path, resolved_endpoints)
     if raw_target is None:
-        reasons.append(not_found_reason)
-        return None, reasons
+        errors.append(not_found_reason)
+        return None, errors
 
     target = str(raw_target)
     if target == DEVNULL_TARGET:
-        return None, reasons  # Valid "no snapshot yet" marker
+        return None, errors  # Valid "no snapshot yet" marker
 
     # Resolve relative target against endpoint path
     resolved = f"{endpoint_path}/{target}"
     if not _check_directory_exists(volume, resolved, resolved_endpoints):
-        reasons.append(invalid_reason)
-        return None, reasons
+        errors.append(invalid_reason)
+        return None, errors
 
     # Extract snapshot name from relative target
     # e.g. "snapshots/2026-03-06T14:30:00.000Z" -> "2026-03-06T14:30:00.000Z"
-    return target.rsplit("/", 1)[-1], reasons
+    return target.rsplit("/", 1)[-1], errors
 
 
 # ── Source snapshot validation ──────────────────────────────
@@ -214,7 +214,7 @@ def _check_source_latest(
     all_syncs: dict[str, SyncConfig],
     resolved_endpoints: ResolvedEndpoints,
     dry_run: bool = False,
-) -> list[SyncReason]:
+) -> list[SyncError]:
     """Validate the source latest symlink.
 
     ``/dev/null`` is accepted only when an enabled upstream sync writes
@@ -223,26 +223,26 @@ def _check_source_latest(
     In dry-run mode, ``/dev/null`` with an upstream sync marks the sync
     as inactive because the upstream dry-run won't create a real snapshot.
     """
-    reasons: list[SyncReason] = []
+    errors: list[SyncError] = []
     latest_path = f"{endpoint_path}/{LATEST_LINK}"
     if not _check_symlink_exists(src_vol, latest_path, resolved_endpoints):
-        reasons.append(SyncReason.SOURCE_LATEST_NOT_FOUND)
-        return reasons
+        errors.append(SyncError.SOURCE_LATEST_NOT_FOUND)
+        return errors
 
     target = _read_symlink_target(src_vol, latest_path, resolved_endpoints)
     if target is None:
-        reasons.append(SyncReason.SOURCE_LATEST_NOT_FOUND)
-        return reasons
+        errors.append(SyncError.SOURCE_LATEST_NOT_FOUND)
+        return errors
 
     if target == DEVNULL_TARGET:
         if not _has_upstream_sync(sync, all_syncs):
-            reasons.append(SyncReason.SOURCE_LATEST_INVALID)
+            errors.append(SyncError.SOURCE_LATEST_INVALID)
         elif dry_run:
-            reasons.append(SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING)
-        return reasons
+            errors.append(SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING)
+        return errors
 
     # Resolve relative target against endpoint path
     resolved = f"{endpoint_path}/{target}"
     if not _check_directory_exists(src_vol, resolved, resolved_endpoints):
-        reasons.append(SyncReason.SOURCE_LATEST_INVALID)
-    return reasons
+        errors.append(SyncError.SOURCE_LATEST_INVALID)
+    return errors

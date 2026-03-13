@@ -35,9 +35,9 @@ from nbkp.preflight.snapshot_checks import (
     _check_btrfs_subvolume,
 )
 from nbkp.preflight.status import (
-    SyncReason,
+    SyncError,
     SyncStatus,
-    VolumeReason,
+    VolumeError,
     VolumeStatus,
 )
 from nbkp.preflight.volume_checks import check_volume
@@ -280,7 +280,7 @@ class TestVolumeStatus:
         vs = VolumeStatus(
             slug="data",
             config=vol,
-            reasons=[],
+            errors=[],
         )
         assert vs.active is True
 
@@ -289,7 +289,7 @@ class TestVolumeStatus:
         vs = VolumeStatus(
             slug="data",
             config=vol,
-            reasons=[VolumeReason.SENTINEL_NOT_FOUND],
+            errors=[VolumeError.SENTINEL_NOT_FOUND],
         )
         assert vs.active is False
 
@@ -300,7 +300,7 @@ class TestSyncStatus:
         vs = VolumeStatus(
             slug="data",
             config=vol,
-            reasons=[],
+            errors=[],
         )
         sc = SyncConfig(
             slug="s1",
@@ -312,7 +312,7 @@ class TestSyncStatus:
             config=sc,
             source_status=vs,
             destination_status=vs,
-            reasons=[],
+            errors=[],
         )
         assert ss.active is True
 
@@ -321,7 +321,7 @@ class TestSyncStatus:
         vs = VolumeStatus(
             slug="data",
             config=vol,
-            reasons=[],
+            errors=[],
         )
         sc = SyncConfig(
             slug="s1",
@@ -333,7 +333,7 @@ class TestSyncStatus:
             config=sc,
             source_status=vs,
             destination_status=vs,
-            reasons=[SyncReason.DISABLED],
+            errors=[SyncError.DISABLED],
         )
         assert ss.active is False
 
@@ -469,13 +469,13 @@ class TestCheckLocalVolume:
         (tmp_path / ".nbkp-vol").touch()
         status = check_volume(vol)
         assert status.active is True
-        assert status.reasons == []
+        assert status.errors == []
 
     def test_inactive(self, tmp_path: Path) -> None:
         vol = LocalVolume(slug="data", path=str(tmp_path))
         status = check_volume(vol)
         assert status.active is False
-        assert status.reasons == [VolumeReason.SENTINEL_NOT_FOUND]
+        assert status.errors == [VolumeError.SENTINEL_NOT_FOUND]
 
 
 class TestCheckRemoteVolume:
@@ -486,7 +486,7 @@ class TestCheckRemoteVolume:
         resolved = _make_resolved(config)
         status = check_volume(vol, resolved)
         assert status.active is True
-        assert status.reasons == []
+        assert status.errors == []
         server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
             server, ["test", "-f", "/backup/.nbkp-vol"], []
@@ -499,7 +499,7 @@ class TestCheckRemoteVolume:
         resolved = _make_resolved(config)
         status = check_volume(vol, resolved)
         assert status.active is False
-        assert status.reasons == [VolumeReason.UNREACHABLE]
+        assert status.errors == [VolumeError.UNREACHABLE]
 
 
 class TestCheckRemoteVolumeLocationExcluded:
@@ -509,7 +509,7 @@ class TestCheckRemoteVolumeLocationExcluded:
         # Empty resolved_endpoints means volume was excluded
         status = check_volume(vol, {})
         assert status.active is False
-        assert status.reasons == [VolumeReason.LOCATION_EXCLUDED]
+        assert status.errors == [VolumeError.LOCATION_EXCLUDED]
 
 
 class TestCheckCommandAvailableLocal:
@@ -770,18 +770,18 @@ class TestCheckSync:
             "src": VolumeStatus(
                 slug="src",
                 config=config.volumes["src"],
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=config.volumes["dst"],
-                reasons=[],
+                errors=[],
             ),
         }
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is True
-        assert status.reasons == []
+        assert status.errors == []
 
     def test_disabled_sync(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
@@ -800,18 +800,18 @@ class TestCheckSync:
             "src": VolumeStatus(
                 slug="src",
                 config=config.volumes["src"],
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=config.volumes["dst"],
-                reasons=[],
+                errors=[],
             ),
         }
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert status.reasons == [SyncReason.DISABLED]
+        assert status.errors == [SyncError.DISABLED]
 
     def test_source_unavailable(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
@@ -824,18 +824,18 @@ class TestCheckSync:
             "src": VolumeStatus(
                 slug="src",
                 config=config.volumes["src"],
-                reasons=[VolumeReason.SENTINEL_NOT_FOUND],
+                errors=[VolumeError.SENTINEL_NOT_FOUND],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=config.volumes["dst"],
-                reasons=[],
+                errors=[],
             ),
         }
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.SOURCE_UNAVAILABLE in status.reasons
+        assert SyncError.SOURCE_UNAVAILABLE in status.errors
 
     def test_missing_src_sentinel(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
@@ -851,18 +851,18 @@ class TestCheckSync:
             "src": VolumeStatus(
                 slug="src",
                 config=config.volumes["src"],
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=config.volumes["dst"],
-                reasons=[],
+                errors=[],
             ),
         }
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.SOURCE_SENTINEL_NOT_FOUND in status.reasons
+        assert SyncError.SOURCE_SENTINEL_NOT_FOUND in status.errors
 
     def _setup_active_sentinels(self, src: Path, dst: Path) -> None:
         (src / ".nbkp-vol").touch()
@@ -877,12 +877,12 @@ class TestCheckSync:
             "src": VolumeStatus(
                 slug="src",
                 config=config.volumes["src"],
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=config.volumes["dst"],
-                reasons=[],
+                errors=[],
             ),
         }
 
@@ -901,8 +901,8 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.SOURCE_RSYNC_NOT_FOUND in status.reasons
-        assert SyncReason.DESTINATION_RSYNC_NOT_FOUND in status.reasons
+        assert SyncError.SOURCE_RSYNC_NOT_FOUND in status.errors
+        assert SyncError.DESTINATION_RSYNC_NOT_FOUND in status.errors
 
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -945,7 +945,7 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.DESTINATION_BTRFS_NOT_FOUND in status.reasons
+        assert SyncError.DESTINATION_BTRFS_NOT_FOUND in status.errors
 
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -988,9 +988,9 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.DESTINATION_STAT_NOT_FOUND in status.reasons
-        assert SyncReason.DESTINATION_NOT_BTRFS not in status.reasons
-        assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.reasons
+        assert SyncError.DESTINATION_STAT_NOT_FOUND in status.errors
+        assert SyncError.DESTINATION_NOT_BTRFS not in status.errors
+        assert SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.errors
 
     @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.subprocess.run")
@@ -1050,8 +1050,8 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.DESTINATION_FINDMNT_NOT_FOUND in status.reasons
-        assert SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM not in status.reasons
+        assert SyncError.DESTINATION_FINDMNT_NOT_FOUND in status.errors
+        assert SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM not in status.errors
 
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -1096,8 +1096,8 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.DESTINATION_STAT_NOT_FOUND in status.reasons
-        assert SyncReason.DESTINATION_FINDMNT_NOT_FOUND in status.reasons
+        assert SyncError.DESTINATION_STAT_NOT_FOUND in status.errors
+        assert SyncError.DESTINATION_FINDMNT_NOT_FOUND in status.errors
 
     @patch("nbkp.preflight.queries.subprocess.run")
     @patch(
@@ -1146,7 +1146,7 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.DESTINATION_NOT_BTRFS in status.reasons
+        assert SyncError.DESTINATION_NOT_BTRFS in status.errors
 
     @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.subprocess.run")
@@ -1204,7 +1204,7 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
+        assert SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME in status.errors
 
     @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.subprocess.run")
@@ -1266,7 +1266,7 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.reasons
+        assert SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.errors
 
     @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.subprocess.run")
@@ -1331,8 +1331,8 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.DESTINATION_TMP_NOT_FOUND in status.reasons
-        assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND not in status.reasons
+        assert SyncError.DESTINATION_TMP_NOT_FOUND in status.errors
+        assert SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND not in status.errors
 
     @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.subprocess.run")
@@ -1397,8 +1397,8 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
-        assert SyncReason.DESTINATION_TMP_NOT_FOUND not in status.reasons
+        assert SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.errors
+        assert SyncError.DESTINATION_TMP_NOT_FOUND not in status.errors
 
     @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.subprocess.run")
@@ -1462,8 +1462,8 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.DESTINATION_TMP_NOT_FOUND in status.reasons
-        assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
+        assert SyncError.DESTINATION_TMP_NOT_FOUND in status.errors
+        assert SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.errors
 
     @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch(
@@ -1487,7 +1487,7 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is True
-        assert status.reasons == []
+        assert status.errors == []
 
     @patch("nbkp.preflight.queries.shutil.which", return_value=None)
     def test_multiple_failures_accumulated(
@@ -1510,9 +1510,9 @@ class TestCheckSync:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.SOURCE_SENTINEL_NOT_FOUND in status.reasons
-        assert SyncReason.SOURCE_RSYNC_NOT_FOUND in status.reasons
-        assert SyncReason.DESTINATION_RSYNC_NOT_FOUND in status.reasons
+        assert SyncError.SOURCE_SENTINEL_NOT_FOUND in status.errors
+        assert SyncError.SOURCE_RSYNC_NOT_FOUND in status.errors
+        assert SyncError.DESTINATION_RSYNC_NOT_FOUND in status.errors
 
     def test_both_volumes_unavailable(self, tmp_path: Path) -> None:
         """Both source and destination unavailable."""
@@ -1526,19 +1526,19 @@ class TestCheckSync:
             "src": VolumeStatus(
                 slug="src",
                 config=config.volumes["src"],
-                reasons=[VolumeReason.SENTINEL_NOT_FOUND],
+                errors=[VolumeError.SENTINEL_NOT_FOUND],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=config.volumes["dst"],
-                reasons=[VolumeReason.SENTINEL_NOT_FOUND],
+                errors=[VolumeError.SENTINEL_NOT_FOUND],
             ),
         }
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.SOURCE_UNAVAILABLE in status.reasons
-        assert SyncReason.DESTINATION_UNAVAILABLE in status.reasons
+        assert SyncError.SOURCE_UNAVAILABLE in status.errors
+        assert SyncError.DESTINATION_UNAVAILABLE in status.errors
 
 
 class TestCheckSyncRemoteCommands:
@@ -1577,12 +1577,12 @@ class TestCheckSyncRemoteCommands:
             "src": VolumeStatus(
                 slug="src",
                 config=src_vol,
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=dst_vol,
-                reasons=[],
+                errors=[],
             ),
         }
 
@@ -1601,7 +1601,7 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert SyncReason.SOURCE_RSYNC_NOT_FOUND in status.reasons
+        assert SyncError.SOURCE_RSYNC_NOT_FOUND in status.errors
 
     @patch("nbkp.preflight.queries.run_remote_command")
     @patch(
@@ -1647,12 +1647,12 @@ class TestCheckSyncRemoteCommands:
             "src": VolumeStatus(
                 slug="src",
                 config=src_vol,
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=dst_vol,
-                reasons=[],
+                errors=[],
             ),
         }
 
@@ -1675,7 +1675,7 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert SyncReason.DESTINATION_RSYNC_NOT_FOUND in status.reasons
+        assert SyncError.DESTINATION_RSYNC_NOT_FOUND in status.errors
 
     @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
@@ -1730,12 +1730,12 @@ class TestCheckSyncRemoteCommands:
             "src": VolumeStatus(
                 slug="src",
                 config=src_vol,
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=dst_vol,
-                reasons=[],
+                errors=[],
             ),
         }
 
@@ -1760,7 +1760,7 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert SyncReason.DESTINATION_BTRFS_NOT_FOUND in status.reasons
+        assert SyncError.DESTINATION_BTRFS_NOT_FOUND in status.errors
 
     @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
@@ -1815,12 +1815,12 @@ class TestCheckSyncRemoteCommands:
             "src": VolumeStatus(
                 slug="src",
                 config=src_vol,
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=dst_vol,
-                reasons=[],
+                errors=[],
             ),
         }
 
@@ -1853,7 +1853,7 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert SyncReason.DESTINATION_NOT_BTRFS in status.reasons
+        assert SyncError.DESTINATION_NOT_BTRFS in status.errors
 
     @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
@@ -1908,12 +1908,12 @@ class TestCheckSyncRemoteCommands:
             "src": VolumeStatus(
                 slug="src",
                 config=src_vol,
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=dst_vol,
-                reasons=[],
+                errors=[],
             ),
         }
 
@@ -1953,7 +1953,7 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
+        assert SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME in status.errors
 
     @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
@@ -2008,12 +2008,12 @@ class TestCheckSyncRemoteCommands:
             "src": VolumeStatus(
                 slug="src",
                 config=src_vol,
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=dst_vol,
-                reasons=[],
+                errors=[],
             ),
         }
 
@@ -2061,7 +2061,7 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.reasons
+        assert SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.errors
 
     @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
@@ -2116,12 +2116,12 @@ class TestCheckSyncRemoteCommands:
             "src": VolumeStatus(
                 slug="src",
                 config=src_vol,
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=dst_vol,
-                reasons=[],
+                errors=[],
             ),
         }
 
@@ -2148,8 +2148,8 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert SyncReason.DESTINATION_STAT_NOT_FOUND in status.reasons
-        assert SyncReason.DESTINATION_NOT_BTRFS not in status.reasons
+        assert SyncError.DESTINATION_STAT_NOT_FOUND in status.errors
+        assert SyncError.DESTINATION_NOT_BTRFS not in status.errors
 
     @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
@@ -2204,12 +2204,12 @@ class TestCheckSyncRemoteCommands:
             "src": VolumeStatus(
                 slug="src",
                 config=src_vol,
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=dst_vol,
-                reasons=[],
+                errors=[],
             ),
         }
 
@@ -2255,8 +2255,8 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert SyncReason.DESTINATION_FINDMNT_NOT_FOUND in status.reasons
-        assert SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM not in status.reasons
+        assert SyncError.DESTINATION_FINDMNT_NOT_FOUND in status.errors
+        assert SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM not in status.errors
 
     @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
@@ -2311,12 +2311,12 @@ class TestCheckSyncRemoteCommands:
             "src": VolumeStatus(
                 slug="src",
                 config=src_vol,
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=dst_vol,
-                reasons=[],
+                errors=[],
             ),
         }
 
@@ -2379,8 +2379,8 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert SyncReason.DESTINATION_TMP_NOT_FOUND in status.reasons
-        assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND not in status.reasons
+        assert SyncError.DESTINATION_TMP_NOT_FOUND in status.errors
+        assert SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND not in status.errors
 
     @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
@@ -2435,12 +2435,12 @@ class TestCheckSyncRemoteCommands:
             "src": VolumeStatus(
                 slug="src",
                 config=src_vol,
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=dst_vol,
-                reasons=[],
+                errors=[],
             ),
         }
 
@@ -2503,8 +2503,8 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
-        assert SyncReason.DESTINATION_TMP_NOT_FOUND not in status.reasons
+        assert SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.errors
+        assert SyncError.DESTINATION_TMP_NOT_FOUND not in status.errors
 
 
 class TestCheckAllSyncs:
@@ -2650,12 +2650,12 @@ class TestCheckHardLinkDest:
             "src": VolumeStatus(
                 slug="src",
                 config=config.volumes["src"],
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=config.volumes["dst"],
-                reasons=[],
+                errors=[],
             ),
         }
 
@@ -2684,7 +2684,7 @@ class TestCheckHardLinkDest:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
+        assert SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.errors
 
     @patch("nbkp.preflight.queries.subprocess.run")
     @patch(
@@ -2711,7 +2711,7 @@ class TestCheckHardLinkDest:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.DESTINATION_NO_HARDLINK_SUPPORT in status.reasons
+        assert SyncError.DESTINATION_NO_HARDLINK_SUPPORT in status.errors
 
     @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.subprocess.run")
@@ -2741,7 +2741,7 @@ class TestCheckHardLinkDest:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is True
-        assert status.reasons == []
+        assert status.errors == []
 
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -2763,9 +2763,9 @@ class TestCheckHardLinkDest:
 
         status = check_sync(sync, config, vol_statuses)
         assert status.active is False
-        assert SyncReason.DESTINATION_STAT_NOT_FOUND in status.reasons
+        assert SyncError.DESTINATION_STAT_NOT_FOUND in status.errors
         # No hardlink support check when stat is missing
-        assert SyncReason.DESTINATION_NO_HARDLINK_SUPPORT not in status.reasons
+        assert SyncError.DESTINATION_NO_HARDLINK_SUPPORT not in status.errors
 
     @patch("nbkp.preflight.queries.subprocess.run")
     @patch(
@@ -2792,10 +2792,10 @@ class TestCheckHardLinkDest:
         mock_subprocess.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
 
         status = check_sync(sync, config, vol_statuses)
-        assert SyncReason.DESTINATION_BTRFS_NOT_FOUND not in status.reasons
-        assert SyncReason.DESTINATION_NOT_BTRFS not in status.reasons
-        assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.reasons
-        assert SyncReason.DESTINATION_TMP_NOT_FOUND not in status.reasons
+        assert SyncError.DESTINATION_BTRFS_NOT_FOUND not in status.errors
+        assert SyncError.DESTINATION_NOT_BTRFS not in status.errors
+        assert SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.errors
+        assert SyncError.DESTINATION_TMP_NOT_FOUND not in status.errors
 
     @patch("nbkp.preflight.volume_checks._check_rsync_version", return_value=True)
     @patch("nbkp.preflight.queries.run_remote_command")
@@ -2850,12 +2850,12 @@ class TestCheckHardLinkDest:
             "src": VolumeStatus(
                 slug="src",
                 config=src_vol,
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=dst_vol,
-                reasons=[],
+                errors=[],
             ),
         }
 
@@ -2894,7 +2894,7 @@ class TestCheckHardLinkDest:
 
         status = check_sync(sync, config, vol_statuses, _make_resolved(config))
         assert status.active is False
-        assert SyncReason.DESTINATION_NO_HARDLINK_SUPPORT in status.reasons
+        assert SyncError.DESTINATION_NO_HARDLINK_SUPPORT in status.errors
 
 
 class TestCheckSourceLatest:
@@ -2955,12 +2955,12 @@ class TestCheckSourceLatest:
             "src": VolumeStatus(
                 slug="src",
                 config=config.volumes["src"],
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=config.volumes["dst"],
-                reasons=[],
+                errors=[],
             ),
         }
 
@@ -2982,7 +2982,7 @@ class TestCheckSourceLatest:
         vol_statuses = self._active_vol_statuses(config)
 
         status = check_sync(sync, config, vol_statuses)
-        assert SyncReason.SOURCE_LATEST_NOT_FOUND in status.reasons
+        assert SyncError.SOURCE_LATEST_NOT_FOUND in status.errors
 
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -3002,7 +3002,7 @@ class TestCheckSourceLatest:
         vol_statuses = self._active_vol_statuses(config)
 
         status = check_sync(sync, config, vol_statuses)
-        assert SyncReason.SOURCE_LATEST_NOT_FOUND in status.reasons
+        assert SyncError.SOURCE_LATEST_NOT_FOUND in status.errors
 
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -3031,8 +3031,8 @@ class TestCheckSourceLatest:
         vol_statuses = self._active_vol_statuses(config)
 
         status = check_sync(sync, config, vol_statuses)
-        assert SyncReason.SOURCE_LATEST_NOT_FOUND not in status.reasons
-        assert SyncReason.SOURCE_LATEST_INVALID not in status.reasons
+        assert SyncError.SOURCE_LATEST_NOT_FOUND not in status.errors
+        assert SyncError.SOURCE_LATEST_INVALID not in status.errors
 
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -3060,7 +3060,7 @@ class TestCheckSourceLatest:
         vol_statuses = self._active_vol_statuses(config)
 
         status = check_sync(sync, config, vol_statuses)
-        assert SyncReason.SOURCE_LATEST_NOT_FOUND not in status.reasons
+        assert SyncError.SOURCE_LATEST_NOT_FOUND not in status.errors
 
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -3102,7 +3102,7 @@ class TestCheckSourceLatest:
         vol_statuses = self._active_vol_statuses(config)
 
         status = check_sync(sync, config, vol_statuses)
-        assert SyncReason.SOURCE_LATEST_NOT_FOUND not in status.reasons
+        assert SyncError.SOURCE_LATEST_NOT_FOUND not in status.errors
 
 
 class TestCheckSourceSnapshots:
@@ -3163,12 +3163,12 @@ class TestCheckSourceSnapshots:
             "src": VolumeStatus(
                 slug="src",
                 config=config.volumes["src"],
-                reasons=[],
+                errors=[],
             ),
             "dst": VolumeStatus(
                 slug="dst",
                 config=config.volumes["dst"],
-                reasons=[],
+                errors=[],
             ),
         }
 
@@ -3191,7 +3191,7 @@ class TestCheckSourceSnapshots:
         vol_statuses = self._active_vol_statuses(config)
 
         status = check_sync(sync, config, vol_statuses)
-        assert SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
+        assert SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND in status.errors
 
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -3212,7 +3212,7 @@ class TestCheckSourceSnapshots:
         vol_statuses = self._active_vol_statuses(config)
 
         status = check_sync(sync, config, vol_statuses)
-        assert SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND in status.reasons
+        assert SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND in status.errors
 
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -3233,7 +3233,7 @@ class TestCheckSourceSnapshots:
         vol_statuses = self._active_vol_statuses(config)
 
         status = check_sync(sync, config, vol_statuses)
-        assert SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND not in status.reasons
+        assert SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND not in status.errors
 
     @patch(
         "nbkp.preflight.queries.shutil.which",
@@ -3275,7 +3275,7 @@ class TestCheckSourceSnapshots:
         vol_statuses = self._active_vol_statuses(config)
 
         status = check_sync(sync, config, vol_statuses)
-        assert SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND not in status.reasons
+        assert SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND not in status.errors
 
 
 class TestCheckDevnullLatest:
@@ -3334,7 +3334,7 @@ class TestCheckDevnullLatest:
 
     def _active_vol_statuses(self, config: Config) -> dict[str, VolumeStatus]:
         return {
-            slug: VolumeStatus(slug=slug, config=vol, reasons=[])
+            slug: VolumeStatus(slug=slug, config=vol, errors=[])
             for slug, vol in config.volumes.items()
         }
 
@@ -3407,8 +3407,8 @@ class TestCheckDevnullLatest:
         vol_statuses = self._active_vol_statuses(config)
 
         status = check_sync(sync, config, vol_statuses, all_syncs=config.syncs)
-        assert SyncReason.SOURCE_LATEST_INVALID not in status.reasons
-        assert SyncReason.SOURCE_LATEST_NOT_FOUND not in status.reasons
+        assert SyncError.SOURCE_LATEST_INVALID not in status.errors
+        assert SyncError.SOURCE_LATEST_NOT_FOUND not in status.errors
 
     # ── Source latest → /dev/null with upstream sync (dry-run) ────
 
@@ -3482,7 +3482,7 @@ class TestCheckDevnullLatest:
         status = check_sync(
             sync, config, vol_statuses, all_syncs=config.syncs, dry_run=True
         )
-        assert SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING in status.reasons
+        assert SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING in status.errors
         assert not status.active
 
     # ── Source latest → /dev/null without upstream sync ────
@@ -3514,7 +3514,7 @@ class TestCheckDevnullLatest:
         vol_statuses = self._active_vol_statuses(config)
 
         status = check_sync(sync, config, vol_statuses)
-        assert SyncReason.SOURCE_LATEST_INVALID in status.reasons
+        assert SyncError.SOURCE_LATEST_INVALID in status.errors
 
     # ── Source latest → dangling path ────
 
@@ -3551,7 +3551,7 @@ class TestCheckDevnullLatest:
         vol_statuses = self._active_vol_statuses(config)
 
         status = check_sync(sync, config, vol_statuses)
-        assert SyncReason.SOURCE_LATEST_INVALID in status.reasons
+        assert SyncError.SOURCE_LATEST_INVALID in status.errors
 
     # ── Destination latest → /dev/null (valid) ────
 
@@ -3584,8 +3584,8 @@ class TestCheckDevnullLatest:
         vol_statuses = self._active_vol_statuses(config)
 
         status = check_sync(sync, config, vol_statuses)
-        assert SyncReason.DESTINATION_LATEST_NOT_FOUND not in status.reasons
-        assert SyncReason.DESTINATION_LATEST_INVALID not in status.reasons
+        assert SyncError.DESTINATION_LATEST_NOT_FOUND not in status.errors
+        assert SyncError.DESTINATION_LATEST_INVALID not in status.errors
 
     # ── Destination latest missing ────
 
@@ -3617,7 +3617,7 @@ class TestCheckDevnullLatest:
         vol_statuses = self._active_vol_statuses(config)
 
         status = check_sync(sync, config, vol_statuses)
-        assert SyncReason.DESTINATION_LATEST_NOT_FOUND in status.reasons
+        assert SyncError.DESTINATION_LATEST_NOT_FOUND in status.errors
 
     # ── Destination latest → dangling path ────
 
@@ -3656,7 +3656,7 @@ class TestCheckDevnullLatest:
         vol_statuses = self._active_vol_statuses(config)
 
         status = check_sync(sync, config, vol_statuses)
-        assert SyncReason.DESTINATION_LATEST_INVALID in status.reasons
+        assert SyncError.DESTINATION_LATEST_INVALID in status.errors
 
 
 class TestCheckRemoteVolumeSpaces:

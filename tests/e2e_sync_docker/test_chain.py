@@ -48,7 +48,7 @@ class TestChainSync:
         resolved = resolve_all_endpoints(config)
         _, sync_statuses = check_all_syncs(config, resolved_endpoints=resolved)
         for slug, status in sync_statuses.items():
-            assert status.active, f"{slug}: {[r.value for r in status.reasons]}"
+            assert status.active, f"{slug}: {[r.value for r in status.errors]}"
 
         # 6. Run all syncs (topologically ordered)
         results = run_all_syncs(
