@@ -6,10 +6,10 @@
 Dependencies between top-level modules (auto-generated via `mise run depgraph`):
 ```mermaid
 graph TD
-    cli["cli"]
+    cli["cli/"]
     config["config/"]
     conventions["conventions"]
-    democli["democli"]
+    democli["democli/"]
     ordering["ordering/"]
     output["output"]
     preflight["preflight/"]

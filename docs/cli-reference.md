@@ -12,17 +12,15 @@ $ nbkp [OPTIONS] COMMAND [ARGS]...
 
 **Options**:
 
-* `--install-completion`: Install completion for the current shell.
-* `--show-completion`: Show completion for the current shell, to copy it or customize the installation.
 * `--help`: Show this message and exit.
 
 **Commands**:
 
 * `check`: Verify that volumes are reachable,...
+* `prune`: Remove snapshots beyond the...
 * `run`: Execute all active syncs in dependency order.
 * `sh`: Compile the config into a self-contained...
 * `troubleshoot`: Run the same checks as `check` but...
-* `prune`: Remove snapshots beyond the...
 * `config`: Configuration commands
 * `demo`: Demo CLI: sample output rendering and seed...
 
@@ -41,6 +39,27 @@ $ nbkp check [OPTIONS]
 * `-c, --config TEXT`: Path to config file
 * `-o, --output [human|json]`: Output format  [default: human]
 * `--strict / --no-strict`: Exit non-zero on any inactive sync, including missing sentinels  [default: no-strict]
+* `-l, --location TEXT`: Prefer endpoints at these locations
+* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
+* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--help`: Show this message and exit.
+
+## `nbkp prune`
+
+Remove snapshots beyond the `max-snapshots` limit. Normally handled automatically by `run`, but can be invoked manually.
+
+**Usage**:
+
+```console
+$ nbkp prune [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config TEXT`: Path to config file
+* `-s, --sync TEXT`: Sync name(s) to prune
+* `-n, --dry-run`: Perform a dry run
+* `-o, --output [human|json]`: Output format  [default: human]
 * `-l, --location TEXT`: Prefer endpoints at these locations
 * `-L, --exclude-location TEXT`: Exclude endpoints at these locations
 * `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
@@ -108,27 +127,6 @@ $ nbkp troubleshoot [OPTIONS]
 **Options**:
 
 * `-c, --config TEXT`: Path to config file
-* `-l, --location TEXT`: Prefer endpoints at these locations
-* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
-* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
-* `--help`: Show this message and exit.
-
-## `nbkp prune`
-
-Remove snapshots beyond the `max-snapshots` limit. Normally handled automatically by `run`, but can be invoked manually.
-
-**Usage**:
-
-```console
-$ nbkp prune [OPTIONS]
-```
-
-**Options**:
-
-* `-c, --config TEXT`: Path to config file
-* `-s, --sync TEXT`: Sync name(s) to prune
-* `-n, --dry-run`: Perform a dry run
-* `-o, --output [human|json]`: Output format  [default: human]
 * `-l, --location TEXT`: Prefer endpoints at these locations
 * `-L, --exclude-location TEXT`: Exclude endpoints at these locations
 * `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
