@@ -24,6 +24,29 @@ from .snapshot_checks import (
 from .status import VolumeCapabilities, VolumeError, VolumeStatus
 
 
+def check_volume(
+    volume: Volume,
+    resolved_endpoints: ResolvedEndpoints | None = None,
+) -> VolumeStatus:
+    """Check volume reachability and compute capabilities for active volumes.
+
+    Returns a fully-populated ``VolumeStatus``: capabilities are ``None``
+    only when the volume is inactive (unreachable / excluded / missing sentinel).
+    """
+    re = resolved_endpoints or {}
+    match volume:
+        case LocalVolume():
+            errors = _check_local_reachability(volume)
+        case RemoteVolume():
+            errors = _check_remote_reachability(volume, re)
+
+    if errors:
+        return VolumeStatus(slug=volume.slug, config=volume, errors=errors)
+
+    caps = check_volume_capabilities(volume, re)
+    return VolumeStatus(slug=volume.slug, config=volume, errors=[], capabilities=caps)
+
+
 def check_volume_capabilities(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
@@ -59,56 +82,25 @@ def check_volume_capabilities(
     )
 
 
-def check_volume(
-    volume: Volume,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-) -> VolumeStatus:
-    """Check if a volume is active."""
-    re = resolved_endpoints or {}
-    match volume:
-        case LocalVolume():
-            return _check_local_volume(volume)
-        case RemoteVolume():
-            return _check_remote_volume(volume, re)
-
-
-def _check_local_volume(volume: LocalVolume) -> VolumeStatus:
-    """Check if a local volume is active (.nbkp-vol sentinel exists)."""
+def _check_local_reachability(volume: LocalVolume) -> list[VolumeError]:
+    """Check if a local volume is reachable (.nbkp-vol sentinel exists)."""
     sentinel = Path(volume.path) / VOLUME_SENTINEL
-    errors: list[VolumeError] = (
-        [] if sentinel.exists() else [VolumeError.SENTINEL_NOT_FOUND]
-    )
-    return VolumeStatus(
-        slug=volume.slug,
-        config=volume,
-        errors=errors,
-    )
+    return [] if sentinel.exists() else [VolumeError.SENTINEL_NOT_FOUND]
 
 
-def _check_remote_volume(
+def _check_remote_reachability(
     volume: RemoteVolume,
     resolved_endpoints: ResolvedEndpoints,
-) -> VolumeStatus:
-    """Check if a remote volume is active (SSH + .nbkp-vol sentinel)."""
+) -> list[VolumeError]:
+    """Check if a remote volume is reachable (SSH + .nbkp-vol sentinel)."""
     if volume.slug not in resolved_endpoints:
-        return VolumeStatus(
-            slug=volume.slug,
-            config=volume,
-            errors=[VolumeError.LOCATION_EXCLUDED],
-        )
+        return [VolumeError.LOCATION_EXCLUDED]
     ep = resolved_endpoints[volume.slug]
     sentinel_path = f"{volume.path}/{VOLUME_SENTINEL}"
     try:
         result = run_remote_command(
             ep.server, ["test", "-f", sentinel_path], ep.proxy_chain
         )
-        errors: list[VolumeError] = (
-            [] if result.returncode == 0 else [VolumeError.UNREACHABLE]
-        )
+        return [] if result.returncode == 0 else [VolumeError.UNREACHABLE]
     except Exception:
-        errors = [VolumeError.UNREACHABLE]
-    return VolumeStatus(
-        slug=volume.slug,
-        config=volume,
-        errors=errors,
-    )
+        return [VolumeError.UNREACHABLE]

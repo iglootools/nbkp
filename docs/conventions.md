@@ -1,8 +1,11 @@
 # Conventions
 
 ## General Coding Conventions
-- **Functional Style**: 
+- **Functional Style**:
   - Prefer functional programming style over procedural style. Use pure functions and avoid side effects when possible.
+  - Avoid mutable accumulator lists (`errors = []; errors.append(...)`). Instead, build lists as single expressions using `[*(...), *(...)]` unpacking, conditional `[item] if cond else []` fragments, and helper functions that return lists.
+  - Prefer dict/list comprehensions over imperative loops for building collections.
+  - When a function computes a list from multiple independent branches, compose the result by unpacking sub-expressions rather than mutating a shared list across branches.
 - **Charsets**: 
   - UTF-8 everywhere.
 - **Time Management**
