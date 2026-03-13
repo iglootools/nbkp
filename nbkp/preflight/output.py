@@ -115,21 +115,19 @@ def _format_capabilities(caps: VolumeCapabilities | None) -> str:
     """Format volume capabilities as a compact comma-separated string."""
     if caps is None:
         return ""
-    items: list[str] = []
-    if caps.has_rsync:
-        items.append("rsync 3.0+" if caps.rsync_version_ok else "rsync (old)")
-    if caps.has_btrfs:
-        items.append("btrfs")
-    if caps.has_stat:
-        items.append("stat")
-    if caps.has_findmnt:
-        items.append("findmnt")
-    if caps.is_btrfs_filesystem:
-        items.append("btrfs-fs")
-    if caps.hardlink_supported:
-        items.append("hardlink")
-    if caps.btrfs_user_subvol_rm:
-        items.append("user_subvol_rm")
+    items = [
+        label
+        for flag, label in [
+            (caps.has_rsync, "rsync 3.0+" if caps.rsync_version_ok else "rsync (old)"),
+            (caps.has_btrfs, "btrfs"),
+            (caps.has_stat, "stat"),
+            (caps.has_findmnt, "findmnt"),
+            (caps.is_btrfs_filesystem, "btrfs-fs"),
+            (caps.hardlink_supported, "hardlink"),
+            (caps.btrfs_user_subvol_rm, "user_subvol_rm"),
+        ]
+        if flag
+    ]
     return ", ".join(items) if items else "none"
 
 
@@ -221,46 +219,47 @@ def _format_destination_diagnostics(ss: SyncStatus) -> str:
     return ", ".join(items)
 
 
-def build_check_sections(
-    vol_statuses: dict[str, VolumeStatus],
-    sync_statuses: dict[str, SyncStatus],
+def _build_ssh_endpoints_section(
     config: Config,
+) -> list[RenderableType]:
+    """Build the SSH Endpoints table section."""
+    if not config.ssh_endpoints:
+        return []
+    table = Table(title="SSH Endpoints:")
+    table.add_column("Name", style="bold")
+    table.add_column("Host")
+    table.add_column("Port")
+    table.add_column("User")
+    table.add_column("Key")
+    table.add_column("Proxy Jump")
+    table.add_column("Locations")
+
+    for server in config.ssh_endpoints.values():
+        table.add_row(
+            server.slug,
+            server.host,
+            str(server.port),
+            server.user or "",
+            server.key or "",
+            ", ".join(server.proxy_jump_chain) or "",
+            ", ".join(server.location_list),
+        )
+
+    return [table, Text("")]
+
+
+def _build_volumes_section(
+    vol_statuses: dict[str, VolumeStatus],
     resolved_endpoints: ResolvedEndpoints,
 ) -> list[RenderableType]:
-    """Build renderable sections for check output."""
-    sections: list[RenderableType] = []
-
-    if config.ssh_endpoints:
-        ep_table = Table(title="SSH Endpoints:")
-        ep_table.add_column("Name", style="bold")
-        ep_table.add_column("Host")
-        ep_table.add_column("Port")
-        ep_table.add_column("User")
-        ep_table.add_column("Key")
-        ep_table.add_column("Proxy Jump")
-        ep_table.add_column("Locations")
-
-        for server in config.ssh_endpoints.values():
-            ep_table.add_row(
-                server.slug,
-                server.host,
-                str(server.port),
-                server.user or "",
-                server.key or "",
-                ", ".join(server.proxy_jump_chain) or "",
-                ", ".join(server.location_list),
-            )
-
-        sections.append(ep_table)
-        sections.append(Text(""))
-
-    vol_table = Table(title="Volumes:")
-    vol_table.add_column("Name", style="bold")
-    vol_table.add_column("Type")
-    vol_table.add_column("SSH Endpoint")
-    vol_table.add_column("URI")
-    vol_table.add_column("Capabilities")
-    vol_table.add_column("Status")
+    """Build the Volumes table section."""
+    table = Table(title="Volumes:")
+    table.add_column("Name", style="bold")
+    table.add_column("Type")
+    table.add_column("SSH Endpoint")
+    table.add_column("URI")
+    table.add_column("Capabilities")
+    table.add_column("Status")
 
     for vs in vol_statuses.values():
         vol = vs.config
@@ -272,7 +271,7 @@ def build_check_sections(
             case LocalVolume():
                 vol_type = "local"
                 ssh_ep = ""
-        vol_table.add_row(
+        table.add_row(
             vs.slug,
             vol_type,
             ssh_ep,
@@ -281,20 +280,25 @@ def build_check_sections(
             _status_text(vs.active, vs.errors),
         )
 
-    sections.append(vol_table)
-    sections.append(Text(""))
+    return [table, Text("")]
 
-    sync_table = Table(title="Syncs:")
-    sync_table.add_column("Name", style="bold")
-    sync_table.add_column("Source")
-    sync_table.add_column("Destination")
-    sync_table.add_column("Options")
-    sync_table.add_column("Src Diagnostics")
-    sync_table.add_column("Dst Diagnostics")
-    sync_table.add_column("Status")
+
+def _build_syncs_section(
+    sync_statuses: dict[str, SyncStatus],
+    config: Config,
+) -> list[RenderableType]:
+    """Build the Syncs table section."""
+    table = Table(title="Syncs:")
+    table.add_column("Name", style="bold")
+    table.add_column("Source")
+    table.add_column("Destination")
+    table.add_column("Options")
+    table.add_column("Src Diagnostics")
+    table.add_column("Dst Diagnostics")
+    table.add_column("Status")
 
     for ss in sync_statuses.values():
-        sync_table.add_row(
+        table.add_row(
             ss.slug,
             _sync_endpoint_display(config.source_endpoint(ss.config)),
             _sync_endpoint_display(config.destination_endpoint(ss.config)),
@@ -304,38 +308,58 @@ def build_check_sections(
             _sync_status_text(ss.active, ss.errors),
         )
 
-    sections.append(sync_table)
+    return [table]
 
+
+def _build_rsync_commands_section(
+    sync_statuses: dict[str, SyncStatus],
+    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
+) -> list[RenderableType]:
+    """Build the Rsync Commands table section."""
     active_syncs = [ss for ss in sync_statuses.values() if ss.active]
-    if active_syncs:
-        sections.append(Text(""))
-        cmd_table = Table(title="Rsync Commands:")
-        cmd_table.add_column("Sync", style="bold")
-        cmd_table.add_column("Command")
+    if not active_syncs:
+        return []
+    table = Table(title="Rsync Commands:")
+    table.add_column("Sync", style="bold")
+    table.add_column("Command")
 
-        for ss in active_syncs:
-            dst_ep = config.destination_endpoint(ss.config)
-            dest_suffix: str | None = None
-            link_dest: str | None = None
-            match dst_ep.snapshot_mode:
-                case "btrfs":
-                    dest_suffix = STAGING_DIR
-                case "hard-link":
-                    dest_suffix = f"{SNAPSHOTS_DIR}/<timestamp>"
-                    if ss.destination_latest_snapshot:
-                        link_dest = f"../{ss.destination_latest_snapshot.name}"
-            cmd = build_rsync_command(
-                ss.config,
-                config,
-                resolved_endpoints=resolved_endpoints,
-                dest_suffix=dest_suffix,
-                link_dest=link_dest,
-            )
-            cmd_table.add_row(ss.slug, shlex.join(cmd))
+    for ss in active_syncs:
+        dst_ep = config.destination_endpoint(ss.config)
+        dest_suffix: str | None = None
+        link_dest: str | None = None
+        match dst_ep.snapshot_mode:
+            case "btrfs":
+                dest_suffix = STAGING_DIR
+            case "hard-link":
+                dest_suffix = f"{SNAPSHOTS_DIR}/<timestamp>"
+                if ss.destination_latest_snapshot:
+                    link_dest = f"../{ss.destination_latest_snapshot.name}"
+        cmd = build_rsync_command(
+            ss.config,
+            config,
+            resolved_endpoints=resolved_endpoints,
+            dest_suffix=dest_suffix,
+            link_dest=link_dest,
+        )
+        table.add_row(ss.slug, shlex.join(cmd))
 
-        sections.append(cmd_table)
+    return [Text(""), table]
 
-    return sections
+
+def build_check_sections(
+    vol_statuses: dict[str, VolumeStatus],
+    sync_statuses: dict[str, SyncStatus],
+    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
+) -> list[RenderableType]:
+    """Build renderable sections for check output."""
+    return [
+        *_build_ssh_endpoints_section(config),
+        *_build_volumes_section(vol_statuses, resolved_endpoints),
+        *_build_syncs_section(sync_statuses, config),
+        *_build_rsync_commands_section(sync_statuses, config, resolved_endpoints),
+    ]
 
 
 def print_human_check(
@@ -788,11 +812,9 @@ def print_human_troubleshoot(
     re = resolved_endpoints or {}
     if console is None:
         console = Console()
-    has_issues = False
 
     failed_vols = [vs for vs in vol_statuses.values() if vs.errors]
     failed_syncs = [ss for ss in sync_statuses.values() if ss.errors]
-    has_issues = bool(failed_vols or failed_syncs)
 
     for vs in failed_vols:
         console.print(f"\n[bold]Volume {vs.slug!r}:[/bold]")
@@ -840,5 +862,5 @@ def print_human_troubleshoot(
                 re,
             )
 
-    if not has_issues:
+    if not failed_vols and not failed_syncs:
         console.print("No issues found. All volumes and syncs are active.")
