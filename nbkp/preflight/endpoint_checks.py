@@ -24,6 +24,7 @@ from ..conventions import (
     SNAPSHOTS_DIR,
     SOURCE_SENTINEL,
     STAGING_DIR,
+    Snapshot,
 )
 from .queries import (
     _check_directory_exists,
@@ -173,9 +174,10 @@ def _read_latest_state(
         else:
             resolved = f"{endpoint_path}/{target}"
             target_valid = _check_directory_exists(volume, resolved, resolved_endpoints)
+            name = target.rsplit("/", 1)[-1] if "/" in target else target
             return LatestSymlinkState(
                 exists=True,
                 raw_target=target,
                 target_valid=target_valid,
-                snapshot_name=(target.rsplit("/", 1)[-1] if target_valid else None),
+                snapshot=(Snapshot.from_name(name) if target_valid else None),
             )

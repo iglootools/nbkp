@@ -18,27 +18,22 @@ from ...config import (
     SyncConfig,
     Volume,
 )
-from ...conventions import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR
+from ...conventions import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR, Snapshot
 from ...remote import run_remote_command
 
 
-def format_snapshot_timestamp(
+def create_snapshot_timestamp(
     now: datetime,
     volume: Volume,
     platform: str = sys.platform,
-) -> str:
-    """Format a UTC timestamp for use as a snapshot directory name.
+) -> Snapshot:
+    """Create a Snapshot for the given timestamp and volume.
 
-    Uses standard ISO 8601 with colons on filesystems that support them
-    (Linux local, all remote). Uses hyphens instead of colons on macOS
-    local volumes because APFS/HFS+ forbids colons in filenames.
+    Resolves the macOS local-volume flag from the volume type
+    and delegates to ``Snapshot.create``.
     """
-    ts = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
-    match volume:
-        case LocalVolume() if platform == "darwin":
-            return ts.replace(":", "-")
-        case _:
-            return ts
+    macos_local = isinstance(volume, LocalVolume) and platform == "darwin"
+    return Snapshot.create(now, macos_local=macos_local)
 
 
 def resolve_dest_path(sync: SyncConfig, config: Config) -> str:
@@ -69,8 +64,8 @@ def list_snapshots(
     sync: SyncConfig,
     config: Config,
     resolved_endpoints: ResolvedEndpoints | None = None,
-) -> list[str]:
-    """List all snapshot paths sorted oldest-first."""
+) -> list[Snapshot]:
+    """List all snapshots sorted oldest-first."""
     re = resolved_endpoints or {}
     dest_path = resolve_dest_path(sync, config)
     snapshots_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
@@ -82,15 +77,15 @@ def list_snapshots(
         return []
     else:
         entries = sorted(result.stdout.strip().split("\n"))
-        return [f"{snapshots_dir}/{e}" for e in entries]
+        return [Snapshot.from_name(e) for e in entries]
 
 
 def get_latest_snapshot(
     sync: SyncConfig,
     config: Config,
     resolved_endpoints: ResolvedEndpoints | None = None,
-) -> str | None:
-    """Get the path to the most recent snapshot, or None."""
+) -> Snapshot | None:
+    """Get the most recent snapshot, or None."""
     snapshots = list_snapshots(sync, config, resolved_endpoints)
     if snapshots:
         return snapshots[-1]
@@ -129,8 +124,8 @@ def read_latest_symlink(
     config: Config,
     *,
     resolved_endpoints: ResolvedEndpoints | None = None,
-) -> str | None:
-    """Read the latest symlink target, returning the snapshot name.
+) -> Snapshot | None:
+    """Read the latest symlink target, returning a Snapshot.
 
     Returns ``None`` if the symlink does not exist or points to
     ``/dev/null`` (the canonical "no snapshot yet" marker).
@@ -144,16 +139,15 @@ def read_latest_symlink(
 
     if target is None or target == DEVNULL_TARGET:
         return None
-    elif "/" in target:
-        return target.rsplit("/", 1)[-1]
     else:
-        return target
+        name = target.rsplit("/", 1)[-1] if "/" in target else target
+        return Snapshot.from_name(name)
 
 
 def update_latest_symlink(
     sync: SyncConfig,
     config: Config,
-    snapshot_name: str,
+    snapshot: Snapshot,
     *,
     resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> None:
@@ -161,7 +155,7 @@ def update_latest_symlink(
     re = resolved_endpoints or {}
     dest_path = resolve_dest_path(sync, config)
     latest_path = f"{dest_path}/{LATEST_LINK}"
-    target = f"{SNAPSHOTS_DIR}/{snapshot_name}"
+    target = f"{SNAPSHOTS_DIR}/{snapshot.name}"
 
     dst = config.destination_endpoint(sync)
     dst_vol = config.volumes[dst.volume]

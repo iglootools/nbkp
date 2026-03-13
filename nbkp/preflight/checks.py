@@ -204,7 +204,7 @@ def _build_sync_status(
         else:
             return [SyncError.DESTINATION_UNAVAILABLE]
 
-    dst_latest = dst_diag.latest.snapshot_name if dst_diag and dst_diag.latest else None
+    dst_latest = dst_diag.latest.snapshot if dst_diag and dst_diag.latest else None
 
     return SyncStatus(
         slug=sync.slug,
@@ -214,7 +214,7 @@ def _build_sync_status(
         source_diagnostics=src_diag,
         destination_diagnostics=dst_diag,
         errors=[*_src_errors(), *_dst_errors()],
-        destination_latest_target=dst_latest,
+        destination_latest_snapshot=dst_latest,
     )
 
 

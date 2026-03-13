@@ -25,7 +25,7 @@ from nbkp.preflight import (
     VolumeStatus,
 )
 from nbkp.preflight.output import build_check_sections, print_human_troubleshoot
-from nbkp.sync.snapshots.common import format_snapshot_timestamp
+from nbkp.sync.snapshots.common import create_snapshot_timestamp
 
 
 def _make_console() -> tuple[Console, StringIO]:
@@ -305,7 +305,7 @@ class TestCheckRsyncCommandDisplay:
                 source_status=vol_s["src"],
                 destination_status=vol_s["dst"],
                 errors=[],
-                destination_latest_target=format_snapshot_timestamp(
+                destination_latest_snapshot=create_snapshot_timestamp(
                     datetime(2026, 3, 6, 14, 30, 0, tzinfo=timezone.utc),
                     dst,
                 ),
@@ -315,10 +315,10 @@ class TestCheckRsyncCommandDisplay:
         output = _render_sections(sections)
         assert "/mnt/dst/snapshots/<timestamp>/" in output
         assert "--link-dest" in output
-        expected_ts = format_snapshot_timestamp(
+        expected_ts = create_snapshot_timestamp(
             datetime(2026, 3, 6, 14, 30, 0, tzinfo=timezone.utc), dst
         )
-        assert f"../{expected_ts}" in output
+        assert f"../{expected_ts.name}" in output
 
     def test_plain_sync_shows_bare_destination(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/src")

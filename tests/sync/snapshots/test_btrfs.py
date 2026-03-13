@@ -21,7 +21,7 @@ from nbkp.config import (
     SyncEndpoint,
     resolve_all_endpoints,
 )
-from nbkp.sync.snapshots.common import format_snapshot_timestamp
+from nbkp.sync.snapshots.common import create_snapshot_timestamp
 
 
 def _local_config() -> tuple[Config, SyncConfig]:
@@ -91,9 +91,9 @@ class TestCreateSnapshotLocal:
 
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
         dst_vol = config.volumes["dst"]
-        expected_ts = format_snapshot_timestamp(fixed_now, dst_vol)
+        expected_ts = create_snapshot_timestamp(fixed_now, dst_vol)
         path = create_snapshot(sync, config, now=fixed_now)
-        assert path == f"/mnt/dst/backup/snapshots/{expected_ts}"
+        assert path == f"/mnt/dst/backup/snapshots/{expected_ts.name}"
         mock_run.assert_called_once()
         call_args = mock_run.call_args[0][0]
         assert call_args == [
@@ -102,7 +102,7 @@ class TestCreateSnapshotLocal:
             "snapshot",
             "-r",
             "/mnt/dst/backup/staging",
-            f"/mnt/dst/backup/snapshots/{expected_ts}",
+            f"/mnt/dst/backup/snapshots/{expected_ts.name}",
         ]
 
     @patch("nbkp.sync.snapshots.btrfs.subprocess.run")
@@ -207,9 +207,9 @@ class TestCreateSnapshotLocalSpaces:
 
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
         dst_vol = config.volumes["dst"]
-        expected_ts = format_snapshot_timestamp(fixed_now, dst_vol)
+        expected_ts = create_snapshot_timestamp(fixed_now, dst_vol)
         path = create_snapshot(sync, config, now=fixed_now)
-        assert path == f"/mnt/my dst/my backup/snapshots/{expected_ts}"
+        assert path == f"/mnt/my dst/my backup/snapshots/{expected_ts.name}"
         call_args = mock_run.call_args[0][0]
         assert call_args == [
             "btrfs",
@@ -217,7 +217,7 @@ class TestCreateSnapshotLocalSpaces:
             "snapshot",
             "-r",
             "/mnt/my dst/my backup/staging",
-            f"/mnt/my dst/my backup/snapshots/{expected_ts}",
+            f"/mnt/my dst/my backup/snapshots/{expected_ts.name}",
         ]
 
 
@@ -401,7 +401,9 @@ class TestPruneSnapshotsLocal:
             stderr="",
         )
         # latest points to the second-oldest snapshot
-        mock_latest.return_value = "20240102T000000Z"
+        from nbkp.conventions import Snapshot
+
+        mock_latest.return_value = Snapshot.from_name("20240102T000000Z")
         config, sync = _local_config()
 
         deleted = prune_snapshots(sync, config, max_snapshots=1)
@@ -465,7 +467,9 @@ class TestPruneSnapshotsRemote:
         mock_snap_rrc.return_value = shared_return
         mock_btrfs_rrc.return_value = shared_return
         # latest points to the oldest snapshot
-        mock_latest.return_value = "20240101T000000Z"
+        from nbkp.conventions import Snapshot
+
+        mock_latest.return_value = Snapshot.from_name("20240101T000000Z")
         config, sync = _remote_config()
         resolved = resolve_all_endpoints(config)
 

@@ -17,6 +17,7 @@ from ..conventions import (
     SOURCE_SENTINEL,
     STAGING_DIR,
     VOLUME_SENTINEL,
+    Snapshot,
 )
 
 
@@ -119,8 +120,8 @@ class LatestSymlinkState(BaseModel):
     target_valid: bool | None = None
     """Whether the resolved target directory exists.
     ``None`` when there is no symlink or target is ``/dev/null``."""
-    snapshot_name: str | None = None
-    """Snapshot name extracted from the target path.
+    snapshot: Snapshot | None = None
+    """Snapshot extracted from the target path.
     ``None`` when target is ``/dev/null``, invalid, or absent."""
 
 
@@ -196,13 +197,11 @@ class SyncStatus(BaseModel):
     source_diagnostics: SourceEndpointDiagnostics | None = None
     destination_diagnostics: DestinationEndpointDiagnostics | None = None
     errors: list[SyncError]
-    destination_latest_target: str | None = None
-    """Snapshot name from the destination ``latest`` symlink.
+    destination_latest_snapshot: Snapshot | None = None
+    """Snapshot from the destination ``latest`` symlink.
 
     ``None`` when the symlink is absent, invalid, or points to
-    ``/dev/null`` (no snapshot yet).  Otherwise, the snapshot
-    name only (e.g. ``2026-03-06T14:30:00.000Z`` or
-    ``2026-03-06T14-30-00.000Z`` on macOS local volumes).
+    ``/dev/null`` (no snapshot yet).
     """
 
     @computed_field  # type: ignore[prop-decorator]

@@ -22,7 +22,7 @@ from nbkp.config import (
 )
 from nbkp.output import OutputFormat
 from nbkp.sync import SyncResult
-from nbkp.sync.snapshots.common import format_snapshot_timestamp
+from nbkp.sync.snapshots.common import create_snapshot_timestamp
 from nbkp.preflight.checks import check_all_syncs, check_sync
 from nbkp.preflight.queries import (
     _check_command_available,
@@ -1780,7 +1780,7 @@ class TestCheckSyncRemoteCommands:
                 "/backup/backup/.nbkp-dst",
             ]:
                 return MagicMock(returncode=0)
-            return MagicMock(returncode=0)
+            return MagicMock(returncode=0, stdout="/dev/null\n")
 
         mock_run.side_effect = remote_side_effect
 
@@ -1852,7 +1852,7 @@ class TestCheckSyncRemoteCommands:
                 "/backup/backup/.nbkp-dst",
             ]:
                 return MagicMock(returncode=0)
-            return MagicMock(returncode=0)
+            return MagicMock(returncode=0, stdout="/dev/null\n")
 
         mock_run.side_effect = remote_side_effect
 
@@ -1931,7 +1931,7 @@ class TestCheckSyncRemoteCommands:
                 "/backup/backup",
             ]:
                 return MagicMock(returncode=0, stdout="1234\n")
-            return MagicMock(returncode=0)
+            return MagicMock(returncode=0, stdout="/dev/null\n")
 
         mock_run.side_effect = remote_side_effect
 
@@ -2010,7 +2010,7 @@ class TestCheckSyncRemoteCommands:
                 "/backup/backup",
             ]:
                 return MagicMock(returncode=0, stdout="256\n")
-            return MagicMock(returncode=0)
+            return MagicMock(returncode=0, stdout="/dev/null\n")
 
         mock_run.side_effect = remote_side_effect
 
@@ -2082,7 +2082,7 @@ class TestCheckSyncRemoteCommands:
                 "/backup/backup/.nbkp-dst",
             ]:
                 return MagicMock(returncode=0)
-            return MagicMock(returncode=0)
+            return MagicMock(returncode=0, stdout="/dev/null\n")
 
         mock_run.side_effect = remote_side_effect
 
@@ -2166,7 +2166,7 @@ class TestCheckSyncRemoteCommands:
                 return MagicMock(returncode=0)
             if cmd == ["test", "-d", "/backup/backup/snapshots"]:
                 return MagicMock(returncode=0)
-            return MagicMock(returncode=0)
+            return MagicMock(returncode=0, stdout="/dev/null\n")
 
         mock_run.side_effect = remote_side_effect
 
@@ -2258,7 +2258,7 @@ class TestCheckSyncRemoteCommands:
                 "/backup/backup/snapshots",
             ]:
                 return MagicMock(returncode=0)
-            return MagicMock(returncode=0)
+            return MagicMock(returncode=0, stdout="/dev/null\n")
 
         mock_run.side_effect = remote_side_effect
 
@@ -2350,7 +2350,7 @@ class TestCheckSyncRemoteCommands:
                 "/backup/backup/snapshots",
             ]:
                 return MagicMock(returncode=1)
-            return MagicMock(returncode=0)
+            return MagicMock(returncode=0, stdout="/dev/null\n")
 
         mock_run.side_effect = remote_side_effect
 
@@ -2683,7 +2683,7 @@ class TestCheckHardLinkDest:
                 "/backup/backup/snapshots",
             ]:
                 return MagicMock(returncode=0)
-            return MagicMock(returncode=0)
+            return MagicMock(returncode=0, stdout="/dev/null\n")
 
         mock_run.side_effect = remote_side_effect
 
@@ -2797,14 +2797,14 @@ class TestCheckSourceLatest:
         self._setup_sentinels(src, dst)
         from datetime import datetime, timezone
 
-        _ts = format_snapshot_timestamp(
+        _ts = create_snapshot_timestamp(
             datetime(2026, 1, 1, tzinfo=timezone.utc),
             LocalVolume(slug="x", path="/x"),
         )
         (src / "data" / "snapshots").mkdir(exist_ok=True)
-        snap = src / "data" / "snapshots" / _ts
+        snap = src / "data" / "snapshots" / _ts.name
         snap.mkdir()
-        (src / "data" / "latest").symlink_to(f"snapshots/{_ts}")
+        (src / "data" / "latest").symlink_to(f"snapshots/{_ts.name}")
 
         config, sync = self._make_config(src, dst, "btrfs")
 
@@ -2826,13 +2826,13 @@ class TestCheckSourceLatest:
         self._setup_sentinels(src, dst)
         from datetime import datetime, timezone
 
-        _ts = format_snapshot_timestamp(
+        _ts = create_snapshot_timestamp(
             datetime(2024, 1, 1, tzinfo=timezone.utc),
             LocalVolume(slug="x", path="/x"),
         )
-        snap = src / "data" / "snapshots" / _ts
+        snap = src / "data" / "snapshots" / _ts.name
         snap.mkdir(parents=True)
-        (src / "data" / "latest").symlink_to(f"snapshots/{_ts}")
+        (src / "data" / "latest").symlink_to(f"snapshots/{_ts.name}")
 
         config, sync = self._make_config(src, dst, "hard-link")
 
@@ -3275,12 +3275,12 @@ class TestCheckDevnullLatest:
         self._setup_sentinels(src, dst)
         from datetime import datetime, timezone
 
-        _ts = format_snapshot_timestamp(
+        _ts = create_snapshot_timestamp(
             datetime(2099, 1, 1, tzinfo=timezone.utc),
             LocalVolume(slug="x", path="/x"),
         )
         (src / "data" / "snapshots").mkdir()
-        (src / "data" / "latest").symlink_to(f"snapshots/{_ts}")
+        (src / "data" / "latest").symlink_to(f"snapshots/{_ts.name}")
         (dst / "backup" / "snapshots").mkdir()
         (dst / "backup" / "latest").symlink_to("/dev/null")
 
@@ -3361,12 +3361,12 @@ class TestCheckDevnullLatest:
         self._setup_sentinels(src, dst)
         from datetime import datetime, timezone
 
-        _ts = format_snapshot_timestamp(
+        _ts = create_snapshot_timestamp(
             datetime(2099, 1, 1, tzinfo=timezone.utc),
             LocalVolume(slug="x", path="/x"),
         )
         (dst / "backup" / "snapshots").mkdir()
-        (dst / "backup" / "latest").symlink_to(f"snapshots/{_ts}")
+        (dst / "backup" / "latest").symlink_to(f"snapshots/{_ts.name}")
 
         config, sync = self._make_config(src, dst)
 

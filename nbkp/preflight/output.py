@@ -322,8 +322,8 @@ def build_check_sections(
                     dest_suffix = STAGING_DIR
                 case "hard-link":
                     dest_suffix = f"{SNAPSHOTS_DIR}/<timestamp>"
-                    if ss.destination_latest_target:
-                        link_dest = f"../{ss.destination_latest_target}"
+                    if ss.destination_latest_snapshot:
+                        link_dest = f"../{ss.destination_latest_snapshot.name}"
             cmd = build_rsync_command(
                 ss.config,
                 config,

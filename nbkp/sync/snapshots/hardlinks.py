@@ -16,7 +16,7 @@ from ...config import (
 from ...conventions import SNAPSHOTS_DIR
 from .common import (
     _run_on_volume,
-    format_snapshot_timestamp,
+    create_snapshot_timestamp,
     list_snapshots,
     read_latest_symlink,
     resolve_dest_path,
@@ -39,8 +39,8 @@ def create_snapshot_dir(
     dst = config.destination_endpoint(sync)
     dst_vol = config.volumes[dst.volume]
     dest_path = resolve_dest_path(sync, config)
-    timestamp = format_snapshot_timestamp(ts, dst_vol)
-    snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{timestamp}"
+    snapshot = create_snapshot_timestamp(ts, dst_vol)
+    snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{snapshot.name}"
     result = _run_on_volume(["mkdir", "-p", snapshot_path], dst_vol, re)
 
     if result.returncode != 0:
@@ -61,14 +61,20 @@ def cleanup_orphaned_snapshots(
     Returns list of deleted paths.
     """
     re = resolved_endpoints or {}
-    latest_name = read_latest_symlink(sync, config, resolved_endpoints=re)
-    if latest_name is None:
+    latest = read_latest_symlink(sync, config, resolved_endpoints=re)
+    if latest is None:
         return []
     else:
         all_snapshots = list_snapshots(sync, config, re)
         dst = config.destination_endpoint(sync)
         dst_vol = config.volumes[dst.volume]
-        orphans = [p for p in all_snapshots if p.rsplit("/", 1)[-1] > latest_name]
+        dest_path = resolve_dest_path(sync, config)
+        snapshots_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
+        orphans = [
+            f"{snapshots_dir}/{s.name}"
+            for s in all_snapshots
+            if s.timestamp > latest.timestamp
+        ]
         for path in orphans:
             delete_snapshot(path, dst_vol, re)
         return orphans
@@ -108,12 +114,16 @@ def prune_snapshots(
     if excess <= 0:
         return []
     else:
-        latest_name = read_latest_symlink(sync, config, resolved_endpoints=re)
+        latest = read_latest_symlink(sync, config, resolved_endpoints=re)
+        dest_path = resolve_dest_path(sync, config)
+        snapshots_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
 
         # Candidates: oldest first, skip the latest target, take up to excess
-        to_delete = [p for p in snapshots if p.rsplit("/", 1)[-1] != latest_name][
-            :excess
-        ]
+        to_delete = [
+            f"{snapshots_dir}/{s.name}"
+            for s in snapshots
+            if latest is None or s.name != latest.name
+        ][:excess]
 
         if not dry_run:
             dst = config.destination_endpoint(sync)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ...conventions import Snapshot
 from ...preflight import (
     BtrfsSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
@@ -134,10 +135,10 @@ def check_data(
                     exists=True,
                     raw_target="snapshots/2026-03-06T14:30:00.000Z",
                     target_valid=True,
-                    snapshot_name="2026-03-06T14:30:00.000Z",
+                    snapshot=Snapshot.from_name("2026-03-06T14:30:00.000Z"),
                 ),
             ),
-            destination_latest_target="snapshots/2026-03-06T14:30:00.000Z",
+            destination_latest_snapshot=Snapshot.from_name("2026-03-06T14:30:00.000Z"),
             errors=[],
         ),
         "docs-to-nas": SyncStatus(

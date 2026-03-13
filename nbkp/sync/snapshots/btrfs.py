@@ -16,7 +16,7 @@ from ...config import (
 from ...conventions import SNAPSHOTS_DIR, STAGING_DIR
 from ...remote import run_remote_command
 from .common import (
-    format_snapshot_timestamp,
+    create_snapshot_timestamp,
     list_snapshots,
     resolve_dest_path,
 )
@@ -52,8 +52,8 @@ def create_snapshot(
     dst = config.destination_endpoint(sync)
     dst_vol = config.volumes[dst.volume]
     dest_path = resolve_dest_path(sync, config)
-    timestamp = format_snapshot_timestamp(ts, dst_vol)
-    snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{timestamp}"
+    snapshot = create_snapshot_timestamp(ts, dst_vol)
+    snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{snapshot.name}"
     tmp_path = f"{dest_path}/{STAGING_DIR}"
     result = _run_on_volume(
         ["btrfs", "subvolume", "snapshot", "-r", tmp_path, snapshot_path],
@@ -123,12 +123,16 @@ def prune_snapshots(
     if excess <= 0:
         return []
     else:
-        latest_name = read_latest_symlink(sync, config, resolved_endpoints=re)
+        latest = read_latest_symlink(sync, config, resolved_endpoints=re)
+        dest_path = resolve_dest_path(sync, config)
+        snapshots_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
 
         # Candidates: oldest first, skip the latest target, take up to excess
-        to_delete = [p for p in snapshots if p.rsplit("/", 1)[-1] != latest_name][
-            :excess
-        ]
+        to_delete = [
+            f"{snapshots_dir}/{s.name}"
+            for s in snapshots
+            if latest is None or s.name != latest.name
+        ][:excess]
 
         if not dry_run:
             dst = config.destination_endpoint(sync)

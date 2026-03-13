@@ -20,7 +20,7 @@ from .snapshots.hardlinks import (
 )
 from .snapshots.common import update_latest_symlink
 from ..config import Config, ResolvedEndpoints
-from ..conventions import SNAPSHOTS_DIR, STAGING_DIR
+from ..conventions import SNAPSHOTS_DIR, STAGING_DIR, Snapshot
 from ..preflight import SyncError, SyncStatus
 from .rsync import ProgressMode, run_rsync
 
@@ -346,12 +346,12 @@ def _btrfs_post_rsync(
             detail=f"Snapshot failed: {e}",
         )
 
-    snapshot_name = snapshot_path.rsplit("/", 1)[-1]
+    snapshot = Snapshot.from_path(snapshot_path)
     try:
         update_latest_symlink(
             sync,
             config,
-            snapshot_name,
+            snapshot,
             resolved_endpoints=resolved_endpoints,
         )
     except RuntimeError as e:
@@ -414,8 +414,8 @@ def _run_hard_link_sync(
 
     # 2. Determine link-dest from latest complete snapshot
     link_dest = (
-        f"../{status.destination_latest_target}"
-        if status.destination_latest_target
+        f"../{status.destination_latest_snapshot.name}"
+        if status.destination_latest_snapshot
         else None
     )
 
@@ -433,7 +433,7 @@ def _run_hard_link_sync(
             output="",
             detail=f"Failed to create snapshot dir: {e}",
         )
-    snapshot_name = snapshot_path.rsplit("/", 1)[-1]
+    snapshot = Snapshot.from_path(snapshot_path)
 
     # 4. Run rsync into the snapshot directory
     try:
@@ -445,7 +445,7 @@ def _run_hard_link_sync(
             progress=progress,
             on_output=on_rsync_output,
             resolved_endpoints=resolved_endpoints,
-            dest_suffix=f"{SNAPSHOTS_DIR}/{snapshot_name}",
+            dest_suffix=f"{SNAPSHOTS_DIR}/{snapshot.name}",
         )
     except Exception as e:
         return SyncResult(
@@ -475,7 +475,7 @@ def _run_hard_link_sync(
             config,
             proc,
             snapshot_path,
-            snapshot_name,
+            snapshot,
             dry_run,
             prune,
             hl_cfg,
@@ -489,7 +489,7 @@ def _hl_post_rsync(
     config: Config,
     proc: subprocess.CompletedProcess[str],
     snapshot_path: str,
-    snapshot_name: str,
+    snapshot: Snapshot,
     dry_run: bool,
     prune: bool,
     hl_cfg: object,
@@ -516,7 +516,7 @@ def _hl_post_rsync(
         update_latest_symlink(
             sync,
             config,
-            snapshot_name,
+            snapshot,
             resolved_endpoints=resolved_endpoints,
         )
     except RuntimeError as e:
