@@ -64,6 +64,7 @@ Before running any sync, nbkp validates that all required infrastructure is in p
 - **Rsync verification**: checks rsync is installed and version is 3.0+ (rejects macOS openrsync)
 - **Btrfs readiness**: filesystem type, subvolume existence, mount options (`user_subvol_rm_allowed`), required directories
 - **Hard-link readiness**: filesystem hard-link support, required directory structure
+- **Orphan detection**: warns about SSH endpoints, volumes, and sync endpoints that are defined but not referenced by anything
 - **Strict mode**: optionally exit non-zero on any inactive sync
 
 ## Configuration

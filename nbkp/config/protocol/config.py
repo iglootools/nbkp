@@ -146,6 +146,30 @@ class Config(_BaseModel):
         """Resolve the destination sync endpoint for a sync."""
         return self.sync_endpoints[sync.destination]
 
+    def orphan_ssh_endpoints(self) -> list[str]:
+        """SSH endpoints not referenced by any volume or proxy-jump chain."""
+        used = {
+            ref
+            for vol in self.volumes.values()
+            if isinstance(vol, RemoteVolume)
+            for ref in [vol.ssh_endpoint, *(vol.ssh_endpoints or [])]
+        } | {hop for ep in self.ssh_endpoints.values() for hop in ep.proxy_jump_chain}
+        return sorted(set(self.ssh_endpoints) - used)
+
+    def orphan_volumes(self) -> list[str]:
+        """Volumes not referenced by any sync endpoint."""
+        used = {ep.volume for ep in self.sync_endpoints.values()}
+        return sorted(set(self.volumes) - used)
+
+    def orphan_sync_endpoints(self) -> list[str]:
+        """Sync endpoints not referenced by any sync."""
+        used = {
+            ref
+            for sync in self.syncs.values()
+            for ref in [sync.source, sync.destination]
+        }
+        return sorted(set(self.sync_endpoints) - used)
+
     @model_validator(mode="after")
     def validate_cross_references(self) -> Config:
         for slug, server in self.ssh_endpoints.items():

@@ -347,6 +347,35 @@ def _build_rsync_commands_section(
     return [Text(""), table]
 
 
+def _build_orphan_warnings_section(
+    config: Config,
+) -> list[RenderableType]:
+    """Build warnings for orphan config items."""
+    warnings = [
+        *[
+            f"SSH endpoint '{slug}' is not referenced by any volume"
+            for slug in config.orphan_ssh_endpoints()
+        ],
+        *[
+            f"Volume '{slug}' is not referenced by any sync endpoint"
+            for slug in config.orphan_volumes()
+        ],
+        *[
+            f"Sync endpoint '{slug}' is not referenced by any sync"
+            for slug in config.orphan_sync_endpoints()
+        ],
+    ]
+    if not warnings:
+        return []
+    text = Text()
+    for i, warning in enumerate(warnings):
+        if i > 0:
+            text.append("\n")
+        text.append("warning: ", style="yellow bold")
+        text.append(warning)
+    return [Text(""), text]
+
+
 def build_check_sections(
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
@@ -359,6 +388,7 @@ def build_check_sections(
         *_build_volumes_section(vol_statuses, resolved_endpoints),
         *_build_syncs_section(sync_statuses, config),
         *_build_rsync_commands_section(sync_statuses, config, resolved_endpoints),
+        *_build_orphan_warnings_section(config),
     ]
 
 

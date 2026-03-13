@@ -34,13 +34,30 @@ from ..config.testkit import (
 
 
 def check_config() -> Config:
-    """Config with local + remote volumes and varied syncs."""
+    """Config with local + remote volumes and varied syncs.
+
+    Includes orphan items to exercise the orphan-config warnings:
+    - SSH endpoint ``orphan-server`` (not referenced by any volume)
+    - Volume ``orphan-volume`` (not referenced by any sync endpoint)
+    - Sync endpoint ``orphan-sync-endpoint`` (not referenced by any sync)
+    """
+    ssh_endpoints = base_ssh_endpoints()
+    ssh_endpoints["orphan-server"] = SshEndpoint(
+        slug="orphan-server",
+        host="old.example.com",
+        user="backup",
+    )
     volumes = base_volumes()
     volumes["external-drive"] = LocalVolume(slug="external-drive", path="/mnt/external")
+    volumes["orphan-volume"] = LocalVolume(slug="orphan-volume", path="/mnt/archive")
     sync_endpoints = base_sync_endpoints()
     sync_endpoints["external-root"] = SyncEndpoint(
         slug="external-root",
         volume="external-drive",
+    )
+    sync_endpoints["orphan-sync-endpoint"] = SyncEndpoint(
+        slug="orphan-sync-endpoint",
+        volume="usb-drive",
     )
     syncs = base_syncs()
     syncs["disabled-backup"] = SyncConfig(
@@ -50,7 +67,7 @@ def check_config() -> Config:
         enabled=False,
     )
     return Config(
-        ssh_endpoints=base_ssh_endpoints(),
+        ssh_endpoints=ssh_endpoints,
         volumes=volumes,
         sync_endpoints=sync_endpoints,
         syncs=syncs,
