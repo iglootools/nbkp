@@ -10,7 +10,7 @@ import tempfile
 from textwrap import dedent
 from io import StringIO
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Callable
 
 import typer
 import yaml
@@ -567,22 +567,21 @@ def seed(
         syncs=syncs,
     )
 
-    remote_exec = None
     # Create sentinels and seed data
     size_bytes = big_file_size * 1024 * 1024
     if docker:
         assert storage_endpoint is not None
-        _server = storage_endpoint
-
-        def _run_remote(cmd: str) -> None:
-            ssh_exec(_server, cmd)
+        _ep = storage_endpoint
 
         with _console.status("Creating btrfs subvolume..."):
-            ssh_exec(
-                storage_endpoint,
-                f"btrfs subvolume create {btrfs_snapshots_path}",
-            )
-        remote_exec = _run_remote
+            ssh_exec(_ep, f"btrfs subvolume create {btrfs_snapshots_path}")
+
+        def _run_remote(cmd: str) -> None:
+            ssh_exec(_ep, cmd)
+
+        remote_exec: Callable[[str], None] | None = _run_remote
+    else:
+        remote_exec = None
 
     with _console.status("Setting up volumes..."):
         create_seed_sentinels(config, remote_exec=remote_exec)
@@ -603,17 +602,18 @@ def seed(
     backup_sh = tmp / "backup.sh"
 
     # Print summary
-    rows: list[tuple[str, str]] = [
+    rows = [
         ("Seed directory", str(tmp)),
         ("Config file", str(config_path)),
+        *(
+            [
+                ("Bastion", f"{BASTION_CONTAINER_NAME} (port {bastion_endpoint.port})"),
+                ("Storage", f"{STORAGE_CONTAINER_NAME} (port {storage_endpoint.port})"),
+            ]
+            if bastion_endpoint is not None and storage_endpoint is not None
+            else []
+        ),
     ]
-    if docker:
-        assert storage_endpoint is not None
-        assert bastion_endpoint is not None
-        rows += [
-            ("Bastion", f"{BASTION_CONTAINER_NAME} (port {bastion_endpoint.port})"),
-            ("Storage", f"{STORAGE_CONTAINER_NAME} (port {storage_endpoint.port})"),
-        ]
     label_w = max(len(r[0]) for r in rows)
     summary = Text()
     for i, (label, value) in enumerate(rows):
@@ -624,6 +624,15 @@ def seed(
     _console.print(Panel(summary, border_style="blue", padding=(0, 1)))
 
     pfx = _cmd_prefix()
+    docker_teardown = (
+        dedent(f"""
+
+            # Teardown containers and network
+            docker rm -f {STORAGE_CONTAINER_NAME} {BASTION_CONTAINER_NAME}
+            docker network rm nbkp-demo-net""")
+        if docker
+        else ""
+    )
     commands = dedent(f"""\
         CFG="{config_path}"
         SH="{backup_sh}"
@@ -659,13 +668,7 @@ def seed(
         {pfx}nbkp sh --config $CFG -o $SH --relative-src --relative-dst \\
           && bash -n $SH \\
           && $SH --dry-run \\
-          && $SH""")
-    if docker:
-        commands += dedent(f"""
-
-            # Teardown containers and network
-            docker rm -f {STORAGE_CONTAINER_NAME} {BASTION_CONTAINER_NAME}
-            docker network rm nbkp-demo-net""")
+          && $SH""") + docker_teardown
     _console.print(
         Panel(
             Syntax(
