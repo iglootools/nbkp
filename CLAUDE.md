@@ -10,9 +10,11 @@ Detailed overview of the architecture, design patterns, and execution flow: @doc
 
 Explanations of key concepts such as volumes, syncs, and the configuration model: @docs/concepts.md
 
-## Conventions
+## Conventions and consistency
 
 Coding conventions, testing practices, and other guidelines for contributing to the codebase: @docs/conventions.md
+
+Implementation checkslists serve as a reminder for things to check when implementing new features or making changes to the codebase: @docs/implementation-checklists.md
 
 ## Build & Test Commands
 
