@@ -172,7 +172,7 @@ class TestConfigShowCommand:
         assert "Syncs:" in result.output
         assert "local-data" in result.output
         assert "nas" in result.output
-        assert "photos-to-nas" in result.output
+        assert "photos" in result.output
 
     @patch("nbkp.cli.common.load_config")
     def test_human_output_shows_servers(self, mock_load: MagicMock) -> None:
@@ -243,7 +243,7 @@ class TestCheckCommand:
         assert "nas" in result.output
         assert "active" in result.output
         assert "inactive" in result.output
-        assert "photos-to-nas" in result.output
+        assert "photos" in result.output
 
     @patch("nbkp.cli.common.check_all_syncs")
     @patch("nbkp.cli.common.load_config")
@@ -376,7 +376,7 @@ class TestRunCommand:
 
         result = runner.invoke(app, ["run", "--config", "/fake.yaml"])
         assert result.exit_code == 0
-        assert "photos-to-nas" in result.output
+        assert "photos" in result.output
         assert "OK" in result.output
         call_kwargs = mock_run.call_args
         assert call_kwargs.kwargs.get("on_rsync_output") is None

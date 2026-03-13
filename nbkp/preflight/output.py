@@ -40,7 +40,13 @@ from ..conventions import (
     STAGING_DIR,
     VOLUME_SENTINEL,
 )
-from .status import SyncError, SyncStatus, VolumeCapabilities, VolumeError, VolumeStatus
+from .status import (
+    SyncError,
+    SyncStatus,
+    VolumeCapabilities,
+    VolumeError,
+    VolumeStatus,
+)
 
 
 def _status_text(
@@ -53,6 +59,56 @@ def _status_text(
     else:
         error_str = ", ".join(r.value for r in errors)
         return Text(f"inactive ({error_str})", style="red")
+
+
+# Sync errors whose diagnostic state is visible as ✓/✗ in the
+# Src/Dst Diagnostics columns.  When *all* errors for a sync are
+# diagnostic-visible, the Status column shows a plain "inactive"
+# because the diagnostics already tell the story.  Non-obvious
+# errors (disabled, unavailable, tool-version, dry-run) are always
+# shown in the Status column so they aren't silently hidden.
+_DIAGNOSTIC_VISIBLE_SYNC_ERRORS: frozenset[SyncError] = frozenset(
+    {
+        # Volume-level — shown as ✗volume(...) in src/dst diagnostics
+        SyncError.SOURCE_UNAVAILABLE,
+        SyncError.DESTINATION_UNAVAILABLE,
+        # Endpoint-level — shown as ✓/✗ items in src/dst diagnostics
+        SyncError.SOURCE_SENTINEL_NOT_FOUND,
+        SyncError.SOURCE_LATEST_NOT_FOUND,
+        SyncError.SOURCE_LATEST_INVALID,
+        SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND,
+        SyncError.DESTINATION_SENTINEL_NOT_FOUND,
+        SyncError.DESTINATION_ENDPOINT_NOT_WRITABLE,
+        SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME,
+        SyncError.DESTINATION_TMP_NOT_FOUND,
+        SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND,
+        SyncError.DESTINATION_LATEST_NOT_FOUND,
+        SyncError.DESTINATION_LATEST_INVALID,
+        SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE,
+        SyncError.DESTINATION_STAGING_DIR_NOT_WRITABLE,
+        SyncError.DESTINATION_NO_HARDLINK_SUPPORT,
+    }
+)
+
+
+def _sync_status_text(
+    active: bool,
+    errors: list[SyncError],
+) -> Text:
+    """Format sync status, showing only non-obvious error reasons.
+
+    Errors that are visible as ✓/✗ in the diagnostics columns are
+    omitted from the status text to avoid redundancy.  Non-obvious
+    errors (disabled, unavailable, tool-version, dry-run) are shown.
+    """
+    if active:
+        return Text("active", style="green")
+    non_obvious = [e for e in errors if e not in _DIAGNOSTIC_VISIBLE_SYNC_ERRORS]
+    if non_obvious:
+        reason = ", ".join(e.value for e in non_obvious)
+        return Text(f"inactive ({reason})", style="red")
+    else:
+        return Text("inactive", style="red")
 
 
 def _format_capabilities(caps: VolumeCapabilities | None) -> str:
@@ -75,6 +131,94 @@ def _format_capabilities(caps: VolumeCapabilities | None) -> str:
     if caps.btrfs_user_subvol_rm:
         items.append("user_subvol_rm")
     return ", ".join(items) if items else "none"
+
+
+def _check(ok: bool, label: str) -> str:
+    """Format a diagnostic item as ✓label or ✗label."""
+    return f"\u2713{label}" if ok else f"\u2717{label}"
+
+
+def _format_volume_issues(vol_status: VolumeStatus) -> str:
+    """Format volume-level issues as ✗volume(reason)."""
+    reason = ", ".join(e.value for e in vol_status.errors)
+    return f"\u2717volume ({reason})" if reason else "\u2717volume"
+
+
+def _format_source_diagnostics(ss: SyncStatus) -> str:
+    """Format source endpoint diagnostics as a compact comma-separated string.
+
+    When the source volume is inactive, shows ✗volume(reason) instead
+    of endpoint-level items (which weren't computed).  Otherwise shows
+    ✓/✗ for each checked item.  Items only appear when the
+    corresponding feature is configured (e.g. snapshots/ and latest
+    are omitted when the endpoint has no snapshot mode).
+    """
+    if not ss.source_status.active:
+        return _format_volume_issues(ss.source_status)
+    diag = ss.source_diagnostics
+    if diag is None:
+        return ""
+    items = [
+        _check(diag.sentinel_exists, "sentinel"),
+        *(
+            [_check(diag.snapshot_dirs.exists, "snapshots/")]
+            if diag.snapshot_dirs is not None
+            else []
+        ),
+        *(
+            [
+                f"\u2713latest \u2192 {diag.latest.raw_target}"
+                if diag.latest.exists and diag.latest.raw_target
+                else "\u2717latest"
+            ]
+            if diag.latest is not None
+            else []
+        ),
+    ]
+    return ", ".join(items)
+
+
+def _format_destination_diagnostics(ss: SyncStatus) -> str:
+    """Format destination endpoint diagnostics as a compact comma-separated string.
+
+    When the destination volume is inactive, shows ✗volume(reason)
+    instead of endpoint-level items.  Otherwise shows ✓/✗ for each
+    checked item.  Btrfs-specific items (subvolume, staging/) only
+    appear when btrfs diagnostics are present.  Snapshot items only
+    appear when snapshot mode is configured.
+    """
+    if not ss.destination_status.active:
+        return _format_volume_issues(ss.destination_status)
+    diag = ss.destination_diagnostics
+    if diag is None:
+        return ""
+    items = [
+        _check(diag.sentinel_exists, "sentinel"),
+        _check(diag.endpoint_writable, "writable"),
+        *(
+            [
+                _check(diag.btrfs.is_subvolume, "subvolume"),
+                _check(diag.btrfs.staging_dir_exists, "staging/"),
+            ]
+            if diag.btrfs is not None
+            else []
+        ),
+        *(
+            [_check(diag.snapshot_dirs.exists, "snapshots/")]
+            if diag.snapshot_dirs is not None
+            else []
+        ),
+        *(
+            [
+                f"\u2713latest \u2192 {diag.latest.raw_target}"
+                if diag.latest.exists and diag.latest.raw_target
+                else "\u2717latest"
+            ]
+            if diag.latest is not None
+            else []
+        ),
+    ]
+    return ", ".join(items)
 
 
 def build_check_sections(
@@ -145,6 +289,8 @@ def build_check_sections(
     sync_table.add_column("Source")
     sync_table.add_column("Destination")
     sync_table.add_column("Options")
+    sync_table.add_column("Src Diagnostics")
+    sync_table.add_column("Dst Diagnostics")
     sync_table.add_column("Status")
 
     for ss in sync_statuses.values():
@@ -153,7 +299,9 @@ def build_check_sections(
             _sync_endpoint_display(config.source_endpoint(ss.config)),
             _sync_endpoint_display(config.destination_endpoint(ss.config)),
             _sync_options(ss.config, config),
-            _status_text(ss.active, ss.errors),
+            _format_source_diagnostics(ss),
+            _format_destination_diagnostics(ss),
+            _sync_status_text(ss.active, ss.errors),
         )
 
     sections.append(sync_table)

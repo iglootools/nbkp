@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 from ...preflight import (
+    BtrfsSubvolumeDiagnostics,
+    DestinationEndpointDiagnostics,
+    LatestSymlinkState,
+    SnapshotDirsDiagnostics,
+    SourceEndpointDiagnostics,
     SyncError,
     SyncStatus,
     VolumeCapabilities,
@@ -111,6 +116,28 @@ def check_data(
             config=config.syncs["photos-to-usb"],
             source_status=laptop_vs,
             destination_status=usb_vs,
+            source_diagnostics=SourceEndpointDiagnostics(
+                endpoint_slug="laptop-photos",
+                sentinel_exists=True,
+            ),
+            destination_diagnostics=DestinationEndpointDiagnostics(
+                endpoint_slug="usb-photos",
+                sentinel_exists=True,
+                endpoint_writable=True,
+                btrfs=BtrfsSubvolumeDiagnostics(
+                    is_subvolume=True,
+                    staging_dir_exists=True,
+                    staging_dir_writable=True,
+                ),
+                snapshot_dirs=SnapshotDirsDiagnostics(exists=True, writable=True),
+                latest=LatestSymlinkState(
+                    exists=True,
+                    raw_target="snapshots/2026-03-06T14:30:00.000Z",
+                    target_valid=True,
+                    snapshot_name="2026-03-06T14:30:00.000Z",
+                ),
+            ),
+            destination_latest_target="snapshots/2026-03-06T14:30:00.000Z",
             errors=[],
         ),
         "docs-to-nas": SyncStatus(
@@ -125,6 +152,20 @@ def check_data(
             config=config.syncs["music-to-usb"],
             source_status=laptop_vs,
             destination_status=usb_vs,
+            source_diagnostics=SourceEndpointDiagnostics(
+                endpoint_slug="laptop-music",
+                sentinel_exists=True,
+            ),
+            destination_diagnostics=DestinationEndpointDiagnostics(
+                endpoint_slug="usb-music",
+                sentinel_exists=True,
+                endpoint_writable=True,
+                snapshot_dirs=SnapshotDirsDiagnostics(exists=True, writable=True),
+                latest=LatestSymlinkState(
+                    exists=True,
+                    raw_target="/dev/null",
+                ),
+            ),
             errors=[],
         ),
         "disabled-backup": SyncStatus(

@@ -75,19 +75,38 @@ def _sync_endpoint_display(endpoint: SyncEndpoint) -> str:
 
 
 def _sync_options(sync: SyncConfig, config: Config) -> str:
-    """Build a comma-separated string of enabled sync options."""
+    """Build a comma-separated summary of notable sync options.
+
+    Shown:
+    - rsync-filter: filters or filter_file configured on the sync
+    - src-snapshots: source reads from latest/ instead of volume root
+      (btrfs or hard-link)
+    - dst-snapshots: destination snapshot mode with optional max count
+      (btrfs or hard-link)
+
+    Omitted (available via config show / JSON output):
+    - rsync flags (compress, checksum, extra_options) — per-sync detail,
+      not structural
+    - filter rules — too verbose for a summary column
+    - enabled/disabled — already in the Status column
+    """
     src_ep = config.source_endpoint(sync)
     dst_ep = config.destination_endpoint(sync)
     return ", ".join(
         opt
         for opt in [
             "rsync-filter" if sync.filters or sync.filter_file else "",
-            f"src:{src_ep.snapshot_mode}" if src_ep.snapshot_mode != "none" else "",
-            _snapshot_label("btrfs-snapshots", dst_ep.btrfs_snapshots.max_snapshots)
+            f"src-snapshots: {src_ep.snapshot_mode}"
+            if src_ep.snapshot_mode != "none"
+            else "",
+            _snapshot_label(
+                "dst-snapshots: btrfs", dst_ep.btrfs_snapshots.max_snapshots
+            )
             if dst_ep.btrfs_snapshots.enabled
             else "",
             _snapshot_label(
-                "hard-link-snapshots", dst_ep.hard_link_snapshots.max_snapshots
+                "dst-snapshots: hard-link",
+                dst_ep.hard_link_snapshots.max_snapshots,
             )
             if dst_ep.hard_link_snapshots.enabled
             else "",
