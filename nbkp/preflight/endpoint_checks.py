@@ -17,7 +17,7 @@ from ..config import (
     SyncEndpoint,
     Volume,
 )
-from ..conventions import (
+from ..fsprotocol import (
     DESTINATION_SENTINEL,
     DEVNULL_TARGET,
     LATEST_LINK,

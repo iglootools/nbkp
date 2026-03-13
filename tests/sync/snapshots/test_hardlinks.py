@@ -18,7 +18,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.conventions import Snapshot
+from nbkp.fsprotocol import Snapshot
 from nbkp.sync.snapshots.common import create_snapshot_timestamp
 from nbkp.sync.snapshots.hardlinks import (
     cleanup_orphaned_snapshots,

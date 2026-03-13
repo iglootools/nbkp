@@ -401,7 +401,7 @@ class TestPruneSnapshotsLocal:
             stderr="",
         )
         # latest points to the second-oldest snapshot
-        from nbkp.conventions import Snapshot
+        from nbkp.fsprotocol import Snapshot
 
         mock_latest.return_value = Snapshot.from_name("20240102T000000Z")
         config, sync = _local_config()
@@ -467,7 +467,7 @@ class TestPruneSnapshotsRemote:
         mock_snap_rrc.return_value = shared_return
         mock_btrfs_rrc.return_value = shared_return
         # latest points to the oldest snapshot
-        from nbkp.conventions import Snapshot
+        from nbkp.fsprotocol import Snapshot
 
         mock_latest.return_value = Snapshot.from_name("20240101T000000Z")
         config, sync = _remote_config()

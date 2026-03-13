@@ -21,7 +21,7 @@ from ..remote import (
     build_ssh_e_option,
     format_remote_path,
 )
-from ..conventions import LATEST_LINK
+from ..fsprotocol import LATEST_LINK
 
 
 class ProgressMode(str, Enum):

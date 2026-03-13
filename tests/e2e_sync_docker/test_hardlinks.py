@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from nbkp.conventions import Snapshot
+from nbkp.fsprotocol import Snapshot
 from nbkp.config import (
     Config,
     HardLinkSnapshotConfig,

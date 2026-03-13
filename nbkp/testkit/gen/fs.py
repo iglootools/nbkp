@@ -13,7 +13,7 @@ from ...config import (
     RemoteVolume,
     SyncEndpoint,
 )
-from ...conventions import (
+from ...fsprotocol import (
     DESTINATION_SENTINEL,
     DEVNULL_TARGET,
     LATEST_LINK,

@@ -13,7 +13,7 @@ from ...config import (
     SyncConfig,
     Volume,
 )
-from ...conventions import SNAPSHOTS_DIR, STAGING_DIR
+from ...fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
 from ...remote import run_remote_command
 from .common import (
     create_snapshot_timestamp,

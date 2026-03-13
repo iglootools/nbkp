@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ...conventions import Snapshot
+from ...fsprotocol import Snapshot
 from ...preflight import (
     BtrfsSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,

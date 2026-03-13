@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from nbkp.conventions import Snapshot
+from nbkp.fsprotocol import Snapshot
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,

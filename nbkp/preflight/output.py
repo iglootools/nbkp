@@ -32,7 +32,7 @@ from ..remote.ssh import (
     wrap_cmd,
 )
 from ..sync.rsync import build_rsync_command
-from ..conventions import (
+from ..fsprotocol import (
     DESTINATION_SENTINEL,
     LATEST_LINK,
     SNAPSHOTS_DIR,

@@ -26,7 +26,7 @@ from .config import (
     SshEndpoint,
     SyncConfig,
 )
-from .conventions import (
+from .fsprotocol import (
     DESTINATION_SENTINEL,
     LATEST_LINK,
     SNAPSHOTS_DIR,

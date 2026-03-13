@@ -20,7 +20,7 @@ from .snapshots.hardlinks import (
 )
 from .snapshots.common import update_latest_symlink
 from ..config import Config, ResolvedEndpoints
-from ..conventions import SNAPSHOTS_DIR, STAGING_DIR, Snapshot
+from ..fsprotocol import SNAPSHOTS_DIR, STAGING_DIR, Snapshot
 from ..preflight import SyncError, SyncStatus
 from .rsync import ProgressMode, run_rsync
 

@@ -1,4 +1,4 @@
-"""Filesystem naming conventions shared across the application.
+"""Filesystem protocol: sentinel names, directory layout, and snapshot types.
 
 This module is a leaf dependency with no internal imports, so any
 module can use it without introducing circular dependencies.

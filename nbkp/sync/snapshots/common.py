@@ -18,7 +18,7 @@ from ...config import (
     SyncConfig,
     Volume,
 )
-from ...conventions import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR, Snapshot
+from ...fsprotocol import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR, Snapshot
 from ...remote import run_remote_command
 
 

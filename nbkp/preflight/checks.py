@@ -24,7 +24,7 @@ from ..config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ..conventions import DEVNULL_TARGET
+from ..fsprotocol import DEVNULL_TARGET
 from .endpoint_checks import check_destination_endpoint, check_source_endpoint
 from .snapshot_checks import _has_upstream_sync
 from .status import (

@@ -8,8 +8,8 @@ Dependencies between top-level modules (auto-generated via `mise run depgraph`):
 graph TD
     cli["cli/"]
     config["config/"]
-    conventions["conventions"]
     democli["democli/"]
+    fsprotocol["fsprotocol"]
     ordering["ordering/"]
     output["output"]
     preflight["preflight/"]
@@ -37,22 +37,22 @@ graph TD
     output --> preflight
     output --> sync
     preflight --> config
-    preflight --> conventions
+    preflight --> fsprotocol
     preflight --> remote
     preflight --> sync
     remote --> config
     scriptgen --> config
-    scriptgen --> conventions
+    scriptgen --> fsprotocol
     scriptgen --> ordering
     scriptgen --> remote
     scriptgen --> sync
     sync --> config
-    sync --> conventions
+    sync --> fsprotocol
     sync --> ordering
     sync --> preflight
     sync --> remote
     testkit --> config
-    testkit --> conventions
+    testkit --> fsprotocol
     testkit --> preflight
     testkit --> remote
     testkit --> sync

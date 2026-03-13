@@ -10,7 +10,7 @@ from ..config import (
     ResolvedEndpoints,
     Volume,
 )
-from ..conventions import VOLUME_SENTINEL
+from ..fsprotocol import VOLUME_SENTINEL
 from ..remote import run_remote_command
 from .queries import (
     _check_command_available,

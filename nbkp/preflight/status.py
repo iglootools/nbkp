@@ -10,7 +10,7 @@ from ..config import (
     SyncConfig,
     Volume,
 )
-from ..conventions import (
+from ..fsprotocol import (
     DESTINATION_SENTINEL,
     LATEST_LINK,
     SNAPSHOTS_DIR,

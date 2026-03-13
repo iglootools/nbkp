@@ -8,7 +8,7 @@ a given symbol.
 from __future__ import annotations
 
 # ── conventions ──────────────────────────────────────────────
-from ...conventions import (
+from ...fsprotocol import (
     DEVNULL_TARGET as DEVNULL_TARGET,
     LATEST_LINK as LATEST_LINK,
     SNAPSHOTS_DIR as SNAPSHOTS_DIR,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from nbkp.conventions import Snapshot
+from nbkp.fsprotocol import Snapshot
 from nbkp.sync.snapshots.btrfs import (
     create_snapshot,
     prune_snapshots,
