@@ -111,17 +111,10 @@ class TestSyncCheck:
         create_seed_sentinels(config, remote_exec=_run_remote)
 
         resolved = resolve_all_endpoints(config)
-        src_status = check_volume(src_vol, resolved)
-        dst_status = check_volume(docker_remote_volume, resolved)
-        volume_statuses = {
-            "src": src_status,
-            "dst": dst_status,
-        }
 
         status = check_sync(
             sync,
             config,
-            volume_statuses,
             resolved_endpoints=resolved,
         )
         assert status.active is True
@@ -269,17 +262,10 @@ class TestSyncCheckBtrfs:
         sync = config.syncs["test-sync"]
 
         resolved = resolve_all_endpoints(config)
-        src_status = check_volume(src_vol, resolved)
-        dst_status = check_volume(remote_btrfs_volume, resolved)
-        volume_statuses = {
-            "src": src_status,
-            "dst": dst_status,
-        }
 
         status = check_sync(
             sync,
             config,
-            volume_statuses,
             resolved_endpoints=resolved,
         )
         assert status.active is False
