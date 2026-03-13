@@ -64,16 +64,18 @@ def find_config_file(config_path: str | None = None) -> Path:
                 f"Config file not found: {config_path}",
                 reason=ConfigErrorReason.FILE_NOT_FOUND,
             )
-        return p
-
-    search = _config_search_paths()
-    found = next((p for p in search if p.is_file()), None)
-    if found is not None:
-        return found
-    raise ConfigError(
-        f"No config file found. Searched: {', '.join(str(p) for p in search)}",
-        reason=ConfigErrorReason.NO_CONFIG_FOUND,
-    )
+        else:
+            return p
+    else:
+        search = _config_search_paths()
+        found = next((p for p in search if p.is_file()), None)
+        if found is not None:
+            return found
+        else:
+            raise ConfigError(
+                f"No config file found. Searched: {', '.join(str(p) for p in search)}",
+                reason=ConfigErrorReason.NO_CONFIG_FOUND,
+            )
 
 
 def load_config(config_path: str | None = None) -> Config:
