@@ -181,6 +181,14 @@ description = "Upload the recorded demo to asciinema.org"
 run = "asciinema upload demo/demo.cast"
 
 # Reference Documentation Generation Tasks
+[tasks.reference-doc]
+description = "Regenerate the reference documentation"
+run = [
+  { task = "clidocs" },
+  { task = "configdocs" },
+  { task = "depgraph" },
+]
+
 [tasks.clidocs]
 description = "Regenerate CLI reference in docs/usage.md"
 run = "poetry run python build-scripts/clidocs.py"
