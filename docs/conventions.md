@@ -2,10 +2,7 @@
 
 ## General Coding Conventions
 - **Functional Style**:
-  - Prefer functional programming style over procedural style. Use pure functions and avoid side effects when possible.
-  - Avoid mutable accumulator lists (`errors = []; errors.append(...)`). Instead, build lists as single expressions using `[*(...), *(...)]` unpacking, conditional `[item] if cond else []` fragments, and helper functions that return lists.
-  - Prefer dict/list comprehensions over imperative loops for building collections.
-  - When a function computes a list from multiple independent branches, compose the result by unpacking sub-expressions rather than mutating a shared list across branches.
+  - Prefer functional programming style over procedural style. Use pure functions and avoid mutability when possible.
 - **Charsets**: 
   - UTF-8 everywhere.
 - **Time Management**
@@ -33,6 +30,10 @@
   - Avoid silent failures and ensure that all errors are surfaced with clear messages. This includes validating inputs and configurations early, and providing informative error messages when something goes wrong.
 
 ## General Python Coding Conventions
+- **Functional Style**:
+  - Avoid mutable accumulator lists (`errors = []; errors.append(...)`). Instead, build lists as single expressions using `[*(...), *(...)]` unpacking, conditional `[item] if cond else []` fragments, and helper functions that return lists.
+  - Prefer dict/list comprehensions over imperative loops for building collections.
+  - When a function computes a list from multiple independent branches, compose the result by unpacking sub-expressions rather than mutating a shared list across branches.
 - **String Literals**:
   - Prefer `dedent("""\...""")` multiline strings over concatenated single-line strings with `\n` escapes when the content has meaningful structure (e.g. YAML, config snippets, multi-line templates). Short single-line strings (e.g. `"key: value\n"`) are fine as-is.
 - **Typing**: Use type annotations for all functions and methods, including return types. Use `pyright` for static type checking.
