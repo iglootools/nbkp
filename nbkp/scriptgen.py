@@ -501,29 +501,71 @@ def _build_preflight_block(
 
     lines = [
         # Source endpoint sentinel
-        _build_check_line(src_vol, ["-f", src_sentinel], f"source sentinel {src_sentinel} not found", re),
+        _build_check_line(
+            src_vol,
+            ["-f", src_sentinel],
+            f"source sentinel {src_sentinel} not found",
+            re,
+        ),
         # Source snapshot: verify latest symlink and snapshots/ exist
         *(
             [
-                _build_check_line(src_vol, ["-L", f"{src_path}/{LATEST_LINK}"], f"source {LATEST_LINK} symlink not found ({src_path}/{LATEST_LINK})", re),
-                _build_check_line(src_vol, ["-d", f"{src_path}/{SNAPSHOTS_DIR}"], f"source {SNAPSHOTS_DIR}/ not found ({src_path}/{SNAPSHOTS_DIR})", re),
+                _build_check_line(
+                    src_vol,
+                    ["-L", f"{src_path}/{LATEST_LINK}"],
+                    f"source {LATEST_LINK} symlink not found ({src_path}/{LATEST_LINK})",
+                    re,
+                ),
+                _build_check_line(
+                    src_vol,
+                    ["-d", f"{src_path}/{SNAPSHOTS_DIR}"],
+                    f"source {SNAPSHOTS_DIR}/ not found ({src_path}/{SNAPSHOTS_DIR})",
+                    re,
+                ),
             ]
             if src_ep.snapshot_mode != "none"
             else []
         ),
         # Destination endpoint sentinel
-        _build_check_line(dst_vol, ["-f", dst_sentinel], f"destination sentinel {dst_sentinel} not found", re),
+        _build_check_line(
+            dst_vol,
+            ["-f", dst_sentinel],
+            f"destination sentinel {dst_sentinel} not found",
+            re,
+        ),
         # rsync on source and destination
         _build_which_line(src_vol, "rsync", "rsync not found on source", re),
         _build_which_line(dst_vol, "rsync", "rsync not found on destination", re),
         # Btrfs checks
         *(
             [
-                _build_which_line(dst_vol, "btrfs", "btrfs not found on destination", re),
-                _build_check_line(dst_vol, ["-d", staging_dir], f"destination {STAGING_DIR}/ directory not found ({staging_dir})", re),
-                _build_check_line(dst_vol, ["-w", staging_dir], f"destination {STAGING_DIR}/ directory not writable ({staging_dir})", re),
-                _build_check_line(dst_vol, ["-d", snaps_dir], f"destination {SNAPSHOTS_DIR}/ directory not found ({snaps_dir})", re),
-                _build_check_line(dst_vol, ["-w", snaps_dir], f"destination {SNAPSHOTS_DIR}/ directory not writable ({snaps_dir})", re),
+                _build_which_line(
+                    dst_vol, "btrfs", "btrfs not found on destination", re
+                ),
+                _build_check_line(
+                    dst_vol,
+                    ["-d", staging_dir],
+                    f"destination {STAGING_DIR}/ directory not found ({staging_dir})",
+                    re,
+                ),
+                _build_check_line(
+                    dst_vol,
+                    ["-w", staging_dir],
+                    f"destination {STAGING_DIR}/ directory not writable ({staging_dir})",
+                    re,
+                ),
+                _build_check_line(
+                    dst_vol,
+                    ["-d", snaps_dir],
+                    f"destination {SNAPSHOTS_DIR}/ directory not found ({snaps_dir})",
+                    re,
+                ),
+                _build_check_line(
+                    dst_vol,
+                    ["-w", snaps_dir],
+                    f"destination {SNAPSHOTS_DIR}/ directory not writable ({snaps_dir})",
+                    re,
+                ),
             ]
             if dst_ep.btrfs_snapshots.enabled
             else []
@@ -531,14 +573,29 @@ def _build_preflight_block(
         # Hard-link checks
         *(
             [
-                _build_check_line(dst_vol, ["-d", snaps_dir], f"destination {SNAPSHOTS_DIR}/ directory not found ({snaps_dir})", re),
-                _build_check_line(dst_vol, ["-w", snaps_dir], f"destination {SNAPSHOTS_DIR}/ directory not writable ({snaps_dir})", re),
+                _build_check_line(
+                    dst_vol,
+                    ["-d", snaps_dir],
+                    f"destination {SNAPSHOTS_DIR}/ directory not found ({snaps_dir})",
+                    re,
+                ),
+                _build_check_line(
+                    dst_vol,
+                    ["-w", snaps_dir],
+                    f"destination {SNAPSHOTS_DIR}/ directory not writable ({snaps_dir})",
+                    re,
+                ),
             ]
             if dst_ep.hard_link_snapshots.enabled
             else []
         ),
         # Destination endpoint writability
-        _build_check_line(dst_vol, ["-w", dst_path], f"destination endpoint {dst_path} not writable", re),
+        _build_check_line(
+            dst_vol,
+            ["-w", dst_path],
+            f"destination endpoint {dst_path} not writable",
+            re,
+        ),
     ]
     return "\n".join(lines)
 
@@ -828,11 +885,7 @@ def _build_volume_check(
     sentinel = f"{vpath}/{VOLUME_SENTINEL}"
     cmd = _test_cmd(vol, ["-f", sentinel], resolved_endpoints)
     return (
-        f"{cmd}"
-        f" || {{ nbkp_log"
-        f' "WARN: volume {slug}:'
-        f' sentinel {sentinel} not found";'
-        f" }}"
+        f'{cmd} || {{ nbkp_log "WARN: volume {slug}: sentinel {sentinel} not found"; }}'
     )
 
 
@@ -878,83 +931,85 @@ def _indent_lines(text: str, indent: str = "    ") -> list[str]:
 
 def _render_enabled_function(ctx: _SyncContext) -> str:
     """Render a sync function body (for disabled commenting)."""
-    return "\n".join([
-        "",
-        f"{ctx.fn_name}() {{",
-        f'    nbkp_log "Starting sync: {ctx.slug}"',
-        "",
-        "    # Pre-flight checks",
-        *_indent_lines(ctx.preflight),
-        *(
-            [
-                "",
-                "    # Cleanup orphaned snapshots",
-                *_indent_lines(ctx.orphan_cleanup),
-                "",
-                "    # Link-dest resolution (latest snapshot for incremental backup)",
-                *_indent_lines(ctx.link_dest),
-                "",
-                "    # Create snapshot directory",
-                *_indent_lines(ctx.hl_mkdir),
-            ]
-            if ctx.has_hard_link
-            else []
-        ),
-        *(
-            [
-                "",
-                "    # Link-dest resolution (latest snapshot for incremental backup)",
-                *_indent_lines(ctx.link_dest),
-            ]
-            if ctx.has_btrfs
-            else []
-        ),
-        "",
-        "    # Rsync",
-        *_indent_lines(ctx.rsync),
-        *(
-            [
-                "",
-                "    # Btrfs snapshot (skip if dry-run)",
-                *_indent_lines(ctx.snapshot),
-                "",
-                "    # Update latest symlink (skip if dry-run)",
-                *_indent_lines(ctx.symlink),
-                *(
-                    [
-                        "",
-                        f"    # Prune old snapshots (max: {ctx.max_snapshots})",
-                        *_indent_lines(ctx.prune),
-                    ]
-                    if ctx.has_prune
-                    else []
-                ),
-            ]
-            if ctx.has_btrfs
-            else []
-        ),
-        *(
-            [
-                "",
-                "    # Update latest symlink (skip if dry-run)",
-                *_indent_lines(ctx.symlink),
-                *(
-                    [
-                        "",
-                        f"    # Prune old snapshots (max: {ctx.max_snapshots})",
-                        *_indent_lines(ctx.hl_prune),
-                    ]
-                    if ctx.has_prune
-                    else []
-                ),
-            ]
-            if ctx.has_hard_link
-            else []
-        ),
-        "",
-        f'    nbkp_log "Completed sync: {ctx.slug}"',
-        "}",
-    ])
+    return "\n".join(
+        [
+            "",
+            f"{ctx.fn_name}() {{",
+            f'    nbkp_log "Starting sync: {ctx.slug}"',
+            "",
+            "    # Pre-flight checks",
+            *_indent_lines(ctx.preflight),
+            *(
+                [
+                    "",
+                    "    # Cleanup orphaned snapshots",
+                    *_indent_lines(ctx.orphan_cleanup),
+                    "",
+                    "    # Link-dest resolution (latest snapshot for incremental backup)",
+                    *_indent_lines(ctx.link_dest),
+                    "",
+                    "    # Create snapshot directory",
+                    *_indent_lines(ctx.hl_mkdir),
+                ]
+                if ctx.has_hard_link
+                else []
+            ),
+            *(
+                [
+                    "",
+                    "    # Link-dest resolution (latest snapshot for incremental backup)",
+                    *_indent_lines(ctx.link_dest),
+                ]
+                if ctx.has_btrfs
+                else []
+            ),
+            "",
+            "    # Rsync",
+            *_indent_lines(ctx.rsync),
+            *(
+                [
+                    "",
+                    "    # Btrfs snapshot (skip if dry-run)",
+                    *_indent_lines(ctx.snapshot),
+                    "",
+                    "    # Update latest symlink (skip if dry-run)",
+                    *_indent_lines(ctx.symlink),
+                    *(
+                        [
+                            "",
+                            f"    # Prune old snapshots (max: {ctx.max_snapshots})",
+                            *_indent_lines(ctx.prune),
+                        ]
+                        if ctx.has_prune
+                        else []
+                    ),
+                ]
+                if ctx.has_btrfs
+                else []
+            ),
+            *(
+                [
+                    "",
+                    "    # Update latest symlink (skip if dry-run)",
+                    *_indent_lines(ctx.symlink),
+                    *(
+                        [
+                            "",
+                            f"    # Prune old snapshots (max: {ctx.max_snapshots})",
+                            *_indent_lines(ctx.hl_prune),
+                        ]
+                        if ctx.has_prune
+                        else []
+                    ),
+                ]
+                if ctx.has_hard_link
+                else []
+            ),
+            "",
+            f'    nbkp_log "Completed sync: {ctx.slug}"',
+            "}",
+        ]
+    )
 
 
 # ── Context builders ─────────────────────────────────────────

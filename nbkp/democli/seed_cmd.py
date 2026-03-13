@@ -407,7 +407,8 @@ def seed(
         if docker
         else ""
     )
-    commands = dedent(f"""\
+    commands = (
+        dedent(f"""\
         CFG="{config_path}"
         SH="{backup_sh}"
 
@@ -442,7 +443,9 @@ def seed(
         {pfx}nbkp sh --config $CFG -o $SH --relative-src --relative-dst \\
           && bash -n $SH \\
           && $SH --dry-run \\
-          && $SH""") + docker_teardown
+          && $SH""")
+        + docker_teardown
+    )
     _console.print(
         Panel(
             Syntax(
