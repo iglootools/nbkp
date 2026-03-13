@@ -72,6 +72,24 @@ def resolve_endpoints(
     return resolve_all_endpoints(cfg, ef)
 
 
+def _check_total(cfg: Config, only_syncs: list[str] | None) -> int:
+    """Count progress steps: volumes + sync endpoints (I/O phases only)."""
+    syncs = (
+        {s: sc for s, sc in cfg.syncs.items() if s in only_syncs}
+        if only_syncs
+        else cfg.syncs
+    )
+    src_eps = {cfg.source_endpoint(sc).slug for sc in syncs.values()}
+    dst_eps = {cfg.destination_endpoint(sc).slug for sc in syncs.values()}
+    volumes = (
+        {cfg.source_endpoint(sc).volume for sc in syncs.values()}
+        | {cfg.destination_endpoint(sc).volume for sc in syncs.values()}
+        if only_syncs
+        else set(cfg.volumes.keys())
+    )
+    return len(volumes) + len(src_eps) + len(dst_eps)
+
+
 def check_all_with_progress(
     cfg: Config,
     use_progress: bool,
@@ -80,7 +98,7 @@ def check_all_with_progress(
     dry_run: bool = False,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     """Run check_all_syncs with an optional progress bar."""
-    total = len(cfg.volumes) + len(cfg.syncs)
+    total = _check_total(cfg, only_syncs)
     if not use_progress or total == 0:
         return check_all_syncs(
             cfg,
@@ -95,7 +113,9 @@ def check_all_with_progress(
             TextColumn("{task.completed}/{task.total}"),
             transient=True,
         ) as progress:
-            task = progress.add_task("Checking volumes and syncs...", total=total)
+            task = progress.add_task(
+                "Checking volumes, endpoints, and syncs...", total=total
+            )
 
             def on_progress(_slug: str) -> None:
                 progress.advance(task)

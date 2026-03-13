@@ -71,13 +71,15 @@ def check_all_syncs(
         else set(config.volumes.keys())
     )
 
-    # Phase 1: Volume reachability + capabilities
-    volume_statuses = {
-        slug: check_volume(config.volumes[slug], re) for slug in needed_volumes
-    }
-    if on_progress:
-        for slug in volume_statuses:
+    def _track(slug: str) -> None:
+        if on_progress:
             on_progress(slug)
+
+    # Phase 1: Volume reachability + capabilities
+    volume_statuses: dict[str, VolumeStatus] = {}
+    for slug in needed_volumes:
+        volume_statuses[slug] = check_volume(config.volumes[slug], re)
+        _track(slug)
 
     # Phase 2: Sync endpoint diagnostics (skip endpoints on inactive volumes)
     active_src_eps = {
@@ -90,26 +92,34 @@ def check_all_syncs(
         for sync in syncs.values()
         if volume_statuses[(ep := config.destination_endpoint(sync)).volume].active
     }
-    src_diagnostics = {
-        slug: check_source_endpoint(
-            ep,
-            config.volumes[ep.volume],
-            volume_statuses[ep.volume].capabilities,  # type: ignore[arg-type]
-            re,
-        )
-        for slug, ep in active_src_eps.items()
-    }
-    dst_diagnostics = {
-        slug: check_destination_endpoint(
-            ep,
-            config.volumes[ep.volume],
-            volume_statuses[ep.volume].capabilities,  # type: ignore[arg-type]
-            re,
-        )
-        for slug, ep in active_dst_eps.items()
-    }
+    all_src_eps = {config.source_endpoint(sync).slug for sync in syncs.values()}
+    all_dst_eps = {config.destination_endpoint(sync).slug for sync in syncs.values()}
 
-    # Phase 3: Sync checks (translates diagnostics + capabilities into errors)
+    src_diagnostics: dict[str, SourceEndpointDiagnostics] = {}
+    for slug, ep in active_src_eps.items():
+        src_diagnostics[slug] = check_source_endpoint(
+            ep,
+            config.volumes[ep.volume],
+            volume_statuses[ep.volume].capabilities,  # type: ignore[arg-type]
+            re,
+        )
+        _track(slug)
+    for slug in all_src_eps - active_src_eps.keys():
+        _track(slug)
+
+    dst_diagnostics: dict[str, DestinationEndpointDiagnostics] = {}
+    for slug, ep in active_dst_eps.items():
+        dst_diagnostics[slug] = check_destination_endpoint(
+            ep,
+            config.volumes[ep.volume],
+            volume_statuses[ep.volume].capabilities,  # type: ignore[arg-type]
+            re,
+        )
+        _track(slug)
+    for slug in all_dst_eps - active_dst_eps.keys():
+        _track(slug)
+
+    # Phase 3: Sync checks — pure computation (no I/O), no progress tracking
     sync_statuses = {
         slug: _build_sync_status(
             sync,
@@ -123,9 +133,6 @@ def check_all_syncs(
         )
         for slug, sync in syncs.items()
     }
-    if on_progress:
-        for slug in sync_statuses:
-            on_progress(slug)
 
     return volume_statuses, sync_statuses
 
