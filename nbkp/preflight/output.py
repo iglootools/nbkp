@@ -40,7 +40,7 @@ from ..conventions import (
     STAGING_DIR,
     VOLUME_SENTINEL,
 )
-from .status import SyncError, SyncStatus, VolumeError, VolumeStatus
+from .status import SyncError, SyncStatus, VolumeCapabilities, VolumeError, VolumeStatus
 
 
 def _status_text(
@@ -53,6 +53,28 @@ def _status_text(
     else:
         error_str = ", ".join(r.value for r in errors)
         return Text(f"inactive ({error_str})", style="red")
+
+
+def _format_capabilities(caps: VolumeCapabilities | None) -> str:
+    """Format volume capabilities as a compact comma-separated string."""
+    if caps is None:
+        return ""
+    items: list[str] = []
+    if caps.has_rsync:
+        items.append("rsync 3.0+" if caps.rsync_version_ok else "rsync (old)")
+    if caps.has_btrfs:
+        items.append("btrfs")
+    if caps.has_stat:
+        items.append("stat")
+    if caps.has_findmnt:
+        items.append("findmnt")
+    if caps.is_btrfs_filesystem:
+        items.append("btrfs-fs")
+    if caps.hardlink_supported:
+        items.append("hardlink")
+    if caps.btrfs_user_subvol_rm:
+        items.append("user_subvol_rm")
+    return ", ".join(items) if items else "none"
 
 
 def build_check_sections(
@@ -93,6 +115,7 @@ def build_check_sections(
     vol_table.add_column("Type")
     vol_table.add_column("SSH Endpoint")
     vol_table.add_column("URI")
+    vol_table.add_column("Capabilities")
     vol_table.add_column("Status")
 
     for vs in vol_statuses.values():
@@ -110,6 +133,7 @@ def build_check_sections(
             vol_type,
             ssh_ep,
             format_volume_display(vol, resolved_endpoints),
+            _format_capabilities(vs.capabilities),
             _status_text(vs.active, vs.errors),
         )
 

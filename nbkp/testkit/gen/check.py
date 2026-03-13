@@ -5,6 +5,7 @@ from __future__ import annotations
 from ...preflight import (
     SyncError,
     SyncStatus,
+    VolumeCapabilities,
     VolumeError,
     VolumeStatus,
 )
@@ -54,15 +55,37 @@ def check_data(
     config: Config,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     """Volume and sync statuses with mixed active/inactive."""
+    _local_caps = VolumeCapabilities(
+        has_rsync=True,
+        rsync_version_ok=True,
+        has_btrfs=False,
+        has_stat=True,
+        has_findmnt=True,
+        is_btrfs_filesystem=False,
+        hardlink_supported=True,
+        btrfs_user_subvol_rm=False,
+    )
+    _usb_caps = VolumeCapabilities(
+        has_rsync=True,
+        rsync_version_ok=True,
+        has_btrfs=True,
+        has_stat=True,
+        has_findmnt=True,
+        is_btrfs_filesystem=True,
+        hardlink_supported=True,
+        btrfs_user_subvol_rm=True,
+    )
     laptop_vs = VolumeStatus(
         slug="laptop",
         config=config.volumes["laptop"],
         errors=[],
+        capabilities=_local_caps,
     )
     usb_vs = VolumeStatus(
         slug="usb-drive",
         config=config.volumes["usb-drive"],
         errors=[],
+        capabilities=_usb_caps,
     )
     nas_vs = VolumeStatus(
         slug="nas-backup",
