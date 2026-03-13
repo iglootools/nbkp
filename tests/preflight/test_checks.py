@@ -875,8 +875,13 @@ class TestCheckSync:
         )
         return config, sync
 
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
     def test_active_sync(
         self,
+        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -892,26 +897,16 @@ class TestCheckSync:
         (dst / "backup" / ".nbkp-dst").touch()
 
         config, sync = self._make_config(src, dst)
-        vol_statuses = {
-            "src": VolumeStatus(
-                slug="src",
-                config=config.volumes["src"],
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=config.volumes["dst"],
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-        }
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert status.active is True
         assert status.errors == []
 
-    def test_disabled_sync(self, tmp_path: Path) -> None:
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
+    def test_disabled_sync(self, _mock_caps: MagicMock, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -924,76 +919,54 @@ class TestCheckSync:
             destination="ep-dst",
             enabled=False,
         )
-        vol_statuses = {
-            "src": VolumeStatus(
-                slug="src",
-                config=config.volumes["src"],
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=config.volumes["dst"],
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-        }
+        config = Config(
+            volumes=config.volumes,
+            sync_endpoints=config.sync_endpoints,
+            syncs={"s1": sync},
+        )
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert status.active is False
         assert status.errors == [SyncError.DISABLED]
 
-    def test_source_unavailable(self, tmp_path: Path) -> None:
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
+    def test_source_unavailable(self, _mock_caps: MagicMock, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
+        # No .nbkp-vol on src, so it becomes inactive
+        (dst / ".nbkp-vol").touch()
+        (dst / "backup").mkdir()
+        (dst / "backup" / ".nbkp-dst").touch()
 
         config, sync = self._make_config(src, dst)
-        vol_statuses = {
-            "src": VolumeStatus(
-                slug="src",
-                config=config.volumes["src"],
-                errors=[VolumeError.SENTINEL_NOT_FOUND],
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=config.volumes["dst"],
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-        }
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.SOURCE_UNAVAILABLE in status.errors
 
-    def test_missing_src_sentinel(self, tmp_path: Path) -> None:
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
+    def test_missing_src_sentinel(self, _mock_caps: MagicMock, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
+        (src / ".nbkp-vol").touch()
+        (dst / ".nbkp-vol").touch()
         (src / "data").mkdir()
         (dst / "backup").mkdir()
         (dst / "backup" / ".nbkp-dst").touch()
 
         config, sync = self._make_config(src, dst)
-        vol_statuses = {
-            "src": VolumeStatus(
-                slug="src",
-                config=config.volumes["src"],
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=config.volumes["dst"],
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-        }
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.SOURCE_SENTINEL_NOT_FOUND in status.errors
 
@@ -1005,28 +978,13 @@ class TestCheckSync:
         (dst / "backup").mkdir(exist_ok=True)
         (dst / "backup" / ".nbkp-dst").touch()
 
-    def _make_active_vol_statuses(
-        self,
-        config: Config,
-        src_caps: VolumeCapabilities = _STUB_CAPS,
-        dst_caps: VolumeCapabilities = _STUB_CAPS,
-    ) -> dict[str, VolumeStatus]:
-        return {
-            "src": VolumeStatus(
-                slug="src",
-                config=config.volumes["src"],
-                errors=[],
-                capabilities=src_caps,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=config.volumes["dst"],
-                errors=[],
-                capabilities=dst_caps,
-            ),
-        }
-
-    def test_rsync_not_found_on_source(self, tmp_path: Path) -> None:
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_NO_RSYNC_CAPS,
+    )
+    def test_rsync_not_found_on_source(
+        self, _mock_caps: MagicMock, tmp_path: Path
+    ) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -1034,16 +992,16 @@ class TestCheckSync:
         self._setup_active_sentinels(src, dst)
 
         config, sync = self._make_config(src, dst)
-        vol_statuses = self._make_active_vol_statuses(
-            config, src_caps=_NO_RSYNC_CAPS, dst_caps=_NO_RSYNC_CAPS
-        )
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.SOURCE_RSYNC_NOT_FOUND in status.errors
         assert SyncError.DESTINATION_RSYNC_NOT_FOUND in status.errors
 
-    def test_rsync_found_btrfs_not_found_on_destination(self, tmp_path: Path) -> None:
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
+    def test_rsync_found_btrfs_not_found_on_destination(
+        self, mock_caps: MagicMock, tmp_path: Path
+    ) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -1074,15 +1032,20 @@ class TestCheckSync:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = self._make_active_vol_statuses(
-            config, dst_caps=_BTRFS_NO_BTRFS_CMD_CAPS
-        )
 
-        status = check_sync(sync, config, vol_statuses)
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_NO_BTRFS_CMD_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
+
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.DESTINATION_BTRFS_NOT_FOUND in status.errors
 
-    def test_stat_not_found_on_destination(self, tmp_path: Path) -> None:
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
+    def test_stat_not_found_on_destination(
+        self, mock_caps: MagicMock, tmp_path: Path
+    ) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -1113,20 +1076,24 @@ class TestCheckSync:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = self._make_active_vol_statuses(
-            config, dst_caps=_BTRFS_NO_STAT_CAPS
-        )
 
-        status = check_sync(sync, config, vol_statuses)
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_NO_STAT_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
+
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.DESTINATION_STAT_NOT_FOUND in status.errors
         assert SyncError.DESTINATION_NOT_BTRFS not in status.errors
         assert SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.queries.subprocess.run")
     def test_findmnt_not_found_on_destination(
         self,
         mock_subprocess: MagicMock,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1161,9 +1128,11 @@ class TestCheckSync:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = self._make_active_vol_statuses(
-            config, dst_caps=_BTRFS_NO_FINDMNT_CAPS
-        )
+
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_NO_FINDMNT_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
 
         def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
             if cmd[:3] == ["stat", "-c", "%i"]:
@@ -1172,12 +1141,15 @@ class TestCheckSync:
 
         mock_subprocess.side_effect = subprocess_side_effect
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.DESTINATION_FINDMNT_NOT_FOUND in status.errors
         assert SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM not in status.errors
 
-    def test_stat_and_findmnt_both_missing(self, tmp_path: Path) -> None:
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
+    def test_stat_and_findmnt_both_missing(
+        self, mock_caps: MagicMock, tmp_path: Path
+    ) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -1208,17 +1180,21 @@ class TestCheckSync:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = self._make_active_vol_statuses(
-            config, dst_caps=_BTRFS_NO_STAT_NO_FINDMNT_CAPS
-        )
 
-        status = check_sync(sync, config, vol_statuses)
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_NO_STAT_NO_FINDMNT_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
+
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.DESTINATION_STAT_NOT_FOUND in status.errors
         assert SyncError.DESTINATION_FINDMNT_NOT_FOUND in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     def test_destination_not_btrfs_filesystem(
         self,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1251,18 +1227,22 @@ class TestCheckSync:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = self._make_active_vol_statuses(
-            config, dst_caps=_BTRFS_NOT_BTRFS_FS_CAPS
-        )
 
-        status = check_sync(sync, config, vol_statuses)
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_NOT_BTRFS_FS_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
+
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.DESTINATION_NOT_BTRFS in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.queries.subprocess.run")
     def test_destination_not_btrfs_subvolume(
         self,
         mock_subprocess: MagicMock,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1295,7 +1275,11 @@ class TestCheckSync:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = self._make_active_vol_statuses(config, dst_caps=_BTRFS_FULL_CAPS)
+
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
 
         def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
             if cmd[:3] == ["stat", "-c", "%i"]:
@@ -1304,14 +1288,16 @@ class TestCheckSync:
 
         mock_subprocess.side_effect = subprocess_side_effect
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.queries.subprocess.run")
     def test_destination_not_mounted_user_subvol_rm(
         self,
         mock_subprocess: MagicMock,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1346,9 +1332,11 @@ class TestCheckSync:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = self._make_active_vol_statuses(
-            config, dst_caps=_BTRFS_NO_SUBVOL_RM_CAPS
-        )
+
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_NO_SUBVOL_RM_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
 
         def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
             if cmd[:3] == ["stat", "-c", "%i"]:
@@ -1357,14 +1345,16 @@ class TestCheckSync:
 
         mock_subprocess.side_effect = subprocess_side_effect
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.queries.subprocess.run")
     def test_destination_latest_not_found(
         self,
         mock_subprocess: MagicMock,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1399,7 +1389,11 @@ class TestCheckSync:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = self._make_active_vol_statuses(config, dst_caps=_BTRFS_FULL_CAPS)
+
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
 
         def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
             if cmd[:3] == ["stat", "-c", "%i"]:
@@ -1408,15 +1402,17 @@ class TestCheckSync:
 
         mock_subprocess.side_effect = subprocess_side_effect
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.DESTINATION_TMP_NOT_FOUND in status.errors
         assert SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND not in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.queries.subprocess.run")
     def test_destination_snapshots_dir_not_found(
         self,
         mock_subprocess: MagicMock,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1451,7 +1447,11 @@ class TestCheckSync:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = self._make_active_vol_statuses(config, dst_caps=_BTRFS_FULL_CAPS)
+
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
 
         def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
             if cmd[:3] == ["stat", "-c", "%i"]:
@@ -1460,15 +1460,17 @@ class TestCheckSync:
 
         mock_subprocess.side_effect = subprocess_side_effect
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.errors
         assert SyncError.DESTINATION_TMP_NOT_FOUND not in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.queries.subprocess.run")
     def test_destination_latest_and_snapshots_both_missing(
         self,
         mock_subprocess: MagicMock,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1502,7 +1504,11 @@ class TestCheckSync:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = self._make_active_vol_statuses(config, dst_caps=_BTRFS_FULL_CAPS)
+
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
 
         def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
             if cmd[:3] == ["stat", "-c", "%i"]:
@@ -1511,13 +1517,18 @@ class TestCheckSync:
 
         mock_subprocess.side_effect = subprocess_side_effect
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.DESTINATION_TMP_NOT_FOUND in status.errors
         assert SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.errors
 
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
     def test_btrfs_check_skipped_when_not_enabled(
         self,
+        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1527,13 +1538,18 @@ class TestCheckSync:
         self._setup_active_sentinels(src, dst)
 
         config, sync = self._make_config(src, dst)
-        vol_statuses = self._make_active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert status.active is True
         assert status.errors == []
 
-    def test_multiple_failures_accumulated(self, tmp_path: Path) -> None:
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_NO_RSYNC_CAPS,
+    )
+    def test_multiple_failures_accumulated(
+        self, _mock_caps: MagicMock, tmp_path: Path
+    ) -> None:
         """Source sentinel missing AND rsync missing on both sides."""
         src = tmp_path / "src"
         dst = tmp_path / "dst"
@@ -1547,11 +1563,8 @@ class TestCheckSync:
         (dst / "backup" / ".nbkp-dst").touch()
 
         config, sync = self._make_config(src, dst)
-        vol_statuses = self._make_active_vol_statuses(
-            config, src_caps=_NO_RSYNC_CAPS, dst_caps=_NO_RSYNC_CAPS
-        )
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.SOURCE_SENTINEL_NOT_FOUND in status.errors
         assert SyncError.SOURCE_RSYNC_NOT_FOUND in status.errors
@@ -1563,31 +1576,26 @@ class TestCheckSync:
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
+        # No .nbkp-vol sentinel files, so volumes are inactive
 
         config, sync = self._make_config(src, dst)
-        vol_statuses = {
-            "src": VolumeStatus(
-                slug="src",
-                config=config.volumes["src"],
-                errors=[VolumeError.SENTINEL_NOT_FOUND],
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=config.volumes["dst"],
-                errors=[VolumeError.SENTINEL_NOT_FOUND],
-            ),
-        }
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.SOURCE_UNAVAILABLE in status.errors
         assert SyncError.DESTINATION_UNAVAILABLE in status.errors
 
 
 class TestCheckSyncRemoteCommands:
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
+    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.preflight.queries.run_remote_command")
     def test_rsync_not_found_on_remote_source(
-        self, mock_run: MagicMock, tmp_path: Path
+        self,
+        mock_run: MagicMock,
+        mock_vol_run: MagicMock,
+        mock_caps: MagicMock,
+        tmp_path: Path,
     ) -> None:
         dst = tmp_path / "dst"
         dst.mkdir()
@@ -1616,20 +1624,13 @@ class TestCheckSyncRemoteCommands:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = {
-            "src": VolumeStatus(
-                slug="src",
-                config=src_vol,
-                errors=[],
-                capabilities=_NO_RSYNC_CAPS,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=dst_vol,
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-        }
+
+        mock_vol_run.return_value = MagicMock(returncode=0)
+
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _NO_RSYNC_CAPS if volume.slug == "src" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
 
         def remote_side_effect(
             server: SshEndpoint,
@@ -1642,14 +1643,18 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
+        status = check_sync(sync, config, _make_resolved(config))
         assert status.active is False
         assert SyncError.SOURCE_RSYNC_NOT_FOUND in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
+    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.preflight.queries.run_remote_command")
     def test_rsync_not_found_on_remote_destination(
         self,
         mock_run: MagicMock,
+        mock_vol_run: MagicMock,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1681,20 +1686,13 @@ class TestCheckSyncRemoteCommands:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = {
-            "src": VolumeStatus(
-                slug="src",
-                config=src_vol,
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=dst_vol,
-                errors=[],
-                capabilities=_NO_RSYNC_CAPS,
-            ),
-        }
+
+        mock_vol_run.return_value = MagicMock(returncode=0)
+
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _NO_RSYNC_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
 
         def remote_side_effect(
             server: SshEndpoint,
@@ -1711,14 +1709,18 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
+        status = check_sync(sync, config, _make_resolved(config))
         assert status.active is False
         assert SyncError.DESTINATION_RSYNC_NOT_FOUND in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
+    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.preflight.queries.run_remote_command")
     def test_btrfs_not_found_on_remote_destination(
         self,
         mock_run: MagicMock,
+        mock_vol_run: MagicMock,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1757,20 +1759,13 @@ class TestCheckSyncRemoteCommands:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = {
-            "src": VolumeStatus(
-                slug="src",
-                config=src_vol,
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=dst_vol,
-                errors=[],
-                capabilities=_BTRFS_NO_BTRFS_CMD_CAPS,
-            ),
-        }
+
+        mock_vol_run.return_value = MagicMock(returncode=0)
+
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_NO_BTRFS_CMD_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
 
         def remote_side_effect(
             server: SshEndpoint,
@@ -1787,14 +1782,18 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
+        status = check_sync(sync, config, _make_resolved(config))
         assert status.active is False
         assert SyncError.DESTINATION_BTRFS_NOT_FOUND in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
+    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.preflight.queries.run_remote_command")
     def test_destination_not_btrfs_on_remote(
         self,
         mock_run: MagicMock,
+        mock_vol_run: MagicMock,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1833,20 +1832,13 @@ class TestCheckSyncRemoteCommands:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = {
-            "src": VolumeStatus(
-                slug="src",
-                config=src_vol,
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=dst_vol,
-                errors=[],
-                capabilities=_BTRFS_NOT_BTRFS_FS_CAPS,
-            ),
-        }
+        mock_vol_run.return_value = MagicMock(returncode=0)
+
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_NOT_BTRFS_FS_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
+
 
         def remote_side_effect(
             server: SshEndpoint,
@@ -1863,14 +1855,18 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
+        status = check_sync(sync, config, _make_resolved(config))
         assert status.active is False
         assert SyncError.DESTINATION_NOT_BTRFS in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
+    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.preflight.queries.run_remote_command")
     def test_destination_not_subvolume_on_remote(
         self,
         mock_run: MagicMock,
+        mock_vol_run: MagicMock,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1909,20 +1905,13 @@ class TestCheckSyncRemoteCommands:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = {
-            "src": VolumeStatus(
-                slug="src",
-                config=src_vol,
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=dst_vol,
-                errors=[],
-                capabilities=_BTRFS_FULL_CAPS,
-            ),
-        }
+        mock_vol_run.return_value = MagicMock(returncode=0)
+
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
+
 
         def remote_side_effect(
             server: SshEndpoint,
@@ -1946,14 +1935,18 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
+        status = check_sync(sync, config, _make_resolved(config))
         assert status.active is False
         assert SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
+    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.preflight.queries.run_remote_command")
     def test_destination_not_mounted_user_subvol_rm_on_remote(
         self,
         mock_run: MagicMock,
+        mock_vol_run: MagicMock,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -1992,20 +1985,13 @@ class TestCheckSyncRemoteCommands:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = {
-            "src": VolumeStatus(
-                slug="src",
-                config=src_vol,
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=dst_vol,
-                errors=[],
-                capabilities=_BTRFS_NO_SUBVOL_RM_CAPS,
-            ),
-        }
+        mock_vol_run.return_value = MagicMock(returncode=0)
+
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_NO_SUBVOL_RM_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
+
 
         def remote_side_effect(
             server: SshEndpoint,
@@ -2029,14 +2015,18 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
+        status = check_sync(sync, config, _make_resolved(config))
         assert status.active is False
         assert SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
+    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.preflight.queries.run_remote_command")
     def test_stat_not_found_on_remote_destination(
         self,
         mock_run: MagicMock,
+        mock_vol_run: MagicMock,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -2075,20 +2065,13 @@ class TestCheckSyncRemoteCommands:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = {
-            "src": VolumeStatus(
-                slug="src",
-                config=src_vol,
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=dst_vol,
-                errors=[],
-                capabilities=_BTRFS_NO_STAT_CAPS,
-            ),
-        }
+        mock_vol_run.return_value = MagicMock(returncode=0)
+
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_NO_STAT_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
+
 
         def remote_side_effect(
             server: SshEndpoint,
@@ -2105,15 +2088,19 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
+        status = check_sync(sync, config, _make_resolved(config))
         assert status.active is False
         assert SyncError.DESTINATION_STAT_NOT_FOUND in status.errors
         assert SyncError.DESTINATION_NOT_BTRFS not in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
+    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.preflight.queries.run_remote_command")
     def test_findmnt_not_found_on_remote_destination(
         self,
         mock_run: MagicMock,
+        mock_vol_run: MagicMock,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -2152,20 +2139,13 @@ class TestCheckSyncRemoteCommands:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = {
-            "src": VolumeStatus(
-                slug="src",
-                config=src_vol,
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=dst_vol,
-                errors=[],
-                capabilities=_BTRFS_NO_FINDMNT_CAPS,
-            ),
-        }
+        mock_vol_run.return_value = MagicMock(returncode=0)
+
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_NO_FINDMNT_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
+
 
         def remote_side_effect(
             server: SshEndpoint,
@@ -2193,15 +2173,19 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
+        status = check_sync(sync, config, _make_resolved(config))
         assert status.active is False
         assert SyncError.DESTINATION_FINDMNT_NOT_FOUND in status.errors
         assert SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM not in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
+    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.preflight.queries.run_remote_command")
     def test_destination_latest_not_found_on_remote(
         self,
         mock_run: MagicMock,
+        mock_vol_run: MagicMock,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -2240,20 +2224,13 @@ class TestCheckSyncRemoteCommands:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = {
-            "src": VolumeStatus(
-                slug="src",
-                config=src_vol,
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=dst_vol,
-                errors=[],
-                capabilities=_BTRFS_FULL_CAPS,
-            ),
-        }
+        mock_vol_run.return_value = MagicMock(returncode=0)
+
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
+
 
         def remote_side_effect(
             server: SshEndpoint,
@@ -2289,15 +2266,19 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
+        status = check_sync(sync, config, _make_resolved(config))
         assert status.active is False
         assert SyncError.DESTINATION_TMP_NOT_FOUND in status.errors
         assert SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND not in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
+    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.preflight.queries.run_remote_command")
     def test_destination_snapshots_dir_not_found_on_remote(
         self,
         mock_run: MagicMock,
+        mock_vol_run: MagicMock,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -2336,20 +2317,13 @@ class TestCheckSyncRemoteCommands:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = {
-            "src": VolumeStatus(
-                slug="src",
-                config=src_vol,
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=dst_vol,
-                errors=[],
-                capabilities=_BTRFS_FULL_CAPS,
-            ),
-        }
+        mock_vol_run.return_value = MagicMock(returncode=0)
+
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
+
 
         def remote_side_effect(
             server: SshEndpoint,
@@ -2385,7 +2359,7 @@ class TestCheckSyncRemoteCommands:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
+        status = check_sync(sync, config, _make_resolved(config))
         assert status.active is False
         assert SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.errors
         assert SyncError.DESTINATION_TMP_NOT_FOUND not in status.errors
@@ -2525,29 +2499,13 @@ class TestCheckHardLinkDest:
         (dst / "backup").mkdir(exist_ok=True)
         (dst / "backup" / ".nbkp-dst").touch()
 
-    def _make_active_vol_statuses(
-        self,
-        config: Config,
-        src_caps: VolumeCapabilities = _STUB_CAPS,
-        dst_caps: VolumeCapabilities = _STUB_CAPS,
-    ) -> dict[str, VolumeStatus]:
-        return {
-            "src": VolumeStatus(
-                slug="src",
-                config=config.volumes["src"],
-                errors=[],
-                capabilities=src_caps,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=config.volumes["dst"],
-                errors=[],
-                capabilities=dst_caps,
-            ),
-        }
-
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
     def test_snapshots_dir_not_found(
         self,
+        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -2558,14 +2516,15 @@ class TestCheckHardLinkDest:
         # No snapshots dir
 
         config, sync = self._make_hl_config(src, dst)
-        vol_statuses = self._make_active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     def test_no_hardlink_support_fat(
         self,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -2576,16 +2535,23 @@ class TestCheckHardLinkDest:
         (dst / "backup" / "snapshots").mkdir()
 
         config, sync = self._make_hl_config(src, dst)
-        vol_statuses = self._make_active_vol_statuses(
-            config, dst_caps=_HL_NO_HARDLINK_CAPS
-        )
 
-        status = check_sync(sync, config, vol_statuses)
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _HL_NO_HARDLINK_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
+
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.DESTINATION_NO_HARDLINK_SUPPORT in status.errors
 
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
     def test_active_with_ext4(
         self,
+        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -2597,14 +2563,15 @@ class TestCheckHardLinkDest:
         (dst / "backup" / "latest").symlink_to("/dev/null")
 
         config, sync = self._make_hl_config(src, dst)
-        vol_statuses = self._make_active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert status.active is True
         assert status.errors == []
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     def test_stat_not_found(
         self,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -2614,16 +2581,25 @@ class TestCheckHardLinkDest:
         self._setup_active_sentinels(src, dst)
 
         config, sync = self._make_hl_config(src, dst)
-        vol_statuses = self._make_active_vol_statuses(config, dst_caps=_HL_NO_STAT_CAPS)
 
-        status = check_sync(sync, config, vol_statuses)
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _HL_NO_STAT_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
+
+        status = check_sync(sync, config)
         assert status.active is False
         assert SyncError.DESTINATION_STAT_NOT_FOUND in status.errors
         # No hardlink support check when stat is missing
         assert SyncError.DESTINATION_NO_HARDLINK_SUPPORT not in status.errors
 
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
     def test_no_btrfs_checks_for_hardlink(
         self,
+        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Hard-link mode should not run any btrfs-specific checks."""
@@ -2635,18 +2611,21 @@ class TestCheckHardLinkDest:
         (dst / "backup" / "snapshots").mkdir()
 
         config, sync = self._make_hl_config(src, dst)
-        vol_statuses = self._make_active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert SyncError.DESTINATION_BTRFS_NOT_FOUND not in status.errors
         assert SyncError.DESTINATION_NOT_BTRFS not in status.errors
         assert SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.errors
         assert SyncError.DESTINATION_TMP_NOT_FOUND not in status.errors
 
+    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
+    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.preflight.queries.run_remote_command")
     def test_remote_no_hardlink_support(
         self,
         mock_run: MagicMock,
+        mock_vol_run: MagicMock,
+        mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -2685,20 +2664,12 @@ class TestCheckHardLinkDest:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = {
-            "src": VolumeStatus(
-                slug="src",
-                config=src_vol,
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=dst_vol,
-                errors=[],
-                capabilities=_HL_NO_HARDLINK_CAPS,
-            ),
-        }
+        mock_vol_run.return_value = MagicMock(returncode=0)
+
+        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
+            return _HL_NO_HARDLINK_CAPS if volume.slug == "dst" else _STUB_CAPS
+
+        mock_caps.side_effect = caps_side_effect
 
         def remote_side_effect(
             server: SshEndpoint,
@@ -2721,7 +2692,7 @@ class TestCheckHardLinkDest:
 
         mock_run.side_effect = remote_side_effect
 
-        status = check_sync(sync, config, vol_statuses, _make_resolved(config))
+        status = check_sync(sync, config, _make_resolved(config))
         assert status.active is False
         assert SyncError.DESTINATION_NO_HARDLINK_SUPPORT in status.errors
 
@@ -2779,23 +2750,13 @@ class TestCheckSourceLatest:
         (dst / "backup").mkdir(exist_ok=True)
         (dst / "backup" / ".nbkp-dst").touch()
 
-    def _active_vol_statuses(self, config: Config) -> dict[str, VolumeStatus]:
-        return {
-            "src": VolumeStatus(
-                slug="src",
-                config=config.volumes["src"],
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=config.volumes["dst"],
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-        }
-
-    def test_btrfs_source_latest_missing(self, tmp_path: Path) -> None:
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
+    def test_btrfs_source_latest_missing(
+        self, _mock_caps: MagicMock, tmp_path: Path
+    ) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -2804,12 +2765,17 @@ class TestCheckSourceLatest:
         # No latest/ under source
 
         config, sync = self._make_config(src, dst, "btrfs")
-        vol_statuses = self._active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert SyncError.SOURCE_LATEST_NOT_FOUND in status.errors
 
-    def test_hard_link_source_latest_missing(self, tmp_path: Path) -> None:
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
+    def test_hard_link_source_latest_missing(
+        self, _mock_caps: MagicMock, tmp_path: Path
+    ) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -2818,12 +2784,17 @@ class TestCheckSourceLatest:
         # No latest/ under source
 
         config, sync = self._make_config(src, dst, "hard-link")
-        vol_statuses = self._active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert SyncError.SOURCE_LATEST_NOT_FOUND in status.errors
 
-    def test_btrfs_source_latest_present(self, tmp_path: Path) -> None:
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
+    def test_btrfs_source_latest_present(
+        self, _mock_caps: MagicMock, tmp_path: Path
+    ) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -2841,13 +2812,18 @@ class TestCheckSourceLatest:
         (src / "data" / "latest").symlink_to(f"snapshots/{_ts}")
 
         config, sync = self._make_config(src, dst, "btrfs")
-        vol_statuses = self._active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert SyncError.SOURCE_LATEST_NOT_FOUND not in status.errors
         assert SyncError.SOURCE_LATEST_INVALID not in status.errors
 
-    def test_hard_link_source_latest_symlink(self, tmp_path: Path) -> None:
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
+    def test_hard_link_source_latest_symlink(
+        self, _mock_caps: MagicMock, tmp_path: Path
+    ) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -2864,12 +2840,17 @@ class TestCheckSourceLatest:
         (src / "data" / "latest").symlink_to(f"snapshots/{_ts}")
 
         config, sync = self._make_config(src, dst, "hard-link")
-        vol_statuses = self._active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert SyncError.SOURCE_LATEST_NOT_FOUND not in status.errors
 
-    def test_no_snapshots_source_skips_check(self, tmp_path: Path) -> None:
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
+    def test_no_snapshots_source_skips_check(
+        self, _mock_caps: MagicMock, tmp_path: Path
+    ) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -2900,9 +2881,8 @@ class TestCheckSourceLatest:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = self._active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert SyncError.SOURCE_LATEST_NOT_FOUND not in status.errors
 
 
@@ -2959,23 +2939,13 @@ class TestCheckSourceSnapshots:
         (dst / "backup").mkdir(exist_ok=True)
         (dst / "backup" / ".nbkp-dst").touch()
 
-    def _active_vol_statuses(self, config: Config) -> dict[str, VolumeStatus]:
-        return {
-            "src": VolumeStatus(
-                slug="src",
-                config=config.volumes["src"],
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-            "dst": VolumeStatus(
-                slug="dst",
-                config=config.volumes["dst"],
-                errors=[],
-                capabilities=_STUB_CAPS,
-            ),
-        }
-
-    def test_btrfs_source_snapshots_missing(self, tmp_path: Path) -> None:
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
+    def test_btrfs_source_snapshots_missing(
+        self, _mock_caps: MagicMock, tmp_path: Path
+    ) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -2985,12 +2955,17 @@ class TestCheckSourceSnapshots:
         # No snapshots/ dir
 
         config, sync = self._make_config(src, dst, "btrfs")
-        vol_statuses = self._active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND in status.errors
 
-    def test_hard_link_source_snapshots_missing(self, tmp_path: Path) -> None:
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
+    def test_hard_link_source_snapshots_missing(
+        self, _mock_caps: MagicMock, tmp_path: Path
+    ) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3000,12 +2975,17 @@ class TestCheckSourceSnapshots:
         # No snapshots/ dir
 
         config, sync = self._make_config(src, dst, "hard-link")
-        vol_statuses = self._active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND in status.errors
 
-    def test_btrfs_source_snapshots_present(self, tmp_path: Path) -> None:
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
+    def test_btrfs_source_snapshots_present(
+        self, _mock_caps: MagicMock, tmp_path: Path
+    ) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3015,12 +2995,17 @@ class TestCheckSourceSnapshots:
         (src / "data" / "latest").symlink_to("/dev/null")
 
         config, sync = self._make_config(src, dst, "btrfs")
-        vol_statuses = self._active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND not in status.errors
 
-    def test_no_snapshots_source_skips_check(self, tmp_path: Path) -> None:
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
+    def test_no_snapshots_source_skips_check(
+        self, _mock_caps: MagicMock, tmp_path: Path
+    ) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3051,9 +3036,8 @@ class TestCheckSourceSnapshots:
             },
             syncs={"s1": sync},
         )
-        vol_statuses = self._active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND not in status.errors
 
 
@@ -3111,18 +3095,15 @@ class TestCheckDevnullLatest:
         (dst / "backup").mkdir(exist_ok=True)
         (dst / "backup" / ".nbkp-dst").touch()
 
-    def _active_vol_statuses(self, config: Config) -> dict[str, VolumeStatus]:
-        return {
-            slug: VolumeStatus(
-                slug=slug, config=vol, errors=[], capabilities=_STUB_CAPS
-            )
-            for slug, vol in config.volumes.items()
-        }
-
     # ── Source latest → /dev/null with upstream sync ────
 
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
     def test_source_devnull_accepted_with_upstream(
         self,
+        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Source latest → /dev/null is valid when an upstream
@@ -3178,16 +3159,19 @@ class TestCheckDevnullLatest:
             },
             syncs={"s1": sync, "upstream": upstream},
         )
-        vol_statuses = self._active_vol_statuses(config)
-
-        status = check_sync(sync, config, vol_statuses, all_syncs=config.syncs)
+        status = check_sync(sync, config)
         assert SyncError.SOURCE_LATEST_INVALID not in status.errors
         assert SyncError.SOURCE_LATEST_NOT_FOUND not in status.errors
 
     # ── Source latest → /dev/null with upstream sync (dry-run) ────
 
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
     def test_source_devnull_inactive_in_dry_run_with_upstream(
         self,
+        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Source latest → /dev/null with upstream sync is marked
@@ -3244,18 +3228,19 @@ class TestCheckDevnullLatest:
             },
             syncs={"s1": sync, "upstream": upstream},
         )
-        vol_statuses = self._active_vol_statuses(config)
-
-        status = check_sync(
-            sync, config, vol_statuses, all_syncs=config.syncs, dry_run=True
-        )
+        status = check_sync(sync, config, dry_run=True)
         assert SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING in status.errors
         assert not status.active
 
     # ── Source latest → /dev/null without upstream sync ────
 
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
     def test_source_devnull_rejected_without_upstream(
         self,
+        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Source latest → /dev/null is invalid when no upstream
@@ -3271,15 +3256,19 @@ class TestCheckDevnullLatest:
         (dst / "backup" / "latest").symlink_to("/dev/null")
 
         config, sync = self._make_config(src, dst)
-        vol_statuses = self._active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert SyncError.SOURCE_LATEST_INVALID in status.errors
 
     # ── Source latest → dangling path ────
 
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
     def test_source_dangling_symlink_invalid(
         self,
+        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Source latest pointing to non-existent snapshot is
@@ -3301,15 +3290,19 @@ class TestCheckDevnullLatest:
         (dst / "backup" / "latest").symlink_to("/dev/null")
 
         config, sync = self._make_config(src, dst)
-        vol_statuses = self._active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert SyncError.SOURCE_LATEST_INVALID in status.errors
 
     # ── Destination latest → /dev/null (valid) ────
 
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
     def test_dest_devnull_accepted(
         self,
+        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Destination latest → /dev/null is valid (no snapshot
@@ -3323,16 +3316,20 @@ class TestCheckDevnullLatest:
         (dst / "backup" / "latest").symlink_to("/dev/null")
 
         config, sync = self._make_config(src, dst)
-        vol_statuses = self._active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert SyncError.DESTINATION_LATEST_NOT_FOUND not in status.errors
         assert SyncError.DESTINATION_LATEST_INVALID not in status.errors
 
     # ── Destination latest missing ────
 
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
     def test_dest_latest_missing(
         self,
+        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Missing destination latest symlink is detected."""
@@ -3345,15 +3342,19 @@ class TestCheckDevnullLatest:
         # No latest symlink
 
         config, sync = self._make_config(src, dst)
-        vol_statuses = self._active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert SyncError.DESTINATION_LATEST_NOT_FOUND in status.errors
 
     # ── Destination latest → dangling path ────
 
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
     def test_dest_dangling_symlink_invalid(
         self,
+        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Destination latest pointing to non-existent snapshot is
@@ -3373,9 +3374,8 @@ class TestCheckDevnullLatest:
         (dst / "backup" / "latest").symlink_to(f"snapshots/{_ts}")
 
         config, sync = self._make_config(src, dst)
-        vol_statuses = self._active_vol_statuses(config)
 
-        status = check_sync(sync, config, vol_statuses)
+        status = check_sync(sync, config)
         assert SyncError.DESTINATION_LATEST_INVALID in status.errors
 
 

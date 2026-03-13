@@ -37,53 +37,118 @@ from .status import (
 )
 from .volume_checks import check_volume
 
+# ── Top-level orchestration ─────────────────────────────────
 
+
+def check_all_syncs(
+    config: Config,
+    on_progress: Callable[[str], None] | None = None,
+    only_syncs: list[str] | None = None,
+    resolved_endpoints: ResolvedEndpoints | None = None,
+    dry_run: bool = False,
+) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
+    """Check volumes and syncs in staged passes.
+
+    Three phases:
+    1. Volumes → ``volume_statuses`` (reachability + capabilities)
+    2. Sync endpoints → diagnostics (skip endpoints on inactive volumes)
+    3. Syncs → ``sync_statuses`` (translates diagnostics into errors)
+
+    When *only_syncs* is given, only those syncs (and the
+    volumes/endpoints they reference) are checked.
+    """
+    re = resolved_endpoints or {}
+    syncs = (
+        {s: sc for s, sc in config.syncs.items() if s in only_syncs}
+        if only_syncs
+        else config.syncs
+    )
+
+    needed_volumes = (
+        {config.source_endpoint(sc).volume for sc in syncs.values()}
+        | {config.destination_endpoint(sc).volume for sc in syncs.values()}
+        if only_syncs
+        else set(config.volumes.keys())
+    )
+
+    # Phase 1: Volume reachability + capabilities
+    volume_statuses = {
+        slug: check_volume(config.volumes[slug], re) for slug in needed_volumes
+    }
+    if on_progress:
+        for slug in volume_statuses:
+            on_progress(slug)
+
+    # Phase 2: Sync endpoint diagnostics (skip endpoints on inactive volumes)
+    active_src_eps = {
+        ep.slug: ep
+        for sync in syncs.values()
+        if volume_statuses[(ep := config.source_endpoint(sync)).volume].active
+    }
+    active_dst_eps = {
+        ep.slug: ep
+        for sync in syncs.values()
+        if volume_statuses[(ep := config.destination_endpoint(sync)).volume].active
+    }
+    src_diagnostics = {
+        slug: check_source_endpoint(
+            ep,
+            config.volumes[ep.volume],
+            volume_statuses[ep.volume].capabilities,  # type: ignore[arg-type]
+            re,
+        )
+        for slug, ep in active_src_eps.items()
+    }
+    dst_diagnostics = {
+        slug: check_destination_endpoint(
+            ep,
+            config.volumes[ep.volume],
+            volume_statuses[ep.volume].capabilities,  # type: ignore[arg-type]
+            re,
+        )
+        for slug, ep in active_dst_eps.items()
+    }
+
+    # Phase 3: Sync checks (translates diagnostics + capabilities into errors)
+    sync_statuses = {
+        slug: _build_sync_status(
+            sync,
+            config,
+            volume_statuses[config.source_endpoint(sync).volume],
+            volume_statuses[config.destination_endpoint(sync).volume],
+            src_diagnostics.get(config.source_endpoint(sync).slug),
+            dst_diagnostics.get(config.destination_endpoint(sync).slug),
+            config.syncs,
+            dry_run,
+        )
+        for slug, sync in syncs.items()
+    }
+    if on_progress:
+        for slug in sync_statuses:
+            on_progress(slug)
+
+    return volume_statuses, sync_statuses
+
+
+# Convenience function used by tests
 def check_sync(
     sync: SyncConfig,
     config: Config,
-    volume_statuses: dict[str, VolumeStatus],
     resolved_endpoints: ResolvedEndpoints | None = None,
-    all_syncs: dict[str, SyncConfig] | None = None,
     dry_run: bool = False,
 ) -> SyncStatus:
-    """Standalone entry point: compute diagnostics, then build status.
+    """Thin wrapper around ``check_all_syncs`` for single-sync usage.
 
-    Expects fully-populated ``VolumeStatus`` (with capabilities).
-    For the batched pipeline, see ``check_all_syncs`` which pre-computes
-    everything in staged passes and calls ``_build_sync_status`` directly.
+    Runs the full pipeline (volume checks, diagnostics, status) for one sync.
+    Primarily used in tests to exercise the real code path.
     """
-    re = resolved_endpoints or {}
-    syncs = all_syncs if all_syncs is not None else config.syncs
-    src_cfg = config.source_endpoint(sync)
-    dst_cfg = config.destination_endpoint(sync)
-
-    src_status = volume_statuses[src_cfg.volume]
-    dst_status = volume_statuses[dst_cfg.volume]
-
-    src_diag = (
-        check_source_endpoint(
-            src_cfg,
-            config.volumes[src_cfg.volume],
-            src_status.capabilities,  # type: ignore[arg-type]
-            re,
-        )
-        if src_status.active
-        else None
+    _, sync_statuses = check_all_syncs(
+        config,
+        only_syncs=[sync.slug],
+        resolved_endpoints=resolved_endpoints,
+        dry_run=dry_run,
     )
-    dst_diag = (
-        check_destination_endpoint(
-            dst_cfg,
-            config.volumes[dst_cfg.volume],
-            dst_status.capabilities,  # type: ignore[arg-type]
-            re,
-        )
-        if dst_status.active
-        else None
-    )
-
-    return _build_sync_status(
-        sync, config, src_status, dst_status, src_diag, dst_diag, syncs, dry_run
-    )
+    return sync_statuses[sync.slug]
 
 
 def _build_sync_status(
@@ -356,96 +421,3 @@ def _destination_latest_errors(
         return [SyncError.DESTINATION_LATEST_INVALID]
     else:
         return []
-
-
-# ── Top-level orchestration ─────────────────────────────────
-
-
-def check_all_syncs(
-    config: Config,
-    on_progress: Callable[[str], None] | None = None,
-    only_syncs: list[str] | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-    dry_run: bool = False,
-) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
-    """Check volumes and syncs in staged passes.
-
-    Three phases:
-    1. Volumes → ``volume_statuses`` (reachability + capabilities)
-    2. Sync endpoints → diagnostics (skip endpoints on inactive volumes)
-    3. Syncs → ``sync_statuses`` (translates diagnostics into errors)
-
-    When *only_syncs* is given, only those syncs (and the
-    volumes/endpoints they reference) are checked.
-    """
-    re = resolved_endpoints or {}
-    syncs = (
-        {s: sc for s, sc in config.syncs.items() if s in only_syncs}
-        if only_syncs
-        else config.syncs
-    )
-
-    needed_volumes = (
-        {config.source_endpoint(sc).volume for sc in syncs.values()}
-        | {config.destination_endpoint(sc).volume for sc in syncs.values()}
-        if only_syncs
-        else set(config.volumes.keys())
-    )
-
-    # Phase 1: Volume reachability + capabilities
-    volume_statuses = {
-        slug: check_volume(config.volumes[slug], re) for slug in needed_volumes
-    }
-    if on_progress:
-        for slug in volume_statuses:
-            on_progress(slug)
-
-    # Phase 2: Sync endpoint diagnostics (skip endpoints on inactive volumes)
-    active_src_eps = {
-        ep.slug: ep
-        for sync in syncs.values()
-        if volume_statuses[(ep := config.source_endpoint(sync)).volume].active
-    }
-    active_dst_eps = {
-        ep.slug: ep
-        for sync in syncs.values()
-        if volume_statuses[(ep := config.destination_endpoint(sync)).volume].active
-    }
-    src_diagnostics = {
-        slug: check_source_endpoint(
-            ep,
-            config.volumes[ep.volume],
-            volume_statuses[ep.volume].capabilities,  # type: ignore[arg-type]
-            re,
-        )
-        for slug, ep in active_src_eps.items()
-    }
-    dst_diagnostics = {
-        slug: check_destination_endpoint(
-            ep,
-            config.volumes[ep.volume],
-            volume_statuses[ep.volume].capabilities,  # type: ignore[arg-type]
-            re,
-        )
-        for slug, ep in active_dst_eps.items()
-    }
-
-    # Phase 3: Sync checks (translates diagnostics + capabilities into errors)
-    sync_statuses = {
-        slug: _build_sync_status(
-            sync,
-            config,
-            volume_statuses[config.source_endpoint(sync).volume],
-            volume_statuses[config.destination_endpoint(sync).volume],
-            src_diagnostics.get(config.source_endpoint(sync).slug),
-            dst_diagnostics.get(config.destination_endpoint(sync).slug),
-            config.syncs,
-            dry_run,
-        )
-        for slug, sync in syncs.items()
-    }
-    if on_progress:
-        for slug in sync_statuses:
-            on_progress(slug)
-
-    return volume_statuses, sync_statuses
