@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shlex
 import subprocess
+from functools import reduce
 
 import paramiko
 from fabric import Connection  # type: ignore[import-untyped]
@@ -58,9 +59,11 @@ def _build_connection(
     proxy_chain: list[SshEndpoint] | None = None,
 ) -> Connection:
     """Build a Fabric Connection with optional proxy chain."""
-    gateway: Connection | None = None
-    for proxy in proxy_chain or []:
-        gateway = _build_single_connection(proxy, gateway)
+    gateway = reduce(
+        lambda gw, proxy: _build_single_connection(proxy, gw),
+        proxy_chain or [],
+        None,
+    )
     return _build_single_connection(server, gateway)
 
 

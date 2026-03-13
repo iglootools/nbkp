@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shlex
+from functools import reduce
 from typing import TYPE_CHECKING
 
 from ..config import SshConnectionOptions, SshEndpoint
@@ -90,11 +91,9 @@ def _build_proxy_command(
     options (e.g. StrictHostKeyChecking) are propagated to
     each hop.
     """
-    inner_cmd: str | None = None
-    for proxy in proxies:
-        inner_cmd = _build_proxy_hop(proxy, inner_cmd)
-    assert inner_cmd is not None
-    return inner_cmd
+    return reduce(  # type: ignore[arg-type]
+        lambda cmd, proxy: _build_proxy_hop(proxy, cmd), proxies, None
+    )
 
 
 def _build_ssh_core_args(
@@ -135,12 +134,10 @@ def build_ssh_e_option(
     """
     core = _build_ssh_core_args(server, proxy_chain)
     # For -e, the ProxyCommand value needs shell quoting
-    parts = ["ssh"]
-    for arg in core:
-        if arg.startswith("ProxyCommand="):
-            parts.append(shlex.quote(arg))
-        else:
-            parts.append(arg)
+    parts = [
+        "ssh",
+        *(shlex.quote(arg) if arg.startswith("ProxyCommand=") else arg for arg in core),
+    ]
     return ["-e", " ".join(parts)]
 
 
