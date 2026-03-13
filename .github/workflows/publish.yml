@@ -46,7 +46,7 @@ jobs:
       with:
         fetch-depth: 0
         fetch-tags: true
-    - uses: jdx/mise-action@v3
+    - uses: jdx/mise-action@v4
     - run: mise run ci-build
     - name: Publish package distributions to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
