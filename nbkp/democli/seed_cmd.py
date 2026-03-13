@@ -1,4 +1,4 @@
-"""NBKP demo CLI: sample output rendering and seed data."""
+"""Demo CLI seed command: create temp folder with config and test data."""
 # pyright: reportPossiblyUnboundVariable=false
 # Docker imports are conditionally available (try/except ImportError),
 # guarded at runtime by _require_docker_extra().
@@ -8,23 +8,18 @@ from __future__ import annotations
 import os
 import tempfile
 from textwrap import dedent
-from io import StringIO
 from pathlib import Path
 from typing import Annotated, Callable
 
 import typer
 import yaml
-from pydantic import ValidationError
-from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
-from .config import (
+from ..config import (
     BtrfsSnapshotConfig,
     Config,
-    ConfigError,
-    ConfigErrorReason,
     HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
@@ -37,7 +32,7 @@ from .config import (
 # Docker-dependent imports are deferred to seed --docker.
 # They require the 'docker' extra: pipx install nbkp[docker]
 try:
-    from .testkit.docker import (
+    from ..testkit.docker import (
         BASTION_CONTAINER_NAME,
         STORAGE_CONTAINER_NAME,
         DOCKER_DIR,
@@ -57,48 +52,12 @@ try:
     _HAS_DOCKER = True
 except ImportError:
     _HAS_DOCKER = False
-from .remote.resolution import resolve_all_endpoints
-from .ordering.output import (
-    build_mermaid_graph,
-    print_mermaid_ascii_graph,
-    print_rich_tree_graph,
-)
-from .output import (
-    print_config_error,
-    print_human_check,
-    print_human_config,
-    print_human_troubleshoot,
-)
-from .sync.output import (
-    print_human_prune_results,
-    print_human_results,
-)
-from .testkit.gen.check import (
-    check_config,
-    check_data,
-    troubleshoot_config,
-    troubleshoot_data,
-)
-from .testkit.gen.config import config_show_config
-from .testkit.gen.fs import (
+from ..testkit.gen.fs import (
     SEED_EXCLUDE_FILTERS,
     create_seed_sentinels,
     seed_volume,
 )
-from .testkit.gen.sync import (
-    dry_run_results,
-    prune_dry_run_results,
-    prune_results,
-    run_results,
-)
-
-_console = Console()
-
-app = typer.Typer(
-    name="nbkp-demo",
-    help="NBKP demo CLI",
-    no_args_is_help=True,
-)
+from .app import app, console as _console
 
 
 def _is_dev_environment() -> bool:
@@ -121,191 +80,6 @@ def _require_docker_extra() -> None:
             err=True,
         )
         raise typer.Exit(1)
-
-
-# ── Commands ─────────────────────────────────────────────────────
-
-
-def _capture_console() -> tuple[Console, StringIO]:
-    """Create a Console that captures output to a StringIO buffer."""
-    buf = StringIO()
-    console = Console(
-        file=buf,
-        force_terminal=True,
-        width=_console.width - 4,
-    )
-    return console, buf
-
-
-def _print_panel(title: str, buf: StringIO) -> None:
-    """Wrap captured console output in a titled panel."""
-    content = Text.from_ansi(buf.getvalue().rstrip("\n"))
-    _console.print(
-        Panel(
-            content,
-            title=f"[bold]{title}[/bold]",
-            border_style="cyan",
-            padding=(0, 1),
-        )
-    )
-
-
-@app.command()
-def output() -> None:
-    """Render all human output functions with fake data."""
-    _show_config_show()
-    _show_config_graph()
-    _show_check()
-    _show_results()
-    _show_prune()
-    _show_troubleshoot()
-    _show_config_errors()
-
-
-def _show_config_show() -> None:
-    console, buf = _capture_console()
-    config = config_show_config()
-    re = resolve_all_endpoints(config)
-    print_human_config(config, console=console, resolved_endpoints=re)
-    _print_panel("print_human_config", buf)
-
-
-def _show_config_graph() -> None:
-    config = config_show_config()
-
-    console, buf = _capture_console()
-    print_rich_tree_graph(config, console=console)
-    _print_panel("print_rich_tree_graph", buf)
-
-    console, buf = _capture_console()
-    print_mermaid_ascii_graph(config, console=console)
-    _print_panel("print_mermaid_ascii_graph", buf)
-
-    console, buf = _capture_console()
-    mermaid_src = build_mermaid_graph(config)
-    console.print(mermaid_src, highlight=False)
-    _print_panel("build_mermaid_graph (mermaid syntax)", buf)
-
-
-def _show_check() -> None:
-    console, buf = _capture_console()
-    config = check_config()
-    re = resolve_all_endpoints(config)
-    vol_statuses, sync_statuses = check_data(config)
-    print_human_check(
-        vol_statuses,
-        sync_statuses,
-        config,
-        console=console,
-        resolved_endpoints=re,
-        wrap_in_panel=False,
-    )
-    _print_panel("print_human_check", buf)
-
-
-def _show_results() -> None:
-    config = config_show_config()
-    re = resolve_all_endpoints(config)
-    console, buf = _capture_console()
-    print_human_results(run_results(config), False, config, re, console=console)
-    _print_panel("print_human_results (run)", buf)
-
-    console, buf = _capture_console()
-    print_human_results(dry_run_results(config), True, config, re, console=console)
-    _print_panel("print_human_results (dry run)", buf)
-
-
-def _show_prune() -> None:
-    config = config_show_config()
-    console, buf = _capture_console()
-    print_human_prune_results(prune_results(config), dry_run=False, console=console)
-    _print_panel("print_human_prune_results (prune)", buf)
-
-    console, buf = _capture_console()
-    print_human_prune_results(
-        prune_dry_run_results(config),
-        dry_run=True,
-        console=console,
-    )
-    _print_panel("print_human_prune_results (dry run)", buf)
-
-
-def _show_troubleshoot() -> None:
-    console, buf = _capture_console()
-    config = troubleshoot_config()
-    re = resolve_all_endpoints(config)
-    vol_statuses, sync_statuses = troubleshoot_data(config)
-    print_human_troubleshoot(
-        vol_statuses,
-        sync_statuses,
-        config,
-        console=console,
-        resolved_endpoints=re,
-    )
-    _print_panel("print_human_troubleshoot", buf)
-
-
-def _show_config_errors() -> None:
-    console, buf = _capture_console()
-    print_config_error(
-        ConfigError(
-            "Config file not found: /etc/nbkp/config.yaml",
-            reason=ConfigErrorReason.FILE_NOT_FOUND,
-        ),
-        console=console,
-    )
-    _print_panel("print_config_error (file not found)", buf)
-
-    console, buf = _capture_console()
-    try:
-        yaml.safe_load("not_a_list:\n  - [invalid")
-    except yaml.YAMLError as ye:
-        err = ConfigError(
-            f"Invalid YAML in /etc/nbkp/config.yaml: {ye}",
-            reason=ConfigErrorReason.INVALID_YAML,
-        )
-        err.__cause__ = ye
-        print_config_error(err, console=console)
-    _print_panel("print_config_error (invalid YAML)", buf)
-
-    console, buf = _capture_console()
-    try:
-        Config.model_validate({"volumes": {"v": {"type": "ftp", "path": "/x"}}})
-    except ValidationError as ve:
-        err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
-        err.__cause__ = ve
-        print_config_error(err, console=console)
-    _print_panel("print_config_error (invalid volume type)", buf)
-
-    console, buf = _capture_console()
-    try:
-        Config.model_validate(
-            {
-                "ssh-endpoints": {},
-                "volumes": {
-                    "v": {
-                        "type": "remote",
-                        "ssh-endpoint": "missing",
-                        "path": "/x",
-                    },
-                },
-                "syncs": {},
-            }
-        )
-    except ValidationError as ve:
-        err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
-        err.__cause__ = ve
-        print_config_error(err, console=console)
-    _print_panel("print_config_error (unknown server reference)", buf)
-
-    console, buf = _capture_console()
-    try:
-        Config.model_validate({"volumes": {"v": {"type": "local"}}, "syncs": {}})
-    except ValidationError as ve:
-        err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
-        err.__cause__ = ve
-        print_config_error(err, console=console)
-    _print_panel("print_config_error (missing required field)", buf)
 
 
 @app.command()
@@ -683,12 +457,3 @@ def seed(
             padding=(0, 1),
         )
     )
-
-
-def main() -> None:
-    """Demo CLI entry point."""
-    app()
-
-
-if __name__ == "__main__":
-    main()
