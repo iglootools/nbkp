@@ -1182,7 +1182,9 @@ class TestCheckSync:
         )
 
         def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_NO_STAT_NO_FINDMNT_CAPS if volume.slug == "dst" else _STUB_CAPS
+            return (
+                _BTRFS_NO_STAT_NO_FINDMNT_CAPS if volume.slug == "dst" else _STUB_CAPS
+            )
 
         mock_caps.side_effect = caps_side_effect
 
@@ -1839,7 +1841,6 @@ class TestCheckSyncRemoteCommands:
 
         mock_caps.side_effect = caps_side_effect
 
-
         def remote_side_effect(
             server: SshEndpoint,
             cmd: list[str],
@@ -1911,7 +1912,6 @@ class TestCheckSyncRemoteCommands:
             return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
 
         mock_caps.side_effect = caps_side_effect
-
 
         def remote_side_effect(
             server: SshEndpoint,
@@ -1992,7 +1992,6 @@ class TestCheckSyncRemoteCommands:
 
         mock_caps.side_effect = caps_side_effect
 
-
         def remote_side_effect(
             server: SshEndpoint,
             cmd: list[str],
@@ -2072,7 +2071,6 @@ class TestCheckSyncRemoteCommands:
 
         mock_caps.side_effect = caps_side_effect
 
-
         def remote_side_effect(
             server: SshEndpoint,
             cmd: list[str],
@@ -2145,7 +2143,6 @@ class TestCheckSyncRemoteCommands:
             return _BTRFS_NO_FINDMNT_CAPS if volume.slug == "dst" else _STUB_CAPS
 
         mock_caps.side_effect = caps_side_effect
-
 
         def remote_side_effect(
             server: SshEndpoint,
@@ -2230,7 +2227,6 @@ class TestCheckSyncRemoteCommands:
             return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
 
         mock_caps.side_effect = caps_side_effect
-
 
         def remote_side_effect(
             server: SshEndpoint,
@@ -2323,7 +2319,6 @@ class TestCheckSyncRemoteCommands:
             return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
 
         mock_caps.side_effect = caps_side_effect
-
 
         def remote_side_effect(
             server: SshEndpoint,
