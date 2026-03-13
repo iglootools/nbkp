@@ -9,8 +9,11 @@ from .endpoint_checks import (
     check_source_endpoint,
 )
 from .status import (
-    SyncEndpointRole,
-    SyncEndpointStatus,
+    BtrfsSubvolumeDiagnostics,
+    DestinationEndpointDiagnostics,
+    LatestSymlinkState,
+    SnapshotDirsDiagnostics,
+    SourceEndpointDiagnostics,
     SyncReason,
     SyncStatus,
     VolumeCapabilities,
@@ -20,8 +23,11 @@ from .status import (
 from .volume_checks import check_volume, check_volume_capabilities
 
 __all__ = [
-    "SyncEndpointRole",
-    "SyncEndpointStatus",
+    "BtrfsSubvolumeDiagnostics",
+    "DestinationEndpointDiagnostics",
+    "LatestSymlinkState",
+    "SnapshotDirsDiagnostics",
+    "SourceEndpointDiagnostics",
     "SyncReason",
     "SyncStatus",
     "VolumeCapabilities",

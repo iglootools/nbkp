@@ -1,6 +1,6 @@
 """Sync check orchestration.
 
-Composes queries, volume checks, endpoint checks, and snapshot checks
+Composes volume checks, endpoint diagnostics, and capabilities
 into the two primary entry points: ``check_sync`` and ``check_all_syncs``.
 
 Four-phase check hierarchy (each level caches results for the next):
@@ -8,9 +8,11 @@ Four-phase check hierarchy (each level caches results for the next):
 1. **Volume reachability** — ``VolumeStatus`` (sentinel + SSH)
 2. **Volume capabilities** — ``VolumeCapabilities`` (command availability,
    filesystem type, mount options)
-3. **Sync endpoints** — ``SyncEndpointStatus`` (sentinels, directories,
-   snapshot readiness, latest symlink)
-4. **Syncs** — ``SyncStatus`` (source latest interpretation, upstream deps)
+3. **Sync endpoints** — ``SourceEndpointDiagnostics`` /
+   ``DestinationEndpointDiagnostics`` (sentinels, directories,
+   symlinks — pure observation, no error interpretation)
+4. **Syncs** — ``SyncStatus`` (translates diagnostics + capabilities
+   into ``SyncReason`` values based on each sync's configuration)
 """
 
 from __future__ import annotations
@@ -24,11 +26,12 @@ from ..config import (
     SyncEndpoint,
     Volume,
 )
+from ..conventions import DEVNULL_TARGET
 from .endpoint_checks import check_destination_endpoint, check_source_endpoint
 from .snapshot_checks import _has_upstream_sync
 from .status import (
-    SyncEndpointRole,
-    SyncEndpointStatus,
+    DestinationEndpointDiagnostics,
+    SourceEndpointDiagnostics,
     SyncReason,
     SyncStatus,
     VolumeCapabilities,
@@ -45,15 +48,15 @@ def check_sync(
     all_syncs: dict[str, SyncConfig] | None = None,
     dry_run: bool = False,
     volume_capabilities: dict[str, VolumeCapabilities] | None = None,
-    endpoint_statuses: (
-        dict[tuple[str, SyncEndpointRole], SyncEndpointStatus] | None
+    source_diagnostics_cache: dict[str, SourceEndpointDiagnostics] | None = None,
+    destination_diagnostics_cache: (
+        dict[str, DestinationEndpointDiagnostics] | None
     ) = None,
 ) -> SyncStatus:
     """Check if a sync is active, accumulating all failure reasons.
 
-    When *volume_capabilities* and *endpoint_statuses* are provided,
-    pre-computed results are reused.  When ``None``, checks run inline
-    (standalone usage).
+    When caches are provided, pre-computed results are reused.
+    When ``None``, checks run inline (standalone usage).
     """
     re = resolved_endpoints or {}
     syncs = all_syncs if all_syncs is not None else config.syncs
@@ -75,8 +78,8 @@ def check_sync(
         )
 
     reasons: list[SyncReason] = []
-    src_ep_status: SyncEndpointStatus | None = None
-    dst_ep_status: SyncEndpointStatus | None = None
+    src_diag: SourceEndpointDiagnostics | None = None
+    dst_diag: DestinationEndpointDiagnostics | None = None
 
     # Volume availability
     if not src_status.active:
@@ -85,58 +88,205 @@ def check_sync(
     if not dst_status.active:
         reasons.append(SyncReason.DESTINATION_UNAVAILABLE)
 
-    # Source endpoint checks (only if source volume is active)
+    # Source checks (only if source volume is active)
     if src_status.active:
-        src_ep_status = _get_or_check_source_endpoint(
-            src_cfg.slug,
-            src_cfg,
-            src_vol,
-            src_status,
-            re,
-            endpoint_statuses,
-            volume_capabilities,
+        src_caps = _get_or_compute_capabilities(
+            src_status.slug, src_status, re, volume_capabilities
         )
-        reasons.extend(src_ep_status.reasons)
+        src_diag = _get_or_check_source(
+            src_cfg, src_vol, src_caps, re, source_diagnostics_cache
+        )
+        reasons.extend(
+            _source_reasons(src_diag, src_caps, src_cfg, sync, syncs, dry_run)
+        )
 
-        # Source latest /dev/null interpretation (sync-scoped)
-        if src_cfg.snapshot_mode != "none":
-            reasons.extend(
-                _interpret_source_latest(
-                    sync,
-                    src_ep_status,
-                    syncs,
-                    dry_run,
-                )
-            )
-
-    # Destination endpoint checks (only if dest volume is active)
+    # Destination checks (only if dest volume is active)
     if dst_status.active:
-        dst_ep_status = _get_or_check_destination_endpoint(
-            dst_cfg.slug,
-            dst_cfg,
-            dst_vol,
-            dst_status,
-            re,
-            endpoint_statuses,
-            volume_capabilities,
+        dst_caps = _get_or_compute_capabilities(
+            dst_status.slug, dst_status, re, volume_capabilities
         )
-        reasons.extend(dst_ep_status.reasons)
+        dst_diag = _get_or_check_destination(
+            dst_cfg, dst_vol, dst_caps, re, destination_diagnostics_cache
+        )
+        reasons.extend(_destination_reasons(dst_diag, dst_caps, dst_cfg))
 
-    dst_latest_target = dst_ep_status.latest_target if dst_ep_status else None
+    dst_latest = dst_diag.latest.snapshot_name if dst_diag and dst_diag.latest else None
 
     return SyncStatus(
         slug=sync.slug,
         config=sync,
         source_status=src_status,
         destination_status=dst_status,
-        source_endpoint_status=src_ep_status,
-        destination_endpoint_status=dst_ep_status,
+        source_diagnostics=src_diag,
+        destination_diagnostics=dst_diag,
         reasons=reasons,
-        destination_latest_target=dst_latest_target,
+        destination_latest_target=dst_latest,
     )
 
 
-# ── Helpers ─────────────────────────────────────────────────
+# ── Diagnostics → reasons translation ──────────────────────
+
+
+def _source_reasons(
+    diag: SourceEndpointDiagnostics,
+    caps: VolumeCapabilities,
+    endpoint: SyncEndpoint,
+    sync: SyncConfig,
+    all_syncs: dict[str, SyncConfig],
+    dry_run: bool,
+) -> list[SyncReason]:
+    """Translate source diagnostics + capabilities into SyncReasons."""
+    reasons: list[SyncReason] = []
+
+    if not diag.sentinel_exists:
+        reasons.append(SyncReason.SOURCE_SENTINEL_NOT_FOUND)
+
+    if not caps.has_rsync:
+        reasons.append(SyncReason.SOURCE_RSYNC_NOT_FOUND)
+    elif not caps.rsync_version_ok:
+        reasons.append(SyncReason.SOURCE_RSYNC_TOO_OLD)
+
+    if endpoint.snapshot_mode != "none":
+        if diag.snapshot_dirs is not None and not diag.snapshot_dirs.exists:
+            reasons.append(SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND)
+        reasons.extend(_source_latest_reasons(diag, sync, all_syncs, dry_run))
+
+    return reasons
+
+
+def _source_latest_reasons(
+    diag: SourceEndpointDiagnostics,
+    sync: SyncConfig,
+    all_syncs: dict[str, SyncConfig],
+    dry_run: bool,
+) -> list[SyncReason]:
+    """Interpret the source latest symlink state."""
+    latest = diag.latest
+    if latest is None or not latest.exists:
+        return [SyncReason.SOURCE_LATEST_NOT_FOUND]
+
+    if latest.raw_target == DEVNULL_TARGET:
+        # /dev/null interpretation depends on sync-level context
+        if not _has_upstream_sync(sync, all_syncs):
+            return [SyncReason.SOURCE_LATEST_INVALID]
+        elif dry_run:
+            return [SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING]
+        return []
+
+    if latest.target_valid is False:
+        return [SyncReason.SOURCE_LATEST_INVALID]
+
+    return []
+
+
+def _destination_reasons(
+    diag: DestinationEndpointDiagnostics,
+    caps: VolumeCapabilities,
+    endpoint: SyncEndpoint,
+) -> list[SyncReason]:
+    """Translate destination diagnostics + capabilities into SyncReasons."""
+    reasons: list[SyncReason] = []
+
+    if not diag.sentinel_exists:
+        reasons.append(SyncReason.DESTINATION_SENTINEL_NOT_FOUND)
+
+    if not caps.has_rsync:
+        reasons.append(SyncReason.DESTINATION_RSYNC_NOT_FOUND)
+    elif not caps.rsync_version_ok:
+        reasons.append(SyncReason.DESTINATION_RSYNC_TOO_OLD)
+
+    if endpoint.btrfs_snapshots.enabled:
+        reasons.extend(_btrfs_destination_reasons(diag, caps))
+    elif endpoint.hard_link_snapshots.enabled:
+        reasons.extend(_hardlink_destination_reasons(diag, caps))
+
+    if not diag.endpoint_writable:
+        reasons.append(SyncReason.DESTINATION_ENDPOINT_NOT_WRITABLE)
+
+    if endpoint.snapshot_mode != "none":
+        reasons.extend(_destination_latest_reasons(diag))
+
+    return reasons
+
+
+def _btrfs_destination_reasons(
+    diag: DestinationEndpointDiagnostics,
+    caps: VolumeCapabilities,
+) -> list[SyncReason]:
+    """Translate btrfs-specific diagnostics into SyncReasons."""
+    reasons: list[SyncReason] = []
+
+    if not caps.has_btrfs:
+        reasons.append(SyncReason.DESTINATION_BTRFS_NOT_FOUND)
+        return reasons
+
+    if not caps.has_stat:
+        reasons.append(SyncReason.DESTINATION_STAT_NOT_FOUND)
+    if not caps.has_findmnt:
+        reasons.append(SyncReason.DESTINATION_FINDMNT_NOT_FOUND)
+
+    if caps.has_stat:
+        if not caps.is_btrfs_filesystem:
+            reasons.append(SyncReason.DESTINATION_NOT_BTRFS)
+        elif diag.btrfs is None or not diag.btrfs.is_subvolume:
+            reasons.append(SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME)
+        else:
+            if caps.has_findmnt and not caps.btrfs_user_subvol_rm:
+                reasons.append(SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM)
+            if not diag.btrfs.staging_dir_exists:
+                reasons.append(SyncReason.DESTINATION_TMP_NOT_FOUND)
+            elif diag.btrfs.staging_dir_writable is False:
+                reasons.append(SyncReason.DESTINATION_STAGING_DIR_NOT_WRITABLE)
+            reasons.extend(_snapshot_dirs_reasons(diag))
+
+    return reasons
+
+
+def _hardlink_destination_reasons(
+    diag: DestinationEndpointDiagnostics,
+    caps: VolumeCapabilities,
+) -> list[SyncReason]:
+    """Translate hard-link-specific diagnostics into SyncReasons."""
+    reasons: list[SyncReason] = []
+
+    if not caps.has_stat:
+        reasons.append(SyncReason.DESTINATION_STAT_NOT_FOUND)
+        return reasons
+
+    if not caps.hardlink_supported:
+        reasons.append(SyncReason.DESTINATION_NO_HARDLINK_SUPPORT)
+    reasons.extend(_snapshot_dirs_reasons(diag))
+
+    return reasons
+
+
+def _snapshot_dirs_reasons(
+    diag: DestinationEndpointDiagnostics,
+) -> list[SyncReason]:
+    """Translate snapshot directory diagnostics into SyncReasons."""
+    sd = diag.snapshot_dirs
+    if sd is None:
+        return []
+    if not sd.exists:
+        return [SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND]
+    if sd.writable is False:
+        return [SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE]
+    return []
+
+
+def _destination_latest_reasons(
+    diag: DestinationEndpointDiagnostics,
+) -> list[SyncReason]:
+    """Interpret the destination latest symlink state."""
+    latest = diag.latest
+    if latest is None or not latest.exists:
+        return [SyncReason.DESTINATION_LATEST_NOT_FOUND]
+    if latest.target_valid is False:
+        return [SyncReason.DESTINATION_LATEST_INVALID]
+    return []
+
+
+# ── Cache helpers ───────────────────────────────────────────
 
 
 def _get_or_compute_capabilities(
@@ -153,79 +303,30 @@ def _get_or_compute_capabilities(
     return check_volume_capabilities(vol_status.config, re)
 
 
-def _get_or_check_source_endpoint(
-    endpoint_slug: str,
+def _get_or_check_source(
     src_cfg: SyncEndpoint,
     src_vol: Volume,
-    src_status: VolumeStatus,
+    caps: VolumeCapabilities,
     re: ResolvedEndpoints,
-    endpoint_statuses: (dict[tuple[str, SyncEndpointRole], SyncEndpointStatus] | None),
-    volume_capabilities: dict[str, VolumeCapabilities] | None,
-) -> SyncEndpointStatus:
-    """Return cached source endpoint status or compute inline."""
-    key: tuple[str, SyncEndpointRole] = (endpoint_slug, "source")
-    if endpoint_statuses and key in endpoint_statuses:
-        return endpoint_statuses[key]
-    caps = _get_or_compute_capabilities(
-        src_status.slug, src_status, re, volume_capabilities
-    )
+    cache: dict[str, SourceEndpointDiagnostics] | None,
+) -> SourceEndpointDiagnostics:
+    """Return cached source diagnostics or compute inline."""
+    if cache and src_cfg.slug in cache:
+        return cache[src_cfg.slug]
     return check_source_endpoint(src_cfg, src_vol, caps, re)
 
 
-def _get_or_check_destination_endpoint(
-    endpoint_slug: str,
+def _get_or_check_destination(
     dst_cfg: SyncEndpoint,
     dst_vol: Volume,
-    dst_status: VolumeStatus,
+    caps: VolumeCapabilities,
     re: ResolvedEndpoints,
-    endpoint_statuses: (dict[tuple[str, SyncEndpointRole], SyncEndpointStatus] | None),
-    volume_capabilities: dict[str, VolumeCapabilities] | None,
-) -> SyncEndpointStatus:
-    """Return cached destination endpoint status or compute inline."""
-    key: tuple[str, SyncEndpointRole] = (endpoint_slug, "destination")
-    if endpoint_statuses and key in endpoint_statuses:
-        return endpoint_statuses[key]
-    caps = _get_or_compute_capabilities(
-        dst_status.slug, dst_status, re, volume_capabilities
-    )
+    cache: dict[str, DestinationEndpointDiagnostics] | None,
+) -> DestinationEndpointDiagnostics:
+    """Return cached destination diagnostics or compute inline."""
+    if cache and dst_cfg.slug in cache:
+        return cache[dst_cfg.slug]
     return check_destination_endpoint(dst_cfg, dst_vol, caps, re)
-
-
-def _interpret_source_latest(
-    sync: SyncConfig,
-    src_ep_status: SyncEndpointStatus,
-    all_syncs: dict[str, SyncConfig],
-    dry_run: bool,
-) -> list[SyncReason]:
-    """Interpret /dev/null in source latest (sync-scoped logic).
-
-    The endpoint-level check reads the symlink and validates it exists
-    and points to a valid target.  But ``/dev/null`` acceptance depends
-    on whether an upstream sync exists and whether we're in dry-run mode.
-    This is the only check that stays per-sync.
-
-    If the endpoint already flagged SOURCE_LATEST_NOT_FOUND or
-    SOURCE_LATEST_INVALID, skip — those are already in the reasons.
-    """
-    # If endpoint-level checks already found issues, don't add more
-    endpoint_has_latest_issue = any(
-        r in (SyncReason.SOURCE_LATEST_NOT_FOUND, SyncReason.SOURCE_LATEST_INVALID)
-        for r in src_ep_status.reasons
-    )
-    if endpoint_has_latest_issue:
-        return []
-
-    # If latest_target is not None, endpoint validated it points to a real dir
-    if src_ep_status.latest_target is not None:
-        return []
-
-    # latest_target is None and no endpoint error → /dev/null case
-    # (endpoint check accepts /dev/null without adding reasons)
-    if not _has_upstream_sync(sync, all_syncs):
-        return [SyncReason.SOURCE_LATEST_INVALID]
-    elif dry_run:
-        return [SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING]
-    return []
 
 
 # ── Top-level orchestration ─────────────────────────────────
@@ -243,8 +344,8 @@ def check_all_syncs(
     Four phases:
     1. Volume reachability → ``volume_statuses``
     2. Volume capabilities → ``volume_capabilities`` (skip inactive)
-    3. Sync endpoints → ``endpoint_statuses`` (skip inactive volumes)
-    4. Syncs → ``sync_statuses`` (uses all pre-computed caches)
+    3. Sync endpoints → diagnostics caches (skip inactive volumes)
+    4. Syncs → ``sync_statuses`` (translates diagnostics into reasons)
 
     When *only_syncs* is given, only those syncs (and the
     volumes/endpoints they reference) are checked.
@@ -277,7 +378,6 @@ def check_all_syncs(
         if vs.active:
             caps = check_volume_capabilities(vs.config, re)
             volume_capabilities[slug] = caps
-            # Attach capabilities to the volume status
             volume_statuses[slug] = VolumeStatus(
                 slug=vs.slug,
                 config=vs.config,
@@ -285,29 +385,34 @@ def check_all_syncs(
                 capabilities=caps,
             )
 
-    # Phase 3: Sync endpoint checks (skip endpoints on inactive volumes)
-    endpoint_statuses: dict[tuple[str, SyncEndpointRole], SyncEndpointStatus] = {}
+    # Phase 3: Sync endpoint diagnostics (skip endpoints on inactive volumes)
+    src_diag_cache: dict[str, SourceEndpointDiagnostics] = {}
+    dst_diag_cache: dict[str, DestinationEndpointDiagnostics] = {}
     for sync in syncs.values():
         src_cfg = config.source_endpoint(sync)
         dst_cfg = config.destination_endpoint(sync)
 
-        src_key: tuple[str, SyncEndpointRole] = (src_cfg.slug, "source")
-        if src_key not in endpoint_statuses and volume_statuses[src_cfg.volume].active:
+        if (
+            src_cfg.slug not in src_diag_cache
+            and volume_statuses[src_cfg.volume].active
+        ):
             src_vol = config.volumes[src_cfg.volume]
             caps = volume_capabilities[src_cfg.volume]
-            endpoint_statuses[src_key] = check_source_endpoint(
+            src_diag_cache[src_cfg.slug] = check_source_endpoint(
                 src_cfg, src_vol, caps, re
             )
 
-        dst_key: tuple[str, SyncEndpointRole] = (dst_cfg.slug, "destination")
-        if dst_key not in endpoint_statuses and volume_statuses[dst_cfg.volume].active:
+        if (
+            dst_cfg.slug not in dst_diag_cache
+            and volume_statuses[dst_cfg.volume].active
+        ):
             dst_vol = config.volumes[dst_cfg.volume]
             caps = volume_capabilities[dst_cfg.volume]
-            endpoint_statuses[dst_key] = check_destination_endpoint(
+            dst_diag_cache[dst_cfg.slug] = check_destination_endpoint(
                 dst_cfg, dst_vol, caps, re
             )
 
-    # Phase 4: Sync checks (uses all pre-computed caches)
+    # Phase 4: Sync checks (translates diagnostics + capabilities into reasons)
     sync_statuses: dict[str, SyncStatus] = {}
     for slug, sync in syncs.items():
         sync_statuses[slug] = check_sync(
@@ -318,7 +423,8 @@ def check_all_syncs(
             config.syncs,
             dry_run=dry_run,
             volume_capabilities=volume_capabilities,
-            endpoint_statuses=endpoint_statuses,
+            source_diagnostics_cache=src_diag_cache,
+            destination_diagnostics_cache=dst_diag_cache,
         )
         if on_progress:
             on_progress(slug)

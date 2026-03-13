@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import enum
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, computed_field
 
@@ -19,8 +18,6 @@ from ..conventions import (
     STAGING_DIR,
     VOLUME_SENTINEL,
 )
-
-SyncEndpointRole = Literal["source", "destination"]
 
 
 class VolumeReason(str, enum.Enum):
@@ -105,21 +102,88 @@ class VolumeStatus(BaseModel):
         return not self.reasons
 
 
-class SyncEndpointStatus(BaseModel):
-    """Cached check results for a sync endpoint (source or destination)."""
+class LatestSymlinkState(BaseModel):
+    """Observed state of a ``latest`` symlink at an endpoint.
+
+    Captures the raw readlink result and whether the resolved
+    target directory exists, without interpreting what constitutes
+    an error.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    exists: bool
+    raw_target: str | None = None
+    """Raw readlink value.  ``/dev/null``, a relative path, or ``None``
+    when the symlink is absent or unreadable."""
+    target_valid: bool | None = None
+    """Whether the resolved target directory exists.
+    ``None`` when there is no symlink or target is ``/dev/null``."""
+    snapshot_name: str | None = None
+    """Snapshot name extracted from the target path.
+    ``None`` when target is ``/dev/null``, invalid, or absent."""
+
+
+class BtrfsSubvolumeDiagnostics(BaseModel):
+    """Btrfs-specific diagnostics for a destination endpoint.
+
+    Present only when btrfs snapshots are enabled, the filesystem
+    is btrfs, and ``stat`` is available on the host.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    is_subvolume: bool
+    staging_dir_exists: bool
+    staging_dir_writable: bool | None = None
+    """``None`` when staging dir does not exist."""
+
+
+class SnapshotDirsDiagnostics(BaseModel):
+    """Snapshot directory diagnostics shared by btrfs and hard-link modes.
+
+    Present only when the endpoint has any snapshot mode enabled.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    exists: bool
+    writable: bool | None = None
+    """``None`` when snapshots dir does not exist."""
+
+
+class SourceEndpointDiagnostics(BaseModel):
+    """Observed state of a source sync endpoint.
+
+    Pure diagnostics — no interpretation of what constitutes an error.
+    The sync layer translates these into ``SyncReason`` values based
+    on the sync's configuration and context.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     endpoint_slug: str
-    role: SyncEndpointRole
-    reasons: list[SyncReason]
-    latest_target: str | None = None
-    """Snapshot name from the ``latest`` symlink.
+    sentinel_exists: bool
+    snapshot_dirs: SnapshotDirsDiagnostics | None = None
+    latest: LatestSymlinkState | None = None
 
-    ``None`` when symlink is absent, invalid, or points to ``/dev/null``.
-    For source endpoints, ``/dev/null`` is NOT added to reasons here —
-    that interpretation depends on sync-level context (upstream deps, dry-run).
+
+class DestinationEndpointDiagnostics(BaseModel):
+    """Observed state of a destination sync endpoint.
+
+    Pure diagnostics — no interpretation of what constitutes an error.
+    The sync layer translates these into ``SyncReason`` values based
+    on the sync's configuration and context.
     """
+
+    model_config = ConfigDict(frozen=True)
+
+    endpoint_slug: str
+    sentinel_exists: bool
+    endpoint_writable: bool
+    btrfs: BtrfsSubvolumeDiagnostics | None = None
+    snapshot_dirs: SnapshotDirsDiagnostics | None = None
+    latest: LatestSymlinkState | None = None
 
 
 class SyncStatus(BaseModel):
@@ -129,8 +193,8 @@ class SyncStatus(BaseModel):
     config: SyncConfig
     source_status: VolumeStatus
     destination_status: VolumeStatus
-    source_endpoint_status: SyncEndpointStatus | None = None
-    destination_endpoint_status: SyncEndpointStatus | None = None
+    source_diagnostics: SourceEndpointDiagnostics | None = None
+    destination_diagnostics: DestinationEndpointDiagnostics | None = None
     reasons: list[SyncReason]
     destination_latest_target: str | None = None
     """Snapshot name from the destination ``latest`` symlink.

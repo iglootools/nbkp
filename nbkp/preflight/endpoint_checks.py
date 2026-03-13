@@ -1,8 +1,13 @@
-"""Sync-endpoint-level checks (source and destination).
+"""Sync-endpoint-level diagnostics (source and destination).
 
-Each function checks subdir-dependent properties of an endpoint,
-reading host/volume-level capabilities from the pre-computed
-``VolumeCapabilities`` to avoid redundant remote commands.
+Each function observes subdir-dependent state of an endpoint and
+returns a diagnostics model.  No ``SyncReason`` interpretation
+happens here — the sync layer translates diagnostics + capabilities
+into reasons.
+
+``VolumeCapabilities`` is accepted to decide *which* checks to run
+(e.g. btrfs subvolume only when the filesystem is btrfs), avoiding
+wasteful remote commands.
 """
 
 from __future__ import annotations
@@ -12,20 +17,29 @@ from ..config import (
     SyncEndpoint,
     Volume,
 )
-from ..conventions import DESTINATION_SENTINEL, SNAPSHOTS_DIR, SOURCE_SENTINEL
+from ..conventions import (
+    DESTINATION_SENTINEL,
+    DEVNULL_TARGET,
+    LATEST_LINK,
+    SNAPSHOTS_DIR,
+    SOURCE_SENTINEL,
+    STAGING_DIR,
+)
 from .queries import (
     _check_directory_exists,
     _check_directory_writable,
     _check_endpoint_sentinel,
+    _check_symlink_exists,
+    _read_symlink_target,
     _resolve_endpoint,
 )
-from .snapshot_checks import (
-    _check_btrfs_subvolume,
-    _check_latest_symlink,
-)
+from .snapshot_checks import _check_btrfs_subvolume
 from .status import (
-    SyncEndpointStatus,
-    SyncReason,
+    BtrfsSubvolumeDiagnostics,
+    DestinationEndpointDiagnostics,
+    LatestSymlinkState,
+    SnapshotDirsDiagnostics,
+    SourceEndpointDiagnostics,
     VolumeCapabilities,
 )
 
@@ -35,50 +49,25 @@ def check_source_endpoint(
     volume: Volume,
     capabilities: VolumeCapabilities,
     resolved_endpoints: ResolvedEndpoints,
-) -> SyncEndpointStatus:
-    """Check a source sync endpoint.
-
-    Validates sentinel, rsync availability, and snapshot readiness.
-    The ``latest`` symlink is read and cached in ``latest_target``,
-    but ``/dev/null`` interpretation is deferred to ``check_sync``.
-    """
-    reasons: list[SyncReason] = []
-    latest_target: str | None = None
-
-    # Sentinel
-    if not _check_endpoint_sentinel(
+) -> SourceEndpointDiagnostics:
+    """Observe state of a source sync endpoint."""
+    sentinel_exists = _check_endpoint_sentinel(
         volume, endpoint.subdir, SOURCE_SENTINEL, resolved_endpoints
-    ):
-        reasons.append(SyncReason.SOURCE_SENTINEL_NOT_FOUND)
+    )
 
-    # Rsync (from capabilities — no remote call)
-    if not capabilities.has_rsync:
-        reasons.append(SyncReason.SOURCE_RSYNC_NOT_FOUND)
-    elif not capabilities.rsync_version_ok:
-        reasons.append(SyncReason.SOURCE_RSYNC_TOO_OLD)
+    snapshot_dirs: SnapshotDirsDiagnostics | None = None
+    latest: LatestSymlinkState | None = None
 
-    # Snapshot-enabled source checks
     if endpoint.snapshot_mode != "none":
         src_ep = _resolve_endpoint(volume, endpoint.subdir)
-        snaps_path = f"{src_ep}/{SNAPSHOTS_DIR}"
-        if not _check_directory_exists(volume, snaps_path, resolved_endpoints):
-            reasons.append(SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND)
+        snapshot_dirs = _check_snapshot_dirs(volume, src_ep, resolved_endpoints)
+        latest = _read_latest_state(volume, src_ep, resolved_endpoints)
 
-        # Read latest symlink (raw — /dev/null interpretation deferred)
-        latest_target, latest_reasons = _check_latest_symlink(
-            volume,
-            src_ep,
-            SyncReason.SOURCE_LATEST_NOT_FOUND,
-            SyncReason.SOURCE_LATEST_INVALID,
-            resolved_endpoints,
-        )
-        reasons.extend(latest_reasons)
-
-    return SyncEndpointStatus(
+    return SourceEndpointDiagnostics(
         endpoint_slug=endpoint.slug,
-        role="source",
-        reasons=reasons,
-        latest_target=latest_target,
+        sentinel_exists=sentinel_exists,
+        snapshot_dirs=snapshot_dirs,
+        latest=latest,
     )
 
 
@@ -87,120 +76,105 @@ def check_destination_endpoint(
     volume: Volume,
     capabilities: VolumeCapabilities,
     resolved_endpoints: ResolvedEndpoints,
-) -> SyncEndpointStatus:
-    """Check a destination sync endpoint.
-
-    Validates sentinel, rsync availability, writability, and
-    snapshot-specific filesystem/directory checks.  Reads btrfs
-    and hard-link status from ``capabilities`` (no remote calls
-    for host-level checks).
-    """
-    reasons: list[SyncReason] = []
-    dst_latest_target: str | None = None
-
-    # Sentinel
-    if not _check_endpoint_sentinel(
+) -> DestinationEndpointDiagnostics:
+    """Observe state of a destination sync endpoint."""
+    sentinel_exists = _check_endpoint_sentinel(
         volume, endpoint.subdir, DESTINATION_SENTINEL, resolved_endpoints
-    ):
-        reasons.append(SyncReason.DESTINATION_SENTINEL_NOT_FOUND)
-
-    # Rsync (from capabilities)
-    if not capabilities.has_rsync:
-        reasons.append(SyncReason.DESTINATION_RSYNC_NOT_FOUND)
-    elif not capabilities.rsync_version_ok:
-        reasons.append(SyncReason.DESTINATION_RSYNC_TOO_OLD)
-
-    # Btrfs snapshot checks
-    if endpoint.btrfs_snapshots.enabled:
-        if not capabilities.has_btrfs:
-            reasons.append(SyncReason.DESTINATION_BTRFS_NOT_FOUND)
-        else:
-            if not capabilities.has_stat:
-                reasons.append(SyncReason.DESTINATION_STAT_NOT_FOUND)
-            if not capabilities.has_findmnt:
-                reasons.append(SyncReason.DESTINATION_FINDMNT_NOT_FOUND)
-
-            if capabilities.has_stat:
-                if not capabilities.is_btrfs_filesystem:
-                    reasons.append(SyncReason.DESTINATION_NOT_BTRFS)
-                elif not _check_btrfs_subvolume(
-                    volume, endpoint.subdir, resolved_endpoints
-                ):
-                    reasons.append(SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME)
-                else:
-                    if (
-                        capabilities.has_findmnt
-                        and not capabilities.btrfs_user_subvol_rm
-                    ):
-                        reasons.append(
-                            SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM
-                        )
-                    reasons.extend(
-                        _check_snapshot_dirs(
-                            volume, endpoint, resolved_endpoints, btrfs=True
-                        )
-                    )
-
-    # Hard-link snapshot checks
-    elif endpoint.hard_link_snapshots.enabled:
-        if not capabilities.has_stat:
-            reasons.append(SyncReason.DESTINATION_STAT_NOT_FOUND)
-        else:
-            if not capabilities.hardlink_supported:
-                reasons.append(SyncReason.DESTINATION_NO_HARDLINK_SUPPORT)
-            reasons.extend(
-                _check_snapshot_dirs(volume, endpoint, resolved_endpoints, btrfs=False)
-            )
-
-    # Endpoint writability
-    dst_ep = _resolve_endpoint(volume, endpoint.subdir)
-    if not _check_directory_writable(volume, dst_ep, resolved_endpoints):
-        reasons.append(SyncReason.DESTINATION_ENDPOINT_NOT_WRITABLE)
-
-    # Destination latest symlink (snapshot modes)
-    if endpoint.snapshot_mode != "none":
-        dst_ep = _resolve_endpoint(volume, endpoint.subdir)
-        dst_latest_target, latest_reasons = _check_latest_symlink(
-            volume,
-            dst_ep,
-            SyncReason.DESTINATION_LATEST_NOT_FOUND,
-            SyncReason.DESTINATION_LATEST_INVALID,
-            resolved_endpoints,
-        )
-        reasons.extend(latest_reasons)
-
-    return SyncEndpointStatus(
-        endpoint_slug=endpoint.slug,
-        role="destination",
-        reasons=reasons,
-        latest_target=dst_latest_target,
     )
+
+    dst_ep = _resolve_endpoint(volume, endpoint.subdir)
+    endpoint_writable = _check_directory_writable(volume, dst_ep, resolved_endpoints)
+
+    # Btrfs diagnostics (subvolume + staging dir)
+    btrfs: BtrfsSubvolumeDiagnostics | None = None
+    if (
+        endpoint.btrfs_snapshots.enabled
+        and capabilities.has_stat
+        and capabilities.is_btrfs_filesystem
+    ):
+        is_subvolume = _check_btrfs_subvolume(
+            volume, endpoint.subdir, resolved_endpoints
+        )
+        staging_path = f"{dst_ep}/{STAGING_DIR}"
+        staging_exists = _check_directory_exists(
+            volume, staging_path, resolved_endpoints
+        )
+        staging_writable = (
+            _check_directory_writable(volume, staging_path, resolved_endpoints)
+            if staging_exists
+            else None
+        )
+        btrfs = BtrfsSubvolumeDiagnostics(
+            is_subvolume=is_subvolume,
+            staging_dir_exists=staging_exists,
+            staging_dir_writable=staging_writable,
+        )
+
+    # Snapshot dirs (both btrfs and hard-link)
+    snapshot_dirs: SnapshotDirsDiagnostics | None = None
+    if endpoint.snapshot_mode != "none":
+        snapshot_dirs = _check_snapshot_dirs(volume, dst_ep, resolved_endpoints)
+
+    # Latest symlink
+    latest: LatestSymlinkState | None = None
+    if endpoint.snapshot_mode != "none":
+        latest = _read_latest_state(volume, dst_ep, resolved_endpoints)
+
+    return DestinationEndpointDiagnostics(
+        endpoint_slug=endpoint.slug,
+        sentinel_exists=sentinel_exists,
+        endpoint_writable=endpoint_writable,
+        btrfs=btrfs,
+        snapshot_dirs=snapshot_dirs,
+        latest=latest,
+    )
+
+
+# ── Helpers ─────────────────────────────────────────────────
 
 
 def _check_snapshot_dirs(
     volume: Volume,
-    endpoint: SyncEndpoint,
+    endpoint_path: str,
     resolved_endpoints: ResolvedEndpoints,
-    *,
-    btrfs: bool,
-) -> list[SyncReason]:
+) -> SnapshotDirsDiagnostics:
     """Check snapshot directory existence and writability."""
-    from ..conventions import STAGING_DIR
+    snaps_path = f"{endpoint_path}/{SNAPSHOTS_DIR}"
+    exists = _check_directory_exists(volume, snaps_path, resolved_endpoints)
+    writable = (
+        _check_directory_writable(volume, snaps_path, resolved_endpoints)
+        if exists
+        else None
+    )
+    return SnapshotDirsDiagnostics(exists=exists, writable=writable)
 
-    reasons: list[SyncReason] = []
-    ep = _resolve_endpoint(volume, endpoint.subdir)
 
-    if btrfs:
-        staging_path = f"{ep}/{STAGING_DIR}"
-        if not _check_directory_exists(volume, staging_path, resolved_endpoints):
-            reasons.append(SyncReason.DESTINATION_TMP_NOT_FOUND)
-        elif not _check_directory_writable(volume, staging_path, resolved_endpoints):
-            reasons.append(SyncReason.DESTINATION_STAGING_DIR_NOT_WRITABLE)
+def _read_latest_state(
+    volume: Volume,
+    endpoint_path: str,
+    resolved_endpoints: ResolvedEndpoints,
+) -> LatestSymlinkState:
+    """Read the latest symlink and return its observed state."""
+    latest_path = f"{endpoint_path}/{LATEST_LINK}"
+    exists = _check_symlink_exists(volume, latest_path, resolved_endpoints)
+    if not exists:
+        return LatestSymlinkState(exists=False)
 
-    snaps_path = f"{ep}/{SNAPSHOTS_DIR}"
-    if not _check_directory_exists(volume, snaps_path, resolved_endpoints):
-        reasons.append(SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND)
-    elif not _check_directory_writable(volume, snaps_path, resolved_endpoints):
-        reasons.append(SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE)
+    raw_target = _read_symlink_target(volume, latest_path, resolved_endpoints)
+    if raw_target is None:
+        return LatestSymlinkState(exists=False)
 
-    return reasons
+    target = str(raw_target)
+    if target == DEVNULL_TARGET:
+        return LatestSymlinkState(exists=True, raw_target=target)
+
+    resolved = f"{endpoint_path}/{target}"
+    target_valid = _check_directory_exists(volume, resolved, resolved_endpoints)
+    snapshot_name = target.rsplit("/", 1)[-1] if target_valid else None
+
+    return LatestSymlinkState(
+        exists=True,
+        raw_target=target,
+        target_valid=target_valid,
+        snapshot_name=snapshot_name,
+    )
