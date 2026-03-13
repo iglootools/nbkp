@@ -16,7 +16,6 @@ graph TD
     remote["remote/"]
     scriptgen["scriptgen"]
     sync["sync/"]
-    testkit["testkit/"]
 
     cli --> config
     cli --> democli
@@ -29,9 +28,9 @@ graph TD
     democli --> config
     democli --> ordering
     democli --> output
+    democli --> preflight
     democli --> remote
     democli --> sync
-    democli --> testkit
     ordering --> config
     output --> config
     output --> preflight
@@ -41,6 +40,7 @@ graph TD
     preflight --> remote
     preflight --> sync
     remote --> config
+    remote --> fsprotocol
     scriptgen --> config
     scriptgen --> fsprotocol
     scriptgen --> ordering
@@ -51,11 +51,6 @@ graph TD
     sync --> ordering
     sync --> preflight
     sync --> remote
-    testkit --> config
-    testkit --> fsprotocol
-    testkit --> preflight
-    testkit --> remote
-    testkit --> sync
 ```
 <!-- END MODULE OVERVIEW -->
 

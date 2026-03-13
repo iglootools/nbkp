@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from ...config import Config
-from ...sync import PruneResult, SyncResult
 from ...fsprotocol import SNAPSHOTS_DIR
+from .. import PruneResult, SyncResult
 
 
 def _snap_base(config: Config, sync_slug: str) -> str:

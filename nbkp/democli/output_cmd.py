@@ -31,14 +31,14 @@ from ..sync.output import (
     print_human_prune_results,
     print_human_results,
 )
-from ..testkit.gen.check import (
+from ..config.testkit import config_show_config
+from ..preflight.testkit import (
     check_config,
     check_data,
     troubleshoot_config,
     troubleshoot_data,
 )
-from ..testkit.gen.config import config_show_config
-from ..testkit.gen.sync import (
+from ..sync.testkit.runner import (
     dry_run_results,
     prune_dry_run_results,
     prune_results,

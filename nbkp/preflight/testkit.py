@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ...fsprotocol import Snapshot
-from ...preflight import (
+from ..fsprotocol import Snapshot
+from . import (
     BtrfsSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
     LatestSymlinkState,
@@ -15,7 +15,7 @@ from ...preflight import (
     VolumeError,
     VolumeStatus,
 )
-from ...config import (
+from ..config import (
     BtrfsSnapshotConfig,
     Config,
     HardLinkSnapshotConfig,
@@ -25,7 +25,7 @@ from ...config import (
     SyncConfig,
     SyncEndpoint,
 )
-from .config import (
+from ..config.testkit import (
     base_ssh_endpoints,
     base_sync_endpoints,
     base_syncs,

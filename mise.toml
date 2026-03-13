@@ -124,7 +124,7 @@ run = "poetry run pytest tests/integration_docker/ -v"
 [tasks.test-integration-docker-btrfs]
 description = "Run local btrfs tests inside Docker (privileged)"
 run = """
-docker build -t nbkp-btrfs-test -f nbkp/testkit/dockerbuild/Dockerfile.btrfs-local-test .
+docker build -t nbkp-btrfs-test -f nbkp/remote/testkit/dockerbuild/Dockerfile.btrfs-local-test .
 # The bind mount exposes the host's .venv.  Poetry inside the Linux
 # container sees a macOS venv, considers it broken, and recreates it
 # with Linux binaries — overwriting the host's .venv.  The anonymous

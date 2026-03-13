@@ -32,7 +32,7 @@ from ..config import (
 # Docker-dependent imports are deferred to seed --docker.
 # They require the 'docker' extra: pipx install nbkp[docker]
 try:
-    from ..testkit.docker import (
+    from ..remote.testkit.docker import (
         BASTION_CONTAINER_NAME,
         STORAGE_CONTAINER_NAME,
         DOCKER_DIR,
@@ -52,7 +52,7 @@ try:
     _HAS_DOCKER = True
 except ImportError:
     _HAS_DOCKER = False
-from ..testkit.gen.fs import (
+from ..sync.testkit.seed import (
     SEED_EXCLUDE_FILTERS,
     create_seed_sentinels,
     seed_volume,

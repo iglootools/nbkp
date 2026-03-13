@@ -304,7 +304,7 @@ def test_btrfs_local_has_execution_path() -> None:
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_DOCKERFILE = "nbkp/testkit/dockerbuild/Dockerfile.btrfs-local-test"
+_DOCKERFILE = "nbkp/remote/testkit/dockerbuild/Dockerfile.btrfs-local-test"
 _IMAGE_TAG = "nbkp-btrfs-test:latest"
 
 

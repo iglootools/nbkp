@@ -22,7 +22,7 @@ from ...fsprotocol import (
     STAGING_DIR,
     VOLUME_SENTINEL,
 )
-from ...sync.rsync import resolve_path
+from ..rsync import resolve_path
 
 _CHUNK_SIZE = 1024 * 1024  # 1 MB
 

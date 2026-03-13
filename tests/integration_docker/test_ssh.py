@@ -37,11 +37,11 @@ from nbkp.remote.sshexec import (
     run_remote_command as ssh_run_remote,
 )
 from nbkp.sync.rsync import run_rsync
-from nbkp.testkit.docker import (
+from nbkp.remote.testkit.docker import (
     REMOTE_BACKUP_PATH,
     generate_ssh_keypair,
 )
-from nbkp.testkit.gen.fs import create_seed_sentinels
+from nbkp.sync.testkit.seed import create_seed_sentinels
 
 from tests._docker_fixtures import ssh_exec
 

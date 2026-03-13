@@ -14,11 +14,11 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.testkit.docker import (
+from nbkp.remote.testkit.docker import (
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_PATH,
 )
-from nbkp.testkit.gen.fs import (
+from nbkp.sync.testkit.seed import (
     SEED_EXCLUDE_FILTERS,
     create_seed_sentinels,
     seed_volume,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ...config import (
+from . import (
     BtrfsSnapshotConfig,
     Config,
     HardLinkSnapshotConfig,

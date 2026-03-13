@@ -70,7 +70,7 @@
 - **Domain Logic Consistency**
   - When making changes to the config schema/models or status checks, make sure to update **all** of the following:
     - **Troubleshoot output** (`nbkp/preflight/output.py`): add a `case` in the troubleshoot match-case for every new `SyncError` or `VolumeError`, with actionable remediation text.
-    - **Seed / demo test data** (`nbkp/testkit/gen/check.py`): add a scenario to `troubleshoot_config` + `troubleshoot_data` that exercises the new error, so `nbkp-demo output` renders it.
+    - **Seed / demo test data** (`nbkp/preflight/testkit.py`): add a scenario to `troubleshoot_config` + `troubleshoot_data` that exercises the new error, so `nbkp-demo output` renders it.
     - **CLI inactive-errors set** (`nbkp/cli.py`, `_INACTIVE_ERRORS`): if the new error should be treated as a non-fatal skip (like missing sentinels), add it here.
     - The demo CLI (`nbkp/democli.py`) to generate new test data that reflects the changes.
     - The `cli` CLI app to support the new functionality, and update the formatting logic in `output.py` if necessary.

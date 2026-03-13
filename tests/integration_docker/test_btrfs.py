@@ -27,7 +27,7 @@ from nbkp.sync.snapshots.common import (
     list_snapshots,
     update_latest_symlink,
 )
-from nbkp.testkit.docker import REMOTE_BTRFS_PATH
+from nbkp.remote.testkit.docker import REMOTE_BTRFS_PATH
 
 from tests._docker_fixtures import ssh_exec
 
