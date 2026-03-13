@@ -146,6 +146,12 @@ class Config(_BaseModel):
         """Resolve the destination sync endpoint for a sync."""
         return self.sync_endpoints[sync.destination]
 
+    def known_locations(self) -> list[str]:
+        """All distinct location tags declared across SSH endpoints."""
+        return sorted(
+            {loc for ep in self.ssh_endpoints.values() for loc in ep.location_list}
+        )
+
     def orphan_ssh_endpoints(self) -> list[str]:
         """SSH endpoints not referenced by any volume or proxy-jump chain."""
         used = {

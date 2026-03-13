@@ -224,6 +224,95 @@ class TestConfigShowCommand:
         assert result.exit_code == 2
 
 
+def _config_with_locations() -> Config:
+    """Config with location-tagged SSH endpoints for filter validation tests."""
+    server_home = SshEndpoint(slug="nas-home", host="192.168.1.50", location="home")
+    server_travel = SshEndpoint(
+        slug="nas-travel", host="nas.example.com", location="travel"
+    )
+    src = LocalVolume(slug="local-data", path="/mnt/data")
+    dst = RemoteVolume(
+        slug="nas",
+        ssh_endpoint="nas-home",
+        ssh_endpoints=["nas-home", "nas-travel"],
+        path="/volume1/backups",
+    )
+    ep_src = SyncEndpoint(slug="ep-src", volume="local-data")
+    ep_dst = SyncEndpoint(slug="ep-dst", volume="nas")
+    sync = SyncConfig(slug="backup", source="ep-src", destination="ep-dst")
+    return Config(
+        ssh_endpoints={"nas-home": server_home, "nas-travel": server_travel},
+        volumes={"local-data": src, "nas": dst},
+        sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
+        syncs={"backup": sync},
+    )
+
+
+class TestLocationValidation:
+    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.cli.common.load_config")
+    def test_unknown_location_rejected(
+        self, mock_load: MagicMock, mock_checks: MagicMock
+    ) -> None:
+        mock_load.return_value = _config_with_locations()
+        result = runner.invoke(
+            app, ["check", "--config", "/f.yaml", "--location", "office"]
+        )
+        assert result.exit_code == 2
+        assert "unknown location 'office'" in result.output
+        assert "home" in result.output
+        assert "travel" in result.output
+
+    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.cli.common.load_config")
+    def test_unknown_exclude_location_rejected(
+        self, mock_load: MagicMock, mock_checks: MagicMock
+    ) -> None:
+        mock_load.return_value = _config_with_locations()
+        result = runner.invoke(
+            app, ["check", "--config", "/f.yaml", "--exclude-location", "office"]
+        )
+        assert result.exit_code == 2
+        assert "unknown location 'office'" in result.output
+        assert "--exclude-location" in result.output
+
+    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.cli.common.load_config")
+    def test_known_location_accepted(
+        self, mock_load: MagicMock, mock_checks: MagicMock
+    ) -> None:
+        config = _config_with_locations()
+        mock_load.return_value = config
+        vol_s = {
+            slug: VolumeStatus(slug=slug, config=config.volumes[slug], errors=[])
+            for slug in config.volumes
+        }
+        sync_s = {
+            slug: SyncStatus(
+                slug=slug,
+                config=config.syncs[slug],
+                source_status=vol_s["local-data"],
+                destination_status=vol_s["nas"],
+                errors=[],
+            )
+            for slug in config.syncs
+        }
+        mock_checks.return_value = (vol_s, sync_s)
+        result = runner.invoke(
+            app, ["check", "--config", "/f.yaml", "--location", "home"]
+        )
+        assert result.exit_code == 0
+
+    @patch("nbkp.cli.common.load_config")
+    def test_location_on_config_without_locations(self, mock_load: MagicMock) -> None:
+        mock_load.return_value = _sample_config()
+        result = runner.invoke(
+            app, ["check", "--config", "/f.yaml", "--location", "home"]
+        )
+        assert result.exit_code == 2
+        assert "no locations are defined" in result.output
+
+
 class TestCheckCommand:
     @patch("nbkp.cli.common.check_all_syncs")
     @patch("nbkp.cli.common.load_config")

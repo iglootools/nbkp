@@ -26,6 +26,46 @@ def _minimal_config(
     )
 
 
+class TestKnownLocations:
+    def test_collects_from_location_field(self) -> None:
+        cfg = _minimal_config(
+            ssh_endpoints={
+                "a": SshEndpoint(slug="a", host="h1", location="home"),
+                "b": SshEndpoint(slug="b", host="h2", location="travel"),
+            },
+        )
+        assert cfg.known_locations() == ["home", "travel"]
+
+    def test_collects_from_locations_field(self) -> None:
+        cfg = _minimal_config(
+            ssh_endpoints={
+                "a": SshEndpoint(slug="a", host="h1", locations=["home", "office"]),
+            },
+        )
+        assert cfg.known_locations() == ["home", "office"]
+
+    def test_deduplicates(self) -> None:
+        cfg = _minimal_config(
+            ssh_endpoints={
+                "a": SshEndpoint(slug="a", host="h1", location="home"),
+                "b": SshEndpoint(slug="b", host="h2", locations=["home", "travel"]),
+            },
+        )
+        assert cfg.known_locations() == ["home", "travel"]
+
+    def test_empty_when_no_locations(self) -> None:
+        cfg = _minimal_config(
+            ssh_endpoints={
+                "a": SshEndpoint(slug="a", host="h1"),
+            },
+        )
+        assert cfg.known_locations() == []
+
+    def test_empty_config(self) -> None:
+        cfg = _minimal_config()
+        assert cfg.known_locations() == []
+
+
 class TestOrphanSshEndpoints:
     def test_all_used_by_volume(self) -> None:
         cfg = _minimal_config(
