@@ -6,7 +6,6 @@ module can use it without introducing circular dependencies.
 
 from __future__ import annotations
 
-import re
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
@@ -50,8 +49,8 @@ def parse_snapshot_name(name: str) -> datetime:
     Handles both standard colons (``2026-03-06T14:30:00.000Z``)
     and macOS hyphens (``2026-03-06T14-30-00.000Z``).
     """
-    normalized = re.sub(r"T(\d{2})-(\d{2})-(\d{2})", r"T\1:\2:\3", name)
-    return datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+    date, time = name.replace("Z", "+00:00").split("T", 1)
+    return datetime.fromisoformat(f"{date}T{time.replace('-', ':')}")
 
 
 class Snapshot(BaseModel):
