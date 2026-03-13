@@ -54,20 +54,21 @@ def check_source_endpoint(
     sentinel_exists = _check_endpoint_sentinel(
         volume, endpoint.subdir, SOURCE_SENTINEL, resolved_endpoints
     )
-
-    snapshot_dirs: SnapshotDirsDiagnostics | None = None
-    latest: LatestSymlinkState | None = None
-
-    if endpoint.snapshot_mode != "none":
-        src_ep = _resolve_endpoint(volume, endpoint.subdir)
-        snapshot_dirs = _check_snapshot_dirs(volume, src_ep, resolved_endpoints)
-        latest = _read_latest_state(volume, src_ep, resolved_endpoints)
+    src_ep = _resolve_endpoint(volume, endpoint.subdir)
 
     return SourceEndpointDiagnostics(
         endpoint_slug=endpoint.slug,
         sentinel_exists=sentinel_exists,
-        snapshot_dirs=snapshot_dirs,
-        latest=latest,
+        **(
+            {
+                "snapshot_dirs": _check_snapshot_dirs(
+                    volume, src_ep, resolved_endpoints
+                ),
+                "latest": _read_latest_state(volume, src_ep, resolved_endpoints),
+            }
+            if endpoint.snapshot_mode != "none"
+            else {}
+        ),
     )
 
 
@@ -81,52 +82,55 @@ def check_destination_endpoint(
     sentinel_exists = _check_endpoint_sentinel(
         volume, endpoint.subdir, DESTINATION_SENTINEL, resolved_endpoints
     )
-
     dst_ep = _resolve_endpoint(volume, endpoint.subdir)
-    endpoint_writable = _check_directory_writable(volume, dst_ep, resolved_endpoints)
-
-    # Btrfs diagnostics (subvolume + staging dir)
-    btrfs: BtrfsSubvolumeDiagnostics | None = None
-    if (
-        endpoint.btrfs_snapshots.enabled
-        and capabilities.has_stat
-        and capabilities.is_btrfs_filesystem
-    ):
-        is_subvolume = _check_btrfs_subvolume(
-            volume, endpoint.subdir, resolved_endpoints
-        )
-        staging_path = f"{dst_ep}/{STAGING_DIR}"
-        staging_exists = _check_directory_exists(
-            volume, staging_path, resolved_endpoints
-        )
-        staging_writable = (
-            _check_directory_writable(volume, staging_path, resolved_endpoints)
-            if staging_exists
-            else None
-        )
-        btrfs = BtrfsSubvolumeDiagnostics(
-            is_subvolume=is_subvolume,
-            staging_dir_exists=staging_exists,
-            staging_dir_writable=staging_writable,
-        )
-
-    # Snapshot dirs (both btrfs and hard-link)
-    snapshot_dirs: SnapshotDirsDiagnostics | None = None
-    if endpoint.snapshot_mode != "none":
-        snapshot_dirs = _check_snapshot_dirs(volume, dst_ep, resolved_endpoints)
-
-    # Latest symlink
-    latest: LatestSymlinkState | None = None
-    if endpoint.snapshot_mode != "none":
-        latest = _read_latest_state(volume, dst_ep, resolved_endpoints)
 
     return DestinationEndpointDiagnostics(
         endpoint_slug=endpoint.slug,
         sentinel_exists=sentinel_exists,
-        endpoint_writable=endpoint_writable,
-        btrfs=btrfs,
-        snapshot_dirs=snapshot_dirs,
-        latest=latest,
+        endpoint_writable=_check_directory_writable(volume, dst_ep, resolved_endpoints),
+        btrfs=_check_btrfs_diagnostics(
+            endpoint, volume, capabilities, dst_ep, resolved_endpoints
+        ),
+        **(
+            {
+                "snapshot_dirs": _check_snapshot_dirs(
+                    volume, dst_ep, resolved_endpoints
+                ),
+                "latest": _read_latest_state(volume, dst_ep, resolved_endpoints),
+            }
+            if endpoint.snapshot_mode != "none"
+            else {}
+        ),
+    )
+
+
+def _check_btrfs_diagnostics(
+    endpoint: SyncEndpoint,
+    volume: Volume,
+    capabilities: VolumeCapabilities,
+    dst_ep: str,
+    resolved_endpoints: ResolvedEndpoints,
+) -> BtrfsSubvolumeDiagnostics | None:
+    """Check btrfs subvolume and staging directory state."""
+    if not (
+        endpoint.btrfs_snapshots.enabled
+        and capabilities.has_stat
+        and capabilities.is_btrfs_filesystem
+    ):
+        return None
+
+    staging_path = f"{dst_ep}/{STAGING_DIR}"
+    staging_exists = _check_directory_exists(volume, staging_path, resolved_endpoints)
+    return BtrfsSubvolumeDiagnostics(
+        is_subvolume=_check_btrfs_subvolume(
+            volume, endpoint.subdir, resolved_endpoints
+        ),
+        staging_dir_exists=staging_exists,
+        staging_dir_writable=(
+            _check_directory_writable(volume, staging_path, resolved_endpoints)
+            if staging_exists
+            else None
+        ),
     )
 
 
@@ -156,25 +160,22 @@ def _read_latest_state(
 ) -> LatestSymlinkState:
     """Read the latest symlink and return its observed state."""
     latest_path = f"{endpoint_path}/{LATEST_LINK}"
-    exists = _check_symlink_exists(volume, latest_path, resolved_endpoints)
-    if not exists:
+    if not _check_symlink_exists(volume, latest_path, resolved_endpoints):
         return LatestSymlinkState(exists=False)
 
     raw_target = _read_symlink_target(volume, latest_path, resolved_endpoints)
     if raw_target is None:
         return LatestSymlinkState(exists=False)
-
-    target = str(raw_target)
-    if target == DEVNULL_TARGET:
-        return LatestSymlinkState(exists=True, raw_target=target)
-
-    resolved = f"{endpoint_path}/{target}"
-    target_valid = _check_directory_exists(volume, resolved, resolved_endpoints)
-    snapshot_name = target.rsplit("/", 1)[-1] if target_valid else None
-
-    return LatestSymlinkState(
-        exists=True,
-        raw_target=target,
-        target_valid=target_valid,
-        snapshot_name=snapshot_name,
-    )
+    else:
+        target = str(raw_target)
+        if target == DEVNULL_TARGET:
+            return LatestSymlinkState(exists=True, raw_target=target)
+        else:
+            resolved = f"{endpoint_path}/{target}"
+            target_valid = _check_directory_exists(volume, resolved, resolved_endpoints)
+            return LatestSymlinkState(
+                exists=True,
+                raw_target=target,
+                target_valid=target_valid,
+                snapshot_name=(target.rsplit("/", 1)[-1] if target_valid else None),
+            )

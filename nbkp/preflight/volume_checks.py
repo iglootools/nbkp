@@ -34,17 +34,26 @@ def check_volume(
     only when the volume is inactive (unreachable / excluded / missing sentinel).
     """
     re = resolved_endpoints or {}
-    match volume:
-        case LocalVolume():
-            errors = _check_local_reachability(volume)
-        case RemoteVolume():
-            errors = _check_remote_reachability(volume, re)
-
+    errors = _check_reachability(volume, re)
     if errors:
         return VolumeStatus(slug=volume.slug, config=volume, errors=errors)
+    else:
+        caps = check_volume_capabilities(volume, re)
+        return VolumeStatus(
+            slug=volume.slug, config=volume, errors=[], capabilities=caps
+        )
 
-    caps = check_volume_capabilities(volume, re)
-    return VolumeStatus(slug=volume.slug, config=volume, errors=[], capabilities=caps)
+
+def _check_reachability(
+    volume: Volume,
+    resolved_endpoints: ResolvedEndpoints,
+) -> list[VolumeError]:
+    """Check volume reachability based on volume type."""
+    match volume:
+        case LocalVolume():
+            return _check_local_reachability(volume)
+        case RemoteVolume():
+            return _check_remote_reachability(volume, resolved_endpoints)
 
 
 def check_volume_capabilities(
@@ -95,12 +104,13 @@ def _check_remote_reachability(
     """Check if a remote volume is reachable (SSH + .nbkp-vol sentinel)."""
     if volume.slug not in resolved_endpoints:
         return [VolumeError.LOCATION_EXCLUDED]
-    ep = resolved_endpoints[volume.slug]
-    sentinel_path = f"{volume.path}/{VOLUME_SENTINEL}"
-    try:
-        result = run_remote_command(
-            ep.server, ["test", "-f", sentinel_path], ep.proxy_chain
-        )
-        return [] if result.returncode == 0 else [VolumeError.UNREACHABLE]
-    except Exception:
-        return [VolumeError.UNREACHABLE]
+    else:
+        ep = resolved_endpoints[volume.slug]
+        sentinel_path = f"{volume.path}/{VOLUME_SENTINEL}"
+        try:
+            result = run_remote_command(
+                ep.server, ["test", "-f", sentinel_path], ep.proxy_chain
+            )
+            return [] if result.returncode == 0 else [VolumeError.UNREACHABLE]
+        except Exception:
+            return [VolumeError.UNREACHABLE]

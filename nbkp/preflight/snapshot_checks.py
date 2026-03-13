@@ -97,34 +97,52 @@ def _check_btrfs_dest(
     resolved_endpoints: ResolvedEndpoints,
 ) -> list[SyncError]:
     """Run btrfs filesystem, subvolume, and directory checks."""
-    errors: list[SyncError] = []
     if not _check_btrfs_filesystem(dst_vol, resolved_endpoints):
-        errors.append(SyncError.DESTINATION_NOT_BTRFS)
-    elif not _check_btrfs_subvolume(
-        dst_vol,
-        dst_subdir,
-        resolved_endpoints,
-    ):
-        errors.append(SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME)
+        return [SyncError.DESTINATION_NOT_BTRFS]
+    elif not _check_btrfs_subvolume(dst_vol, dst_subdir, resolved_endpoints):
+        return [SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME]
     else:
-        if has_findmnt and not _check_btrfs_mount_option(
-            dst_vol,
-            "user_subvol_rm_allowed",
-            resolved_endpoints,
-        ):
-            errors.append(SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM)
         ep = _resolve_endpoint(dst_vol, dst_subdir)
-        staging_path = f"{ep}/{STAGING_DIR}"
-        if not _check_directory_exists(dst_vol, staging_path, resolved_endpoints):
-            errors.append(SyncError.DESTINATION_TMP_NOT_FOUND)
-        elif not _check_directory_writable(dst_vol, staging_path, resolved_endpoints):
-            errors.append(SyncError.DESTINATION_STAGING_DIR_NOT_WRITABLE)
-        snaps_path = f"{ep}/{SNAPSHOTS_DIR}"
-        if not _check_directory_exists(dst_vol, snaps_path, resolved_endpoints):
-            errors.append(SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND)
-        elif not _check_directory_writable(dst_vol, snaps_path, resolved_endpoints):
-            errors.append(SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE)
-    return errors
+        return [
+            *(
+                [SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM]
+                if has_findmnt
+                and not _check_btrfs_mount_option(
+                    dst_vol, "user_subvol_rm_allowed", resolved_endpoints
+                )
+                else []
+            ),
+            *_check_staging_dir(dst_vol, f"{ep}/{STAGING_DIR}", resolved_endpoints),
+            *_check_snapshots_dir(dst_vol, f"{ep}/{SNAPSHOTS_DIR}", resolved_endpoints),
+        ]
+
+
+def _check_staging_dir(
+    volume: Volume,
+    path: str,
+    resolved_endpoints: ResolvedEndpoints,
+) -> list[SyncError]:
+    """Check staging directory exists and is writable."""
+    if not _check_directory_exists(volume, path, resolved_endpoints):
+        return [SyncError.DESTINATION_TMP_NOT_FOUND]
+    elif not _check_directory_writable(volume, path, resolved_endpoints):
+        return [SyncError.DESTINATION_STAGING_DIR_NOT_WRITABLE]
+    else:
+        return []
+
+
+def _check_snapshots_dir(
+    volume: Volume,
+    path: str,
+    resolved_endpoints: ResolvedEndpoints,
+) -> list[SyncError]:
+    """Check snapshots directory exists and is writable."""
+    if not _check_directory_exists(volume, path, resolved_endpoints):
+        return [SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND]
+    elif not _check_directory_writable(volume, path, resolved_endpoints):
+        return [SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE]
+    else:
+        return []
 
 
 def _check_hard_link_dest(
@@ -133,16 +151,15 @@ def _check_hard_link_dest(
     resolved_endpoints: ResolvedEndpoints,
 ) -> list[SyncError]:
     """Run hard-link snapshot filesystem and directory checks."""
-    errors: list[SyncError] = []
-    if not _check_hardlink_support(dst_vol, resolved_endpoints):
-        errors.append(SyncError.DESTINATION_NO_HARDLINK_SUPPORT)
     ep = _resolve_endpoint(dst_vol, dst_subdir)
-    snaps_path = f"{ep}/{SNAPSHOTS_DIR}"
-    if not _check_directory_exists(dst_vol, snaps_path, resolved_endpoints):
-        errors.append(SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND)
-    elif not _check_directory_writable(dst_vol, snaps_path, resolved_endpoints):
-        errors.append(SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE)
-    return errors
+    return [
+        *(
+            [SyncError.DESTINATION_NO_HARDLINK_SUPPORT]
+            if not _check_hardlink_support(dst_vol, resolved_endpoints)
+            else []
+        ),
+        *_check_snapshots_dir(dst_vol, f"{ep}/{SNAPSHOTS_DIR}", resolved_endpoints),
+    ]
 
 
 # ── Latest symlink validation ───────────────────────────────
@@ -163,30 +180,26 @@ def _check_latest_symlink(
 
     Returns a tuple of (snapshot_name_or_None, errors).
     """
-    errors: list[SyncError] = []
     latest_path = f"{endpoint_path}/{LATEST_LINK}"
     if not _check_symlink_exists(volume, latest_path, resolved_endpoints):
-        errors.append(not_found_reason)
-        return None, errors
+        return None, [not_found_reason]
 
     raw_target = _read_symlink_target(volume, latest_path, resolved_endpoints)
     if raw_target is None:
-        errors.append(not_found_reason)
-        return None, errors
+        return None, [not_found_reason]
 
     target = str(raw_target)
     if target == DEVNULL_TARGET:
-        return None, errors  # Valid "no snapshot yet" marker
+        return None, []  # Valid "no snapshot yet" marker
 
     # Resolve relative target against endpoint path
     resolved = f"{endpoint_path}/{target}"
     if not _check_directory_exists(volume, resolved, resolved_endpoints):
-        errors.append(invalid_reason)
-        return None, errors
+        return None, [invalid_reason]
 
     # Extract snapshot name from relative target
     # e.g. "snapshots/2026-03-06T14:30:00.000Z" -> "2026-03-06T14:30:00.000Z"
-    return target.rsplit("/", 1)[-1], errors
+    return target.rsplit("/", 1)[-1], []
 
 
 # ── Source snapshot validation ──────────────────────────────
@@ -223,26 +236,24 @@ def _check_source_latest(
     In dry-run mode, ``/dev/null`` with an upstream sync marks the sync
     as inactive because the upstream dry-run won't create a real snapshot.
     """
-    errors: list[SyncError] = []
     latest_path = f"{endpoint_path}/{LATEST_LINK}"
     if not _check_symlink_exists(src_vol, latest_path, resolved_endpoints):
-        errors.append(SyncError.SOURCE_LATEST_NOT_FOUND)
-        return errors
+        return [SyncError.SOURCE_LATEST_NOT_FOUND]
 
     target = _read_symlink_target(src_vol, latest_path, resolved_endpoints)
     if target is None:
-        errors.append(SyncError.SOURCE_LATEST_NOT_FOUND)
-        return errors
-
-    if target == DEVNULL_TARGET:
+        return [SyncError.SOURCE_LATEST_NOT_FOUND]
+    elif target == DEVNULL_TARGET:
         if not _has_upstream_sync(sync, all_syncs):
-            errors.append(SyncError.SOURCE_LATEST_INVALID)
+            return [SyncError.SOURCE_LATEST_INVALID]
         elif dry_run:
-            errors.append(SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING)
-        return errors
-
-    # Resolve relative target against endpoint path
-    resolved = f"{endpoint_path}/{target}"
-    if not _check_directory_exists(src_vol, resolved, resolved_endpoints):
-        errors.append(SyncError.SOURCE_LATEST_INVALID)
-    return errors
+            return [SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING]
+        else:
+            return []
+    else:
+        # Resolve relative target against endpoint path
+        resolved = f"{endpoint_path}/{target}"
+        if not _check_directory_exists(src_vol, resolved, resolved_endpoints):
+            return [SyncError.SOURCE_LATEST_INVALID]
+        else:
+            return []
