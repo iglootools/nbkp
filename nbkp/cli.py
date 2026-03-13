@@ -654,25 +654,25 @@ def _check_all_with_progress(
             resolved_endpoints=resolved_endpoints,
             dry_run=dry_run,
         )
+    else:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TextColumn("{task.completed}/{task.total}"),
+            transient=True,
+        ) as progress:
+            task = progress.add_task("Checking volumes and syncs...", total=total)
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        TextColumn("{task.completed}/{task.total}"),
-        transient=True,
-    ) as progress:
-        task = progress.add_task("Checking volumes and syncs...", total=total)
+            def on_progress(_slug: str) -> None:
+                progress.advance(task)
 
-        def on_progress(_slug: str) -> None:
-            progress.advance(task)
-
-        return check_all_syncs(
-            cfg,
-            on_progress=on_progress,
-            only_syncs=only_syncs,
-            resolved_endpoints=resolved_endpoints,
-            dry_run=dry_run,
-        )
+            return check_all_syncs(
+                cfg,
+                on_progress=on_progress,
+                only_syncs=only_syncs,
+                resolved_endpoints=resolved_endpoints,
+                dry_run=dry_run,
+            )
 
 
 def _check_and_display(
