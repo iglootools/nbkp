@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from mermaid_ascii import parse_mermaid, render_ascii
-from rich.console import Console
+from rich.console import Console, RenderableType
 from rich.tree import Tree
 
 from ..config import Config, SyncEndpoint
@@ -63,15 +63,8 @@ def print_mermaid_ascii_graph(
     console.print(render_ascii(diagram), highlight=False)
 
 
-def print_rich_tree_graph(
-    config: Config,
-    *,
-    console: Console | None = None,
-) -> None:
-    """Render the config graph as Rich Trees."""
-    if console is None:
-        console = Console()
-
+def build_rich_tree_sections(config: Config) -> list[RenderableType]:
+    """Build Rich Tree renderables for the sync dependency graph."""
     children, roots = build_adjacency(config.syncs)
 
     def _add_children(tree: Tree, ep_slug: str, visited: set[str]) -> None:
@@ -93,11 +86,24 @@ def print_rich_tree_graph(
                 visited.add(dst_slug)
                 _add_children(child, dst_slug, visited)
 
+    trees: list[RenderableType] = []
     for root in sorted(roots):
         tree = Tree(f"[bold]{root}[/bold]")
         visited: set[str] = {root}
         _add_children(tree, root, visited)
-        console.print(tree)
+        trees.append(tree)
+    return trees
+
+
+def print_rich_tree_graph(
+    config: Config,
+    *,
+    console: Console | None = None,
+) -> None:
+    """Render the config graph as Rich Trees."""
+    c = console or Console()
+    for section in build_rich_tree_sections(config):
+        c.print(section)
 
 
 def print_mermaid_graph(config: Config) -> None:

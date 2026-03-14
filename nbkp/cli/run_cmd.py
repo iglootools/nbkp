@@ -6,17 +6,19 @@ import json
 from typing import Annotated, Optional
 
 import typer
-from rich.console import Console
+from rich.console import Console, Group
+from rich.panel import Panel
+from rich.text import Text
 
 from ..config import NetworkType
-from ..ordering.output import print_rich_tree_graph
+from ..ordering.output import build_rich_tree_sections
 from ..output import OutputFormat
 from ..sync import (
     ProgressMode,
     SyncResult,
     run_all_syncs,
 )
-from ..sync.output import print_human_results
+from ..sync.output import build_human_results_sections
 from .app import app
 from .common import (
     _INACTIVE_ERRORS,
@@ -114,11 +116,6 @@ def run(
             typer.echo(json.dumps(data, indent=2))
         raise typer.Exit(1)
     else:
-        if output_format is OutputFormat.HUMAN:
-            typer.echo("")
-            print_rich_tree_graph(cfg)
-            typer.echo("")
-
         use_spinner = output_format is OutputFormat.HUMAN and progress in (
             None,
             ProgressMode.NONE,
@@ -130,6 +127,7 @@ def run(
         )
 
         console = Console()
+        progress_lines: list[Text] = []
         status_display = None
 
         def on_sync_start(slug: str) -> None:
@@ -147,6 +145,7 @@ def run(
                 status_display = None
             icon = "[green]✓[/green]" if result.success else "[red]✗[/red]"
             console.print(f"{icon} {slug}")
+            progress_lines.append(Text.from_markup(f"{icon} {slug}"))
 
         results = run_all_syncs(
             cfg,
@@ -172,8 +171,21 @@ def run(
                 }
                 typer.echo(json.dumps(data, indent=2))
             case OutputFormat.HUMAN:
-                typer.echo("")
-                print_human_results(results, dry_run, cfg, resolved)
+                sections = [
+                    *build_rich_tree_sections(cfg),
+                    Text(""),
+                    *progress_lines,
+                    Text(""),
+                    *build_human_results_sections(results, dry_run, cfg, resolved),
+                ]
+                console.print(
+                    Panel(
+                        Group(*sections),
+                        title="[bold]Sync Results[/bold]",
+                        border_style="cyan",
+                        padding=(0, 1),
+                    )
+                )
 
         def _is_expected_skip(r: SyncResult) -> bool:
             ss = sync_statuses.get(r.sync_slug)

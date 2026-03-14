@@ -219,16 +219,13 @@ def _outcome_text(outcome: SyncOutcome) -> Text:
             return Text("FAILED", style="red")
 
 
-def print_human_results(
+def build_human_results_sections(
     results: list[SyncResult],
     dry_run: bool,
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
-    *,
-    console: Console | None = None,
-) -> None:
-    """Print human-readable run results."""
-    c = console or Console()
+) -> list[RenderableType]:
+    """Build renderable sections for run results output."""
     mode = " (dry run)" if dry_run else ""
 
     table = Table(
@@ -259,7 +256,23 @@ def print_human_results(
             "\n".join(details_parts),
         )
 
-    c.print(table)
+    return [table]
+
+
+def print_human_results(
+    results: list[SyncResult],
+    dry_run: bool,
+    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
+    *,
+    console: Console | None = None,
+) -> None:
+    """Print human-readable run results."""
+    c = console or Console()
+    for section in build_human_results_sections(
+        results, dry_run, config, resolved_endpoints
+    ):
+        c.print(section)
 
 
 def print_human_prune_results(
