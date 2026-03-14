@@ -34,6 +34,9 @@ jobs:
     name: test (python ${{ matrix.python-version }})
     steps:
       - uses: actions/checkout@v6
+      # graphviz not available on mise
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y graphviz
       - uses: jdx/mise-action@v4
       - run: mise use python@${{ matrix.python-version }}
       - run: mise run ci-test
