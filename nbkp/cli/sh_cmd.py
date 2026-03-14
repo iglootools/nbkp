@@ -89,6 +89,9 @@ def sh(
                 "Target platform for snapshot timestamp format"
                 " (e.g. 'darwin', 'linux'). Defaults to the current OS."
             ),
+            # sys.platform varies by OS, so the generated CLI docs would differ
+            # between macOS and Linux, breaking CI's clidocs-check.
+            show_default=False,
         ),
     ] = sys.platform,
 ) -> None:
