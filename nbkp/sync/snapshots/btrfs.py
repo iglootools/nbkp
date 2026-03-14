@@ -2,38 +2,21 @@
 
 from __future__ import annotations
 
-import subprocess
 from datetime import datetime, timezone
 
 from ...config import (
     Config,
-    LocalVolume,
-    RemoteVolume,
     ResolvedEndpoints,
     SyncConfig,
     Volume,
 )
 from ...fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
-from ...remote import run_remote_command
+from ...remote.dispatch import run_on_volume
 from .common import (
     create_snapshot_timestamp,
     list_snapshots,
     resolve_dest_path,
 )
-
-
-def _run_on_volume(
-    cmd: list[str],
-    volume: Volume,
-    resolved_endpoints: ResolvedEndpoints,
-) -> subprocess.CompletedProcess[str]:
-    """Run a command on the volume's host (local or remote)."""
-    match volume:
-        case RemoteVolume():
-            ep = resolved_endpoints[volume.slug]
-            return run_remote_command(ep.server, cmd, ep.proxy_chain)
-        case LocalVolume():
-            return subprocess.run(cmd, capture_output=True, text=True)
 
 
 def create_snapshot(
@@ -55,7 +38,7 @@ def create_snapshot(
     snapshot = create_snapshot_timestamp(ts, dst_vol)
     snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{snapshot.name}"
     tmp_path = f"{dest_path}/{STAGING_DIR}"
-    result = _run_on_volume(
+    result = run_on_volume(
         ["btrfs", "subvolume", "snapshot", "-r", tmp_path, snapshot_path],
         dst_vol,
         re,
@@ -72,7 +55,7 @@ def _make_snapshot_writable(
     resolved_endpoints: ResolvedEndpoints,
 ) -> None:
     """Unset the readonly property so the snapshot can be deleted."""
-    result = _run_on_volume(
+    result = run_on_volume(
         ["btrfs", "property", "set", path, "ro", "false"],
         volume,
         resolved_endpoints,
@@ -93,7 +76,7 @@ def delete_snapshot(
     CAP_SYS_ADMIN), then deletes the subvolume.
     """
     _make_snapshot_writable(path, volume, resolved_endpoints)
-    result = _run_on_volume(
+    result = run_on_volume(
         ["btrfs", "subvolume", "delete", path],
         volume,
         resolved_endpoints,

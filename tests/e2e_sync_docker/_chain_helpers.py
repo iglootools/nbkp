@@ -9,14 +9,18 @@ from nbkp.config import (
     Config,
     HardLinkSnapshotConfig,
     LocalVolume,
+    LuksEncryptionConfig,
+    MountConfig,
     RemoteVolume,
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
 )
 from nbkp.remote.testkit.docker import (
+    LUKS_MAPPER_NAME,
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_PATH,
+    REMOTE_ENCRYPTED_PATH,
 )
 from nbkp.sync.testkit.seed import (
     SEED_EXCLUDE_FILTERS,
@@ -26,14 +30,13 @@ from nbkp.sync.testkit.seed import (
 
 from tests._docker_fixtures import ssh_exec
 
-BTRFS_SNAPSHOTS_PATH = f"{REMOTE_BTRFS_PATH}/snapshots"
-BTRFS_BARE_PATH = f"{REMOTE_BTRFS_PATH}/bare"
-
 
 def build_chain_config(
     tmp_path: Path,
     bastion_endpoint: SshEndpoint,
     proxied_endpoint: SshEndpoint,
+    *,
+    luks_uuid: str | None = None,
 ) -> Config:
     """Build a 6-hop chain config across local and remote volumes.
 
@@ -41,10 +44,15 @@ def build_chain_config(
       src-local-bare                — chain origin (bare source)
       stage-local-hl-snapshots      — HL dest / HL source
       stage-remote-bare             — bare dest / HL source
-      stage-remote-btrfs-snapshots  — btrfs dest / btrfs source
+      stage-remote-btrfs-snapshots  — btrfs dest / btrfs source (encrypted)
       stage-remote-btrfs-bare       — bare dest / HL source
       stage-remote-hl-snapshots     — HL dest / HL source
       dst-local-bare                — chain terminus (bare dest)
+
+    When *luks_uuid* is provided, ``stage-remote-btrfs-snapshots``
+    gets a ``MountConfig`` so that ``mount_volumes`` /
+    ``umount_volumes`` manage the LUKS lifecycle as part of the
+    chain — same code path as ``nbkp run``.
     """
     volumes: dict[str, LocalVolume | RemoteVolume] = {
         "src-local-bare": LocalVolume(
@@ -63,12 +71,28 @@ def build_chain_config(
         "stage-remote-btrfs-snapshots": RemoteVolume(
             slug="stage-remote-btrfs-snapshots",
             ssh_endpoint="via-bastion",
-            path=BTRFS_SNAPSHOTS_PATH,
+            path=(
+                REMOTE_ENCRYPTED_PATH
+                if luks_uuid is not None
+                else f"{REMOTE_BTRFS_PATH}/snapshots"
+            ),
+            mount=(
+                MountConfig(
+                    strategy="direct",
+                    device_uuid=luks_uuid,
+                    encryption=LuksEncryptionConfig(
+                        mapper_name=LUKS_MAPPER_NAME,
+                        passphrase_id="test-luks",
+                    ),
+                )
+                if luks_uuid is not None
+                else None
+            ),
         ),
         "stage-remote-btrfs-bare": RemoteVolume(
             slug="stage-remote-btrfs-bare",
             ssh_endpoint="via-bastion",
-            path=BTRFS_BARE_PATH,
+            path=f"{REMOTE_BTRFS_PATH}/bare",
         ),
         "stage-remote-hl-snapshots": RemoteVolume(
             slug="stage-remote-hl-snapshots",
@@ -189,17 +213,15 @@ def setup_chain(
     tmp_path: Path,
     docker_ssh_endpoint: SshEndpoint,
 ) -> Path:
-    """Common setup: btrfs subvolume, sentinels, seed data.
+    """Common setup: sentinels, seed data.
+
+    Btrfs snapshot infrastructure (``staging/`` subvolume,
+    ``snapshots/`` directory, ``latest`` symlink) is created
+    by ``create_seed_sentinels``.
 
     Returns the source directory path.
     """
-    # Create btrfs subvolume for the btrfs-snapshots volume
-    ssh_exec(
-        docker_ssh_endpoint,
-        f"btrfs subvolume create {BTRFS_SNAPSHOTS_PATH}",
-    )
 
-    # Create sentinels
     def _run_remote(cmd: str) -> None:
         ssh_exec(docker_ssh_endpoint, cmd)
 
@@ -264,6 +286,8 @@ def assert_chain_results(
     - Snapshot artifacts on intermediate volumes
     - Sentinel handling on final destination
     """
+    btrfs_vol = config.volumes["stage-remote-btrfs-snapshots"]
+
     dst = tmp_path / "dst-local-bare"
 
     # Final destination matches source (minus excluded/)
@@ -279,12 +303,12 @@ def assert_chain_results(
     # Btrfs dest (step-3): snapshot + latest symlink
     snap_check = ssh_exec(
         docker_ssh_endpoint,
-        f"ls {BTRFS_SNAPSHOTS_PATH}/snapshots/",
+        f"ls {btrfs_vol.path}/snapshots/",
     )
     assert snap_check.stdout.strip()
     btrfs_link = ssh_exec(
         docker_ssh_endpoint,
-        f"readlink {BTRFS_SNAPSHOTS_PATH}/latest",
+        f"readlink {btrfs_vol.path}/latest",
     )
     assert "snapshots/" in btrfs_link.stdout
 

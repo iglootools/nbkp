@@ -9,6 +9,7 @@ from . import prune_cmd as _prune_cmd  # noqa: F401
 from . import run_cmd as _run_cmd  # noqa: F401
 from . import sh_cmd as _sh_cmd  # noqa: F401
 from . import troubleshoot_cmd as _troubleshoot_cmd  # noqa: F401
+from . import volumes_cmd as _volumes_cmd  # noqa: F401
 
 __all__ = ["app", "main"]
 

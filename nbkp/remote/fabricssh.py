@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import shlex
 import subprocess
 from functools import reduce
@@ -74,15 +75,21 @@ def run_remote_command(
     server: SshEndpoint,
     command: list[str],
     proxy_chain: list[SshEndpoint] | None = None,
+    input: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run a command on a remote host via Fabric."""
     cmd_string = " ".join(shlex.quote(arg) for arg in command)
+    # When input is provided, wrap it as a BytesIO stream for Fabric.
+    # Otherwise, use in_stream=False to disable stdin entirely.
+    in_stream: io.BytesIO | bool = (
+        io.BytesIO(input.encode()) if input is not None else False
+    )
     with _build_connection(server, proxy_chain) as conn:
         if server.connection_options.server_alive_interval is not None:
             conn.transport.set_keepalive(  # pyright: ignore[reportOptionalMemberAccess]
                 server.connection_options.server_alive_interval
             )
-        result = conn.run(cmd_string, warn=True, hide=True, in_stream=False)
+        result = conn.run(cmd_string, warn=True, hide=True, in_stream=in_stream)
     return subprocess.CompletedProcess(
         args=cmd_string,
         returncode=result.exited,

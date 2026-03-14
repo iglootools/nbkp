@@ -22,6 +22,7 @@ $ nbkp [OPTIONS] COMMAND [ARGS]...
 * `sh`: Compile the config into a self-contained...
 * `troubleshoot`: Run the same checks as `check` but...
 * `config`: Configuration commands
+* `volumes`: Volume mount management commands
 * `demo`: Demo CLI: sample output rendering and seed...
 
 ## `nbkp check`
@@ -42,6 +43,8 @@ $ nbkp check [OPTIONS]
 * `-l, --location TEXT`: Prefer endpoints at these locations
 * `-L, --exclude-location TEXT`: Exclude endpoints at these locations
 * `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--mount / --no-mount`: Mount/umount volumes with mount config before checking  [default: mount]
+* `--umount / --no-umount`: Umount after check (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
 
 ## `nbkp prune`
@@ -87,6 +90,8 @@ $ nbkp run [OPTIONS]
 * `-l, --location TEXT`: Prefer endpoints at these locations
 * `-L, --exclude-location TEXT`: Exclude endpoints at these locations
 * `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--mount / --no-mount`: Mount/umount volumes with mount config  [default: mount]
+* `--umount / --no-umount`: Umount after sync (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
 
 ## `nbkp sh`
@@ -130,6 +135,8 @@ $ nbkp troubleshoot [OPTIONS]
 * `-l, --location TEXT`: Prefer endpoints at these locations
 * `-L, --exclude-location TEXT`: Exclude endpoints at these locations
 * `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--mount / --no-mount`: Mount/umount volumes with mount config before checking  [default: mount]
+* `--umount / --no-umount`: Umount after check (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
 
 ## `nbkp config`
@@ -150,6 +157,7 @@ $ nbkp config [OPTIONS] COMMAND [ARGS]...
 
 * `show`: Load, validate, and render the config as...
 * `graph`: Display the backup chain as a graph.
+* `setup-auth`: Generate polkit and sudoers configuration...
 
 ### `nbkp config show`
 
@@ -182,6 +190,81 @@ $ nbkp config graph [OPTIONS]
 * `-c, --config TEXT`: Path to config file
 * `-o, --output [human|json]`: Output format  [default: human]
 * `-f, --format [rich-tree|mermaid-ascii|mermaid]`: Graph format (human output only)  [default: rich-tree]
+* `--help`: Show this message and exit.
+
+### `nbkp config setup-auth`
+
+Generate polkit and sudoers configuration for mount management.
+
+**Usage**:
+
+```console
+$ nbkp config setup-auth [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config TEXT`: Path to config file
+* `-u, --user TEXT`: System user for auth rules  [default: ubuntu]
+* `--help`: Show this message and exit.
+
+## `nbkp volumes`
+
+Volume mount management commands
+
+**Usage**:
+
+```console
+$ nbkp volumes [OPTIONS] COMMAND [ARGS]...
+```
+
+**Options**:
+
+* `--help`: Show this message and exit.
+
+**Commands**:
+
+* `mount`: Mount and unlock volumes.
+* `umount`: Umount and lock volumes.
+
+### `nbkp volumes mount`
+
+Mount and unlock volumes. Mounts all volumes with mount config, or specific ones via --name.
+
+**Usage**:
+
+```console
+$ nbkp volumes mount [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config TEXT`: Path to config file
+* `-o, --output [human|json]`: Output format  [default: human]
+* `-n, --name TEXT`: Volume name(s) to mount
+* `-l, --location TEXT`: Prefer endpoints at these locations
+* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
+* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--help`: Show this message and exit.
+
+### `nbkp volumes umount`
+
+Umount and lock volumes. Umounts all volumes with mount config, or specific ones via --name.
+
+**Usage**:
+
+```console
+$ nbkp volumes umount [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config TEXT`: Path to config file
+* `-o, --output [human|json]`: Output format  [default: human]
+* `-n, --name TEXT`: Volume name(s) to umount
+* `-l, --location TEXT`: Prefer endpoints at these locations
+* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
+* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
 * `--help`: Show this message and exit.
 
 ## `nbkp demo`

@@ -13,6 +13,7 @@ from .app import app
 from .common import (
     check_and_display,
     load_config_or_exit,
+    managed_mount,
     resolve_endpoints,
 )
 
@@ -58,24 +59,42 @@ def check(
             help="Prefer private (LAN) or public (WAN) endpoints",
         ),
     ] = None,
+    mount: Annotated[
+        bool,
+        typer.Option(
+            "--mount/--no-mount",
+            help="Mount/umount volumes with mount config before checking",
+        ),
+    ] = True,
+    umount: Annotated[
+        bool,
+        typer.Option(
+            "--umount/--no-umount",
+            help="Umount after check (use --no-umount for debugging)",
+        ),
+    ] = True,
 ) -> None:
     """Verify that volumes are reachable, sentinel files exist, SSH connectivity works, and required tools are available. Use this before `run` to confirm everything is ready."""
     cfg = load_config_or_exit(config)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
-    vol_statuses, sync_statuses, has_errors = check_and_display(
-        cfg,
-        output_format,
-        strict,
-        resolved_endpoints=resolved,
-    )
 
-    if output_format is OutputFormat.JSON:
-        data = {
-            "volumes": [v.model_dump() for v in vol_statuses.values()],
-            "syncs": [s.model_dump() for s in sync_statuses.values()],
-        }
-        typer.echo(json.dumps(data, indent=2))
+    with managed_mount(
+        cfg, resolved, mount=mount, umount=umount, output_format=output_format
+    ):
+        vol_statuses, sync_statuses, has_errors = check_and_display(
+            cfg,
+            output_format,
+            strict,
+            resolved_endpoints=resolved,
+        )
 
-    if has_errors:
-        raise typer.Exit(1)
+        if output_format is OutputFormat.JSON:
+            data = {
+                "volumes": [v.model_dump() for v in vol_statuses.values()],
+                "syncs": [s.model_dump() for s in sync_statuses.values()],
+            }
+            typer.echo(json.dumps(data, indent=2))
+
+        if has_errors:
+            raise typer.Exit(1)

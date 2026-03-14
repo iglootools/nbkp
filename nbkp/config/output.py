@@ -18,6 +18,7 @@ from . import (
     SyncConfig,
     SyncEndpoint,
 )
+from .protocol.volume import MountConfig
 
 
 def format_volume_display(
@@ -64,6 +65,23 @@ def endpoint_path(
         return f"{vol.path}/{subdir}"
     else:
         return vol.path
+
+
+def format_mount_summary(mount: MountConfig | None) -> str:
+    """Compact mount config summary for table display."""
+    if mount is None:
+        return ""
+    return " ".join(
+        [
+            f"uuid:{mount.device_uuid[:8]}\u2026",
+            f"strategy:{mount.strategy}",
+            *(
+                [f"luks:{mount.encryption.mapper_name}"]
+                if mount.encryption is not None
+                else []
+            ),
+        ]
+    )
 
 
 def _sync_endpoint_display(endpoint: SyncEndpoint) -> str:
@@ -160,6 +178,7 @@ def print_human_config(
     vol_table.add_column("Type")
     vol_table.add_column("SSH Endpoint")
     vol_table.add_column("URI")
+    vol_table.add_column("Mount Config")
 
     for vol in config.volumes.values():
         match vol:
@@ -175,6 +194,7 @@ def print_human_config(
             vol_type,
             ssh_ep,
             format_volume_display(vol, re),
+            format_mount_summary(vol.mount),
         )
 
     console.print(vol_table)

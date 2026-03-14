@@ -705,7 +705,7 @@ class TestCheckCommandAvailableLocal:
 
 
 class TestCheckCommandAvailableRemote:
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_command_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         vol, config = _remote_config()
@@ -714,7 +714,7 @@ class TestCheckCommandAvailableRemote:
         server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(server, ["which", "rsync"], [])
 
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_command_not_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1)
         vol, config = _remote_config()
@@ -725,7 +725,7 @@ class TestCheckCommandAvailableRemote:
 
 
 class TestCheckBtrfsFilesystemLocal:
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -736,13 +736,13 @@ class TestCheckBtrfsFilesystemLocal:
             text=True,
         )
 
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_not_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
         assert _check_btrfs_filesystem(vol, {}) is False
 
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_stat_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -750,7 +750,7 @@ class TestCheckBtrfsFilesystemLocal:
 
 
 class TestCheckBtrfsFilesystemRemote:
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
         vol, config = _remote_config()
@@ -763,7 +763,7 @@ class TestCheckBtrfsFilesystemRemote:
             [],
         )
 
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_not_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
         vol, config = _remote_config()
@@ -772,7 +772,7 @@ class TestCheckBtrfsFilesystemRemote:
 
 
 class TestCheckBtrfsSubvolumeLocal:
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_is_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -783,7 +783,7 @@ class TestCheckBtrfsSubvolumeLocal:
             text=True,
         )
 
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_is_subvolume_with_subdir(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -794,13 +794,13 @@ class TestCheckBtrfsSubvolumeLocal:
             text=True,
         )
 
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_not_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
         assert _check_btrfs_subvolume(vol, None, {}) is False
 
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_stat_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -808,7 +808,7 @@ class TestCheckBtrfsSubvolumeLocal:
 
 
 class TestCheckBtrfsSubvolumeRemote:
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_is_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol, config = _remote_config()
@@ -821,7 +821,7 @@ class TestCheckBtrfsSubvolumeRemote:
             [],
         )
 
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_is_subvolume_with_subdir(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol, config = _remote_config()
@@ -834,7 +834,7 @@ class TestCheckBtrfsSubvolumeRemote:
             [],
         )
 
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_not_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
         vol, config = _remote_config()
@@ -843,7 +843,7 @@ class TestCheckBtrfsSubvolumeRemote:
 
 
 class TestCheckBtrfsMountOptionLocal:
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_option_present(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -857,13 +857,13 @@ class TestCheckBtrfsMountOptionLocal:
             text=True,
         )
 
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_option_missing(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="rw,relatime\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
         assert _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}) is False
 
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_findmnt_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -871,7 +871,7 @@ class TestCheckBtrfsMountOptionLocal:
 
 
 class TestCheckBtrfsMountOptionRemote:
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_option_present(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -889,7 +889,7 @@ class TestCheckBtrfsMountOptionRemote:
             [],
         )
 
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_option_missing(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="rw,relatime\n")
         vol, config = _remote_config()
@@ -1132,7 +1132,7 @@ class TestCheckSync:
         assert SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.errors
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_findmnt_not_found_on_destination(
         self,
         mock_subprocess: MagicMock,
@@ -1283,7 +1283,7 @@ class TestCheckSync:
         assert SyncError.DESTINATION_NOT_BTRFS in status.errors
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_destination_not_btrfs_subvolume(
         self,
         mock_subprocess: MagicMock,
@@ -1338,7 +1338,7 @@ class TestCheckSync:
         assert SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME in status.errors
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_destination_not_mounted_user_subvol_rm(
         self,
         mock_subprocess: MagicMock,
@@ -1395,7 +1395,7 @@ class TestCheckSync:
         assert SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM in status.errors
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_destination_latest_not_found(
         self,
         mock_subprocess: MagicMock,
@@ -1453,7 +1453,7 @@ class TestCheckSync:
         assert SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND not in status.errors
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_destination_snapshots_dir_not_found(
         self,
         mock_subprocess: MagicMock,
@@ -1511,7 +1511,7 @@ class TestCheckSync:
         assert SyncError.DESTINATION_TMP_NOT_FOUND not in status.errors
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_destination_latest_and_snapshots_both_missing(
         self,
         mock_subprocess: MagicMock,
@@ -1634,7 +1634,7 @@ class TestCheckSync:
 class TestCheckSyncRemoteCommands:
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_rsync_not_found_on_remote_source(
         self,
         mock_run: MagicMock,
@@ -1694,7 +1694,7 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_rsync_not_found_on_remote_destination(
         self,
         mock_run: MagicMock,
@@ -1760,7 +1760,7 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_btrfs_not_found_on_remote_destination(
         self,
         mock_run: MagicMock,
@@ -1833,7 +1833,7 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_destination_not_btrfs_on_remote(
         self,
         mock_run: MagicMock,
@@ -1905,7 +1905,7 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_destination_not_subvolume_on_remote(
         self,
         mock_run: MagicMock,
@@ -1984,7 +1984,7 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_destination_not_mounted_user_subvol_rm_on_remote(
         self,
         mock_run: MagicMock,
@@ -2063,7 +2063,7 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_stat_not_found_on_remote_destination(
         self,
         mock_run: MagicMock,
@@ -2136,7 +2136,7 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_findmnt_not_found_on_remote_destination(
         self,
         mock_run: MagicMock,
@@ -2220,7 +2220,7 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_destination_latest_not_found_on_remote(
         self,
         mock_run: MagicMock,
@@ -2312,7 +2312,7 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_destination_snapshots_dir_not_found_on_remote(
         self,
         mock_run: MagicMock,
@@ -2658,7 +2658,7 @@ class TestCheckHardLinkDest:
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_remote_no_hardlink_support(
         self,
         mock_run: MagicMock,
@@ -3466,7 +3466,7 @@ class TestParseRsyncVersion:
 
 
 class TestCheckRsyncVersionLocal:
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_new_enough(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -3475,7 +3475,7 @@ class TestCheckRsyncVersionLocal:
         vol = LocalVolume(slug="data", path="/mnt/data")
         assert _check_rsync_version(vol, {}) is True
 
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_too_old(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -3484,7 +3484,7 @@ class TestCheckRsyncVersionLocal:
         vol = LocalVolume(slug="data", path="/mnt/data")
         assert _check_rsync_version(vol, {}) is False
 
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_openrsync(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -3493,13 +3493,13 @@ class TestCheckRsyncVersionLocal:
         vol = LocalVolume(slug="data", path="/mnt/data")
         assert _check_rsync_version(vol, {}) is False
 
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_command_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
         assert _check_rsync_version(vol, {}) is False
 
-    @patch("nbkp.preflight.queries.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_exactly_3_0_0(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -3510,7 +3510,7 @@ class TestCheckRsyncVersionLocal:
 
 
 class TestCheckRsyncVersionRemote:
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_new_enough(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -3520,7 +3520,7 @@ class TestCheckRsyncVersionRemote:
         resolved = _make_resolved(config)
         assert _check_rsync_version(vol, resolved) is True
 
-    @patch("nbkp.preflight.queries.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_too_old(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,

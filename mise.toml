@@ -34,7 +34,7 @@ run = "poetry shell"
 
 [tasks.install]
 description = "Install dependencies"
-run = "poetry install"
+run = "poetry install --all-extras"
 
 [tasks.check]
 description = "Run all checks (format, lint, type-check, compat-check, clidocs-check, configdocs-check, depgraph-check)"

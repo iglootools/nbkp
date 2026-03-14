@@ -9,6 +9,7 @@ from typing import Annotated, Optional
 import typer
 
 from ..config import resolve_all_endpoints
+from ..mount.auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH, generate_auth_rules
 from ..ordering.output import (
     build_graph_json,
     print_mermaid_ascii_graph,
@@ -47,7 +48,7 @@ def show(
     output_format = output
     match output_format:
         case OutputFormat.JSON:
-            typer.echo(json.dumps(cfg.model_dump(by_alias=True), indent=2))
+            typer.echo(json.dumps(cfg.model_dump(by_alias=True, mode="json"), indent=2))
         case OutputFormat.HUMAN:
             resolved = resolve_all_endpoints(cfg)
             print_human_config(cfg, resolved_endpoints=resolved)
@@ -81,3 +82,34 @@ def graph(
                     print_mermaid_ascii_graph(cfg)
                 case GraphFormat.MERMAID:
                     print_mermaid_graph(cfg)
+
+
+@config_app.command("setup-auth")
+def setup_auth(
+    config: Annotated[
+        Optional[str],
+        typer.Option("--config", "-c", help="Path to config file"),
+    ] = None,
+    user: Annotated[
+        str,
+        typer.Option("--user", "-u", help="System user for auth rules"),
+    ] = "ubuntu",
+) -> None:
+    """Generate polkit and sudoers configuration for mount management."""
+    cfg = load_config_or_exit(config)
+    rules = generate_auth_rules(cfg, user)
+
+    if rules.polkit is None:
+        typer.echo("No volumes with mount config found.", err=True)
+        raise typer.Exit(0)
+
+    typer.echo("# polkit rules")
+    typer.echo(f"# Install to: {POLKIT_RULES_PATH}")
+    typer.echo()
+    typer.echo(rules.polkit)
+
+    if rules.sudoers is not None:
+        typer.echo("# sudoers rules")
+        typer.echo(f"# Install with: sudo visudo -f {SUDOERS_RULES_PATH}")
+        typer.echo()
+        typer.echo(rules.sudoers)

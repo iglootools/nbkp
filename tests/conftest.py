@@ -22,7 +22,7 @@ pytest_plugins = ["tests._docker_fixtures"]
 def config_to_yaml(config: Config) -> str:
     """Convert a Config to a YAML string."""
     return yaml.safe_dump(
-        config.model_dump(by_alias=True),
+        config.model_dump(by_alias=True, mode="json"),
         default_flow_style=False,
         sort_keys=False,
     )

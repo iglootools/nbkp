@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import enum
 from collections import deque
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 from pydantic import Field, ValidationInfo, field_validator, model_validator
 
@@ -12,6 +13,15 @@ from .ssh_endpoint import SshEndpoint
 from .sync import SyncConfig
 from .sync_endpoint import SyncEndpoint
 from .volume import RemoteVolume, Volume
+
+
+class CredentialProvider(str, enum.Enum):
+    """How LUKS passphrases are retrieved."""
+
+    KEYRING = "keyring"
+    PROMPT = "prompt"
+    ENV = "env"
+    COMMAND = "command"
 
 
 def _remove_stale_exclusive_keys(
@@ -26,6 +36,22 @@ def _remove_stale_exclusive_keys(
 
 class Config(_BaseModel):
     """Top-level NBKP configuration."""
+
+    credential_provider: CredentialProvider = Field(
+        default=CredentialProvider.KEYRING,
+        description=(
+            "How LUKS passphrases are retrieved."
+            " Options: keyring, prompt, env, command."
+        ),
+    )
+    credential_command: Optional[List[str]] = Field(
+        default=None,
+        description=(
+            "Command template for the ``command`` credential provider."
+            " ``{id}`` is replaced with the passphrase-id."
+            ' Example: ``["pass", "show", "nbkp/{id}"]``.'
+        ),
+    )
 
     ssh_endpoints: Dict[str, SshEndpoint] = Field(default_factory=dict)
 
@@ -288,4 +314,21 @@ class Config(_BaseModel):
                     f" Use two separate syncs through"
                     f" the local machine instead."
                 )
+
+        # Credential provider validation
+        if (
+            self.credential_provider == CredentialProvider.COMMAND
+            and self.credential_command is None
+        ):
+            raise ValueError(
+                "credential-command is required when credential-provider is 'command'"
+            )
+
+        if self.credential_command is not None:
+            joined = " ".join(self.credential_command)
+            if "{id}" not in joined:
+                raise ValueError(
+                    "credential-command must contain the '{id}' placeholder"
+                )
+
         return self

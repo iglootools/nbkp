@@ -5,6 +5,9 @@ RUN apt-get update && \
     openssh-server \
     rsync \
     btrfs-progs \
+    cryptsetup \
+    sudo \
+    e2fsprogs \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd -m -s /bin/bash testuser && \

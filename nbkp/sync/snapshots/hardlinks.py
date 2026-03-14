@@ -14,8 +14,8 @@ from ...config import (
     Volume,
 )
 from ...fsprotocol import SNAPSHOTS_DIR
+from ...remote.dispatch import run_on_volume
 from .common import (
-    _run_on_volume,
     create_snapshot_timestamp,
     list_snapshots,
     read_latest_symlink,
@@ -41,7 +41,7 @@ def create_snapshot_dir(
     dest_path = resolve_dest_path(sync, config)
     snapshot = create_snapshot_timestamp(ts, dst_vol)
     snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{snapshot.name}"
-    result = _run_on_volume(["mkdir", "-p", snapshot_path], dst_vol, re)
+    result = run_on_volume(["mkdir", "-p", snapshot_path], dst_vol, re)
 
     if result.returncode != 0:
         raise RuntimeError(f"mkdir snapshot dir failed: {result.stderr}")
@@ -88,7 +88,7 @@ def delete_snapshot(
     """Delete a hard-link snapshot directory."""
     match volume:
         case RemoteVolume():
-            result = _run_on_volume(["rm", "-rf", path], volume, resolved_endpoints)
+            result = run_on_volume(["rm", "-rf", path], volume, resolved_endpoints)
             if result.returncode != 0:
                 raise RuntimeError(f"rm -rf snapshot failed: {result.stderr}")
         case LocalVolume():

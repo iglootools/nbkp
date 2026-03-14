@@ -88,7 +88,7 @@ def _remote_config() -> tuple[SyncConfig, Config, dict[str, ResolvedEndpoint]]:
 
 
 class TestCreateSnapshotDir:
-    @patch("nbkp.sync.snapshots.common.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_local(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         sync, config = _local_config()
@@ -100,7 +100,7 @@ class TestCreateSnapshotDir:
         cmd = mock_run.call_args[0][0]
         assert cmd == ["mkdir", "-p", f"/dst/snapshots/{_TS_LOCAL.name}"]
 
-    @patch("nbkp.sync.snapshots.common.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_remote(self, mock_remote: MagicMock) -> None:
         mock_remote.return_value = MagicMock(returncode=0, stderr="")
         sync, config, re = _remote_config()
@@ -110,7 +110,7 @@ class TestCreateSnapshotDir:
         assert path == f"/backup/snapshots/{_TS_REMOTE.name}"
         mock_remote.assert_called_once()
 
-    @patch("nbkp.sync.snapshots.common.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_failure_raises(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stderr="permission denied")
         sync, config = _local_config()
@@ -229,7 +229,7 @@ class TestDeleteSnapshot:
         delete_snapshot(str(snap), vol, {})
         assert not snap.exists()
 
-    @patch("nbkp.sync.snapshots.common.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_remote(self, mock_remote: MagicMock) -> None:
         mock_remote.return_value = MagicMock(returncode=0, stderr="")
         server = SshEndpoint(slug="nas", host="nas.local", user="backup")

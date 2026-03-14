@@ -13,6 +13,7 @@ def run_remote_command(
     server: SshEndpoint,
     command: list[str],
     proxy_chain: list[SshEndpoint] | None = None,
+    input: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run a command on a remote host via SSH."""
     cmd_string = " ".join(shlex.quote(arg) for arg in command)
@@ -20,4 +21,5 @@ def run_remote_command(
         [*build_ssh_base_args(server, proxy_chain), cmd_string],
         capture_output=True,
         text=True,
+        input=input,
     )

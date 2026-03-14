@@ -9,9 +9,9 @@ from ..config import (
     ResolvedEndpoints,
     Volume,
 )
+from ..remote.dispatch import run_on_volume
 from .queries import (
     _resolve_endpoint,
-    _run_on_volume,
 )
 
 
@@ -23,7 +23,7 @@ def _check_btrfs_filesystem(
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
     """Check if the volume path is on a btrfs filesystem."""
-    result = _run_on_volume(
+    result = run_on_volume(
         ["stat", "-f", "-c", "%T", volume.path], volume, resolved_endpoints
     )
     return result.returncode == 0 and result.stdout.strip() == "btrfs"
@@ -40,7 +40,7 @@ def _check_hardlink_support(
 
     Rejects known non-hardlink filesystems (FAT, exFAT).
     """
-    result = _run_on_volume(
+    result = run_on_volume(
         ["stat", "-f", "-c", "%T", volume.path], volume, resolved_endpoints
     )
     return (
@@ -62,7 +62,7 @@ def _check_btrfs_subvolume(
     On btrfs, subvolumes always have inode number 256.
     """
     path = _resolve_endpoint(volume, subdir)
-    result = _run_on_volume(["stat", "-c", "%i", path], volume, resolved_endpoints)
+    result = run_on_volume(["stat", "-c", "%i", path], volume, resolved_endpoints)
     return result.returncode == 0 and result.stdout.strip() == "256"
 
 
@@ -72,7 +72,7 @@ def _check_btrfs_mount_option(
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
     """Check if the volume is mounted with a specific mount option."""
-    result = _run_on_volume(
+    result = run_on_volume(
         ["findmnt", "-T", volume.path, "-n", "-o", "OPTIONS"],
         volume,
         resolved_endpoints,

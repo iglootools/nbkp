@@ -58,6 +58,30 @@ _SSH_ENDPOINT_NOTES = "Fields not explicitly set (`port`, `user`, `key`) are aut
 
 _LOCAL_VOLUME_NOTES = '> **YAML caveat:** Bare `~` is interpreted as `null` by YAML. Always quote it: `path: "~"` or `path: "~/subdir"`.'
 
+_MOUNT_CONFIG_NOTES = """\
+The `mount` section is optional on both local and remote volumes. When present, nbkp manages the mount/umount lifecycle automatically during `run`.
+
+For encrypted volumes, `device-uuid` is the LUKS container UUID (from `crypttab` or `blkid`). For unencrypted volumes, it is the filesystem UUID (from `fstab` or `blkid`)."""
+
+_LUKS_ENCRYPTION_NOTES = """\
+The `type: luks` field is a discriminator for future encryption backend extensibility. Currently only LUKS is supported.
+
+The `passphrase-id` is used as a lookup key with the configured `credential-provider`. Multiple volumes can share the same `passphrase-id` — the passphrase is cached in memory during a single run."""
+
+_CREDENTIAL_PROVIDER_NOTES = """\
+Top-level config fields for credential retrieval:
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `credential-provider` | `"keyring"` \\| `"prompt"` \\| `"env"` \\| `"command"` | `"keyring"` | How LUKS passphrases are retrieved |
+| `credential-command` | list of strings | `null` | Command template for `command` provider. Must contain `{id}` placeholder (e.g. `["pass", "show", "nbkp/{id}"]`) |
+
+Providers:
+- **keyring**: `keyring.get_password("nbkp", passphrase_id)` — uses macOS Keychain or Linux SecretService. Requires `pip install nbkp[keyring]`.
+- **prompt**: interactive hidden input prompt.
+- **env**: reads `NBKP_PASSPHRASE_<ID>` (uppercased, hyphens → underscores).
+- **command**: runs command template with `{id}` replaced by passphrase-id."""
+
 _SYNC_ENDPOINT_NOTES = """\
 Only one of `btrfs-snapshots` and `hard-link-snapshots` can be enabled per endpoint. Each (volume, subdir) pair must be unique across all sync endpoints.
 
@@ -146,6 +170,12 @@ def _type_str(info: FieldInfo) -> str:
 
     origin = get_origin(annotation)
     args = get_args(annotation)
+
+    # Annotated[X, ...] → unwrap to inner type
+    if origin is Annotated:
+        inner_info = FieldInfo(annotation=args[0])
+        inner_info.metadata = info.metadata
+        return _type_str(inner_info)
 
     # Optional[X] → show the inner type with original constraints
     from types import UnionType
@@ -257,7 +287,12 @@ def _generate_config_reference() -> str:
         BtrfsSnapshotConfig,
         SyncEndpoint,
     )
-    from nbkp.config.protocol.volume import LocalVolume, RemoteVolume
+    from nbkp.config.protocol.volume import (
+        LocalVolume,
+        LuksEncryptionConfig,
+        MountConfig,
+        RemoteVolume,
+    )
 
     sections: list[str] = [
         "# Configuration Reference",
@@ -291,6 +326,24 @@ def _generate_config_reference() -> str:
         "## `volumes.<slug>` — Remote Volume",
         "",
         _generate_table(RemoteVolume),
+        "",
+        "---",
+        "",
+        "## `mount` — Mount Config",
+        "",
+        _generate_table(MountConfig),
+        "",
+        _MOUNT_CONFIG_NOTES,
+        "",
+        "## `encryption` — LUKS Encryption Config",
+        "",
+        _generate_table(LuksEncryptionConfig),
+        "",
+        _LUKS_ENCRYPTION_NOTES,
+        "",
+        "---",
+        "",
+        _CREDENTIAL_PROVIDER_NOTES,
         "",
         "---",
         "",

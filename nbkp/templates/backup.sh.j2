@@ -18,6 +18,10 @@ ${{ config_line }}
 #   - Python runtime / config parsing → all values hardcoded
 #   - --strict/--no-strict flag → checks are inline, comment out if not needed
 #   - Paramiko-only SSH options (channel_timeout, disabled_algorithms) → no ssh CLI equivalent
+#   - Volume mount management (LUKS unlock/lock, systemctl mount/umount) → credential
+#     retrieval depends on keyring/prompt/command backends that don't translate to shell.
+#     Volumes with mount config must be manually mounted/umounted before/after running
+#     this script. Use: nbkp volumes mount -c <config> / nbkp volumes umount -c <config>
 
 # Unofficial bash strict mode (http://redsymbol.net/articles/unofficial-bash-strict-mode/)
 set -euo pipefail

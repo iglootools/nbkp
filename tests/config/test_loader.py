@@ -29,7 +29,7 @@ from nbkp.config import (
 
 def _config_to_yaml(config: Config) -> str:
     return yaml.safe_dump(
-        config.model_dump(by_alias=True),
+        config.model_dump(by_alias=True, mode="json"),
         default_flow_style=False,
         sort_keys=False,
     )

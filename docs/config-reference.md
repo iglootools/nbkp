@@ -66,6 +66,7 @@ Fields not explicitly set (`port`, `user`, `key`) are automatically filled from 
 |---|---|---|---|
 | `type` | `"local"` | **required** | Volume type discriminator |
 | `path` | string | **required** | Absolute path to the volume. `~` is expanded to the user's home directory. Trailing slashes are stripped. |
+| `mount` | object | `null` | Mount management config. When set, nbkp manages the volume's mount lifecycle. |
 
 > **YAML caveat:** Bare `~` is interpreted as `null` by YAML. Always quote it: `path: "~"` or `path: "~/subdir"`.
 
@@ -77,6 +78,48 @@ Fields not explicitly set (`port`, `user`, `key`) are automatically filled from 
 | `ssh-endpoint` | string | **required** | Primary SSH endpoint slug |
 | `ssh-endpoints` | list of strings | `null` | Candidate endpoints for auto-selection |
 | `path` | string | **required** | Absolute path on the remote host. Trailing slashes are stripped. `~` is not expanded (it refers to the remote user's home and is resolved by SSH/rsync). |
+| `mount` | object | `null` | Mount management config. When set, nbkp manages the volume's mount lifecycle. |
+
+---
+
+## `mount` — Mount Config
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `strategy` | `"auto"` \| `"systemd"` \| `"direct"` | `"auto"` | Mount strategy: ``systemd`` uses systemctl and systemd-cryptsetup, ``direct`` uses raw mount/umount/cryptsetup commands, ``auto`` probes for systemctl and picks accordingly. |
+| `device-uuid` | string | **required** | Device UUID for drive detection (from ``/dev/disk/by-uuid/``). For encrypted volumes: the LUKS container UUID (from crypttab). For unencrypted volumes: the filesystem UUID (from fstab/blkid). |
+| `encryption` | object | `null` | Encryption config. Omit for unencrypted volumes. |
+
+The `mount` section is optional on both local and remote volumes. When present, nbkp manages the mount/umount lifecycle automatically during `run`.
+
+For encrypted volumes, `device-uuid` is the LUKS container UUID (from `crypttab` or `blkid`). For unencrypted volumes, it is the filesystem UUID (from `fstab` or `blkid`).
+
+## `encryption` — LUKS Encryption Config
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `type` | `"luks"` | **required** | Volume type discriminator |
+| `mapper-name` | string | **required** | Device mapper name (e.g. ``seagate8tb``) |
+| `passphrase-id` | string | **required** | Credential lookup key for the passphrase |
+
+The `type: luks` field is a discriminator for future encryption backend extensibility. Currently only LUKS is supported.
+
+The `passphrase-id` is used as a lookup key with the configured `credential-provider`. Multiple volumes can share the same `passphrase-id` — the passphrase is cached in memory during a single run.
+
+---
+
+Top-level config fields for credential retrieval:
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `credential-provider` | `"keyring"` \| `"prompt"` \| `"env"` \| `"command"` | `"keyring"` | How LUKS passphrases are retrieved |
+| `credential-command` | list of strings | `null` | Command template for `command` provider. Must contain `{id}` placeholder (e.g. `["pass", "show", "nbkp/{id}"]`) |
+
+Providers:
+- **keyring**: `keyring.get_password("nbkp", passphrase_id)` — uses macOS Keychain or Linux SecretService. Requires `pip install nbkp[keyring]`.
+- **prompt**: interactive hidden input prompt.
+- **env**: reads `NBKP_PASSPHRASE_<ID>` (uppercased, hyphens → underscores).
+- **command**: runs command template with `{id}` replaced by passphrase-id.
 
 ---
 

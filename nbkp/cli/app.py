@@ -17,6 +17,13 @@ config_app = typer.Typer(
 )
 app.add_typer(config_app)
 
+volumes_app = typer.Typer(
+    name="volumes",
+    help="Volume mount management commands",
+    no_args_is_help=True,
+)
+app.add_typer(volumes_app)
+
 app.add_typer(
     demo_app,
     name="demo",

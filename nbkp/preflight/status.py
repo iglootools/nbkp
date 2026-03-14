@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import enum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, computed_field
 
 from ..config import (
+    MountConfig,
     SyncConfig,
     SyncEndpoint,
     Volume,
@@ -27,6 +29,26 @@ class VolumeError(str, enum.Enum):
     SENTINEL_NOT_FOUND = f"{VOLUME_SENTINEL} volume sentinel not found"
     UNREACHABLE = "unreachable"
     LOCATION_EXCLUDED = "excluded by location filter"
+
+    # Mount management errors
+    DEVICE_NOT_PRESENT = "device not plugged in"
+    UNLOCK_FAILED = "failed to unlock encrypted device"
+    MOUNT_FAILED = "failed to mount volume"
+    SYSTEMCTL_NOT_FOUND = "systemctl not found"
+    SYSTEMD_ESCAPE_NOT_FOUND = "systemd-escape not found"
+    MOUNT_UNIT_NOT_CONFIGURED = "mount unit not configured in systemd"
+    MOUNT_UNIT_MISMATCH = "mount unit config does not match nbkp config"
+    CRYPTSETUP_SERVICE_NOT_CONFIGURED = "cryptsetup service not configured in systemd"
+    CRYPTSETUP_SERVICE_MISMATCH = "cryptsetup service config does not match nbkp config"
+    POLKIT_RULES_MISSING = "polkit rules not configured"
+    SUDOERS_RULES_MISSING = "sudoers rules not configured"
+    SUDO_NOT_FOUND = "sudo not found"
+    CRYPTSETUP_NOT_FOUND = "cryptsetup not found"
+    SYSTEMD_CRYPTSETUP_NOT_FOUND = "systemd-cryptsetup not found"
+    MOUNT_CMD_NOT_FOUND = "mount command not found"
+    UMOUNT_CMD_NOT_FOUND = "umount command not found"
+    MOUNTPOINT_CMD_NOT_FOUND = "mountpoint command not found"
+    PASSPHRASE_NOT_AVAILABLE = "passphrase not available"
 
 
 class SyncError(str, enum.Enum):
@@ -76,6 +98,41 @@ class SyncError(str, enum.Enum):
     )
 
 
+class MountCapabilities(BaseModel):
+    """Mount management capabilities, probed when a volume has mount config.
+
+    Composed into ``VolumeCapabilities`` as an optional field.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    resolved_backend: Literal["systemd", "direct"] | None = None
+    """Which backend was resolved (``None`` when auto-detection was not performed)."""
+
+    # Systemd-specific (None when direct)
+    has_systemctl: bool | None = None
+    has_systemd_escape: bool | None = None
+    mount_unit: str | None = None
+    has_mount_unit_config: bool | None = None
+    mount_unit_what: str | None = None
+    mount_unit_where: str | None = None
+    has_cryptsetup_service_config: bool | None = None
+    cryptsetup_service_exec_start: str | None = None
+    has_systemd_cryptsetup: bool | None = None
+    systemd_cryptsetup_path: str | None = None
+    has_polkit_rules: bool | None = None
+
+    # Shared (both backends)
+    has_sudo: bool | None = None
+    has_cryptsetup: bool | None = None
+    has_sudoers_rules: bool | None = None
+
+    # Direct-specific (None when systemd)
+    has_mount_cmd: bool | None = None
+    has_umount_cmd: bool | None = None
+    has_mountpoint: bool | None = None
+
+
 class VolumeCapabilities(BaseModel):
     """Host- and volume-level capabilities, computed once per reachable volume.
 
@@ -96,6 +153,7 @@ class VolumeCapabilities(BaseModel):
     is_btrfs_filesystem: bool
     hardlink_supported: bool
     btrfs_user_subvol_rm: bool
+    mount: MountCapabilities | None = None
 
 
 class VolumeDiagnostics(BaseModel):
@@ -137,15 +195,19 @@ class VolumeStatus(BaseModel):
         diagnostics: VolumeDiagnostics,
     ) -> "VolumeStatus":
         """Create a ``VolumeStatus`` by interpreting diagnostics into errors."""
+        mount = getattr(config, "mount", None)
         return VolumeStatus(
             slug=slug,
             config=config,
             diagnostics=diagnostics,
-            errors=_volume_errors(diagnostics),
+            errors=_volume_errors(diagnostics, mount),
         )
 
 
-def _volume_errors(diag: VolumeDiagnostics) -> list[VolumeError]:
+def _volume_errors(
+    diag: VolumeDiagnostics,
+    mount: MountConfig | None = None,
+) -> list[VolumeError]:
     """Translate volume diagnostics into VolumeError values."""
     if diag.location_excluded:
         return [VolumeError.LOCATION_EXCLUDED]
@@ -153,8 +215,158 @@ def _volume_errors(diag: VolumeDiagnostics) -> list[VolumeError]:
         return [VolumeError.UNREACHABLE]
     elif diag.capabilities is not None and not diag.capabilities.sentinel_exists:
         return [VolumeError.SENTINEL_NOT_FOUND]
+    elif diag.capabilities is not None and mount is not None:
+        return _mount_errors(diag.capabilities.mount, mount)
     else:
         return []
+
+
+def _mount_errors(
+    mount_caps: MountCapabilities | None,
+    mount: MountConfig,
+) -> list[VolumeError]:
+    """Translate mount-related capabilities into VolumeError values."""
+    if mount_caps is None:
+        return []
+    match mount_caps.resolved_backend:
+        case "direct":
+            return _direct_mount_errors(mount_caps, mount)
+        case _:
+            # "systemd" or None (legacy/unresolved) — use systemd checks
+            return _systemd_mount_errors(mount_caps, mount)
+
+
+def _systemd_mount_errors(
+    mount_caps: MountCapabilities,
+    mount: MountConfig,
+) -> list[VolumeError]:
+    """Translate systemd-specific mount capabilities into VolumeError values."""
+    has_encryption = mount.encryption is not None
+    return [
+        *(
+            [VolumeError.SYSTEMCTL_NOT_FOUND]
+            if mount_caps.has_systemctl is False
+            else []
+        ),
+        *(
+            [VolumeError.SYSTEMD_ESCAPE_NOT_FOUND]
+            if mount_caps.has_systemd_escape is False
+            else []
+        ),
+        *(
+            [VolumeError.MOUNT_UNIT_NOT_CONFIGURED]
+            if mount_caps.has_mount_unit_config is False
+            else []
+        ),
+        *(
+            [VolumeError.MOUNT_UNIT_MISMATCH]
+            if mount_caps.has_mount_unit_config is True
+            and _mount_unit_mismatches(mount_caps, mount)
+            else []
+        ),
+        *(
+            [VolumeError.SUDO_NOT_FOUND]
+            if has_encryption and mount_caps.has_sudo is False
+            else []
+        ),
+        *(
+            [VolumeError.CRYPTSETUP_NOT_FOUND]
+            if has_encryption and mount_caps.has_cryptsetup is False
+            else []
+        ),
+        *(
+            [VolumeError.SYSTEMD_CRYPTSETUP_NOT_FOUND]
+            if has_encryption and mount_caps.has_systemd_cryptsetup is False
+            else []
+        ),
+        *(
+            [VolumeError.CRYPTSETUP_SERVICE_NOT_CONFIGURED]
+            if has_encryption and mount_caps.has_cryptsetup_service_config is False
+            else []
+        ),
+        *(
+            [VolumeError.CRYPTSETUP_SERVICE_MISMATCH]
+            if has_encryption
+            and mount_caps.has_cryptsetup_service_config is True
+            and _cryptsetup_service_mismatches(mount_caps, mount)
+            else []
+        ),
+        *(
+            [VolumeError.POLKIT_RULES_MISSING]
+            if mount_caps.has_polkit_rules is False
+            else []
+        ),
+        *(
+            [VolumeError.SUDOERS_RULES_MISSING]
+            if has_encryption and mount_caps.has_sudoers_rules is False
+            else []
+        ),
+    ]
+
+
+def _direct_mount_errors(
+    mount_caps: MountCapabilities,
+    mount: MountConfig,
+) -> list[VolumeError]:
+    """Translate direct-backend mount capabilities into VolumeError values."""
+    has_encryption = mount.encryption is not None
+    return [
+        *([VolumeError.SUDO_NOT_FOUND] if mount_caps.has_sudo is False else []),
+        *(
+            [VolumeError.MOUNT_CMD_NOT_FOUND]
+            if mount_caps.has_mount_cmd is False
+            else []
+        ),
+        *(
+            [VolumeError.UMOUNT_CMD_NOT_FOUND]
+            if mount_caps.has_umount_cmd is False
+            else []
+        ),
+        *(
+            [VolumeError.MOUNTPOINT_CMD_NOT_FOUND]
+            if mount_caps.has_mountpoint is False
+            else []
+        ),
+        *(
+            [VolumeError.CRYPTSETUP_NOT_FOUND]
+            if has_encryption and mount_caps.has_cryptsetup is False
+            else []
+        ),
+        *(
+            [VolumeError.SUDOERS_RULES_MISSING]
+            if has_encryption and mount_caps.has_sudoers_rules is False
+            else []
+        ),
+    ]
+
+
+def _mount_unit_mismatches(
+    mount_caps: MountCapabilities,
+    mount: MountConfig,
+) -> bool:
+    """Check if the systemd mount unit config doesn't match expectations."""
+    if mount.encryption is not None:
+        expected_what = f"/dev/mapper/{mount.encryption.mapper_name}"
+    else:
+        expected_what = f"/dev/disk/by-uuid/{mount.device_uuid}"
+    return (
+        mount_caps.mount_unit_what is not None
+        and mount_caps.mount_unit_what != expected_what
+    )
+
+
+def _cryptsetup_service_mismatches(
+    mount_caps: MountCapabilities,
+    mount: MountConfig,
+) -> bool:
+    """Check if the systemd cryptsetup service config doesn't match expectations."""
+    if mount.encryption is None or mount_caps.cryptsetup_service_exec_start is None:
+        return False
+    exec_start = mount_caps.cryptsetup_service_exec_start
+    return (
+        mount.encryption.mapper_name not in exec_start
+        or mount.device_uuid not in exec_start
+    )
 
 
 class LatestSymlinkState(BaseModel):

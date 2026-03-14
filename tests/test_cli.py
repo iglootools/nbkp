@@ -338,7 +338,9 @@ class TestCheckCommand:
         result = runner.invoke(app, ["check", "--config", "/fake.yaml"])
         # Unreachable is not an error in non-strict mode
         assert result.exit_code == 0
-        assert "local-data" in result.output
+        # Rich may truncate column values with "…" in narrow terminals,
+        # so check for prefixes that survive truncation.
+        assert "local-da" in result.output
         assert "nas" in result.output
         assert "active" in result.output
         assert "inactive" in result.output

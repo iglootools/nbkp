@@ -367,7 +367,7 @@ def seed(
     config_path = tmp / "config.yaml"
     config_path.write_text(
         yaml.safe_dump(
-            config.model_dump(by_alias=True),
+            config.model_dump(by_alias=True, mode="json"),
             default_flow_style=False,
             sort_keys=False,
         )

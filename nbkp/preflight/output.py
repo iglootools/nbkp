@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import getpass
+from textwrap import dedent
+
 from rich.console import Console, Group, RenderableType
 from rich.padding import Padding
 from rich.panel import Panel
@@ -12,6 +15,7 @@ from rich.text import Text
 from ..config import (
     Config,
     LocalVolume,
+    MountConfig,
     RemoteVolume,
     ResolvedEndpoints,
     SshEndpoint,
@@ -21,9 +25,11 @@ from ..config.output import (
     _sync_endpoint_display,
     _sync_options,
     endpoint_path,
+    format_mount_summary,
     format_volume_display,
     host_label,
 )
+from ..mount.auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH, generate_auth_rules
 from ..remote.ssh import (
     format_proxy_jump_chain,
     ssh_prefix,
@@ -38,6 +44,7 @@ from ..fsprotocol import (
     VOLUME_SENTINEL,
 )
 from .status import (
+    MountCapabilities,
     SyncError,
     SyncStatus,
     VolumeCapabilities,
@@ -108,6 +115,41 @@ def _sync_status_text(
         return Text("inactive", style="red")
 
 
+def _mount_capability_items(
+    mount: MountCapabilities,
+) -> list[tuple[bool | None, str | None]]:
+    """Build capability display items based on resolved backend."""
+    match mount.resolved_backend:
+        case "direct":
+            return [
+                (True, "mnt-strategy:direct"),
+                (mount.has_sudo, "sudo"),
+                (mount.has_mount_cmd, "mount"),
+                (mount.has_umount_cmd, "umount"),
+                (mount.has_mountpoint, "mountpoint"),
+                (mount.has_cryptsetup, "cryptsetup"),
+                (mount.has_sudoers_rules, "sudoers"),
+            ]
+        case _:
+            return [
+                (
+                    True,
+                    f"mnt-strategy:{mount.resolved_backend or 'systemd'}",
+                ),
+                (mount.has_systemctl, "systemctl"),
+                (mount.has_systemd_escape, "systemd-escape"),
+                (mount.has_sudo, "sudo"),
+                (mount.has_cryptsetup, "cryptsetup"),
+                (mount.has_systemd_cryptsetup, "systemd-cryptsetup"),
+                (
+                    mount.mount_unit is not None,
+                    f"mount:{mount.mount_unit}" if mount.mount_unit else None,
+                ),
+                (mount.has_polkit_rules, "polkit"),
+                (mount.has_sudoers_rules, "sudoers"),
+            ]
+
+
 def _format_capabilities(caps: VolumeCapabilities | None) -> str:
     """Format volume capabilities as a compact comma-separated string."""
     if caps is None:
@@ -122,8 +164,9 @@ def _format_capabilities(caps: VolumeCapabilities | None) -> str:
             (caps.is_btrfs_filesystem, "btrfs-fs"),
             (caps.hardlink_supported, "hardlink"),
             (caps.btrfs_user_subvol_rm, "user_subvol_rm"),
+            *(_mount_capability_items(caps.mount) if caps.mount is not None else []),
         ]
-        if flag
+        if flag and label is not None
     ]
     return ", ".join(items) if items else "none"
 
@@ -255,6 +298,7 @@ def _build_volumes_section(
     table.add_column("Type")
     table.add_column("SSH Endpoint")
     table.add_column("URI")
+    table.add_column("Mount")
     table.add_column("Capabilities")
     table.add_column("Status")
 
@@ -273,6 +317,7 @@ def _build_volumes_section(
             vol_type,
             ssh_ep,
             format_volume_display(vol, resolved_endpoints),
+            format_mount_summary(vol.mount),
             _format_capabilities(vs.diagnostics.capabilities),
             _status_text(vs.active, vs.errors),
         )
@@ -328,12 +373,9 @@ def _build_orphan_warnings_section(
     ]
     if not warnings:
         return []
-    text = Text()
-    for i, warning in enumerate(warnings):
-        if i > 0:
-            text.append("\n")
-        text.append("warning: ", style="yellow bold")
-        text.append(warning)
+    text = Text("\n").join(
+        Text.assemble(("warning: ", "yellow bold"), warning) for warning in warnings
+    )
     return [Text(""), text]
 
 
@@ -388,26 +430,22 @@ def print_human_check(
 
 _INDENT = "  "
 
-_RSYNC_INSTALL = (
-    "Ubuntu/Debian: sudo apt install rsync\n"
-    "Fedora/RHEL:   sudo dnf install rsync\n"
-    "macOS:         brew install rsync"
-)
+_RSYNC_INSTALL = dedent("""\
+    Ubuntu/Debian: sudo apt install rsync
+    Fedora/RHEL:   sudo dnf install rsync
+    macOS:         brew install rsync""")
 
-_BTRFS_INSTALL = (
-    "Ubuntu/Debian: sudo apt install btrfs-progs\n"
-    "Fedora/RHEL:   sudo dnf install btrfs-progs"
-)
+_BTRFS_INSTALL = dedent("""\
+    Ubuntu/Debian: sudo apt install btrfs-progs
+    Fedora/RHEL:   sudo dnf install btrfs-progs""")
 
-_COREUTILS_INSTALL = (
-    "Ubuntu/Debian: sudo apt install coreutils\n"
-    "Fedora/RHEL:   sudo dnf install coreutils"
-)
+_COREUTILS_INSTALL = dedent("""\
+    Ubuntu/Debian: sudo apt install coreutils
+    Fedora/RHEL:   sudo dnf install coreutils""")
 
-_UTIL_LINUX_INSTALL = (
-    "Ubuntu/Debian: sudo apt install util-linux\n"
-    "Fedora/RHEL:   sudo dnf install util-linux"
-)
+_UTIL_LINUX_INSTALL = dedent("""\
+    Ubuntu/Debian: sudo apt install util-linux
+    Fedora/RHEL:   sudo dnf install util-linux""")
 
 
 def _print_cmd(
@@ -568,14 +606,14 @@ def _print_sync_error_fix(
                 f" but {path}/{LATEST_LINK} symlink"
                 " does not exist. Create it:"
             )
-            cmds = [
-                f"ln -sfn /dev/null {path}/{LATEST_LINK}",
-            ]
-            for cmd in cmds:
-                _print_cmd(
-                    console,
-                    wrap_cmd(cmd, src_vol, resolved_endpoints),
-                )
+            _print_cmd(
+                console,
+                wrap_cmd(
+                    f"ln -sfn /dev/null {path}/{LATEST_LINK}",
+                    src_vol,
+                    resolved_endpoints,
+                ),
+            )
         case SyncError.SOURCE_LATEST_INVALID:
             path = endpoint_path(src_vol, src_ep.subdir)
             console.print(
@@ -585,14 +623,14 @@ def _print_sync_error_fix(
                 " sync has run at least once,"
                 " or reset it:"
             )
-            cmds = [
-                f"ln -sfn /dev/null {path}/{LATEST_LINK}",
-            ]
-            for cmd in cmds:
-                _print_cmd(
-                    console,
-                    wrap_cmd(cmd, src_vol, resolved_endpoints),
-                )
+            _print_cmd(
+                console,
+                wrap_cmd(
+                    f"ln -sfn /dev/null {path}/{LATEST_LINK}",
+                    src_vol,
+                    resolved_endpoints,
+                ),
+            )
         case SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND:
             path = endpoint_path(src_vol, src_ep.subdir)
             if src_ep.btrfs_snapshots.enabled:
@@ -704,14 +742,14 @@ def _print_sync_error_fix(
                 f"{p2}The destination endpoint directory"
                 f" {path}/ is not writable. Fix permissions:"
             )
-            cmds = [
-                f"sudo chown <user>:<group> {path}",
-            ]
-            for cmd in cmds:
-                _print_cmd(
-                    console,
-                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
-                )
+            _print_cmd(
+                console,
+                wrap_cmd(
+                    f"sudo chown <user>:<group> {path}",
+                    dst_vol,
+                    resolved_endpoints,
+                ),
+            )
         case SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
@@ -719,14 +757,14 @@ def _print_sync_error_fix(
                 f" directory ({path}/{SNAPSHOTS_DIR})"
                 " is not writable. Fix permissions:"
             )
-            cmds = [
-                f"sudo chown <user>:<group> {path}/{SNAPSHOTS_DIR}",
-            ]
-            for cmd in cmds:
-                _print_cmd(
-                    console,
-                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
-                )
+            _print_cmd(
+                console,
+                wrap_cmd(
+                    f"sudo chown <user>:<group> {path}/{SNAPSHOTS_DIR}",
+                    dst_vol,
+                    resolved_endpoints,
+                ),
+            )
         case SyncError.DESTINATION_STAGING_DIR_NOT_WRITABLE:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
@@ -734,14 +772,14 @@ def _print_sync_error_fix(
                 f" directory ({path}/{STAGING_DIR})"
                 " is not writable. Fix permissions:"
             )
-            cmds = [
-                f"sudo chown <user>:<group> {path}/{STAGING_DIR}",
-            ]
-            for cmd in cmds:
-                _print_cmd(
-                    console,
-                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
-                )
+            _print_cmd(
+                console,
+                wrap_cmd(
+                    f"sudo chown <user>:<group> {path}/{STAGING_DIR}",
+                    dst_vol,
+                    resolved_endpoints,
+                ),
+            )
         case SyncError.DESTINATION_LATEST_NOT_FOUND:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
@@ -749,14 +787,14 @@ def _print_sync_error_fix(
                 f" but {path}/{LATEST_LINK} symlink"
                 " does not exist. Create it:"
             )
-            cmds = [
-                f"ln -sfn /dev/null {path}/{LATEST_LINK}",
-            ]
-            for cmd in cmds:
-                _print_cmd(
-                    console,
-                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
-                )
+            _print_cmd(
+                console,
+                wrap_cmd(
+                    f"ln -sfn /dev/null {path}/{LATEST_LINK}",
+                    dst_vol,
+                    resolved_endpoints,
+                ),
+            )
         case SyncError.DESTINATION_LATEST_INVALID:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
@@ -764,14 +802,14 @@ def _print_sync_error_fix(
                 " symlink points to an invalid"
                 " target. Reset it:"
             )
-            cmds = [
-                f"ln -sfn /dev/null {path}/{LATEST_LINK}",
-            ]
-            for cmd in cmds:
-                _print_cmd(
-                    console,
-                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
-                )
+            _print_cmd(
+                console,
+                wrap_cmd(
+                    f"ln -sfn /dev/null {path}/{LATEST_LINK}",
+                    dst_vol,
+                    resolved_endpoints,
+                ),
+            )
         case SyncError.DESTINATION_NO_HARDLINK_SUPPORT:
             console.print(
                 f"{p2}The destination filesystem does not"
@@ -788,6 +826,269 @@ def _print_sync_error_fix(
                 " is skipped. Run without --dry-run to"
                 " execute the full chain."
             )
+
+
+def _print_mount_error(
+    console: Console,
+    title: str,
+    details: str,
+) -> None:
+    """Print a mount-related error with indented details."""
+    p2 = _INDENT * 2
+    console.print(f"{p2}{title}")
+    for line in details.splitlines():
+        console.print(f"{p2}{_INDENT}{line}")
+
+
+def _print_device_not_present_fix(
+    console: Console,
+    mount: MountConfig | None,
+) -> None:
+    """Print fix for device not plugged in."""
+    p2 = _INDENT * 2
+    uuid = mount.device_uuid if mount else "<uuid>"
+    console.print(f"{p2}Plug in the drive and verify:")
+    _print_cmd(console, f"ls -la /dev/disk/by-uuid/{uuid}")
+    console.print(f"{p2}Or with systemd:")
+    _print_cmd(console, f"udevadm info /dev/disk/by-uuid/{uuid}")
+
+
+def _print_mount_unit_not_configured_fix(
+    console: Console,
+    vol: LocalVolume | RemoteVolume,
+    resolved_endpoints: ResolvedEndpoints,
+) -> None:
+    """Print fix for mount unit not configured in systemd."""
+    p2 = _INDENT * 2
+    host = host_label(vol, resolved_endpoints)
+    mount = vol.mount
+    console.print(f"{p2}Mount unit not configured in systemd on {host}.")
+    console.print(
+        f"{p2}The volume path must have a corresponding"
+        " fstab entry or native .mount unit."
+    )
+    if mount and mount.encryption:
+        console.print(f"{p2}fstab example (encrypted):")
+        _print_cmd(
+            console,
+            f"/dev/mapper/{mount.encryption.mapper_name}"
+            f"  {vol.path}  btrfs  defaults,noauto  0  0",
+            indent=3,
+        )
+    else:
+        uuid = mount.device_uuid if mount else "<uuid>"
+        console.print(f"{p2}fstab example (unencrypted):")
+        _print_cmd(
+            console,
+            f"UUID={uuid}  {vol.path}  ext4  defaults,noauto  0  0",
+            indent=3,
+        )
+    console.print(f"{p2}After editing fstab:")
+    _print_cmd(console, "sudo systemctl daemon-reload", indent=3)
+
+
+def _print_mount_unit_mismatch_fix(
+    console: Console,
+    vol: LocalVolume | RemoteVolume,
+    caps: VolumeCapabilities | None,
+    resolved_endpoints: ResolvedEndpoints,
+) -> None:
+    """Print fix for mount unit config mismatch."""
+    p2 = _INDENT * 2
+    host = host_label(vol, resolved_endpoints)
+    mount = vol.mount
+    mc = caps.mount if caps else None
+    mount_unit = mc.mount_unit if mc else "<mount-unit>"
+    actual_what = mc.mount_unit_what if mc else "?"
+    actual_where = mc.mount_unit_where if mc else "?"
+    if mount and mount.encryption:
+        expected_what = f"/dev/mapper/{mount.encryption.mapper_name}"
+    elif mount:
+        expected_what = f"/dev/disk/by-uuid/{mount.device_uuid}"
+    else:
+        expected_what = "?"
+    console.print(f"{p2}Mount unit config does not match on {host}.")
+    console.print(f"{p2}Expected:")
+    console.print(f"{p2}{_INDENT}Where={vol.path}")
+    console.print(f"{p2}{_INDENT}What={expected_what}")
+    console.print(f"{p2}Actual:")
+    console.print(f"{p2}{_INDENT}Where={actual_where}")
+    console.print(f"{p2}{_INDENT}What={actual_what}")
+    console.print(f"{p2}Check with:")
+    _print_cmd(
+        console,
+        f"systemctl show {mount_unit} -p What -p Where --no-pager",
+        indent=3,
+    )
+    console.print(f"{p2}Fix fstab or .mount unit, then:")
+    _print_cmd(console, "sudo systemctl daemon-reload", indent=3)
+
+
+def _print_cryptsetup_service_not_configured_fix(
+    console: Console,
+    vol: LocalVolume | RemoteVolume,
+    resolved_endpoints: ResolvedEndpoints,
+) -> None:
+    """Print fix for cryptsetup service not configured."""
+    p2 = _INDENT * 2
+    host = host_label(vol, resolved_endpoints)
+    mount = vol.mount
+    mapper = mount.encryption.mapper_name if mount and mount.encryption else "<mapper>"
+    uuid = mount.device_uuid if mount else "<uuid>"
+    console.print(
+        f"{p2}Cryptsetup service"
+        f" systemd-cryptsetup@{mapper}.service"
+        f" not configured in systemd on {host}."
+    )
+    console.print(
+        f"{p2}The encrypted volume must have a"
+        " corresponding crypttab entry or native"
+        " service unit."
+    )
+    console.print(f"{p2}crypttab example:")
+    _print_cmd(
+        console,
+        f"{mapper}  UUID={uuid}  none  luks,noauto",
+        indent=3,
+    )
+    console.print(f"{p2}After editing crypttab:")
+    _print_cmd(console, "sudo systemctl daemon-reload", indent=3)
+
+
+def _print_cryptsetup_service_mismatch_fix(
+    console: Console,
+    vol: LocalVolume | RemoteVolume,
+    caps: VolumeCapabilities | None,
+    resolved_endpoints: ResolvedEndpoints,
+) -> None:
+    """Print fix for cryptsetup service config mismatch."""
+    p2 = _INDENT * 2
+    host = host_label(vol, resolved_endpoints)
+    mount = vol.mount
+    mapper = mount.encryption.mapper_name if mount and mount.encryption else "<mapper>"
+    uuid = mount.device_uuid if mount else "<uuid>"
+    mc = caps.mount if caps else None
+    actual_exec = mc.cryptsetup_service_exec_start if mc else "?"
+    service = f"systemd-cryptsetup@{mapper}.service"
+    console.print(f"{p2}Cryptsetup service config does not match on {host}.")
+    console.print(f"{p2}Expected ExecStart to contain mapper={mapper} and UUID={uuid}.")
+    console.print(f"{p2}Actual ExecStart: {actual_exec}")
+    console.print(f"{p2}Check with:")
+    _print_cmd(
+        console,
+        f"systemctl show {service} -p ExecStart --no-pager",
+        indent=3,
+    )
+    console.print(f"{p2}Fix crypttab or service unit, then:")
+    _print_cmd(console, "sudo systemctl daemon-reload", indent=3)
+
+
+def _print_passphrase_not_available_fix(
+    console: Console,
+    mount: MountConfig | None,
+) -> None:
+    """Print fix for passphrase not available."""
+    p2 = _INDENT * 2
+    pid = (
+        mount.encryption.passphrase_id
+        if mount and mount.encryption
+        else "<passphrase-id>"
+    )
+    env_var = f"NBKP_PASSPHRASE_{pid.upper().replace('-', '_')}"
+    console.print(f"{p2}Configure with your credential provider:")
+    console.print(f"{p2}{_INDENT}keyring: keyring set nbkp {pid}")
+    console.print(f"{p2}{_INDENT}env: export {env_var}=...")
+    console.print(f"{p2}{_INDENT}command: ensure <credential-command> works")
+
+
+def _print_mount_failed_fix(
+    console: Console,
+    vol: LocalVolume | RemoteVolume,
+    mount: MountConfig | None,
+    resolved_endpoints: ResolvedEndpoints,
+) -> None:
+    """Print fix for unlock/mount failure."""
+    p2 = _INDENT * 2
+    if mount and mount.encryption:
+        mapper = mount.encryption.mapper_name
+        uuid = mount.device_uuid
+        console.print(f"{p2}Manual steps:")
+        _print_cmd(
+            console,
+            wrap_cmd(
+                f"sudo systemd-cryptsetup attach {mapper}"
+                f" /dev/disk/by-uuid/{uuid} /dev/stdin luks",
+                vol,
+                resolved_endpoints,
+            ),
+            indent=3,
+        )
+        console.print(f"{p2}Check journal:")
+        _print_cmd(
+            console,
+            f"journalctl -u systemd-cryptsetup@{mapper}.service",
+            indent=3,
+        )
+    else:
+        console.print(f"{p2}Check journal for mount errors.")
+
+
+def _resolve_volume_user(
+    vol: LocalVolume | RemoteVolume,
+    resolved_endpoints: ResolvedEndpoints,
+) -> str:
+    """Resolve the system user for auth rules on a volume's host.
+
+    For remote volumes, uses the SSH endpoint user. For local volumes
+    or when the SSH user is unset, falls back to the current OS user.
+    """
+    match vol:
+        case RemoteVolume():
+            ep = resolved_endpoints.get(vol.slug)
+            if ep and ep.server.user:
+                return ep.server.user
+            else:
+                return getpass.getuser()
+        case LocalVolume():
+            return getpass.getuser()
+
+
+def _print_polkit_rules_missing_fix(
+    console: Console,
+    vol: LocalVolume | RemoteVolume,
+    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
+) -> None:
+    """Print fix for missing polkit rules, including generated content."""
+    p2 = _INDENT * 2
+    host = host_label(vol, resolved_endpoints)
+    user = _resolve_volume_user(vol, resolved_endpoints)
+    rules = generate_auth_rules(config, user)
+    console.print(f"{p2}polkit rules not configured on {host}.")
+    console.print(f"{p2}Required for systemctl start/stop authorization without sudo.")
+    if rules.polkit:
+        console.print(f"{p2}Install to: {POLKIT_RULES_PATH}")
+        _print_cmd(console, rules.polkit.rstrip(), indent=3)
+    console.print(f"{p2}Or generate with: nbkp config setup-auth -c <config>")
+
+
+def _print_sudoers_rules_missing_fix(
+    console: Console,
+    vol: LocalVolume | RemoteVolume,
+    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
+) -> None:
+    """Print fix for missing sudoers rules, including generated content."""
+    p2 = _INDENT * 2
+    host = host_label(vol, resolved_endpoints)
+    user = _resolve_volume_user(vol, resolved_endpoints)
+    rules = generate_auth_rules(config, user)
+    console.print(f"{p2}sudoers rules not configured on {host}.")
+    console.print(f"{p2}Required for passwordless sudo systemd-cryptsetup attach.")
+    if rules.sudoers:
+        console.print(f"{p2}Install with: sudo visudo -f {SUDOERS_RULES_PATH}")
+        _print_cmd(console, rules.sudoers.rstrip(), indent=3)
+    console.print(f"{p2}Or generate with: nbkp config setup-auth -c <config>")
 
 
 def print_human_troubleshoot(
@@ -839,6 +1140,123 @@ def print_human_troubleshoot(
                         " endpoint at a different"
                         " location."
                     )
+                case VolumeError.DEVICE_NOT_PRESENT:
+                    mount = vol.mount
+                    _print_device_not_present_fix(console, mount)
+                case VolumeError.SYSTEMCTL_NOT_FOUND:
+                    host = host_label(vol, re)
+                    _print_mount_error(
+                        console,
+                        f"systemctl not found on {host}.",
+                        "Mount management requires systemd."
+                        " Install systemd or disable mount"
+                        " config for this volume.",
+                    )
+                case VolumeError.SYSTEMD_ESCAPE_NOT_FOUND:
+                    host = host_label(vol, re)
+                    _print_mount_error(
+                        console,
+                        f"systemd-escape not found on {host}.",
+                        "Install: sudo apt install systemd"
+                        " (usually pre-installed)\n"
+                        "Check: which systemd-escape",
+                    )
+                case VolumeError.MOUNT_UNIT_NOT_CONFIGURED:
+                    _print_mount_unit_not_configured_fix(
+                        console,
+                        vol,
+                        re,
+                    )
+                case VolumeError.MOUNT_UNIT_MISMATCH:
+                    _print_mount_unit_mismatch_fix(
+                        console,
+                        vol,
+                        vs.diagnostics.capabilities,
+                        re,
+                    )
+                case VolumeError.SUDO_NOT_FOUND:
+                    host = host_label(vol, re)
+                    _print_mount_error(
+                        console,
+                        f"sudo not found on {host}.",
+                        "sudo is required for mount"
+                        " operations (cryptsetup, mount/umount).\n"
+                        "Install: apt install sudo\n"
+                        "Check: which sudo",
+                    )
+                case VolumeError.CRYPTSETUP_NOT_FOUND:
+                    host = host_label(vol, re)
+                    _print_mount_error(
+                        console,
+                        f"cryptsetup not found on {host}.",
+                        "Install: sudo apt install cryptsetup\nCheck: which cryptsetup",
+                    )
+                case VolumeError.SYSTEMD_CRYPTSETUP_NOT_FOUND:
+                    host = host_label(vol, re)
+                    _print_mount_error(
+                        console,
+                        f"systemd-cryptsetup not found on {host}.",
+                        "This binary is part of systemd but"
+                        " requires the cryptsetup package"
+                        " (libcryptsetup).\n"
+                        "Install: sudo apt install cryptsetup\n"
+                        "Check: ls /usr/lib/systemd/"
+                        "systemd-cryptsetup",
+                    )
+                case VolumeError.MOUNT_CMD_NOT_FOUND:
+                    host = host_label(vol, re)
+                    _print_mount_error(
+                        console,
+                        f"mount command not found on {host}.",
+                        "Install: sudo apt install util-linux\nCheck: which mount",
+                    )
+                case VolumeError.UMOUNT_CMD_NOT_FOUND:
+                    host = host_label(vol, re)
+                    _print_mount_error(
+                        console,
+                        f"umount command not found on {host}.",
+                        "Install: sudo apt install util-linux\nCheck: which umount",
+                    )
+                case VolumeError.MOUNTPOINT_CMD_NOT_FOUND:
+                    host = host_label(vol, re)
+                    _print_mount_error(
+                        console,
+                        f"mountpoint command not found on {host}.",
+                        "Install: sudo apt install util-linux\nCheck: which mountpoint",
+                    )
+                case VolumeError.CRYPTSETUP_SERVICE_NOT_CONFIGURED:
+                    _print_cryptsetup_service_not_configured_fix(
+                        console,
+                        vol,
+                        re,
+                    )
+                case VolumeError.CRYPTSETUP_SERVICE_MISMATCH:
+                    _print_cryptsetup_service_mismatch_fix(
+                        console,
+                        vol,
+                        vs.diagnostics.capabilities,
+                        re,
+                    )
+                case VolumeError.POLKIT_RULES_MISSING:
+                    _print_polkit_rules_missing_fix(
+                        console,
+                        vol,
+                        config,
+                        re,
+                    )
+                case VolumeError.SUDOERS_RULES_MISSING:
+                    _print_sudoers_rules_missing_fix(
+                        console,
+                        vol,
+                        config,
+                        re,
+                    )
+                case VolumeError.PASSPHRASE_NOT_AVAILABLE:
+                    mount = vol.mount
+                    _print_passphrase_not_available_fix(console, mount)
+                case VolumeError.UNLOCK_FAILED | VolumeError.MOUNT_FAILED:
+                    mount = vol.mount
+                    _print_mount_failed_fix(console, vol, mount, re)
 
     for ss in failed_syncs:
         console.print(f"\n[bold]Sync {ss.slug!r}:[/bold]")

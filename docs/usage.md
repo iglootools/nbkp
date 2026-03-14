@@ -334,4 +334,118 @@ nbkp troubleshoot
 nbkp sh -o backup.sh
 ```
 
+### Example 3: Encrypted removable drives with mount management
+
+A laptop backing up to two LUKS-encrypted external drives and one unencrypted USB drive. nbkp automatically unlocks, mounts, syncs, umounts, and locks the drives.
+
+```yaml
+credential-provider: keyring  # or: prompt, env, command
+# credential-command: ["pass", "show", "nbkp/{id}"]  # only needed for command provider
+
+volumes:
+  laptop:
+    type: local
+    path: "~"
+
+  seagate8tb:
+    type: local
+    path: /mnt/seagate8tb
+    mount:
+      device-uuid: 5941f273-f73c-44c5-a3ef-fae7248db1b6  # LUKS container UUID
+      encryption:
+        type: luks
+        mapper-name: seagate8tb
+        passphrase-id: seagate8tb
+
+  iomega1tb:
+    type: local
+    path: /mnt/iomega1tb
+    mount:
+      device-uuid: ad5542e5-5365-4951-a1f2-fe81c4d6fe43
+      encryption:
+        type: luks
+        mapper-name: iomega1tb
+        passphrase-id: backup-drives  # shared passphrase across drives
+
+  usb-plain:
+    type: local
+    path: /mnt/usb-plain
+    mount:
+      device-uuid: 8a3b2c1d-4e5f-6789-abcd-ef0123456789  # filesystem UUID
+
+sync-endpoints:
+  laptop-photos:
+    volume: laptop
+    subdir: photos
+
+  seagate-photos:
+    volume: seagate8tb
+    subdir: photos
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  iomega-photos:
+    volume: iomega1tb
+
+  usb-photos:
+    volume: usb-plain
+
+syncs:
+  photos-to-seagate:
+    source: laptop-photos
+    destination: seagate-photos
+
+  photos-to-iomega:
+    source: laptop-photos
+    destination: iomega-photos
+
+  photos-to-usb:
+    source: laptop-photos
+    destination: usb-photos
+```
+
+System setup (one-time, on the target host):
+
+```bash
+# 1. Store passphrases in keyring
+keyring set nbkp seagate8tb
+keyring set nbkp backup-drives
+
+# 2. Configure fstab and crypttab
+# /etc/crypttab:
+#   seagate8tb UUID=5941f273-f73c-44c5-a3ef-fae7248db1b6 none luks,noauto
+#   iomega1tb  UUID=ad5542e5-5365-4951-a1f2-fe81c4d6fe43 none luks,noauto
+# /etc/fstab:
+#   /dev/mapper/seagate8tb /mnt/seagate8tb btrfs defaults,noauto 0 0
+#   /dev/mapper/iomega1tb  /mnt/iomega1tb  ext4  defaults,noauto 0 0
+#   UUID=8a3b2c1d-...      /mnt/usb-plain  ext4  defaults,noauto 0 0
+sudo systemctl daemon-reload
+
+# 3. Generate and install authorization rules
+nbkp config setup-auth -c config.yaml
+# Review output, then install:
+# sudo cp polkit-rules /etc/polkit-1/rules.d/50-nbkp.rules
+# sudo visudo -f /etc/sudoers.d/nbkp  # paste sudoers content
+
+# 4. Create sentinel files
+touch /mnt/seagate8tb/.nbkp-vol /mnt/iomega1tb/.nbkp-vol /mnt/usb-plain/.nbkp-vol
+```
+
+Usage:
+
+```bash
+# Run with automatic mount/umount (default)
+nbkp run
+
+# Run without mount management (volumes must be pre-mounted)
+nbkp run --no-mount --no-umount
+
+# Manually mount/umount specific volumes
+nbkp volumes mount --name seagate8tb
+nbkp volumes umount --name seagate8tb
+
+# Diagnose mount issues
+nbkp troubleshoot
+```
 

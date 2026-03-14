@@ -7,6 +7,7 @@ from . import (
     BtrfsSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
     LatestSymlinkState,
+    MountCapabilities,
     SnapshotDirsDiagnostics,
     SourceEndpointDiagnostics,
     SyncError,
@@ -21,6 +22,8 @@ from ..config import (
     Config,
     HardLinkSnapshotConfig,
     LocalVolume,
+    LuksEncryptionConfig,
+    MountConfig,
     RemoteVolume,
     SshEndpoint,
     SyncConfig,
@@ -227,7 +230,103 @@ def _troubleshoot_volumes() -> dict[str, LocalVolume]:
         "usb-7": LocalVolume(slug="usb-7", path="/mnt/usb-7"),
         "usb-8": LocalVolume(slug="usb-8", path="/mnt/usb-8"),
         "usb-9": LocalVolume(slug="usb-9", path="/mnt/usb-9"),
+        "mount-encrypted": LocalVolume(
+            slug="mount-encrypted",
+            path="/mnt/encrypted",
+            mount=MountConfig(
+                device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6",
+                encryption=LuksEncryptionConfig(
+                    mapper_name="encrypted",
+                    passphrase_id="encrypted",
+                ),
+            ),
+        ),
+        "mount-unencrypted": LocalVolume(
+            slug="mount-unencrypted",
+            path="/mnt/usb-backup",
+            mount=MountConfig(
+                device_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            ),
+        ),
+        "mount-direct": LocalVolume(
+            slug="mount-direct",
+            path="/mnt/direct-encrypted",
+            mount=MountConfig(
+                strategy="direct",
+                device_uuid="dddddddd-eeee-ffff-0000-111111111111",
+                encryption=LuksEncryptionConfig(
+                    mapper_name="direct-encrypted",
+                    passphrase_id="direct-encrypted",
+                ),
+            ),
+        ),
     }
+
+
+_MOUNT_ENCRYPTED_CAPS = VolumeCapabilities(
+    sentinel_exists=True,
+    has_rsync=True,
+    rsync_version_ok=True,
+    has_btrfs=False,
+    has_stat=True,
+    has_findmnt=True,
+    is_btrfs_filesystem=False,
+    hardlink_supported=True,
+    btrfs_user_subvol_rm=False,
+    mount=MountCapabilities(
+        resolved_backend="systemd",
+        has_systemctl=False,
+        has_systemd_escape=False,
+        has_sudo=False,
+        has_cryptsetup=False,
+        has_systemd_cryptsetup=False,
+        has_mount_unit_config=None,
+        has_cryptsetup_service_config=None,
+        has_polkit_rules=False,
+        has_sudoers_rules=False,
+    ),
+)
+
+_MOUNT_UNENCRYPTED_CAPS = VolumeCapabilities(
+    sentinel_exists=True,
+    has_rsync=True,
+    rsync_version_ok=True,
+    has_btrfs=False,
+    has_stat=True,
+    has_findmnt=True,
+    is_btrfs_filesystem=False,
+    hardlink_supported=True,
+    btrfs_user_subvol_rm=False,
+    mount=MountCapabilities(
+        resolved_backend="systemd",
+        has_systemctl=True,
+        has_systemd_escape=True,
+        mount_unit="mnt-usb\\x2dbackup.mount",
+        has_mount_unit_config=False,
+        has_polkit_rules=False,
+    ),
+)
+
+_MOUNT_DIRECT_ENCRYPTED_CAPS = VolumeCapabilities(
+    sentinel_exists=True,
+    has_rsync=True,
+    rsync_version_ok=True,
+    has_btrfs=False,
+    has_stat=True,
+    has_findmnt=True,
+    is_btrfs_filesystem=False,
+    hardlink_supported=True,
+    btrfs_user_subvol_rm=False,
+    mount=MountCapabilities(
+        resolved_backend="direct",
+        has_sudo=False,
+        has_mount_cmd=False,
+        has_umount_cmd=False,
+        has_mountpoint=False,
+        has_cryptsetup=False,
+        has_sudoers_rules=False,
+    ),
+)
 
 
 def troubleshoot_config() -> Config:
@@ -345,6 +444,19 @@ def troubleshoot_config() -> Config:
             slug="dst-no-snap-perms",
             volume="usb-9",
         ),
+        # Mount management endpoints
+        "mount-encrypted-dst": SyncEndpoint(
+            slug="mount-encrypted-dst",
+            volume="mount-encrypted",
+        ),
+        "mount-unencrypted-dst": SyncEndpoint(
+            slug="mount-unencrypted-dst",
+            volume="mount-unencrypted",
+        ),
+        "mount-direct-dst": SyncEndpoint(
+            slug="mount-direct-dst",
+            volume="mount-direct",
+        ),
     }
     return Config(
         ssh_endpoints=ssh_eps,
@@ -435,6 +547,21 @@ def troubleshoot_config() -> Config:
                 source="laptop-src",
                 destination="dst-no-snap-perms",
             ),
+            "mount-encrypted-errors": SyncConfig(
+                slug="mount-encrypted-errors",
+                source="laptop-src",
+                destination="mount-encrypted-dst",
+            ),
+            "mount-unencrypted-errors": SyncConfig(
+                slug="mount-unencrypted-errors",
+                source="laptop-src",
+                destination="mount-unencrypted-dst",
+            ),
+            "mount-direct-errors": SyncConfig(
+                slug="mount-direct-errors",
+                source="laptop-src",
+                destination="mount-direct-dst",
+            ),
         },
     )
 
@@ -486,6 +613,43 @@ def troubleshoot_data(
         errors=[],
     )
 
+    mount_encrypted_vs = VolumeStatus(
+        slug="mount-encrypted",
+        config=config.volumes["mount-encrypted"],
+        diagnostics=VolumeDiagnostics(capabilities=_MOUNT_ENCRYPTED_CAPS),
+        errors=[
+            VolumeError.SYSTEMCTL_NOT_FOUND,
+            VolumeError.SYSTEMD_ESCAPE_NOT_FOUND,
+            VolumeError.SUDO_NOT_FOUND,
+            VolumeError.CRYPTSETUP_NOT_FOUND,
+            VolumeError.SYSTEMD_CRYPTSETUP_NOT_FOUND,
+            VolumeError.POLKIT_RULES_MISSING,
+            VolumeError.SUDOERS_RULES_MISSING,
+        ],
+    )
+    mount_unencrypted_vs = VolumeStatus(
+        slug="mount-unencrypted",
+        config=config.volumes["mount-unencrypted"],
+        diagnostics=VolumeDiagnostics(capabilities=_MOUNT_UNENCRYPTED_CAPS),
+        errors=[
+            VolumeError.MOUNT_UNIT_NOT_CONFIGURED,
+            VolumeError.POLKIT_RULES_MISSING,
+        ],
+    )
+    mount_direct_vs = VolumeStatus(
+        slug="mount-direct",
+        config=config.volumes["mount-direct"],
+        diagnostics=VolumeDiagnostics(capabilities=_MOUNT_DIRECT_ENCRYPTED_CAPS),
+        errors=[
+            VolumeError.SUDO_NOT_FOUND,
+            VolumeError.MOUNT_CMD_NOT_FOUND,
+            VolumeError.UMOUNT_CMD_NOT_FOUND,
+            VolumeError.MOUNTPOINT_CMD_NOT_FOUND,
+            VolumeError.CRYPTSETUP_NOT_FOUND,
+            VolumeError.SUDOERS_RULES_MISSING,
+        ],
+    )
+
     vol_statuses = {
         "laptop": laptop_vs,
         "usb-drive": usb_vs,
@@ -494,6 +658,9 @@ def troubleshoot_data(
         "usb-7": usb7_vs,
         "usb-8": usb8_vs,
         "usb-9": usb9_vs,
+        "mount-encrypted": mount_encrypted_vs,
+        "mount-unencrypted": mount_unencrypted_vs,
+        "mount-direct": mount_direct_vs,
     }
 
     sync_statuses = {
@@ -646,6 +813,27 @@ def troubleshoot_data(
             errors=[
                 SyncError.DESTINATION_ENDPOINT_NOT_WRITABLE,
             ],
+        ),
+        "mount-encrypted-errors": SyncStatus(
+            slug="mount-encrypted-errors",
+            config=config.syncs["mount-encrypted-errors"],
+            source_status=laptop_vs,
+            destination_status=mount_encrypted_vs,
+            errors=[],
+        ),
+        "mount-unencrypted-errors": SyncStatus(
+            slug="mount-unencrypted-errors",
+            config=config.syncs["mount-unencrypted-errors"],
+            source_status=laptop_vs,
+            destination_status=mount_unencrypted_vs,
+            errors=[],
+        ),
+        "mount-direct-errors": SyncStatus(
+            slug="mount-direct-errors",
+            config=config.syncs["mount-direct-errors"],
+            source_status=laptop_vs,
+            destination_status=mount_direct_vs,
+            errors=[],
         ),
     }
 

@@ -24,6 +24,7 @@ from .common import (
     _INACTIVE_ERRORS,
     check_and_display,
     load_config_or_exit,
+    managed_mount,
     resolve_endpoints,
 )
 
@@ -92,108 +93,134 @@ def run(
             help="Prefer private (LAN) or public (WAN) endpoints",
         ),
     ] = None,
+    mount: Annotated[
+        bool,
+        typer.Option(
+            "--mount/--no-mount",
+            help="Mount/umount volumes with mount config",
+        ),
+    ] = True,
+    umount: Annotated[
+        bool,
+        typer.Option(
+            "--umount/--no-umount",
+            help="Umount after sync (use --no-umount for debugging)",
+        ),
+    ] = True,
 ) -> None:
     """Execute all active syncs in dependency order. Supports dry-run, progress display, snapshot creation, and automatic pruning."""
     cfg = load_config_or_exit(config)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
-    vol_statuses, sync_statuses, has_errors = check_and_display(
-        cfg,
-        output_format,
-        strict,
-        only_syncs=sync,
-        resolved_endpoints=resolved,
-        dry_run=dry_run,
-    )
+    exit_code = 0
 
-    if has_errors:
-        if output_format is OutputFormat.JSON:
-            data = {
-                "volumes": [v.model_dump() for v in vol_statuses.values()],
-                "syncs": [s.model_dump() for s in sync_statuses.values()],
-                "results": [],
-            }
-            typer.echo(json.dumps(data, indent=2))
-        raise typer.Exit(1)
-    else:
-        use_spinner = output_format is OutputFormat.HUMAN and progress in (
-            None,
-            ProgressMode.NONE,
-        )
-        stream_output = (
-            (lambda chunk: typer.echo(chunk, nl=False))
-            if output_format is OutputFormat.HUMAN and not use_spinner
-            else None
-        )
-
-        console = Console()
-        progress_lines: list[Text] = []
-        status_display = None
-
-        def on_sync_start(slug: str) -> None:
-            nonlocal status_display
-            if use_spinner:
-                status_display = console.status(f"Syncing {slug}...")
-                status_display.start()
-            else:
-                console.print(f"Syncing {slug}...")
-
-        def on_sync_end(slug: str, result: SyncResult) -> None:
-            nonlocal status_display
-            if status_display is not None:
-                status_display.stop()
-                status_display = None
-            icon = "[green]✓[/green]" if result.success else "[red]✗[/red]"
-            console.print(f"{icon} {slug}")
-            progress_lines.append(Text.from_markup(f"{icon} {slug}"))
-
-        results = run_all_syncs(
+    with managed_mount(
+        cfg, resolved, mount=mount, umount=umount, output_format=output_format
+    ):
+        vol_statuses, sync_statuses, has_errors = check_and_display(
             cfg,
-            sync_statuses,
-            dry_run=dry_run,
+            output_format,
+            strict,
             only_syncs=sync,
-            progress=progress,
-            prune=prune,
-            on_rsync_output=stream_output,
-            on_sync_start=(
-                on_sync_start if output_format is OutputFormat.HUMAN else None
-            ),
-            on_sync_end=(on_sync_end if output_format is OutputFormat.HUMAN else None),
             resolved_endpoints=resolved,
+            dry_run=dry_run,
         )
 
-        match output_format:
-            case OutputFormat.JSON:
+        if has_errors:
+            if output_format is OutputFormat.JSON:
                 data = {
                     "volumes": [v.model_dump() for v in vol_statuses.values()],
                     "syncs": [s.model_dump() for s in sync_statuses.values()],
-                    "results": [r.model_dump() for r in results],
+                    "results": [],
                 }
                 typer.echo(json.dumps(data, indent=2))
-            case OutputFormat.HUMAN:
-                sections = [
-                    *build_rich_tree_sections(cfg),
-                    Text(""),
-                    *progress_lines,
-                    Text(""),
-                    *build_human_results_sections(results, dry_run, cfg, resolved),
-                ]
-                console.print(
-                    Panel(
-                        Group(*sections),
-                        title="[bold]Sync Results[/bold]",
-                        border_style="cyan",
-                        padding=(0, 1),
-                    )
-                )
-
-        def _is_expected_skip(r: SyncResult) -> bool:
-            ss = sync_statuses.get(r.sync_slug)
-            return (
-                ss is not None
-                and bool(ss.errors)
-                and set(ss.errors) <= _INACTIVE_ERRORS
+            exit_code = 1
+        else:
+            use_spinner = output_format is OutputFormat.HUMAN and progress in (
+                None,
+                ProgressMode.NONE,
+            )
+            stream_output = (
+                (lambda chunk: typer.echo(chunk, nl=False))
+                if output_format is OutputFormat.HUMAN and not use_spinner
+                else None
             )
 
-        if any(not r.success and not _is_expected_skip(r) for r in results):
-            raise typer.Exit(1)
+            console = Console()
+            progress_lines: list[Text] = []
+            status_display = None
+
+            def on_sync_start(slug: str) -> None:
+                nonlocal status_display
+                if use_spinner:
+                    status_display = console.status(f"Syncing {slug}...")
+                    status_display.start()
+                else:
+                    console.print(f"Syncing {slug}...")
+
+            def on_sync_end(slug: str, result: SyncResult) -> None:
+                nonlocal status_display
+                if status_display is not None:
+                    status_display.stop()
+                    status_display = None
+                icon = (
+                    "[green]\u2713[/green]" if result.success else "[red]\u2717[/red]"
+                )
+                console.print(f"{icon} {slug}")
+                progress_lines.append(Text.from_markup(f"{icon} {slug}"))
+
+            results = run_all_syncs(
+                cfg,
+                sync_statuses,
+                dry_run=dry_run,
+                only_syncs=sync,
+                progress=progress,
+                prune=prune,
+                on_rsync_output=stream_output,
+                on_sync_start=(
+                    on_sync_start if output_format is OutputFormat.HUMAN else None
+                ),
+                on_sync_end=(
+                    on_sync_end if output_format is OutputFormat.HUMAN else None
+                ),
+                resolved_endpoints=resolved,
+            )
+
+            match output_format:
+                case OutputFormat.JSON:
+                    data = {
+                        "volumes": [v.model_dump() for v in vol_statuses.values()],
+                        "syncs": [s.model_dump() for s in sync_statuses.values()],
+                        "results": [r.model_dump() for r in results],
+                    }
+                    typer.echo(json.dumps(data, indent=2))
+                case OutputFormat.HUMAN:
+                    sections = [
+                        *build_rich_tree_sections(cfg),
+                        Text(""),
+                        *progress_lines,
+                        Text(""),
+                        *build_human_results_sections(results, dry_run, cfg, resolved),
+                    ]
+                    console.print(
+                        Panel(
+                            Group(*sections),
+                            title="[bold]Sync Results[/bold]",
+                            border_style="cyan",
+                            padding=(0, 1),
+                        )
+                    )
+
+            def _is_expected_skip(r: SyncResult) -> bool:
+                ss = sync_statuses.get(r.sync_slug)
+                return (
+                    ss is not None
+                    and bool(ss.errors)
+                    and set(ss.errors) <= _INACTIVE_ERRORS
+                )
+
+            if any(not r.success and not _is_expected_skip(r) for r in results):
+                exit_code = 1
+
+    if exit_code != 0:
+        raise typer.Exit(exit_code)

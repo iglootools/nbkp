@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from typing import Generator
+
 import typer
+from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ..config import (
@@ -14,6 +18,15 @@ from ..config import (
     load_config,
     resolve_all_endpoints,
 )
+from ..credentials import build_passphrase_fn
+from ..mount.detection import resolve_mount_strategy
+from ..mount.lifecycle import (
+    MountResult,
+    UmountResult,
+    mount_volumes,
+    umount_volumes,
+)
+from ..mount.strategy import MountStrategy
 from ..output import (
     OutputFormat,
     print_config_error,
@@ -22,6 +35,7 @@ from ..output import (
 from ..preflight import (
     SyncError,
     SyncStatus,
+    VolumeError,
     VolumeStatus,
     check_all_syncs,
 )
@@ -32,6 +46,10 @@ _INACTIVE_ERRORS = {
     SyncError.SOURCE_UNAVAILABLE,
     SyncError.DESTINATION_UNAVAILABLE,
     SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING,
+}
+
+_INACTIVE_VOLUME_ERRORS = {
+    VolumeError.DEVICE_NOT_PRESENT,
 }
 
 
@@ -202,3 +220,117 @@ def check_and_display(
     )
 
     return vol_statuses, sync_statuses, has_errors
+
+
+@contextmanager
+def managed_mount(
+    cfg: Config,
+    resolved: ResolvedEndpoints,
+    *,
+    mount: bool = True,
+    umount: bool = True,
+    output_format: OutputFormat = OutputFormat.HUMAN,
+) -> Generator[dict[str, MountStrategy], None, None]:
+    """Context manager that mounts volumes on entry and umounts on exit.
+
+    Yields the resolved mount strategy dict (empty when mounting is
+    skipped).  Umount runs in the ``finally`` block so cleanup is
+    guaranteed even on exceptions.
+
+    Parameters
+    ----------
+    mount:
+        When ``False`` (or no volumes have mount config), mounting and
+        umounting are both skipped.
+    umount:
+        When ``False``, the umount phase is skipped even if volumes
+        were mounted.  Useful for debugging (``run --no-umount``).
+    output_format:
+        Controls whether Rich spinner / result lines are printed.
+    """
+    has_mount_config = any(
+        getattr(v, "mount", None) is not None for v in cfg.volumes.values()
+    )
+    do_mount = mount and has_mount_config
+    do_umount = do_mount and umount
+
+    mount_strategy: dict[str, MountStrategy] = {}
+
+    if do_mount:
+        console_mount = Console()
+        passphrase_fn, cache = build_passphrase_fn(
+            cfg.credential_provider, cfg.credential_command
+        )
+        mount_strategy = resolve_mount_strategy(cfg, resolved, names=None)
+
+        mount_status = None
+
+        def on_mount_start(slug: str) -> None:
+            nonlocal mount_status
+            if output_format is OutputFormat.HUMAN:
+                mount_status = console_mount.status(f"Mounting {slug}...")
+                mount_status.start()
+
+        def on_mount_end(slug: str, result: MountResult) -> None:
+            nonlocal mount_status
+            if mount_status is not None:
+                mount_status.stop()
+                mount_status = None
+            if output_format is OutputFormat.HUMAN:
+                icon = (
+                    "[green]\u2713[/green]" if result.success else "[red]\u2717[/red]"
+                )
+                detail = f" ({result.detail})" if result.detail else ""
+                console_mount.print(f"{icon} mount {slug}{detail}")
+
+        try:
+            mount_volumes(
+                cfg,
+                resolved,
+                passphrase_fn,
+                mount_strategy=mount_strategy,
+                on_mount_start=on_mount_start,
+                on_mount_end=on_mount_end,
+            )
+        finally:
+            cache.clear()
+
+    try:
+        yield mount_strategy
+    finally:
+        if do_umount:
+            umount_console = Console()
+            umount_status = None
+
+            def on_umount_start(slug: str) -> None:
+                nonlocal umount_status
+                if output_format is OutputFormat.HUMAN:
+                    umount_status = umount_console.status(f"Umounting {slug}...")
+                    umount_status.start()
+
+            def on_umount_end(slug: str, result: UmountResult) -> None:
+                nonlocal umount_status
+                if umount_status is not None:
+                    umount_status.stop()
+                    umount_status = None
+                if output_format is OutputFormat.HUMAN:
+                    icon = (
+                        "[green]\u2713[/green]"
+                        if result.success
+                        else "[red]\u2717[/red]"
+                    )
+                    detail = f" ({result.detail})" if result.detail else ""
+                    warning = (
+                        f" [yellow]warning: {result.warning}[/yellow]"
+                        if result.warning
+                        else ""
+                    )
+                    umount_console.print(f"{icon} umount {slug}{detail}{warning}")
+
+            umount_volumes(
+                cfg,
+                resolved,
+                mount_strategy=mount_strategy,
+                on_umount_start=on_umount_start,
+                on_umount_end=on_umount_end,
+            )

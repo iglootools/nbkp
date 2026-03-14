@@ -15,18 +15,27 @@ from nbkp.config import (
     Config,
     LocalVolume,
     RemoteVolume,
+    ResolvedEndpoints,
     SshEndpoint,
     SyncConfig,
+    resolve_all_endpoints,
 )
+from nbkp.config import LuksEncryptionConfig, MountConfig
+from nbkp.mount.strategy import DirectMountStrategy
 from nbkp.remote.testkit.docker import (  # noqa: F401
     DOCKER_DIR,
+    LUKS_MAPPER_NAME,
+    LUKS_PASSPHRASE,
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_PATH,
+    REMOTE_ENCRYPTED_PATH,
+    LuksMetadata,
     create_sentinels,
     create_test_ssh_endpoint,
     generate_ssh_keypair,
     prepare_btrfs_snapshot_based_backup_dst,
     prepare_hardlinks_snapshot_based_backup_dst,
+    read_luks_metadata,
     ssh_exec,
     wait_for_ssh,
 )
@@ -96,6 +105,23 @@ def assert_sentinels_after_sync(
     assert _check_exists(f"{sentinel_dir}/.nbkp-dst"), (
         f".nbkp-dst missing from {sentinel_dir}"
     )
+
+
+def direct_strategy_for(volume: RemoteVolume) -> DirectMountStrategy:
+    """Build a ``DirectMountStrategy`` from a volume's mount config."""
+    return DirectMountStrategy(volume_path=volume.path)
+
+
+def resolved_endpoints_for(
+    server: SshEndpoint,
+    volume: RemoteVolume,
+) -> ResolvedEndpoints:
+    """Build minimal ``ResolvedEndpoints`` for a single remote volume."""
+    config = Config(
+        ssh_endpoints={"test-server": server},
+        volumes={volume.slug: volume},
+    )
+    return resolve_all_endpoints(config)
 
 
 def _docker_available() -> bool:
@@ -301,6 +327,57 @@ def remote_hardlink_volume() -> RemoteVolume:
     )
 
 
+# ── LUKS / encrypted volume fixtures ────────────────────────────
+
+
+@pytest.fixture(scope="session")
+def luks_metadata(docker_ssh_endpoint: SshEndpoint) -> LuksMetadata:
+    """Read LUKS setup metadata from the Docker container."""
+    return read_luks_metadata(docker_ssh_endpoint)
+
+
+@pytest.fixture(scope="session")
+def luks_uuid(luks_metadata: LuksMetadata) -> str:
+    """LUKS container UUID — skips test session if LUKS unavailable."""
+    if not luks_metadata.available:
+        pytest.skip("LUKS not available (dm-crypt kernel module missing?)")
+    assert luks_metadata.uuid is not None
+    return luks_metadata.uuid
+
+
+@pytest.fixture(scope="session")
+def remote_encrypted_volume(luks_uuid: str) -> RemoteVolume:
+    """RemoteVolume with MountConfig pointing at /mnt/encrypted-backup.
+
+    Uses ``strategy="direct"`` because Docker containers run sshd as
+    PID 1 (no systemd).
+    """
+    return RemoteVolume(
+        slug="test-encrypted",
+        ssh_endpoint="test-server",
+        path=REMOTE_ENCRYPTED_PATH,
+        mount=MountConfig(
+            strategy="direct",
+            device_uuid=luks_uuid,
+            encryption=LuksEncryptionConfig(
+                mapper_name=LUKS_MAPPER_NAME,
+                passphrase_id="test-luks",
+            ),
+        ),
+    )
+
+
+@pytest.fixture(scope="session")
+def remote_encrypted_volume_unencrypted(luks_uuid: str) -> RemoteVolume:
+    """RemoteVolume with MountConfig but no encryption (unencrypted mount)."""
+    return RemoteVolume(
+        slug="test-unencrypted-mount",
+        ssh_endpoint="test-server",
+        path=REMOTE_ENCRYPTED_PATH,
+        mount=MountConfig(device_uuid=luks_uuid),
+    )
+
+
 # ── Cleanup ─────────────────────────────────────────────────────
 
 
@@ -383,3 +460,53 @@ def _cleanup_remote(
     run(f"rm -rf {REMOTE_BTRFS_PATH}/bare 2>/dev/null || true")
 
     run(f"find {REMOTE_BTRFS_PATH} -name '.nbkp-*' -delete")
+
+    # Clean encrypted volume — try to mount for btrfs cleanup, then
+    # umount and close LUKS.  Each step is idempotent (|| true).
+    #
+    # Open LUKS if closed (read UUID from entrypoint-saved file)
+    run(
+        f"LUKS_UUID=$(cat /srv/luks-uuid 2>/dev/null) && "
+        f'[ -n "$LUKS_UUID" ] && '
+        f"echo -n '{LUKS_PASSPHRASE}' | sudo cryptsetup open"
+        f" --type luks /dev/disk/by-uuid/$LUKS_UUID"
+        f" {LUKS_MAPPER_NAME} - 2>/dev/null || true"
+    )
+    # Mount if not already mounted
+    run(
+        f"sudo mount -o user_subvol_rm_allowed"
+        f" /dev/mapper/{LUKS_MAPPER_NAME} {REMOTE_ENCRYPTED_PATH}"
+        f" 2>/dev/null || true"
+    )
+    # Clean btrfs artifacts on the encrypted volume (chain test puts
+    # btrfs subvolumes here).  Same pattern as /srv/btrfs-backups
+    # cleanup above.
+    enc_snap_base = f"{REMOTE_ENCRYPTED_PATH}/snapshots"
+    enc_snaps_result = ssh_exec(
+        server,
+        f"ls {enc_snap_base}/snapshots 2>/dev/null || true",
+        check=False,
+    )
+    if enc_snaps_result.stdout.strip():
+        for snap in enc_snaps_result.stdout.strip().split("\n"):
+            snap = snap.strip()
+            if snap:
+                run(
+                    "btrfs property set"
+                    f" {enc_snap_base}/snapshots/{snap}"
+                    " ro false 2>/dev/null || true"
+                )
+                run(
+                    "btrfs subvolume delete"
+                    f" {enc_snap_base}/snapshots/{snap}"
+                    " 2>/dev/null || true"
+                )
+    run(f"btrfs subvolume delete {enc_snap_base}/staging 2>/dev/null || true")
+    run(f"rm -f {enc_snap_base}/latest 2>/dev/null || true")
+    run(f"rm -rf {enc_snap_base}/snapshots 2>/dev/null || true")
+    run(f"btrfs subvolume delete {enc_snap_base} 2>/dev/null || true")
+    run(f"rm -rf {REMOTE_ENCRYPTED_PATH}/bare 2>/dev/null || true")
+    run(f"find {REMOTE_ENCRYPTED_PATH} -name '.nbkp-*' -delete 2>/dev/null || true")
+    # Umount and close LUKS
+    run(f"sudo umount {REMOTE_ENCRYPTED_PATH} 2>/dev/null || true")
+    run(f"sudo cryptsetup close {LUKS_MAPPER_NAME} 2>/dev/null || true")
