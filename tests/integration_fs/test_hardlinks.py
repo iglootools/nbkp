@@ -13,7 +13,12 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.sync.snapshots.common import list_snapshots, update_latest_symlink
+from nbkp.fsprotocol import Snapshot
+from nbkp.sync.snapshots.common import (
+    create_snapshot_timestamp,
+    list_snapshots,
+    update_latest_symlink,
+)
 from nbkp.sync.snapshots.hardlinks import (
     cleanup_orphaned_snapshots,
     create_snapshot_dir,
@@ -72,17 +77,17 @@ def _do_sync(
     """
     sync, config = _make_config(str(src), str(dst), max_snapshots)
     snapshot_path = create_snapshot_dir(sync, config, now=now)
-    snapshot_name = snapshot_path.rsplit("/", 1)[-1]
+    snapshot = Snapshot.from_path(snapshot_path)
 
     result = run_rsync(
         sync,
         config,
-        dest_suffix=f"snapshots/{snapshot_name}",
+        dest_suffix=f"snapshots/{snapshot.name}",
     )
     assert result.returncode == 0
 
-    update_latest_symlink(sync, config, snapshot_name)
-    return sync, config, snapshot_name
+    update_latest_symlink(sync, config, snapshot)
+    return sync, config, snapshot.name
 
 
 class TestCreateSnapshotDir:
@@ -124,12 +129,16 @@ class TestCleanupOrphanedSnapshots:
         sync, config, snap_name = _do_sync(src, dst)
 
         # Create an orphaned snapshot (newer than latest)
-        orphan = Path(str(dst)) / "snapshots" / "9999-01-01T00:00:00.000Z"
+        dst_vol = config.volumes["dst"]
+        orphan_snapshot = create_snapshot_timestamp(
+            datetime(9999, 1, 1, tzinfo=timezone.utc), dst_vol
+        )
+        orphan = Path(str(dst)) / "snapshots" / orphan_snapshot.name
         orphan.mkdir(parents=True)
 
         deleted = cleanup_orphaned_snapshots(sync, config)
         assert len(deleted) == 1
-        assert "9999-01-01T00:00:00.000Z" in deleted[0]
+        assert orphan_snapshot.name in deleted[0]
         assert not orphan.exists()
 
     def test_preserves_latest_target(self, tmp_path: Path) -> None:
@@ -165,11 +174,14 @@ class TestDeleteSnapshot:
         src.mkdir()
         dst.mkdir()
 
-        snap_dir = dst / "snapshots" / "2024-01-01T00:00:00.000Z"
+        dst_vol = LocalVolume(slug="dst", path=str(dst))
+        snap = create_snapshot_timestamp(
+            datetime(2024, 1, 1, tzinfo=timezone.utc), dst_vol
+        )
+        snap_dir = dst / "snapshots" / snap.name
         snap_dir.mkdir(parents=True)
         (snap_dir / "file.txt").write_text("delete me")
 
-        dst_vol = LocalVolume(slug="dst", path=str(dst))
         delete_snapshot(str(snap_dir), dst_vol, {})
         assert not snap_dir.exists()
 
@@ -214,8 +226,7 @@ class TestPruneSnapshots:
         assert len(remaining) == 3
         # Oldest two should be deleted
         for snap in remaining:
-            snap_name = snap.rsplit("/", 1)[-1]
-            assert snap_name not in [names[0], names[1]]
+            assert snap.name not in [names[0], names[1]]
 
     def test_never_deletes_latest_target(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
@@ -232,7 +243,7 @@ class TestPruneSnapshots:
 
         remaining = list_snapshots(sync, config)
         assert len(remaining) == 1
-        assert names[-1] in remaining[0]
+        assert names[-1] == remaining[0].name
 
     def test_dry_run_returns_paths_without_deleting(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
@@ -285,14 +296,14 @@ class TestHardLinkIncremental:
         # First sync
         now1 = datetime(2024, 1, 1, tzinfo=timezone.utc)
         snap1_path = create_snapshot_dir(sync, config, now=now1)
-        snap1_name = snap1_path.rsplit("/", 1)[-1]
+        snap1 = Snapshot.from_path(snap1_path)
         result = run_rsync(
             sync,
             config,
-            dest_suffix=f"snapshots/{snap1_name}",
+            dest_suffix=f"snapshots/{snap1.name}",
         )
         assert result.returncode == 0
-        update_latest_symlink(sync, config, snap1_name)
+        update_latest_symlink(sync, config, snap1)
 
         # Change one file
         (src / "changed.txt").write_text("v2 is different")
@@ -300,12 +311,12 @@ class TestHardLinkIncremental:
         # Second sync with --link-dest
         now2 = datetime(2024, 1, 2, tzinfo=timezone.utc)
         snap2_path = create_snapshot_dir(sync, config, now=now2)
-        snap2_name = snap2_path.rsplit("/", 1)[-1]
+        snap2 = Snapshot.from_path(snap2_path)
         result = run_rsync(
             sync,
             config,
-            link_dest=f"../{snap1_name}",
-            dest_suffix=f"snapshots/{snap2_name}",
+            link_dest=f"../{snap1.name}",
+            dest_suffix=f"snapshots/{snap2.name}",
         )
         assert result.returncode == 0
 

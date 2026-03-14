@@ -5,11 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from nbkp.preflight import (
-    SyncReason,
-    _check_btrfs_filesystem,
-    _check_btrfs_subvolume,
+    SyncError,
     check_sync,
     check_volume,
+)
+from nbkp.preflight.snapshot_checks import (
+    _check_btrfs_filesystem,
+    _check_btrfs_subvolume,
 )
 from nbkp.config import (
     BtrfsSnapshotConfig,
@@ -21,8 +23,8 @@ from nbkp.config import (
     SyncEndpoint,
     resolve_all_endpoints,
 )
-from nbkp.testkit.docker import REMOTE_BACKUP_PATH, REMOTE_BTRFS_PATH
-from nbkp.testkit.gen.fs import create_seed_sentinels
+from nbkp.remote.testkit.docker import REMOTE_BACKUP_PATH, REMOTE_BTRFS_PATH
+from nbkp.sync.testkit.seed import create_seed_sentinels
 
 from tests._docker_fixtures import create_sentinels, ssh_exec
 
@@ -109,21 +111,14 @@ class TestSyncCheck:
         create_seed_sentinels(config, remote_exec=_run_remote)
 
         resolved = resolve_all_endpoints(config)
-        src_status = check_volume(src_vol, resolved)
-        dst_status = check_volume(docker_remote_volume, resolved)
-        volume_statuses = {
-            "src": src_status,
-            "dst": dst_status,
-        }
 
         status = check_sync(
             sync,
             config,
-            volume_statuses,
             resolved_endpoints=resolved,
         )
         assert status.active is True
-        assert status.reasons == []
+        assert status.errors == []
 
 
 class TestBtrfsFilesystemCheck:
@@ -267,21 +262,14 @@ class TestSyncCheckBtrfs:
         sync = config.syncs["test-sync"]
 
         resolved = resolve_all_endpoints(config)
-        src_status = check_volume(src_vol, resolved)
-        dst_status = check_volume(remote_btrfs_volume, resolved)
-        volume_statuses = {
-            "src": src_status,
-            "dst": dst_status,
-        }
 
         status = check_sync(
             sync,
             config,
-            volume_statuses,
             resolved_endpoints=resolved,
         )
         assert status.active is False
-        assert SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME in status.reasons
+        assert SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME in status.errors
 
         # Cleanup
         ssh_exec(

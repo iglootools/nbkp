@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from mermaid_ascii import parse_mermaid, render_ascii
-from rich.console import Console
+from rich.console import Console, RenderableType
 from rich.tree import Tree
 
 from ..config import Config, SyncEndpoint
@@ -63,41 +63,47 @@ def print_mermaid_ascii_graph(
     console.print(render_ascii(diagram), highlight=False)
 
 
+def build_rich_tree_sections(config: Config) -> list[RenderableType]:
+    """Build Rich Tree renderables for the sync dependency graph."""
+    children, roots = build_adjacency(config.syncs)
+
+    def _add_children(tree: Tree, ep_slug: str, visited: set[str]) -> None:
+        for sync in children.get(ep_slug, []):
+            dst_slug = sync.destination
+            annotation = _endpoint_annotation(config.sync_endpoints[dst_slug])
+            label = " ".join(
+                part
+                for part in [
+                    f"[bold]{sync.slug}[/bold] -> {dst_slug}",
+                    f"({annotation})" if annotation else "",
+                    "(disabled)" if not sync.enabled else "",
+                ]
+                if part
+            )
+            child = tree.add(label, style="dim" if not sync.enabled else "")
+
+            if dst_slug not in visited:
+                visited.add(dst_slug)
+                _add_children(child, dst_slug, visited)
+
+    trees: list[RenderableType] = []
+    for root in sorted(roots):
+        tree = Tree(f"[bold]{root}[/bold]")
+        visited: set[str] = {root}
+        _add_children(tree, root, visited)
+        trees.append(tree)
+    return trees
+
+
 def print_rich_tree_graph(
     config: Config,
     *,
     console: Console | None = None,
 ) -> None:
     """Render the config graph as Rich Trees."""
-    if console is None:
-        console = Console()
-
-    children, roots = build_adjacency(config.syncs)
-
-    def _add_children(tree: Tree, ep_slug: str, visited: set[str]) -> None:
-        for sync in children.get(ep_slug, []):
-            dst_slug = sync.destination
-            dst_ep = config.sync_endpoints[dst_slug]
-            annotation = _endpoint_annotation(dst_ep)
-            label_parts = [f"[bold]{sync.slug}[/bold] -> {dst_slug}"]
-            if annotation:
-                label_parts.append(f"({annotation})")
-            if not sync.enabled:
-                label_parts.append("(disabled)")
-
-            style = "dim" if not sync.enabled else ""
-            label = " ".join(label_parts)
-            child = tree.add(label, style=style)
-
-            if dst_slug not in visited:
-                visited.add(dst_slug)
-                _add_children(child, dst_slug, visited)
-
-    for root in sorted(roots):
-        tree = Tree(f"[bold]{root}[/bold]")
-        visited: set[str] = {root}
-        _add_children(tree, root, visited)
-        console.print(tree)
+    c = console or Console()
+    for section in build_rich_tree_sections(config):
+        c.print(section)
 
 
 def print_mermaid_graph(config: Config) -> None:
@@ -107,31 +113,30 @@ def print_mermaid_graph(config: Config) -> None:
 
 def build_graph_json(config: Config) -> dict[str, object]:
     """Build JSON-serializable graph structure."""
-    # Collect all endpoint slugs referenced by syncs
-    ep_slugs: set[str] = set()
-    for sync in config.syncs.values():
-        ep_slugs.add(sync.source)
-        ep_slugs.add(sync.destination)
-
-    nodes = [
-        {
-            "slug": slug,
-            "volume": ep.volume,
-            "subdir": ep.subdir,
-            "snapshot_mode": ep.snapshot_mode,
-        }
-        for slug in sorted(ep_slugs)
-        if (ep := config.sync_endpoints.get(slug)) is not None
-    ]
-
-    edges = [
-        {
-            "sync": sync.slug,
-            "source": sync.source,
-            "destination": sync.destination,
-            "enabled": sync.enabled,
-        }
+    ep_slugs = {
+        slug
         for sync in config.syncs.values()
-    ]
+        for slug in (sync.source, sync.destination)
+    }
 
-    return {"nodes": nodes, "edges": edges}
+    return {
+        "nodes": [
+            {
+                "slug": slug,
+                "volume": ep.volume,
+                "subdir": ep.subdir,
+                "snapshot_mode": ep.snapshot_mode,
+            }
+            for slug in sorted(ep_slugs)
+            if (ep := config.sync_endpoints.get(slug)) is not None
+        ],
+        "edges": [
+            {
+                "sync": sync.slug,
+                "source": sync.source,
+                "destination": sync.destination,
+                "enabled": sync.enabled,
+            }
+            for sync in config.syncs.values()
+        ],
+    }

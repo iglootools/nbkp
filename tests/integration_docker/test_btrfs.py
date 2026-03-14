@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
+from nbkp.fsprotocol import Snapshot
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
@@ -26,7 +27,7 @@ from nbkp.sync.snapshots.common import (
     list_snapshots,
     update_latest_symlink,
 )
-from nbkp.testkit.docker import REMOTE_BTRFS_PATH
+from nbkp.remote.testkit.docker import REMOTE_BTRFS_PATH
 
 from tests._docker_fixtures import ssh_exec
 
@@ -137,8 +138,8 @@ class TestListSnapshots:
         snapshots = list_snapshots(sync, config, resolved)
         assert len(snapshots) == 2
         # Oldest first
-        assert "2024-01-01" in snapshots[0]
-        assert "2024-01-02" in snapshots[1]
+        assert "2024-01-01" in snapshots[0].name
+        assert "2024-01-02" in snapshots[1].name
 
 
 class TestGetLatestSnapshot:
@@ -162,7 +163,7 @@ class TestGetLatestSnapshot:
 
         latest = get_latest_snapshot(sync, config, resolved)
         assert latest is not None
-        assert "2024-01-02" in latest
+        assert "2024-01-02" in latest.name
 
     def test_returns_none_when_empty(
         self,
@@ -227,11 +228,13 @@ class TestPruneSnapshots:
                 now=now,
                 resolved_endpoints=resolved,
             )
-            name = path.rsplit("/", 1)[-1]
-            names.append(name)
+            snapshot = Snapshot.from_path(path)
+            names.append(snapshot.name)
 
         # Point latest to the newest
-        update_latest_symlink(sync, config, names[-1], resolved_endpoints=resolved)
+        update_latest_symlink(
+            sync, config, Snapshot.from_name(names[-1]), resolved_endpoints=resolved
+        )
 
         # Prune to keep 1
         deleted = prune_snapshots(sync, config, 1, resolved_endpoints=resolved)
@@ -239,7 +242,7 @@ class TestPruneSnapshots:
 
         remaining = list_snapshots(sync, config, resolved)
         assert len(remaining) == 1
-        assert names[-1] in remaining[0]
+        assert names[-1] == remaining[0].name
 
     def test_dry_run_preserves_all(
         self,
@@ -261,8 +264,8 @@ class TestPruneSnapshots:
                 now=now,
                 resolved_endpoints=resolved,
             )
-        name = path.rsplit("/", 1)[-1]
-        update_latest_symlink(sync, config, name, resolved_endpoints=resolved)
+        snapshot = Snapshot.from_path(path)
+        update_latest_symlink(sync, config, snapshot, resolved_endpoints=resolved)
 
         deleted = prune_snapshots(
             sync,

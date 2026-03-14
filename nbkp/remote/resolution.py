@@ -6,6 +6,7 @@ import ipaddress
 import socket
 from collections.abc import Callable
 from enum import Enum
+from functools import reduce
 from pathlib import Path
 from typing import List, Optional
 
@@ -111,9 +112,9 @@ def enrich_from_ssh_config(
     ssh_config = _load_ssh_config()
     if ssh_config is None:
         return endpoint
-
-    updates = _ssh_config_updates(endpoint, ssh_config.lookup(endpoint.host))
-    return endpoint.model_copy(update=updates) if updates else endpoint
+    else:
+        updates = _ssh_config_updates(endpoint, ssh_config.lookup(endpoint.host))
+        return endpoint.model_copy(update=updates) if updates else endpoint
 
 
 # --- Endpoint resolution ---
@@ -167,36 +168,35 @@ def resolve_endpoint_for_volume(
 
     if endpoint_filter is None:
         return eps[candidates[0]]
+    else:
+        ef = endpoint_filter
+        result = _apply_soft_filters(candidates, eps, ef)
+        return eps[result[0]]
 
-    ef = endpoint_filter
 
-    # DNS reachability
-    reachable = _soft_filter(
-        candidates, lambda s: is_private_host(eps[s].host) is not None
-    )
+def _apply_soft_filters(
+    candidates: list[str],
+    eps: dict[str, SshEndpoint],
+    ef: EndpointFilter,
+) -> list[str]:
+    """Apply the soft filter chain: DNS → exclude → include → network."""
+    excl = set(ef.exclude_locations)
+    locs = set(ef.locations)
+    want_private = ef.network == NetworkType.PRIVATE if ef.network is not None else None
 
-    # Exclude locations
-    if ef.exclude_locations:
-        excl = set(ef.exclude_locations)
-        reachable = _soft_filter(
-            reachable, lambda s: not (excl & set(eps[s].location_list))
-        )
+    filters: list[Callable[[str], bool]] = [
+        # DNS reachability
+        lambda s: is_private_host(eps[s].host) is not None,
+        *([lambda s: not (excl & set(eps[s].location_list))] if excl else []),
+        *([lambda s: bool(locs & set(eps[s].location_list))] if locs else []),
+        *(
+            [lambda s: is_private_host(eps[s].host) == want_private]
+            if want_private is not None
+            else []
+        ),
+    ]
 
-    # Include locations
-    if ef.locations:
-        locs = set(ef.locations)
-        reachable = _soft_filter(
-            reachable, lambda s: bool(locs & set(eps[s].location_list))
-        )
-
-    # Network filter (private / public)
-    if ef.network is not None:
-        want_private = ef.network == NetworkType.PRIVATE
-        reachable = _soft_filter(
-            reachable, lambda s: is_private_host(eps[s].host) == want_private
-        )
-
-    return eps[reachable[0]]
+    return reduce(_soft_filter, filters, candidates)
 
 
 def resolve_proxy_chain(

@@ -14,9 +14,10 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.preflight import (
-    SyncReason,
+    SyncError,
     SyncStatus,
-    VolumeReason,
+    VolumeDiagnostics,
+    VolumeError,
     VolumeStatus,
 )
 from nbkp.sync import run_all_syncs
@@ -124,7 +125,8 @@ def _active_statuses(
         name: VolumeStatus(
             slug=name,
             config=vol,
-            reasons=[],
+            diagnostics=VolumeDiagnostics(),
+            errors=[],
         )
         for name, vol in config.volumes.items()
     }
@@ -134,7 +136,7 @@ def _active_statuses(
             config=sync,
             source_status=vol_statuses[config.source_endpoint(sync).volume],
             destination_status=vol_statuses[config.destination_endpoint(sync).volume],
-            reasons=[],
+            errors=[],
         )
         for name, sync in config.syncs.items()
     }
@@ -148,7 +150,8 @@ def _inactive_statuses(
         name: VolumeStatus(
             slug=name,
             config=vol,
-            reasons=[VolumeReason.UNREACHABLE],
+            diagnostics=VolumeDiagnostics(ssh_reachable=False),
+            errors=[VolumeError.UNREACHABLE],
         )
         for name, vol in config.volumes.items()
     }
@@ -158,7 +161,7 @@ def _inactive_statuses(
             config=sync,
             source_status=vol_statuses[config.source_endpoint(sync).volume],
             destination_status=vol_statuses[config.destination_endpoint(sync).volume],
-            reasons=[SyncReason.SOURCE_UNAVAILABLE],
+            errors=[SyncError.SOURCE_UNAVAILABLE],
         )
         for name, sync in config.syncs.items()
     }

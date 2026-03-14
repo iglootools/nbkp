@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pydantic import ValidationError
+from pydantic_core import ErrorDetails
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -29,13 +30,14 @@ def format_volume_display(
             ep = resolved_endpoints.get(vol.slug)
             if ep is None:
                 return f"{vol.ssh_endpoint}:{vol.path}"
-            if ep.server.user:
-                host_part = f"{ep.server.user}@{ep.server.host}"
             else:
-                host_part = ep.server.host
-            if ep.server.port != 22:
-                host_part += f":{ep.server.port}"
-            return f"{host_part}:{vol.path}"
+                host_part = (
+                    f"{ep.server.user}@{ep.server.host}"
+                    if ep.server.user
+                    else ep.server.host
+                )
+                port_suffix = f":{ep.server.port}" if ep.server.port != 22 else ""
+                return f"{host_part}{port_suffix}:{vol.path}"
         case LocalVolume():
             return vol.path
 
@@ -73,27 +75,49 @@ def _sync_endpoint_display(endpoint: SyncEndpoint) -> str:
 
 
 def _sync_options(sync: SyncConfig, config: Config) -> str:
-    """Build a comma-separated string of enabled sync options."""
+    """Build a comma-separated summary of notable sync options.
+
+    Shown:
+    - rsync-filter: filters or filter_file configured on the sync
+    - src-snapshots: source reads from latest/ instead of volume root
+      (btrfs or hard-link)
+    - dst-snapshots: destination snapshot mode with optional max count
+      (btrfs or hard-link)
+
+    Omitted (available via config show / JSON output):
+    - rsync flags (compress, checksum, extra_options) — per-sync detail,
+      not structural
+    - filter rules — too verbose for a summary column
+    - enabled/disabled — already in the Status column
+    """
     src_ep = config.source_endpoint(sync)
     dst_ep = config.destination_endpoint(sync)
-    opts: list[str] = []
-    if sync.filters or sync.filter_file:
-        opts.append("rsync-filter")
-    if src_ep.snapshot_mode != "none":
-        opts.append(f"src:{src_ep.snapshot_mode}")
-    if dst_ep.btrfs_snapshots.enabled:
-        btrfs_label = "btrfs-snapshots"
-        max_snap = dst_ep.btrfs_snapshots.max_snapshots
-        if max_snap is not None:
-            btrfs_label += f"(max:{max_snap})"
-        opts.append(btrfs_label)
-    if dst_ep.hard_link_snapshots.enabled:
-        hl_label = "hard-link-snapshots"
-        max_snap = dst_ep.hard_link_snapshots.max_snapshots
-        if max_snap is not None:
-            hl_label += f"(max:{max_snap})"
-        opts.append(hl_label)
-    return ", ".join(opts)
+    return ", ".join(
+        opt
+        for opt in [
+            "rsync-filter" if sync.filters or sync.filter_file else "",
+            f"src-snapshots: {src_ep.snapshot_mode}"
+            if src_ep.snapshot_mode != "none"
+            else "",
+            _snapshot_label(
+                "dst-snapshots: btrfs", dst_ep.btrfs_snapshots.max_snapshots
+            )
+            if dst_ep.btrfs_snapshots.enabled
+            else "",
+            _snapshot_label(
+                "dst-snapshots: hard-link",
+                dst_ep.hard_link_snapshots.max_snapshots,
+            )
+            if dst_ep.hard_link_snapshots.enabled
+            else "",
+        ]
+        if opt
+    )
+
+
+def _snapshot_label(name: str, max_snapshots: int | None) -> str:
+    """Format a snapshot backend label with optional max count."""
+    return f"{name}(max:{max_snapshots})" if max_snapshots is not None else name
 
 
 def print_human_config(
@@ -178,6 +202,15 @@ def print_human_config(
     console.print(sync_table)
 
 
+def _format_validation_error(err: ErrorDetails) -> str:
+    """Format a single Pydantic validation error for display."""
+    loc = " → ".join(str(p) for p in err["loc"])
+    msg = str(err["msg"])
+    if msg.startswith("Value error, "):
+        msg = msg[len("Value error, ") :]
+    return f"{loc}: {msg}" if loc else msg
+
+
 def print_config_error(
     e: ConfigError,
     *,
@@ -189,18 +222,7 @@ def print_config_error(
     cause = e.__cause__
     match cause:
         case ValidationError():
-            lines: list[str] = []
-            for err in cause.errors():
-                loc = " → ".join(str(p) for p in err["loc"])
-                msg = err["msg"]
-                if msg.startswith("Value error, "):
-                    prefix_len = len("Value error, ")
-                    msg = msg[prefix_len:]
-                if loc:
-                    lines.append(f"{loc}: {msg}")
-                else:
-                    lines.append(msg)
-            body = "\n".join(lines)
+            body = "\n".join(_format_validation_error(err) for err in cause.errors())
         case _:
             body = str(e)
     title = f"Config error [{e.reason}]"

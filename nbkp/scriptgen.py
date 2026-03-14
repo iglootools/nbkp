@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib.resources
 import os
 import shlex
+import sys
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from textwrap import dedent
@@ -25,9 +26,15 @@ from .config import (
     SshEndpoint,
     SyncConfig,
 )
+from .fsprotocol import (
+    DESTINATION_SENTINEL,
+    LATEST_LINK,
+    SNAPSHOTS_DIR,
+    SOURCE_SENTINEL,
+    STAGING_DIR,
+    VOLUME_SENTINEL,
+)
 from .remote.ssh import build_ssh_base_args
-from .sync.snapshots.btrfs import STAGING_DIR
-from .sync.snapshots.common import LATEST_LINK, SNAPSHOTS_DIR
 from .sync.rsync import build_rsync_command
 
 # ── Public API ────────────────────────────────────────────────
@@ -42,6 +49,7 @@ class ScriptOptions:
     relative_src: bool = False
     relative_dst: bool = False
     portable: bool = True
+    platform: str = sys.platform
 
 
 def generate_script(
@@ -53,10 +61,9 @@ def generate_script(
 ) -> str:
     """Generate a standalone bash script from config."""
     re = resolved_endpoints or {}
-    if now is None:
-        now = datetime.now(timezone.utc)
+    ts = now or datetime.now(timezone.utc)
     vol_paths = _build_vol_paths(config, options)
-    ctx = _build_script_context(config, options, vol_paths, now, re)
+    ctx = _build_script_context(config, options, vol_paths, ts, re)
     template = _load_template()
     return template.render(ctx) + "\n"
 
@@ -120,23 +127,33 @@ def _build_vol_paths(
     """Compute volume slug -> effective path."""
     src_slugs = {config.source_endpoint(s).volume for s in config.syncs.values()}
     dst_slugs = {config.destination_endpoint(s).volume for s in config.syncs.values()}
+    return {
+        slug: _resolve_vol_path(slug, vol, src_slugs, dst_slugs, options)
+        for slug, vol in config.volumes.items()
+    }
 
-    vol_paths: dict[str, str] = {}
-    for slug, vol in config.volumes.items():
-        match vol:
-            case RemoteVolume():
-                vol_paths[slug] = vol.path
-            case LocalVolume():
-                should_relativize = (slug in src_slugs and options.relative_src) or (
-                    slug in dst_slugs and options.relative_dst
-                )
-                if should_relativize and options.output_file:
-                    output_dir = os.path.dirname(options.output_file)
-                    rel = os.path.relpath(vol.path, output_dir)
-                    vol_paths[slug] = f"${{NBKP_SCRIPT_DIR}}/{rel}"
-                else:
-                    vol_paths[slug] = vol.path
-    return vol_paths
+
+def _resolve_vol_path(
+    slug: str,
+    vol: LocalVolume | RemoteVolume,
+    src_slugs: set[str],
+    dst_slugs: set[str],
+    options: ScriptOptions,
+) -> str:
+    """Resolve effective path for a single volume."""
+    match vol:
+        case RemoteVolume():
+            return vol.path
+        case LocalVolume():
+            should_relativize = (slug in src_slugs and options.relative_src) or (
+                slug in dst_slugs and options.relative_dst
+            )
+            if should_relativize and options.output_file:
+                output_dir = os.path.dirname(options.output_file)
+                rel = os.path.relpath(vol.path, output_dir)
+                return f"${{NBKP_SCRIPT_DIR}}/{rel}"
+            else:
+                return vol.path
 
 
 def _vol_path(
@@ -187,8 +204,9 @@ def _format_shell_command(
     parts = [_qp(arg) for arg in cmd]
     if len(parts) <= 3:
         return " ".join(parts)
-    sep = f" \\\n{cont_indent}"
-    return parts[0] + sep + sep.join(parts[1:])
+    else:
+        sep = f" \\\n{cont_indent}"
+        return parts[0] + sep + sep.join(parts[1:])
 
 
 # ── SSH command helpers ──────────────────────────────────────
@@ -271,6 +289,22 @@ def _ls_snapshots_cmd(
             return _format_remote_command_str(
                 ep.server, ep.proxy_chain, ["ls", snaps_dir]
             )
+
+
+def _snapshot_date_format(
+    dst_vol: LocalVolume | RemoteVolume,
+    platform: str = sys.platform,
+) -> str:
+    """Return the shell date format string for snapshot timestamps.
+
+    Uses colons (standard ISO 8601) on Linux/remote, hyphens on macOS local
+    volumes where APFS/HFS+ forbids colons in filenames.
+    """
+    match dst_vol:
+        case LocalVolume() if platform == "darwin":
+            return "%Y-%m-%dT%H-%M-%S.000Z"
+        case _:
+            return "%Y-%m-%dT%H:%M:%S.000Z"
 
 
 def _snapshot_cmd(
@@ -459,147 +493,110 @@ def _build_preflight_block(
     dst_vol = config.volumes[dst_ep.volume]
     src_path = _vol_path(vol_paths, src_ep.volume, src_ep.subdir)
     dst_path = _vol_path(vol_paths, dst_ep.volume, dst_ep.subdir)
+    src_sentinel = f"{src_path}/{SOURCE_SENTINEL}"
+    dst_sentinel = f"{dst_path}/{DESTINATION_SENTINEL}"
+    staging_dir = f"{dst_path}/{STAGING_DIR}"
+    snaps_dir = f"{dst_path}/{SNAPSHOTS_DIR}"
+    re = resolved_endpoints
 
-    lines: list[str] = []
-
-    # Source endpoint sentinel
-    src_sentinel = f"{src_path}/.nbkp-src"
-    lines.append(
+    lines = [
+        # Source endpoint sentinel
         _build_check_line(
             src_vol,
             ["-f", src_sentinel],
             f"source sentinel {src_sentinel} not found",
-            resolved_endpoints,
-        )
-    )
-
-    # Source snapshot: verify latest symlink and snapshots/ exist
-    if src_ep.snapshot_mode != "none":
-        src_latest = f"{src_path}/{LATEST_LINK}"
-        lines.append(
-            _build_check_line(
-                src_vol,
-                ["-L", src_latest],
-                (f"source {LATEST_LINK} symlink not found ({src_latest})"),
-                resolved_endpoints,
-            )
-        )
-        src_snapshots = f"{src_path}/{SNAPSHOTS_DIR}"
-        lines.append(
-            _build_check_line(
-                src_vol,
-                ["-d", src_snapshots],
-                (f"source {SNAPSHOTS_DIR}/ not found ({src_snapshots})"),
-                resolved_endpoints,
-            )
-        )
-
-    # Destination endpoint sentinel
-    dst_sentinel = f"{dst_path}/.nbkp-dst"
-    lines.append(
+            re,
+        ),
+        # Source snapshot: verify latest symlink and snapshots/ exist
+        *(
+            [
+                _build_check_line(
+                    src_vol,
+                    ["-L", f"{src_path}/{LATEST_LINK}"],
+                    f"source {LATEST_LINK} symlink not found ({src_path}/{LATEST_LINK})",
+                    re,
+                ),
+                _build_check_line(
+                    src_vol,
+                    ["-d", f"{src_path}/{SNAPSHOTS_DIR}"],
+                    f"source {SNAPSHOTS_DIR}/ not found ({src_path}/{SNAPSHOTS_DIR})",
+                    re,
+                ),
+            ]
+            if src_ep.snapshot_mode != "none"
+            else []
+        ),
+        # Destination endpoint sentinel
         _build_check_line(
             dst_vol,
             ["-f", dst_sentinel],
             f"destination sentinel {dst_sentinel} not found",
-            resolved_endpoints,
-        )
-    )
-
-    # rsync on source
-    lines.append(
-        _build_which_line(
-            src_vol,
-            "rsync",
-            "rsync not found on source",
-            resolved_endpoints,
-        )
-    )
-
-    # rsync on destination
-    lines.append(
-        _build_which_line(
-            dst_vol,
-            "rsync",
-            "rsync not found on destination",
-            resolved_endpoints,
-        )
-    )
-
-    # Btrfs checks
-    if dst_ep.btrfs_snapshots.enabled:
-        lines.append(
-            _build_which_line(
-                dst_vol,
-                "btrfs",
-                "btrfs not found on destination",
-                resolved_endpoints,
-            )
-        )
-        tmp_dir = f"{dst_path}/{STAGING_DIR}"
-        lines.append(
-            _build_check_line(
-                dst_vol,
-                ["-d", tmp_dir],
-                f"destination {STAGING_DIR}/ directory not found ({tmp_dir})",
-                resolved_endpoints,
-            )
-        )
-        lines.append(
-            _build_check_line(
-                dst_vol,
-                ["-w", tmp_dir],
-                f"destination {STAGING_DIR}/ directory not writable ({tmp_dir})",
-                resolved_endpoints,
-            )
-        )
-        snaps_dir = f"{dst_path}/{SNAPSHOTS_DIR}"
-        lines.append(
-            _build_check_line(
-                dst_vol,
-                ["-d", snaps_dir],
-                f"destination {SNAPSHOTS_DIR}/ directory not found ({snaps_dir})",
-                resolved_endpoints,
-            )
-        )
-        lines.append(
-            _build_check_line(
-                dst_vol,
-                ["-w", snaps_dir],
-                f"destination {SNAPSHOTS_DIR}/ directory not writable ({snaps_dir})",
-                resolved_endpoints,
-            )
-        )
-
-    # Hard-link checks
-    if dst_ep.hard_link_snapshots.enabled:
-        snaps_dir = f"{dst_path}/{SNAPSHOTS_DIR}"
-        lines.append(
-            _build_check_line(
-                dst_vol,
-                ["-d", snaps_dir],
-                f"destination {SNAPSHOTS_DIR}/ directory not found ({snaps_dir})",
-                resolved_endpoints,
-            )
-        )
-        lines.append(
-            _build_check_line(
-                dst_vol,
-                ["-w", snaps_dir],
-                f"destination {SNAPSHOTS_DIR}/ directory not writable ({snaps_dir})",
-                resolved_endpoints,
-            )
-        )
-
-    # Destination endpoint writability
-    lines.append(
+            re,
+        ),
+        # rsync on source and destination
+        _build_which_line(src_vol, "rsync", "rsync not found on source", re),
+        _build_which_line(dst_vol, "rsync", "rsync not found on destination", re),
+        # Btrfs checks
+        *(
+            [
+                _build_which_line(
+                    dst_vol, "btrfs", "btrfs not found on destination", re
+                ),
+                _build_check_line(
+                    dst_vol,
+                    ["-d", staging_dir],
+                    f"destination {STAGING_DIR}/ directory not found ({staging_dir})",
+                    re,
+                ),
+                _build_check_line(
+                    dst_vol,
+                    ["-w", staging_dir],
+                    f"destination {STAGING_DIR}/ directory not writable ({staging_dir})",
+                    re,
+                ),
+                _build_check_line(
+                    dst_vol,
+                    ["-d", snaps_dir],
+                    f"destination {SNAPSHOTS_DIR}/ directory not found ({snaps_dir})",
+                    re,
+                ),
+                _build_check_line(
+                    dst_vol,
+                    ["-w", snaps_dir],
+                    f"destination {SNAPSHOTS_DIR}/ directory not writable ({snaps_dir})",
+                    re,
+                ),
+            ]
+            if dst_ep.btrfs_snapshots.enabled
+            else []
+        ),
+        # Hard-link checks
+        *(
+            [
+                _build_check_line(
+                    dst_vol,
+                    ["-d", snaps_dir],
+                    f"destination {SNAPSHOTS_DIR}/ directory not found ({snaps_dir})",
+                    re,
+                ),
+                _build_check_line(
+                    dst_vol,
+                    ["-w", snaps_dir],
+                    f"destination {SNAPSHOTS_DIR}/ directory not writable ({snaps_dir})",
+                    re,
+                ),
+            ]
+            if dst_ep.hard_link_snapshots.enabled
+            else []
+        ),
+        # Destination endpoint writability
         _build_check_line(
             dst_vol,
             ["-w", dst_path],
             f"destination endpoint {dst_path} not writable",
-            resolved_endpoints,
-        )
-    )
-
+            re,
+        ),
+    ]
     return "\n".join(lines)
 
 
@@ -677,11 +674,10 @@ def _build_rsync_block(
     formatted = _format_shell_command(cmd, cont_indent=i2)
 
     runtime_vars = [
+        *(['${RSYNC_LINK_DEST:+"$RSYNC_LINK_DEST"}'] if has_link_dest else []),
         '${RSYNC_DRY_RUN_FLAG:+"$RSYNC_DRY_RUN_FLAG"}',
         "$RSYNC_PROGRESS_FLAGS",
     ]
-    if has_link_dest:
-        runtime_vars.insert(0, '${RSYNC_LINK_DEST:+"$RSYNC_LINK_DEST"}')
     runtime_suffix = f" \\\n{i2}".join(runtime_vars)
     return f"{formatted} \\\n{i2}{runtime_suffix}"
 
@@ -691,6 +687,7 @@ def _build_snapshot_block(
     config: Config,
     vol_paths: dict[str, str],
     resolved_endpoints: ResolvedEndpoints,
+    platform: str = sys.platform,
 ) -> str:
     """Build btrfs snapshot block at indent 0."""
     dst_ep = config.destination_endpoint(sync)
@@ -700,9 +697,10 @@ def _build_snapshot_block(
     snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     snap = _snapshot_cmd(dst_vol, tmp, snaps_dir, resolved_endpoints)
 
+    date_fmt = _snapshot_date_format(dst_vol, platform)
     return dedent(f"""\
         if [ "$NBKP_DRY_RUN" = false ]; then
-            NBKP_TS=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+            NBKP_TS=$(date -u +{date_fmt})
             {snap}
         fi""")
 
@@ -795,6 +793,7 @@ def _build_hard_link_mkdir_block(
     config: Config,
     vol_paths: dict[str, str],
     resolved_endpoints: ResolvedEndpoints,
+    platform: str = sys.platform,
 ) -> str:
     """Build snapshot directory creation block."""
     dst_ep = config.destination_endpoint(sync)
@@ -803,8 +802,9 @@ def _build_hard_link_mkdir_block(
     snaps_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     mkdir_cmd = _mkdir_snap_cmd(dst_vol, snaps_dir, resolved_endpoints)
 
+    date_fmt = _snapshot_date_format(dst_vol, platform)
     return dedent(f"""\
-        NBKP_TS=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+        NBKP_TS=$(date -u +{date_fmt})
         {mkdir_cmd}""")
 
 
@@ -882,19 +882,10 @@ def _build_volume_check(
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     vpath = vol_paths[slug]
-    sentinel = f"{vpath}/.nbkp-vol"
-    match vol:
-        case LocalVolume():
-            test_cmd = f"test -f {_qp(sentinel)}"
-        case RemoteVolume():
-            ep = resolved_endpoints[vol.slug]
-            test_cmd = _format_remote_test(ep.server, ep.proxy_chain, ["-f", sentinel])
+    sentinel = f"{vpath}/{VOLUME_SENTINEL}"
+    cmd = _test_cmd(vol, ["-f", sentinel], resolved_endpoints)
     return (
-        f"{test_cmd}"
-        f" || {{ nbkp_log"
-        f' "WARN: volume {slug}:'
-        f' sentinel {sentinel} not found";'
-        f" }}"
+        f'{cmd} || {{ nbkp_log "WARN: volume {slug}: sentinel {sentinel} not found"; }}'
     )
 
 
@@ -907,6 +898,7 @@ def _build_disabled_body(
     config: Config,
     vol_paths: dict[str, str],
     resolved_endpoints: ResolvedEndpoints,
+    platform: str = sys.platform,
 ) -> str:
     """Build the commented-out function body for a disabled sync."""
     enabled_sync = SyncConfig(
@@ -924,6 +916,7 @@ def _build_disabled_body(
         config,
         vol_paths,
         resolved_endpoints,
+        platform,
     )
 
     # Render the function body the same way the template would
@@ -938,70 +931,85 @@ def _indent_lines(text: str, indent: str = "    ") -> list[str]:
 
 def _render_enabled_function(ctx: _SyncContext) -> str:
     """Render a sync function body (for disabled commenting)."""
-    parts: list[str] = [
-        "",
-        f"{ctx.fn_name}() {{",
-        f'    nbkp_log "Starting sync: {ctx.slug}"',
-        "",
-        "    # Pre-flight checks",
-        *_indent_lines(ctx.preflight),
-    ]
-    if ctx.has_hard_link:
-        parts += [
+    return "\n".join(
+        [
             "",
-            "    # Cleanup orphaned snapshots",
-            *_indent_lines(ctx.orphan_cleanup),
+            f"{ctx.fn_name}() {{",
+            f'    nbkp_log "Starting sync: {ctx.slug}"',
             "",
-            "    # Link-dest resolution (latest snapshot for incremental backup)",
-            *_indent_lines(ctx.link_dest),
+            "    # Pre-flight checks",
+            *_indent_lines(ctx.preflight),
+            *(
+                [
+                    "",
+                    "    # Cleanup orphaned snapshots",
+                    *_indent_lines(ctx.orphan_cleanup),
+                    "",
+                    "    # Link-dest resolution (latest snapshot for incremental backup)",
+                    *_indent_lines(ctx.link_dest),
+                    "",
+                    "    # Create snapshot directory",
+                    *_indent_lines(ctx.hl_mkdir),
+                ]
+                if ctx.has_hard_link
+                else []
+            ),
+            *(
+                [
+                    "",
+                    "    # Link-dest resolution (latest snapshot for incremental backup)",
+                    *_indent_lines(ctx.link_dest),
+                ]
+                if ctx.has_btrfs
+                else []
+            ),
             "",
-            "    # Create snapshot directory",
-            *_indent_lines(ctx.hl_mkdir),
+            "    # Rsync",
+            *_indent_lines(ctx.rsync),
+            *(
+                [
+                    "",
+                    "    # Btrfs snapshot (skip if dry-run)",
+                    *_indent_lines(ctx.snapshot),
+                    "",
+                    "    # Update latest symlink (skip if dry-run)",
+                    *_indent_lines(ctx.symlink),
+                    *(
+                        [
+                            "",
+                            f"    # Prune old snapshots (max: {ctx.max_snapshots})",
+                            *_indent_lines(ctx.prune),
+                        ]
+                        if ctx.has_prune
+                        else []
+                    ),
+                ]
+                if ctx.has_btrfs
+                else []
+            ),
+            *(
+                [
+                    "",
+                    "    # Update latest symlink (skip if dry-run)",
+                    *_indent_lines(ctx.symlink),
+                    *(
+                        [
+                            "",
+                            f"    # Prune old snapshots (max: {ctx.max_snapshots})",
+                            *_indent_lines(ctx.hl_prune),
+                        ]
+                        if ctx.has_prune
+                        else []
+                    ),
+                ]
+                if ctx.has_hard_link
+                else []
+            ),
+            "",
+            f'    nbkp_log "Completed sync: {ctx.slug}"',
+            "}",
         ]
-    if ctx.has_btrfs:
-        parts += [
-            "",
-            "    # Link-dest resolution (latest snapshot for incremental backup)",
-            *_indent_lines(ctx.link_dest),
-        ]
-    parts += [
-        "",
-        "    # Rsync",
-        *_indent_lines(ctx.rsync),
-    ]
-    if ctx.has_btrfs:
-        parts += [
-            "",
-            "    # Btrfs snapshot (skip if dry-run)",
-            *_indent_lines(ctx.snapshot),
-            "",
-            "    # Update latest symlink (skip if dry-run)",
-            *_indent_lines(ctx.symlink),
-        ]
-        if ctx.has_prune:
-            parts += [
-                "",
-                f"    # Prune old snapshots (max: {ctx.max_snapshots})",
-                *_indent_lines(ctx.prune),
-            ]
-    if ctx.has_hard_link:
-        parts += [
-            "",
-            "    # Update latest symlink (skip if dry-run)",
-            *_indent_lines(ctx.symlink),
-        ]
-        if ctx.has_prune:
-            parts += [
-                "",
-                f"    # Prune old snapshots (max: {ctx.max_snapshots})",
-                *_indent_lines(ctx.hl_prune),
-            ]
-    parts += [
-        "",
-        f'    nbkp_log "Completed sync: {ctx.slug}"',
-        "}",
-    ]
-    return "\n".join(parts)
+    )
 
 
 # ── Context builders ─────────────────────────────────────────
@@ -1013,6 +1021,7 @@ def _build_sync_context(
     config: Config,
     vol_paths: dict[str, str],
     resolved_endpoints: ResolvedEndpoints,
+    platform: str = sys.platform,
 ) -> _SyncContext:
     """Build a _SyncContext with all pre-computed blocks."""
     dst_ep = config.destination_endpoint(sync)
@@ -1077,7 +1086,7 @@ def _build_sync_context(
 
     # Btrfs blocks
     snapshot = (
-        _build_snapshot_block(sync, config, vol_paths, resolved_endpoints)
+        _build_snapshot_block(sync, config, vol_paths, resolved_endpoints, platform)
         if has_btrfs
         else ""
     )
@@ -1102,7 +1111,9 @@ def _build_sync_context(
         else ""
     )
     hl_mkdir = (
-        _build_hard_link_mkdir_block(sync, config, vol_paths, resolved_endpoints)
+        _build_hard_link_mkdir_block(
+            sync, config, vol_paths, resolved_endpoints, platform
+        )
         if has_hard_link
         else ""
     )
@@ -1143,6 +1154,33 @@ def _build_sync_context(
     )
 
 
+def _build_ordered_sync_context(
+    slug: str,
+    config: Config,
+    vol_paths: dict[str, str],
+    resolved_endpoints: ResolvedEndpoints,
+    platform: str,
+    pred_map: dict[str, set[str]],
+) -> _SyncContext:
+    """Build a _SyncContext with predecessor info, handling enabled/disabled."""
+    sync = config.syncs[slug]
+    ctx = _build_sync_context(
+        slug, sync, config, vol_paths, resolved_endpoints, platform
+    )
+    pred_fns = tuple(_slug_to_fn(p) for p in sorted(pred_map.get(slug, set())))
+    if sync.enabled:
+        return replace(ctx, predecessors=pred_fns)
+    else:
+        return _SyncContext(
+            slug=ctx.slug,
+            fn_name=ctx.fn_name,
+            enabled=False,
+            disabled_body=_build_disabled_body(
+                slug, sync, config, vol_paths, resolved_endpoints, platform
+            ),
+        )
+
+
 def _build_script_context(
     config: Config,
     options: ScriptOptions,
@@ -1151,6 +1189,8 @@ def _build_script_context(
     resolved_endpoints: ResolvedEndpoints,
 ) -> dict[str, object]:
     """Build the full template context dict."""
+    from .ordering.graph import sort_syncs, sync_predecessors
+
     timestamp = now.isoformat(timespec="seconds").replace("+00:00", "Z")
     config_line = (
         f"# Config: {options.config_path}"
@@ -1158,45 +1198,21 @@ def _build_script_context(
         else "# Config: <stdin>"
     )
     has_script_dir = any("$" in p for p in vol_paths.values())
-
-    volume_checks = [
-        _build_volume_check(slug, vol, vol_paths, resolved_endpoints)
-        for slug, vol in config.volumes.items()
-    ]
-
-    from .ordering.graph import sort_syncs, sync_predecessors
-
     pred_map = sync_predecessors(config.syncs)
-
-    syncs: list[_SyncContext] = []
-    for slug in sort_syncs(config.syncs):
-        sync = config.syncs[slug]
-        ctx = _build_sync_context(slug, sync, config, vol_paths, resolved_endpoints)
-        pred_fns = tuple(_slug_to_fn(p) for p in sorted(pred_map.get(slug, set())))
-        if sync.enabled:
-            syncs.append(replace(ctx, predecessors=pred_fns))
-        else:
-            disabled_body = _build_disabled_body(
-                slug,
-                sync,
-                config,
-                vol_paths,
-                resolved_endpoints,
-            )
-            syncs.append(
-                _SyncContext(
-                    slug=ctx.slug,
-                    fn_name=ctx.fn_name,
-                    enabled=False,
-                    disabled_body=disabled_body,
-                )
-            )
 
     return {
         "timestamp": timestamp,
         "config_line": config_line,
         "has_script_dir": has_script_dir,
         "portable": options.portable,
-        "volume_checks": volume_checks,
-        "syncs": syncs,
+        "volume_checks": [
+            _build_volume_check(slug, vol, vol_paths, resolved_endpoints)
+            for slug, vol in config.volumes.items()
+        ],
+        "syncs": [
+            _build_ordered_sync_context(
+                slug, config, vol_paths, resolved_endpoints, options.platform, pred_map
+            )
+            for slug in sort_syncs(config.syncs)
+        ],
     }

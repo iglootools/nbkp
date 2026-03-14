@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
 )
 
-from nbkp.preflight import VolumeReason, check_volume
+from nbkp.preflight import VolumeError, check_volume
 from nbkp.config import (
     Config,
     LocalVolume,
@@ -37,11 +37,11 @@ from nbkp.remote.sshexec import (
     run_remote_command as ssh_run_remote,
 )
 from nbkp.sync.rsync import run_rsync
-from nbkp.testkit.docker import (
+from nbkp.remote.testkit.docker import (
     REMOTE_BACKUP_PATH,
     generate_ssh_keypair,
 )
-from nbkp.testkit.gen.fs import create_seed_sentinels
+from nbkp.sync.testkit.seed import create_seed_sentinels
 
 from tests._docker_fixtures import ssh_exec
 
@@ -236,7 +236,7 @@ class TestHostKeyVerification:
         resolved = resolve_all_endpoints(config)
         status = check_volume(vol, resolved)
         assert status.active is False
-        assert VolumeReason.UNREACHABLE in status.reasons
+        assert VolumeError.UNREACHABLE in status.errors
 
     def test_rsync_succeeds_with_correct_known_hosts(
         self,
@@ -427,7 +427,7 @@ class TestConnectionFailure:
         resolved = resolve_all_endpoints(config)
         status = check_volume(vol, resolved)
         assert status.active is False
-        assert VolumeReason.UNREACHABLE in status.reasons
+        assert VolumeError.UNREACHABLE in status.errors
 
     def test_unreachable_volume_wrong_key(
         self,
@@ -464,7 +464,7 @@ class TestConnectionFailure:
         resolved = resolve_all_endpoints(config)
         status = check_volume(vol, resolved)
         assert status.active is False
-        assert VolumeReason.UNREACHABLE in status.reasons
+        assert VolumeError.UNREACHABLE in status.errors
 
 
 # ── Agent forwarding through bastion ────────────────────────

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ...config import (
+from . import (
     BtrfsSnapshotConfig,
     Config,
     HardLinkSnapshotConfig,
@@ -114,10 +114,6 @@ def base_sync_endpoints() -> dict[str, SyncEndpoint]:
             slug="laptop-root",
             volume="laptop",
         ),
-        "usb-root": SyncEndpoint(
-            slug="usb-root",
-            volume="usb-drive",
-        ),
     }
 
 
@@ -138,12 +134,6 @@ def base_syncs() -> dict[str, SyncConfig]:
             slug="music-to-usb",
             source="laptop-music",
             destination="usb-music",
-        ),
-        "disabled-backup": SyncConfig(
-            slug="disabled-backup",
-            source="laptop-root",
-            destination="usb-root",
-            enabled=False,
         ),
     }
 

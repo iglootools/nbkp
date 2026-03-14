@@ -19,6 +19,7 @@ from nbkp.config import (
     resolve_all_endpoints,
 )
 from nbkp.sync.snapshots.common import (
+    create_snapshot_timestamp,
     get_latest_snapshot,
     list_snapshots,
     read_latest_symlink,
@@ -199,7 +200,30 @@ def _hl_remote_config() -> tuple[SyncConfig, Config, dict[str, ResolvedEndpoint]
 
 
 _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=timezone.utc)
-_TS = "2026-02-21T12:00:00.000Z"
+_LOCAL_VOL = LocalVolume(slug="dummy", path="/dummy")
+_REMOTE_VOL = RemoteVolume(slug="dummy", ssh_endpoint="dummy", path="/dummy")
+_TS_LOCAL = create_snapshot_timestamp(_NOW, _LOCAL_VOL)
+_TS_REMOTE = create_snapshot_timestamp(_NOW, _REMOTE_VOL)
+
+
+# ── create_snapshot_timestamp ────────────────────────────────
+
+
+class TestCreateSnapshotTimestamp:
+    def test_remote_volume_uses_colons(self) -> None:
+        vol = RemoteVolume(slug="r", ssh_endpoint="s", path="/p")
+        result = create_snapshot_timestamp(_NOW, vol, platform="linux")
+        assert result.name == "2026-02-21T12:00:00.000Z"
+
+    def test_local_volume_darwin_uses_hyphens(self) -> None:
+        vol = LocalVolume(slug="l", path="/p")
+        result = create_snapshot_timestamp(_NOW, vol, platform="darwin")
+        assert result.name == "2026-02-21T12-00-00.000Z"
+
+    def test_local_volume_linux_uses_colons(self) -> None:
+        vol = LocalVolume(slug="l", path="/p")
+        result = create_snapshot_timestamp(_NOW, vol, platform="linux")
+        assert result.name == "2026-02-21T12:00:00.000Z"
 
 
 # ── get_latest_snapshot ──────────────────────────────────────
@@ -215,7 +239,8 @@ class TestGetLatestSnapshotLocal:
         config, sync = _local_config()
 
         result = get_latest_snapshot(sync, config)
-        assert result == ("/mnt/dst/backup/snapshots/20240115T120000Z")
+        assert result is not None
+        assert result.name == "20240115T120000Z"
 
     @patch("nbkp.sync.snapshots.common.subprocess.run")
     def test_empty(self, mock_run: MagicMock) -> None:
@@ -245,7 +270,8 @@ class TestGetLatestSnapshotRemote:
         resolved = resolve_all_endpoints(config)
 
         result = get_latest_snapshot(sync, config, resolved)
-        assert result == ("/backup/data/snapshots/20240115T120000Z")
+        assert result is not None
+        assert result.name == "20240115T120000Z"
         mock_run.assert_called_once_with(
             config.ssh_endpoints["nas-server"],
             ["ls", "/backup/data/snapshots"],
@@ -264,7 +290,8 @@ class TestGetLatestSnapshotRemoteSpaces:
         resolved = resolve_all_endpoints(config)
 
         result = get_latest_snapshot(sync, config, resolved)
-        assert result == ("/my backup/my data/snapshots/20240115T120000Z")
+        assert result is not None
+        assert result.name == "20240115T120000Z"
         mock_run.assert_called_once_with(
             config.ssh_endpoints["nas-server"],
             ["ls", "/my backup/my data/snapshots"],
@@ -285,9 +312,9 @@ class TestListSnapshotsLocal:
         config, sync = _local_config()
 
         result = list_snapshots(sync, config)
-        assert result == [
-            "/mnt/dst/backup/snapshots/20240101T000000Z",
-            "/mnt/dst/backup/snapshots/20240115T120000Z",
+        assert [s.name for s in result] == [
+            "20240101T000000Z",
+            "20240115T120000Z",
         ]
 
     @patch("nbkp.sync.snapshots.common.subprocess.run")
@@ -318,9 +345,9 @@ class TestListSnapshotsRemote:
         resolved = resolve_all_endpoints(config)
 
         result = list_snapshots(sync, config, resolved)
-        assert result == [
-            "/backup/data/snapshots/20240101T000000Z",
-            "/backup/data/snapshots/20240115T120000Z",
+        assert [s.name for s in result] == [
+            "20240101T000000Z",
+            "20240115T120000Z",
         ]
 
 
@@ -349,10 +376,10 @@ class TestReadLatestSymlink:
             syncs={"s1": sync},
         )
         latest = tmp_path / "latest"
-        latest.symlink_to("snapshots/2026-02-21T12:00:00.000Z")
+        latest.symlink_to(f"snapshots/{_TS_LOCAL.name}")
 
         result = read_latest_symlink(sync, config)
-        assert result == "2026-02-21T12:00:00.000Z"
+        assert result == _TS_LOCAL
 
     def test_local_missing(self, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
@@ -382,12 +409,12 @@ class TestReadLatestSymlink:
     def test_remote_exists(self, mock_remote: MagicMock) -> None:
         mock_remote.return_value = MagicMock(
             returncode=0,
-            stdout="snapshots/2026-02-21T12:00:00.000Z\n",
+            stdout=f"snapshots/{_TS_REMOTE.name}\n",
         )
         sync, config, re = _hl_remote_config()
 
         result = read_latest_symlink(sync, config, resolved_endpoints=re)
-        assert result == "2026-02-21T12:00:00.000Z"
+        assert result == _TS_REMOTE
 
     @patch("nbkp.sync.snapshots.common.run_remote_command")
     def test_remote_missing(self, mock_remote: MagicMock) -> None:
@@ -462,18 +489,18 @@ class TestUpdateLatestSymlink:
             syncs={"s1": sync},
         )
 
-        update_latest_symlink(sync, config, _TS)
+        update_latest_symlink(sync, config, _TS_LOCAL)
         link = tmp_path / "latest"
         assert link.is_symlink()
-        assert str(link.readlink()) == f"snapshots/{_TS}"
+        assert str(link.readlink()) == f"snapshots/{_TS_LOCAL.name}"
 
     @patch("nbkp.sync.snapshots.common.run_remote_command")
     def test_remote(self, mock_remote: MagicMock) -> None:
         mock_remote.return_value = MagicMock(returncode=0, stderr="")
         sync, config, re = _hl_remote_config()
 
-        update_latest_symlink(sync, config, _TS, resolved_endpoints=re)
+        update_latest_symlink(sync, config, _TS_REMOTE, resolved_endpoints=re)
         mock_remote.assert_called_once()
         cmd = mock_remote.call_args[0][1]
         assert "ln" in cmd
-        assert f"snapshots/{_TS}" in cmd
+        assert f"snapshots/{_TS_REMOTE.name}" in cmd

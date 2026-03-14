@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from ...config import Config
-from ...sync import PruneResult, SyncResult
-from ...sync.snapshots.common import SNAPSHOTS_DIR
+from ...fsprotocol import SNAPSHOTS_DIR
+from .. import PruneResult, SyncResult
 
 
 def _snap_base(config: Config, sync_slug: str) -> str:
@@ -20,7 +20,7 @@ def _snap_base(config: Config, sync_slug: str) -> str:
 def run_results(config: Config) -> list[SyncResult]:
     """Sync results: success, success+snapshot (local & remote), failure."""
     local_snap_base = _snap_base(config, "photos-to-usb")
-    local_snap = f"{local_snap_base}/2026-02-19T10:30:00.000Z"
+    local_snap = f"{local_snap_base}/2026-02-19T10-30-00.000Z"
     remote_snap_base = _snap_base(config, "docs-to-nas")
     remote_snap = f"{remote_snap_base}/2026-02-19T11:00:00.000Z"
     _docs_src = config.source_endpoint(config.syncs["docs-to-nas"])
@@ -42,8 +42,8 @@ def run_results(config: Config) -> list[SyncResult]:
             output="",
             snapshot_path=local_snap,
             pruned_paths=[
-                f"{local_snap_base}/2026-02-01T08:00:00.000Z",
-                f"{local_snap_base}/2026-02-10T12:00:00.000Z",
+                f"{local_snap_base}/2026-02-01T08-00-00.000Z",
+                f"{local_snap_base}/2026-02-10T12-00-00.000Z",
             ],
         ),
         SyncResult(
@@ -76,9 +76,9 @@ def prune_results(config: Config) -> list[PruneResult]:
         PruneResult(
             sync_slug="photos-to-usb",
             deleted=[
-                f"{snap_base}/2026-01-01T00:00:00.000Z",
-                f"{snap_base}/2026-01-15T00:00:00.000Z",
-                f"{snap_base}/2026-02-01T00:00:00.000Z",
+                f"{snap_base}/2026-01-01T00-00-00.000Z",
+                f"{snap_base}/2026-01-15T00-00-00.000Z",
+                f"{snap_base}/2026-02-01T00-00-00.000Z",
             ],
             kept=7,
             dry_run=False,
@@ -108,8 +108,8 @@ def prune_dry_run_results(
         PruneResult(
             sync_slug="photos-to-usb",
             deleted=[
-                f"{snap_base}/2026-01-01T00:00:00.000Z",
-                f"{snap_base}/2026-01-15T00:00:00.000Z",
+                f"{snap_base}/2026-01-01T00-00-00.000Z",
+                f"{snap_base}/2026-01-15T00-00-00.000Z",
             ],
             kept=10,
             dry_run=True,

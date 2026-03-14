@@ -43,6 +43,8 @@ It replaces the rsync shell scripts you'd normally maintain, adding:
 
 Full feature list: [docs/features.md](https://github.com/iglootools/nbkp/blob/main/docs/features.md).
 
+Also check [Why I wrote Nomad Backup (nbkp) to replace my rsync shell scripts](https://www.reddit.com/r/Backup/comments/1rrf97n/i_wrote_nomad_backup_nbkp_to_replace_my_rsync/) for additional context.
+
 ## Non-Goals
 
 nbkp is designed around a single orchestrator (typically a laptop) that initiates all syncs. 
@@ -59,7 +61,14 @@ If you need server-to-server replication:
 
 ## Known Limitations
 
-- No Windows support
+- No Windows support -- Haven't used it for decades, so no idea wether Cygwin is still a thing, if WSL could work, 
+  or if there is a completely different rsync-like ecosystem that's the preferred way of performing backups.
+- No cloud backends -- local and SSH only. Might explore [rclone](https://rclone.org/) integration down the road.
+- No built-in encryption -- just slap a LUKS volume underneath.
+  I'd like to integrate LUKS management someday so you don't have to manually unlock and mount every time, but that's out of scope for now.
+- No bidirectional sync -- one-way rsync, on purpose. It could be interesting to explore [unison](https://www.cis.upenn.edu/~bcpierce/unison/) 
+  integration for bidirectional syncs, but I don't have a use case for it for now.
+- Not designed for always-on server-to-server replication (though you can deploy a generated shell script on a server for that).
 
 ## Philosophy
 

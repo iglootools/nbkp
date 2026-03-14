@@ -10,7 +10,7 @@ RUN apt-get update && \
 RUN pip install --quiet poetry poetry-dynamic-versioning
 
 # Create btrfs loopback filesystem at container startup
-COPY nbkp/testkit/dockerbuild/btrfs-local-entrypoint.sh /entrypoint.sh
+COPY nbkp/remote/testkit/dockerbuild/btrfs-local-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 WORKDIR /app

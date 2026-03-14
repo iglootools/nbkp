@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import shlex
-
 from rich.console import Console, Group, RenderableType
 from rich.padding import Padding
 from rich.panel import Panel
@@ -31,63 +29,234 @@ from ..remote.ssh import (
     ssh_prefix,
     wrap_cmd,
 )
-from ..sync.rsync import build_rsync_command
-from ..sync.snapshots.btrfs import STAGING_DIR
-from ..sync.snapshots.common import LATEST_LINK, SNAPSHOTS_DIR
-from .checks import SyncReason, SyncStatus, VolumeReason, VolumeStatus
+from ..fsprotocol import (
+    DESTINATION_SENTINEL,
+    LATEST_LINK,
+    SNAPSHOTS_DIR,
+    SOURCE_SENTINEL,
+    STAGING_DIR,
+    VOLUME_SENTINEL,
+)
+from .status import (
+    SyncError,
+    SyncStatus,
+    VolumeCapabilities,
+    VolumeError,
+    VolumeStatus,
+)
 
 
 def _status_text(
     active: bool,
-    reasons: list[VolumeReason] | list[SyncReason],
+    errors: list[VolumeError] | list[SyncError],
 ) -> Text:
-    """Format status with optional reasons as styled text."""
+    """Format status with optional errors as styled text."""
     if active:
         return Text("active", style="green")
     else:
-        reason_str = ", ".join(r.value for r in reasons)
-        return Text(f"inactive ({reason_str})", style="red")
+        error_str = ", ".join(r.value for r in errors)
+        return Text(f"inactive ({error_str})", style="red")
 
 
-def build_check_sections(
-    vol_statuses: dict[str, VolumeStatus],
-    sync_statuses: dict[str, SyncStatus],
+# Sync errors whose diagnostic state is visible as ✓/✗ in the
+# Src/Dst Diagnostics columns.  When *all* errors for a sync are
+# diagnostic-visible, the Status column shows a plain "inactive"
+# because the diagnostics already tell the story.  Non-obvious
+# errors (disabled, unavailable, tool-version, dry-run) are always
+# shown in the Status column so they aren't silently hidden.
+_DIAGNOSTIC_VISIBLE_SYNC_ERRORS: frozenset[SyncError] = frozenset(
+    {
+        # Volume-level — shown as ✗volume(...) in src/dst diagnostics
+        SyncError.SOURCE_UNAVAILABLE,
+        SyncError.DESTINATION_UNAVAILABLE,
+        # Endpoint-level — shown as ✓/✗ items in src/dst diagnostics
+        SyncError.SOURCE_SENTINEL_NOT_FOUND,
+        SyncError.SOURCE_LATEST_NOT_FOUND,
+        SyncError.SOURCE_LATEST_INVALID,
+        SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND,
+        SyncError.DESTINATION_SENTINEL_NOT_FOUND,
+        SyncError.DESTINATION_ENDPOINT_NOT_WRITABLE,
+        SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME,
+        SyncError.DESTINATION_TMP_NOT_FOUND,
+        SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND,
+        SyncError.DESTINATION_LATEST_NOT_FOUND,
+        SyncError.DESTINATION_LATEST_INVALID,
+        SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE,
+        SyncError.DESTINATION_STAGING_DIR_NOT_WRITABLE,
+        SyncError.DESTINATION_NO_HARDLINK_SUPPORT,
+    }
+)
+
+
+def _sync_status_text(
+    active: bool,
+    errors: list[SyncError],
+) -> Text:
+    """Format sync status, showing only non-obvious error reasons.
+
+    Errors that are visible as ✓/✗ in the diagnostics columns are
+    omitted from the status text to avoid redundancy.  Non-obvious
+    errors (disabled, unavailable, tool-version, dry-run) are shown.
+    """
+    if active:
+        return Text("active", style="green")
+    non_obvious = [e for e in errors if e not in _DIAGNOSTIC_VISIBLE_SYNC_ERRORS]
+    if non_obvious:
+        reason = ", ".join(e.value for e in non_obvious)
+        return Text(f"inactive ({reason})", style="red")
+    else:
+        return Text("inactive", style="red")
+
+
+def _format_capabilities(caps: VolumeCapabilities | None) -> str:
+    """Format volume capabilities as a compact comma-separated string."""
+    if caps is None:
+        return ""
+    items = [
+        label
+        for flag, label in [
+            (caps.has_rsync, "rsync 3.0+" if caps.rsync_version_ok else "rsync (old)"),
+            (caps.has_btrfs, "btrfs"),
+            (caps.has_stat, "stat"),
+            (caps.has_findmnt, "findmnt"),
+            (caps.is_btrfs_filesystem, "btrfs-fs"),
+            (caps.hardlink_supported, "hardlink"),
+            (caps.btrfs_user_subvol_rm, "user_subvol_rm"),
+        ]
+        if flag
+    ]
+    return ", ".join(items) if items else "none"
+
+
+def _check(ok: bool, label: str) -> str:
+    """Format a diagnostic item as ✓label or ✗label."""
+    return f"\u2713{label}" if ok else f"\u2717{label}"
+
+
+def _format_volume_issues(vol_status: VolumeStatus) -> str:
+    """Format volume-level issues as ✗volume(reason)."""
+    reason = ", ".join(e.value for e in vol_status.errors)
+    return f"\u2717volume ({reason})" if reason else "\u2717volume"
+
+
+def _format_source_diagnostics(ss: SyncStatus) -> str:
+    """Format source endpoint diagnostics as a compact comma-separated string.
+
+    When the source volume is inactive, shows ✗volume(reason) instead
+    of endpoint-level items (which weren't computed).  Otherwise shows
+    ✓/✗ for each checked item.  Items only appear when the
+    corresponding feature is configured (e.g. snapshots/ and latest
+    are omitted when the endpoint has no snapshot mode).
+    """
+    if not ss.source_status.active:
+        return _format_volume_issues(ss.source_status)
+    diag = ss.source_diagnostics
+    if diag is None:
+        return ""
+    items = [
+        _check(diag.sentinel_exists, "sentinel"),
+        *(
+            [_check(diag.snapshot_dirs.exists, "snapshots/")]
+            if diag.snapshot_dirs is not None
+            else []
+        ),
+        *(
+            [
+                f"\u2713latest \u2192 {diag.latest.raw_target}"
+                if diag.latest.exists and diag.latest.raw_target
+                else "\u2717latest"
+            ]
+            if diag.latest is not None
+            else []
+        ),
+    ]
+    return ", ".join(items)
+
+
+def _format_destination_diagnostics(ss: SyncStatus) -> str:
+    """Format destination endpoint diagnostics as a compact comma-separated string.
+
+    When the destination volume is inactive, shows ✗volume(reason)
+    instead of endpoint-level items.  Otherwise shows ✓/✗ for each
+    checked item.  Btrfs-specific items (subvolume, staging/) only
+    appear when btrfs diagnostics are present.  Snapshot items only
+    appear when snapshot mode is configured.
+    """
+    if not ss.destination_status.active:
+        return _format_volume_issues(ss.destination_status)
+    diag = ss.destination_diagnostics
+    if diag is None:
+        return ""
+    items = [
+        _check(diag.sentinel_exists, "sentinel"),
+        _check(diag.endpoint_writable, "writable"),
+        *(
+            [
+                _check(diag.btrfs.is_subvolume, "subvolume"),
+                _check(diag.btrfs.staging_dir_exists, "staging/"),
+            ]
+            if diag.btrfs is not None
+            else []
+        ),
+        *(
+            [_check(diag.snapshot_dirs.exists, "snapshots/")]
+            if diag.snapshot_dirs is not None
+            else []
+        ),
+        *(
+            [
+                f"\u2713latest \u2192 {diag.latest.raw_target}"
+                if diag.latest.exists and diag.latest.raw_target
+                else "\u2717latest"
+            ]
+            if diag.latest is not None
+            else []
+        ),
+    ]
+    return ", ".join(items)
+
+
+def _build_ssh_endpoints_section(
     config: Config,
+) -> list[RenderableType]:
+    """Build the SSH Endpoints table section."""
+    if not config.ssh_endpoints:
+        return []
+    table = Table(title="SSH Endpoints:")
+    table.add_column("Name", style="bold")
+    table.add_column("Host")
+    table.add_column("Port")
+    table.add_column("User")
+    table.add_column("Key")
+    table.add_column("Proxy Jump")
+    table.add_column("Locations")
+
+    for server in config.ssh_endpoints.values():
+        table.add_row(
+            server.slug,
+            server.host,
+            str(server.port),
+            server.user or "",
+            server.key or "",
+            ", ".join(server.proxy_jump_chain) or "",
+            ", ".join(server.location_list),
+        )
+
+    return [table, Text("")]
+
+
+def _build_volumes_section(
+    vol_statuses: dict[str, VolumeStatus],
     resolved_endpoints: ResolvedEndpoints,
 ) -> list[RenderableType]:
-    """Build renderable sections for check output."""
-    sections: list[RenderableType] = []
-
-    if config.ssh_endpoints:
-        ep_table = Table(title="SSH Endpoints:")
-        ep_table.add_column("Name", style="bold")
-        ep_table.add_column("Host")
-        ep_table.add_column("Port")
-        ep_table.add_column("User")
-        ep_table.add_column("Key")
-        ep_table.add_column("Proxy Jump")
-        ep_table.add_column("Locations")
-
-        for server in config.ssh_endpoints.values():
-            ep_table.add_row(
-                server.slug,
-                server.host,
-                str(server.port),
-                server.user or "",
-                server.key or "",
-                ", ".join(server.proxy_jump_chain) or "",
-                ", ".join(server.location_list),
-            )
-
-        sections.append(ep_table)
-        sections.append(Text(""))
-
-    vol_table = Table(title="Volumes:")
-    vol_table.add_column("Name", style="bold")
-    vol_table.add_column("Type")
-    vol_table.add_column("SSH Endpoint")
-    vol_table.add_column("URI")
-    vol_table.add_column("Status")
+    """Build the Volumes table section."""
+    table = Table(title="Volumes:")
+    table.add_column("Name", style="bold")
+    table.add_column("Type")
+    table.add_column("SSH Endpoint")
+    table.add_column("URI")
+    table.add_column("Capabilities")
+    table.add_column("Status")
 
     for vs in vol_statuses.values():
         vol = vs.config
@@ -99,65 +268,88 @@ def build_check_sections(
             case LocalVolume():
                 vol_type = "local"
                 ssh_ep = ""
-        vol_table.add_row(
+        table.add_row(
             vs.slug,
             vol_type,
             ssh_ep,
             format_volume_display(vol, resolved_endpoints),
-            _status_text(vs.active, vs.reasons),
+            _format_capabilities(vs.diagnostics.capabilities),
+            _status_text(vs.active, vs.errors),
         )
 
-    sections.append(vol_table)
-    sections.append(Text(""))
+    return [table, Text("")]
 
-    sync_table = Table(title="Syncs:")
-    sync_table.add_column("Name", style="bold")
-    sync_table.add_column("Source")
-    sync_table.add_column("Destination")
-    sync_table.add_column("Options")
-    sync_table.add_column("Status")
+
+def _build_syncs_section(
+    sync_statuses: dict[str, SyncStatus],
+    config: Config,
+) -> list[RenderableType]:
+    """Build the Syncs table section."""
+    table = Table(title="Syncs:")
+    table.add_column("Name", style="bold")
+    table.add_column("Source")
+    table.add_column("Destination")
+    table.add_column("Options")
+    table.add_column("Src Diagnostics")
+    table.add_column("Dst Diagnostics")
+    table.add_column("Status")
 
     for ss in sync_statuses.values():
-        sync_table.add_row(
+        table.add_row(
             ss.slug,
             _sync_endpoint_display(config.source_endpoint(ss.config)),
             _sync_endpoint_display(config.destination_endpoint(ss.config)),
             _sync_options(ss.config, config),
-            _status_text(ss.active, ss.reasons),
+            _format_source_diagnostics(ss),
+            _format_destination_diagnostics(ss),
+            _sync_status_text(ss.active, ss.errors),
         )
 
-    sections.append(sync_table)
+    return [table]
 
-    active_syncs = [ss for ss in sync_statuses.values() if ss.active]
-    if active_syncs:
-        sections.append(Text(""))
-        cmd_table = Table(title="Rsync Commands:")
-        cmd_table.add_column("Sync", style="bold")
-        cmd_table.add_column("Command")
 
-        for ss in active_syncs:
-            dst_ep = config.destination_endpoint(ss.config)
-            dest_suffix: str | None = None
-            link_dest: str | None = None
-            match dst_ep.snapshot_mode:
-                case "btrfs":
-                    dest_suffix = STAGING_DIR
-                case "hard-link":
-                    dest_suffix = f"{SNAPSHOTS_DIR}/<timestamp>"
-                    if ss.destination_latest_target:
-                        link_dest = f"../{ss.destination_latest_target}"
-            cmd = build_rsync_command(
-                ss.config,
-                config,
-                resolved_endpoints=resolved_endpoints,
-                dest_suffix=dest_suffix,
-                link_dest=link_dest,
-            )
-            cmd_table.add_row(ss.slug, shlex.join(cmd))
+def _build_orphan_warnings_section(
+    config: Config,
+) -> list[RenderableType]:
+    """Build warnings for orphan config items."""
+    warnings = [
+        *[
+            f"SSH endpoint '{slug}' is not referenced by any volume"
+            for slug in config.orphan_ssh_endpoints()
+        ],
+        *[
+            f"Volume '{slug}' is not referenced by any sync endpoint"
+            for slug in config.orphan_volumes()
+        ],
+        *[
+            f"Sync endpoint '{slug}' is not referenced by any sync"
+            for slug in config.orphan_sync_endpoints()
+        ],
+    ]
+    if not warnings:
+        return []
+    text = Text()
+    for i, warning in enumerate(warnings):
+        if i > 0:
+            text.append("\n")
+        text.append("warning: ", style="yellow bold")
+        text.append(warning)
+    return [Text(""), text]
 
-        sections.append(cmd_table)
 
-    return sections
+def build_check_sections(
+    vol_statuses: dict[str, VolumeStatus],
+    sync_statuses: dict[str, SyncStatus],
+    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
+) -> list[RenderableType]:
+    """Build renderable sections for check output."""
+    return [
+        *_build_ssh_endpoints_section(config),
+        *_build_volumes_section(vol_statuses, resolved_endpoints),
+        *_build_syncs_section(sync_statuses, config),
+        *_build_orphan_warnings_section(config),
+    ]
 
 
 def print_human_check(
@@ -302,23 +494,23 @@ def _print_ssh_troubleshoot(
     _print_cmd(console, f"{ssh_cmd} echo ok", indent=4)
 
 
-def _print_sync_reason_fix(
+def _print_sync_error_fix(
     console: Console,
     sync: SyncConfig,
-    reason: SyncReason,
+    error: SyncError,
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
 ) -> None:
-    """Print fix instructions for a sync reason."""
+    """Print fix instructions for a sync error."""
     p2 = _INDENT * 2
     src_ep = config.source_endpoint(sync)
     dst_ep = config.destination_endpoint(sync)
     src_vol = config.volumes[src_ep.volume]
     dst_vol = config.volumes[dst_ep.volume]
-    match reason:
-        case SyncReason.DISABLED:
+    match error:
+        case SyncError.DISABLED:
             console.print(f"{p2}Enable the sync in the configuration file.")
-        case SyncReason.SOURCE_UNAVAILABLE:
+        case SyncError.SOURCE_UNAVAILABLE:
             match src_vol:
                 case RemoteVolume():
                     ep = resolved_endpoints.get(src_vol.slug)
@@ -339,7 +531,7 @@ def _print_sync_reason_fix(
                     console.print(
                         f"{p2}Source volume '{src_ep.volume}' is not available."
                     )
-        case SyncReason.DESTINATION_UNAVAILABLE:
+        case SyncError.DESTINATION_UNAVAILABLE:
             match dst_vol:
                 case RemoteVolume():
                     ep = resolved_endpoints.get(dst_vol.slug)
@@ -360,16 +552,16 @@ def _print_sync_reason_fix(
                     console.print(
                         f"{p2}Destination volume '{dst_ep.volume}' is not available."
                     )
-        case SyncReason.SOURCE_SENTINEL_NOT_FOUND:
+        case SyncError.SOURCE_SENTINEL_NOT_FOUND:
             path = endpoint_path(src_vol, src_ep.subdir)
             _print_sentinel_fix(
                 console,
                 src_vol,
                 path,
-                ".nbkp-src",
+                SOURCE_SENTINEL,
                 resolved_endpoints,
             )
-        case SyncReason.SOURCE_LATEST_NOT_FOUND:
+        case SyncError.SOURCE_LATEST_NOT_FOUND:
             path = endpoint_path(src_vol, src_ep.subdir)
             console.print(
                 f"{p2}Source has snapshots enabled"
@@ -384,7 +576,7 @@ def _print_sync_reason_fix(
                     console,
                     wrap_cmd(cmd, src_vol, resolved_endpoints),
                 )
-        case SyncReason.SOURCE_LATEST_INVALID:
+        case SyncError.SOURCE_LATEST_INVALID:
             path = endpoint_path(src_vol, src_ep.subdir)
             console.print(
                 f"{p2}Source {path}/{LATEST_LINK}"
@@ -401,7 +593,7 @@ def _print_sync_reason_fix(
                     console,
                     wrap_cmd(cmd, src_vol, resolved_endpoints),
                 )
-        case SyncReason.SOURCE_SNAPSHOTS_DIR_NOT_FOUND:
+        case SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND:
             path = endpoint_path(src_vol, src_ep.subdir)
             if src_ep.btrfs_snapshots.enabled:
                 cmds = [
@@ -415,46 +607,46 @@ def _print_sync_reason_fix(
                     console,
                     wrap_cmd(cmd, src_vol, resolved_endpoints),
                 )
-        case SyncReason.DESTINATION_SENTINEL_NOT_FOUND:
+        case SyncError.DESTINATION_SENTINEL_NOT_FOUND:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             _print_sentinel_fix(
                 console,
                 dst_vol,
                 path,
-                ".nbkp-dst",
+                DESTINATION_SENTINEL,
                 resolved_endpoints,
             )
-        case SyncReason.RSYNC_NOT_FOUND_ON_SOURCE:
+        case SyncError.SOURCE_RSYNC_NOT_FOUND:
             host = host_label(src_vol, resolved_endpoints)
             console.print(f"{p2}Install rsync on {host}:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
-        case SyncReason.RSYNC_NOT_FOUND_ON_DESTINATION:
+        case SyncError.DESTINATION_RSYNC_NOT_FOUND:
             host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}Install rsync on {host}:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
-        case SyncReason.RSYNC_TOO_OLD_ON_SOURCE:
+        case SyncError.SOURCE_RSYNC_TOO_OLD:
             host = host_label(src_vol, resolved_endpoints)
             console.print(f"{p2}rsync 3.0+ is required on {host}. Install or upgrade:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
-        case SyncReason.RSYNC_TOO_OLD_ON_DESTINATION:
+        case SyncError.DESTINATION_RSYNC_TOO_OLD:
             host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}rsync 3.0+ is required on {host}. Install or upgrade:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
-        case SyncReason.BTRFS_NOT_FOUND_ON_DESTINATION:
+        case SyncError.DESTINATION_BTRFS_NOT_FOUND:
             host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}Install btrfs-progs on {host}:")
             _print_cmd(console, _BTRFS_INSTALL, indent=3)
-        case SyncReason.STAT_NOT_FOUND_ON_DESTINATION:
+        case SyncError.DESTINATION_STAT_NOT_FOUND:
             host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}Install coreutils (stat) on {host}:")
             _print_cmd(console, _COREUTILS_INSTALL, indent=3)
-        case SyncReason.FINDMNT_NOT_FOUND_ON_DESTINATION:
+        case SyncError.DESTINATION_FINDMNT_NOT_FOUND:
             host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}Install util-linux (findmnt) on {host}:")
             _print_cmd(console, _UTIL_LINUX_INSTALL, indent=3)
-        case SyncReason.DESTINATION_NOT_BTRFS:
+        case SyncError.DESTINATION_NOT_BTRFS:
             console.print(f"{p2}The destination is not on a btrfs filesystem.")
-        case SyncReason.DESTINATION_NOT_BTRFS_SUBVOLUME:
+        case SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             cmds = [
                 f"sudo btrfs subvolume create {path}/{STAGING_DIR}",
@@ -468,7 +660,7 @@ def _print_sync_reason_fix(
                     console,
                     wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
-        case SyncReason.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM:
+        case SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM:
             console.print(f"{p2}Remount the btrfs volume with user_subvol_rm_allowed:")
             cmd = f"sudo mount -o remount,user_subvol_rm_allowed {dst_vol.path}"
             _print_cmd(
@@ -481,7 +673,7 @@ def _print_sync_reason_fix(
                 " the mount options in /etc/fstab"
                 f" for {dst_vol.path}."
             )
-        case SyncReason.DESTINATION_TMP_NOT_FOUND:
+        case SyncError.DESTINATION_TMP_NOT_FOUND:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             cmds = [
                 f"sudo btrfs subvolume create {path}/{STAGING_DIR}",
@@ -492,7 +684,7 @@ def _print_sync_reason_fix(
                     console,
                     wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
-        case SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND:
+        case SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             if dst_ep.hard_link_snapshots.enabled:
                 cmds = [f"mkdir -p {path}/{SNAPSHOTS_DIR}"]
@@ -506,7 +698,7 @@ def _print_sync_reason_fix(
                     console,
                     wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
-        case SyncReason.DESTINATION_ENDPOINT_NOT_WRITABLE:
+        case SyncError.DESTINATION_ENDPOINT_NOT_WRITABLE:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}The destination endpoint directory"
@@ -520,7 +712,7 @@ def _print_sync_reason_fix(
                     console,
                     wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
-        case SyncReason.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE:
+        case SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}The destination {SNAPSHOTS_DIR}/"
@@ -535,7 +727,7 @@ def _print_sync_reason_fix(
                     console,
                     wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
-        case SyncReason.DESTINATION_STAGING_DIR_NOT_WRITABLE:
+        case SyncError.DESTINATION_STAGING_DIR_NOT_WRITABLE:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}The destination {STAGING_DIR}/"
@@ -550,7 +742,7 @@ def _print_sync_reason_fix(
                     console,
                     wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
-        case SyncReason.DESTINATION_LATEST_NOT_FOUND:
+        case SyncError.DESTINATION_LATEST_NOT_FOUND:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}Destination has snapshots enabled"
@@ -565,7 +757,7 @@ def _print_sync_reason_fix(
                     console,
                     wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
-        case SyncReason.DESTINATION_LATEST_INVALID:
+        case SyncError.DESTINATION_LATEST_INVALID:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}Destination {path}/{LATEST_LINK}"
@@ -580,14 +772,14 @@ def _print_sync_reason_fix(
                     console,
                     wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
-        case SyncReason.DESTINATION_NO_HARDLINK_SUPPORT:
+        case SyncError.DESTINATION_NO_HARDLINK_SUPPORT:
             console.print(
                 f"{p2}The destination filesystem does not"
                 " support hard links (e.g. FAT/exFAT)."
                 " Use a filesystem like ext4, xfs, or"
                 " btrfs, or use btrfs-snapshots instead."
             )
-        case SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING:
+        case SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING:
             console.print(
                 f"{p2}The source endpoint's latest symlink"
                 " points to /dev/null (no snapshot yet)."
@@ -610,27 +802,25 @@ def print_human_troubleshoot(
     re = resolved_endpoints or {}
     if console is None:
         console = Console()
-    has_issues = False
 
-    failed_vols = [vs for vs in vol_statuses.values() if vs.reasons]
-    failed_syncs = [ss for ss in sync_statuses.values() if ss.reasons]
-    has_issues = bool(failed_vols or failed_syncs)
+    failed_vols = [vs for vs in vol_statuses.values() if vs.errors]
+    failed_syncs = [ss for ss in sync_statuses.values() if ss.errors]
 
     for vs in failed_vols:
         console.print(f"\n[bold]Volume {vs.slug!r}:[/bold]")
         vol = vs.config
-        for reason in vs.reasons:
-            console.print(f"{_INDENT}{reason.value}")
-            match reason:
-                case VolumeReason.SENTINEL_NOT_FOUND:
+        for error in vs.errors:
+            console.print(f"{_INDENT}{error.value}")
+            match error:
+                case VolumeError.SENTINEL_NOT_FOUND:
                     _print_sentinel_fix(
                         console,
                         vol,
                         vol.path,
-                        ".nbkp-vol",
+                        VOLUME_SENTINEL,
                         re,
                     )
-                case VolumeReason.UNREACHABLE:
+                case VolumeError.UNREACHABLE:
                     match vol:
                         case RemoteVolume():
                             ep = re[vol.slug]
@@ -639,7 +829,7 @@ def print_human_troubleshoot(
                                 ep.server,
                                 ep.proxy_chain,
                             )
-                case VolumeReason.LOCATION_EXCLUDED:
+                case VolumeError.LOCATION_EXCLUDED:
                     p2 = _INDENT * 2
                     console.print(
                         f"{p2}All SSH endpoints for this"
@@ -652,15 +842,15 @@ def print_human_troubleshoot(
 
     for ss in failed_syncs:
         console.print(f"\n[bold]Sync {ss.slug!r}:[/bold]")
-        for sync_reason in ss.reasons:
-            console.print(f"{_INDENT}{sync_reason.value}")
-            _print_sync_reason_fix(
+        for sync_error in ss.errors:
+            console.print(f"{_INDENT}{sync_error.value}")
+            _print_sync_error_fix(
                 console,
                 ss.config,
-                sync_reason,
+                sync_error,
                 config,
                 re,
             )
 
-    if not has_issues:
+    if not failed_vols and not failed_syncs:
         console.print("No issues found. All volumes and syncs are active.")

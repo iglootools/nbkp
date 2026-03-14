@@ -86,7 +86,7 @@ If any sentinel is missing, the sync is marked **inactive** and skipped. This pr
 
 ### Snapshot Lifecycle
 
-Both snapshot backends follow the same directory layout and lifecycle. Snapshot directories are named with ISO 8601 UTC timestamps (e.g. `2026-03-06T14:30:00.000Z`):
+Both snapshot backends follow the same directory layout and lifecycle. Snapshot directories are named with ISO 8601 UTC timestamps (e.g. `2026-03-06T14:30:00.000Z`). On macOS local volumes, colons are replaced with hyphens (`2026-03-06T14-30-00.000Z`) because APFS/HFS+ forbids colons in filenames — the OS silently converts them to slashes, corrupting the directory name.
 
 ```
 {destination}/

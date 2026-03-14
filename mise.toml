@@ -11,10 +11,82 @@ _.python.venv = { path = ".venv", create = true }
 [settings]
 lockfile = true
 
+# Build and Publishing Tasks
+[tasks.clean]
+description = "Clean up build artifacts"
+run = """
+rm -rf build/ dist/ *.egg-info/
+find . -type d -name __pycache__ -delete
+find . -type f -name "*.pyc" -delete
+"""
+
+[tasks.build]
+description = "Build the package"
+run = "poetry build"
+
+[tasks.publish]
+description = "Publish to PyPI (requires authentication)"
+run = "poetry publish"
+
+[tasks.shell]
+description = "Start a Poetry shell"
+run = "poetry shell"
+
 [tasks.install]
 description = "Install dependencies"
 run = "poetry install"
 
+[tasks.check]
+description = "Run all checks (format, lint, type-check, compat-check, clidocs-check, configdocs-check, depgraph-check)"
+run = [
+  { task = "format" },
+  { task = "lint" },
+  { task = "type-check" },
+  { task = "compat-check" },
+  { task = "clidocs-check" },
+  { task = "configdocs-check" },
+  { task = "depgraph-check" },
+]
+
+[tasks.check-all]
+description = "Run all checks (format, lint, type-check, compat-check, test)"
+run = [
+  { task = "check" },
+  { task = "test-all" },
+]
+
+# CI Workflow Tasks
+[tasks.ci-test]
+description = "Run all checks needed on CI"
+run = [
+  { task = "install" },
+  { task = "build" },
+  { task = "check-all" },
+]
+
+[tasks.ci-build]
+description = "Run all checks needed on CI"
+run = [
+  { task = "install" },
+  { task = "build" },
+]
+
+[tasks.ci-demo-record]
+description = "Record the demo on CI"
+run = [
+  { task = "install" },
+  { task = "demo-record" },
+]
+
+[tasks.ci-demo]
+description = "Record and upload the demo on CI"
+run = [
+  { task = "install" },
+  { task = "demo-record" },
+  { task = "demo-upload" },
+]
+
+# Test Tasks
 [tasks.test-unit]
 description = "Run unit tests (no Docker, no external dependencies)"
 run = "poetry run pytest tests/ --ignore=tests/e2e_sync_local/ --ignore=tests/e2e_sync_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -v"
@@ -52,7 +124,7 @@ run = "poetry run pytest tests/integration_docker/ -v"
 [tasks.test-integration-docker-btrfs]
 description = "Run local btrfs tests inside Docker (privileged)"
 run = """
-docker build -t nbkp-btrfs-test -f nbkp/testkit/dockerbuild/Dockerfile.btrfs-local-test .
+docker build -t nbkp-btrfs-test -f nbkp/remote/testkit/dockerbuild/Dockerfile.btrfs-local-test .
 # The bind mount exposes the host's .venv.  Poetry inside the Linux
 # container sees a macOS venv, considers it broken, and recreates it
 # with Linux binaries — overwriting the host's .venv.  The anonymous
@@ -75,58 +147,24 @@ run = [
   { task = "test-e2e" },
 ]
 
+# Lint / Formatting Tasks
 [tasks.format]
 description = "Format code with ruff"
 run = "poetry run ruff format ."
 
 [tasks.lint]
 description = "Run ruff linting"
-run = "poetry run ruff check nbkp/ tests/"
+run = "poetry run ruff check nbkp/ tests/ build-scripts/"
 
 [tasks.type-check]
 description = "Run pyright type checking"
-run = "poetry run pyright nbkp/"
+run = "poetry run pyright nbkp/ build-scripts/"
 
 [tasks.compat-check]
 description = "Verify no Python features above 3.12 are used"
 run = "poetry run vermin --target=3.12- --no-tips --no-parse-comments nbkp/ tests/"
 
-[tasks.check]
-description = "Run all checks (format, lint, type-check, compat-check)"
-run = [
-  { task = "format" },
-  { task = "lint" },
-  { task = "type-check" },
-  { task = "compat-check" },
-]
-
-[tasks.check-all]
-description = "Run all checks (format, lint, type-check, compat-check, test)"
-run = [
-  { task = "check" },
-  { task = "test-all" },
-]
-
-[tasks.clean]
-description = "Clean up build artifacts"
-run = """
-rm -rf build/ dist/ *.egg-info/
-find . -type d -name __pycache__ -delete
-find . -type f -name "*.pyc" -delete
-"""
-
-[tasks.build]
-description = "Build the package"
-run = "poetry build"
-
-[tasks.publish]
-description = "Publish to PyPI (requires authentication)"
-run = "poetry publish"
-
-[tasks.shell]
-description = "Start a Poetry shell"
-run = "poetry shell"
-
+# Demo Tasks
 [tasks.demo]
 description = "Record the demo and upload to asciinema.org"
 run = [
@@ -142,41 +180,43 @@ run = "./demo/record-demo.sh \"$(poetry version -s)\""
 description = "Upload the recorded demo to asciinema.org"
 run = "asciinema upload demo/demo.cast"
 
+# Reference Documentation Generation Tasks
+[tasks.reference-doc]
+description = "Regenerate the reference documentation"
+run = [
+  { task = "clidocs" },
+  { task = "configdocs" },
+  { task = "depgraph" },
+]
+
+[tasks.clidocs]
+description = "Regenerate CLI reference in docs/usage.md"
+run = "poetry run python build-scripts/clidocs.py"
+
+[tasks.clidocs-check]
+description = "Check that CLI reference in docs/cli-reference.md is up to date"
+run = "poetry run python build-scripts/clidocs.py --check"
+
+[tasks.configdocs]
+description = "Regenerate config reference in docs/config-reference.md"
+run = "poetry run python build-scripts/configdocs.py"
+
+[tasks.configdocs-check]
+description = "Check that config reference in docs/config-reference.md is up to date"
+run = "poetry run python build-scripts/configdocs.py --check"
+
 [tasks.depgraph]
-description = "Generate module dependency graph (mermaid syntax)"
-run = "poetry run python scripts/depgraph.py"
+description = "Regenerate Module Overview in docs/architecture.md"
+run = "poetry run python build-scripts/depgraph.py"
+
+[tasks.depgraph-check]
+description = "Check that Module Overview in docs/architecture.md is up to date"
+run = "poetry run python build-scripts/depgraph.py --check"
 
 [tasks.depgraph-ascii]
 description = "Generate module dependency graph (ASCII art)"
-run = "poetry run python scripts/depgraph.py --format ascii"
+run = "poetry run python build-scripts/depgraph.py --format ascii"
 
-# Tasks used by CI workflows
-[tasks.ci-test]
-description = "Run all checks needed on CI"
-run = [
-  { task = "install" },
-  { task = "build" },
-  { task = "check-all" },
-]
-
-[tasks.ci-build]
-description = "Run all checks needed on CI"
-run = [
-  { task = "install" },
-  { task = "build" },
-]
-
-[tasks.ci-demo-record]
-description = "Record the demo on CI"
-run = [
-  { task = "install" },
-  { task = "demo-record" },
-]
-
-[tasks.ci-demo]
-description = "Record and upload the demo on CI"
-run = [
-  { task = "install" },
-  { task = "demo-record" },
-  { task = "demo-upload" },
-]
+[tasks.depgraph-mermaid]
+description = "Print module dependency graph (mermaid syntax) to stdout"
+run = "poetry run python build-scripts/depgraph.py --format mermaid"

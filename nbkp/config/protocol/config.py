@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from typing import Any, Dict
 
 from pydantic import Field, ValidationInfo, field_validator, model_validator
@@ -11,6 +12,16 @@ from .ssh_endpoint import SshEndpoint
 from .sync import SyncConfig
 from .sync_endpoint import SyncEndpoint
 from .volume import RemoteVolume, Volume
+
+
+def _remove_stale_exclusive_keys(
+    merged: dict[str, Any], child: dict[str, Any], key_group: set[str]
+) -> None:
+    """Remove parent-only keys from an exclusive key group when child overrides one."""
+    child_keys = key_group & set(child.keys())
+    if child_keys:
+        for k in key_group - child_keys:
+            merged.pop(k, None)
 
 
 class Config(_BaseModel):
@@ -56,19 +67,10 @@ class Config(_BaseModel):
                 **parent,
                 **{k: v for k, v in ep.items() if k != "extends"},
             }
-            # If child sets proxy-jump or proxy-jumps, remove
+            # If child sets one of an exclusive key pair, remove
             # the other to avoid exclusivity clash with parent
-            proxy_keys = {"proxy-jump", "proxy-jumps"}
-            child_proxy_keys = proxy_keys & set(ep.keys())
-            if child_proxy_keys:
-                for k in proxy_keys - child_proxy_keys:
-                    merged.pop(k, None)
-            # Same for location / locations
-            loc_keys = {"location", "locations"}
-            child_loc_keys = loc_keys & set(ep.keys())
-            if child_loc_keys:
-                for k in loc_keys - child_loc_keys:
-                    merged.pop(k, None)
+            _remove_stale_exclusive_keys(merged, ep, {"proxy-jump", "proxy-jumps"})
+            _remove_stale_exclusive_keys(merged, ep, {"location", "locations"})
             resolved[slug] = merged
             return merged
 
@@ -144,6 +146,36 @@ class Config(_BaseModel):
         """Resolve the destination sync endpoint for a sync."""
         return self.sync_endpoints[sync.destination]
 
+    def known_locations(self) -> list[str]:
+        """All distinct location tags declared across SSH endpoints."""
+        return sorted(
+            {loc for ep in self.ssh_endpoints.values() for loc in ep.location_list}
+        )
+
+    def orphan_ssh_endpoints(self) -> list[str]:
+        """SSH endpoints not referenced by any volume or proxy-jump chain."""
+        used = {
+            ref
+            for vol in self.volumes.values()
+            if isinstance(vol, RemoteVolume)
+            for ref in [vol.ssh_endpoint, *(vol.ssh_endpoints or [])]
+        } | {hop for ep in self.ssh_endpoints.values() for hop in ep.proxy_jump_chain}
+        return sorted(set(self.ssh_endpoints) - used)
+
+    def orphan_volumes(self) -> list[str]:
+        """Volumes not referenced by any sync endpoint."""
+        used = {ep.volume for ep in self.sync_endpoints.values()}
+        return sorted(set(self.volumes) - used)
+
+    def orphan_sync_endpoints(self) -> list[str]:
+        """Sync endpoints not referenced by any sync."""
+        used = {
+            ref
+            for sync in self.syncs.values()
+            for ref in [sync.source, sync.destination]
+        }
+        return sorted(set(self.sync_endpoints) - used)
+
     @model_validator(mode="after")
     def validate_cross_references(self) -> Config:
         for slug, server in self.ssh_endpoints.items():
@@ -156,9 +188,9 @@ class Config(_BaseModel):
             # Circular detection via BFS through transitive
             # proxy chains
             visited: set[str] = {slug}
-            queue = list(chain)
+            queue: deque[str] = deque(chain)
             while queue:
-                current = queue.pop(0)
+                current = queue.popleft()
                 if current in visited:
                     raise ValueError(
                         f"Circular proxy-jump chain "

@@ -14,10 +14,15 @@ class RsyncOptions(_BaseModel):
     """Rsync flag configuration for a sync operation."""
 
     model_config = ConfigDict(frozen=True)
-    compress: bool = False
-    checksum: bool = True
-    default_options_override: Optional[List[str]] = None
-    extra_options: List[str] = Field(default_factory=list)
+    compress: bool = Field(default=False, description="Enable rsync `--compress`")
+    checksum: bool = Field(default=True, description="Enable rsync `--checksum`")
+    default_options_override: Optional[List[str]] = Field(
+        default=None, description="Replace default rsync flags entirely"
+    )
+    extra_options: List[str] = Field(
+        default_factory=list,
+        description="Additional flags appended after defaults",
+    )
 
 
 _DIR_MERGE_OPTS = {"path", "exclude-self"}
@@ -37,12 +42,21 @@ class SyncConfig(_BaseModel):
     """Configuration for a single sync operation."""
 
     slug: Slug
-    source: str = Field(..., min_length=1)
-    destination: str = Field(..., min_length=1)
-    enabled: bool = True
-    rsync_options: RsyncOptions = Field(default_factory=lambda: RsyncOptions())
-    filters: List[str] = Field(default_factory=list)
-    filter_file: Optional[str] = None
+    source: str = Field(..., min_length=1, description="Source sync endpoint slug")
+    destination: str = Field(
+        ..., min_length=1, description="Destination sync endpoint slug"
+    )
+    enabled: bool = Field(default=True, description="Whether this sync is active")
+    rsync_options: RsyncOptions = Field(
+        default_factory=lambda: RsyncOptions(),
+        description="Rsync flag configuration",
+    )
+    filters: List[str] = Field(
+        default_factory=list, description="Rsync filter rules (see below)"
+    )
+    filter_file: Optional[str] = Field(
+        default=None, description="Path to external rsync filter file"
+    )
 
     @field_validator("filter_file", mode="before")
     @classmethod
@@ -54,6 +68,11 @@ class SyncConfig(_BaseModel):
     @field_validator("filters", mode="before")
     @classmethod
     def normalize_filters(cls, v: Any) -> list[str]:
+        if isinstance(v, dict):
+            raise ValueError(
+                "filters must be a list, not a mapping. Add '- ' before each"
+                f" filter rule. Got: {v!r}"
+            )
         result: list[str] = []
         for item in v:
             match item:

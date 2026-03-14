@@ -7,11 +7,16 @@ a given symbol.
 
 from __future__ import annotations
 
-# ── common ───────────────────────────────────────────────────
-from .common import (
+# ── conventions ──────────────────────────────────────────────
+from ...fsprotocol import (
     DEVNULL_TARGET as DEVNULL_TARGET,
     LATEST_LINK as LATEST_LINK,
     SNAPSHOTS_DIR as SNAPSHOTS_DIR,
+    STAGING_DIR as STAGING_DIR,
+)
+
+# ── common ───────────────────────────────────────────────────
+from .common import (
     get_latest_snapshot as get_latest_snapshot,
     list_snapshots as list_snapshots,
     read_latest_symlink as read_latest_symlink,
@@ -21,7 +26,6 @@ from .common import (
 
 # ── btrfs ────────────────────────────────────────────────────
 from .btrfs import (
-    STAGING_DIR as STAGING_DIR,
     create_snapshot as create_snapshot,
 )
 

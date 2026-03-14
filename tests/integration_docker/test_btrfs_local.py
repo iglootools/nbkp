@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from nbkp.fsprotocol import Snapshot
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
@@ -185,8 +186,8 @@ class TestListSnapshots:
 
         snapshots = list_snapshots(sync, config)
         assert len(snapshots) == 2
-        assert "2024-01-01" in snapshots[0]
-        assert "2024-01-02" in snapshots[1]
+        assert "2024-01-01" in snapshots[0].name
+        assert "2024-01-02" in snapshots[1].name
 
 
 @_skip_no_btrfs
@@ -207,7 +208,7 @@ class TestGetLatestSnapshot:
 
         latest = get_latest_snapshot(sync, config)
         assert latest is not None
-        assert "2024-01-02" in latest
+        assert "2024-01-02" in latest.name
 
 
 @_skip_no_btrfs
@@ -243,16 +244,16 @@ class TestPruneSnapshots:
         for i in range(3):
             now = datetime(2024, 1, 1 + i, tzinfo=timezone.utc)
             path = create_snapshot(sync, config, now=now)
-            names.append(path.rsplit("/", 1)[-1])
+            names.append(Snapshot.from_path(path).name)
 
-        update_latest_symlink(sync, config, names[-1])
+        update_latest_symlink(sync, config, Snapshot.from_name(names[-1]))
 
         deleted = prune_snapshots(sync, config, 1)
         assert len(deleted) == 2
 
         remaining = list_snapshots(sync, config)
         assert len(remaining) == 1
-        assert names[-1] in remaining[0]
+        assert names[-1] == remaining[0].name
 
     def test_dry_run_preserves_all(self, tmp_path: Path, btrfs_dst: Path) -> None:
         src = tmp_path / "src"
@@ -265,8 +266,8 @@ class TestPruneSnapshots:
         for i in range(3):
             now = datetime(2024, 1, 1 + i, tzinfo=timezone.utc)
             path = create_snapshot(sync, config, now=now)
-        name = path.rsplit("/", 1)[-1]
-        update_latest_symlink(sync, config, name)
+        snapshot = Snapshot.from_path(path)
+        update_latest_symlink(sync, config, snapshot)
 
         deleted = prune_snapshots(sync, config, 1, dry_run=True)
         assert len(deleted) == 2
@@ -303,7 +304,7 @@ def test_btrfs_local_has_execution_path() -> None:
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_DOCKERFILE = "nbkp/testkit/dockerbuild/Dockerfile.btrfs-local-test"
+_DOCKERFILE = "nbkp/remote/testkit/dockerbuild/Dockerfile.btrfs-local-test"
 _IMAGE_TAG = "nbkp-btrfs-test:latest"
 
 

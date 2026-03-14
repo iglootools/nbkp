@@ -11,10 +11,9 @@ import docker as dockerlib
 import docker.errors as docker_errors
 import typer
 
-from ..config import SshConnectionOptions, SshEndpoint
-from ..remote.fabricssh import run_remote_command
-from ..sync.snapshots.btrfs import STAGING_DIR
-from ..sync.snapshots.common import SNAPSHOTS_DIR
+from ...config import SshConnectionOptions, SshEndpoint
+from ...fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
+from ...remote.fabricssh import run_remote_command
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"
 STORAGE_CONTAINER_NAME = "nbkp-demo"

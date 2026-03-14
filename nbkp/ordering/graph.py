@@ -22,14 +22,12 @@ def _build_graph(
     for sync_slug, sync in syncs.items():
         writers[sync.destination].append(sync_slug)
 
-    graph: dict[str, set[str]] = {}
-    for sync_slug, sync in syncs.items():
-        deps = {
+    return {
+        sync_slug: {
             writer for writer in writers.get(sync.source, []) if writer != sync_slug
         }
-        graph[sync_slug] = deps
-
-    return graph
+        for sync_slug, sync in syncs.items()
+    }
 
 
 def sync_predecessors(
@@ -76,13 +74,9 @@ def build_adjacency(
     - roots is the set of endpoint slugs that are never destinations
     """
     children: dict[str, list[SyncConfig]] = defaultdict(list)
-    all_sources: set[str] = set()
-    all_destinations: set[str] = set()
-
     for sync in syncs.values():
         children[sync.source].append(sync)
-        all_sources.add(sync.source)
-        all_destinations.add(sync.destination)
 
-    roots = all_sources - all_destinations
-    return dict(children), roots
+    all_sources = {sync.source for sync in syncs.values()}
+    all_destinations = {sync.destination for sync in syncs.values()}
+    return dict(children), all_sources - all_destinations

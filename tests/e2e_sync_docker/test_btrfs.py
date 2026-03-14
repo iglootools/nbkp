@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from nbkp.fsprotocol import Snapshot
 from nbkp.sync.snapshots.btrfs import (
     create_snapshot,
     prune_snapshots,
@@ -26,8 +27,8 @@ from nbkp.config import (
     resolve_all_endpoints,
 )
 from nbkp.sync.rsync import run_rsync
-from nbkp.testkit.docker import REMOTE_BTRFS_PATH
-from nbkp.testkit.gen.fs import create_seed_sentinels
+from nbkp.remote.testkit.docker import REMOTE_BTRFS_PATH
+from nbkp.sync.testkit.seed import create_seed_sentinels
 
 from tests._docker_fixtures import assert_sentinels_after_sync, ssh_exec
 
@@ -99,15 +100,15 @@ class TestBtrfsSnapshots:
         assert check.returncode == 0
 
         # Update latest symlink
-        snap_name = snapshot_path.rsplit("/", 1)[-1]
-        update_latest_symlink(sync, config, snap_name, resolved_endpoints=resolved)
+        snapshot = Snapshot.from_path(snapshot_path)
+        update_latest_symlink(sync, config, snapshot, resolved_endpoints=resolved)
 
         # Verify latest symlink
         link = ssh_exec(
             docker_ssh_endpoint,
             f"readlink {REMOTE_BTRFS_PATH}/latest",
         )
-        assert f"snapshots/{snap_name}" in link.stdout
+        assert f"snapshots/{snapshot.name}" in link.stdout
 
         assert_sentinels_after_sync(
             sync, config, docker_ssh_endpoint, dest_suffix="staging"
@@ -153,9 +154,9 @@ class TestBtrfsSnapshots:
 
         # First sync + snapshot + symlink
         run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="staging")
-        first_snap = create_snapshot(sync, config, resolved_endpoints=resolved)
-        first_name = first_snap.rsplit("/", 1)[-1]
-        update_latest_symlink(sync, config, first_name, resolved_endpoints=resolved)
+        first_snap_path = create_snapshot(sync, config, resolved_endpoints=resolved)
+        first_snapshot = Snapshot.from_path(first_snap_path)
+        update_latest_symlink(sync, config, first_snapshot, resolved_endpoints=resolved)
 
         # Small delay to ensure distinct timestamp
         time.sleep(0.1)
@@ -168,7 +169,7 @@ class TestBtrfsSnapshots:
         )
         assert latest_snap is not None
 
-        link_dest = f"../snapshots/{latest_snap.rsplit('/', 1)[-1]}"
+        link_dest = f"../snapshots/{latest_snap.name}"
         result = run_rsync(
             sync,
             config,
@@ -183,15 +184,15 @@ class TestBtrfsSnapshots:
         check = ssh_exec(docker_ssh_endpoint, f"test -d {snapshot_path}")
         assert check.returncode == 0
 
-        snap_name = snapshot_path.rsplit("/", 1)[-1]
-        update_latest_symlink(sync, config, snap_name, resolved_endpoints=resolved)
+        snapshot = Snapshot.from_path(snapshot_path)
+        update_latest_symlink(sync, config, snapshot, resolved_endpoints=resolved)
 
         # Verify latest symlink points to second snapshot
         link = ssh_exec(
             docker_ssh_endpoint,
             f"readlink {REMOTE_BTRFS_PATH}/latest",
         )
-        assert f"snapshots/{snap_name}" in link.stdout
+        assert f"snapshots/{snapshot.name}" in link.stdout
 
         assert_sentinels_after_sync(
             sync, config, docker_ssh_endpoint, dest_suffix="staging"
@@ -253,8 +254,8 @@ class TestPruneSnapshots:
                 config,
                 resolved_endpoints=resolved,
             )
-            name = path.rsplit("/", 1)[-1]
-            update_latest_symlink(sync, config, name, resolved_endpoints=resolved)
+            snapshot = Snapshot.from_path(path)
+            update_latest_symlink(sync, config, snapshot, resolved_endpoints=resolved)
             paths.append(path)
             time.sleep(0.1)  # distinct timestamps
         return paths

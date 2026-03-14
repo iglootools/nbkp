@@ -19,6 +19,7 @@ from nbkp.config import (
     resolve_all_endpoints,
 )
 from nbkp.sync.rsync import ProgressMode, build_rsync_command, run_rsync
+from nbkp.sync.snapshots.common import create_snapshot_timestamp
 
 _SSH_KEY = str(Path("~/.ssh/key").expanduser())
 
@@ -1231,10 +1232,12 @@ class TestDestSuffix:
             syncs={"s1": sync},
         )
 
-        cmd = build_rsync_command(
-            sync, config, dest_suffix="snapshots/2026-02-21T12:00:00.000Z"
-        )
-        assert cmd[-1] == "/mnt/dst/snapshots/2026-02-21T12:00:00.000Z/"
+        from datetime import datetime, timezone
+
+        _now = datetime(2026, 2, 21, 12, 0, 0, tzinfo=timezone.utc)
+        _ts = create_snapshot_timestamp(_now, dst)
+        cmd = build_rsync_command(sync, config, dest_suffix=f"snapshots/{_ts.name}")
+        assert cmd[-1] == f"/mnt/dst/snapshots/{_ts.name}/"
 
     def test_local_to_remote(self) -> None:
         server = SshEndpoint(slug="nas", host="nas.local", user="backup")

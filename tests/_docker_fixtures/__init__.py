@@ -18,7 +18,7 @@ from nbkp.config import (
     SshEndpoint,
     SyncConfig,
 )
-from nbkp.testkit.docker import (  # noqa: F401
+from nbkp.remote.testkit.docker import (  # noqa: F401
     DOCKER_DIR,
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_PATH,

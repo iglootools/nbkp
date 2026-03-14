@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
 from enum import Enum
 from typing import Callable, Optional
 
 from pydantic import BaseModel, model_validator
 
 from .snapshots.btrfs import (
-    STAGING_DIR,
     create_snapshot,
     prune_snapshots as btrfs_prune_snapshots,
 )
@@ -18,9 +18,10 @@ from .snapshots.hardlinks import (
     create_snapshot_dir,
     prune_snapshots as hl_prune_snapshots,
 )
-from .snapshots.common import SNAPSHOTS_DIR, update_latest_symlink
+from .snapshots.common import update_latest_symlink
 from ..config import Config, ResolvedEndpoints
-from ..preflight import SyncReason, SyncStatus
+from ..fsprotocol import SNAPSHOTS_DIR, STAGING_DIR, Snapshot
+from ..preflight import SyncError, SyncStatus
 from .rsync import ProgressMode, run_rsync
 
 
@@ -124,7 +125,7 @@ def run_all_syncs(
                 output="",
                 outcome=SyncOutcome.SKIPPED,
                 detail=(
-                    "Sync not active: " + ", ".join(r.value for r in status.reasons)
+                    "Sync not active: " + ", ".join(r.value for r in status.errors)
                 ),
             )
         else:
@@ -143,7 +144,7 @@ def run_all_syncs(
         # the chain would succeed in a real run.
         is_dry_run_pending = (
             result.outcome == SyncOutcome.SKIPPED
-            and status.reasons == [SyncReason.DRY_RUN_SOURCE_SNAPSHOT_PENDING]
+            and status.errors == [SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING]
         )
         if not result.success and not is_dry_run_pending:
             failed.add(slug)
@@ -301,62 +302,90 @@ def _run_btrfs_sync(
             detail=f"rsync exited with code {proc.returncode}",
         )
     else:
-        snapshot_path: str | None = None
-        pruned_paths: list[str] | None = None
-        dst = config.destination_endpoint(sync)
-        btrfs_cfg = dst.btrfs_snapshots
-        if not dry_run:
-            try:
-                snapshot_path = create_snapshot(
-                    sync,
-                    config,
-                    resolved_endpoints=resolved_endpoints,
-                )
-            except RuntimeError as e:
-                return SyncResult(
-                    sync_slug=slug,
-                    success=False,
-                    dry_run=dry_run,
-                    rsync_exit_code=proc.returncode,
-                    output=proc.stdout,
-                    detail=f"Snapshot failed: {e}",
-                )
+        return _btrfs_post_rsync(
+            slug, sync, config, proc, dry_run, prune, resolved_endpoints
+        )
 
-            snapshot_name = snapshot_path.rsplit("/", 1)[-1]
-            try:
-                update_latest_symlink(
-                    sync,
-                    config,
-                    snapshot_name,
-                    resolved_endpoints=resolved_endpoints,
-                )
-            except RuntimeError as e:
-                return SyncResult(
-                    sync_slug=slug,
-                    success=False,
-                    dry_run=dry_run,
-                    rsync_exit_code=proc.returncode,
-                    output=proc.stdout,
-                    detail=f"Symlink update failed: {e}",
-                )
 
-            if prune and btrfs_cfg.max_snapshots is not None:
-                pruned_paths = btrfs_prune_snapshots(
-                    sync,
-                    config,
-                    btrfs_cfg.max_snapshots,
-                    resolved_endpoints=resolved_endpoints,
-                )
+def _btrfs_post_rsync(
+    slug: str,
+    sync: object,
+    config: Config,
+    proc: subprocess.CompletedProcess[str],
+    dry_run: bool,
+    prune: bool,
+    resolved_endpoints: ResolvedEndpoints | None,
+) -> SyncResult:
+    """Create btrfs snapshot, update symlink, and optionally prune after successful rsync."""
+    from ..config import SyncConfig
 
+    assert isinstance(sync, SyncConfig)
+
+    if dry_run:
         return SyncResult(
             sync_slug=slug,
             success=True,
             dry_run=dry_run,
             rsync_exit_code=proc.returncode,
             output=proc.stdout,
-            snapshot_path=snapshot_path,
-            pruned_paths=pruned_paths,
         )
+
+    try:
+        snapshot_path = create_snapshot(
+            sync,
+            config,
+            resolved_endpoints=resolved_endpoints,
+        )
+    except RuntimeError as e:
+        return SyncResult(
+            sync_slug=slug,
+            success=False,
+            dry_run=dry_run,
+            rsync_exit_code=proc.returncode,
+            output=proc.stdout,
+            detail=f"Snapshot failed: {e}",
+        )
+
+    snapshot = Snapshot.from_path(snapshot_path)
+    try:
+        update_latest_symlink(
+            sync,
+            config,
+            snapshot,
+            resolved_endpoints=resolved_endpoints,
+        )
+    except RuntimeError as e:
+        return SyncResult(
+            sync_slug=slug,
+            success=False,
+            dry_run=dry_run,
+            rsync_exit_code=proc.returncode,
+            output=proc.stdout,
+            detail=f"Symlink update failed: {e}",
+        )
+
+    dst = config.destination_endpoint(sync)
+    btrfs_cfg = dst.btrfs_snapshots
+    pruned_paths = (
+        btrfs_prune_snapshots(
+            sync,
+            config,
+            btrfs_cfg.max_snapshots,
+            resolved_endpoints=resolved_endpoints,
+        )
+        if prune and btrfs_cfg.max_snapshots is not None
+        else None
+    )
+
+    return SyncResult(
+        sync_slug=slug,
+        success=True,
+        dry_run=dry_run,
+        rsync_exit_code=proc.returncode,
+        output=proc.stdout,
+        snapshot_path=snapshot_path,
+        pruned_paths=pruned_paths,
+    )
 
 
 def _run_hard_link_sync(
@@ -384,9 +413,11 @@ def _run_hard_link_sync(
         pass  # Best-effort cleanup
 
     # 2. Determine link-dest from latest complete snapshot
-    link_dest: str | None = None
-    if status.destination_latest_target:
-        link_dest = f"../{status.destination_latest_target}"
+    link_dest = (
+        f"../{status.destination_latest_snapshot.name}"
+        if status.destination_latest_snapshot
+        else None
+    )
 
     # 3. Create new snapshot directory
     try:
@@ -402,7 +433,7 @@ def _run_hard_link_sync(
             output="",
             detail=f"Failed to create snapshot dir: {e}",
         )
-    snapshot_name = snapshot_path.rsplit("/", 1)[-1]
+    snapshot = Snapshot.from_path(snapshot_path)
 
     # 4. Run rsync into the snapshot directory
     try:
@@ -414,7 +445,7 @@ def _run_hard_link_sync(
             progress=progress,
             on_output=on_rsync_output,
             resolved_endpoints=resolved_endpoints,
-            dest_suffix=f"{SNAPSHOTS_DIR}/{snapshot_name}",
+            dest_suffix=f"{SNAPSHOTS_DIR}/{snapshot.name}",
         )
     except Exception as e:
         return SyncResult(
@@ -437,38 +468,77 @@ def _run_hard_link_sync(
             output=proc.stdout + proc.stderr,
             detail=f"rsync exited with code {proc.returncode}",
         )
-
-    # 5. Update latest symlink (skip on dry-run)
-    pruned_paths: list[str] | None = None
-    if not dry_run:
-        try:
-            update_latest_symlink(
-                sync,
-                config,
-                snapshot_name,
-                resolved_endpoints=resolved_endpoints,
-            )
-        except RuntimeError as e:
-            return SyncResult(
-                sync_slug=slug,
-                success=False,
-                dry_run=dry_run,
-                rsync_exit_code=proc.returncode,
-                output=proc.stdout,
-                detail=f"Symlink update failed: {e}",
-            )
-
-        # 6. Prune old snapshots
-        if prune and hl_cfg.max_snapshots is not None:
-            pruned_paths = hl_prune_snapshots(
-                sync,
-                config,
-                hl_cfg.max_snapshots,
-                resolved_endpoints=resolved_endpoints,
-            )
     else:
-        # Dry-run: remove the empty snapshot dir
+        return _hl_post_rsync(
+            slug,
+            sync,
+            config,
+            proc,
+            snapshot_path,
+            snapshot,
+            dry_run,
+            prune,
+            hl_cfg,
+            resolved_endpoints,
+        )
+
+
+def _hl_post_rsync(
+    slug: str,
+    sync: object,
+    config: Config,
+    proc: subprocess.CompletedProcess[str],
+    snapshot_path: str,
+    snapshot: Snapshot,
+    dry_run: bool,
+    prune: bool,
+    hl_cfg: object,
+    resolved_endpoints: ResolvedEndpoints | None,
+) -> SyncResult:
+    """Update symlink, prune, or clean up after successful hard-link rsync."""
+    from ..config import SyncConfig
+    from ..config.protocol.sync_endpoint import HardLinkSnapshotConfig
+
+    assert isinstance(sync, SyncConfig)
+    assert isinstance(hl_cfg, HardLinkSnapshotConfig)
+
+    if dry_run:
         _cleanup_snapshot_dir(snapshot_path, sync, config, resolved_endpoints)
+        return SyncResult(
+            sync_slug=slug,
+            success=True,
+            dry_run=dry_run,
+            rsync_exit_code=proc.returncode,
+            output=proc.stdout,
+        )
+
+    try:
+        update_latest_symlink(
+            sync,
+            config,
+            snapshot,
+            resolved_endpoints=resolved_endpoints,
+        )
+    except RuntimeError as e:
+        return SyncResult(
+            sync_slug=slug,
+            success=False,
+            dry_run=dry_run,
+            rsync_exit_code=proc.returncode,
+            output=proc.stdout,
+            detail=f"Symlink update failed: {e}",
+        )
+
+    pruned_paths = (
+        hl_prune_snapshots(
+            sync,
+            config,
+            hl_cfg.max_snapshots,
+            resolved_endpoints=resolved_endpoints,
+        )
+        if prune and hl_cfg.max_snapshots is not None
+        else None
+    )
 
     return SyncResult(
         sync_slug=slug,
@@ -476,7 +546,7 @@ def _run_hard_link_sync(
         dry_run=dry_run,
         rsync_exit_code=proc.returncode,
         output=proc.stdout,
-        snapshot_path=snapshot_path if not dry_run else None,
+        snapshot_path=snapshot_path,
         pruned_paths=pruned_paths,
     )
 

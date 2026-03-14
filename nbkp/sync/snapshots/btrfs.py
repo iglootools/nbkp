@@ -13,12 +13,13 @@ from ...config import (
     SyncConfig,
     Volume,
 )
+from ...fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
 from ...remote import run_remote_command
-from .common import SNAPSHOTS_DIR, list_snapshots, resolve_dest_path
-
-#: Directory name for the writable btrfs subvolume that rsync
-#: syncs into before a read-only snapshot is created.
-STAGING_DIR = "staging"
+from .common import (
+    create_snapshot_timestamp,
+    list_snapshots,
+    resolve_dest_path,
+)
 
 
 def _run_on_volume(
@@ -47,16 +48,13 @@ def create_snapshot(
     Returns the snapshot path.
     """
     re = resolved_endpoints or {}
-    if now is None:
-        now = datetime.now(timezone.utc)
-    dest_path = resolve_dest_path(sync, config)
-    # isoformat uses +00:00, but Z is more conventional for UTC.
-    timestamp = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
-    snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{timestamp}"
-    tmp_path = f"{dest_path}/{STAGING_DIR}"
-
+    ts = now or datetime.now(timezone.utc)
     dst = config.destination_endpoint(sync)
     dst_vol = config.volumes[dst.volume]
+    dest_path = resolve_dest_path(sync, config)
+    snapshot = create_snapshot_timestamp(ts, dst_vol)
+    snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{snapshot.name}"
+    tmp_path = f"{dest_path}/{STAGING_DIR}"
     result = _run_on_volume(
         ["btrfs", "subvolume", "snapshot", "-r", tmp_path, snapshot_path],
         dst_vol,
@@ -64,7 +62,8 @@ def create_snapshot(
     )
     if result.returncode != 0:
         raise RuntimeError(f"btrfs snapshot failed: {result.stderr}")
-    return snapshot_path
+    else:
+        return snapshot_path
 
 
 def _make_snapshot_writable(
@@ -123,16 +122,22 @@ def prune_snapshots(
     excess = len(snapshots) - max_snapshots
     if excess <= 0:
         return []
+    else:
+        latest = read_latest_symlink(sync, config, resolved_endpoints=re)
+        dest_path = resolve_dest_path(sync, config)
+        snapshots_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
 
-    latest_name = read_latest_symlink(sync, config, resolved_endpoints=re)
+        # Candidates: oldest first, skip the latest target, take up to excess
+        to_delete = [
+            f"{snapshots_dir}/{s.name}"
+            for s in snapshots
+            if latest is None or s.name != latest.name
+        ][:excess]
 
-    # Candidates: oldest first, skip the latest target, take up to excess
-    to_delete = [p for p in snapshots if p.rsplit("/", 1)[-1] != latest_name][:excess]
+        if not dry_run:
+            dst = config.destination_endpoint(sync)
+            dst_vol = config.volumes[dst.volume]
+            for path in to_delete:
+                delete_snapshot(path, dst_vol, re)
 
-    if not dry_run:
-        dst = config.destination_endpoint(sync)
-        dst_vol = config.volumes[dst.volume]
-        for path in to_delete:
-            delete_snapshot(path, dst_vol, re)
-
-    return to_delete
+        return to_delete

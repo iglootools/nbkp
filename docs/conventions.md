@@ -1,15 +1,18 @@
 # Conventions
 
+A set of [implementation checklists](./implementation-checklists.md) serve as a reminder for things to check when implementing new features or making changes to the codebase. 
+
 ## General Coding Conventions
-- **Functional Style**: 
-  - Prefer functional programming style over procedural style. Use pure functions and avoid side effects when possible.
+- **Functional Style**:
+  - Prefer functional programming style over procedural style. Use pure functions and avoid mutability when possible.
+- **Code comments**: When making changes to the codebase, explain the reasoning when the implementation is non-obvious, and document any non-trivial design decisions or trade-offs that were made.
 - **Charsets**: 
   - UTF-8 everywhere.
 - **Time Management**
   - UTC for all timestamps
   - Do not generate the current timestamps directly inside the core logic: pass the timestamps from the higher-level functions, tests, and other entry points.
 - **Mocks**
-  - Avoid use of mocks when the values can be passed as a parameter (e.g. time)
+  - Prefer passing values as explicit parameters (with sensible defaults) over reading global/ambient state internally. This makes functions testable without mocking. For example, pass `now: datetime` instead of calling `datetime.now()` internally, pass `platform: str = sys.platform` instead of reading `sys.platform` internally. Tests should pass these values explicitly rather than patching modules.
 - **Console Output**
   - Do not hardcode indents in strings, compute the indent at the call site
 - **Version Management**
@@ -19,9 +22,6 @@
     # examples
     mise use --pin pipx:poetry
     ```
-- **Github Workflows**
-  - Whenever safe (i.e. not affecting production), enable `workflow_dispatch` and `repository_dispatch` to allow manual triggering of workflows from the GitHub UI or CLI, which is useful for testing and debugging.
-  - Use OpenID Connect (OIDC) authentication for publishing to PyPI, and set up a separate workflow for testing releases to Test PyPI. This allows testing the release and publish process without affecting the real PyPI index, and provides more detailed logs for debugging.
 - **Command Line**
   - When calling external commands, build the command lines as lists of arguments instead of strings to avoid issues with quoting and escaping.
 - **Testability**
@@ -30,6 +30,10 @@
   - Avoid silent failures and ensure that all errors are surfaced with clear messages. This includes validating inputs and configurations early, and providing informative error messages when something goes wrong.
 
 ## General Python Coding Conventions
+- **Functional Style**:
+  - Avoid mutable accumulator lists (`errors = []; errors.append(...)`). Instead, build lists as single expressions using `[*(...), *(...)]` unpacking, conditional `[item] if cond else []` fragments, and helper functions that return lists.
+  - Prefer dict/list comprehensions over imperative loops for building collections.
+  - When a function computes a list from multiple independent branches, compose the result by unpacking sub-expressions rather than mutating a shared list across branches.
 - **String Literals**:
   - Prefer `dedent("""\...""")` multiline strings over concatenated single-line strings with `\n` escapes when the content has meaningful structure (e.g. YAML, config snippets, multi-line templates). Short single-line strings (e.g. `"key: value\n"`) are fine as-is.
 - **Typing**: Use type annotations for all functions and methods, including return types. Use `pyright` for static type checking.
@@ -49,6 +53,10 @@
   - Prefer dict unpacking with a filtered comprehension over if-chains when conditionally
     including keys (e.g. `**{k: v for k, v in {...}.items() if v is not None}`).
 
+## Github Workflows
+- Whenever safe (i.e. not affecting production), enable `workflow_dispatch` and `repository_dispatch` to allow manual triggering of workflows from the GitHub UI or CLI, which is useful for testing and debugging.
+- Use OpenID Connect (OIDC) authentication for publishing to PyPI, and set up a separate workflow for testing releases to Test PyPI. This allows testing the release and publish process without affecting the real PyPI index, and provides more detailed logs for debugging.
+
 ## Application-Specific Coding Conventions
 - **Naming Conventions**
   - `kebab-case` for CLI commands and config keys
@@ -63,19 +71,6 @@
   - No real rsync/ssh/btrfs calls in unit tests - use mocks instead. Docker-enabled integration tests cover the real interactions.
   - Generate YAML test data using the Pydantic data models and `model.model_dump()` instead of hardcoding YAML strings.
     This ensures the test data is always valid and consistent with the models.
-- **Domain Logic Consistency**
-  - When making changes to the config schema/models or status checks, make sure to update **all** of the following:
-    - **Troubleshoot output** (`nbkp/preflight/output.py`): add a `case` in the troubleshoot match-case for every new `SyncReason` or `VolumeReason`, with actionable remediation text.
-    - **Seed / demo test data** (`nbkp/testkit/gen/check.py`): add a scenario to `troubleshoot_config` + `troubleshoot_data` that exercises the new reason, so `nbkp-demo output` renders it.
-    - **CLI inactive-reasons set** (`nbkp/cli.py`, `_INACTIVE_REASONS`): if the new reason should be treated as a non-fatal skip (like missing sentinels), add it here.
-    - The demo CLI (`nbkp/democli.py`) to generate new test data that reflects the changes.
-    - The `cli` CLI app to support the new functionality, and update the formatting logic in `output.py` if necessary.
-      - `sh` command:
-      - Ensure to add comments in the codebase to describe which choices have been made with regard to which of the original (`run`) functionality has been preserved vs dropped
-      - When adding functionality to the `run` command, make sure to also add it to the `sh` command, or explicitly document why it's not applicable.
-  - When adding a dependency on an external tool (e.g. `stat`, `findfmt`), add a check for the tool in the CLI app and provide a clear error message if it's not found.
-- **Documentation Consistency**
-  - When making changes to the CLI or config schema, make sure to update the documentation in `docs/` to reflect the changes, especially in `features.md`, `usage.md` and `conventions.md`.
 
 ## Testing Strategy
 

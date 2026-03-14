@@ -14,8 +14,8 @@ from nbkp.config import (
     resolve_all_endpoints,
 )
 from nbkp.sync.rsync import run_rsync
-from nbkp.testkit.docker import REMOTE_BACKUP_PATH
-from nbkp.testkit.gen.fs import create_seed_sentinels
+from nbkp.remote.testkit.docker import REMOTE_BACKUP_PATH
+from nbkp.sync.testkit.seed import create_seed_sentinels
 
 from tests._docker_fixtures import assert_sentinels_after_sync, ssh_exec
 

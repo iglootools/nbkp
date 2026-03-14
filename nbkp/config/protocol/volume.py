@@ -11,11 +11,20 @@ from .base import Slug, _BaseModel
 
 
 class LocalVolume(_BaseModel):
+    """A local filesystem volume."""
+
     model_config = ConfigDict(frozen=True)
     type: Literal["local"] = "local"
-    """A local filesystem volume."""
     slug: Slug
-    path: str = Field(..., min_length=1)
+    path: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Absolute path to the volume."
+            " `~` is expanded to the user's home directory."
+            " Trailing slashes are stripped."
+        ),
+    )
 
     @field_validator("path", mode="before")
     @classmethod
@@ -26,13 +35,28 @@ class LocalVolume(_BaseModel):
 
 
 class RemoteVolume(_BaseModel):
+    """A remote volume accessible via SSH."""
+
     model_config = ConfigDict(frozen=True)
     type: Literal["remote"] = "remote"
-    """A remote volume accessible via SSH."""
     slug: Slug
-    ssh_endpoint: str = Field(..., min_length=1)
-    ssh_endpoints: Optional[List[str]] = None
-    path: str = Field(..., min_length=1)
+    ssh_endpoint: str = Field(
+        ..., min_length=1, description="Primary SSH endpoint slug"
+    )
+    ssh_endpoints: Optional[List[str]] = Field(
+        default=None, description="Candidate endpoints for auto-selection"
+    )
+    path: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Absolute path on the remote host."
+            " Trailing slashes are stripped."
+            " `~` is not expanded"
+            " (it refers to the remote user's home"
+            " and is resolved by SSH/rsync)."
+        ),
+    )
 
     @field_validator("path", mode="before")
     @classmethod
