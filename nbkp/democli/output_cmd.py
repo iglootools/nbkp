@@ -30,6 +30,7 @@ from ..remote.resolution import resolve_all_endpoints
 from ..sync.output import (
     print_human_prune_results,
     print_human_results,
+    print_run_preview,
 )
 from ..config.testkit import config_show_config
 from ..preflight.testkit import (
@@ -77,6 +78,7 @@ def output() -> None:
     _show_config_show()
     _show_config_graph()
     _show_check()
+    _show_run_preview()
     _show_results()
     _show_prune()
     _show_troubleshoot()
@@ -122,6 +124,21 @@ def _show_check() -> None:
         wrap_in_panel=False,
     )
     _print_panel("print_human_check", buf)
+
+
+def _show_run_preview() -> None:
+    console, buf = _capture_console()
+    config = check_config()
+    re = resolve_all_endpoints(config)
+    _vol_statuses, sync_statuses = check_data(config)
+    print_run_preview(
+        sync_statuses,
+        config,
+        console=console,
+        resolved_endpoints=re,
+        wrap_in_panel=False,
+    )
+    _print_panel("print_run_preview", buf)
 
 
 def _show_results() -> None:

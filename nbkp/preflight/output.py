@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import shlex
-
 from rich.console import Console, Group, RenderableType
 from rich.padding import Padding
 from rich.panel import Panel
@@ -31,7 +29,6 @@ from ..remote.ssh import (
     ssh_prefix,
     wrap_cmd,
 )
-from ..sync.rsync import build_rsync_command
 from ..fsprotocol import (
     DESTINATION_SENTINEL,
     LATEST_LINK,
@@ -311,42 +308,6 @@ def _build_syncs_section(
     return [table]
 
 
-def _build_rsync_commands_section(
-    sync_statuses: dict[str, SyncStatus],
-    config: Config,
-    resolved_endpoints: ResolvedEndpoints,
-) -> list[RenderableType]:
-    """Build the Rsync Commands table section."""
-    active_syncs = [ss for ss in sync_statuses.values() if ss.active]
-    if not active_syncs:
-        return []
-    table = Table(title="Rsync Commands:")
-    table.add_column("Sync", style="bold")
-    table.add_column("Command")
-
-    for ss in active_syncs:
-        dst_ep = config.destination_endpoint(ss.config)
-        dest_suffix: str | None = None
-        link_dest: str | None = None
-        match dst_ep.snapshot_mode:
-            case "btrfs":
-                dest_suffix = STAGING_DIR
-            case "hard-link":
-                dest_suffix = f"{SNAPSHOTS_DIR}/<timestamp>"
-                if ss.destination_latest_snapshot:
-                    link_dest = f"../{ss.destination_latest_snapshot.name}"
-        cmd = build_rsync_command(
-            ss.config,
-            config,
-            resolved_endpoints=resolved_endpoints,
-            dest_suffix=dest_suffix,
-            link_dest=link_dest,
-        )
-        table.add_row(ss.slug, shlex.join(cmd))
-
-    return [Text(""), table]
-
-
 def _build_orphan_warnings_section(
     config: Config,
 ) -> list[RenderableType]:
@@ -387,7 +348,6 @@ def build_check_sections(
         *_build_ssh_endpoints_section(config),
         *_build_volumes_section(vol_statuses, resolved_endpoints),
         *_build_syncs_section(sync_statuses, config),
-        *_build_rsync_commands_section(sync_statuses, config, resolved_endpoints),
         *_build_orphan_warnings_section(config),
     ]
 

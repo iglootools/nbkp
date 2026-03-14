@@ -40,7 +40,6 @@ graph TD
     preflight --> config
     preflight --> fsprotocol
     preflight --> remote
-    preflight --> sync
     remote --> config
     remote --> fsprotocol
     scriptgen --> config
