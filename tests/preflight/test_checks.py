@@ -38,12 +38,14 @@ from nbkp.preflight.status import (
     SyncError,
     SyncStatus,
     VolumeCapabilities,
+    VolumeDiagnostics,
     VolumeError,
     VolumeStatus,
 )
-from nbkp.preflight.volume_checks import check_volume
+from nbkp.preflight.checks import check_volume
 
 _STUB_CAPS = VolumeCapabilities(
+    sentinel_exists=True,
     has_rsync=True,
     rsync_version_ok=True,
     has_btrfs=False,
@@ -55,6 +57,7 @@ _STUB_CAPS = VolumeCapabilities(
 )
 
 _NO_RSYNC_CAPS = VolumeCapabilities(
+    sentinel_exists=True,
     has_rsync=False,
     rsync_version_ok=False,
     has_btrfs=False,
@@ -66,6 +69,7 @@ _NO_RSYNC_CAPS = VolumeCapabilities(
 )
 
 _BTRFS_FULL_CAPS = VolumeCapabilities(
+    sentinel_exists=True,
     has_rsync=True,
     rsync_version_ok=True,
     has_btrfs=True,
@@ -77,6 +81,7 @@ _BTRFS_FULL_CAPS = VolumeCapabilities(
 )
 
 _BTRFS_NO_SUBVOL_RM_CAPS = VolumeCapabilities(
+    sentinel_exists=True,
     has_rsync=True,
     rsync_version_ok=True,
     has_btrfs=True,
@@ -88,6 +93,7 @@ _BTRFS_NO_SUBVOL_RM_CAPS = VolumeCapabilities(
 )
 
 _BTRFS_NO_BTRFS_CMD_CAPS = VolumeCapabilities(
+    sentinel_exists=True,
     has_rsync=True,
     rsync_version_ok=True,
     has_btrfs=False,
@@ -99,6 +105,7 @@ _BTRFS_NO_BTRFS_CMD_CAPS = VolumeCapabilities(
 )
 
 _BTRFS_NO_STAT_CAPS = VolumeCapabilities(
+    sentinel_exists=True,
     has_rsync=True,
     rsync_version_ok=True,
     has_btrfs=True,
@@ -110,6 +117,7 @@ _BTRFS_NO_STAT_CAPS = VolumeCapabilities(
 )
 
 _BTRFS_NO_FINDMNT_CAPS = VolumeCapabilities(
+    sentinel_exists=True,
     has_rsync=True,
     rsync_version_ok=True,
     has_btrfs=True,
@@ -121,6 +129,7 @@ _BTRFS_NO_FINDMNT_CAPS = VolumeCapabilities(
 )
 
 _BTRFS_NO_STAT_NO_FINDMNT_CAPS = VolumeCapabilities(
+    sentinel_exists=True,
     has_rsync=True,
     rsync_version_ok=True,
     has_btrfs=True,
@@ -132,6 +141,7 @@ _BTRFS_NO_STAT_NO_FINDMNT_CAPS = VolumeCapabilities(
 )
 
 _BTRFS_NOT_BTRFS_FS_CAPS = VolumeCapabilities(
+    sentinel_exists=True,
     has_rsync=True,
     rsync_version_ok=True,
     has_btrfs=True,
@@ -143,6 +153,7 @@ _BTRFS_NOT_BTRFS_FS_CAPS = VolumeCapabilities(
 )
 
 _HL_NO_STAT_CAPS = VolumeCapabilities(
+    sentinel_exists=True,
     has_rsync=True,
     rsync_version_ok=True,
     has_btrfs=False,
@@ -154,6 +165,7 @@ _HL_NO_STAT_CAPS = VolumeCapabilities(
 )
 
 _HL_NO_HARDLINK_CAPS = VolumeCapabilities(
+    sentinel_exists=True,
     has_rsync=True,
     rsync_version_ok=True,
     has_btrfs=False,
@@ -402,15 +414,28 @@ class TestVolumeStatus:
         vs = VolumeStatus(
             slug="data",
             config=vol,
+            diagnostics=VolumeDiagnostics(),
             errors=[],
         )
         assert vs.active is True
 
     def test_construction_inactive(self) -> None:
         vol = LocalVolume(slug="data", path="/mnt/data")
+        sentinel_missing_caps = VolumeCapabilities(
+            sentinel_exists=False,
+            has_rsync=False,
+            rsync_version_ok=False,
+            has_btrfs=False,
+            has_stat=False,
+            has_findmnt=False,
+            is_btrfs_filesystem=False,
+            hardlink_supported=True,
+            btrfs_user_subvol_rm=False,
+        )
         vs = VolumeStatus(
             slug="data",
             config=vol,
+            diagnostics=VolumeDiagnostics(capabilities=sentinel_missing_caps),
             errors=[VolumeError.SENTINEL_NOT_FOUND],
         )
         assert vs.active is False
@@ -422,6 +447,7 @@ class TestSyncStatus:
         vs = VolumeStatus(
             slug="data",
             config=vol,
+            diagnostics=VolumeDiagnostics(),
             errors=[],
         )
         sc = SyncConfig(
@@ -443,6 +469,7 @@ class TestSyncStatus:
         vs = VolumeStatus(
             slug="data",
             config=vol,
+            diagnostics=VolumeDiagnostics(),
             errors=[],
         )
         sc = SyncConfig(
@@ -596,7 +623,7 @@ class TestCheckLocalVolume:
         status = check_volume(vol)
         assert status.active is True
         assert status.errors == []
-        assert status.capabilities is _STUB_CAPS
+        assert status.diagnostics.capabilities is _STUB_CAPS
         mock_caps.assert_called_once()
 
     def test_inactive(self, tmp_path: Path) -> None:
@@ -619,20 +646,36 @@ class TestCheckRemoteVolume:
         status = check_volume(vol, resolved)
         assert status.active is True
         assert status.errors == []
-        assert status.capabilities is _STUB_CAPS
+        assert status.diagnostics.capabilities is _STUB_CAPS
         server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
             server, ["test", "-f", "/backup/.nbkp-vol"], []
         )
 
     @patch("nbkp.preflight.volume_checks.run_remote_command")
-    def test_inactive(self, mock_run: MagicMock) -> None:
+    def test_sentinel_missing(self, mock_run: MagicMock) -> None:
+        """SSH succeeds but sentinel file is absent."""
         mock_run.return_value = MagicMock(returncode=1)
         vol, config = _remote_config()
         resolved = _make_resolved(config)
         status = check_volume(vol, resolved)
         assert status.active is False
+        assert status.errors == [VolumeError.SENTINEL_NOT_FOUND]
+        assert status.diagnostics.ssh_reachable is True
+        assert status.diagnostics.capabilities is not None
+        assert status.diagnostics.capabilities.sentinel_exists is False
+
+    @patch("nbkp.preflight.volume_checks.run_remote_command")
+    def test_ssh_unreachable(self, mock_run: MagicMock) -> None:
+        """SSH connection fails entirely."""
+        mock_run.side_effect = Exception("connection refused")
+        vol, config = _remote_config()
+        resolved = _make_resolved(config)
+        status = check_volume(vol, resolved)
+        assert status.active is False
         assert status.errors == [VolumeError.UNREACHABLE]
+        assert status.diagnostics.ssh_reachable is False
+        assert status.diagnostics.capabilities is None
 
 
 class TestCheckRemoteVolumeLocationExcluded:
@@ -3386,7 +3429,7 @@ class TestCheckRemoteVolumeSpaces:
         resolved = _make_resolved(config)
         status = check_volume(vol, resolved)
         assert status.active is True
-        assert status.capabilities is not None
+        assert status.diagnostics.capabilities is not None
         server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
             server,

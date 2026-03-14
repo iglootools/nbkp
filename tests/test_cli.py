@@ -22,6 +22,7 @@ from nbkp.sync import ProgressMode, SyncResult
 from nbkp.preflight import (
     SyncError,
     SyncStatus,
+    VolumeDiagnostics,
     VolumeError,
     VolumeStatus,
 )
@@ -70,11 +71,13 @@ def _sample_vol_statuses(
         "local-data": VolumeStatus(
             slug="local-data",
             config=config.volumes["local-data"],
+            diagnostics=VolumeDiagnostics(),
             errors=[],
         ),
         "nas": VolumeStatus(
             slug="nas",
             config=config.volumes["nas"],
+            diagnostics=VolumeDiagnostics(ssh_reachable=False),
             errors=[VolumeError.UNREACHABLE],
         ),
     }
@@ -135,11 +138,13 @@ def _sample_all_active_vol_statuses(
         "local-data": VolumeStatus(
             slug="local-data",
             config=config.volumes["local-data"],
+            diagnostics=VolumeDiagnostics(),
             errors=[],
         ),
         "nas": VolumeStatus(
             slug="nas",
             config=config.volumes["nas"],
+            diagnostics=VolumeDiagnostics(),
             errors=[],
         ),
     }
@@ -284,7 +289,12 @@ class TestLocationValidation:
         config = _config_with_locations()
         mock_load.return_value = config
         vol_s = {
-            slug: VolumeStatus(slug=slug, config=config.volumes[slug], errors=[])
+            slug: VolumeStatus(
+                slug=slug,
+                config=config.volumes[slug],
+                diagnostics=VolumeDiagnostics(),
+                errors=[],
+            )
             for slug in config.volumes
         }
         sync_s = {
@@ -789,7 +799,12 @@ def _prune_active_statuses(
     config: Config,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     vol_statuses = {
-        name: VolumeStatus(slug=name, config=vol, errors=[])
+        name: VolumeStatus(
+            slug=name,
+            config=vol,
+            diagnostics=VolumeDiagnostics(),
+            errors=[],
+        )
         for name, vol in config.volumes.items()
     }
     sync_statuses = {
@@ -827,6 +842,7 @@ class TestPruneCommand:
                 name: VolumeStatus(
                     slug=name,
                     config=config.volumes[name],
+                    diagnostics=VolumeDiagnostics(),
                     errors=[],
                 )
                 for name in config.volumes
@@ -863,6 +879,7 @@ class TestPruneCommand:
                 name: VolumeStatus(
                     slug=name,
                     config=config.volumes[name],
+                    diagnostics=VolumeDiagnostics(),
                     errors=[],
                 )
                 for name in config.volumes
@@ -902,6 +919,7 @@ class TestPruneCommand:
                 name: VolumeStatus(
                     slug=name,
                     config=config.volumes[name],
+                    diagnostics=VolumeDiagnostics(),
                     errors=[],
                 )
                 for name in config.volumes

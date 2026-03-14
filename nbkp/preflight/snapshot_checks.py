@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from ..config import (
     ResolvedEndpoints,
-    SyncConfig,
     Volume,
 )
 from .queries import (
@@ -79,21 +78,3 @@ def _check_btrfs_mount_option(
         resolved_endpoints,
     )
     return result.returncode == 0 and option in result.stdout.strip().split(",")
-
-
-# ── Upstream sync detection ────────────────────────────────
-
-
-def _has_upstream_sync(
-    sync: SyncConfig,
-    all_syncs: dict[str, SyncConfig],
-) -> bool:
-    """Check if an enabled upstream sync writes to this sync's source.
-
-    An upstream sync is one whose destination endpoint slug
-    matches this sync's source endpoint slug.
-    """
-    return any(
-        other.destination == sync.source and other.slug != sync.slug and other.enabled
-        for other in all_syncs.values()
-    )

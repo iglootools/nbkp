@@ -276,7 +276,7 @@ def _build_volumes_section(
             vol_type,
             ssh_ep,
             format_volume_display(vol, resolved_endpoints),
-            _format_capabilities(vs.capabilities),
+            _format_capabilities(vs.diagnostics.capabilities),
             _status_text(vs.active, vs.errors),
         )
 

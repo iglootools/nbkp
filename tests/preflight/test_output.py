@@ -21,6 +21,7 @@ from nbkp.config import (
 from nbkp.preflight import (
     SyncError,
     SyncStatus,
+    VolumeDiagnostics,
     VolumeError,
     VolumeStatus,
 )
@@ -65,11 +66,13 @@ def _make_vol_statuses(
         "src": VolumeStatus(
             slug="src",
             config=config.volumes["src"],
+            diagnostics=VolumeDiagnostics(),
             errors=src_errors or [],
         ),
         "dst": VolumeStatus(
             slug="dst",
             config=config.volumes["dst"],
+            diagnostics=VolumeDiagnostics(),
             errors=dst_errors or [],
         ),
     }
@@ -193,8 +196,18 @@ class TestTroubleshootBtrfsStagingNotFound:
             syncs={"btrfs-sync": sync},
         )
         vol_statuses = {
-            "src": VolumeStatus(slug="src", config=src, errors=[]),
-            "dst": VolumeStatus(slug="dst", config=dst, errors=[]),
+            "src": VolumeStatus(
+                slug="src",
+                config=src,
+                diagnostics=VolumeDiagnostics(),
+                errors=[],
+            ),
+            "dst": VolumeStatus(
+                slug="dst",
+                config=dst,
+                diagnostics=VolumeDiagnostics(),
+                errors=[],
+            ),
         }
         sync_statuses = {
             "btrfs-sync": SyncStatus(
@@ -402,6 +415,7 @@ class TestTroubleshootLocationExcluded:
             "remote": VolumeStatus(
                 slug="remote",
                 config=vol,
+                diagnostics=VolumeDiagnostics(location_excluded=True),
                 errors=[VolumeError.LOCATION_EXCLUDED],
             ),
         }

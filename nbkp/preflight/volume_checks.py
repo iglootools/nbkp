@@ -1,4 +1,4 @@
-"""Volume availability checks."""
+"""Volume observation: raw state and capabilities without error interpretation."""
 
 from __future__ import annotations
 
@@ -21,39 +21,73 @@ from .snapshot_checks import (
     _check_btrfs_mount_option,
     _check_hardlink_support,
 )
-from .status import VolumeCapabilities, VolumeError, VolumeStatus
+from .status import VolumeCapabilities, VolumeDiagnostics
 
 
-def check_volume(
+def observe_volume(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints | None = None,
-) -> VolumeStatus:
-    """Check volume reachability and compute capabilities for active volumes.
+) -> VolumeDiagnostics:
+    """Observe volume state without interpreting errors.
 
-    Returns a fully-populated ``VolumeStatus``: capabilities are ``None``
-    only when the volume is inactive (unreachable / excluded / missing sentinel).
+    Returns a ``VolumeDiagnostics`` capturing raw observations:
+    sentinel existence, SSH reachability, and capabilities.
     """
     re = resolved_endpoints or {}
-    errors = _check_reachability(volume, re)
-    if errors:
-        return VolumeStatus(slug=volume.slug, config=volume, errors=errors)
-    else:
-        caps = check_volume_capabilities(volume, re)
-        return VolumeStatus(
-            slug=volume.slug, config=volume, errors=[], capabilities=caps
-        )
-
-
-def _check_reachability(
-    volume: Volume,
-    resolved_endpoints: ResolvedEndpoints,
-) -> list[VolumeError]:
-    """Check volume reachability based on volume type."""
     match volume:
         case LocalVolume():
-            return _check_local_reachability(volume)
+            return _observe_local(volume, re)
         case RemoteVolume():
-            return _check_remote_reachability(volume, resolved_endpoints)
+            return _observe_remote(volume, re)
+
+
+def _observe_local(
+    volume: LocalVolume,
+    resolved_endpoints: ResolvedEndpoints,
+) -> VolumeDiagnostics:
+    """Observe a local volume's state."""
+    sentinel_exists = (Path(volume.path) / VOLUME_SENTINEL).exists()
+    caps = (
+        check_volume_capabilities(volume, resolved_endpoints)
+        if sentinel_exists
+        else _sentinel_only_capabilities()
+    )
+    return VolumeDiagnostics(
+        capabilities=caps,
+    )
+
+
+def _observe_remote(
+    volume: RemoteVolume,
+    resolved_endpoints: ResolvedEndpoints,
+) -> VolumeDiagnostics:
+    """Observe a remote volume's state."""
+    if volume.slug not in resolved_endpoints:
+        return VolumeDiagnostics(location_excluded=True)
+    else:
+        ep = resolved_endpoints[volume.slug]
+        sentinel_path = f"{volume.path}/{VOLUME_SENTINEL}"
+        try:
+            result = run_remote_command(
+                ep.server, ["test", "-f", sentinel_path], ep.proxy_chain
+            )
+            ssh_reachable = True
+            sentinel_exists = result.returncode == 0
+        except Exception:
+            ssh_reachable = False
+            sentinel_exists = None
+        caps = (
+            check_volume_capabilities(volume, resolved_endpoints)
+            if sentinel_exists
+            else _sentinel_only_capabilities()
+            if ssh_reachable
+            else None
+        )
+        return VolumeDiagnostics(
+            location_excluded=False,
+            ssh_reachable=ssh_reachable,
+            capabilities=caps,
+        )
 
 
 def check_volume_capabilities(
@@ -80,6 +114,7 @@ def check_volume_capabilities(
         else False
     )
     return VolumeCapabilities(
+        sentinel_exists=True,
         has_rsync=has_rsync,
         rsync_version_ok=rsync_version_ok,
         has_btrfs=has_btrfs,
@@ -91,26 +126,20 @@ def check_volume_capabilities(
     )
 
 
-def _check_local_reachability(volume: LocalVolume) -> list[VolumeError]:
-    """Check if a local volume is reachable (.nbkp-vol sentinel exists)."""
-    sentinel = Path(volume.path) / VOLUME_SENTINEL
-    return [] if sentinel.exists() else [VolumeError.SENTINEL_NOT_FOUND]
+def _sentinel_only_capabilities() -> VolumeCapabilities:
+    """Minimal capabilities for a reachable volume whose sentinel is missing.
 
-
-def _check_remote_reachability(
-    volume: RemoteVolume,
-    resolved_endpoints: ResolvedEndpoints,
-) -> list[VolumeError]:
-    """Check if a remote volume is reachable (SSH + .nbkp-vol sentinel)."""
-    if volume.slug not in resolved_endpoints:
-        return [VolumeError.LOCATION_EXCLUDED]
-    else:
-        ep = resolved_endpoints[volume.slug]
-        sentinel_path = f"{volume.path}/{VOLUME_SENTINEL}"
-        try:
-            result = run_remote_command(
-                ep.server, ["test", "-f", sentinel_path], ep.proxy_chain
-            )
-            return [] if result.returncode == 0 else [VolumeError.UNREACHABLE]
-        except Exception:
-            return [VolumeError.UNREACHABLE]
+    Only ``sentinel_exists`` is meaningful; the remaining fields are
+    not probed and carry safe defaults.
+    """
+    return VolumeCapabilities(
+        sentinel_exists=False,
+        has_rsync=False,
+        rsync_version_ok=False,
+        has_btrfs=False,
+        has_stat=False,
+        has_findmnt=False,
+        is_btrfs_filesystem=False,
+        hardlink_supported=True,
+        btrfs_user_subvol_rm=False,
+    )

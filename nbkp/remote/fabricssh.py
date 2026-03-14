@@ -51,6 +51,9 @@ def _build_single_connection(
     if not opts.strict_host_key_checking:
         conn.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # pyright: ignore[reportOptionalMemberAccess]
 
+    if opts.known_hosts_file is not None:
+        conn.client.load_host_keys(opts.known_hosts_file)  # pyright: ignore[reportOptionalMemberAccess]
+
     return conn
 
 

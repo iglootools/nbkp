@@ -16,6 +16,7 @@ from nbkp.config import (
 from nbkp.preflight import (
     SyncError,
     SyncStatus,
+    VolumeDiagnostics,
     VolumeError,
     VolumeStatus,
 )
@@ -124,6 +125,7 @@ def _active_statuses(
         name: VolumeStatus(
             slug=name,
             config=vol,
+            diagnostics=VolumeDiagnostics(),
             errors=[],
         )
         for name, vol in config.volumes.items()
@@ -148,6 +150,7 @@ def _inactive_statuses(
         name: VolumeStatus(
             slug=name,
             config=vol,
+            diagnostics=VolumeDiagnostics(ssh_reachable=False),
             errors=[VolumeError.UNREACHABLE],
         )
         for name, vol in config.volumes.items()

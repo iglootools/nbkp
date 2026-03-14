@@ -45,7 +45,7 @@ from .status import (
 )
 
 
-def check_source_endpoint(
+def observe_source_endpoint(
     endpoint: SyncEndpoint,
     volume: Volume,
     capabilities: VolumeCapabilities,
@@ -73,7 +73,7 @@ def check_source_endpoint(
     )
 
 
-def check_destination_endpoint(
+def observe_destination_endpoint(
     endpoint: SyncEndpoint,
     volume: Volume,
     capabilities: VolumeCapabilities,

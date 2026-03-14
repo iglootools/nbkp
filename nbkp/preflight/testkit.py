@@ -12,6 +12,7 @@ from . import (
     SyncError,
     SyncStatus,
     VolumeCapabilities,
+    VolumeDiagnostics,
     VolumeError,
     VolumeStatus,
 )
@@ -30,6 +31,18 @@ from ..config.testkit import (
     base_sync_endpoints,
     base_syncs,
     base_volumes,
+)
+
+_SENTINEL_MISSING_CAPS = VolumeCapabilities(
+    sentinel_exists=False,
+    has_rsync=False,
+    rsync_version_ok=False,
+    has_btrfs=False,
+    has_stat=False,
+    has_findmnt=False,
+    is_btrfs_filesystem=False,
+    hardlink_supported=True,
+    btrfs_user_subvol_rm=False,
 )
 
 
@@ -79,6 +92,7 @@ def check_data(
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     """Volume and sync statuses with mixed active/inactive."""
     _local_caps = VolumeCapabilities(
+        sentinel_exists=True,
         has_rsync=True,
         rsync_version_ok=True,
         has_btrfs=False,
@@ -89,6 +103,7 @@ def check_data(
         btrfs_user_subvol_rm=False,
     )
     _usb_caps = VolumeCapabilities(
+        sentinel_exists=True,
         has_rsync=True,
         rsync_version_ok=True,
         has_btrfs=True,
@@ -101,23 +116,25 @@ def check_data(
     laptop_vs = VolumeStatus(
         slug="laptop",
         config=config.volumes["laptop"],
+        diagnostics=VolumeDiagnostics(capabilities=_local_caps),
         errors=[],
-        capabilities=_local_caps,
     )
     usb_vs = VolumeStatus(
         slug="usb-drive",
         config=config.volumes["usb-drive"],
+        diagnostics=VolumeDiagnostics(capabilities=_usb_caps),
         errors=[],
-        capabilities=_usb_caps,
     )
     nas_vs = VolumeStatus(
         slug="nas-backup",
         config=config.volumes["nas-backup"],
+        diagnostics=VolumeDiagnostics(ssh_reachable=False),
         errors=[VolumeError.UNREACHABLE],
     )
     external_vs = VolumeStatus(
         slug="external-drive",
         config=config.volumes["external-drive"],
+        diagnostics=VolumeDiagnostics(capabilities=_SENTINEL_MISSING_CAPS),
         errors=[VolumeError.SENTINEL_NOT_FOUND],
     )
 
@@ -429,36 +446,43 @@ def troubleshoot_data(
     laptop_vs = VolumeStatus(
         slug="laptop",
         config=config.volumes["laptop"],
+        diagnostics=VolumeDiagnostics(capabilities=_SENTINEL_MISSING_CAPS),
         errors=[VolumeError.SENTINEL_NOT_FOUND],
     )
     usb_vs = VolumeStatus(
         slug="usb-drive",
         config=config.volumes["usb-drive"],
+        diagnostics=VolumeDiagnostics(),
         errors=[],
     )
     nas_vs = VolumeStatus(
         slug="nas-backup",
         config=config.volumes["nas-backup"],
+        diagnostics=VolumeDiagnostics(ssh_reachable=False),
         errors=[VolumeError.UNREACHABLE],
     )
     home_nas_vs = VolumeStatus(
         slug="home-nas",
         config=config.volumes["home-nas"],
+        diagnostics=VolumeDiagnostics(location_excluded=True),
         errors=[VolumeError.LOCATION_EXCLUDED],
     )
     usb7_vs = VolumeStatus(
         slug="usb-7",
         config=config.volumes["usb-7"],
+        diagnostics=VolumeDiagnostics(),
         errors=[],
     )
     usb8_vs = VolumeStatus(
         slug="usb-8",
         config=config.volumes["usb-8"],
+        diagnostics=VolumeDiagnostics(),
         errors=[],
     )
     usb9_vs = VolumeStatus(
         slug="usb-9",
         config=config.volumes["usb-9"],
+        diagnostics=VolumeDiagnostics(),
         errors=[],
     )
 
