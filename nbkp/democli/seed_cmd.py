@@ -347,9 +347,6 @@ def seed(
         assert storage_endpoint is not None
         _ep = storage_endpoint
 
-        with _console.status("Creating btrfs subvolume..."):
-            ssh_exec(_ep, f"btrfs subvolume create {btrfs_snapshots_path}")
-
         def _run_remote(cmd: str) -> None:
             ssh_exec(_ep, cmd)
 
