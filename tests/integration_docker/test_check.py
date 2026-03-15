@@ -21,8 +21,8 @@ from nbkp.config import (
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
-    resolve_all_endpoints,
 )
+from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.testkit.docker import REMOTE_BACKUP_PATH, REMOTE_BTRFS_PATH
 from nbkp.sync.testkit.seed import create_seed_sentinels
 

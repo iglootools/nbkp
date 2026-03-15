@@ -6,10 +6,10 @@ from datetime import datetime, timezone
 
 from ...config import (
     Config,
-    ResolvedEndpoints,
     SyncConfig,
     Volume,
 )
+from ...config.epresolution import ResolvedEndpoints
 from ...fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
 from ...remote.dispatch import run_on_volume
 from .common import (

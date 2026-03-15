@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import enum
 from contextlib import contextmanager
 from typing import Generator
 
@@ -12,22 +13,21 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from ..config import (
     Config,
     ConfigError,
+    load_config,
+)
+from ..config.epresolution import (
     EndpointFilter,
     NetworkType,
     ResolvedEndpoints,
-    load_config,
-    resolve_all_endpoints,
 )
+from ..remote.resolution import resolve_all_endpoints
 from ..credentials import build_passphrase_fn
 from ..mount.lifecycle import MountResult, UmountResult
 from ..mount.observation import MountObservation
 from ..mount.strategy import MountStrategy
 from ..orchestration import managed_mount as _orchestration_managed_mount
-from ..output import (
-    OutputFormat,
-    print_config_error,
-    print_human_check,
-)
+from ..config.output import print_config_error
+from ..preflight.output import print_human_check
 from ..preflight import (
     SyncStatus,
     VolumeError,
@@ -35,6 +35,14 @@ from ..preflight import (
     check_all_syncs,
 )
 from ..sync.pipeline import INACTIVE_ERRORS, has_fatal_errors
+
+
+class OutputFormat(str, enum.Enum):
+    """Output format for CLI commands."""
+
+    HUMAN = "human"
+    JSON = "json"
+
 
 _INACTIVE_ERRORS = INACTIVE_ERRORS
 

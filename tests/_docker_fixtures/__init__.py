@@ -15,11 +15,11 @@ from nbkp.config import (
     Config,
     LocalVolume,
     RemoteVolume,
-    ResolvedEndpoints,
     SshEndpoint,
     SyncConfig,
-    resolve_all_endpoints,
 )
+from nbkp.config.epresolution import ResolvedEndpoints
+from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.config import LuksEncryptionConfig, MountConfig
 from nbkp.mount.strategy import DirectMountStrategy
 from nbkp.remote.testkit.docker import (  # noqa: F401

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import subprocess
 
-from ..config import LocalVolume, RemoteVolume, ResolvedEndpoints, Volume
+from ..config import LocalVolume, RemoteVolume, Volume
+from ..config.epresolution import ResolvedEndpoints
 from .fabricssh import run_remote_command
 
 

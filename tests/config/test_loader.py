@@ -17,14 +17,14 @@ from nbkp.config import (
     LocalVolume,
     RemoteVolume,
     RsyncOptions,
-    SshEndpoint,
     SshConnectionOptions,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
     find_config_file,
     load_config,
-    resolve_proxy_chain,
 )
+from nbkp.remote.resolution import resolve_proxy_chain
 
 
 def _config_to_yaml(config: Config) -> str:

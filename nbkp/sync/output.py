@@ -13,8 +13,8 @@ from ..config import (
     Config,
     LocalVolume,
     RemoteVolume,
-    ResolvedEndpoints,
 )
+from ..config.epresolution import ResolvedEndpoints
 from ..config.output import endpoint_path
 from ..fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
 from ..preflight.status import SyncStatus

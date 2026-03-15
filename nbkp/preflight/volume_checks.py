@@ -8,9 +8,9 @@ from ..config import (
     LocalVolume,
     MountConfig,
     RemoteVolume,
-    ResolvedEndpoints,
     Volume,
 )
+from ..config.epresolution import ResolvedEndpoints
 from ..fsprotocol import VOLUME_SENTINEL
 from ..mount.auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH
 from ..mount import direct as direct_cmds

@@ -11,16 +11,15 @@ from nbkp.config import (
     HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
-    ResolvedEndpoint,
-    ResolvedEndpoints,
     RsyncOptions,
-    SshEndpoint,
     SshConnectionOptions,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
-    resolve_proxy_chain,
 )
-from nbkp.output import OutputFormat
+from nbkp.config.epresolution import ResolvedEndpoint, ResolvedEndpoints
+from nbkp.remote.resolution import resolve_proxy_chain
+from nbkp.cli.common import OutputFormat
 from nbkp.sync import SyncResult
 from nbkp.sync.snapshots.common import create_snapshot_timestamp
 from nbkp.preflight.checks import check_all_syncs, check_sync
@@ -879,9 +878,7 @@ class TestCheckBtrfsMountOptionRemote:
         )
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert (
-            check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved) is True
-        )
+        assert check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved) is True
         server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
             server,

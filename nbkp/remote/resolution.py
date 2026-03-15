@@ -5,19 +5,21 @@ from __future__ import annotations
 import ipaddress
 import socket
 from collections.abc import Callable
-from enum import Enum
 from functools import reduce
 from pathlib import Path
-from typing import List, Optional
 
 import paramiko
-from pydantic import ConfigDict, Field
 
+from ..config.epresolution import (
+    EndpointFilter,
+    NetworkType,
+    ResolvedEndpoint,
+    ResolvedEndpoints,
+)
 from ..config.protocol import (
     Config,
     RemoteVolume,
     SshEndpoint,
-    _BaseModel,
 )
 
 
@@ -115,36 +117,6 @@ def enrich_from_ssh_config(
     else:
         updates = _ssh_config_updates(endpoint, ssh_config.lookup(endpoint.host))
         return endpoint.model_copy(update=updates) if updates else endpoint
-
-
-# --- Endpoint resolution ---
-
-
-class NetworkType(str, Enum):
-    """Network type for endpoint filtering."""
-
-    PRIVATE = "private"
-    PUBLIC = "public"
-
-
-class EndpointFilter(_BaseModel):
-    """Endpoint selection filter (not serialized)."""
-
-    model_config = ConfigDict(frozen=True)
-    locations: List[str] = Field(default_factory=list)
-    exclude_locations: List[str] = Field(default_factory=list)
-    network: Optional[NetworkType] = None
-
-
-class ResolvedEndpoint(_BaseModel):
-    """Pre-resolved SSH endpoint with proxy chain."""
-
-    model_config = ConfigDict(frozen=True)
-    server: SshEndpoint
-    proxy_chain: list[SshEndpoint] = Field(default_factory=list)
-
-
-ResolvedEndpoints = dict[str, ResolvedEndpoint]
 
 
 def _soft_filter(slugs: list[str], predicate: Callable[[str], bool]) -> list[str]:

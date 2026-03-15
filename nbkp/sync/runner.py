@@ -19,7 +19,8 @@ from .snapshots.hardlinks import (
     prune_snapshots as hl_prune_snapshots,
 )
 from .snapshots.common import update_latest_symlink
-from ..config import Config, ResolvedEndpoints
+from ..config import Config
+from ..config.epresolution import ResolvedEndpoints
 from ..fsprotocol import SNAPSHOTS_DIR, STAGING_DIR, Snapshot
 from ..preflight import SyncError, SyncStatus
 from .rsync import ProgressMode, run_rsync

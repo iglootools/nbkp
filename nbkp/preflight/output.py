@@ -17,10 +17,10 @@ from ..config import (
     LocalVolume,
     MountConfig,
     RemoteVolume,
-    ResolvedEndpoints,
     SshEndpoint,
     SyncConfig,
 )
+from ..config.epresolution import ResolvedEndpoints
 from ..config.output import (
     _sync_endpoint_display,
     _sync_options,

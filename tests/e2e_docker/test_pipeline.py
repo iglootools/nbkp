@@ -23,8 +23,8 @@ from pathlib import Path
 
 from nbkp.config import (
     SshEndpoint,
-    resolve_all_endpoints,
 )
+from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.orchestration import managed_mount
 from nbkp.sync.pipeline import check_and_run
 

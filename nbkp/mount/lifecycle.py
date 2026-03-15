@@ -9,9 +9,9 @@ from typing import Callable
 from ..config import (
     Config,
     MountConfig,
-    ResolvedEndpoints,
     Volume,
 )
+from ..config.epresolution import ResolvedEndpoints
 from ..remote.dispatch import run_on_volume
 from .strategy import MountStrategy
 from .detection import (

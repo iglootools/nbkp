@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from ..config import Config, ResolvedEndpoints
+from ..config import Config
+from ..config.epresolution import ResolvedEndpoints
 from ..preflight import SyncStatus
 from .runner import PruneResult
 from .snapshots.btrfs import prune_snapshots as btrfs_prune_snapshots

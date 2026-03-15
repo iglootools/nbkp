@@ -16,12 +16,12 @@ from nbkp.config import (
     Config,
     LocalVolume,
     RemoteVolume,
-    ResolvedEndpoints,
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
-    resolve_all_endpoints,
 )
+from nbkp.config.epresolution import ResolvedEndpoints
+from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.sync.rsync import run_rsync
 from nbkp.sync.snapshots.btrfs import (
     create_snapshot,

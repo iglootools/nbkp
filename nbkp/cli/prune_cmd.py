@@ -7,12 +7,12 @@ from typing import Annotated, Optional
 
 import typer
 
-from ..config import NetworkType
-from ..output import OutputFormat
+from ..config.epresolution import NetworkType
 from ..sync.output import print_human_prune_results
 from ..sync.pruner import prune_all_syncs
 from .app import app
 from .common import (
+    OutputFormat,
     check_all_with_progress,
     load_config_or_exit,
     resolve_endpoints,

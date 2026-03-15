@@ -6,9 +6,9 @@ from pathlib import Path
 
 from nbkp.config import (
     Config,
-    ResolvedEndpoints,
     SshEndpoint,
 )
+from nbkp.config.epresolution import ResolvedEndpoints
 from nbkp.preflight.queries import check_directory_exists, read_symlink_target
 from nbkp.preflight.snapshot_checks import check_btrfs_readonly, check_btrfs_subvolume
 from nbkp.remote.testkit.docker import (

@@ -6,8 +6,8 @@ from typing import Annotated, Optional
 
 import typer
 
-from ..config import NetworkType
-from ..output import print_human_troubleshoot
+from ..config.epresolution import NetworkType
+from ..preflight.output import print_human_troubleshoot
 from .app import app
 from .common import (
     check_all_with_progress,

@@ -20,12 +20,8 @@ from ..ordering.output import (
     print_mermaid_ascii_graph,
     print_rich_tree_graph,
 )
-from ..output import (
-    print_config_error,
-    print_human_check,
-    print_human_config,
-    print_human_troubleshoot,
-)
+from ..config.output import print_config_error, print_human_config
+from ..preflight.output import print_human_check, print_human_troubleshoot
 from ..remote.resolution import resolve_all_endpoints
 from ..sync.output import (
     print_human_prune_results,

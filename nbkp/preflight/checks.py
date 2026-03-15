@@ -20,10 +20,10 @@ from typing import Callable
 
 from ..config import (
     Config,
-    ResolvedEndpoints,
     SyncConfig,
     Volume,
 )
+from ..config.epresolution import ResolvedEndpoints
 from ..mount.observation import MountObservation
 from .endpoint_checks import observe_destination_endpoint, observe_source_endpoint
 from .status import (

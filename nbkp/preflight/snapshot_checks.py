@@ -5,10 +5,8 @@ Low-level queries used by ``volume_checks`` and ``endpoint_checks``.
 
 from __future__ import annotations
 
-from ..config import (
-    ResolvedEndpoints,
-    Volume,
-)
+from ..config import Volume
+from ..config.epresolution import ResolvedEndpoints
 from ..remote.dispatch import run_on_volume
 from .queries import (
     resolve_endpoint,

@@ -7,10 +7,10 @@ from typing import Annotated, Optional
 
 import typer
 
-from ..config import NetworkType
-from ..output import OutputFormat
+from ..config.epresolution import NetworkType
 from .app import app
 from .common import (
+    OutputFormat,
     check_and_display,
     load_config_or_exit,
     managed_mount,

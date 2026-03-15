@@ -9,7 +9,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from ..config import NetworkType
+from ..config.epresolution import NetworkType
 from ..credentials import build_passphrase_fn
 from ..mount.detection import resolve_mount_strategy
 from ..mount.lifecycle import (
@@ -18,10 +18,9 @@ from ..mount.lifecycle import (
     mount_volumes,
     umount_volumes,
 )
-from ..output import OutputFormat
 from ..preflight import check_mount_status
 from .app import volumes_app
-from .common import load_config_or_exit, resolve_endpoints
+from .common import OutputFormat, load_config_or_exit, resolve_endpoints
 
 
 @volumes_app.command("mount")

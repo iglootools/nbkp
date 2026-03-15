@@ -12,12 +12,12 @@ from nbkp.config import (
     HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
-    ResolvedEndpoint,
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
-    resolve_all_endpoints,
 )
+from nbkp.config.epresolution import ResolvedEndpoint
+from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.sync.snapshots.common import (
     create_snapshot_timestamp,
     get_latest_snapshot,

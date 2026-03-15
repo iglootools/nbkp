@@ -13,12 +13,12 @@ from nbkp.config import (
     LocalVolume,
     RemoteVolume,
     RsyncOptions,
-    SshEndpoint,
     SshConnectionOptions,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
-    resolve_all_endpoints,
 )
+from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.scriptgen import ScriptOptions, generate_script
 
 _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=timezone.utc)

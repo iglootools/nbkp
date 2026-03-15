@@ -12,9 +12,9 @@ from ..config import (
     Config,
     LocalVolume,
     MountConfig,
-    ResolvedEndpoints,
     Volume,
 )
+from ..config.epresolution import ResolvedEndpoints
 from ..remote.dispatch import run_on_volume
 from .auth import CRYPTSETUP_PATHS
 from .strategy import DirectMountStrategy, MountStrategy, SystemdMountStrategy

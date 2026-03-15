@@ -20,8 +20,8 @@ from rich.text import Text
 from ..config import (
     CredentialProvider,
     RsyncOptions,
-    resolve_all_endpoints,
 )
+from ..remote.resolution import resolve_all_endpoints
 from ..mount.detection import resolve_mount_strategy
 from ..mount.lifecycle import mount_volumes, umount_volumes
 

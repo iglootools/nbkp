@@ -14,10 +14,10 @@ from . import (
     ConfigError,
     LocalVolume,
     RemoteVolume,
-    ResolvedEndpoints,
     SyncConfig,
     SyncEndpoint,
 )
+from .epresolution import ResolvedEndpoints
 from .protocol.volume import MountConfig
 
 

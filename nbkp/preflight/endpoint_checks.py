@@ -13,10 +13,10 @@ wasteful remote commands.
 from __future__ import annotations
 
 from ..config import (
-    ResolvedEndpoints,
     SyncEndpoint,
     Volume,
 )
+from ..config.epresolution import ResolvedEndpoints
 from ..fsprotocol import (
     DESTINATION_SENTINEL,
     DEVNULL_TARGET,

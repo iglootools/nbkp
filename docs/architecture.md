@@ -16,7 +16,6 @@ graph TD
     mount["mount/"]
     orchestration["orchestration"]
     ordering["ordering/"]
-    output["output"]
     preflight["preflight/"]
     remote["remote/"]
     scriptgen["scriptgen"]
@@ -28,16 +27,14 @@ graph TD
     cli --> mount
     cli --> orchestration
     cli --> ordering
-    cli --> output
     cli --> preflight
+    cli --> remote
     cli --> scriptgen
     cli --> sync
-    config --> remote
     credentials --> config
     democli --> config
     democli --> mount
     democli --> ordering
-    democli --> output
     democli --> preflight
     democli --> remote
     democli --> sync
@@ -48,9 +45,6 @@ graph TD
     orchestration --> preflight
     orchestration --> sync
     ordering --> config
-    output --> config
-    output --> preflight
-    output --> sync
     preflight --> config
     preflight --> fsprotocol
     preflight --> mount

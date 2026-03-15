@@ -19,8 +19,8 @@ from nbkp.config import (
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
-    resolve_all_endpoints,
 )
+from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.sync.snapshots.common import create_snapshot_timestamp
 
 

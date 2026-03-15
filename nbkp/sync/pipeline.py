@@ -11,7 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from ..config import Config, ResolvedEndpoints
+from ..config import Config
+from ..config.epresolution import ResolvedEndpoints
 from ..preflight import SyncError, SyncStatus, VolumeStatus, check_all_syncs
 from .rsync import ProgressMode
 from .runner import SyncResult, run_all_syncs

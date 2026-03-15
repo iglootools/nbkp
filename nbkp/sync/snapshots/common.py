@@ -13,10 +13,10 @@ from ...config import (
     Config,
     LocalVolume,
     RemoteVolume,
-    ResolvedEndpoints,
     SyncConfig,
     Volume,
 )
+from ...config.epresolution import ResolvedEndpoints
 from ...fsprotocol import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR, Snapshot
 from ...remote import run_remote_command
 from ...remote.dispatch import run_on_volume

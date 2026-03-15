@@ -11,7 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from ..config import ResolvedEndpoints, Volume
+from ..config import Volume
+from ..config.epresolution import ResolvedEndpoints
 from ..remote.dispatch import run_on_volume
 from . import direct as direct_cmds
 from . import systemd as systemd_cmds

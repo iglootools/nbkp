@@ -13,9 +13,9 @@ from pathlib import Path
 from ..config import (
     LocalVolume,
     RemoteVolume,
-    ResolvedEndpoints,
     Volume,
 )
+from ..config.epresolution import ResolvedEndpoints
 from ..remote.dispatch import run_on_volume
 
 

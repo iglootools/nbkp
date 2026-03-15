@@ -19,9 +19,9 @@ from nbkp.config import (
     LuksEncryptionConfig,
     MountConfig,
     RemoteVolume,
-    ResolvedEndpoints,
     SshEndpoint,
 )
+from nbkp.config.epresolution import ResolvedEndpoints
 from nbkp.mount.detection import (
     detect_device_present,
     detect_luks_attached,

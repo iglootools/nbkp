@@ -8,7 +8,7 @@ from typing import Annotated, Optional
 
 import typer
 
-from ..config import resolve_all_endpoints
+from ..remote.resolution import resolve_all_endpoints
 from ..mount.auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH, generate_auth_rules
 from ..ordering.output import (
     build_graph_json,
@@ -16,12 +16,9 @@ from ..ordering.output import (
     print_mermaid_graph,
     print_rich_tree_graph,
 )
-from ..output import (
-    OutputFormat,
-    print_human_config,
-)
+from ..config.output import print_human_config
 from .app import config_app
-from .common import load_config_or_exit
+from .common import OutputFormat, load_config_or_exit
 
 
 class GraphFormat(str, enum.Enum):

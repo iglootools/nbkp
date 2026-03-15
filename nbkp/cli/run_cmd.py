@@ -11,15 +11,16 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.text import Text
 
-from ..config import NetworkType
+from ..config.epresolution import NetworkType
 from ..ordering.output import build_rich_tree_sections
-from ..output import OutputFormat, print_human_check
+from ..preflight.output import print_human_check
 from ..preflight import SyncStatus, VolumeStatus
 from ..sync import ProgressMode, SyncResult
 from ..sync.output import build_human_results_sections
 from ..sync.pipeline import INACTIVE_ERRORS, check_and_run
 from .app import app
 from .common import (
+    OutputFormat,
     _check_total,
     load_config_or_exit,
     managed_mount,
