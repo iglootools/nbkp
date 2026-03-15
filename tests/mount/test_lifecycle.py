@@ -88,7 +88,7 @@ class TestMountVolume:
         strategy = _systemd_strategy()
         with (
             patch("nbkp.mount.lifecycle.detect_device_present", return_value=True),
-            patch("nbkp.mount.lifecycle.detect_device_unlocked", return_value=True),
+            patch("nbkp.mount.lifecycle.detect_luks_attached", return_value=True),
             # Patch run_on_volume in the strategy module so detect_mounted returns True
             patch(
                 "nbkp.mount.strategy.run_on_volume",
@@ -125,12 +125,12 @@ class TestMountVolume:
             )
         assert result.success
 
-    def test_unlock_failure(self) -> None:
+    def test_attach_luks_failure(self) -> None:
         vol = _encrypted_vol()
         strategy = _systemd_strategy()
         with (
             patch("nbkp.mount.lifecycle.detect_device_present", return_value=True),
-            patch("nbkp.mount.lifecycle.detect_device_unlocked", return_value=False),
+            patch("nbkp.mount.lifecycle.detect_luks_attached", return_value=False),
             patch(
                 "nbkp.mount.lifecycle.run_on_volume",
                 return_value=_mock_run(1, stderr="permission denied"),
@@ -144,7 +144,7 @@ class TestMountVolume:
                 strategy,
             )
         assert not result.success
-        assert "unlock failed" in (result.detail or "")
+        assert "attach-luks failed" in (result.detail or "")
 
     def test_direct_strategy_mount(self) -> None:
         vol = _unencrypted_vol()
@@ -169,7 +169,7 @@ class TestMountVolume:
 
 
 class TestUmountVolume:
-    def test_umount_and_lock(self) -> None:
+    def test_umount_and_close_luks(self) -> None:
         vol = _encrypted_vol()
         strategy = _systemd_strategy()
         call_count = 0
@@ -182,7 +182,7 @@ class TestUmountVolume:
         with (
             # detect_mounted -> True
             patch("nbkp.mount.strategy.run_on_volume", return_value=_mock_run(0)),
-            patch("nbkp.mount.lifecycle.detect_device_unlocked", return_value=True),
+            patch("nbkp.mount.lifecycle.detect_luks_attached", return_value=True),
             patch("nbkp.mount.lifecycle.run_on_volume", side_effect=mock_run),
         ):
             result = umount_volume(
@@ -194,13 +194,13 @@ class TestUmountVolume:
         assert result.success
         assert call_count == 2  # umount + lock
 
-    def test_not_mounted_still_locks(self) -> None:
+    def test_not_mounted_still_closes_luks(self) -> None:
         vol = _encrypted_vol()
         strategy = _systemd_strategy()
         with (
             # detect_mounted -> False
             patch("nbkp.mount.strategy.run_on_volume", return_value=_mock_run(3)),
-            patch("nbkp.mount.lifecycle.detect_device_unlocked", return_value=True),
+            patch("nbkp.mount.lifecycle.detect_luks_attached", return_value=True),
             patch("nbkp.mount.lifecycle.run_on_volume", return_value=_mock_run(0)),
         ):
             result = umount_volume(
@@ -275,7 +275,7 @@ class TestMountVolumes:
         )
         with (
             patch("nbkp.mount.lifecycle.detect_device_present", return_value=True),
-            patch("nbkp.mount.lifecycle.detect_device_unlocked", return_value=True),
+            patch("nbkp.mount.lifecycle.detect_luks_attached", return_value=True),
             # detect_mounted -> True
             patch("nbkp.mount.strategy.run_on_volume", return_value=_mock_run(0)),
         ):
@@ -351,7 +351,7 @@ class TestUmountVolumes:
         with (
             # detect_mounted -> False
             patch("nbkp.mount.strategy.run_on_volume", return_value=_mock_run(3)),
-            patch("nbkp.mount.lifecycle.detect_device_unlocked", return_value=False),
+            patch("nbkp.mount.lifecycle.detect_luks_attached", return_value=False),
         ):
             umount_volumes(
                 cfg,

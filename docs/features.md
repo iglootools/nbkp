@@ -58,13 +58,13 @@ nbkp uses lightweight sentinel files to guard against syncing to the wrong place
 
 ## Mount Management
 
-nbkp can automatically mount and umount volumes before and after backups, including LUKS-encrypted drives. This is especially useful for removable drives that need to be unlocked and mounted before syncing, and locked and umounted afterward.
+nbkp can automatically mount and umount volumes before and after backups, including LUKS-encrypted drives. This is especially useful for removable drives that need to be attached (LUKS) and mounted before syncing, and umounted and closed (LUKS) afterward.
 
-- **LUKS encryption support**: automatic unlock via `systemd-cryptsetup attach` with passphrase piped via stdin, lock via `systemctl stop systemd-cryptsetup@<mapper>.service`
+- **LUKS encryption support**: automatic attach via `systemd-cryptsetup attach` with passphrase piped via stdin, close via `systemctl stop systemd-cryptsetup@<mapper>.service`
 - **Unencrypted volume mount**: `systemctl start/stop` for volumes with fstab or native .mount unit entries
 - **Credential providers**: retrieve LUKS passphrases from keyring, interactive prompt, environment variable, or external command (e.g. `pass`, 1Password CLI)
-- **Idempotent**: skips already-unlocked and already-mounted volumes
-- **Integrated into `run`**: mount before syncs, umount in `finally` block (even on failure). Controllable via `--mount/--no-mount` and `--umount/--no-umount`
+- **Idempotent**: skips already-attached and already-mounted volumes
+- **Integrated into `run`, `check`, and `troubleshoot`**: mount before running, umount in `finally` block (even on failure). Controllable via `--mount/--no-mount` and `--umount/--no-umount`
 - **Standalone commands**: `volumes mount` and `volumes umount` for manual lifecycle management
 - **Authorization setup**: `config setup-auth` generates polkit and sudoers rules for passwordless mount/umount
 - **Pre-flight validation**: checks systemd tools, mount unit config, cryptsetup service config, polkit/sudoers rules, with actionable troubleshoot output

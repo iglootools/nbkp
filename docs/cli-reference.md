@@ -224,12 +224,12 @@ $ nbkp volumes [OPTIONS] COMMAND [ARGS]...
 
 **Commands**:
 
-* `mount`: Mount and unlock volumes.
-* `umount`: Umount and lock volumes.
+* `mount`: Attach LUKS and mount volumes.
+* `umount`: Umount volumes and close LUKS.
 
 ### `nbkp volumes mount`
 
-Mount and unlock volumes. Mounts all volumes with mount config, or specific ones via --name.
+Attach LUKS and mount volumes. Mounts all volumes with mount config, or specific ones via --name.
 
 **Usage**:
 
@@ -249,7 +249,7 @@ $ nbkp volumes mount [OPTIONS]
 
 ### `nbkp volumes umount`
 
-Umount and lock volumes. Umounts all volumes with mount config, or specific ones via --name.
+Umount volumes and close LUKS. Umounts all volumes with mount config, or specific ones via --name.
 
 **Usage**:
 

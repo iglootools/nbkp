@@ -11,7 +11,7 @@ from .auth import (
 from .strategy import DirectMountStrategy, MountStrategy, SystemdMountStrategy
 from .detection import (
     detect_device_present,
-    detect_device_unlocked,
+    detect_luks_attached,
     detect_systemd_cryptsetup_path,
     detect_volume_mounted,
     resolve_mount_strategy,
@@ -26,9 +26,9 @@ from .lifecycle import (
     umount_volumes,
 )
 from .systemd import (
-    build_lock_command,
+    build_close_luks_command,
     build_mount_command,
-    build_unlock_command,
+    build_attach_luks_command,
     build_umount_command,
 )
 
@@ -41,12 +41,12 @@ __all__ = [
     "SUDOERS_RULES_PATH",
     "SystemdMountStrategy",
     "UmountResult",
-    "build_lock_command",
+    "build_close_luks_command",
     "build_mount_command",
-    "build_unlock_command",
+    "build_attach_luks_command",
     "build_umount_command",
     "detect_device_present",
-    "detect_device_unlocked",
+    "detect_luks_attached",
     "detect_systemd_cryptsetup_path",
     "detect_volume_mounted",
     "generate_auth_rules",

@@ -32,7 +32,7 @@ class VolumeError(str, enum.Enum):
 
     # Mount management errors
     DEVICE_NOT_PRESENT = "device not plugged in"
-    UNLOCK_FAILED = "failed to unlock encrypted device"
+    ATTACH_LUKS_FAILED = "failed to attach luks encrypted device"
     MOUNT_FAILED = "failed to mount volume"
     SYSTEMCTL_NOT_FOUND = "systemctl not found"
     SYSTEMD_ESCAPE_NOT_FOUND = "systemd-escape not found"

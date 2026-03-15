@@ -125,7 +125,7 @@ Volumes can optionally declare a `mount` section to automate the mount/umount li
 
 **Mount config** — The `mount` section specifies a `device-uuid` for drive detection (via `/dev/disk/by-uuid/`) and an optional `encryption` block for LUKS-encrypted volumes. The `device-uuid` is the LUKS container UUID for encrypted volumes, or the filesystem UUID for unencrypted volumes.
 
-**Encrypted volumes** — For LUKS-encrypted volumes, the `encryption` block specifies a `mapper-name` (device mapper name, e.g. `seagate8tb`) and a `passphrase-id` (credential lookup key). The unlock command is `sudo systemd-cryptsetup attach <mapper> /dev/disk/by-uuid/<uuid> /dev/stdin luks`, with the passphrase piped via stdin.
+**Encrypted volumes** — For LUKS-encrypted volumes, the `encryption` block specifies a `mapper-name` (device mapper name, e.g. `seagate8tb`) and a `passphrase-id` (credential lookup key). The attach command is `sudo systemd-cryptsetup attach <mapper> /dev/disk/by-uuid/<uuid> /dev/stdin luks`, with the passphrase piped via stdin.
 
 **Unencrypted volumes** — For unencrypted volumes, only `device-uuid` is needed. The mount command is `systemctl start <mount-unit>`, where the mount unit is derived from the volume path via `systemd-escape --path`.
 
@@ -137,7 +137,7 @@ Volumes can optionally declare a `mount` section to automate the mount/umount li
 
 Passphrases are cached in memory during a single run, so the user is only prompted once per unique passphrase-id even if multiple volumes share it.
 
-**Lifecycle** — The `run` command mounts volumes before syncs and umounts in a `finally` block (even on failure). Mount is idempotent: already-unlocked and already-mounted volumes are skipped. Umount always attempts to umount+lock all volumes with mount config, regardless of who mounted them — this avoids fragile action tracking across failed/restarted runs.
+**Lifecycle** — The `run`, `check`, and `troubleshoot` commands mount volumes before running and umount in a `finally` block (even on failure). Mount is idempotent: already-attached and already-mounted volumes are skipped. Umount always attempts to umount and close LUKS for all volumes with mount config, regardless of who mounted them — this avoids fragile action tracking across failed/restarted runs.
 
 **Authorization** — Mount management uses polkit for `systemctl start/stop` (D-Bus authorization) and sudoers NOPASSWD for `sudo systemd-cryptsetup attach`. The `config setup-auth` command generates both rule files for review and manual installation.
 
@@ -258,14 +258,23 @@ This section documents every external command nbkp invokes on local or remote ho
 | `readlink <latest>` | Read current latest snapshot |
 | `ln -sfn <target> <latest>` | Update latest symlink (remote only; local uses Python `pathlib`) |
 
-### Mount management
+### Mount management (systemd strategy)
 
 | Command | Purpose |
 |---|---|
-| `sudo <systemd-cryptsetup-path> attach <mapper> /dev/disk/by-uuid/<uuid> /dev/stdin luks` | Unlock LUKS volume (passphrase piped via stdin) |
+| `sudo <systemd-cryptsetup-path> attach <mapper> /dev/disk/by-uuid/<uuid> /dev/stdin luks` | Attach LUKS volume (passphrase piped via stdin) |
 | `systemctl start <mount-unit>` | Mount volume |
 | `systemctl stop <mount-unit>` | Umount volume |
-| `systemctl stop systemd-cryptsetup@<mapper>.service` | Lock LUKS volume |
+| `systemctl stop systemd-cryptsetup@<mapper>.service` | Close LUKS volume |
+
+### Mount management (direct strategy)
+
+| Command | Purpose |
+|---|---|
+| `sudo cryptsetup open --type luks /dev/disk/by-uuid/<uuid> <mapper> -` | Attach LUKS volume (passphrase read from stdin via `-` key-file argument) |
+| `sudo mount <volume-path>` | Mount volume (device and options from fstab) |
+| `sudo umount <volume-path>` | Umount volume |
+| `sudo cryptsetup close <mapper>` | Close LUKS volume |
 
 ### SSH transport
 

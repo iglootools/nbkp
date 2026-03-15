@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from nbkp.mount.systemd import (
-    build_lock_command,
+    build_close_luks_command,
     build_mount_command,
-    build_unlock_command,
+    build_attach_luks_command,
     build_umount_command,
 )
 
 
-class TestBuildUnlockCommand:
+class TestBuildAttachLuksCommand:
     def test_basic(self) -> None:
-        cmd = build_unlock_command(
+        cmd = build_attach_luks_command(
             cryptsetup_path="/usr/lib/systemd/systemd-cryptsetup",
             mapper_name="seagate8tb",
             device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6",
@@ -28,7 +28,7 @@ class TestBuildUnlockCommand:
         ]
 
     def test_different_cryptsetup_path(self) -> None:
-        cmd = build_unlock_command(
+        cmd = build_attach_luks_command(
             cryptsetup_path="/lib/systemd/systemd-cryptsetup",
             mapper_name="disk1",
             device_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
@@ -37,7 +37,7 @@ class TestBuildUnlockCommand:
         assert cmd[3] == "disk1"
 
     def test_mapper_name_with_hyphens(self) -> None:
-        cmd = build_unlock_command(
+        cmd = build_attach_luks_command(
             cryptsetup_path="/usr/lib/systemd/systemd-cryptsetup",
             mapper_name="my-disk-1",
             device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6",
@@ -57,9 +57,9 @@ class TestBuildUmountCommand:
         assert cmd == ["systemctl", "stop", "mnt-seagate8tb.mount"]
 
 
-class TestBuildLockCommand:
+class TestBuildCloseLuksCommand:
     def test_basic(self) -> None:
-        cmd = build_lock_command("seagate8tb")
+        cmd = build_close_luks_command("seagate8tb")
         assert cmd == [
             "systemctl",
             "stop",
@@ -67,7 +67,7 @@ class TestBuildLockCommand:
         ]
 
     def test_mapper_name_with_hyphens(self) -> None:
-        cmd = build_lock_command("my-disk-1")
+        cmd = build_close_luks_command("my-disk-1")
         assert cmd == [
             "systemctl",
             "stop",

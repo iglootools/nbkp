@@ -1,4 +1,4 @@
-"""Direct command builders for mount/umount and LUKS lock/unlock.
+"""Direct command builders for mount/umount and LUKS attach/close.
 
 Used on hosts without systemd (e.g. Docker containers). All functions
 are pure — they receive pre-resolved values and return command lists.
@@ -7,11 +7,11 @@ are pure — they receive pre-resolved values and return command lists.
 from __future__ import annotations
 
 
-def build_unlock_command(
+def build_attach_luks_command(
     mapper_name: str,
     device_uuid: str,
 ) -> list[str]:
-    """Build command to unlock a LUKS volume via cryptsetup.
+    """Build command to attach a LUKS volume via cryptsetup.
 
     Passphrase is read from stdin (``-`` key-file argument).
 
@@ -32,8 +32,8 @@ def build_unlock_command(
     ]
 
 
-def build_lock_command(mapper_name: str) -> list[str]:
-    """Build command to lock a LUKS volume via cryptsetup close.
+def build_close_luks_command(mapper_name: str) -> list[str]:
+    """Build command to close a LUKS volume via cryptsetup close.
 
     Returns e.g.::
 

@@ -1007,7 +1007,7 @@ def _print_mount_failed_fix(
     mount: MountConfig | None,
     resolved_endpoints: ResolvedEndpoints,
 ) -> None:
-    """Print fix for unlock/mount failure."""
+    """Print fix for attach-luks/mount failure."""
     p2 = _INDENT * 2
     if mount and mount.encryption:
         mapper = mount.encryption.mapper_name
@@ -1254,7 +1254,7 @@ def print_human_troubleshoot(
                 case VolumeError.PASSPHRASE_NOT_AVAILABLE:
                     mount = vol.mount
                     _print_passphrase_not_available_fix(console, mount)
-                case VolumeError.UNLOCK_FAILED | VolumeError.MOUNT_FAILED:
+                case VolumeError.ATTACH_LUKS_FAILED | VolumeError.MOUNT_FAILED:
                     mount = vol.mount
                     _print_mount_failed_fix(console, vol, mount, re)
 

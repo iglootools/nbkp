@@ -57,7 +57,7 @@ def volumes_mount(
         ),
     ] = None,
 ) -> None:
-    """Mount and unlock volumes. Mounts all volumes with mount config, or specific ones via --name."""
+    """Attach LUKS and mount volumes. Mounts all volumes with mount config, or specific ones via --name."""
     cfg = load_config_or_exit(config)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
 
@@ -152,7 +152,7 @@ def volumes_umount(
         ),
     ] = None,
 ) -> None:
-    """Umount and lock volumes. Umounts all volumes with mount config, or specific ones via --name."""
+    """Umount volumes and close LUKS. Umounts all volumes with mount config, or specific ones via --name."""
     cfg = load_config_or_exit(config)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
 

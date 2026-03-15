@@ -47,7 +47,7 @@ class MountConfig(_BaseModel):
     """Mount management config for a volume.
 
     When present, nbkp manages the volume's mount lifecycle:
-    detect drive → (unlock if encrypted) → mount → backup → umount → (lock).
+    detect drive → (attach LUKS if encrypted) → mount → backup → umount → (close LUKS).
     """
 
     model_config = ConfigDict(frozen=True)

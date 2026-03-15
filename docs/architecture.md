@@ -74,7 +74,7 @@ flowchart TD
     mount/lifecycle.py
     ─────────────────────
     Detect device (UUID)
-    Unlock LUKS (if encrypted)
+    Attach LUKS (if encrypted)
     systemctl start mount-unit
     Idempotent: skip if mounted"]
 
@@ -146,7 +146,7 @@ flowchart TD
     mount/lifecycle.py
     ─────────────────────
     systemctl stop mount-unit
-    Lock LUKS (if encrypted)
+    Close LUKS (if encrypted)
     Always runs (try/finally)
     Reverse order of mounting"]
 ```
@@ -157,11 +157,11 @@ flowchart TD
 
 #### Why `systemd-cryptsetup` instead of raw `cryptsetup`
 
-LUKS unlock uses `sudo systemd-cryptsetup attach` rather than `sudo cryptsetup open` for two reasons:
+LUKS attach uses `sudo systemd-cryptsetup attach` rather than `sudo cryptsetup open` for two reasons:
 
-1. **systemd integration** — `systemd-cryptsetup attach` registers the device mapper with systemd's unit tracking. This means `systemctl stop systemd-cryptsetup@<mapper>.service` cleanly tears down the device, and tools like `systemctl status` and `journalctl -u` work as expected. Raw `cryptsetup open` creates the mapper outside systemd's awareness, making lock via `systemctl stop` unreliable.
+1. **systemd integration** — `systemd-cryptsetup attach` registers the device mapper with systemd's unit tracking. This means `systemctl stop systemd-cryptsetup@<mapper>.service` cleanly tears down the device, and tools like `systemctl status` and `journalctl -u` work as expected. Raw `cryptsetup open` creates the mapper outside systemd's awareness, making close via `systemctl stop` unreliable.
 
-2. **Consistent lock path** — Locking via `systemctl stop systemd-cryptsetup@<mapper>.service` works regardless of whether the device was opened by nbkp or by the system (e.g. via crypttab at boot). If we used `cryptsetup open`, we'd need `cryptsetup close` for lock, which would fight with systemd if it also manages the device.
+2. **Consistent close path** — Closing via `systemctl stop systemd-cryptsetup@<mapper>.service` works regardless of whether the device was opened by nbkp or by the system (e.g. via crypttab at boot). If we used `cryptsetup open`, we'd need `cryptsetup close` to close, which would fight with systemd if it also manages the device.
 
 #### Why polkit + sudoers (hybrid authorization)
 
@@ -185,7 +185,7 @@ The `keyring` package is an optional dependency (`pip install nbkp[keyring]`) to
 
 #### Why no action tracking for umount
 
-`umount_volumes` always attempts to umount and lock every volume with mount config, rather than tracking which volumes were actually mounted by the current run. This avoids fragile state tracking across scenarios like:
+`umount_volumes` always attempts to umount and close LUKS for every volume with mount config, rather than tracking which volumes were actually mounted by the current run. This avoids fragile state tracking across scenarios like:
 
 - A `run` that fails partway through and is restarted
 - A `volumes mount` followed by a `run --no-mount` followed by `volumes umount`

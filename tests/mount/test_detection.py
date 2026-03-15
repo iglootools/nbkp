@@ -8,7 +8,7 @@ from unittest.mock import patch
 from nbkp.config import LocalVolume
 from nbkp.mount.detection import (
     detect_device_present,
-    detect_device_unlocked,
+    detect_luks_attached,
     detect_systemd_cryptsetup_path,
     detect_volume_mounted,
     resolve_mount_unit,
@@ -48,20 +48,20 @@ class TestDetectDevicePresent:
         assert cmd == ["test", "-e", "/dev/disk/by-uuid/aaaa-bbbb-cccc-dddd"]
 
 
-class TestDetectDeviceUnlocked:
-    def test_unlocked(self) -> None:
+class TestDetectLuksAttached:
+    def test_attached(self) -> None:
         with patch("nbkp.remote.dispatch.subprocess.run", return_value=_mock_run(0)):
-            assert detect_device_unlocked(_local_vol(), "seagate8tb", {})
+            assert detect_luks_attached(_local_vol(), "seagate8tb", {})
 
-    def test_locked(self) -> None:
+    def test_not_attached(self) -> None:
         with patch("nbkp.remote.dispatch.subprocess.run", return_value=_mock_run(1)):
-            assert not detect_device_unlocked(_local_vol(), "seagate8tb", {})
+            assert not detect_luks_attached(_local_vol(), "seagate8tb", {})
 
     def test_passes_correct_command(self) -> None:
         with patch(
             "nbkp.remote.dispatch.subprocess.run", return_value=_mock_run(0)
         ) as mock:
-            detect_device_unlocked(_local_vol(), "mydisk", {})
+            detect_luks_attached(_local_vol(), "mydisk", {})
         cmd = mock.call_args[0][0]
         assert cmd == ["test", "-b", "/dev/mapper/mydisk"]
 

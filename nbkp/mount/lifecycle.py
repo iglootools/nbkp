@@ -15,7 +15,7 @@ from ..remote.dispatch import run_on_volume
 from .strategy import MountStrategy
 from .detection import (
     detect_device_present,
-    detect_device_unlocked,
+    detect_luks_attached,
 )
 
 
@@ -68,12 +68,12 @@ def mount_volume(
             detail=f"device not plugged in (UUID: {mount_config.device_uuid})",
         )
 
-    # 2. Unlock if encrypted and not yet unlocked
+    # 2. Attach LUKS if encrypted and not yet attached
     if mount_config.encryption is not None:
         enc = mount_config.encryption
-        if not detect_device_unlocked(volume, enc.mapper_name, resolved_endpoints):
+        if not detect_luks_attached(volume, enc.mapper_name, resolved_endpoints):
             passphrase = passphrase_fn(enc.passphrase_id)
-            cmd = mount_strategy.build_unlock_command(
+            cmd = mount_strategy.build_attach_luks_command(
                 enc.mapper_name, mount_config.device_uuid
             )
             result = run_on_volume(cmd, volume, resolved_endpoints, input=passphrase)
@@ -82,7 +82,7 @@ def mount_volume(
                     volume_slug=slug,
                     success=False,
                     detail=(
-                        f"unlock failed (exit {result.returncode}):"
+                        f"attach-luks failed (exit {result.returncode}):"
                         f" {result.stderr.strip()}"
                     ),
                 )
@@ -109,9 +109,9 @@ def umount_volume(
     resolved_endpoints: ResolvedEndpoints,
     mount_strategy: MountStrategy,
 ) -> UmountResult:
-    """Umount and lock a single volume.
+    """Umount and close LUKS for a single volume.
 
-    Always attempts umount+lock regardless of who mounted.
+    Always attempts umount + close LUKS regardless of who mounted.
     """
     slug = volume.slug
 
@@ -129,18 +129,18 @@ def umount_volume(
                 warning="device may still be mounted, manual umount needed",
             )
 
-    # 2. Lock if encrypted and still unlocked
+    # 2. Close LUKS if encrypted and still attached
     if mount_config.encryption is not None:
         enc = mount_config.encryption
-        if detect_device_unlocked(volume, enc.mapper_name, resolved_endpoints):
-            cmd = mount_strategy.build_lock_command(enc.mapper_name)
+        if detect_luks_attached(volume, enc.mapper_name, resolved_endpoints):
+            cmd = mount_strategy.build_close_luks_command(enc.mapper_name)
             result = run_on_volume(cmd, volume, resolved_endpoints)
             if result.returncode != 0:
                 return UmountResult(
                     volume_slug=slug,
                     success=True,
                     warning=(
-                        "umounted but lock failed"
+                        "umounted but close-luks failed"
                         f" (exit {result.returncode}):"
                         f" {result.stderr.strip()}"
                     ),
@@ -198,7 +198,7 @@ def umount_volumes(
     on_umount_start: Callable[[str], None] | None = None,
     on_umount_end: Callable[[str, UmountResult], None] | None = None,
 ) -> list[UmountResult]:
-    """Umount and lock all volumes with mount config.
+    """Umount and close LUKS for all volumes with mount config.
 
     Always umounts regardless of who mounted — avoids fragile
     action tracking across failed/restarted runs.

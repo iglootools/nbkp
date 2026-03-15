@@ -19,7 +19,7 @@ from nbkp.config import (
 )
 from nbkp.mount.detection import (
     detect_device_present,
-    detect_device_unlocked,
+    detect_luks_attached,
     detect_systemd_cryptsetup_path,
 )
 from nbkp.mount.lifecycle import mount_volume, umount_volume
@@ -35,24 +35,24 @@ from tests._docker_fixtures import (
 )
 
 
-def _unlock(
+def _attach_luks(
     volume: RemoteVolume,
     strategy: DirectMountStrategy,
     resolved: ResolvedEndpoints,
     luks_uuid: str,
 ) -> None:
-    """Unlock LUKS via production command builder + run_on_volume."""
-    cmd = strategy.build_unlock_command(LUKS_MAPPER_NAME, luks_uuid)
+    """Attach LUKS via production command builder + run_on_volume."""
+    cmd = strategy.build_attach_luks_command(LUKS_MAPPER_NAME, luks_uuid)
     run_on_volume(cmd, volume, resolved, input=LUKS_PASSPHRASE)
 
 
-def _lock(
+def _close_luks(
     volume: RemoteVolume,
     strategy: DirectMountStrategy,
     resolved: ResolvedEndpoints,
 ) -> None:
-    """Lock LUKS via production command builder + run_on_volume."""
-    cmd = strategy.build_lock_command(LUKS_MAPPER_NAME)
+    """Close LUKS via production command builder + run_on_volume."""
+    cmd = strategy.build_close_luks_command(LUKS_MAPPER_NAME)
     run_on_volume(cmd, volume, resolved)
 
 
@@ -64,7 +64,7 @@ def _cleanup(
     """Idempotent cleanup: umount + lock (ignore errors)."""
     umount_cmd = strategy.build_umount_command()
     run_on_volume(umount_cmd, volume, resolved)
-    lock_cmd = strategy.build_lock_command(LUKS_MAPPER_NAME)
+    lock_cmd = strategy.build_close_luks_command(LUKS_MAPPER_NAME)
     run_on_volume(lock_cmd, volume, resolved)
 
 
@@ -96,19 +96,19 @@ class TestDetectDevicePresent:
         )
 
 
-class TestDetectDeviceUnlocked:
-    def test_not_unlocked_when_closed(
+class TestDetectLuksAttached:
+    def test_not_attached_when_closed(
         self,
         docker_ssh_endpoint: SshEndpoint,
         remote_encrypted_volume: RemoteVolume,
     ) -> None:
         """Mapper does not exist when LUKS is closed."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
-        assert not detect_device_unlocked(
+        assert not detect_luks_attached(
             remote_encrypted_volume, LUKS_MAPPER_NAME, resolved
         )
 
-    def test_unlocked_after_open(
+    def test_attached_after_open(
         self,
         docker_ssh_endpoint: SshEndpoint,
         remote_encrypted_volume: RemoteVolume,
@@ -117,15 +117,15 @@ class TestDetectDeviceUnlocked:
         """Mapper exists after LUKS is opened."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
         strategy = direct_strategy_for(remote_encrypted_volume)
-        _unlock(remote_encrypted_volume, strategy, resolved, luks_uuid)
+        _attach_luks(remote_encrypted_volume, strategy, resolved, luks_uuid)
         try:
-            assert detect_device_unlocked(
+            assert detect_luks_attached(
                 remote_encrypted_volume, LUKS_MAPPER_NAME, resolved
             )
         finally:
-            _lock(remote_encrypted_volume, strategy, resolved)
+            _close_luks(remote_encrypted_volume, strategy, resolved)
 
-    def test_not_unlocked_after_close(
+    def test_not_attached_after_close(
         self,
         docker_ssh_endpoint: SshEndpoint,
         remote_encrypted_volume: RemoteVolume,
@@ -134,9 +134,9 @@ class TestDetectDeviceUnlocked:
         """Mapper disappears after LUKS is closed."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
         strategy = direct_strategy_for(remote_encrypted_volume)
-        _unlock(remote_encrypted_volume, strategy, resolved, luks_uuid)
-        _lock(remote_encrypted_volume, strategy, resolved)
-        assert not detect_device_unlocked(
+        _attach_luks(remote_encrypted_volume, strategy, resolved, luks_uuid)
+        _close_luks(remote_encrypted_volume, strategy, resolved)
+        assert not detect_luks_attached(
             remote_encrypted_volume, LUKS_MAPPER_NAME, resolved
         )
 
@@ -274,7 +274,7 @@ class TestLuksLifecycle:
         """Opening an already-open LUKS device does not fail."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
         strategy = direct_strategy_for(remote_encrypted_volume)
-        _unlock(remote_encrypted_volume, strategy, resolved, luks_uuid)
+        _attach_luks(remote_encrypted_volume, strategy, resolved, luks_uuid)
         try:
             # Second open should not raise (cryptsetup returns 0 or
             # non-zero for "already active" — we accept either)

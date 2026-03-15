@@ -39,7 +39,7 @@ def detect_device_present(
     return result.returncode == 0
 
 
-def detect_device_unlocked(
+def detect_luks_attached(
     volume: Volume,
     mapper_name: str,
     resolved_endpoints: ResolvedEndpoints,
