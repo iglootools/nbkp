@@ -4,17 +4,28 @@ Verifies data propagates through a 6-hop chain using all
 supported sync variants and snapshot modes, with bastion SSH
 for all remote access.  The btrfs snapshot volume lives on a
 LUKS-encrypted filesystem to exercise encrypted volume I/O
-end-to-end:
+end-to-end.
 
-  src-local-bare -> stage-local-hl-snapshots ->
-    stage-remote-bare -> stage-remote-btrfs-snapshots ->
-    stage-remote-btrfs-bare -> stage-remote-hl-snapshots ->
-    dst-local-bare
+Chain topology (6 hops)::
 
-The Docker container runs sshd as PID 1 (not systemd), so
-``stage-remote-btrfs-snapshots`` uses ``strategy="direct"`` and
-the mount lifecycle is driven by the production
-``mount_volumes`` / ``umount_volumes`` code path.
+  step-1  local → local            (HL snapshots dest)
+  step-2  local → remote           (bare dest, via bastion)
+  step-3  remote → remote          (btrfs snapshots dest, same server)
+  step-4  remote → remote          (bare dest on btrfs, same server)
+  step-5  remote → remote          (HL snapshots dest, same server)
+  step-6  remote → local           (bare dest, via bastion)
+
+Covered scenarios:
+
+- All four sync direction combinations (local→local, local→remote,
+  remote→remote same-server, remote→local)
+- Both snapshot modes (hard-link and btrfs) as source and destination
+- Bastion/proxy-jump SSH for all remote access
+- LUKS-encrypted btrfs volume via ``managed_mount`` lifecycle
+- Rsync filter exclusion (``excluded/`` absent from all destinations)
+- Topological ordering of dependent syncs
+- Failure propagation (skipped upstream → cancelled downstream)
+- Sentinel preservation across syncs
 """
 
 from __future__ import annotations
