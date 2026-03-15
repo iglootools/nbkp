@@ -66,6 +66,24 @@ def check_config() -> Config:
     volumes = base_volumes()
     volumes["external-drive"] = LocalVolume(slug="external-drive", path="/mnt/external")
     volumes["orphan-volume"] = LocalVolume(slug="orphan-volume", path="/mnt/archive")
+    volumes["mount-encrypted"] = LocalVolume(
+        slug="mount-encrypted",
+        path="/mnt/encrypted",
+        mount=MountConfig(
+            device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6",
+            encryption=LuksEncryptionConfig(
+                mapper_name="encrypted",
+                passphrase_id="encrypted",
+            ),
+        ),
+    )
+    volumes["mount-unencrypted"] = LocalVolume(
+        slug="mount-unencrypted",
+        path="/mnt/usb-backup-mount",
+        mount=MountConfig(
+            device_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        ),
+    )
     sync_endpoints = base_sync_endpoints()
     sync_endpoints["external-root"] = SyncEndpoint(
         slug="external-root",
@@ -75,12 +93,30 @@ def check_config() -> Config:
         slug="orphan-sync-endpoint",
         volume="usb-drive",
     )
+    sync_endpoints["mount-encrypted-dst"] = SyncEndpoint(
+        slug="mount-encrypted-dst",
+        volume="mount-encrypted",
+    )
+    sync_endpoints["mount-unencrypted-dst"] = SyncEndpoint(
+        slug="mount-unencrypted-dst",
+        volume="mount-unencrypted",
+    )
     syncs = base_syncs()
     syncs["disabled-backup"] = SyncConfig(
         slug="disabled-backup",
         source="laptop-root",
         destination="external-root",
         enabled=False,
+    )
+    syncs["backup-to-encrypted"] = SyncConfig(
+        slug="backup-to-encrypted",
+        source="laptop-root",
+        destination="mount-encrypted-dst",
+    )
+    syncs["backup-to-unencrypted"] = SyncConfig(
+        slug="backup-to-unencrypted",
+        source="laptop-root",
+        destination="mount-unencrypted-dst",
     )
     return Config(
         ssh_endpoints=ssh_endpoints,
@@ -140,12 +176,68 @@ def check_data(
         diagnostics=VolumeDiagnostics(capabilities=_SENTINEL_MISSING_CAPS),
         errors=[VolumeError.SENTINEL_NOT_FOUND],
     )
+    # Encrypted volume: device present, luks not attached, not mounted
+    mount_encrypted_vs = VolumeStatus(
+        slug="mount-encrypted",
+        config=config.volumes["mount-encrypted"],
+        diagnostics=VolumeDiagnostics(
+            capabilities=VolumeCapabilities(
+                sentinel_exists=False,
+                has_rsync=False,
+                rsync_version_ok=False,
+                has_btrfs=False,
+                has_stat=False,
+                has_findmnt=False,
+                is_btrfs_filesystem=False,
+                hardlink_supported=True,
+                btrfs_user_subvol_rm=False,
+                mount=MountCapabilities(
+                    resolved_backend="systemd",
+                    device_present=True,
+                    luks_attached=False,
+                    mounted=False,
+                ),
+            ),
+        ),
+        errors=[VolumeError.VOLUME_NOT_MOUNTED],
+    )
+    # Unencrypted volume: device present, mounted, active
+    mount_unencrypted_vs = VolumeStatus(
+        slug="mount-unencrypted",
+        config=config.volumes["mount-unencrypted"],
+        diagnostics=VolumeDiagnostics(
+            capabilities=VolumeCapabilities(
+                sentinel_exists=True,
+                has_rsync=True,
+                rsync_version_ok=True,
+                has_btrfs=False,
+                has_stat=True,
+                has_findmnt=True,
+                is_btrfs_filesystem=False,
+                hardlink_supported=True,
+                btrfs_user_subvol_rm=False,
+                mount=MountCapabilities(
+                    resolved_backend="systemd",
+                    has_systemctl=True,
+                    has_systemd_escape=True,
+                    mount_unit="mnt-usb\\x2dbackup\\x2dmount.mount",
+                    has_mount_unit_config=True,
+                    has_polkit_rules=True,
+                    device_present=True,
+                    mounted=True,
+                ),
+            ),
+        ),
+        errors=[],
+    )
 
     vol_statuses = {
         "laptop": laptop_vs,
         "usb-drive": usb_vs,
         "nas-backup": nas_vs,
         "external-drive": external_vs,
+        "mount-encrypted": mount_encrypted_vs,
+        "mount-unencrypted": mount_unencrypted_vs,
     }
 
     sync_statuses = {
@@ -212,6 +304,29 @@ def check_data(
             source_status=laptop_vs,
             destination_status=external_vs,
             errors=[SyncError.DISABLED],
+        ),
+        "backup-to-encrypted": SyncStatus(
+            slug="backup-to-encrypted",
+            config=config.syncs["backup-to-encrypted"],
+            source_status=laptop_vs,
+            destination_status=mount_encrypted_vs,
+            errors=[SyncError.DST_VOL_UNAVAILABLE],
+        ),
+        "backup-to-unencrypted": SyncStatus(
+            slug="backup-to-unencrypted",
+            config=config.syncs["backup-to-unencrypted"],
+            source_status=laptop_vs,
+            destination_status=mount_unencrypted_vs,
+            source_diagnostics=SourceEndpointDiagnostics(
+                endpoint_slug="laptop-root",
+                sentinel_exists=True,
+            ),
+            destination_diagnostics=DestinationEndpointDiagnostics(
+                endpoint_slug="mount-unencrypted-dst",
+                sentinel_exists=True,
+                endpoint_writable=True,
+            ),
+            errors=[],
         ),
     }
 
@@ -284,6 +399,9 @@ _MOUNT_ENCRYPTED_CAPS = VolumeCapabilities(
         has_cryptsetup_service_config=None,
         has_polkit_rules=False,
         has_sudoers_rules=False,
+        device_present=False,
+        luks_attached=None,
+        mounted=None,
     ),
 )
 
@@ -304,6 +422,8 @@ _MOUNT_UNENCRYPTED_CAPS = VolumeCapabilities(
         mount_unit="mnt-usb\\x2dbackup.mount",
         has_mount_unit_config=False,
         has_polkit_rules=False,
+        device_present=True,
+        mounted=False,
     ),
 )
 
@@ -325,6 +445,9 @@ _MOUNT_DIRECT_ENCRYPTED_CAPS = VolumeCapabilities(
         has_mountpoint=False,
         has_cryptsetup=False,
         has_sudoers_rules=False,
+        device_present=False,
+        luks_attached=None,
+        mounted=None,
     ),
 )
 

@@ -226,6 +226,7 @@ $ nbkp volumes [OPTIONS] COMMAND [ARGS]...
 
 * `mount`: Attach LUKS and mount volumes.
 * `umount`: Umount volumes and close LUKS.
+* `status`: Show mount status for volumes with mount...
 
 ### `nbkp volumes mount`
 
@@ -262,6 +263,26 @@ $ nbkp volumes umount [OPTIONS]
 * `-c, --config TEXT`: Path to config file
 * `-o, --output [human|json]`: Output format  [default: human]
 * `-n, --name TEXT`: Volume name(s) to umount
+* `-l, --location TEXT`: Prefer endpoints at these locations
+* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
+* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--help`: Show this message and exit.
+
+### `nbkp volumes status`
+
+Show mount status for volumes with mount config.
+
+**Usage**:
+
+```console
+$ nbkp volumes status [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config TEXT`: Path to config file
+* `-o, --output [human|json]`: Output format  [default: human]
+* `-n, --name TEXT`: Volume name(s) to check
 * `-l, --location TEXT`: Prefer endpoints at these locations
 * `-L, --exclude-location TEXT`: Exclude endpoints at these locations
 * `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints

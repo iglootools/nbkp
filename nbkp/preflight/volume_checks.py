@@ -13,7 +13,14 @@ from ..config import (
 )
 from ..fsprotocol import VOLUME_SENTINEL
 from ..mount.auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH
-from ..mount.detection import detect_systemd_cryptsetup_path, resolve_mount_unit
+from ..mount.detection import (
+    detect_device_present,
+    detect_luks_attached,
+    detect_systemd_cryptsetup_path,
+    detect_volume_mounted,
+    resolve_mount_unit,
+)
+from ..remote.dispatch import run_on_volume
 from ..remote import run_remote_command
 from .queries import (
     _check_command_available,
@@ -56,7 +63,7 @@ def _observe_local(
     caps = (
         check_volume_capabilities(volume, resolved_endpoints)
         if sentinel_exists
-        else _sentinel_only_capabilities()
+        else _sentinel_only_capabilities(volume, resolved_endpoints)
     )
     return VolumeDiagnostics(
         capabilities=caps,
@@ -85,7 +92,7 @@ def _observe_remote(
         caps = (
             check_volume_capabilities(volume, resolved_endpoints)
             if sentinel_exists
-            else _sentinel_only_capabilities()
+            else _sentinel_only_capabilities(volume, resolved_endpoints)
             if ssh_reachable
             else None
         )
@@ -240,6 +247,21 @@ def _check_systemd_mount_capabilities(
         else None
     )
 
+    # Runtime mount state
+    device_present = detect_device_present(
+        volume, mount.device_uuid, resolved_endpoints
+    )
+    luks_attached = (
+        detect_luks_attached(volume, mount.encryption.mapper_name, resolved_endpoints)
+        if mount.encryption is not None
+        else None
+    )
+    mounted = (
+        detect_volume_mounted(volume, mount_unit, resolved_endpoints)
+        if has_systemctl and mount_unit is not None
+        else None
+    )
+
     return MountCapabilities(
         resolved_backend="systemd",
         has_systemctl=has_systemctl,
@@ -256,6 +278,9 @@ def _check_systemd_mount_capabilities(
         cryptsetup_service_exec_start=cryptsetup_service_props.get("ExecStart"),
         has_polkit_rules=has_polkit_rules,
         has_sudoers_rules=has_sudoers_rules,
+        device_present=device_present,
+        luks_attached=luks_attached,
+        mounted=mounted,
     )
 
 
@@ -282,6 +307,24 @@ def _check_direct_mount_capabilities(
         else None
     )
 
+    # Runtime mount state
+    device_present = detect_device_present(
+        volume, mount.device_uuid, resolved_endpoints
+    )
+    luks_attached = (
+        detect_luks_attached(volume, mount.encryption.mapper_name, resolved_endpoints)
+        if mount.encryption is not None
+        else None
+    )
+    mounted = (
+        run_on_volume(
+            ["mountpoint", "-q", volume.path], volume, resolved_endpoints
+        ).returncode
+        == 0
+        if has_mountpoint
+        else None
+    )
+
     return MountCapabilities(
         resolved_backend="direct",
         has_sudo=has_sudo,
@@ -290,15 +333,30 @@ def _check_direct_mount_capabilities(
         has_mountpoint=has_mountpoint,
         has_cryptsetup=has_cryptsetup,
         has_sudoers_rules=has_sudoers_rules,
+        device_present=device_present,
+        luks_attached=luks_attached,
+        mounted=mounted,
     )
 
 
-def _sentinel_only_capabilities() -> VolumeCapabilities:
+def _sentinel_only_capabilities(
+    volume: Volume,
+    resolved_endpoints: ResolvedEndpoints,
+) -> VolumeCapabilities:
     """Minimal capabilities for a reachable volume whose sentinel is missing.
 
     Only ``sentinel_exists`` is meaningful; the remaining fields are
-    not probed and carry safe defaults.
+    not probed and carry safe defaults.  Mount status is still probed
+    when the volume has mount config — mount state is independent of
+    the sentinel and represents a prerequisite for it (the drive must
+    be mounted before the sentinel can exist).
     """
+    mount_config: MountConfig | None = getattr(volume, "mount", None)
+    mount_caps = (
+        _check_mount_capabilities(volume, mount_config, resolved_endpoints)
+        if mount_config is not None
+        else None
+    )
     return VolumeCapabilities(
         sentinel_exists=False,
         has_rsync=False,
@@ -309,4 +367,19 @@ def _sentinel_only_capabilities() -> VolumeCapabilities:
         is_btrfs_filesystem=False,
         hardlink_supported=True,
         btrfs_user_subvol_rm=False,
+        mount=mount_caps,
     )
+
+
+def check_mount_status(
+    volume: Volume,
+    mount: MountConfig,
+    resolved_endpoints: ResolvedEndpoints,
+) -> MountCapabilities:
+    """Probe mount capabilities and runtime state for a single volume.
+
+    Lightweight alternative to ``check_volume_capabilities`` — only
+    probes mount-related capabilities (tool availability, config
+    validation, and runtime device/luks/mounted state).
+    """
+    return _check_mount_capabilities(volume, mount, resolved_endpoints)

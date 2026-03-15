@@ -59,10 +59,10 @@ def _status_text(
 ) -> Text:
     """Format status with optional errors as styled text."""
     if active:
-        return Text("active", style="green")
+        return Text("\u2713active", style="green")
     else:
         error_str = ", ".join(r.value for r in errors)
-        return Text(f"inactive ({error_str})", style="red")
+        return Text(f"\u2717inactive ({error_str})", style="red")
 
 
 # Sync errors whose diagnostic state is visible as ✓/✗ in the
@@ -106,13 +106,13 @@ def _sync_status_text(
     errors (disabled, unavailable, tool-version, dry-run) are shown.
     """
     if active:
-        return Text("active", style="green")
+        return Text("\u2713active", style="green")
     non_obvious = [e for e in errors if e not in _DIAGNOSTIC_VISIBLE_SYNC_ERRORS]
     if non_obvious:
         reason = ", ".join(e.value for e in non_obvious)
-        return Text(f"inactive ({reason})", style="red")
+        return Text(f"\u2717inactive ({reason})", style="red")
     else:
-        return Text("inactive", style="red")
+        return Text("\u2717inactive", style="red")
 
 
 def _mount_capability_items(
@@ -172,14 +172,43 @@ def _format_capabilities(caps: VolumeCapabilities | None) -> str:
 
 
 def _check(ok: bool, label: str) -> str:
-    """Format a diagnostic item as ✓label or ✗label."""
-    return f"\u2713{label}" if ok else f"\u2717{label}"
+    """Format a diagnostic item as ✓label or ✗label with color."""
+    return f"[green]\u2713{label}[/green]" if ok else f"[red]\u2717{label}[/red]"
+
+
+def _format_mount_status(
+    mount_caps: MountCapabilities | None,
+    mount_config: MountConfig | None,
+) -> str:
+    """Format runtime mount state as a compact string.
+
+    Shows ✓/✗ for each probed mount state item.  Items whose value
+    is ``None`` (not probed / not applicable) are omitted, matching
+    the pattern used by source/destination diagnostics columns.
+    Empty when the volume has no mount config or caps are unavailable.
+    """
+    if mount_caps is None or mount_config is None:
+        return ""
+    items = [
+        (mount_caps.device_present, "device"),
+        *(
+            [(mount_caps.luks_attached, "luks")]
+            if mount_config.encryption is not None
+            else []
+        ),
+        (mount_caps.mounted, "mounted"),
+    ]
+    return ", ".join(
+        _check(value, label) for value, label in items if value is not None
+    )
 
 
 def _format_volume_issues(vol_status: VolumeStatus) -> str:
     """Format volume-level issues as ✗volume(reason)."""
     reason = ", ".join(e.value for e in vol_status.errors)
-    return f"\u2717volume ({reason})" if reason else "\u2717volume"
+    return (
+        f"[red]\u2717volume ({reason})[/red]" if reason else "[red]\u2717volume[/red]"
+    )
 
 
 def _format_source_diagnostics(ss: SyncStatus) -> str:
@@ -205,9 +234,9 @@ def _format_source_diagnostics(ss: SyncStatus) -> str:
         ),
         *(
             [
-                f"\u2713latest \u2192 {diag.latest.raw_target}"
+                f"[green]\u2713latest \u2192 {diag.latest.raw_target}[/green]"
                 if diag.latest.exists and diag.latest.raw_target
-                else "\u2717latest"
+                else "[red]\u2717latest[/red]"
             ]
             if diag.latest is not None
             else []
@@ -248,9 +277,9 @@ def _format_destination_diagnostics(ss: SyncStatus) -> str:
         ),
         *(
             [
-                f"\u2713latest \u2192 {diag.latest.raw_target}"
+                f"[green]\u2713latest \u2192 {diag.latest.raw_target}[/green]"
                 if diag.latest.exists and diag.latest.raw_target
-                else "\u2717latest"
+                else "[red]\u2717latest[/red]"
             ]
             if diag.latest is not None
             else []
@@ -298,12 +327,15 @@ def _build_volumes_section(
     table.add_column("Type")
     table.add_column("SSH Endpoint")
     table.add_column("URI")
-    table.add_column("Mount")
+    table.add_column("Mount Config")
+    table.add_column("Mount Diagnostics")
     table.add_column("Capabilities")
     table.add_column("Status")
 
     for vs in vol_statuses.values():
         vol = vs.config
+        caps = vs.diagnostics.capabilities
+        mount_caps = caps.mount if caps else None
         match vol:
             case RemoteVolume():
                 vol_type = "remote"
@@ -318,7 +350,8 @@ def _build_volumes_section(
             ssh_ep,
             format_volume_display(vol, resolved_endpoints),
             format_mount_summary(vol.mount),
-            _format_capabilities(vs.diagnostics.capabilities),
+            _format_mount_status(mount_caps, vol.mount),
+            _format_capabilities(caps),
             _status_text(vs.active, vs.errors),
         )
 
@@ -1139,6 +1172,12 @@ def print_human_troubleshoot(
                         " --exclude-location or add an"
                         " endpoint at a different"
                         " location."
+                    )
+                case VolumeError.VOLUME_NOT_MOUNTED:
+                    _print_mount_error(
+                        console,
+                        "Volume is not mounted.",
+                        f"Mount the volume with: nbkp volumes mount -n {vs.slug}",
                     )
                 case VolumeError.DEVICE_NOT_PRESENT:
                     mount = vol.mount

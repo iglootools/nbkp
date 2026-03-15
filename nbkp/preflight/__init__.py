@@ -23,7 +23,7 @@ from .status import (
     VolumeError,
     VolumeStatus,
 )
-from .volume_checks import check_volume_capabilities, observe_volume
+from .volume_checks import check_mount_status, check_volume_capabilities, observe_volume
 
 __all__ = [
     "BtrfsStagingSubvolumeDiagnostics",
@@ -39,6 +39,7 @@ __all__ = [
     "VolumeError",
     "VolumeStatus",
     "check_all_syncs",
+    "check_mount_status",
     "observe_destination_endpoint",
     "observe_source_endpoint",
     "check_sync",

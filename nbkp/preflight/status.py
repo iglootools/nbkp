@@ -26,11 +26,17 @@ from ..fsprotocol import (
 
 
 class VolumeError(str, enum.Enum):
-    SENTINEL_NOT_FOUND = f"{VOLUME_SENTINEL} volume sentinel not found"
+    # Network management
     UNREACHABLE = "unreachable"
     LOCATION_EXCLUDED = "excluded by location filter"
 
-    # Mount management errors
+    # Mount management — runtime state
+    VOLUME_NOT_MOUNTED = "volume not mounted"
+
+    # Sentinel management
+    SENTINEL_NOT_FOUND = f"{VOLUME_SENTINEL} volume sentinel not found"
+
+    # Mount management — lifecycle errors
     DEVICE_NOT_PRESENT = "device not plugged in"
     ATTACH_LUKS_FAILED = "failed to attach luks encrypted device"
     MOUNT_FAILED = "failed to mount volume"
@@ -152,6 +158,11 @@ class MountCapabilities(BaseModel):
     has_umount_cmd: bool | None = None
     has_mountpoint: bool | None = None
 
+    # Runtime mount state (probed during observation)
+    device_present: bool | None = None
+    luks_attached: bool | None = None
+    mounted: bool | None = None
+
 
 class VolumeCapabilities(BaseModel):
     """Host- and volume-level capabilities, computed once per reachable volume.
@@ -234,7 +245,14 @@ def _volume_errors(
     elif diag.ssh_reachable is False:
         return [VolumeError.UNREACHABLE]
     elif diag.capabilities is not None and not diag.capabilities.sentinel_exists:
-        return [VolumeError.SENTINEL_NOT_FOUND]
+        # When a volume has mount config and is not mounted, report
+        # "not mounted" instead of the misleading "sentinel not found" —
+        # the sentinel can only exist once the volume is mounted.
+        mount_caps = diag.capabilities.mount
+        if mount is not None and mount_caps is not None and mount_caps.mounted is False:
+            return [VolumeError.VOLUME_NOT_MOUNTED]
+        else:
+            return [VolumeError.SENTINEL_NOT_FOUND]
     elif diag.capabilities is not None and mount is not None:
         return _mount_errors(diag.capabilities.mount, mount)
     else:

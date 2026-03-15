@@ -7,6 +7,7 @@ from nbkp.config import (
     LuksEncryptionConfig,
     MountConfig,
 )
+from nbkp.preflight.output import _format_mount_status
 from nbkp.preflight.status import (
     MountCapabilities,
     VolumeCapabilities,
@@ -373,3 +374,66 @@ class TestDirectMountErrors:
             VolumeError.POLKIT_RULES_MISSING,
         }
         assert not systemd_errors.intersection(errors)
+
+
+# ── Runtime mount state fields ─────────────────────────────
+
+
+class TestMountCapabilitiesRuntimeState:
+    """New runtime state fields on MountCapabilities default to None."""
+
+    def test_defaults_to_none(self) -> None:
+        mc = MountCapabilities(resolved_backend="systemd")
+        assert mc.device_present is None
+        assert mc.luks_attached is None
+        assert mc.mounted is None
+
+    def test_explicit_values(self) -> None:
+        mc = MountCapabilities(
+            resolved_backend="systemd",
+            device_present=True,
+            luks_attached=True,
+            mounted=False,
+        )
+        assert mc.device_present is True
+        assert mc.luks_attached is True
+        assert mc.mounted is False
+
+
+# ── _format_mount_status ───────────────────────────────────
+
+
+class TestFormatMountStatus:
+    def test_none_caps_returns_empty(self) -> None:
+        assert _format_mount_status(None, _encrypted_mount()) == ""
+
+    def test_none_config_returns_empty(self) -> None:
+        mc = _base_mount_caps(device_present=True, mounted=True)
+        assert _format_mount_status(mc, None) == ""
+
+    def test_encrypted_all_true(self) -> None:
+        mc = _base_mount_caps(device_present=True, luks_attached=True, mounted=True)
+        result = _format_mount_status(mc, _encrypted_mount())
+        assert "\u2713device" in result
+        assert "\u2713luks" in result
+        assert "\u2713mounted" in result
+
+    def test_encrypted_all_false(self) -> None:
+        mc = _base_mount_caps(device_present=False, luks_attached=False, mounted=False)
+        result = _format_mount_status(mc, _encrypted_mount())
+        assert "\u2717device" in result
+        assert "\u2717luks" in result
+        assert "\u2717mounted" in result
+
+    def test_unencrypted_no_luks_column(self) -> None:
+        mc = _base_mount_caps(device_present=True, mounted=True)
+        result = _format_mount_status(mc, _unencrypted_mount())
+        assert "luks" not in result
+        assert "\u2713device" in result
+        assert "\u2713mounted" in result
+
+    def test_not_probed_items_omitted(self) -> None:
+        mc = _base_mount_caps(device_present=None, mounted=None)
+        result = _format_mount_status(mc, _unencrypted_mount())
+        assert "device" not in result
+        assert "mounted" not in result
