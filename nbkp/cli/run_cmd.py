@@ -134,6 +134,31 @@ def run(
                     "results": [],
                 }
                 typer.echo(json.dumps(data, indent=2))
+            else:
+                errored = (
+                    {
+                        slug: sorted(e.value for e in s.errors)
+                        for slug, s in sync_statuses.items()
+                        if not s.active
+                    }
+                    if strict
+                    else {
+                        slug: sorted(e.value for e in set(s.errors) - _INACTIVE_ERRORS)
+                        for slug, s in sync_statuses.items()
+                        if set(s.errors) - _INACTIVE_ERRORS
+                    }
+                )
+                lines = [
+                    f"  {slug}: {', '.join(errors)}" for slug, errors in errored.items()
+                ]
+                Console(stderr=True).print(
+                    f"\n[bold red]Aborting:[/bold red] preflight checks"
+                    f" found errors in {len(errored)}"
+                    f" sync{'s' if len(errored) != 1 else ''}:\n"
+                    + "\n".join(lines)
+                    + "\n\nRun [bold]nbkp troubleshoot[/bold] for"
+                    " detailed remediation steps."
+                )
             exit_code = 1
         else:
             use_spinner = output_format is OutputFormat.HUMAN and progress in (
