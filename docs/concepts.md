@@ -156,9 +156,28 @@ Checks include:
 - **Hard-link readiness** — Filesystem hard-link support, required directory structure
 - **`latest` symlink validity** — Must exist and point to `/dev/null` or an existing snapshot (see [The `latest` Symlink](#the-latest-symlink))
 - **Mount infrastructure** — For volumes with mount config: systemctl/systemd-escape availability, mount unit configured in systemd (fstab/native .mount), mount unit What/Where match nbkp config, polkit rules. For encrypted volumes: cryptsetup/systemd-cryptsetup availability, cryptsetup service configured, sudoers rules.
-- **Strict mode** — Optionally exit non-zero on any inactive sync
+- **Strict mode** — See below
 
 The `troubleshoot` command runs the same checks and displays step-by-step remediation instructions for each failure.
+
+#### Strict vs non-strict mode
+
+Pre-flight checks distinguish between two categories of errors:
+
+- **Inactive errors** — Missing sentinel files (`.nbkp-vol`, `.nbkp-src`, `.nbkp-dst`), unavailable volumes, and pending snapshots in dry-run mode. These represent expected situations where a sync is not ready to run (e.g. a removable drive is not plugged in, a remote host is unreachable, or a volume is not mounted at the expected path).
+- **Infrastructure errors** — Everything else: missing rsync, wrong filesystem type, broken symlinks, misconfigured systemd units, etc. These indicate real problems that need fixing.
+
+The `--strict/--no-strict` flag controls how inactive errors are treated:
+
+| | Non-strict (default) | Strict |
+|---|---|---|
+| **Inactive errors** | Sync is silently skipped; other syncs still run | Fatal — aborts the entire run before any sync executes |
+| **Infrastructure errors** | Fatal in both modes | Fatal |
+| **Exit code** | 0 if only inactive syncs were skipped | 1 if any sync is inactive |
+
+**Non-strict mode** (default) is designed for configs that include syncs which are not always runnable — for example, a backup to a USB drive that is only connected on weekends, or a remote server that is only reachable from a specific network. The run succeeds as long as all *active* syncs complete, and inactive ones are skipped without noise.
+
+**Strict mode** is useful for scheduled/automated runs where every sync is expected to be active. A missing sentinel or unreachable volume likely indicates a problem (drive not mounted, server down) rather than an expected absence, and the operator wants to be alerted.
 
 ### Sync Dependencies and Execution Order
 
