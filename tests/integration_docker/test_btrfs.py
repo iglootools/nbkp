@@ -7,8 +7,9 @@ sync-flow tests (rsync into staging → snapshot → verify).
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
 from pathlib import Path
+
+import pytest
 
 from nbkp.fsprotocol import Snapshot
 from nbkp.config import (
@@ -25,7 +26,6 @@ from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.sync.rsync import run_rsync
 from nbkp.sync.snapshots.btrfs import (
     create_snapshot,
-    delete_snapshot,
     prune_snapshots,
 )
 from nbkp.sync.snapshots.common import (
@@ -37,6 +37,19 @@ from nbkp.remote.testkit.docker import REMOTE_BTRFS_PATH
 from nbkp.sync.testkit.seed import create_seed_sentinels
 
 from tests._docker_fixtures import assert_sentinels_after_sync, ssh_exec
+from tests.integration_docker._btrfs_helpers import (
+    BtrfsEnv,
+    run_test_creates_readonly_snapshot,
+    run_test_deletes_subvolume,
+    run_test_dry_run_preserves_all,
+    run_test_lists_sorted_oldest_first,
+    run_test_prunes_oldest_beyond_limit,
+    run_test_returns_most_recent,
+    run_test_returns_none_when_empty,
+)
+
+
+# ── Remote BtrfsEnv fixture ─────────────────────────────────────────
 
 
 def _make_btrfs_config(
@@ -71,220 +84,90 @@ def _make_btrfs_config(
     return sync, config, resolved
 
 
-def _create_staging_subvolume(
+@pytest.fixture()
+def btrfs_env_remote(
+    tmp_path: Path,
     docker_ssh_endpoint: SshEndpoint,
-) -> None:
-    """Create the staging btrfs subvolume on the remote server."""
-    ssh_exec(
-        docker_ssh_endpoint,
-        f"btrfs subvolume create {REMOTE_BTRFS_PATH}/staging",
+    remote_btrfs_volume: RemoteVolume,
+) -> BtrfsEnv:
+    """BtrfsEnv backed by the Docker SSH container."""
+    sync, config, resolved = _make_btrfs_config(
+        str(tmp_path), remote_btrfs_volume, docker_ssh_endpoint
     )
-    ssh_exec(
-        docker_ssh_endpoint,
-        f"mkdir -p {REMOTE_BTRFS_PATH}/snapshots",
+
+    def _create_staging() -> None:
+        ssh_exec(
+            docker_ssh_endpoint,
+            f"btrfs subvolume create {REMOTE_BTRFS_PATH}/staging",
+        )
+        ssh_exec(
+            docker_ssh_endpoint,
+            f"mkdir -p {REMOTE_BTRFS_PATH}/snapshots",
+        )
+
+    def _seed_staging(content: str) -> None:
+        ssh_exec(
+            docker_ssh_endpoint,
+            f"echo '{content}' > {REMOTE_BTRFS_PATH}/staging/data.txt",
+        )
+
+    def _check_exists(path: str) -> bool:
+        return (
+            ssh_exec(docker_ssh_endpoint, f"test -d {path}", check=False).returncode
+            == 0
+        )
+
+    def _check_readonly(path: str) -> bool:
+        result = ssh_exec(
+            docker_ssh_endpoint,
+            f"btrfs property get {path} ro",
+            check=False,
+        )
+        return "ro=true" in result.stdout
+
+    return BtrfsEnv(
+        sync=sync,
+        config=config,
+        resolved=resolved,
+        create_staging=_create_staging,
+        seed_staging=_seed_staging,
+        check_exists=_check_exists,
+        check_readonly=_check_readonly,
     )
 
 
-def _seed_staging(
-    docker_ssh_endpoint: SshEndpoint,
-    content: str = "test data",
-) -> None:
-    """Put some data in the staging subvolume."""
-    ssh_exec(
-        docker_ssh_endpoint,
-        f"echo '{content}' > {REMOTE_BTRFS_PATH}/staging/data.txt",
-    )
+# ── Component-level tests (delegated to shared helpers) ─────────────
 
 
 class TestCreateSnapshot:
-    def test_creates_readonly_snapshot(
-        self,
-        tmp_path: Path,
-        docker_ssh_endpoint: SshEndpoint,
-        remote_btrfs_volume: RemoteVolume,
-    ) -> None:
-        sync, config, resolved = _make_btrfs_config(
-            str(tmp_path), remote_btrfs_volume, docker_ssh_endpoint
-        )
-        _create_staging_subvolume(docker_ssh_endpoint)
-        _seed_staging(docker_ssh_endpoint)
-
-        snapshot_path = create_snapshot(sync, config, resolved_endpoints=resolved)
-
-        # Verify snapshot exists
-        check = ssh_exec(docker_ssh_endpoint, f"test -d {snapshot_path}")
-        assert check.returncode == 0
-
-        # Verify it's readonly
-        ro = ssh_exec(
-            docker_ssh_endpoint,
-            f"btrfs property get {snapshot_path} ro",
-        )
-        assert "ro=true" in ro.stdout
+    def test_creates_readonly_snapshot(self, btrfs_env_remote: BtrfsEnv) -> None:
+        run_test_creates_readonly_snapshot(btrfs_env_remote)
 
 
 class TestListSnapshots:
-    def test_lists_sorted_oldest_first(
-        self,
-        tmp_path: Path,
-        docker_ssh_endpoint: SshEndpoint,
-        remote_btrfs_volume: RemoteVolume,
-    ) -> None:
-        sync, config, resolved = _make_btrfs_config(
-            str(tmp_path), remote_btrfs_volume, docker_ssh_endpoint
-        )
-        _create_staging_subvolume(docker_ssh_endpoint)
-        _seed_staging(docker_ssh_endpoint)
-
-        now1 = datetime(2024, 1, 1, tzinfo=timezone.utc)
-        now2 = datetime(2024, 1, 2, tzinfo=timezone.utc)
-
-        create_snapshot(sync, config, now=now1, resolved_endpoints=resolved)
-        create_snapshot(sync, config, now=now2, resolved_endpoints=resolved)
-
-        snapshots = list_snapshots(sync, config, resolved)
-        assert len(snapshots) == 2
-        # Oldest first
-        assert "2024-01-01" in snapshots[0].name
-        assert "2024-01-02" in snapshots[1].name
+    def test_lists_sorted_oldest_first(self, btrfs_env_remote: BtrfsEnv) -> None:
+        run_test_lists_sorted_oldest_first(btrfs_env_remote)
 
 
 class TestGetLatestSnapshot:
-    def test_returns_most_recent(
-        self,
-        tmp_path: Path,
-        docker_ssh_endpoint: SshEndpoint,
-        remote_btrfs_volume: RemoteVolume,
-    ) -> None:
-        sync, config, resolved = _make_btrfs_config(
-            str(tmp_path), remote_btrfs_volume, docker_ssh_endpoint
-        )
-        _create_staging_subvolume(docker_ssh_endpoint)
-        _seed_staging(docker_ssh_endpoint)
+    def test_returns_most_recent(self, btrfs_env_remote: BtrfsEnv) -> None:
+        run_test_returns_most_recent(btrfs_env_remote)
 
-        now1 = datetime(2024, 1, 1, tzinfo=timezone.utc)
-        now2 = datetime(2024, 1, 2, tzinfo=timezone.utc)
-
-        create_snapshot(sync, config, now=now1, resolved_endpoints=resolved)
-        create_snapshot(sync, config, now=now2, resolved_endpoints=resolved)
-
-        latest = get_latest_snapshot(sync, config, resolved)
-        assert latest is not None
-        assert "2024-01-02" in latest.name
-
-    def test_returns_none_when_empty(
-        self,
-        tmp_path: Path,
-        docker_ssh_endpoint: SshEndpoint,
-        remote_btrfs_volume: RemoteVolume,
-    ) -> None:
-        sync, config, resolved = _make_btrfs_config(
-            str(tmp_path), remote_btrfs_volume, docker_ssh_endpoint
-        )
-        latest = get_latest_snapshot(sync, config, resolved)
-        assert latest is None
+    def test_returns_none_when_empty(self, btrfs_env_remote: BtrfsEnv) -> None:
+        run_test_returns_none_when_empty(btrfs_env_remote)
 
 
 class TestDeleteSnapshot:
-    def test_deletes_subvolume(
-        self,
-        tmp_path: Path,
-        docker_ssh_endpoint: SshEndpoint,
-        remote_btrfs_volume: RemoteVolume,
-    ) -> None:
-        sync, config, resolved = _make_btrfs_config(
-            str(tmp_path), remote_btrfs_volume, docker_ssh_endpoint
-        )
-        _create_staging_subvolume(docker_ssh_endpoint)
-        _seed_staging(docker_ssh_endpoint)
-
-        snapshot_path = create_snapshot(sync, config, resolved_endpoints=resolved)
-
-        # Delete it
-        delete_snapshot(snapshot_path, remote_btrfs_volume, resolved)
-
-        # Verify it's gone
-        check = ssh_exec(
-            docker_ssh_endpoint,
-            f"test -d {snapshot_path}",
-            check=False,
-        )
-        assert check.returncode != 0
+    def test_deletes_subvolume(self, btrfs_env_remote: BtrfsEnv) -> None:
+        run_test_deletes_subvolume(btrfs_env_remote)
 
 
 class TestPruneSnapshots:
-    def test_prunes_oldest_beyond_limit(
-        self,
-        tmp_path: Path,
-        docker_ssh_endpoint: SshEndpoint,
-        remote_btrfs_volume: RemoteVolume,
-    ) -> None:
-        sync, config, resolved = _make_btrfs_config(
-            str(tmp_path), remote_btrfs_volume, docker_ssh_endpoint
-        )
-        _create_staging_subvolume(docker_ssh_endpoint)
-        _seed_staging(docker_ssh_endpoint)
+    def test_prunes_oldest_beyond_limit(self, btrfs_env_remote: BtrfsEnv) -> None:
+        run_test_prunes_oldest_beyond_limit(btrfs_env_remote)
 
-        # Create 3 snapshots
-        names = []
-        for i in range(3):
-            now = datetime(2024, 1, 1 + i, tzinfo=timezone.utc)
-            path = create_snapshot(
-                sync,
-                config,
-                now=now,
-                resolved_endpoints=resolved,
-            )
-            snapshot = Snapshot.from_path(path)
-            names.append(snapshot.name)
-
-        # Point latest to the newest
-        update_latest_symlink(
-            sync, config, Snapshot.from_name(names[-1]), resolved_endpoints=resolved
-        )
-
-        # Prune to keep 1
-        deleted = prune_snapshots(sync, config, 1, resolved_endpoints=resolved)
-        assert len(deleted) == 2
-
-        remaining = list_snapshots(sync, config, resolved)
-        assert len(remaining) == 1
-        assert names[-1] == remaining[0].name
-
-    def test_dry_run_preserves_all(
-        self,
-        tmp_path: Path,
-        docker_ssh_endpoint: SshEndpoint,
-        remote_btrfs_volume: RemoteVolume,
-    ) -> None:
-        sync, config, resolved = _make_btrfs_config(
-            str(tmp_path), remote_btrfs_volume, docker_ssh_endpoint
-        )
-        _create_staging_subvolume(docker_ssh_endpoint)
-        _seed_staging(docker_ssh_endpoint)
-
-        for i in range(3):
-            now = datetime(2024, 1, 1 + i, tzinfo=timezone.utc)
-            path = create_snapshot(
-                sync,
-                config,
-                now=now,
-                resolved_endpoints=resolved,
-            )
-        snapshot = Snapshot.from_path(path)
-        update_latest_symlink(sync, config, snapshot, resolved_endpoints=resolved)
-
-        deleted = prune_snapshots(
-            sync,
-            config,
-            1,
-            dry_run=True,
-            resolved_endpoints=resolved,
-        )
-        assert len(deleted) == 2
-
-        remaining = list_snapshots(sync, config, resolved)
-        assert len(remaining) == 3
+    def test_dry_run_preserves_all(self, btrfs_env_remote: BtrfsEnv) -> None:
+        run_test_dry_run_preserves_all(btrfs_env_remote)
 
 
 # ── Sync-flow tests (rsync into staging → snapshot → verify) ────────
