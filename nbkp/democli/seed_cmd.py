@@ -18,15 +18,7 @@ from rich.syntax import Syntax
 from rich.text import Text
 
 from ..config import (
-    BtrfsSnapshotConfig,
-    Config,
-    HardLinkSnapshotConfig,
-    LocalVolume,
-    RemoteVolume,
     RsyncOptions,
-    SshEndpoint,
-    SyncConfig,
-    SyncEndpoint,
 )
 
 # Docker-dependent imports are deferred to seed --docker.
@@ -36,8 +28,6 @@ try:
         BASTION_CONTAINER_NAME,
         STORAGE_CONTAINER_NAME,
         DOCKER_DIR,
-        REMOTE_BACKUP_PATH,
-        REMOTE_BTRFS_PATH,
         build_docker_image,
         check_docker,
         create_docker_network,
@@ -53,7 +43,8 @@ try:
 except ImportError:
     _HAS_DOCKER = False
 from ..sync.testkit.seed import (
-    SEED_EXCLUDE_FILTERS,
+    build_chain_config,
+    build_local_chain_config,
     create_seed_sentinels,
     seed_volume,
 )
@@ -175,171 +166,29 @@ def seed(
             wait_for_ssh(storage_endpoint)
 
     # Config — chain layout matching integration test
-    hl_dst = HardLinkSnapshotConfig(enabled=True, max_snapshots=5)
-
-    ssh_endpoints: dict[str, SshEndpoint] = {}
-    volumes: dict[str, LocalVolume | RemoteVolume] = {
-        "src-local-bare": LocalVolume(
-            slug="src-local-bare",
-            path=str(tmp / "src-local-bare"),
-        ),
-        "stage-local-hl-snapshots": LocalVolume(
-            slug="stage-local-hl-snapshots",
-            path=str(tmp / "stage-local-hl-snapshots"),
-        ),
-        "dst-local-bare": LocalVolume(
-            slug="dst-local-bare",
-            path=str(tmp / "dst-local-bare"),
-        ),
-    }
-    sync_endpoints: dict[str, SyncEndpoint] = {
-        "ep-src-local": SyncEndpoint(
-            slug="ep-src-local",
-            volume="src-local-bare",
-        ),
-        "ep-stage-local-hl": SyncEndpoint(
-            slug="ep-stage-local-hl",
-            volume="stage-local-hl-snapshots",
-            hard_link_snapshots=hl_dst,
-        ),
-        "ep-dst-local": SyncEndpoint(
-            slug="ep-dst-local",
-            volume="dst-local-bare",
-        ),
-    }
-    syncs: dict[str, SyncConfig] = {
-        # local→local, HL destination
-        "step-1": SyncConfig(
-            slug="step-1",
-            source="ep-src-local",
-            destination="ep-stage-local-hl",
-            rsync_options=rsync_opts,
-            filters=SEED_EXCLUDE_FILTERS,
-        ),
-    }
-
     if docker:
-        assert storage_endpoint is not None
         assert bastion_endpoint is not None
-        btrfs_snapshots_path = f"{REMOTE_BTRFS_PATH}/snapshots"
-        btrfs_bare_path = f"{REMOTE_BTRFS_PATH}/bare"
-        btrfs_dst = BtrfsSnapshotConfig(enabled=True, max_snapshots=5)
-
-        ssh_endpoints["bastion"] = bastion_endpoint
-        ssh_endpoints["storage"] = storage_endpoint
-        ssh_endpoints["via-bastion"] = create_test_ssh_endpoint(
+        proxied_endpoint = create_test_ssh_endpoint(
             "via-bastion",
             "backup-server",
             22,
             private_key,
             proxy_jump="bastion",
         )
-        volumes.update(
-            {
-                "stage-remote-bare": RemoteVolume(
-                    slug="stage-remote-bare",
-                    ssh_endpoint="via-bastion",
-                    path=f"{REMOTE_BACKUP_PATH}/bare",
-                ),
-                "stage-remote-btrfs-snapshots": RemoteVolume(
-                    slug="stage-remote-btrfs-snapshots",
-                    ssh_endpoint="via-bastion",
-                    path=btrfs_snapshots_path,
-                ),
-                "stage-remote-btrfs-bare": RemoteVolume(
-                    slug="stage-remote-btrfs-bare",
-                    ssh_endpoint="via-bastion",
-                    path=btrfs_bare_path,
-                ),
-                "stage-remote-hl-snapshots": RemoteVolume(
-                    slug="stage-remote-hl-snapshots",
-                    ssh_endpoint="via-bastion",
-                    path=f"{REMOTE_BACKUP_PATH}/hl",
-                ),
-            }
-        )
-        sync_endpoints.update(
-            {
-                "ep-remote-bare": SyncEndpoint(
-                    slug="ep-remote-bare",
-                    volume="stage-remote-bare",
-                ),
-                "ep-remote-btrfs": SyncEndpoint(
-                    slug="ep-remote-btrfs",
-                    volume="stage-remote-btrfs-snapshots",
-                    btrfs_snapshots=btrfs_dst,
-                ),
-                "ep-remote-btrfs-bare": SyncEndpoint(
-                    slug="ep-remote-btrfs-bare",
-                    volume="stage-remote-btrfs-bare",
-                ),
-                "ep-remote-hl": SyncEndpoint(
-                    slug="ep-remote-hl",
-                    volume="stage-remote-hl-snapshots",
-                    hard_link_snapshots=hl_dst,
-                ),
-            }
-        )
-        syncs.update(
-            {
-                # local→remote (bastion), bare dest
-                "step-2": SyncConfig(
-                    slug="step-2",
-                    source="ep-stage-local-hl",
-                    destination="ep-remote-bare",
-                    rsync_options=rsync_opts,
-                    filters=SEED_EXCLUDE_FILTERS,
-                ),
-                # remote→remote (bastion), btrfs dest
-                "step-3": SyncConfig(
-                    slug="step-3",
-                    source="ep-remote-bare",
-                    destination="ep-remote-btrfs",
-                    rsync_options=rsync_opts,
-                    filters=SEED_EXCLUDE_FILTERS,
-                ),
-                # remote→remote (bastion), bare on btrfs
-                "step-4": SyncConfig(
-                    slug="step-4",
-                    source="ep-remote-btrfs",
-                    destination="ep-remote-btrfs-bare",
-                    rsync_options=rsync_opts,
-                    filters=SEED_EXCLUDE_FILTERS,
-                ),
-                # remote→remote (bastion), HL dest
-                "step-5": SyncConfig(
-                    slug="step-5",
-                    source="ep-remote-btrfs-bare",
-                    destination="ep-remote-hl",
-                    rsync_options=rsync_opts,
-                    filters=SEED_EXCLUDE_FILTERS,
-                ),
-                # remote (bastion)→local, bare dest
-                "step-6": SyncConfig(
-                    slug="step-6",
-                    source="ep-remote-hl",
-                    destination="ep-dst-local",
-                    rsync_options=rsync_opts,
-                    filters=SEED_EXCLUDE_FILTERS,
-                ),
-            }
+        config = build_chain_config(
+            tmp,
+            bastion_endpoint,
+            proxied_endpoint,
+            rsync_options=rsync_opts,
+            max_snapshots=5,
         )
     else:
-        # Local-only: step-2 goes directly to dst
-        syncs["step-2"] = SyncConfig(
-            slug="step-2",
-            source="ep-stage-local-hl",
-            destination="ep-dst-local",
+        # Local-only: 2-step chain (src → HL → dst)
+        config = build_local_chain_config(
+            tmp,
             rsync_options=rsync_opts,
-            filters=SEED_EXCLUDE_FILTERS,
+            max_snapshots=5,
         )
-
-    config = Config(
-        ssh_endpoints=ssh_endpoints,
-        volumes=volumes,
-        sync_endpoints=sync_endpoints,
-        syncs=syncs,
-    )
 
     # Create sentinels and seed data
     size_bytes = big_file_size * 1024 * 1024

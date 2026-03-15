@@ -15,6 +15,13 @@ import typer
 from ...config import SshConnectionOptions, SshEndpoint
 from ...fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
 from ...remote.fabricssh import run_remote_command
+from .constants import (  # noqa: F401
+    LUKS_MAPPER_NAME,
+    LUKS_PASSPHRASE,
+    REMOTE_BACKUP_PATH,
+    REMOTE_BTRFS_PATH,
+    REMOTE_ENCRYPTED_PATH,
+)
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"
 STORAGE_CONTAINER_NAME = "nbkp-demo"
@@ -22,17 +29,7 @@ BASTION_CONTAINER_NAME = "nbkp-demo-bastion"
 _IMAGE_TAG = "nbkp-demo-server:latest"
 _NETWORK_NAME = "nbkp-demo-net"
 
-# ── Standard remote paths inside the test container ──────────
-
-REMOTE_BACKUP_PATH = "/srv/backups"
-REMOTE_BTRFS_PATH = "/srv/btrfs-backups"
-REMOTE_ENCRYPTED_PATH = "/srv/btrfs-encrypted-backups"
 SSH_AUTHORIZED_KEYS_PATH = "/mnt/ssh-authorized-keys"
-
-# ── LUKS test constants ──────────────────────────────────────
-
-LUKS_PASSPHRASE = "test-passphrase"
-LUKS_MAPPER_NAME = "test-encrypted"
 
 
 @dataclass(frozen=True)

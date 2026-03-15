@@ -30,10 +30,11 @@ from nbkp.mount.lifecycle import mount_volumes, umount_volumes
 from nbkp.preflight import check_all_syncs
 from nbkp.sync.runner import run_all_syncs
 
+from nbkp.sync.testkit.seed import build_chain_config
+
 from tests._docker_fixtures import LUKS_PASSPHRASE
 from tests.e2e_sync_docker._chain_helpers import (
     assert_chain_results,
-    build_chain_config,
     setup_chain,
 )
 

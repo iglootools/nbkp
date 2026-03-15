@@ -16,9 +16,10 @@ from nbkp.config import (
 )
 from nbkp.scriptgen import ScriptOptions, generate_script
 
+from nbkp.sync.testkit.seed import build_chain_config
+
 from tests.e2e_sync_docker._chain_helpers import (
     assert_chain_results,
-    build_chain_config,
     setup_chain,
 )
 
