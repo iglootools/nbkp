@@ -20,7 +20,7 @@ from .constants import (  # noqa: F401
     LUKS_PASSPHRASE,
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_PATH,
-    REMOTE_ENCRYPTED_PATH,
+    REMOTE_BTRFS_ENCRYPTED_PATH,
 )
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"
@@ -189,6 +189,13 @@ def start_storage_container(
         name=STORAGE_CONTAINER_NAME,
         privileged=True,
         ports={"22/tcp": None},
+        environment={
+            "NBKP_BACKUP_PATH": REMOTE_BACKUP_PATH,
+            "NBKP_BTRFS_PATH": REMOTE_BTRFS_PATH,
+            "NBKP_BTRFS_ENCRYPTED_PATH": REMOTE_BTRFS_ENCRYPTED_PATH,
+            "NBKP_LUKS_PASSPHRASE": LUKS_PASSPHRASE,
+            "NBKP_LUKS_MAPPER_NAME": LUKS_MAPPER_NAME,
+        },
         volumes={
             str(pub_key): {
                 "bind": SSH_AUTHORIZED_KEYS_PATH,

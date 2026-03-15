@@ -9,7 +9,7 @@ heavy dependencies.
 
 REMOTE_BACKUP_PATH = "/srv/backups"
 REMOTE_BTRFS_PATH = "/srv/btrfs-backups"
-REMOTE_ENCRYPTED_PATH = "/srv/btrfs-encrypted-backups"
+REMOTE_BTRFS_ENCRYPTED_PATH = "/srv/btrfs-encrypted-backups"
 
 # ── LUKS test constants ──────────────────────────────────────
 

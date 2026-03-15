@@ -24,7 +24,7 @@ from ...remote.testkit.constants import (
     LUKS_MAPPER_NAME,
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_PATH,
-    REMOTE_ENCRYPTED_PATH,
+    REMOTE_BTRFS_ENCRYPTED_PATH,
 )
 from ...fsprotocol import (
     DESTINATION_SENTINEL,
@@ -361,7 +361,7 @@ def build_chain_config(
             slug="stage-remote-btrfs-snapshots",
             ssh_endpoint="via-bastion",
             path=(
-                REMOTE_ENCRYPTED_PATH
+                REMOTE_BTRFS_ENCRYPTED_PATH
                 if luks_uuid is not None
                 else f"{REMOTE_BTRFS_PATH}/snapshots"
             ),

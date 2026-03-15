@@ -28,7 +28,7 @@ from nbkp.remote.testkit.docker import (  # noqa: F401
     LUKS_PASSPHRASE,
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_PATH,
-    REMOTE_ENCRYPTED_PATH,
+    REMOTE_BTRFS_ENCRYPTED_PATH,
     LuksMetadata,
     create_sentinels,
     create_test_ssh_endpoint,
@@ -202,6 +202,11 @@ def docker_container(
             "/mnt/ssh-authorized-keys",
             "ro",
         )
+        .with_env("NBKP_BACKUP_PATH", REMOTE_BACKUP_PATH)
+        .with_env("NBKP_BTRFS_PATH", REMOTE_BTRFS_PATH)
+        .with_env("NBKP_BTRFS_ENCRYPTED_PATH", REMOTE_BTRFS_ENCRYPTED_PATH)
+        .with_env("NBKP_LUKS_PASSPHRASE", LUKS_PASSPHRASE)
+        .with_env("NBKP_LUKS_MAPPER_NAME", LUKS_MAPPER_NAME)
         .with_kwargs(privileged=True)
         .waiting_for(wait_strategy)
     )
@@ -355,7 +360,7 @@ def remote_encrypted_volume(luks_uuid: str) -> RemoteVolume:
     return RemoteVolume(
         slug="test-encrypted",
         ssh_endpoint="test-server",
-        path=REMOTE_ENCRYPTED_PATH,
+        path=REMOTE_BTRFS_ENCRYPTED_PATH,
         mount=MountConfig(
             strategy="direct",
             device_uuid=luks_uuid,
@@ -373,7 +378,7 @@ def remote_encrypted_volume_unencrypted(luks_uuid: str) -> RemoteVolume:
     return RemoteVolume(
         slug="test-unencrypted-mount",
         ssh_endpoint="test-server",
-        path=REMOTE_ENCRYPTED_PATH,
+        path=REMOTE_BTRFS_ENCRYPTED_PATH,
         mount=MountConfig(device_uuid=luks_uuid),
     )
 
@@ -475,13 +480,13 @@ def _cleanup_remote(
     # Mount if not already mounted
     run(
         f"sudo mount -o user_subvol_rm_allowed"
-        f" /dev/mapper/{LUKS_MAPPER_NAME} {REMOTE_ENCRYPTED_PATH}"
+        f" /dev/mapper/{LUKS_MAPPER_NAME} {REMOTE_BTRFS_ENCRYPTED_PATH}"
         f" 2>/dev/null || true"
     )
     # Clean btrfs artifacts on the encrypted volume (chain test puts
     # btrfs subvolumes here).  Same pattern as /srv/btrfs-backups
     # cleanup above.
-    enc_snap_base = f"{REMOTE_ENCRYPTED_PATH}/snapshots"
+    enc_snap_base = f"{REMOTE_BTRFS_ENCRYPTED_PATH}/snapshots"
     enc_snaps_result = ssh_exec(
         server,
         f"ls {enc_snap_base}/snapshots 2>/dev/null || true",
@@ -505,8 +510,10 @@ def _cleanup_remote(
     run(f"rm -f {enc_snap_base}/latest 2>/dev/null || true")
     run(f"rm -rf {enc_snap_base}/snapshots 2>/dev/null || true")
     run(f"btrfs subvolume delete {enc_snap_base} 2>/dev/null || true")
-    run(f"rm -rf {REMOTE_ENCRYPTED_PATH}/bare 2>/dev/null || true")
-    run(f"find {REMOTE_ENCRYPTED_PATH} -name '.nbkp-*' -delete 2>/dev/null || true")
+    run(f"rm -rf {REMOTE_BTRFS_ENCRYPTED_PATH}/bare 2>/dev/null || true")
+    run(
+        f"find {REMOTE_BTRFS_ENCRYPTED_PATH} -name '.nbkp-*' -delete 2>/dev/null || true"
+    )
     # Umount and close LUKS
-    run(f"sudo umount {REMOTE_ENCRYPTED_PATH} 2>/dev/null || true")
+    run(f"sudo umount {REMOTE_BTRFS_ENCRYPTED_PATH} 2>/dev/null || true")
     run(f"sudo cryptsetup close {LUKS_MAPPER_NAME} 2>/dev/null || true")
