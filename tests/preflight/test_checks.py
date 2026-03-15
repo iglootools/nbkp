@@ -1129,7 +1129,7 @@ class TestCheckSync:
         assert status.active is False
         assert SyncError.DESTINATION_STAT_NOT_FOUND in status.errors
         assert SyncError.DESTINATION_NOT_BTRFS not in status.errors
-        assert SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.errors
+        assert SyncError.DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME not in status.errors
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.remote.dispatch.subprocess.run")
@@ -1295,6 +1295,8 @@ class TestCheckSync:
         src.mkdir()
         dst.mkdir()
         self._setup_active_sentinels(src, dst)
+        # staging/ must exist for the subvolume check to run
+        (dst / "backup" / "staging").mkdir(parents=True)
 
         src_vol = LocalVolume(slug="src", path=str(src))
         dst_vol = LocalVolume(slug="dst", path=str(dst))
@@ -1335,7 +1337,7 @@ class TestCheckSync:
 
         status = check_sync(sync, config)
         assert status.active is False
-        assert SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME in status.errors
+        assert SyncError.DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME in status.errors
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.remote.dispatch.subprocess.run")
@@ -1980,7 +1982,7 @@ class TestCheckSyncRemoteCommands:
 
         status = check_sync(sync, config, _make_resolved(config))
         assert status.active is False
-        assert SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME in status.errors
+        assert SyncError.DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME in status.errors
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
     @patch("nbkp.preflight.volume_checks.run_remote_command")
@@ -2653,7 +2655,7 @@ class TestCheckHardLinkDest:
         status = check_sync(sync, config)
         assert SyncError.DESTINATION_BTRFS_NOT_FOUND not in status.errors
         assert SyncError.DESTINATION_NOT_BTRFS not in status.errors
-        assert SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME not in status.errors
+        assert SyncError.DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME not in status.errors
         assert SyncError.DESTINATION_TMP_NOT_FOUND not in status.errors
 
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")

@@ -120,11 +120,16 @@ def _check_btrfs_diagnostics(
     ):
         return None
 
+    staging_subdir = (
+        f"{endpoint.subdir}/{STAGING_DIR}" if endpoint.subdir else STAGING_DIR
+    )
     staging_path = f"{dst_ep}/{STAGING_DIR}"
     staging_exists = _check_directory_exists(volume, staging_path, resolved_endpoints)
     return BtrfsSubvolumeDiagnostics(
-        is_subvolume=_check_btrfs_subvolume(
-            volume, endpoint.subdir, resolved_endpoints
+        is_subvolume=(
+            _check_btrfs_subvolume(volume, staging_subdir, resolved_endpoints)
+            if staging_exists
+            else False
         ),
         staging_dir_exists=staging_exists,
         staging_dir_writable=(

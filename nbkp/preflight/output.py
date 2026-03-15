@@ -83,7 +83,7 @@ _DIAGNOSTIC_VISIBLE_SYNC_ERRORS: frozenset[SyncError] = frozenset(
         SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND,
         SyncError.DESTINATION_SENTINEL_NOT_FOUND,
         SyncError.DESTINATION_ENDPOINT_NOT_WRITABLE,
-        SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME,
+        SyncError.DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME,
         SyncError.DESTINATION_TMP_NOT_FOUND,
         SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND,
         SyncError.DESTINATION_LATEST_NOT_FOUND,
@@ -235,8 +235,8 @@ def _format_destination_diagnostics(ss: SyncStatus) -> str:
         _check(diag.endpoint_writable, "writable"),
         *(
             [
-                _check(diag.btrfs.is_subvolume, "subvolume"),
                 _check(diag.btrfs.staging_dir_exists, "staging/"),
+                _check(diag.btrfs.is_subvolume, "staging-subvolume"),
             ]
             if diag.btrfs is not None
             else []
@@ -684,7 +684,7 @@ def _print_sync_error_fix(
             _print_cmd(console, _UTIL_LINUX_INSTALL, indent=3)
         case SyncError.DESTINATION_NOT_BTRFS:
             console.print(f"{p2}The destination is not on a btrfs filesystem.")
-        case SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME:
+        case SyncError.DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             cmds = [
                 f"sudo btrfs subvolume create {path}/{STAGING_DIR}",

@@ -709,7 +709,7 @@ def troubleshoot_data(
             errors=[
                 SyncError.DESTINATION_BTRFS_NOT_FOUND,
                 SyncError.DESTINATION_NOT_BTRFS,
-                SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME,
+                SyncError.DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME,
             ],
         ),
         "btrfs-mount-issues": SyncStatus(

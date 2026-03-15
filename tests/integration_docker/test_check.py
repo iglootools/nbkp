@@ -214,10 +214,10 @@ class TestSyncCheckBtrfs:
         docker_ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        # Create a regular directory (not a subvolume)
+        # Create a regular directory with staging/ (not a subvolume)
         ssh_exec(
             docker_ssh_endpoint,
-            f"mkdir -p {REMOTE_BTRFS_PATH}/not-a-subvol",
+            f"mkdir -p {REMOTE_BTRFS_PATH}/not-a-subvol/staging",
         )
         create_sentinels(
             docker_ssh_endpoint,
@@ -269,7 +269,7 @@ class TestSyncCheckBtrfs:
             resolved_endpoints=resolved,
         )
         assert status.active is False
-        assert SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME in status.errors
+        assert SyncError.DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME in status.errors
 
         # Cleanup
         ssh_exec(

@@ -67,7 +67,7 @@ class SyncError(str, enum.Enum):
         f"{DESTINATION_SENTINEL} destination sentinel not found"
     )
     DESTINATION_NOT_BTRFS = "destination not on btrfs filesystem"
-    DESTINATION_NOT_BTRFS_SUBVOLUME = "destination endpoint is not a btrfs subvolume"
+
     DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM = (
         "destination not mounted with user_subvol_rm_allowed"
     )
@@ -83,6 +83,9 @@ class SyncError(str, enum.Enum):
     DESTINATION_ENDPOINT_NOT_WRITABLE = "destination endpoint directory not writable"
     DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE = (
         f"destination {SNAPSHOTS_DIR}/ directory not writable"
+    )
+    DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME = (
+        "destination staging/ is not a btrfs subvolume"
     )
     DESTINATION_STAGING_DIR_NOT_WRITABLE = (
         f"destination {STAGING_DIR}/ directory not writable"
@@ -401,6 +404,8 @@ class BtrfsSubvolumeDiagnostics(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     is_subvolume: bool
+    """Whether ``staging/`` is a btrfs subvolume (inode 256).
+    ``False`` when staging does not exist."""
     staging_dir_exists: bool
     staging_dir_writable: bool | None = None
     """``None`` when staging dir does not exist."""
@@ -673,8 +678,8 @@ def _btrfs_stat_errors(
     """Translate btrfs filesystem/subvolume diagnostics (requires stat)."""
     if not caps.is_btrfs_filesystem:
         return [SyncError.DESTINATION_NOT_BTRFS]
-    elif diag.btrfs is None or not diag.btrfs.is_subvolume:
-        return [SyncError.DESTINATION_NOT_BTRFS_SUBVOLUME]
+    elif diag.btrfs is None:
+        return [SyncError.DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME]
     else:
         return [
             *(
@@ -683,6 +688,11 @@ def _btrfs_stat_errors(
                 else []
             ),
             *_btrfs_staging_errors(diag),
+            *(
+                [SyncError.DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME]
+                if diag.btrfs.staging_dir_exists and not diag.btrfs.is_subvolume
+                else []
+            ),
             *_snapshot_dirs_errors(diag),
         ]
 
