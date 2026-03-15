@@ -31,7 +31,7 @@ from nbkp.sync.pipeline import check_and_run
 from nbkp.sync.testkit.seed import build_chain_config
 
 from tests._docker_fixtures import LUKS_PASSPHRASE
-from tests.e2e_sync_docker._chain_helpers import (
+from tests.e2e_docker._chain_helpers import (
     assert_chain_results,
     setup_chain,
 )

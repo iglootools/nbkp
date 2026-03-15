@@ -36,8 +36,8 @@ mise run depgraph           # regenerate Module Overview in docs/architecture.md
 mise run depgraph-check     # check Module Overview is up to date
 
 # Using Poetry syntax directly
-poetry run pytest tests/ --ignore=tests/e2e_sync_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -v  # Unit tests only
-poetry run pytest tests/e2e_sync_docker/ -v                                   # End-to-end sync tests
+poetry run pytest tests/ --ignore=tests/e2e_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -v  # Unit tests only
+poetry run pytest tests/e2e_docker/ -v                                   # End-to-end sync tests
 poetry run pytest tests/integration_docker/ tests/integration_fs/ -v    # Integration tests
 poetry run pytest tests/ -v                                             # All tests
 poetry run ruff format .                                                # formatting

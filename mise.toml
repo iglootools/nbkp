@@ -89,7 +89,7 @@ run = [
 # Test Tasks
 [tasks.test-unit]
 description = "Run unit tests (no Docker, no external dependencies)"
-run = "poetry run pytest tests/ --ignore=tests/e2e_sync_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -v"
+run = "poetry run pytest tests/ --ignore=tests/e2e_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -v"
 
 [tasks.test-e2e]
 description = "Run end-to-end sync tests (Docker)"
@@ -99,7 +99,7 @@ run = [
 
 [tasks.test-e2e-docker]
 description = "Run end-to-end sync tests (Docker only)"
-run = "poetry run pytest tests/e2e_sync_docker/ -v"
+run = "poetry run pytest tests/e2e_docker/ -v"
 
 [tasks.test-integration]
 description = "Run all integration tests (Docker + filesystem)"
