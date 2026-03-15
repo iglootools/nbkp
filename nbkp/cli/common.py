@@ -19,15 +19,10 @@ from ..config import (
     resolve_all_endpoints,
 )
 from ..credentials import build_passphrase_fn
-from ..mount.detection import resolve_mount_strategy
-from ..mount.lifecycle import (
-    MountResult,
-    UmountResult,
-    mount_volumes,
-    umount_volumes,
-)
-from ..mount.observation import MountObservation, build_mount_observations
+from ..mount.lifecycle import MountResult, UmountResult
+from ..mount.observation import MountObservation
 from ..mount.strategy import MountStrategy
+from ..orchestration import managed_mount as _orchestration_managed_mount
 from ..output import (
     OutputFormat,
     print_config_error,
@@ -232,6 +227,9 @@ def managed_mount(
 ]:
     """Context manager that mounts volumes on entry and umounts on exit.
 
+    Thin wrapper around :func:`orchestration.managed_mount` that adds
+    Rich display callbacks and credential management.
+
     Yields a tuple of ``(mount_strategy, mount_observations)``.  When
     mounting is skipped both dicts are empty.  Observations capture
     the runtime state discovered during mount so that preflight checks
@@ -248,93 +246,65 @@ def managed_mount(
     output_format:
         Controls whether Rich spinner / result lines are printed.
     """
-    has_mount_config = any(
-        getattr(v, "mount", None) is not None for v in cfg.volumes.values()
+    passphrase_fn, cache = build_passphrase_fn(
+        cfg.credential_provider, cfg.credential_command
     )
-    do_mount = mount and has_mount_config
-    do_umount = do_mount and umount
 
-    mount_strategy: dict[str, MountStrategy] = {}
-    mount_observations: dict[str, MountObservation] = {}
+    # ── Rich mount callbacks ───────────────────────────────────
+    console_mount = Console()
+    mount_status = None
 
-    if do_mount:
-        console_mount = Console()
-        passphrase_fn, cache = build_passphrase_fn(
-            cfg.credential_provider, cfg.credential_command
-        )
-        mount_strategy = resolve_mount_strategy(cfg, resolved, names=None)
+    def on_mount_start(slug: str) -> None:
+        nonlocal mount_status
+        if output_format is OutputFormat.HUMAN:
+            mount_status = console_mount.status(f"Mounting {slug}...")
+            mount_status.start()
 
-        mount_status = None
+    def on_mount_end(slug: str, result: MountResult) -> None:
+        nonlocal mount_status
+        if mount_status is not None:
+            mount_status.stop()
+            mount_status = None
+        if output_format is OutputFormat.HUMAN:
+            icon = "[green]\u2713[/green]" if result.success else "[red]\u2717[/red]"
+            detail = f" ({result.detail})" if result.detail else ""
+            console_mount.print(f"{icon} mount {slug}{detail}")
 
-        def on_mount_start(slug: str) -> None:
-            nonlocal mount_status
-            if output_format is OutputFormat.HUMAN:
-                mount_status = console_mount.status(f"Mounting {slug}...")
-                mount_status.start()
+    # ── Rich umount callbacks ──────────────────────────────────
+    umount_console = Console()
+    umount_status = None
 
-        def on_mount_end(slug: str, result: MountResult) -> None:
-            nonlocal mount_status
-            if mount_status is not None:
-                mount_status.stop()
-                mount_status = None
-            if output_format is OutputFormat.HUMAN:
-                icon = (
-                    "[green]\u2713[/green]" if result.success else "[red]\u2717[/red]"
-                )
-                detail = f" ({result.detail})" if result.detail else ""
-                console_mount.print(f"{icon} mount {slug}{detail}")
+    def on_umount_start(slug: str) -> None:
+        nonlocal umount_status
+        if output_format is OutputFormat.HUMAN:
+            umount_status = umount_console.status(f"Umounting {slug}...")
+            umount_status.start()
 
-        try:
-            mount_results = mount_volumes(
-                cfg,
-                resolved,
-                passphrase_fn,
-                mount_strategy=mount_strategy,
-                on_mount_start=on_mount_start,
-                on_mount_end=on_mount_end,
+    def on_umount_end(slug: str, result: UmountResult) -> None:
+        nonlocal umount_status
+        if umount_status is not None:
+            umount_status.stop()
+            umount_status = None
+        if output_format is OutputFormat.HUMAN:
+            icon = "[green]\u2713[/green]" if result.success else "[red]\u2717[/red]"
+            detail = f" ({result.detail})" if result.detail else ""
+            warning = (
+                f" [yellow]warning: {result.warning}[/yellow]" if result.warning else ""
             )
-            mount_observations = build_mount_observations(
-                mount_results, mount_strategy, cfg
-            )
-        finally:
-            cache.clear()
+            umount_console.print(f"{icon} umount {slug}{detail}{warning}")
 
     try:
-        yield mount_strategy, mount_observations
+        with _orchestration_managed_mount(
+            cfg,
+            resolved,
+            passphrase_fn,
+            mount=mount,
+            umount=umount,
+            on_mount_start=on_mount_start,
+            on_mount_end=on_mount_end,
+            on_umount_start=on_umount_start,
+            on_umount_end=on_umount_end,
+        ) as result:
+            yield result
     finally:
-        if do_umount:
-            umount_console = Console()
-            umount_status = None
-
-            def on_umount_start(slug: str) -> None:
-                nonlocal umount_status
-                if output_format is OutputFormat.HUMAN:
-                    umount_status = umount_console.status(f"Umounting {slug}...")
-                    umount_status.start()
-
-            def on_umount_end(slug: str, result: UmountResult) -> None:
-                nonlocal umount_status
-                if umount_status is not None:
-                    umount_status.stop()
-                    umount_status = None
-                if output_format is OutputFormat.HUMAN:
-                    icon = (
-                        "[green]\u2713[/green]"
-                        if result.success
-                        else "[red]\u2717[/red]"
-                    )
-                    detail = f" ({result.detail})" if result.detail else ""
-                    warning = (
-                        f" [yellow]warning: {result.warning}[/yellow]"
-                        if result.warning
-                        else ""
-                    )
-                    umount_console.print(f"{icon} umount {slug}{detail}{warning}")
-
-            umount_volumes(
-                cfg,
-                resolved,
-                mount_strategy=mount_strategy,
-                on_umount_start=on_umount_start,
-                on_umount_end=on_umount_end,
-            )
+        cache.clear()

@@ -14,6 +14,7 @@ graph TD
     democli["democli/"]
     fsprotocol["fsprotocol"]
     mount["mount/"]
+    orchestration["orchestration"]
     ordering["ordering/"]
     output["output"]
     preflight["preflight/"]
@@ -25,6 +26,7 @@ graph TD
     cli --> credentials
     cli --> democli
     cli --> mount
+    cli --> orchestration
     cli --> ordering
     cli --> output
     cli --> preflight
@@ -41,6 +43,10 @@ graph TD
     democli --> sync
     mount --> config
     mount --> remote
+    orchestration --> config
+    orchestration --> mount
+    orchestration --> preflight
+    orchestration --> sync
     ordering --> config
     output --> config
     output --> preflight

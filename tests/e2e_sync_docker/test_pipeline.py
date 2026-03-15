@@ -25,8 +25,7 @@ from nbkp.config import (
     SshEndpoint,
     resolve_all_endpoints,
 )
-from nbkp.mount.detection import resolve_mount_strategy
-from nbkp.mount.lifecycle import mount_volumes, umount_volumes
+from nbkp.orchestration import managed_mount
 from nbkp.sync.pipeline import check_and_run
 
 from nbkp.sync.testkit.seed import build_chain_config
@@ -60,23 +59,20 @@ class TestChainSync:
         resolved = resolve_all_endpoints(config)
 
         # 2. Mount encrypted volume via production lifecycle
-        mount_strategy = resolve_mount_strategy(config, resolved, names=None)
-        mount_results = mount_volumes(
-            config,
-            resolved,
-            lambda _: LUKS_PASSPHRASE,
-            mount_strategy=mount_strategy,
-        )
-        assert all(r.success for r in mount_results), [
-            r.detail for r in mount_results if not r.success
-        ]
-
-        try:
+        with managed_mount(config, resolved, lambda _: LUKS_PASSPHRASE) as (
+            _mount_strategy,
+            mount_observations,
+        ):
             # 3. Setup: sentinels, seed data
             src = setup_chain(config, tmp_path, docker_ssh_endpoint)
 
             # 4–5. Preflight checks + run all syncs (production pipeline)
-            pipeline = check_and_run(config, strict=True, resolved_endpoints=resolved)
+            pipeline = check_and_run(
+                config,
+                strict=True,
+                resolved_endpoints=resolved,
+                mount_observations=mount_observations,
+            )
             assert not pipeline.has_preflight_errors, {
                 slug: [e.value for e in s.errors]
                 for slug, s in pipeline.sync_statuses.items()
@@ -92,9 +88,3 @@ class TestChainSync:
 
             # 7. Verify results (tree equality, snapshots, sentinels)
             assert_chain_results(src, tmp_path, config, docker_ssh_endpoint)
-        finally:
-            umount_volumes(
-                config,
-                resolved,
-                mount_strategy=mount_strategy,
-            )
