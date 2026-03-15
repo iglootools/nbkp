@@ -25,12 +25,14 @@ from nbkp.config import (
     SshEndpoint,
 )
 from nbkp.remote.resolution import resolve_all_endpoints
+from nbkp.remote.testkit.docker import REMOTE_BACKUP_PATH
 from nbkp.orchestration import managed_mount
 from nbkp.sync.pipeline import check_and_run
+from nbkp.sync.runner import SyncOutcome
 
 from nbkp.sync.testkit.seed import build_chain_config
 
-from tests._docker_fixtures import LUKS_PASSPHRASE
+from tests._docker_fixtures import LUKS_PASSPHRASE, ssh_exec
 from tests.e2e_docker._pipeline_helpers import (
     assert_chain_results,
     setup_chain,
@@ -88,3 +90,62 @@ class TestChainSync:
 
             # 7. Verify results (tree equality, snapshots, sentinels)
             assert_chain_results(src, tmp_path, config, docker_ssh_endpoint, resolved)
+
+    def test_failure_cancels_downstream_syncs(
+        self,
+        tmp_path: Path,
+        docker_ssh_endpoint: SshEndpoint,
+        bastion_container: SshEndpoint,
+        proxied_ssh_endpoint: SshEndpoint,
+        luks_uuid: str,
+    ) -> None:
+        """When an upstream sync is skipped (inactive), all transitive
+        downstream syncs are cancelled via failure propagation."""
+        # 1. Build the same 6-hop chain config
+        config = build_chain_config(
+            tmp_path,
+            bastion_container,
+            proxied_ssh_endpoint,
+            luks_uuid=luks_uuid,
+        )
+        resolved = resolve_all_endpoints(config)
+
+        # 2. Mount encrypted volume via production lifecycle
+        with managed_mount(config, resolved, lambda _: LUKS_PASSPHRASE) as (
+            _mount_strategy,
+            mount_observations,
+        ):
+            # 3. Setup: sentinels, seed data
+            setup_chain(config, tmp_path, docker_ssh_endpoint)
+
+            # 4. Deliberately remove the .nbkp-dst sentinel on step-2's
+            #    destination (ep-stage-remote-bare) to make step-2 inactive
+            ssh_exec(
+                docker_ssh_endpoint,
+                f"rm -f {REMOTE_BACKUP_PATH}/bare/.nbkp-dst",
+            )
+
+            # 5. Run pipeline in non-strict mode so missing sentinels
+            #    cause skips rather than a hard preflight failure
+            pipeline = check_and_run(
+                config,
+                strict=False,
+                resolved_endpoints=resolved,
+                mount_observations=mount_observations,
+            )
+
+            # 6. Verify outcomes
+            results_by_slug = {r.sync_slug: r for r in pipeline.results}
+
+            # step-1 (local->local) has no dependency on step-2
+            assert results_by_slug["step-1"].success is True
+
+            # step-2 is skipped because its destination sentinel is missing
+            assert results_by_slug["step-2"].outcome == SyncOutcome.SKIPPED
+
+            # step-3 through step-6 are cancelled because they depend
+            # transitively on step-2 through the chain
+            assert results_by_slug["step-3"].outcome == SyncOutcome.CANCELLED
+            assert results_by_slug["step-4"].outcome == SyncOutcome.CANCELLED
+            assert results_by_slug["step-5"].outcome == SyncOutcome.CANCELLED
+            assert results_by_slug["step-6"].outcome == SyncOutcome.CANCELLED
