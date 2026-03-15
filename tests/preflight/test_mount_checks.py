@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from nbkp.config import (
     LocalVolume,
     LuksEncryptionConfig,
     MountConfig,
 )
+from nbkp.mount.observation import MountObservation
 from nbkp.preflight.output import _format_mount_status
 from nbkp.preflight.status import (
     MountCapabilities,
@@ -437,3 +440,123 @@ class TestFormatMountStatus:
         result = _format_mount_status(mc, _unencrypted_mount())
         assert "device" not in result
         assert "mounted" not in result
+
+
+# ── Observation reuse ─────────────────────────────────────
+
+
+class TestObservationReuse:
+    """Verify that mount observation values bypass runtime detection probes."""
+
+    @patch("nbkp.preflight.volume_checks.detect_device_present")
+    @patch("nbkp.preflight.volume_checks.detect_luks_attached")
+    @patch("nbkp.preflight.volume_checks.detect_volume_mounted")
+    @patch("nbkp.preflight.volume_checks.resolve_mount_unit")
+    @patch("nbkp.preflight.volume_checks.detect_systemd_cryptsetup_path")
+    @patch("nbkp.preflight.volume_checks._check_command_available", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_file_exists", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_systemctl_cat", return_value=True)
+    @patch("nbkp.preflight.volume_checks._run_systemctl_show", return_value={})
+    def test_systemd_observation_skips_runtime_probes(
+        self,
+        _mock_show: object,
+        _mock_cat: object,
+        _mock_file: object,
+        _mock_cmd: object,
+        mock_cryptsetup_path: object,
+        mock_mount_unit: object,
+        mock_mounted: object,
+        mock_luks: object,
+        mock_device: object,
+    ) -> None:
+        """When observation is provided, runtime detection functions are not called."""
+        from nbkp.preflight.volume_checks import _check_systemd_mount_capabilities
+
+        obs = MountObservation(
+            resolved_backend="systemd",
+            mount_unit="mnt-encrypted.mount",
+            systemd_cryptsetup_path="/usr/lib/systemd/systemd-cryptsetup",
+            device_present=True,
+            luks_attached=True,
+            mounted=True,
+        )
+
+        result = _check_systemd_mount_capabilities(
+            _encrypted_vol(), _encrypted_mount(), {}, obs
+        )
+
+        # Runtime probes should not have been called
+        mock_device.assert_not_called()  # type: ignore[union-attr]
+        mock_luks.assert_not_called()  # type: ignore[union-attr]
+        mock_mounted.assert_not_called()  # type: ignore[union-attr]
+        mock_mount_unit.assert_not_called()  # type: ignore[union-attr]
+        mock_cryptsetup_path.assert_not_called()  # type: ignore[union-attr]
+
+        # Values come from observation
+        assert result.device_present is True
+        assert result.luks_attached is True
+        assert result.mounted is True
+        assert result.mount_unit == "mnt-encrypted.mount"
+        assert result.systemd_cryptsetup_path == "/usr/lib/systemd/systemd-cryptsetup"
+
+    @patch("nbkp.preflight.volume_checks.detect_device_present")
+    @patch("nbkp.preflight.volume_checks.detect_luks_attached")
+    @patch("nbkp.preflight.volume_checks.run_on_volume")
+    @patch("nbkp.preflight.volume_checks._check_command_available", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_file_exists", return_value=True)
+    def test_direct_observation_skips_runtime_probes(
+        self,
+        _mock_file: object,
+        _mock_cmd: object,
+        mock_run: object,
+        mock_luks: object,
+        mock_device: object,
+    ) -> None:
+        """When observation is provided for direct backend, runtime probes are skipped."""
+        from nbkp.preflight.volume_checks import _check_direct_mount_capabilities
+
+        obs = MountObservation(
+            resolved_backend="direct",
+            device_present=False,
+            luks_attached=None,
+            mounted=None,
+        )
+
+        result = _check_direct_mount_capabilities(
+            _unencrypted_vol(), _unencrypted_mount(), {}, obs
+        )
+
+        mock_device.assert_not_called()  # type: ignore[union-attr]
+        mock_luks.assert_not_called()  # type: ignore[union-attr]
+        mock_run.assert_not_called()  # type: ignore[union-attr]
+
+        assert result.device_present is False
+        assert result.mounted is None
+
+    @patch("nbkp.preflight.volume_checks._check_command_available", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_file_exists", return_value=True)
+    @patch("nbkp.preflight.volume_checks._check_systemctl_cat", return_value=True)
+    @patch("nbkp.preflight.volume_checks._run_systemctl_show", return_value={})
+    def test_observation_decides_backend(
+        self,
+        _mock_show: object,
+        _mock_cat: object,
+        _mock_file: object,
+        mock_cmd: object,
+    ) -> None:
+        """Observation's resolved_backend is used instead of probing systemctl."""
+        from nbkp.preflight.volume_checks import _check_mount_capabilities
+
+        obs = MountObservation(
+            resolved_backend="systemd",
+            mount_unit="mnt-encrypted.mount",
+            device_present=True,
+            mounted=True,
+        )
+
+        result = _check_mount_capabilities(
+            _encrypted_vol(), _encrypted_mount(), {}, obs
+        )
+
+        # Should have resolved to systemd backend from observation
+        assert result.resolved_backend == "systemd"

@@ -24,6 +24,7 @@ from ..config import (
     SyncConfig,
     Volume,
 )
+from ..mount.observation import MountObservation
 from .endpoint_checks import observe_destination_endpoint, observe_source_endpoint
 from .status import (
     DestinationEndpointDiagnostics,
@@ -42,6 +43,7 @@ def check_all_syncs(
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     dry_run: bool = False,
+    mount_observations: dict[str, MountObservation] | None = None,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     """Check volumes and syncs in staged passes.
 
@@ -72,9 +74,10 @@ def check_all_syncs(
             on_progress(slug)
 
     # Phase 1: Volume observation + interpretation
+    mo = mount_observations or {}
     volume_statuses: dict[str, VolumeStatus] = {}
     for slug in needed_volumes:
-        diag = observe_volume(config.volumes[slug], re)
+        diag = observe_volume(config.volumes[slug], re, mount_observation=mo.get(slug))
         volume_statuses[slug] = VolumeStatus.from_diagnostics(
             slug=slug,
             config=config.volumes[slug],

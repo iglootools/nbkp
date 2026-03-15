@@ -81,12 +81,13 @@ def check(
 
     with managed_mount(
         cfg, resolved, mount=mount, umount=umount, output_format=output_format
-    ):
+    ) as (_mount_strategy, mount_observations):
         vol_statuses, sync_statuses, has_errors = check_and_display(
             cfg,
             output_format,
             strict,
             resolved_endpoints=resolved,
+            mount_observations=mount_observations,
         )
 
         if output_format is OutputFormat.JSON:

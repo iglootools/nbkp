@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import enum
 from dataclasses import dataclass
 from typing import Callable
 
@@ -19,6 +20,15 @@ from .detection import (
 )
 
 
+class MountFailureReason(str, enum.Enum):
+    """Structured reason for a mount failure."""
+
+    DEVICE_NOT_PRESENT = "device_not_present"
+    ATTACH_LUKS_FAILED = "attach_luks_failed"
+    MOUNT_FAILED = "mount_failed"
+    STRATEGY_NOT_RESOLVED = "strategy_not_resolved"
+
+
 @dataclass(frozen=True)
 class MountResult:
     """Result of attempting to mount a single volume."""
@@ -26,6 +36,7 @@ class MountResult:
     volume_slug: str
     success: bool
     detail: str | None = None
+    failure_reason: MountFailureReason | None = None
 
 
 @dataclass(frozen=True)
@@ -66,6 +77,7 @@ def mount_volume(
             volume_slug=slug,
             success=False,
             detail=f"device not plugged in (UUID: {mount_config.device_uuid})",
+            failure_reason=MountFailureReason.DEVICE_NOT_PRESENT,
         )
 
     # 2. Attach LUKS if encrypted and not yet attached
@@ -85,6 +97,7 @@ def mount_volume(
                         f"attach-luks failed (exit {result.returncode}):"
                         f" {result.stderr.strip()}"
                     ),
+                    failure_reason=MountFailureReason.ATTACH_LUKS_FAILED,
                 )
 
     # 3. Mount if not already mounted
@@ -98,6 +111,7 @@ def mount_volume(
                 detail=(
                     f"mount failed (exit {result.returncode}): {result.stderr.strip()}"
                 ),
+                failure_reason=MountFailureReason.MOUNT_FAILED,
             )
 
     return MountResult(volume_slug=slug, success=True)
@@ -169,6 +183,7 @@ def mount_volumes(
                 volume_slug=slug,
                 success=False,
                 detail="mount strategy not resolved",
+                failure_reason=MountFailureReason.STRATEGY_NOT_RESOLVED,
             )
         if on_mount_start is not None:
             on_mount_start(slug)

@@ -34,36 +34,43 @@ from .snapshot_checks import (
     _check_btrfs_mount_option,
     _check_hardlink_support,
 )
+from ..mount.observation import MountObservation
 from .status import MountCapabilities, VolumeCapabilities, VolumeDiagnostics
 
 
 def observe_volume(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    mount_observation: MountObservation | None = None,
 ) -> VolumeDiagnostics:
     """Observe volume state without interpreting errors.
 
     Returns a ``VolumeDiagnostics`` capturing raw observations:
     sentinel existence, SSH reachability, and capabilities.
+
+    When *mount_observation* is provided (from a prior mount lifecycle),
+    runtime mount state probes (device present, LUKS attached, mounted)
+    are skipped.
     """
     re = resolved_endpoints or {}
     match volume:
         case LocalVolume():
-            return _observe_local(volume, re)
+            return _observe_local(volume, re, mount_observation)
         case RemoteVolume():
-            return _observe_remote(volume, re)
+            return _observe_remote(volume, re, mount_observation)
 
 
 def _observe_local(
     volume: LocalVolume,
     resolved_endpoints: ResolvedEndpoints,
+    mount_observation: MountObservation | None = None,
 ) -> VolumeDiagnostics:
     """Observe a local volume's state."""
     sentinel_exists = (Path(volume.path) / VOLUME_SENTINEL).exists()
     caps = (
-        check_volume_capabilities(volume, resolved_endpoints)
+        check_volume_capabilities(volume, resolved_endpoints, mount_observation)
         if sentinel_exists
-        else _sentinel_only_capabilities(volume, resolved_endpoints)
+        else _sentinel_only_capabilities(volume, resolved_endpoints, mount_observation)
     )
     return VolumeDiagnostics(
         capabilities=caps,
@@ -73,6 +80,7 @@ def _observe_local(
 def _observe_remote(
     volume: RemoteVolume,
     resolved_endpoints: ResolvedEndpoints,
+    mount_observation: MountObservation | None = None,
 ) -> VolumeDiagnostics:
     """Observe a remote volume's state."""
     if volume.slug not in resolved_endpoints:
@@ -90,9 +98,11 @@ def _observe_remote(
             ssh_reachable = False
             sentinel_exists = None
         caps = (
-            check_volume_capabilities(volume, resolved_endpoints)
+            check_volume_capabilities(volume, resolved_endpoints, mount_observation)
             if sentinel_exists
-            else _sentinel_only_capabilities(volume, resolved_endpoints)
+            else _sentinel_only_capabilities(
+                volume, resolved_endpoints, mount_observation
+            )
             if ssh_reachable
             else None
         )
@@ -106,6 +116,7 @@ def _observe_remote(
 def check_volume_capabilities(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
+    mount_observation: MountObservation | None = None,
 ) -> VolumeCapabilities:
     """Compute host- and volume-level capabilities once per active volume."""
     has_rsync = _check_command_available(volume, "rsync", resolved_endpoints)
@@ -129,7 +140,9 @@ def check_volume_capabilities(
 
     mount_config: MountConfig | None = getattr(volume, "mount", None)
     mount_caps = (
-        _check_mount_capabilities(volume, mount_config, resolved_endpoints)
+        _check_mount_capabilities(
+            volume, mount_config, resolved_endpoints, mount_observation
+        )
         if mount_config is not None
         else None
     )
@@ -152,37 +165,58 @@ def _check_mount_capabilities(
     volume: Volume,
     mount: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
+    mount_observation: MountObservation | None = None,
 ) -> MountCapabilities:
     """Probe mount-related capabilities for a volume with mount config.
 
     Dispatches to systemd or direct probing based on the configured
-    strategy. ``auto`` probes for systemctl to decide.
+    strategy.  When *mount_observation* is available, it provides the
+    resolved backend so the ``systemctl`` availability probe is skipped.
     """
-    strategy = mount.strategy
-    use_systemd = strategy == "systemd" or (
-        strategy == "auto"
-        and _check_command_available(volume, "systemctl", resolved_endpoints)
-    )
-    if use_systemd:
-        return _check_systemd_mount_capabilities(volume, mount, resolved_endpoints)
+    if mount_observation is not None:
+        use_systemd = mount_observation.resolved_backend == "systemd"
     else:
-        return _check_direct_mount_capabilities(volume, mount, resolved_endpoints)
+        strategy = mount.strategy
+        use_systemd = strategy == "systemd" or (
+            strategy == "auto"
+            and _check_command_available(volume, "systemctl", resolved_endpoints)
+        )
+    if use_systemd:
+        return _check_systemd_mount_capabilities(
+            volume, mount, resolved_endpoints, mount_observation
+        )
+    else:
+        return _check_direct_mount_capabilities(
+            volume, mount, resolved_endpoints, mount_observation
+        )
 
 
 def _check_systemd_mount_capabilities(
     volume: Volume,
     mount: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
+    mount_observation: MountObservation | None = None,
 ) -> MountCapabilities:
-    """Probe systemd-specific mount capabilities."""
+    """Probe systemd-specific mount capabilities.
+
+    When *mount_observation* is provided, reuses ``mount_unit``,
+    ``systemd_cryptsetup_path``, ``device_present``, ``luks_attached``,
+    and ``mounted`` from the prior mount lifecycle — skipping the
+    corresponding SSH round-trips.
+    """
+    obs = mount_observation
     has_systemctl = _check_command_available(volume, "systemctl", resolved_endpoints)
     has_systemd_escape = _check_command_available(
         volume, "systemd-escape", resolved_endpoints
     )
 
-    # Derive mount unit via systemd-escape
+    # Derive mount unit via systemd-escape (or reuse from observation)
     mount_unit = (
-        resolve_mount_unit(volume, resolved_endpoints) if has_systemd_escape else None
+        obs.mount_unit
+        if obs is not None and obs.mount_unit is not None
+        else resolve_mount_unit(volume, resolved_endpoints)
+        if has_systemd_escape
+        else None
     )
 
     # Check mount unit config in systemd
@@ -210,8 +244,11 @@ def _check_systemd_mount_capabilities(
         if has_encryption
         else None
     )
+    # Reuse cryptsetup path from observation when available
     cryptsetup_path = (
-        detect_systemd_cryptsetup_path(volume, resolved_endpoints)
+        obs.systemd_cryptsetup_path
+        if obs is not None and has_encryption
+        else detect_systemd_cryptsetup_path(volume, resolved_endpoints)
         if has_encryption
         else None
     )
@@ -247,17 +284,25 @@ def _check_systemd_mount_capabilities(
         else None
     )
 
-    # Runtime mount state
-    device_present = detect_device_present(
-        volume, mount.device_uuid, resolved_endpoints
+    # Runtime mount state — reuse from observation when available
+    device_present = (
+        obs.device_present
+        if obs is not None
+        else detect_device_present(volume, mount.device_uuid, resolved_endpoints)
     )
     luks_attached = (
-        detect_luks_attached(volume, mount.encryption.mapper_name, resolved_endpoints)
+        obs.luks_attached
+        if obs is not None
+        else detect_luks_attached(
+            volume, mount.encryption.mapper_name, resolved_endpoints
+        )
         if mount.encryption is not None
         else None
     )
     mounted = (
-        detect_volume_mounted(volume, mount_unit, resolved_endpoints)
+        obs.mounted
+        if obs is not None
+        else detect_volume_mounted(volume, mount_unit, resolved_endpoints)
         if has_systemctl and mount_unit is not None
         else None
     )
@@ -288,8 +333,14 @@ def _check_direct_mount_capabilities(
     volume: Volume,
     mount: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
+    mount_observation: MountObservation | None = None,
 ) -> MountCapabilities:
-    """Probe direct-backend mount capabilities."""
+    """Probe direct-backend mount capabilities.
+
+    When *mount_observation* is provided, reuses ``device_present``,
+    ``luks_attached``, and ``mounted`` from the prior mount lifecycle.
+    """
+    obs = mount_observation
     has_encryption = mount.encryption is not None
 
     has_sudo = _check_command_available(volume, "sudo", resolved_endpoints)
@@ -307,17 +358,25 @@ def _check_direct_mount_capabilities(
         else None
     )
 
-    # Runtime mount state
-    device_present = detect_device_present(
-        volume, mount.device_uuid, resolved_endpoints
+    # Runtime mount state — reuse from observation when available
+    device_present = (
+        obs.device_present
+        if obs is not None
+        else detect_device_present(volume, mount.device_uuid, resolved_endpoints)
     )
     luks_attached = (
-        detect_luks_attached(volume, mount.encryption.mapper_name, resolved_endpoints)
+        obs.luks_attached
+        if obs is not None
+        else detect_luks_attached(
+            volume, mount.encryption.mapper_name, resolved_endpoints
+        )
         if mount.encryption is not None
         else None
     )
     mounted = (
-        run_on_volume(
+        obs.mounted
+        if obs is not None
+        else run_on_volume(
             ["mountpoint", "-q", volume.path], volume, resolved_endpoints
         ).returncode
         == 0
@@ -342,6 +401,7 @@ def _check_direct_mount_capabilities(
 def _sentinel_only_capabilities(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
+    mount_observation: MountObservation | None = None,
 ) -> VolumeCapabilities:
     """Minimal capabilities for a reachable volume whose sentinel is missing.
 
@@ -353,7 +413,9 @@ def _sentinel_only_capabilities(
     """
     mount_config: MountConfig | None = getattr(volume, "mount", None)
     mount_caps = (
-        _check_mount_capabilities(volume, mount_config, resolved_endpoints)
+        _check_mount_capabilities(
+            volume, mount_config, resolved_endpoints, mount_observation
+        )
         if mount_config is not None
         else None
     )

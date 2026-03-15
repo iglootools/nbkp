@@ -116,7 +116,7 @@ def run(
 
     with managed_mount(
         cfg, resolved, mount=mount, umount=umount, output_format=output_format
-    ):
+    ) as (_mount_strategy, mount_observations):
         vol_statuses, sync_statuses, has_errors = check_and_display(
             cfg,
             output_format,
@@ -124,6 +124,7 @@ def run(
             only_syncs=sync,
             resolved_endpoints=resolved,
             dry_run=dry_run,
+            mount_observations=mount_observations,
         )
 
         if has_errors:

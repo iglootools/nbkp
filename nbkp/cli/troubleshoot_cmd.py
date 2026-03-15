@@ -66,11 +66,15 @@ def troubleshoot(
     cfg = load_config_or_exit(config)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
 
-    with managed_mount(cfg, resolved, mount=mount, umount=umount):
+    with managed_mount(cfg, resolved, mount=mount, umount=umount) as (
+        _mount_strategy,
+        mount_observations,
+    ):
         vol_statuses, sync_statuses = check_all_with_progress(
             cfg,
             use_progress=True,
             resolved_endpoints=resolved,
+            mount_observations=mount_observations,
         )
         print_human_troubleshoot(
             vol_statuses,

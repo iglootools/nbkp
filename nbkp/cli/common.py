@@ -26,6 +26,7 @@ from ..mount.lifecycle import (
     mount_volumes,
     umount_volumes,
 )
+from ..mount.observation import MountObservation, build_mount_observations
 from ..mount.strategy import MountStrategy
 from ..output import (
     OutputFormat,
@@ -147,6 +148,7 @@ def check_all_with_progress(
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     dry_run: bool = False,
+    mount_observations: dict[str, MountObservation] | None = None,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     """Run check_all_syncs with an optional progress bar."""
     total = _check_total(cfg, only_syncs)
@@ -156,6 +158,7 @@ def check_all_with_progress(
             only_syncs=only_syncs,
             resolved_endpoints=resolved_endpoints,
             dry_run=dry_run,
+            mount_observations=mount_observations,
         )
     else:
         with Progress(
@@ -177,6 +180,7 @@ def check_all_with_progress(
                 only_syncs=only_syncs,
                 resolved_endpoints=resolved_endpoints,
                 dry_run=dry_run,
+                mount_observations=mount_observations,
             )
 
 
@@ -187,6 +191,7 @@ def check_and_display(
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     dry_run: bool = False,
+    mount_observations: dict[str, MountObservation] | None = None,
 ) -> tuple[
     dict[str, VolumeStatus],
     dict[str, SyncStatus],
@@ -204,6 +209,7 @@ def check_and_display(
         only_syncs=only_syncs,
         resolved_endpoints=resolved_endpoints,
         dry_run=dry_run,
+        mount_observations=mount_observations,
     )
 
     if output_format is OutputFormat.HUMAN:
@@ -231,12 +237,17 @@ def managed_mount(
     mount: bool = True,
     umount: bool = True,
     output_format: OutputFormat = OutputFormat.HUMAN,
-) -> Generator[dict[str, MountStrategy], None, None]:
+) -> Generator[
+    tuple[dict[str, MountStrategy], dict[str, MountObservation]],
+    None,
+    None,
+]:
     """Context manager that mounts volumes on entry and umounts on exit.
 
-    Yields the resolved mount strategy dict (empty when mounting is
-    skipped).  Umount runs in the ``finally`` block so cleanup is
-    guaranteed even on exceptions.
+    Yields a tuple of ``(mount_strategy, mount_observations)``.  When
+    mounting is skipped both dicts are empty.  Observations capture
+    the runtime state discovered during mount so that preflight checks
+    can reuse it instead of re-probing.
 
     Parameters
     ----------
@@ -256,6 +267,7 @@ def managed_mount(
     do_umount = do_mount and umount
 
     mount_strategy: dict[str, MountStrategy] = {}
+    mount_observations: dict[str, MountObservation] = {}
 
     if do_mount:
         console_mount = Console()
@@ -285,7 +297,7 @@ def managed_mount(
                 console_mount.print(f"{icon} mount {slug}{detail}")
 
         try:
-            mount_volumes(
+            mount_results = mount_volumes(
                 cfg,
                 resolved,
                 passphrase_fn,
@@ -293,11 +305,14 @@ def managed_mount(
                 on_mount_start=on_mount_start,
                 on_mount_end=on_mount_end,
             )
+            mount_observations = build_mount_observations(
+                mount_results, mount_strategy, cfg
+            )
         finally:
             cache.clear()
 
     try:
-        yield mount_strategy
+        yield mount_strategy, mount_observations
     finally:
         if do_umount:
             umount_console = Console()
