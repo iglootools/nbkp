@@ -86,17 +86,15 @@ This allows testing the encrypted backup workflows end-to-end but nbkp's mount/u
 
 ### Automated tests
 
-Automated tests are organized into 5 categories based on what they test and what infrastructure they require:
+Automated tests are organized into 4 categories based on what they test and what infrastructure they require:
 
 1. **Unit tests** (`tests/`, `tests/sync/`, `tests/remote/`) — Mock all external calls (rsync, SSH, filesystem). Test logic and command building. No external dependencies.
 
-2. **E2E sync (local)** (`tests/e2e_sync_local/`) — Full sync pipeline on local filesystem, no Docker. Tests local-to-local syncs end-to-end with real rsync.
+2. **E2E sync (Docker)** (`tests/e2e_sync_docker/`) — Full sync pipeline with remote endpoints via Docker containers. Includes end-to-end btrfs and hard-link snapshot workflows, proxy jump, chained syncs, and remote-to-remote syncs.
 
-3. **E2E sync (Docker)** (`tests/e2e_sync_docker/`) — Full sync pipeline with remote endpoints via Docker containers. Includes end-to-end btrfs and hard-link snapshot workflows, proxy jump, chained syncs, and remote-to-remote syncs.
+3. **Integration (Docker)** (`tests/integration_docker/`) — Component-level tests against real infrastructure in Docker. Tests individual module functions (volume/sync checks, btrfs operations) via SSH. Includes local btrfs tests that run inside a privileged Docker container (`mise run test-btrfs-local`).
 
-4. **Integration (Docker)** (`tests/integration_docker/`) — Component-level tests against real infrastructure in Docker. Tests individual module functions (volume/sync checks, btrfs operations) via SSH. Includes local btrfs tests that run inside a privileged Docker container (`mise run test-btrfs-local`).
-
-5. **Integration (filesystem)** (`tests/integration_fs/`) — Component-level tests using real local filesystem operations (hard-link snapshots, symlinks, inode verification). Runs on any OS that supports hard links.
+4. **Integration (filesystem)** (`tests/integration_fs/`) — Component-level tests using real local filesystem operations (local-to-local syncs with real rsync, hard-link snapshots, symlinks, inode verification). Runs on any OS that supports hard links.
 
 ### Known Gaps and Limitations
 

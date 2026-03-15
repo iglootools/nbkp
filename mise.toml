@@ -89,18 +89,13 @@ run = [
 # Test Tasks
 [tasks.test-unit]
 description = "Run unit tests (no Docker, no external dependencies)"
-run = "poetry run pytest tests/ --ignore=tests/e2e_sync_local/ --ignore=tests/e2e_sync_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -v"
+run = "poetry run pytest tests/ --ignore=tests/e2e_sync_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -v"
 
 [tasks.test-e2e]
-description = "Run end-to-end sync tests (Docker + local)"
+description = "Run end-to-end sync tests (Docker)"
 run = [
-  { task = "test-e2e-local" },
   { task = "test-e2e-docker" },
 ]
-
-[tasks.test-e2e-local]
-description = "Run end-to-end sync tests (local)"
-run = "poetry run pytest tests/e2e_sync_local/ -v"
 
 [tasks.test-e2e-docker]
 description = "Run end-to-end sync tests (Docker only)"
