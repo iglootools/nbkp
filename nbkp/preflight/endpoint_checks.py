@@ -36,7 +36,7 @@ from .queries import (
 )
 from .snapshot_checks import _check_btrfs_subvolume
 from .status import (
-    BtrfsSubvolumeDiagnostics,
+    BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
     LatestSymlinkState,
     SnapshotDirsDiagnostics,
@@ -111,8 +111,8 @@ def _check_btrfs_diagnostics(
     capabilities: VolumeCapabilities,
     dst_ep: str,
     resolved_endpoints: ResolvedEndpoints,
-) -> BtrfsSubvolumeDiagnostics | None:
-    """Check btrfs subvolume and staging directory state."""
+) -> BtrfsStagingSubvolumeDiagnostics | None:
+    """Check btrfs staging subvolume state."""
     if not (
         endpoint.btrfs_snapshots.enabled
         and capabilities.has_stat
@@ -125,14 +125,14 @@ def _check_btrfs_diagnostics(
     )
     staging_path = f"{dst_ep}/{STAGING_DIR}"
     staging_exists = _check_directory_exists(volume, staging_path, resolved_endpoints)
-    return BtrfsSubvolumeDiagnostics(
-        is_subvolume=(
+    return BtrfsStagingSubvolumeDiagnostics(
+        staging_exists=staging_exists,
+        staging_is_subvolume=(
             _check_btrfs_subvolume(volume, staging_subdir, resolved_endpoints)
             if staging_exists
             else False
         ),
-        staging_dir_exists=staging_exists,
-        staging_dir_writable=(
+        staging_writable=(
             _check_directory_writable(volume, staging_path, resolved_endpoints)
             if staging_exists
             else None

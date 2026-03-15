@@ -235,8 +235,8 @@ def _format_destination_diagnostics(ss: SyncStatus) -> str:
         _check(diag.endpoint_writable, "writable"),
         *(
             [
-                _check(diag.btrfs.staging_dir_exists, "staging/"),
-                _check(diag.btrfs.is_subvolume, "staging-subvolume"),
+                _check(diag.btrfs.staging_exists, "staging/"),
+                _check(diag.btrfs.staging_is_subvolume, "staging-subvolume"),
             ]
             if diag.btrfs is not None
             else []

@@ -209,7 +209,7 @@ Probe B requires the result of probe A as input. These conditions live in the ob
 - `btrfs_user_subvol_rm` requires `has_findmnt AND is_btrfs`
 - `mount_unit` derivation requires `has_systemd_escape` — needs the tool to compute the unit name
 - `has_mount_unit_config` requires `mount_unit` — can't query a systemd unit without its name
-- `staging_dir_writable` requires `staging_dir_exists`
+- `staging_writable` requires `staging_exists`
 
 #### Config-as-input probing
 
@@ -224,7 +224,7 @@ The probe itself needs config values as parameters — without them, the probe c
 The probe is independent of config values, but only relevant when a feature is enabled. These are skipped in the observation layer to avoid unnecessary SSH round-trips (each check is a remote call):
 
 - `snapshot_dirs` and `latest` symlink checks only run when `endpoint.snapshot_mode != "none"`
-- `BtrfsSubvolumeDiagnostics` only probed when `btrfs_snapshots.enabled` (plus physical prerequisites)
+- `BtrfsStagingSubvolumeDiagnostics` only probed when `btrfs_snapshots.enabled` (plus physical prerequisites)
 
 The error interpretation layer already filters based on these same config flags, so these probes could theoretically always run. However, always-probing would add 2–5 extra SSH calls per non-snapshot endpoint, which adds up across configs with many endpoints.
 

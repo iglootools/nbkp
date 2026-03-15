@@ -10,7 +10,7 @@ from .endpoint_checks import (
     observe_source_endpoint,
 )
 from .status import (
-    BtrfsSubvolumeDiagnostics,
+    BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
     LatestSymlinkState,
     MountCapabilities,
@@ -26,7 +26,7 @@ from .status import (
 from .volume_checks import check_volume_capabilities, observe_volume
 
 __all__ = [
-    "BtrfsSubvolumeDiagnostics",
+    "BtrfsStagingSubvolumeDiagnostics",
     "DestinationEndpointDiagnostics",
     "LatestSymlinkState",
     "MountCapabilities",

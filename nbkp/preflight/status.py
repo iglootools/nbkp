@@ -394,8 +394,8 @@ class LatestSymlinkState(BaseModel):
     ``None`` when target is ``/dev/null``, invalid, or absent."""
 
 
-class BtrfsSubvolumeDiagnostics(BaseModel):
-    """Btrfs-specific diagnostics for a destination endpoint.
+class BtrfsStagingSubvolumeDiagnostics(BaseModel):
+    """Btrfs staging subvolume diagnostics for a destination endpoint.
 
     Present only when btrfs snapshots are enabled, the filesystem
     is btrfs, and ``stat`` is available on the host.
@@ -403,12 +403,12 @@ class BtrfsSubvolumeDiagnostics(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    is_subvolume: bool
+    staging_exists: bool
+    staging_is_subvolume: bool
     """Whether ``staging/`` is a btrfs subvolume (inode 256).
     ``False`` when staging does not exist."""
-    staging_dir_exists: bool
-    staging_dir_writable: bool | None = None
-    """``None`` when staging dir does not exist."""
+    staging_writable: bool | None = None
+    """``None`` when staging does not exist."""
 
 
 class SnapshotDirsDiagnostics(BaseModel):
@@ -453,7 +453,7 @@ class DestinationEndpointDiagnostics(BaseModel):
     endpoint_slug: str
     sentinel_exists: bool
     endpoint_writable: bool
-    btrfs: BtrfsSubvolumeDiagnostics | None = None
+    btrfs: BtrfsStagingSubvolumeDiagnostics | None = None
     snapshot_dirs: SnapshotDirsDiagnostics | None = None
     latest: LatestSymlinkState | None = None
 
@@ -690,7 +690,7 @@ def _btrfs_stat_errors(
             *_btrfs_staging_errors(diag),
             *(
                 [SyncError.DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME]
-                if diag.btrfs.staging_dir_exists and not diag.btrfs.is_subvolume
+                if diag.btrfs.staging_exists and not diag.btrfs.staging_is_subvolume
                 else []
             ),
             *_snapshot_dirs_errors(diag),
@@ -702,9 +702,9 @@ def _btrfs_staging_errors(
 ) -> list[SyncError]:
     """Translate btrfs staging directory diagnostics."""
     assert diag.btrfs is not None
-    if not diag.btrfs.staging_dir_exists:
+    if not diag.btrfs.staging_exists:
         return [SyncError.DESTINATION_TMP_NOT_FOUND]
-    elif diag.btrfs.staging_dir_writable is False:
+    elif diag.btrfs.staging_writable is False:
         return [SyncError.DESTINATION_STAGING_DIR_NOT_WRITABLE]
     else:
         return []

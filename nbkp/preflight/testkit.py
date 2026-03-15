@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ..fsprotocol import Snapshot
 from . import (
-    BtrfsSubvolumeDiagnostics,
+    BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
     LatestSymlinkState,
     MountCapabilities,
@@ -162,10 +162,10 @@ def check_data(
                 endpoint_slug="usb-photos",
                 sentinel_exists=True,
                 endpoint_writable=True,
-                btrfs=BtrfsSubvolumeDiagnostics(
-                    is_subvolume=True,
-                    staging_dir_exists=True,
-                    staging_dir_writable=True,
+                btrfs=BtrfsStagingSubvolumeDiagnostics(
+                    staging_exists=True,
+                    staging_is_subvolume=True,
+                    staging_writable=True,
                 ),
                 snapshot_dirs=SnapshotDirsDiagnostics(exists=True, writable=True),
                 latest=LatestSymlinkState(
