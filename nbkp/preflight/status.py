@@ -54,49 +54,66 @@ class VolumeError(str, enum.Enum):
 class SyncError(str, enum.Enum):
     DISABLED = "disabled"
 
-    SOURCE_UNAVAILABLE = "source unavailable"
-    SOURCE_SENTINEL_NOT_FOUND = f"{SOURCE_SENTINEL} source sentinel not found"
-    SOURCE_LATEST_NOT_FOUND = f"source {LATEST_LINK} symlink not found"
-    SOURCE_LATEST_INVALID = f"source {LATEST_LINK} symlink target is invalid"
-    SOURCE_SNAPSHOTS_DIR_NOT_FOUND = f"source {SNAPSHOTS_DIR}/ directory not found"
-    SOURCE_RSYNC_NOT_FOUND = "rsync not found on source"
-    SOURCE_RSYNC_TOO_OLD = "rsync too old on source (3.0+ required)"
+    # Source Volume
+    SRC_VOL_UNAVAILABLE = "source volume unavailable"
+    SRC_VOL_RSYNC_NOT_FOUND = "rsync not found on source"
+    SRC_VOL_RSYNC_TOO_OLD = "rsync too old on source (3.0+ required)"
 
-    DESTINATION_UNAVAILABLE = "destination unavailable"
-    DESTINATION_SENTINEL_NOT_FOUND = (
-        f"{DESTINATION_SENTINEL} destination sentinel not found"
+    # Source Endpoint
+    SRC_EP_SENTINEL_NOT_FOUND = f"source endpoint {SOURCE_SENTINEL} sentinel not found"
+    SRC_EP_LATEST_SYMLINK_NOT_FOUND = f"source endpoint {LATEST_LINK} symlink not found"
+    SRC_EP_LATEST_SYMLINK_INVALID = (
+        f"source endpoint {LATEST_LINK} symlink target is invalid"
     )
-    DESTINATION_NOT_BTRFS = "destination not on btrfs filesystem"
+    SRC_EP_SNAPSHOTS_DIR_NOT_FOUND = (
+        f"source endpoint {SNAPSHOTS_DIR}/ directory not found"
+    )
 
-    DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM = (
-        "destination not mounted with user_subvol_rm_allowed"
-    )
-    DESTINATION_TMP_NOT_FOUND = f"destination {STAGING_DIR}/ directory not found"
-    DESTINATION_SNAPSHOTS_DIR_NOT_FOUND = (
-        f"destination {SNAPSHOTS_DIR}/ directory not found"
-    )
-    DESTINATION_LATEST_NOT_FOUND = f"destination {LATEST_LINK} symlink not found"
-    DESTINATION_LATEST_INVALID = f"destination {LATEST_LINK} symlink target is invalid"
-    DESTINATION_NO_HARDLINK_SUPPORT = (
-        "destination filesystem does not support hard links"
-    )
-    DESTINATION_ENDPOINT_NOT_WRITABLE = "destination endpoint directory not writable"
-    DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE = (
-        f"destination {SNAPSHOTS_DIR}/ directory not writable"
-    )
-    DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME = (
-        "destination staging/ is not a btrfs subvolume"
-    )
-    DESTINATION_STAGING_DIR_NOT_WRITABLE = (
-        f"destination {STAGING_DIR}/ directory not writable"
-    )
-    DESTINATION_RSYNC_NOT_FOUND = "rsync not found on destination"
-    DESTINATION_RSYNC_TOO_OLD = "rsync too old on destination (3.0+ required)"
-    DESTINATION_BTRFS_NOT_FOUND = "btrfs not found on destination"
-    DESTINATION_STAT_NOT_FOUND = "stat not found on destination"
-    DESTINATION_FINDMNT_NOT_FOUND = "findmnt not found on destination"
+    # Destination Volume
+    DST_VOL_UNAVAILABLE = "destination volume unavailable"
 
-    DRY_RUN_SOURCE_SNAPSHOT_PENDING = (
+    DST_VOL_RSYNC_NOT_FOUND = "rsync not found on destination"
+    DST_VOL_RSYNC_TOO_OLD = "rsync too old on destination (3.0+ required)"
+    DST_VOL_BTRFS_NOT_FOUND = "btrfs not found on destination"
+    DST_VOL_STAT_NOT_FOUND = "stat not found on destination"
+    DST_VOL_FINDMNT_NOT_FOUND = "findmnt not found on destination"
+
+    DST_VOL_NOT_BTRFS = "destination volume not on btrfs filesystem"
+    DST_VOL_NOT_MOUNTED_USER_SUBVOL_RM = (
+        "destination volume not mounted with user_subvol_rm_allowed"
+    )
+    DST_VOL_NO_HARDLINK_SUPPORT = (
+        "destination volume filesystem does not support hard links"
+    )
+
+    # Destinatin Endpoint
+    DST_EP_SENTINEL_NOT_FOUND = (
+        f"destination endpoint {DESTINATION_SENTINEL} sentinel not found"
+    )
+    DST_EP_STAGING_SUBVOL_NOT_FOUND = (
+        f"destination endpoint {STAGING_DIR}/ directory not found"
+    )
+    DST_EP_SNAPSHOTS_DIR_NOT_FOUND = (
+        f"destination endpoint {SNAPSHOTS_DIR}/ directory not found"
+    )
+    DST_EP_LATEST_SYMLINK_NOT_FOUND = (
+        f"destination endpoint {LATEST_LINK} symlink not found"
+    )
+    DST_EP_LATEST_SYMLINK_INVALID = (
+        f"destination endpoint {LATEST_LINK} symlink target is invalid"
+    )
+    DST_EP_NOT_WRITABLE = "destination endpoint directory not writable"
+    DST_EP_SNAPSHOTS_DIR_NOT_WRITABLE = (
+        f"destination endpoint {SNAPSHOTS_DIR}/ directory not writable"
+    )
+    DST_EP_STAGING_NOT_BTRFS_SUBVOLUME = (
+        f"destination endpoint {STAGING_DIR}/ is not a btrfs subvolume"
+    )
+    DST_EP_STAGING_SUBVOL_NOT_WRITABLE = (
+        f"destination endpoint {STAGING_DIR}/ subvolume not writable"
+    )
+
+    DRY_RUN_SRC_EP_SNAPSHOT_PENDING = (
         "source snapshot not yet available (dry-run; upstream has not run)"
     )
 
@@ -512,7 +529,7 @@ class SyncStatus(BaseModel):
                 dry_run,
             )
             if src_status.active
-            else [SyncError.SOURCE_UNAVAILABLE]
+            else [SyncError.SRC_VOL_UNAVAILABLE]
         )
 
         dst_errors = (
@@ -522,7 +539,7 @@ class SyncStatus(BaseModel):
                 dst_endpoint,
             )
             if dst_status.active
-            else [SyncError.DESTINATION_UNAVAILABLE]
+            else [SyncError.DST_VOL_UNAVAILABLE]
         )
 
         dst_latest = dst_diag.latest.snapshot if dst_diag and dst_diag.latest else None
@@ -552,12 +569,12 @@ def _source_errors(
 ) -> list[SyncError]:
     """Translate source diagnostics + capabilities into SyncErrors."""
     return [
-        *([SyncError.SOURCE_SENTINEL_NOT_FOUND] if not diag.sentinel_exists else []),
+        *([SyncError.SRC_EP_SENTINEL_NOT_FOUND] if not diag.sentinel_exists else []),
         *_source_rsync_errors(caps),
         *(
             [
                 *(
-                    [SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND]
+                    [SyncError.SRC_EP_SNAPSHOTS_DIR_NOT_FOUND]
                     if diag.snapshot_dirs is not None and not diag.snapshot_dirs.exists
                     else []
                 ),
@@ -573,9 +590,9 @@ def _source_rsync_errors(caps: VolumeCapabilities) -> list[SyncError]:
     """Translate source rsync capability into SyncErrors."""
     match (caps.has_rsync, caps.rsync_version_ok):
         case (False, _):
-            return [SyncError.SOURCE_RSYNC_NOT_FOUND]
+            return [SyncError.SRC_VOL_RSYNC_NOT_FOUND]
         case (True, False):
-            return [SyncError.SOURCE_RSYNC_TOO_OLD]
+            return [SyncError.SRC_VOL_RSYNC_TOO_OLD]
         case _:
             return []
 
@@ -589,17 +606,17 @@ def _source_latest_errors(
     """Interpret the source latest symlink state."""
     latest = diag.latest
     if latest is None or not latest.exists:
-        return [SyncError.SOURCE_LATEST_NOT_FOUND]
+        return [SyncError.SRC_EP_LATEST_SYMLINK_NOT_FOUND]
     elif latest.raw_target == DEVNULL_TARGET:
         # /dev/null interpretation depends on sync-level context
         if not _has_upstream_sync(sync, all_syncs):
-            return [SyncError.SOURCE_LATEST_INVALID]
+            return [SyncError.SRC_EP_LATEST_SYMLINK_INVALID]
         elif dry_run:
-            return [SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING]
+            return [SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING]
         else:
             return []
     elif latest.target_valid is False:
-        return [SyncError.SOURCE_LATEST_INVALID]
+        return [SyncError.SRC_EP_LATEST_SYMLINK_INVALID]
     else:
         return []
 
@@ -611,18 +628,10 @@ def _destination_errors(
 ) -> list[SyncError]:
     """Translate destination diagnostics + capabilities into SyncErrors."""
     return [
-        *(
-            [SyncError.DESTINATION_SENTINEL_NOT_FOUND]
-            if not diag.sentinel_exists
-            else []
-        ),
+        *([SyncError.DST_EP_SENTINEL_NOT_FOUND] if not diag.sentinel_exists else []),
         *_destination_rsync_errors(caps),
         *_destination_snapshot_backend_errors(diag, caps, endpoint),
-        *(
-            [SyncError.DESTINATION_ENDPOINT_NOT_WRITABLE]
-            if not diag.endpoint_writable
-            else []
-        ),
+        *([SyncError.DST_EP_NOT_WRITABLE] if not diag.endpoint_writable else []),
         *(_destination_latest_errors(diag) if endpoint.snapshot_mode != "none" else []),
     ]
 
@@ -631,9 +640,9 @@ def _destination_rsync_errors(caps: VolumeCapabilities) -> list[SyncError]:
     """Translate destination rsync capability into SyncErrors."""
     match (caps.has_rsync, caps.rsync_version_ok):
         case (False, _):
-            return [SyncError.DESTINATION_RSYNC_NOT_FOUND]
+            return [SyncError.DST_VOL_RSYNC_NOT_FOUND]
         case (True, False):
-            return [SyncError.DESTINATION_RSYNC_TOO_OLD]
+            return [SyncError.DST_VOL_RSYNC_TOO_OLD]
         case _:
             return []
 
@@ -658,15 +667,11 @@ def _btrfs_destination_errors(
 ) -> list[SyncError]:
     """Translate btrfs-specific diagnostics into SyncErrors."""
     if not caps.has_btrfs:
-        return [SyncError.DESTINATION_BTRFS_NOT_FOUND]
+        return [SyncError.DST_VOL_BTRFS_NOT_FOUND]
     else:
         return [
-            *([SyncError.DESTINATION_STAT_NOT_FOUND] if not caps.has_stat else []),
-            *(
-                [SyncError.DESTINATION_FINDMNT_NOT_FOUND]
-                if not caps.has_findmnt
-                else []
-            ),
+            *([SyncError.DST_VOL_STAT_NOT_FOUND] if not caps.has_stat else []),
+            *([SyncError.DST_VOL_FINDMNT_NOT_FOUND] if not caps.has_findmnt else []),
             *(_btrfs_stat_errors(diag, caps) if caps.has_stat else []),
         ]
 
@@ -677,19 +682,19 @@ def _btrfs_stat_errors(
 ) -> list[SyncError]:
     """Translate btrfs filesystem/subvolume diagnostics (requires stat)."""
     if not caps.is_btrfs_filesystem:
-        return [SyncError.DESTINATION_NOT_BTRFS]
+        return [SyncError.DST_VOL_NOT_BTRFS]
     elif diag.btrfs is None:
-        return [SyncError.DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME]
+        return [SyncError.DST_EP_STAGING_NOT_BTRFS_SUBVOLUME]
     else:
         return [
             *(
-                [SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM]
+                [SyncError.DST_VOL_NOT_MOUNTED_USER_SUBVOL_RM]
                 if caps.has_findmnt and not caps.btrfs_user_subvol_rm
                 else []
             ),
             *_btrfs_staging_errors(diag),
             *(
-                [SyncError.DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME]
+                [SyncError.DST_EP_STAGING_NOT_BTRFS_SUBVOLUME]
                 if diag.btrfs.staging_exists and not diag.btrfs.staging_is_subvolume
                 else []
             ),
@@ -703,9 +708,9 @@ def _btrfs_staging_errors(
     """Translate btrfs staging directory diagnostics."""
     assert diag.btrfs is not None
     if not diag.btrfs.staging_exists:
-        return [SyncError.DESTINATION_TMP_NOT_FOUND]
+        return [SyncError.DST_EP_STAGING_SUBVOL_NOT_FOUND]
     elif diag.btrfs.staging_writable is False:
-        return [SyncError.DESTINATION_STAGING_DIR_NOT_WRITABLE]
+        return [SyncError.DST_EP_STAGING_SUBVOL_NOT_WRITABLE]
     else:
         return []
 
@@ -716,11 +721,11 @@ def _hardlink_destination_errors(
 ) -> list[SyncError]:
     """Translate hard-link-specific diagnostics into SyncErrors."""
     if not caps.has_stat:
-        return [SyncError.DESTINATION_STAT_NOT_FOUND]
+        return [SyncError.DST_VOL_STAT_NOT_FOUND]
     else:
         return [
             *(
-                [SyncError.DESTINATION_NO_HARDLINK_SUPPORT]
+                [SyncError.DST_VOL_NO_HARDLINK_SUPPORT]
                 if not caps.hardlink_supported
                 else []
             ),
@@ -736,9 +741,9 @@ def _snapshot_dirs_errors(
     if sd is None:
         return []
     elif not sd.exists:
-        return [SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND]
+        return [SyncError.DST_EP_SNAPSHOTS_DIR_NOT_FOUND]
     elif sd.writable is False:
-        return [SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE]
+        return [SyncError.DST_EP_SNAPSHOTS_DIR_NOT_WRITABLE]
     else:
         return []
 
@@ -749,9 +754,9 @@ def _destination_latest_errors(
     """Interpret the destination latest symlink state."""
     latest = diag.latest
     if latest is None or not latest.exists:
-        return [SyncError.DESTINATION_LATEST_NOT_FOUND]
+        return [SyncError.DST_EP_LATEST_SYMLINK_NOT_FOUND]
     elif latest.target_valid is False:
-        return [SyncError.DESTINATION_LATEST_INVALID]
+        return [SyncError.DST_EP_LATEST_SYMLINK_INVALID]
     else:
         return []
 

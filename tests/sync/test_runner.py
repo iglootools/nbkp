@@ -161,7 +161,7 @@ def _inactive_statuses(
             config=sync,
             source_status=vol_statuses[config.source_endpoint(sync).volume],
             destination_status=vol_statuses[config.destination_endpoint(sync).volume],
-            errors=[SyncError.SOURCE_UNAVAILABLE],
+            errors=[SyncError.SRC_VOL_UNAVAILABLE],
         )
         for name, sync in config.syncs.items()
     }

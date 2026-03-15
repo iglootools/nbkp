@@ -140,11 +140,11 @@ def run_all_syncs(
                 resolved_endpoints,
             )
 
-        # Dry-run-pending skips (skipped syncs because of DRY_RUN_SOURCE_SNAPSHOT_PENDING) should not cascade to downstream syncs:
+        # Dry-run-pending skips (skipped syncs because of DRY_RUN_SRC_EP_SNAPSHOT_PENDING) should not cascade to downstream syncs:
         # the chain would succeed in a real run.
         is_dry_run_pending = (
             result.outcome == SyncOutcome.SKIPPED
-            and status.errors == [SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING]
+            and status.errors == [SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING]
         )
         if not result.success and not is_dry_run_pending:
             failed.add(slug)

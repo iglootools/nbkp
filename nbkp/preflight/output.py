@@ -74,23 +74,23 @@ def _status_text(
 _DIAGNOSTIC_VISIBLE_SYNC_ERRORS: frozenset[SyncError] = frozenset(
     {
         # Volume-level — shown as ✗volume(...) in src/dst diagnostics
-        SyncError.SOURCE_UNAVAILABLE,
-        SyncError.DESTINATION_UNAVAILABLE,
+        SyncError.SRC_VOL_UNAVAILABLE,
+        SyncError.DST_VOL_UNAVAILABLE,
         # Endpoint-level — shown as ✓/✗ items in src/dst diagnostics
-        SyncError.SOURCE_SENTINEL_NOT_FOUND,
-        SyncError.SOURCE_LATEST_NOT_FOUND,
-        SyncError.SOURCE_LATEST_INVALID,
-        SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND,
-        SyncError.DESTINATION_SENTINEL_NOT_FOUND,
-        SyncError.DESTINATION_ENDPOINT_NOT_WRITABLE,
-        SyncError.DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME,
-        SyncError.DESTINATION_TMP_NOT_FOUND,
-        SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND,
-        SyncError.DESTINATION_LATEST_NOT_FOUND,
-        SyncError.DESTINATION_LATEST_INVALID,
-        SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE,
-        SyncError.DESTINATION_STAGING_DIR_NOT_WRITABLE,
-        SyncError.DESTINATION_NO_HARDLINK_SUPPORT,
+        SyncError.SRC_EP_SENTINEL_NOT_FOUND,
+        SyncError.SRC_EP_LATEST_SYMLINK_NOT_FOUND,
+        SyncError.SRC_EP_LATEST_SYMLINK_INVALID,
+        SyncError.SRC_EP_SNAPSHOTS_DIR_NOT_FOUND,
+        SyncError.DST_EP_SENTINEL_NOT_FOUND,
+        SyncError.DST_EP_NOT_WRITABLE,
+        SyncError.DST_EP_STAGING_NOT_BTRFS_SUBVOLUME,
+        SyncError.DST_EP_STAGING_SUBVOL_NOT_FOUND,
+        SyncError.DST_EP_SNAPSHOTS_DIR_NOT_FOUND,
+        SyncError.DST_EP_LATEST_SYMLINK_NOT_FOUND,
+        SyncError.DST_EP_LATEST_SYMLINK_INVALID,
+        SyncError.DST_EP_SNAPSHOTS_DIR_NOT_WRITABLE,
+        SyncError.DST_EP_STAGING_SUBVOL_NOT_WRITABLE,
+        SyncError.DST_VOL_NO_HARDLINK_SUPPORT,
     }
 )
 
@@ -548,7 +548,7 @@ def _print_sync_error_fix(
     match error:
         case SyncError.DISABLED:
             console.print(f"{p2}Enable the sync in the configuration file.")
-        case SyncError.SOURCE_UNAVAILABLE:
+        case SyncError.SRC_VOL_UNAVAILABLE:
             match src_vol:
                 case RemoteVolume():
                     ep = resolved_endpoints.get(src_vol.slug)
@@ -569,7 +569,7 @@ def _print_sync_error_fix(
                     console.print(
                         f"{p2}Source volume '{src_ep.volume}' is not available."
                     )
-        case SyncError.DESTINATION_UNAVAILABLE:
+        case SyncError.DST_VOL_UNAVAILABLE:
             match dst_vol:
                 case RemoteVolume():
                     ep = resolved_endpoints.get(dst_vol.slug)
@@ -590,7 +590,7 @@ def _print_sync_error_fix(
                     console.print(
                         f"{p2}Destination volume '{dst_ep.volume}' is not available."
                     )
-        case SyncError.SOURCE_SENTINEL_NOT_FOUND:
+        case SyncError.SRC_EP_SENTINEL_NOT_FOUND:
             path = endpoint_path(src_vol, src_ep.subdir)
             _print_sentinel_fix(
                 console,
@@ -599,7 +599,7 @@ def _print_sync_error_fix(
                 SOURCE_SENTINEL,
                 resolved_endpoints,
             )
-        case SyncError.SOURCE_LATEST_NOT_FOUND:
+        case SyncError.SRC_EP_LATEST_SYMLINK_NOT_FOUND:
             path = endpoint_path(src_vol, src_ep.subdir)
             console.print(
                 f"{p2}Source has snapshots enabled"
@@ -614,7 +614,7 @@ def _print_sync_error_fix(
                     resolved_endpoints,
                 ),
             )
-        case SyncError.SOURCE_LATEST_INVALID:
+        case SyncError.SRC_EP_LATEST_SYMLINK_INVALID:
             path = endpoint_path(src_vol, src_ep.subdir)
             console.print(
                 f"{p2}Source {path}/{LATEST_LINK}"
@@ -631,7 +631,7 @@ def _print_sync_error_fix(
                     resolved_endpoints,
                 ),
             )
-        case SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND:
+        case SyncError.SRC_EP_SNAPSHOTS_DIR_NOT_FOUND:
             path = endpoint_path(src_vol, src_ep.subdir)
             if src_ep.btrfs_snapshots.enabled:
                 cmds = [
@@ -645,7 +645,7 @@ def _print_sync_error_fix(
                     console,
                     wrap_cmd(cmd, src_vol, resolved_endpoints),
                 )
-        case SyncError.DESTINATION_SENTINEL_NOT_FOUND:
+        case SyncError.DST_EP_SENTINEL_NOT_FOUND:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             _print_sentinel_fix(
                 console,
@@ -654,37 +654,37 @@ def _print_sync_error_fix(
                 DESTINATION_SENTINEL,
                 resolved_endpoints,
             )
-        case SyncError.SOURCE_RSYNC_NOT_FOUND:
+        case SyncError.SRC_VOL_RSYNC_NOT_FOUND:
             host = host_label(src_vol, resolved_endpoints)
             console.print(f"{p2}Install rsync on {host}:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
-        case SyncError.DESTINATION_RSYNC_NOT_FOUND:
+        case SyncError.DST_VOL_RSYNC_NOT_FOUND:
             host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}Install rsync on {host}:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
-        case SyncError.SOURCE_RSYNC_TOO_OLD:
+        case SyncError.SRC_VOL_RSYNC_TOO_OLD:
             host = host_label(src_vol, resolved_endpoints)
             console.print(f"{p2}rsync 3.0+ is required on {host}. Install or upgrade:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
-        case SyncError.DESTINATION_RSYNC_TOO_OLD:
+        case SyncError.DST_VOL_RSYNC_TOO_OLD:
             host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}rsync 3.0+ is required on {host}. Install or upgrade:")
             _print_cmd(console, _RSYNC_INSTALL, indent=3)
-        case SyncError.DESTINATION_BTRFS_NOT_FOUND:
+        case SyncError.DST_VOL_BTRFS_NOT_FOUND:
             host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}Install btrfs-progs on {host}:")
             _print_cmd(console, _BTRFS_INSTALL, indent=3)
-        case SyncError.DESTINATION_STAT_NOT_FOUND:
+        case SyncError.DST_VOL_STAT_NOT_FOUND:
             host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}Install coreutils (stat) on {host}:")
             _print_cmd(console, _COREUTILS_INSTALL, indent=3)
-        case SyncError.DESTINATION_FINDMNT_NOT_FOUND:
+        case SyncError.DST_VOL_FINDMNT_NOT_FOUND:
             host = host_label(dst_vol, resolved_endpoints)
             console.print(f"{p2}Install util-linux (findmnt) on {host}:")
             _print_cmd(console, _UTIL_LINUX_INSTALL, indent=3)
-        case SyncError.DESTINATION_NOT_BTRFS:
+        case SyncError.DST_VOL_NOT_BTRFS:
             console.print(f"{p2}The destination is not on a btrfs filesystem.")
-        case SyncError.DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME:
+        case SyncError.DST_EP_STAGING_NOT_BTRFS_SUBVOLUME:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             cmds = [
                 f"sudo btrfs subvolume create {path}/{STAGING_DIR}",
@@ -698,7 +698,7 @@ def _print_sync_error_fix(
                     console,
                     wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
-        case SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM:
+        case SyncError.DST_VOL_NOT_MOUNTED_USER_SUBVOL_RM:
             console.print(f"{p2}Remount the btrfs volume with user_subvol_rm_allowed:")
             cmd = f"sudo mount -o remount,user_subvol_rm_allowed {dst_vol.path}"
             _print_cmd(
@@ -711,7 +711,7 @@ def _print_sync_error_fix(
                 " the mount options in /etc/fstab"
                 f" for {dst_vol.path}."
             )
-        case SyncError.DESTINATION_TMP_NOT_FOUND:
+        case SyncError.DST_EP_STAGING_SUBVOL_NOT_FOUND:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             cmds = [
                 f"sudo btrfs subvolume create {path}/{STAGING_DIR}",
@@ -722,7 +722,7 @@ def _print_sync_error_fix(
                     console,
                     wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
-        case SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND:
+        case SyncError.DST_EP_SNAPSHOTS_DIR_NOT_FOUND:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             if dst_ep.hard_link_snapshots.enabled:
                 cmds = [f"mkdir -p {path}/{SNAPSHOTS_DIR}"]
@@ -736,7 +736,7 @@ def _print_sync_error_fix(
                     console,
                     wrap_cmd(cmd, dst_vol, resolved_endpoints),
                 )
-        case SyncError.DESTINATION_ENDPOINT_NOT_WRITABLE:
+        case SyncError.DST_EP_NOT_WRITABLE:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}The destination endpoint directory"
@@ -750,7 +750,7 @@ def _print_sync_error_fix(
                     resolved_endpoints,
                 ),
             )
-        case SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE:
+        case SyncError.DST_EP_SNAPSHOTS_DIR_NOT_WRITABLE:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}The destination {SNAPSHOTS_DIR}/"
@@ -765,7 +765,7 @@ def _print_sync_error_fix(
                     resolved_endpoints,
                 ),
             )
-        case SyncError.DESTINATION_STAGING_DIR_NOT_WRITABLE:
+        case SyncError.DST_EP_STAGING_SUBVOL_NOT_WRITABLE:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}The destination {STAGING_DIR}/"
@@ -780,7 +780,7 @@ def _print_sync_error_fix(
                     resolved_endpoints,
                 ),
             )
-        case SyncError.DESTINATION_LATEST_NOT_FOUND:
+        case SyncError.DST_EP_LATEST_SYMLINK_NOT_FOUND:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}Destination has snapshots enabled"
@@ -795,7 +795,7 @@ def _print_sync_error_fix(
                     resolved_endpoints,
                 ),
             )
-        case SyncError.DESTINATION_LATEST_INVALID:
+        case SyncError.DST_EP_LATEST_SYMLINK_INVALID:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}Destination {path}/{LATEST_LINK}"
@@ -810,14 +810,14 @@ def _print_sync_error_fix(
                     resolved_endpoints,
                 ),
             )
-        case SyncError.DESTINATION_NO_HARDLINK_SUPPORT:
+        case SyncError.DST_VOL_NO_HARDLINK_SUPPORT:
             console.print(
                 f"{p2}The destination filesystem does not"
                 " support hard links (e.g. FAT/exFAT)."
                 " Use a filesystem like ext4, xfs, or"
                 " btrfs, or use btrfs-snapshots instead."
             )
-        case SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING:
+        case SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING:
             console.print(
                 f"{p2}The source endpoint's latest symlink"
                 " points to /dev/null (no snapshot yet)."

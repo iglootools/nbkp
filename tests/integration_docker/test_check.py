@@ -269,7 +269,7 @@ class TestSyncCheckBtrfs:
             resolved_endpoints=resolved,
         )
         assert status.active is False
-        assert SyncError.DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME in status.errors
+        assert SyncError.DST_EP_STAGING_NOT_BTRFS_SUBVOLUME in status.errors
 
         # Cleanup
         ssh_exec(

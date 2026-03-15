@@ -76,7 +76,7 @@ def _make_vol_statuses(
 
 class TestTroubleshootBtrfsStagingNotFound:
     def test_destination_staging_not_found_text(self) -> None:
-        """Output mentions staging/ for DESTINATION_TMP_NOT_FOUND."""
+        """Output mentions staging/ for DST_EP_STAGING_SUBVOL_NOT_FOUND."""
         config = _btrfs_config()
         vol_statuses = _make_vol_statuses(config)
         sync_statuses = {
@@ -85,7 +85,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 config=config.syncs["btrfs-sync"],
                 source_status=vol_statuses["src"],
                 destination_status=vol_statuses["dst"],
-                errors=[SyncError.DESTINATION_TMP_NOT_FOUND],
+                errors=[SyncError.DST_EP_STAGING_SUBVOL_NOT_FOUND],
             )
         }
         console, buf = _make_console()
@@ -110,7 +110,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 config=config.syncs["btrfs-sync"],
                 source_status=vol_statuses["src"],
                 destination_status=vol_statuses["dst"],
-                errors=[SyncError.DESTINATION_TMP_NOT_FOUND],
+                errors=[SyncError.DST_EP_STAGING_SUBVOL_NOT_FOUND],
             )
         }
         console, buf = _make_console()
@@ -134,7 +134,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 config=config.syncs["btrfs-sync"],
                 source_status=vol_statuses["src"],
                 destination_status=vol_statuses["dst"],
-                errors=[SyncError.DESTINATION_TMP_NOT_FOUND],
+                errors=[SyncError.DST_EP_STAGING_SUBVOL_NOT_FOUND],
             )
         }
         console, buf = _make_console()
@@ -145,7 +145,7 @@ class TestTroubleshootBtrfsStagingNotFound:
             console=console,
         )
         output = buf.getvalue()
-        assert SyncError.DESTINATION_TMP_NOT_FOUND.value in output
+        assert SyncError.DST_EP_STAGING_SUBVOL_NOT_FOUND.value in output
 
     def test_no_issues_message(self) -> None:
         """When all statuses are active, prints no-issues message."""
@@ -211,7 +211,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 config=sync,
                 source_status=vol_statuses["src"],
                 destination_status=vol_statuses["dst"],
-                errors=[SyncError.DESTINATION_TMP_NOT_FOUND],
+                errors=[SyncError.DST_EP_STAGING_SUBVOL_NOT_FOUND],
             )
         }
         console, buf = _make_console()
@@ -236,7 +236,7 @@ class TestTroubleshootDryRunPendingSnapshot:
                 config=config.syncs["btrfs-sync"],
                 source_status=vol_statuses["src"],
                 destination_status=vol_statuses["dst"],
-                errors=[SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING],
+                errors=[SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING],
             )
         }
         console, buf = _make_console()
@@ -249,7 +249,7 @@ class TestTroubleshootDryRunPendingSnapshot:
         output = buf.getvalue()
         assert "dry-run" in output
         assert "upstream" in output
-        assert SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING.value in output
+        assert SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING.value in output
 
 
 class TestTroubleshootLocationExcluded:

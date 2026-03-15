@@ -93,7 +93,7 @@ def _sample_sync_statuses(
             config=config.syncs["photos-to-nas"],
             source_status=vol_statuses["local-data"],
             destination_status=vol_statuses["nas"],
-            errors=[SyncError.DESTINATION_UNAVAILABLE],
+            errors=[SyncError.DST_VOL_UNAVAILABLE],
         ),
     }
 
@@ -108,7 +108,7 @@ def _sample_error_sync_statuses(
             config=config.syncs["photos-to-nas"],
             source_status=vol_statuses["local-data"],
             destination_status=vol_statuses["nas"],
-            errors=[SyncError.DESTINATION_RSYNC_NOT_FOUND],
+            errors=[SyncError.DST_VOL_RSYNC_NOT_FOUND],
         ),
     }
 
@@ -124,8 +124,8 @@ def _sample_sentinel_only_sync_statuses(
             source_status=vol_statuses["local-data"],
             destination_status=vol_statuses["nas"],
             errors=[
-                SyncError.SOURCE_SENTINEL_NOT_FOUND,
-                SyncError.DESTINATION_SENTINEL_NOT_FOUND,
+                SyncError.SRC_EP_SENTINEL_NOT_FOUND,
+                SyncError.DST_EP_SENTINEL_NOT_FOUND,
             ],
         ),
     }

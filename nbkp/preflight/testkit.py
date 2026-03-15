@@ -183,7 +183,7 @@ def check_data(
             config=config.syncs["docs-to-nas"],
             source_status=laptop_vs,
             destination_status=nas_vs,
-            errors=[SyncError.DESTINATION_UNAVAILABLE],
+            errors=[SyncError.DST_VOL_UNAVAILABLE],
         ),
         "music-to-usb": SyncStatus(
             slug="music-to-usb",
@@ -677,8 +677,8 @@ def troubleshoot_data(
             source_status=laptop_vs,
             destination_status=nas_vs,
             errors=[
-                SyncError.SOURCE_UNAVAILABLE,
-                SyncError.DESTINATION_UNAVAILABLE,
+                SyncError.SRC_VOL_UNAVAILABLE,
+                SyncError.DST_VOL_UNAVAILABLE,
             ],
         ),
         "missing-sentinels": SyncStatus(
@@ -687,8 +687,8 @@ def troubleshoot_data(
             source_status=laptop_vs,
             destination_status=usb_vs,
             errors=[
-                SyncError.SOURCE_SENTINEL_NOT_FOUND,
-                SyncError.DESTINATION_SENTINEL_NOT_FOUND,
+                SyncError.SRC_EP_SENTINEL_NOT_FOUND,
+                SyncError.DST_EP_SENTINEL_NOT_FOUND,
             ],
         ),
         "rsync-missing": SyncStatus(
@@ -697,8 +697,8 @@ def troubleshoot_data(
             source_status=laptop_vs,
             destination_status=nas_vs,
             errors=[
-                SyncError.SOURCE_RSYNC_NOT_FOUND,
-                SyncError.DESTINATION_RSYNC_NOT_FOUND,
+                SyncError.SRC_VOL_RSYNC_NOT_FOUND,
+                SyncError.DST_VOL_RSYNC_NOT_FOUND,
             ],
         ),
         "btrfs-not-detected": SyncStatus(
@@ -707,9 +707,9 @@ def troubleshoot_data(
             source_status=laptop_vs,
             destination_status=usb_vs,
             errors=[
-                SyncError.DESTINATION_BTRFS_NOT_FOUND,
-                SyncError.DESTINATION_NOT_BTRFS,
-                SyncError.DESTINATION_STAGING_NOT_BTRFS_SUBVOLUME,
+                SyncError.DST_VOL_BTRFS_NOT_FOUND,
+                SyncError.DST_VOL_NOT_BTRFS,
+                SyncError.DST_EP_STAGING_NOT_BTRFS_SUBVOLUME,
             ],
         ),
         "btrfs-mount-issues": SyncStatus(
@@ -718,9 +718,9 @@ def troubleshoot_data(
             source_status=laptop_vs,
             destination_status=nas_vs,
             errors=[
-                SyncError.DESTINATION_NOT_MOUNTED_USER_SUBVOL_RM,
-                SyncError.DESTINATION_TMP_NOT_FOUND,
-                SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND,
+                SyncError.DST_VOL_NOT_MOUNTED_USER_SUBVOL_RM,
+                SyncError.DST_EP_STAGING_SUBVOL_NOT_FOUND,
+                SyncError.DST_EP_SNAPSHOTS_DIR_NOT_FOUND,
             ],
         ),
         "tools-missing": SyncStatus(
@@ -729,8 +729,8 @@ def troubleshoot_data(
             source_status=laptop_vs,
             destination_status=usb_vs,
             errors=[
-                SyncError.DESTINATION_STAT_NOT_FOUND,
-                SyncError.DESTINATION_FINDMNT_NOT_FOUND,
+                SyncError.DST_VOL_STAT_NOT_FOUND,
+                SyncError.DST_VOL_FINDMNT_NOT_FOUND,
             ],
         ),
         "hardlink-issues": SyncStatus(
@@ -739,8 +739,8 @@ def troubleshoot_data(
             source_status=laptop_vs,
             destination_status=usb_vs,
             errors=[
-                SyncError.DESTINATION_NO_HARDLINK_SUPPORT,
-                SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_FOUND,
+                SyncError.DST_VOL_NO_HARDLINK_SUPPORT,
+                SyncError.DST_EP_SNAPSHOTS_DIR_NOT_FOUND,
             ],
         ),
         "rsync-too-old": SyncStatus(
@@ -749,8 +749,8 @@ def troubleshoot_data(
             source_status=laptop_vs,
             destination_status=nas_vs,
             errors=[
-                SyncError.SOURCE_RSYNC_TOO_OLD,
-                SyncError.DESTINATION_RSYNC_TOO_OLD,
+                SyncError.SRC_VOL_RSYNC_TOO_OLD,
+                SyncError.DST_VOL_RSYNC_TOO_OLD,
             ],
         ),
         "source-latest-missing": SyncStatus(
@@ -759,8 +759,8 @@ def troubleshoot_data(
             source_status=usb_vs,
             destination_status=nas_vs,
             errors=[
-                SyncError.SOURCE_LATEST_NOT_FOUND,
-                SyncError.SOURCE_SNAPSHOTS_DIR_NOT_FOUND,
+                SyncError.SRC_EP_LATEST_SYMLINK_NOT_FOUND,
+                SyncError.SRC_EP_SNAPSHOTS_DIR_NOT_FOUND,
             ],
         ),
         "dry-run-upstream": SyncStatus(
@@ -775,14 +775,14 @@ def troubleshoot_data(
             config=config.syncs["dry-run-pending"],
             source_status=usb_vs,
             destination_status=nas_vs,
-            errors=[SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING],
+            errors=[SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING],
         ),
         "location-excluded": SyncStatus(
             slug="location-excluded",
             config=config.syncs["location-excluded"],
             source_status=laptop_vs,
             destination_status=home_nas_vs,
-            errors=[SyncError.DESTINATION_UNAVAILABLE],
+            errors=[SyncError.DST_VOL_UNAVAILABLE],
         ),
         "btrfs-permissions": SyncStatus(
             slug="btrfs-permissions",
@@ -790,9 +790,9 @@ def troubleshoot_data(
             source_status=laptop_vs,
             destination_status=usb7_vs,
             errors=[
-                SyncError.DESTINATION_ENDPOINT_NOT_WRITABLE,
-                SyncError.DESTINATION_STAGING_DIR_NOT_WRITABLE,
-                SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE,
+                SyncError.DST_EP_NOT_WRITABLE,
+                SyncError.DST_EP_STAGING_SUBVOL_NOT_WRITABLE,
+                SyncError.DST_EP_SNAPSHOTS_DIR_NOT_WRITABLE,
             ],
         ),
         "hardlink-permissions": SyncStatus(
@@ -801,8 +801,8 @@ def troubleshoot_data(
             source_status=laptop_vs,
             destination_status=usb8_vs,
             errors=[
-                SyncError.DESTINATION_ENDPOINT_NOT_WRITABLE,
-                SyncError.DESTINATION_SNAPSHOTS_DIR_NOT_WRITABLE,
+                SyncError.DST_EP_NOT_WRITABLE,
+                SyncError.DST_EP_SNAPSHOTS_DIR_NOT_WRITABLE,
             ],
         ),
         "no-snap-permissions": SyncStatus(
@@ -811,7 +811,7 @@ def troubleshoot_data(
             source_status=laptop_vs,
             destination_status=usb9_vs,
             errors=[
-                SyncError.DESTINATION_ENDPOINT_NOT_WRITABLE,
+                SyncError.DST_EP_NOT_WRITABLE,
             ],
         ),
         "mount-encrypted-errors": SyncStatus(
