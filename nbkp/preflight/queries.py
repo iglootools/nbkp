@@ -59,7 +59,7 @@ def _check_command_available(
             )
 
 
-def _resolve_endpoint(volume: Volume, subdir: str | None) -> str:
+def resolve_endpoint(volume: Volume, subdir: str | None) -> str:
     """Resolve the full endpoint path for a volume."""
     return f"{volume.path}/{subdir}" if subdir else volume.path
 
@@ -75,7 +75,7 @@ def _check_directory_writable(
     )
 
 
-def _check_directory_exists(
+def check_directory_exists(
     volume: Volume,
     path: str,
     resolved_endpoints: ResolvedEndpoints,
@@ -111,7 +111,7 @@ def _check_symlink_exists(
             )
 
 
-def _read_symlink_target(
+def read_symlink_target(
     volume: Volume,
     path: str,
     resolved_endpoints: ResolvedEndpoints,

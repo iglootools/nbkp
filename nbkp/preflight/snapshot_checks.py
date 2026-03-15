@@ -11,14 +11,14 @@ from ..config import (
 )
 from ..remote.dispatch import run_on_volume
 from .queries import (
-    _resolve_endpoint,
+    resolve_endpoint,
 )
 
 
 # ── Filesystem detection ────────────────────────────────────
 
 
-def _check_btrfs_filesystem(
+def check_btrfs_filesystem(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
@@ -32,7 +32,7 @@ def _check_btrfs_filesystem(
 _NO_HARDLINK_FILESYSTEMS = {"vfat", "msdos", "exfat"}
 
 
-def _check_hardlink_support(
+def check_hardlink_support(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
@@ -52,7 +52,7 @@ def _check_hardlink_support(
 # ── Btrfs subvolume / mount option ─────────────────────────
 
 
-def _check_btrfs_subvolume(
+def check_btrfs_subvolume(
     volume: Volume,
     subdir: str | None,
     resolved_endpoints: ResolvedEndpoints,
@@ -61,12 +61,24 @@ def _check_btrfs_subvolume(
 
     On btrfs, subvolumes always have inode number 256.
     """
-    path = _resolve_endpoint(volume, subdir)
+    path = resolve_endpoint(volume, subdir)
     result = run_on_volume(["stat", "-c", "%i", path], volume, resolved_endpoints)
     return result.returncode == 0 and result.stdout.strip() == "256"
 
 
-def _check_btrfs_mount_option(
+def check_btrfs_readonly(
+    volume: Volume,
+    path: str,
+    resolved_endpoints: ResolvedEndpoints,
+) -> bool:
+    """Check if a btrfs subvolume is read-only."""
+    result = run_on_volume(
+        ["btrfs", "property", "get", path, "ro"], volume, resolved_endpoints
+    )
+    return result.returncode == 0 and "ro=true" in result.stdout
+
+
+def check_btrfs_mount_option(
     volume: Volume,
     option: str,
     resolved_endpoints: ResolvedEndpoints,

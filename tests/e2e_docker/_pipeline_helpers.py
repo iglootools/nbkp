@@ -6,8 +6,11 @@ from pathlib import Path
 
 from nbkp.config import (
     Config,
+    ResolvedEndpoints,
     SshEndpoint,
 )
+from nbkp.preflight.queries import check_directory_exists, read_symlink_target
+from nbkp.preflight.snapshot_checks import check_btrfs_readonly, check_btrfs_subvolume
 from nbkp.remote.testkit.docker import (
     REMOTE_BACKUP_PATH,
 )
@@ -93,6 +96,7 @@ def assert_chain_results(
     tmp_path: Path,
     config: Config,
     docker_ssh_endpoint: SshEndpoint,
+    resolved: ResolvedEndpoints,
 ) -> None:
     """Shared assertions for chain sync results.
 
@@ -102,6 +106,7 @@ def assert_chain_results(
     - Sentinel handling on final destination
     """
     btrfs_vol = config.volumes["stage-remote-btrfs-snapshots"]
+    hl_vol = config.volumes["stage-remote-hl-snapshots"]
 
     dst = tmp_path / "dst-local-bare"
 
@@ -113,26 +118,43 @@ def assert_chain_results(
     # HL dest (step-1): latest symlink on local-hl
     local_hl = tmp_path / "stage-local-hl-snapshots"
     assert (local_hl / "latest").is_symlink()
+    local_hl_target = (local_hl / "latest").resolve()
+    assert local_hl_target.is_dir(), (
+        f"local-hl latest target is not a directory: {local_hl_target}"
+    )
     assert_trees_equal(src, local_hl / "latest", exclude_dirs={"excluded"})
 
     # Btrfs dest (step-3): snapshot + latest symlink
-    snap_check = ssh_exec(
-        docker_ssh_endpoint,
-        f"ls {btrfs_vol.path}/snapshots/",
+    btrfs_link_target = read_symlink_target(
+        btrfs_vol, f"{btrfs_vol.path}/latest", resolved
     )
-    assert snap_check.stdout.strip()
-    btrfs_link = ssh_exec(
-        docker_ssh_endpoint,
-        f"readlink {btrfs_vol.path}/latest",
+    assert btrfs_link_target is not None, "btrfs latest symlink missing"
+    assert "snapshots/" in btrfs_link_target
+
+    # Verify btrfs latest target is a valid directory and a read-only snapshot
+    btrfs_latest_abs = f"{btrfs_vol.path}/{btrfs_link_target}"
+    assert check_directory_exists(btrfs_vol, btrfs_latest_abs, resolved), (
+        f"btrfs latest target is not a directory: {btrfs_latest_abs}"
     )
-    assert "snapshots/" in btrfs_link.stdout
+    # Extract the subdir relative to the volume path for check_btrfs_subvolume
+    btrfs_snapshot_subdir = btrfs_link_target
+    assert check_btrfs_subvolume(btrfs_vol, btrfs_snapshot_subdir, resolved), (
+        f"btrfs latest target is not a subvolume: {btrfs_latest_abs}"
+    )
+    assert check_btrfs_readonly(btrfs_vol, btrfs_latest_abs, resolved), (
+        f"btrfs snapshot is not read-only: {btrfs_latest_abs}"
+    )
 
     # HL dest (step-5): latest symlink on remote-hl
-    hl_check = ssh_exec(
-        docker_ssh_endpoint,
-        f"readlink {REMOTE_BACKUP_PATH}/hl/latest",
+    hl_link_target = read_symlink_target(
+        hl_vol, f"{REMOTE_BACKUP_PATH}/hl/latest", resolved
     )
-    assert "snapshots/" in hl_check.stdout
+    assert hl_link_target is not None, "remote-hl latest symlink missing"
+    assert "snapshots/" in hl_link_target
+    hl_latest_abs = f"{REMOTE_BACKUP_PATH}/hl/{hl_link_target}"
+    assert check_directory_exists(hl_vol, hl_latest_abs, resolved), (
+        f"remote-hl latest target is not a directory: {hl_latest_abs}"
+    )
 
     # Sentinel handling on final destination
     step6 = config.syncs["step-6"]

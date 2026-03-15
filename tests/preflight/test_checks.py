@@ -30,9 +30,9 @@ from nbkp.preflight.queries import (
     parse_rsync_version,
 )
 from nbkp.preflight.snapshot_checks import (
-    _check_btrfs_filesystem,
-    _check_btrfs_mount_option,
-    _check_btrfs_subvolume,
+    check_btrfs_filesystem,
+    check_btrfs_mount_option,
+    check_btrfs_subvolume,
 )
 from nbkp.preflight.status import (
     SyncError,
@@ -729,7 +729,7 @@ class TestCheckBtrfsFilesystemLocal:
     def test_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert _check_btrfs_filesystem(vol, {}) is True
+        assert check_btrfs_filesystem(vol, {}) is True
         mock_run.assert_called_once_with(
             ["stat", "-f", "-c", "%T", "/mnt/data"],
             capture_output=True,
@@ -740,13 +740,13 @@ class TestCheckBtrfsFilesystemLocal:
     def test_not_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert _check_btrfs_filesystem(vol, {}) is False
+        assert check_btrfs_filesystem(vol, {}) is False
 
     @patch("nbkp.remote.dispatch.subprocess.run")
     def test_stat_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert _check_btrfs_filesystem(vol, {}) is False
+        assert check_btrfs_filesystem(vol, {}) is False
 
 
 class TestCheckBtrfsFilesystemRemote:
@@ -755,7 +755,7 @@ class TestCheckBtrfsFilesystemRemote:
         mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert _check_btrfs_filesystem(vol, resolved) is True
+        assert check_btrfs_filesystem(vol, resolved) is True
         server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
             server,
@@ -768,7 +768,7 @@ class TestCheckBtrfsFilesystemRemote:
         mock_run.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert _check_btrfs_filesystem(vol, resolved) is False
+        assert check_btrfs_filesystem(vol, resolved) is False
 
 
 class TestCheckBtrfsSubvolumeLocal:
@@ -776,7 +776,7 @@ class TestCheckBtrfsSubvolumeLocal:
     def test_is_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert _check_btrfs_subvolume(vol, None, {}) is True
+        assert check_btrfs_subvolume(vol, None, {}) is True
         mock_run.assert_called_once_with(
             ["stat", "-c", "%i", "/mnt/data"],
             capture_output=True,
@@ -787,7 +787,7 @@ class TestCheckBtrfsSubvolumeLocal:
     def test_is_subvolume_with_subdir(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert _check_btrfs_subvolume(vol, "backup", {}) is True
+        assert check_btrfs_subvolume(vol, "backup", {}) is True
         mock_run.assert_called_once_with(
             ["stat", "-c", "%i", "/mnt/data/backup"],
             capture_output=True,
@@ -798,13 +798,13 @@ class TestCheckBtrfsSubvolumeLocal:
     def test_not_subvolume(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert _check_btrfs_subvolume(vol, None, {}) is False
+        assert check_btrfs_subvolume(vol, None, {}) is False
 
     @patch("nbkp.remote.dispatch.subprocess.run")
     def test_stat_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert _check_btrfs_subvolume(vol, None, {}) is False
+        assert check_btrfs_subvolume(vol, None, {}) is False
 
 
 class TestCheckBtrfsSubvolumeRemote:
@@ -813,7 +813,7 @@ class TestCheckBtrfsSubvolumeRemote:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert _check_btrfs_subvolume(vol, None, resolved) is True
+        assert check_btrfs_subvolume(vol, None, resolved) is True
         server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
             server,
@@ -826,7 +826,7 @@ class TestCheckBtrfsSubvolumeRemote:
         mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert _check_btrfs_subvolume(vol, "data", resolved) is True
+        assert check_btrfs_subvolume(vol, "data", resolved) is True
         server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
             server,
@@ -839,7 +839,7 @@ class TestCheckBtrfsSubvolumeRemote:
         mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert _check_btrfs_subvolume(vol, None, resolved) is False
+        assert check_btrfs_subvolume(vol, None, resolved) is False
 
 
 class TestCheckBtrfsMountOptionLocal:
@@ -850,7 +850,7 @@ class TestCheckBtrfsMountOptionLocal:
             stdout="rw,relatime,user_subvol_rm_allowed\n",
         )
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}) is True
+        assert check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}) is True
         mock_run.assert_called_once_with(
             ["findmnt", "-T", "/mnt/data", "-n", "-o", "OPTIONS"],
             capture_output=True,
@@ -861,13 +861,13 @@ class TestCheckBtrfsMountOptionLocal:
     def test_option_missing(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="rw,relatime\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}) is False
+        assert check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}) is False
 
     @patch("nbkp.remote.dispatch.subprocess.run")
     def test_findmnt_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}) is False
+        assert check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}) is False
 
 
 class TestCheckBtrfsMountOptionRemote:
@@ -880,7 +880,7 @@ class TestCheckBtrfsMountOptionRemote:
         vol, config = _remote_config()
         resolved = _make_resolved(config)
         assert (
-            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved) is True
+            check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved) is True
         )
         server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
@@ -895,7 +895,7 @@ class TestCheckBtrfsMountOptionRemote:
         vol, config = _remote_config()
         resolved = _make_resolved(config)
         assert (
-            _check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved) is False
+            check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved) is False
         )
 
 

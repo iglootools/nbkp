@@ -31,9 +31,9 @@ from .queries import (
     _run_systemctl_show,
 )
 from .snapshot_checks import (
-    _check_btrfs_filesystem,
-    _check_btrfs_mount_option,
-    _check_hardlink_support,
+    check_btrfs_filesystem,
+    check_btrfs_mount_option,
+    check_hardlink_support,
 )
 from ..mount.observation import MountObservation
 from .status import MountCapabilities, VolumeCapabilities, VolumeDiagnostics
@@ -127,14 +127,12 @@ def check_volume_capabilities(
     has_btrfs = _check_command_available(volume, "btrfs", resolved_endpoints)
     has_stat = _check_command_available(volume, "stat", resolved_endpoints)
     has_findmnt = _check_command_available(volume, "findmnt", resolved_endpoints)
-    is_btrfs = (
-        _check_btrfs_filesystem(volume, resolved_endpoints) if has_stat else False
-    )
+    is_btrfs = check_btrfs_filesystem(volume, resolved_endpoints) if has_stat else False
     hardlink_supported = (
-        _check_hardlink_support(volume, resolved_endpoints) if has_stat else True
+        check_hardlink_support(volume, resolved_endpoints) if has_stat else True
     )
     btrfs_user_subvol_rm = (
-        _check_btrfs_mount_option(volume, "user_subvol_rm_allowed", resolved_endpoints)
+        check_btrfs_mount_option(volume, "user_subvol_rm_allowed", resolved_endpoints)
         if has_findmnt and is_btrfs
         else False
     )

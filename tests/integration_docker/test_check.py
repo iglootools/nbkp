@@ -10,8 +10,8 @@ from nbkp.preflight import (
     check_volume,
 )
 from nbkp.preflight.snapshot_checks import (
-    _check_btrfs_filesystem,
-    _check_btrfs_subvolume,
+    check_btrfs_filesystem,
+    check_btrfs_subvolume,
 )
 from nbkp.config import (
     BtrfsSnapshotConfig,
@@ -132,7 +132,7 @@ class TestBtrfsFilesystemCheck:
             volumes={"btrfs": remote_btrfs_volume},
         )
         resolved = resolve_all_endpoints(config)
-        assert _check_btrfs_filesystem(remote_btrfs_volume, resolved) is True
+        assert check_btrfs_filesystem(remote_btrfs_volume, resolved) is True
 
     def test_non_btrfs_path_detected(
         self,
@@ -144,7 +144,7 @@ class TestBtrfsFilesystemCheck:
             volumes={"data": docker_remote_volume},
         )
         resolved = resolve_all_endpoints(config)
-        assert _check_btrfs_filesystem(docker_remote_volume, resolved) is False
+        assert check_btrfs_filesystem(docker_remote_volume, resolved) is False
 
 
 class TestBtrfsSubvolumeCheck:
@@ -163,7 +163,7 @@ class TestBtrfsSubvolumeCheck:
         )
         resolved = resolve_all_endpoints(config)
         assert (
-            _check_btrfs_subvolume(
+            check_btrfs_subvolume(
                 remote_btrfs_volume,
                 "test-subvol",
                 resolved,
@@ -192,7 +192,7 @@ class TestBtrfsSubvolumeCheck:
         )
         resolved = resolve_all_endpoints(config)
         assert (
-            _check_btrfs_subvolume(
+            check_btrfs_subvolume(
                 remote_btrfs_volume,
                 "regular-dir",
                 resolved,

@@ -20,7 +20,7 @@ from nbkp.scriptgen import ScriptOptions, generate_script
 from nbkp.sync.testkit.seed import build_chain_config
 
 from tests._docker_fixtures import LUKS_PASSPHRASE
-from tests.e2e_docker._chain_helpers import (
+from tests.e2e_docker._pipeline_helpers import (
     assert_chain_results,
     setup_chain,
 )
@@ -87,4 +87,4 @@ class TestChainSyncSh:
             assert "All syncs completed" in result.stderr
 
             # 8. Verify results (tree equality, snapshots, sentinels)
-            assert_chain_results(src, tmp_path, config, docker_ssh_endpoint)
+            assert_chain_results(src, tmp_path, config, docker_ssh_endpoint, resolved)
