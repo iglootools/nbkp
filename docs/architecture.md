@@ -106,6 +106,14 @@ The `keyring` package is an optional dependency (`pip install nbkp[keyring]`) to
 
 The cost is negligible — `systemctl stop` on an already-stopped unit is a no-op — and the benefit is that cleanup is always complete regardless of how the session progressed.
 
+#### Why no `dm-crypt` kernel module check
+
+Pre-flight checks verify that userspace tools (`cryptsetup`, `systemd-cryptsetup`) are available, but deliberately do not probe for the `dm-crypt` kernel module:
+
+- On any system where `cryptsetup` is installed, `dm-crypt` is almost always available (built-in or auto-loaded on first use).
+- The kernel may auto-load the module when `cryptsetup` runs, so a pre-check could give false negatives.
+- When `dm-crypt` is genuinely missing (e.g. Docker without `--privileged`), `cryptsetup`/`systemd-cryptsetup attach` fails with a clear error — the failure is not silent.
+
 #### Why mount unit names are derived at runtime
 
 Mount unit names (e.g. `/mnt/seagate8tb` → `mnt-seagate8tb.mount`) are derived by running `systemd-escape --path <volume-path>` on the target host rather than being hardcoded or computed in Python. This is because systemd's escaping rules are non-trivial (hyphens in path components become `\x2d`, among other edge cases), and `systemd-escape` is the canonical implementation. The result is cached in `VolumeCapabilities.mount_unit` after the first preflight probe.
