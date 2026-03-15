@@ -195,3 +195,43 @@ The cost is negligible — `systemctl stop` on an already-stopped unit is a no-o
 #### Why mount unit names are derived at runtime
 
 Mount unit names (e.g. `/mnt/seagate8tb` → `mnt-seagate8tb.mount`) are derived by running `systemd-escape --path <volume-path>` on the target host rather than being hardcoded or computed in Python. This is because systemd's escaping rules are non-trivial (hyphens in path components become `\x2d`, among other edge cases), and `systemd-escape` is the canonical implementation. The result is cached in `VolumeCapabilities.mount_unit` after the first preflight probe.
+
+### Preflight Conditional Probing
+
+The preflight check system uses two layers: an **observation layer** (`volume_checks.py`, `endpoint_checks.py`) that probes raw state, and an **error interpretation layer** (`status.py`) that decides what constitutes a problem based on config. Not all capabilities are checked for every volume or endpoint — probing is selective. This is an intentional design choice driven by three categories of conditional logic.
+
+#### Physical cascade dependencies
+
+Probe B requires the result of probe A as input. These conditions live in the observation layer because they represent physical impossibilities, not policy decisions:
+
+- `rsync_version_ok` requires `has_rsync` — can't run `rsync --version` if rsync isn't installed
+- `is_btrfs_filesystem` requires `has_stat` — needs `stat -f -c %T`
+- `btrfs_user_subvol_rm` requires `has_findmnt AND is_btrfs`
+- `mount_unit` derivation requires `has_systemd_escape` — needs the tool to compute the unit name
+- `has_mount_unit_config` requires `mount_unit` — can't query a systemd unit without its name
+- `staging_dir_writable` requires `staging_dir_exists`
+
+#### Config-as-input probing
+
+The probe itself needs config values as parameters — without them, the probe cannot be formulated. These also live in the observation layer:
+
+- Encryption checks need `mapper_name` from `mount.encryption` — no mapper name means nothing to query
+- `systemd-cryptsetup@{mapper}.service` lookup needs the mapper name from config
+- `systemctl show {mount-unit}` needs the derived mount unit name
+
+#### Config-as-filter probing
+
+The probe is independent of config values, but only relevant when a feature is enabled. These are skipped in the observation layer to avoid unnecessary SSH round-trips (each check is a remote call):
+
+- `snapshot_dirs` and `latest` symlink checks only run when `endpoint.snapshot_mode != "none"`
+- `BtrfsSubvolumeDiagnostics` only probed when `btrfs_snapshots.enabled` (plus physical prerequisites)
+
+The error interpretation layer already filters based on these same config flags, so these probes could theoretically always run. However, always-probing would add 2–5 extra SSH calls per non-snapshot endpoint, which adds up across configs with many endpoints.
+
+#### Why not always-probe
+
+Consolidating all conditional logic in the error interpretation layer was considered and rejected:
+
+- **Categories 1 and 2 cannot move** — they encode physical prerequisites, not policy. Moving them downstream would just replace cascade conditionals with null-checks in the error layer.
+- **Category 3 saves real SSH round-trips** with minimal code complexity (2–3 lines of guards per check site).
+- **The `| None` type convention** (meaning "not probed / not applicable") is consistently applied across all diagnostics models and well-understood by the error interpretation layer.
