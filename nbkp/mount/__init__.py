@@ -13,7 +13,6 @@ from .detection import (
     detect_device_present,
     detect_luks_attached,
     detect_systemd_cryptsetup_path,
-    detect_volume_mounted,
     resolve_mount_strategy,
     resolve_mount_unit,
 )
@@ -53,7 +52,6 @@ __all__ = [
     "detect_device_present",
     "detect_luks_attached",
     "detect_systemd_cryptsetup_path",
-    "detect_volume_mounted",
     "generate_auth_rules",
     "generate_polkit_rules",
     "generate_sudoers_rules",

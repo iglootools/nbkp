@@ -69,7 +69,7 @@ class SystemdMountStrategy:
         resolved_endpoints: ResolvedEndpoints,
     ) -> bool:
         result = run_on_volume(
-            ["systemctl", "is-active", self.mount_unit, "--quiet"],
+            systemd_cmds.build_detect_mounted_command(self.mount_unit),
             volume,
             resolved_endpoints,
         )
@@ -106,7 +106,7 @@ class DirectMountStrategy:
         resolved_endpoints: ResolvedEndpoints,
     ) -> bool:
         result = run_on_volume(
-            ["mountpoint", "-q", self.volume_path],
+            direct_cmds.build_detect_mounted_command(self.volume_path),
             volume,
             resolved_endpoints,
         )

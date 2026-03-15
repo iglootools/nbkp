@@ -6,11 +6,12 @@ import subprocess
 from unittest.mock import patch
 
 from nbkp.config import LocalVolume
+from nbkp.mount import direct as direct_cmds
+from nbkp.mount import systemd as systemd_cmds
 from nbkp.mount.detection import (
     detect_device_present,
     detect_luks_attached,
     detect_systemd_cryptsetup_path,
-    detect_volume_mounted,
     resolve_mount_unit,
 )
 
@@ -66,14 +67,21 @@ class TestDetectLuksAttached:
         assert cmd == ["test", "-b", "/dev/mapper/mydisk"]
 
 
-class TestDetectVolumeMounted:
-    def test_mounted(self) -> None:
-        with patch("nbkp.remote.dispatch.subprocess.run", return_value=_mock_run(0)):
-            assert detect_volume_mounted(_local_vol(), "mnt-disk.mount", {})
+class TestBuildDetectMountedCommand:
+    def test_systemd(self) -> None:
+        assert systemd_cmds.build_detect_mounted_command("mnt-disk.mount") == [
+            "systemctl",
+            "is-active",
+            "mnt-disk.mount",
+            "--quiet",
+        ]
 
-    def test_not_mounted(self) -> None:
-        with patch("nbkp.remote.dispatch.subprocess.run", return_value=_mock_run(3)):
-            assert not detect_volume_mounted(_local_vol(), "mnt-disk.mount", {})
+    def test_direct(self) -> None:
+        assert direct_cmds.build_detect_mounted_command("/mnt/disk") == [
+            "mountpoint",
+            "-q",
+            "/mnt/disk",
+        ]
 
 
 class TestDetectSystemdCryptsetupPath:

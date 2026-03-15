@@ -53,6 +53,16 @@ def build_umount_command(mount_unit: str) -> list[str]:
     return ["systemctl", "stop", mount_unit]
 
 
+def build_detect_mounted_command(mount_unit: str) -> list[str]:
+    """Build command to check if a volume is mounted via systemctl.
+
+    Returns e.g.::
+
+        ["systemctl", "is-active", "mnt-seagate8tb.mount", "--quiet"]
+    """
+    return ["systemctl", "is-active", mount_unit, "--quiet"]
+
+
 def build_close_luks_command(mapper_name: str) -> list[str]:
     """Build command to close a LUKS volume via systemctl.
 

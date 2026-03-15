@@ -53,20 +53,6 @@ def detect_luks_attached(
     return result.returncode == 0
 
 
-def detect_volume_mounted(
-    volume: Volume,
-    mount_unit: str,
-    resolved_endpoints: ResolvedEndpoints,
-) -> bool:
-    """Check if a volume is mounted via systemctl."""
-    result = run_on_volume(
-        ["systemctl", "is-active", mount_unit, "--quiet"],
-        volume,
-        resolved_endpoints,
-    )
-    return result.returncode == 0
-
-
 def detect_systemd_cryptsetup_path(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,

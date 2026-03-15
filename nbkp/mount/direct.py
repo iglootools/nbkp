@@ -32,6 +32,16 @@ def build_attach_luks_command(
     ]
 
 
+def build_detect_mounted_command(volume_path: str) -> list[str]:
+    """Build command to check if a volume is mounted via mountpoint.
+
+    Returns e.g.::
+
+        ["mountpoint", "-q", "/mnt/seagate8tb"]
+    """
+    return ["mountpoint", "-q", volume_path]
+
+
 def build_close_luks_command(mapper_name: str) -> list[str]:
     """Build command to close a LUKS volume via cryptsetup close.
 

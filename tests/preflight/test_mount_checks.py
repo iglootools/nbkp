@@ -450,7 +450,6 @@ class TestObservationReuse:
 
     @patch("nbkp.preflight.volume_checks.detect_device_present")
     @patch("nbkp.preflight.volume_checks.detect_luks_attached")
-    @patch("nbkp.preflight.volume_checks.detect_volume_mounted")
     @patch("nbkp.preflight.volume_checks.resolve_mount_unit")
     @patch("nbkp.preflight.volume_checks.detect_systemd_cryptsetup_path")
     @patch("nbkp.preflight.volume_checks._check_command_available", return_value=True)
@@ -465,7 +464,6 @@ class TestObservationReuse:
         _mock_cmd: object,
         mock_cryptsetup_path: object,
         mock_mount_unit: object,
-        mock_mounted: object,
         mock_luks: object,
         mock_device: object,
     ) -> None:
@@ -488,7 +486,6 @@ class TestObservationReuse:
         # Runtime probes should not have been called
         mock_device.assert_not_called()  # type: ignore[union-attr]
         mock_luks.assert_not_called()  # type: ignore[union-attr]
-        mock_mounted.assert_not_called()  # type: ignore[union-attr]
         mock_mount_unit.assert_not_called()  # type: ignore[union-attr]
         mock_cryptsetup_path.assert_not_called()  # type: ignore[union-attr]
 

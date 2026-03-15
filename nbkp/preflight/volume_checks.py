@@ -13,11 +13,12 @@ from ..config import (
 )
 from ..fsprotocol import VOLUME_SENTINEL
 from ..mount.auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH
+from ..mount import direct as direct_cmds
+from ..mount import systemd as systemd_cmds
 from ..mount.detection import (
     detect_device_present,
     detect_luks_attached,
     detect_systemd_cryptsetup_path,
-    detect_volume_mounted,
     resolve_mount_unit,
 )
 from ..remote.dispatch import run_on_volume
@@ -302,7 +303,12 @@ def _check_systemd_mount_capabilities(
     mounted = (
         obs.mounted
         if obs is not None
-        else detect_volume_mounted(volume, mount_unit, resolved_endpoints)
+        else run_on_volume(
+            systemd_cmds.build_detect_mounted_command(mount_unit),
+            volume,
+            resolved_endpoints,
+        ).returncode
+        == 0
         if has_systemctl and mount_unit is not None
         else None
     )
@@ -377,7 +383,9 @@ def _check_direct_mount_capabilities(
         obs.mounted
         if obs is not None
         else run_on_volume(
-            ["mountpoint", "-q", volume.path], volume, resolved_endpoints
+            direct_cmds.build_detect_mounted_command(volume.path),
+            volume,
+            resolved_endpoints,
         ).returncode
         == 0
         if has_mountpoint
