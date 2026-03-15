@@ -447,8 +447,8 @@ class TestCheckCommand:
 
 
 class TestRunCommand:
-    @patch("nbkp.cli.run_cmd.run_all_syncs")
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.sync.pipeline.run_all_syncs")
+    @patch("nbkp.sync.pipeline.check_all_syncs")
     @patch("nbkp.cli.common.load_config")
     def test_successful_run(
         self,
@@ -480,8 +480,8 @@ class TestRunCommand:
         assert callable(call_kwargs.kwargs.get("on_sync_start"))
         assert callable(call_kwargs.kwargs.get("on_sync_end"))
 
-    @patch("nbkp.cli.run_cmd.run_all_syncs")
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.sync.pipeline.run_all_syncs")
+    @patch("nbkp.sync.pipeline.check_all_syncs")
     @patch("nbkp.cli.common.load_config")
     def test_displays_status_before_results(
         self,
@@ -513,8 +513,8 @@ class TestRunCommand:
         ok_pos = result.output.index("OK")
         assert vol_pos < ok_pos
 
-    @patch("nbkp.cli.run_cmd.run_all_syncs")
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.sync.pipeline.run_all_syncs")
+    @patch("nbkp.sync.pipeline.check_all_syncs")
     @patch("nbkp.cli.common.load_config")
     def test_failed_run(
         self,
@@ -542,8 +542,8 @@ class TestRunCommand:
         assert result.exit_code == 1
         assert "FAILED" in result.output
 
-    @patch("nbkp.cli.run_cmd.run_all_syncs")
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.sync.pipeline.run_all_syncs")
+    @patch("nbkp.sync.pipeline.check_all_syncs")
     @patch("nbkp.cli.common.load_config")
     def test_dry_run(
         self,
@@ -576,8 +576,8 @@ class TestRunCommand:
         check_kwargs = mock_checks.call_args
         assert check_kwargs.kwargs.get("dry_run") is True
 
-    @patch("nbkp.cli.run_cmd.run_all_syncs")
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.sync.pipeline.run_all_syncs")
+    @patch("nbkp.sync.pipeline.check_all_syncs")
     @patch("nbkp.cli.common.load_config")
     def test_json_output(
         self,
@@ -619,8 +619,8 @@ class TestRunCommand:
         call_kwargs = mock_run.call_args
         assert call_kwargs.kwargs.get("on_rsync_output") is None
 
-    @patch("nbkp.cli.run_cmd.run_all_syncs")
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.sync.pipeline.run_all_syncs")
+    @patch("nbkp.sync.pipeline.check_all_syncs")
     @patch("nbkp.cli.common.load_config")
     def test_sync_filter(
         self,
@@ -659,8 +659,8 @@ class TestRunCommand:
         run_kwargs = mock_run.call_args
         assert run_kwargs.kwargs.get("only_syncs") == ["photos-to-nas"]
 
-    @patch("nbkp.cli.run_cmd.run_all_syncs")
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.sync.pipeline.run_all_syncs")
+    @patch("nbkp.sync.pipeline.check_all_syncs")
     @patch("nbkp.cli.common.load_config")
     def test_progress(
         self,
@@ -697,8 +697,8 @@ class TestRunCommand:
         call_kwargs = mock_run.call_args
         assert call_kwargs.kwargs.get("progress") == ProgressMode.PER_FILE
 
-    @patch("nbkp.cli.run_cmd.run_all_syncs")
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.sync.pipeline.run_all_syncs")
+    @patch("nbkp.sync.pipeline.check_all_syncs")
     @patch("nbkp.cli.common.load_config")
     def test_exits_before_syncs_on_status_error(
         self,
@@ -716,8 +716,8 @@ class TestRunCommand:
         assert result.exit_code == 1
         mock_run.assert_not_called()
 
-    @patch("nbkp.cli.run_cmd.run_all_syncs")
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.sync.pipeline.run_all_syncs")
+    @patch("nbkp.sync.pipeline.check_all_syncs")
     @patch("nbkp.cli.common.load_config")
     def test_sentinel_only_proceeds_by_default(
         self,
@@ -744,8 +744,8 @@ class TestRunCommand:
         assert result.exit_code == 0
         mock_run.assert_called_once()
 
-    @patch("nbkp.cli.run_cmd.run_all_syncs")
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.sync.pipeline.run_all_syncs")
+    @patch("nbkp.sync.pipeline.check_all_syncs")
     @patch("nbkp.cli.common.load_config")
     def test_sentinel_only_exits_when_strict(
         self,

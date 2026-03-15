@@ -8,21 +8,19 @@ from typing import Annotated, Optional
 import typer
 from rich.console import Console, Group
 from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.text import Text
 
 from ..config import NetworkType
 from ..ordering.output import build_rich_tree_sections
-from ..output import OutputFormat
-from ..sync import (
-    ProgressMode,
-    SyncResult,
-    run_all_syncs,
-)
+from ..output import OutputFormat, print_human_check
+from ..preflight import SyncStatus, VolumeStatus
+from ..sync import ProgressMode, SyncResult
 from ..sync.output import build_human_results_sections
+from ..sync.pipeline import INACTIVE_ERRORS, check_and_run
 from .app import app
 from .common import (
-    _INACTIVE_ERRORS,
-    check_and_display,
+    _check_total,
     load_config_or_exit,
     managed_mount,
     resolve_endpoints,
@@ -112,26 +110,100 @@ def run(
     cfg = load_config_or_exit(config)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
-    exit_code = 0
 
     with managed_mount(
         cfg, resolved, mount=mount, umount=umount, output_format=output_format
     ) as (_mount_strategy, mount_observations):
-        vol_statuses, sync_statuses, has_errors = check_and_display(
+        # ── Check progress bar ────────────────────────────────────
+        check_progress_ctx: Progress | None = None
+        check_task_id = None
+
+        if output_format is OutputFormat.HUMAN:
+            total = _check_total(cfg, sync)
+            if total > 0:
+                check_progress_ctx = Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    TextColumn("{task.completed}/{task.total}"),
+                    transient=True,
+                )
+                check_progress_ctx.start()
+                check_task_id = check_progress_ctx.add_task(
+                    "Checking volumes, endpoints, and syncs...", total=total
+                )
+
+        def on_check_progress(_slug: str) -> None:
+            if check_progress_ctx is not None and check_task_id is not None:
+                check_progress_ctx.advance(check_task_id)
+
+        def on_checks_done(
+            vol_statuses: dict[str, VolumeStatus],
+            sync_statuses: dict[str, SyncStatus],
+        ) -> None:
+            if check_progress_ctx is not None:
+                check_progress_ctx.stop()
+            if output_format is OutputFormat.HUMAN:
+                print_human_check(
+                    vol_statuses, sync_statuses, cfg, resolved_endpoints=resolved
+                )
+
+        # ── Sync progress callbacks ───────────────────────────────
+        use_spinner = output_format is OutputFormat.HUMAN and progress in (
+            None,
+            ProgressMode.NONE,
+        )
+        stream_output = (
+            (lambda chunk: typer.echo(chunk, nl=False))
+            if output_format is OutputFormat.HUMAN and not use_spinner
+            else None
+        )
+
+        console = Console()
+        progress_lines: list[Text] = []
+        status_display = None
+
+        def on_sync_start(slug: str) -> None:
+            nonlocal status_display
+            if use_spinner:
+                status_display = console.status(f"Syncing {slug}...")
+                status_display.start()
+            else:
+                console.print(f"Syncing {slug}...")
+
+        def on_sync_end(slug: str, result: SyncResult) -> None:
+            nonlocal status_display
+            if status_display is not None:
+                status_display.stop()
+                status_display = None
+            icon = "[green]\u2713[/green]" if result.success else "[red]\u2717[/red]"
+            console.print(f"{icon} {slug}")
+            progress_lines.append(Text.from_markup(f"{icon} {slug}"))
+
+        # ── Pipeline ──────────────────────────────────────────────
+        pipeline = check_and_run(
             cfg,
-            output_format,
-            strict,
-            only_syncs=sync,
-            resolved_endpoints=resolved,
+            strict=strict,
             dry_run=dry_run,
+            only_syncs=sync,
+            progress=progress,
+            prune=prune,
+            on_check_progress=on_check_progress,
+            on_checks_done=on_checks_done,
+            on_rsync_output=stream_output,
+            on_sync_start=(
+                on_sync_start if output_format is OutputFormat.HUMAN else None
+            ),
+            on_sync_end=(on_sync_end if output_format is OutputFormat.HUMAN else None),
+            resolved_endpoints=resolved,
             mount_observations=mount_observations,
         )
 
-        if has_errors:
+        # ── Output ────────────────────────────────────────────────
+        if pipeline.has_preflight_errors:
             if output_format is OutputFormat.JSON:
                 data = {
-                    "volumes": [v.model_dump() for v in vol_statuses.values()],
-                    "syncs": [s.model_dump() for s in sync_statuses.values()],
+                    "volumes": [v.model_dump() for v in pipeline.vol_statuses.values()],
+                    "syncs": [s.model_dump() for s in pipeline.sync_statuses.values()],
                     "results": [],
                 }
                 typer.echo(json.dumps(data, indent=2))
@@ -139,14 +211,14 @@ def run(
                 errored = (
                     {
                         slug: sorted(e.value for e in s.errors)
-                        for slug, s in sync_statuses.items()
+                        for slug, s in pipeline.sync_statuses.items()
                         if not s.active
                     }
                     if strict
                     else {
-                        slug: sorted(e.value for e in set(s.errors) - _INACTIVE_ERRORS)
-                        for slug, s in sync_statuses.items()
-                        if set(s.errors) - _INACTIVE_ERRORS
+                        slug: sorted(e.value for e in set(s.errors) - INACTIVE_ERRORS)
+                        for slug, s in pipeline.sync_statuses.items()
+                        if set(s.errors) - INACTIVE_ERRORS
                     }
                 )
                 lines = [
@@ -160,64 +232,17 @@ def run(
                     + "\n\nRun [bold]nbkp troubleshoot[/bold] for"
                     " detailed remediation steps."
                 )
-            exit_code = 1
         else:
-            use_spinner = output_format is OutputFormat.HUMAN and progress in (
-                None,
-                ProgressMode.NONE,
-            )
-            stream_output = (
-                (lambda chunk: typer.echo(chunk, nl=False))
-                if output_format is OutputFormat.HUMAN and not use_spinner
-                else None
-            )
-
-            console = Console()
-            progress_lines: list[Text] = []
-            status_display = None
-
-            def on_sync_start(slug: str) -> None:
-                nonlocal status_display
-                if use_spinner:
-                    status_display = console.status(f"Syncing {slug}...")
-                    status_display.start()
-                else:
-                    console.print(f"Syncing {slug}...")
-
-            def on_sync_end(slug: str, result: SyncResult) -> None:
-                nonlocal status_display
-                if status_display is not None:
-                    status_display.stop()
-                    status_display = None
-                icon = (
-                    "[green]\u2713[/green]" if result.success else "[red]\u2717[/red]"
-                )
-                console.print(f"{icon} {slug}")
-                progress_lines.append(Text.from_markup(f"{icon} {slug}"))
-
-            results = run_all_syncs(
-                cfg,
-                sync_statuses,
-                dry_run=dry_run,
-                only_syncs=sync,
-                progress=progress,
-                prune=prune,
-                on_rsync_output=stream_output,
-                on_sync_start=(
-                    on_sync_start if output_format is OutputFormat.HUMAN else None
-                ),
-                on_sync_end=(
-                    on_sync_end if output_format is OutputFormat.HUMAN else None
-                ),
-                resolved_endpoints=resolved,
-            )
-
             match output_format:
                 case OutputFormat.JSON:
                     data = {
-                        "volumes": [v.model_dump() for v in vol_statuses.values()],
-                        "syncs": [s.model_dump() for s in sync_statuses.values()],
-                        "results": [r.model_dump() for r in results],
+                        "volumes": [
+                            v.model_dump() for v in pipeline.vol_statuses.values()
+                        ],
+                        "syncs": [
+                            s.model_dump() for s in pipeline.sync_statuses.values()
+                        ],
+                        "results": [r.model_dump() for r in pipeline.results],
                     }
                     typer.echo(json.dumps(data, indent=2))
                 case OutputFormat.HUMAN:
@@ -226,7 +251,9 @@ def run(
                         Text(""),
                         *progress_lines,
                         Text(""),
-                        *build_human_results_sections(results, dry_run, cfg, resolved),
+                        *build_human_results_sections(
+                            pipeline.results, dry_run, cfg, resolved
+                        ),
                     ]
                     console.print(
                         Panel(
@@ -237,16 +264,5 @@ def run(
                         )
                     )
 
-            def _is_expected_skip(r: SyncResult) -> bool:
-                ss = sync_statuses.get(r.sync_slug)
-                return (
-                    ss is not None
-                    and bool(ss.errors)
-                    and set(ss.errors) <= _INACTIVE_ERRORS
-                )
-
-            if any(not r.success and not _is_expected_skip(r) for r in results):
-                exit_code = 1
-
-    if exit_code != 0:
-        raise typer.Exit(exit_code)
+        if pipeline.has_preflight_errors or pipeline.has_sync_failures:
+            raise typer.Exit(1)

@@ -34,20 +34,14 @@ from ..output import (
     print_human_check,
 )
 from ..preflight import (
-    SyncError,
     SyncStatus,
     VolumeError,
     VolumeStatus,
     check_all_syncs,
 )
+from ..sync.pipeline import INACTIVE_ERRORS, has_fatal_errors
 
-_INACTIVE_ERRORS = {
-    SyncError.SRC_EP_SENTINEL_NOT_FOUND,
-    SyncError.DST_EP_SENTINEL_NOT_FOUND,
-    SyncError.SRC_VOL_UNAVAILABLE,
-    SyncError.DST_VOL_UNAVAILABLE,
-    SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING,
-}
+_INACTIVE_ERRORS = INACTIVE_ERRORS
 
 _INACTIVE_VOLUME_ERRORS = {
     VolumeError.DEVICE_NOT_PRESENT,
@@ -220,13 +214,7 @@ def check_and_display(
             resolved_endpoints=resolved_endpoints,
         )
 
-    has_errors = (
-        any(not s.active for s in sync_statuses.values())
-        if strict
-        else any(set(s.errors) - _INACTIVE_ERRORS for s in sync_statuses.values())
-    )
-
-    return vol_statuses, sync_statuses, has_errors
+    return vol_statuses, sync_statuses, has_fatal_errors(sync_statuses, strict=strict)
 
 
 @contextmanager

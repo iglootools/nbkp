@@ -27,8 +27,7 @@ from nbkp.config import (
 )
 from nbkp.mount.detection import resolve_mount_strategy
 from nbkp.mount.lifecycle import mount_volumes, umount_volumes
-from nbkp.preflight import check_all_syncs
-from nbkp.sync.runner import run_all_syncs
+from nbkp.sync.pipeline import check_and_run
 
 from nbkp.sync.testkit.seed import build_chain_config
 
@@ -76,27 +75,18 @@ class TestChainSync:
             # 3. Setup: sentinels, seed data
             src = setup_chain(config, tmp_path, docker_ssh_endpoint)
 
-            # 4. Preflight checks — mirrors prod `run` error handling
-            vol_statuses, sync_statuses = check_all_syncs(
-                config, resolved_endpoints=resolved
-            )
-            for slug, vs in vol_statuses.items():
-                assert vs.active, f"volume {slug}: {[e.value for e in vs.errors]}"
-            for slug, ss in sync_statuses.items():
-                assert ss.active, f"{slug}: {[e.value for e in ss.errors]}"
-                assert not ss.errors, f"{slug}: {[e.value for e in ss.errors]}"
-
-            # 5. Run all syncs (topologically ordered)
-            results = run_all_syncs(
-                config,
-                sync_statuses,
-                resolved_endpoints=resolved,
-            )
-            for r in results:
+            # 4–5. Preflight checks + run all syncs (production pipeline)
+            pipeline = check_and_run(config, strict=True, resolved_endpoints=resolved)
+            assert not pipeline.has_preflight_errors, {
+                slug: [e.value for e in s.errors]
+                for slug, s in pipeline.sync_statuses.items()
+                if s.errors
+            }
+            for r in pipeline.results:
                 assert r.success, f"{r.sync_slug}: {r.detail}"
 
             # 6. Verify topological ordering
-            slugs = [r.sync_slug for r in results]
+            slugs = [r.sync_slug for r in pipeline.results]
             for i in range(1, 6):
                 assert slugs.index(f"step-{i}") < slugs.index(f"step-{i + 1}")
 
