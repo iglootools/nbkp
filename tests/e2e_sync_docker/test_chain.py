@@ -76,10 +76,15 @@ class TestChainSync:
             # 3. Setup: sentinels, seed data
             src = setup_chain(config, tmp_path, docker_ssh_endpoint)
 
-            # 4. Check all syncs — all should be active
-            _, sync_statuses = check_all_syncs(config, resolved_endpoints=resolved)
-            for slug, status in sync_statuses.items():
-                assert status.active, f"{slug}: {[r.value for r in status.errors]}"
+            # 4. Preflight checks — mirrors prod `run` error handling
+            vol_statuses, sync_statuses = check_all_syncs(
+                config, resolved_endpoints=resolved
+            )
+            for slug, vs in vol_statuses.items():
+                assert vs.active, f"volume {slug}: {[e.value for e in vs.errors]}"
+            for slug, ss in sync_statuses.items():
+                assert ss.active, f"{slug}: {[e.value for e in ss.errors]}"
+                assert not ss.errors, f"{slug}: {[e.value for e in ss.errors]}"
 
             # 5. Run all syncs (topologically ordered)
             results = run_all_syncs(
