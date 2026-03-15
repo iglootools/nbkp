@@ -1,6 +1,6 @@
 # Building and Testing
 
-The unit tests cover the core logic of the tool. Integration and end-to-end tests exercise the real rsync/SSH/btrfs pipeline against Docker containers and local filesystems. See [Testing Categories](conventions.md#testing-categories) for details on each test category.
+The unit tests cover the core logic of the tool. Integration and end-to-end tests exercise the real rsync/SSH/btrfs pipeline against Docker containers and local filesystems. See [Testing Strategy](conventions.md#testing-strategy) for details on each test category.
 
 Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/QA. The `seed --docker` command requires the `docker` extra: `pipx install nbkp[docker]`. In dev: `poetry run nbkp demo`.
 
@@ -51,24 +51,14 @@ The `check-links` workflow runs a link checker against the documentation to catc
 It is scheduled to run weekly, but can also be triggered manually using `gh workflow run check-links.yml`.
 
 ## Testing Strategy
+
+See [Testing Strategy](conventions.md#testing-strategy) for details on test categories, automated vs manual testing, and intentionally untested areas.
+
 The Docker-based test suites use [testcontainers](https://testcontainers-python.readthedocs.io/) and automatically:
-- Generates an ephemeral SSH key pair
-- Builds and starts a Docker container with SSH, rsync, and a btrfs filesystem
-- Runs tests covering local-to-local, local-to-remote, remote-to-local syncs, btrfs snapshots, and status checks
-- Tears down the container on completion
-
-### Intentionally Not Integration-Tested
-
-The following functionality is covered by unit tests but intentionally excluded from Docker/integration testing, with reasoning:
-
-- **Credential providers** (keyring, prompt, env, command) — Keyring requires OS-level secret store setup (macOS Keychain, GNOME Keyring) unavailable in Docker. Prompt is interactive. Env and command providers are trivial wrappers. The passphrase delivery path is exercised end-to-end through LUKS mount tests, which pipe a real passphrase via stdin.
-- **SSH agent authentication** — Requires managing an `ssh-agent` process in the test environment. All integration tests use explicit key files. The `allow_agent=False` parameter is validated via unit tests.
-- **Paramiko-specific timeouts** (`banner_timeout`, `auth_timeout`, `channel_timeout`) — Would require a deliberately slow or broken SSH server. Correct flag generation is unit-tested.
-- **`disabled_algorithms`** — Would require a server configured to require specific algorithms. Correct option mapping is unit-tested.
-- **SSH `compress` / `server_alive_interval` behavior** — Verifying actual compression or keepalive behavior over the wire is impractical. Correct flag generation is unit-tested.
-- **Per-hop connection options** — Multi-hop proxy tests use identical options on all hops. Per-hop option variation is covered by unit tests (each hop generates options independently).
-- **Sync ordering** — Pure graph logic with no external commands. Topological sort and cycle detection are thoroughly unit-tested. Ordering is implicitly validated by the e2e chain sync test which asserts step execution order.
-- **Shell script generation internals** — The `integration_fs` test suite already generates and executes a full backup script against real filesystems, validating the end-to-end scriptgen path.
+- Generate an ephemeral SSH key pair
+- Build and start a Docker container with SSH, rsync, and a btrfs filesystem
+- Run the tests
+- Tear down the container on completion
 
 ## Release Process
 - Trigger the `release` workflow: `gh workflow run release.yml`
