@@ -10,6 +10,7 @@ from pathlib import Path
 from ...config import (
     BtrfsSnapshotConfig,
     Config,
+    CredentialProvider,
     HardLinkSnapshotConfig,
     LocalVolume,
     LuksEncryptionConfig,
@@ -320,6 +321,7 @@ def build_chain_config(
     luks_uuid: str | None = None,
     rsync_options: RsyncOptions | None = None,
     max_snapshots: int | None = None,
+    credential_provider: CredentialProvider = CredentialProvider.KEYRING,
 ) -> Config:
     """Build a 6-hop chain config across local and remote volumes.
 
@@ -492,6 +494,7 @@ def build_chain_config(
     }
 
     return Config(
+        credential_provider=credential_provider,
         ssh_endpoints={
             "bastion": bastion_endpoint,
             "via-bastion": proxied_endpoint,

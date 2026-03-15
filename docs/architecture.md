@@ -33,6 +33,7 @@ graph TD
     config --> remote
     credentials --> config
     democli --> config
+    democli --> mount
     democli --> ordering
     democli --> output
     democli --> preflight

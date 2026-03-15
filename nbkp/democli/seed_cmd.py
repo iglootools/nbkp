@@ -18,14 +18,19 @@ from rich.syntax import Syntax
 from rich.text import Text
 
 from ..config import (
+    CredentialProvider,
     RsyncOptions,
+    resolve_all_endpoints,
 )
+from ..mount.detection import resolve_mount_strategy
+from ..mount.lifecycle import mount_volumes, umount_volumes
 
 # Docker-dependent imports are deferred to seed --docker.
 # They require the 'docker' extra: pipx install nbkp[docker]
 try:
     from ..remote.testkit.docker import (
         BASTION_CONTAINER_NAME,
+        LUKS_PASSPHRASE,
         STORAGE_CONTAINER_NAME,
         DOCKER_DIR,
         build_docker_image,
@@ -33,6 +38,7 @@ try:
         create_docker_network,
         create_test_ssh_endpoint,
         generate_ssh_keypair,
+        read_luks_metadata,
         ssh_exec,
         start_bastion_container,
         start_storage_container,
@@ -62,6 +68,31 @@ def _cmd_prefix() -> str:
     return "poetry run " if _is_dev_environment() else ""
 
 
+def _luks_setup_instructions(provider: CredentialProvider) -> list[str]:
+    """Return shell lines that set up the LUKS passphrase."""
+    match provider:
+        case CredentialProvider.ENV:
+            return [
+                f'export NBKP_PASSPHRASE_TEST_LUKS="{LUKS_PASSPHRASE}"',
+            ]
+        case CredentialProvider.KEYRING:
+            return [
+                "# Set the LUKS passphrase in the keyring (one-time):",
+                "keyring set nbkp test-luks",
+                f"#   (enter passphrase: {LUKS_PASSPHRASE})",
+            ]
+        case CredentialProvider.PROMPT:
+            return [
+                "# You will be prompted for the LUKS passphrase at runtime.",
+                f"# Passphrase: {LUKS_PASSPHRASE}",
+            ]
+        case CredentialProvider.COMMAND:
+            return [
+                "# Configure a command provider in the config to retrieve",
+                f"# the passphrase. Passphrase: {LUKS_PASSPHRASE}",
+            ]
+
+
 def _require_docker_extra() -> None:
     """Exit with install hint if docker extra is not installed."""
     if not _HAS_DOCKER:
@@ -88,10 +119,18 @@ def seed(
     docker: Annotated[
         bool,
         typer.Option(
-            "--docker",
+            "--docker/--no-docker",
             help="Start a Docker container for remote syncs.",
         ),
-    ] = False,
+    ] = True,
+    luks: Annotated[
+        bool,
+        typer.Option(
+            "--luks/--no-luks",
+            help="Use LUKS-encrypted btrfs volume (requires --docker"
+            " and dm-crypt kernel module).",
+        ),
+    ] = True,
     bandwidth_limit: Annotated[
         int,
         typer.Option(
@@ -101,6 +140,14 @@ def seed(
             " Set to 0 to disable.",
         ),
     ] = 250,
+    credential_provider: Annotated[
+        CredentialProvider,
+        typer.Option(
+            "--credential-provider",
+            help="How LUKS passphrases are retrieved at runtime."
+            " Only relevant when --luks is enabled.",
+        ),
+    ] = CredentialProvider.KEYRING,
     base_dir: Annotated[
         Path | None,
         typer.Option(
@@ -166,8 +213,10 @@ def seed(
             wait_for_ssh(storage_endpoint)
 
     # Config — chain layout matching integration test
+    luks_uuid: str | None = None
     if docker:
         assert bastion_endpoint is not None
+        assert storage_endpoint is not None
         proxied_endpoint = create_test_ssh_endpoint(
             "via-bastion",
             "backup-server",
@@ -175,12 +224,33 @@ def seed(
             private_key,
             proxy_jump="bastion",
         )
+
+        if luks:
+            with _console.status("Reading LUKS metadata..."):
+                meta = read_luks_metadata(storage_endpoint)
+            if meta.available:
+                luks_uuid = meta.uuid
+            else:
+                _console.print(
+                    "[red]LUKS unavailable[/red]"
+                    " (dm-crypt kernel module missing?)."
+                    "\nUse [bold]--no-luks[/bold] to skip encrypted volume setup.",
+                    highlight=False,
+                )
+                raise typer.Exit(1)
+
         config = build_chain_config(
             tmp,
             bastion_endpoint,
             proxied_endpoint,
+            luks_uuid=luks_uuid,
             rsync_options=rsync_opts,
             max_snapshots=5,
+            credential_provider=(
+                credential_provider
+                if luks_uuid is not None
+                else CredentialProvider.KEYRING
+            ),
         )
     else:
         # Local-only: 2-step chain (src → HL → dst)
@@ -190,7 +260,9 @@ def seed(
             max_snapshots=5,
         )
 
-    # Create sentinels and seed data
+    # Create sentinels and seed data.
+    # When LUKS is active, temporarily mount the encrypted volume
+    # so create_seed_sentinels can set up btrfs staging subvolumes.
     size_bytes = big_file_size * 1024 * 1024
     if docker:
         assert storage_endpoint is not None
@@ -203,12 +275,39 @@ def seed(
     else:
         remote_exec = None
 
-    with _console.status("Setting up volumes..."):
-        create_seed_sentinels(config, remote_exec=remote_exec)
-        seed_volume(
-            config.volumes["src-local-bare"],
-            big_file_size_bytes=size_bytes,
-        )
+    resolved = resolve_all_endpoints(config)
+    mount_strategy = resolve_mount_strategy(config, resolved, names=None)
+
+    if luks_uuid is not None:
+        with _console.status("Mounting encrypted volume..."):
+            mount_results = mount_volumes(
+                config,
+                resolved,
+                lambda _: LUKS_PASSPHRASE,
+                mount_strategy=mount_strategy,
+            )
+            for r in mount_results:
+                if not r.success:
+                    _console.print(
+                        f"[red]Mount failed:[/red] {r.volume_slug}: {r.detail}"
+                    )
+                    raise typer.Exit(1)
+
+    try:
+        with _console.status("Setting up volumes..."):
+            create_seed_sentinels(config, remote_exec=remote_exec)
+            seed_volume(
+                config.volumes["src-local-bare"],
+                big_file_size_bytes=size_bytes,
+            )
+    finally:
+        if luks_uuid is not None:
+            with _console.status("Unmounting encrypted volume..."):
+                umount_volumes(
+                    config,
+                    resolved,
+                    mount_strategy=mount_strategy,
+                )
 
     config_path = tmp / "config.yaml"
     config_path.write_text(
@@ -253,11 +352,18 @@ def seed(
         if docker
         else ""
     )
+    luks_setup_lines = (
+        _luks_setup_instructions(credential_provider)
+        if luks_uuid is not None
+        else ["# No LUKS passphrase needed for this config"]
+    )
+    # 8-space indent matches the dedent() block below
+    luks_setup_line = ("\n" + " " * 8).join(luks_setup_lines)
     commands = (
         dedent(f"""\
         CFG="{config_path}"
         SH="{backup_sh}"
-
+        {luks_setup_line}
         # Show parsed configuration
         {pfx}nbkp config show --config $CFG
 

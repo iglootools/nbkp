@@ -313,7 +313,9 @@ $ nbkp demo seed [OPTIONS]
 **Options**:
 
 * `--big-file-size INTEGER`: Size in MB for large files (e.g. 100, 1024). When set, large files are written at this size to slow down syncs. Set to 0 to disable.  [default: 1]
-* `--docker`: Start a Docker container for remote syncs.
+* `--docker / --no-docker`: Start a Docker container for remote syncs.  [default: docker]
+* `--luks / --no-luks`: Use LUKS-encrypted btrfs volume (requires --docker and dm-crypt kernel module).  [default: luks]
 * `--bandwidth-limit INTEGER`: Rsync bandwidth limit in KiB/s (e.g. 100 for ~100 KiB/s). Set to 0 to disable.  [default: 250]
+* `--credential-provider [keyring|prompt|env|command]`: How LUKS passphrases are retrieved at runtime. Only relevant when --luks is enabled.  [default: keyring]
 * `--base-dir PATH`: Use a fixed directory instead of a random temp folder. Created if it does not exist.
 * `--help`: Show this message and exit.
