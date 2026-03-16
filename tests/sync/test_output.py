@@ -16,6 +16,12 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.preflight import (
+    DestinationEndpointDiagnostics,
+    DestinationEndpointStatus,
+    SourceEndpointDiagnostics,
+    SourceEndpointStatus,
+    SshEndpointDiagnostics,
+    SshEndpointStatus,
     SyncStatus,
     VolumeDiagnostics,
     VolumeError,
@@ -23,6 +29,15 @@ from nbkp.preflight import (
 )
 from nbkp.sync.output import build_run_preview_sections
 from nbkp.sync.snapshots.common import create_snapshot_timestamp
+
+
+def _localhost_ssh_status() -> SshEndpointStatus:
+    """Create an active localhost SSH endpoint status."""
+    return SshEndpointStatus(
+        slug="localhost",
+        diagnostics=SshEndpointDiagnostics(),
+        errors=[],
+    )
 
 
 def _btrfs_config() -> Config:
@@ -51,20 +66,66 @@ def _make_vol_statuses(
     src_errors: list[VolumeError] | None = None,
     dst_errors: list[VolumeError] | None = None,
 ) -> dict[str, VolumeStatus]:
+    ssh_status = _localhost_ssh_status()
     return {
         "src": VolumeStatus(
             slug="src",
             config=config.volumes["src"],
+            ssh_endpoint_status=ssh_status,
             diagnostics=VolumeDiagnostics(),
             errors=src_errors or [],
         ),
         "dst": VolumeStatus(
             slug="dst",
             config=config.volumes["dst"],
+            ssh_endpoint_status=ssh_status,
             diagnostics=VolumeDiagnostics(),
             errors=dst_errors or [],
         ),
     }
+
+
+def _make_sync_status(
+    sync_slug: str,
+    sync_cfg: SyncConfig,
+    config: Config,
+    vol_statuses: dict[str, VolumeStatus],
+    *,
+    destination_latest_snapshot=None,
+) -> SyncStatus:
+    """Build a SyncStatus with the new 4-layer model."""
+    src_ep_slug = sync_cfg.source
+    dst_ep_slug = sync_cfg.destination
+    src_vol_slug = config.sync_endpoints[src_ep_slug].volume
+    dst_vol_slug = config.sync_endpoints[dst_ep_slug].volume
+
+    src_ep_status = SourceEndpointStatus(
+        endpoint_slug=src_ep_slug,
+        volume_status=vol_statuses[src_vol_slug],
+        diagnostics=SourceEndpointDiagnostics(
+            endpoint_slug=src_ep_slug,
+            sentinel_exists=True,
+        ),
+        errors=[],
+    )
+    dst_ep_status = DestinationEndpointStatus(
+        endpoint_slug=dst_ep_slug,
+        volume_status=vol_statuses[dst_vol_slug],
+        diagnostics=DestinationEndpointDiagnostics(
+            endpoint_slug=dst_ep_slug,
+            sentinel_exists=True,
+            endpoint_writable=True,
+        ),
+        errors=[],
+    )
+    return SyncStatus(
+        slug=sync_slug,
+        config=sync_cfg,
+        source_endpoint_status=src_ep_status,
+        destination_endpoint_status=dst_ep_status,
+        errors=[],
+        destination_latest_snapshot=destination_latest_snapshot,
+    )
 
 
 def _render_sections(sections: list) -> str:
@@ -81,12 +142,8 @@ class TestRunPreviewRsyncCommandDisplay:
         config = _btrfs_config()
         vol_s = _make_vol_statuses(config)
         sync_s = {
-            "btrfs-sync": SyncStatus(
-                slug="btrfs-sync",
-                config=config.syncs["btrfs-sync"],
-                source_status=vol_s["src"],
-                destination_status=vol_s["dst"],
-                errors=[],
+            "btrfs-sync": _make_sync_status(
+                "btrfs-sync", config.syncs["btrfs-sync"], config, vol_s
             )
         }
         sections = build_run_preview_sections(sync_s, config, resolved_endpoints={})
@@ -114,15 +171,7 @@ class TestRunPreviewRsyncCommandDisplay:
             syncs={"hl-sync": sync},
         )
         vol_s = _make_vol_statuses(config)
-        sync_s = {
-            "hl-sync": SyncStatus(
-                slug="hl-sync",
-                config=sync,
-                source_status=vol_s["src"],
-                destination_status=vol_s["dst"],
-                errors=[],
-            )
-        }
+        sync_s = {"hl-sync": _make_sync_status("hl-sync", sync, config, vol_s)}
         sections = build_run_preview_sections(sync_s, config, resolved_endpoints={})
         output = _render_sections(sections)
         assert "/mnt/dst/snapshots/<timestamp>/" in output
@@ -150,12 +199,11 @@ class TestRunPreviewRsyncCommandDisplay:
         )
         vol_s = _make_vol_statuses(config)
         sync_s = {
-            "hl-sync": SyncStatus(
-                slug="hl-sync",
-                config=sync,
-                source_status=vol_s["src"],
-                destination_status=vol_s["dst"],
-                errors=[],
+            "hl-sync": _make_sync_status(
+                "hl-sync",
+                sync,
+                config,
+                vol_s,
                 destination_latest_snapshot=create_snapshot_timestamp(
                     datetime(2026, 3, 6, 14, 30, 0, tzinfo=timezone.utc),
                     dst,
@@ -187,15 +235,7 @@ class TestRunPreviewRsyncCommandDisplay:
             syncs={"plain-sync": sync},
         )
         vol_s = _make_vol_statuses(config)
-        sync_s = {
-            "plain-sync": SyncStatus(
-                slug="plain-sync",
-                config=sync,
-                source_status=vol_s["src"],
-                destination_status=vol_s["dst"],
-                errors=[],
-            )
-        }
+        sync_s = {"plain-sync": _make_sync_status("plain-sync", sync, config, vol_s)}
         sections = build_run_preview_sections(sync_s, config, resolved_endpoints={})
         output = _render_sections(sections)
         assert "/mnt/dst/" in output

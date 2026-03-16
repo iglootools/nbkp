@@ -38,6 +38,7 @@ from .snapshot_checks import check_btrfs_subvolume
 from .status import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
+    HostToolCapabilities,
     LatestSymlinkState,
     SnapshotDirsDiagnostics,
     SourceEndpointDiagnostics,
@@ -50,6 +51,8 @@ def observe_source_endpoint(
     volume: Volume,
     capabilities: VolumeCapabilities,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    host_tools: HostToolCapabilities,
 ) -> SourceEndpointDiagnostics:
     """Observe state of a source sync endpoint."""
     sentinel_exists = _check_endpoint_sentinel(
@@ -78,6 +81,8 @@ def observe_destination_endpoint(
     volume: Volume,
     capabilities: VolumeCapabilities,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    host_tools: HostToolCapabilities,
 ) -> DestinationEndpointDiagnostics:
     """Observe state of a destination sync endpoint."""
     sentinel_exists = _check_endpoint_sentinel(
@@ -90,7 +95,7 @@ def observe_destination_endpoint(
         sentinel_exists=sentinel_exists,
         endpoint_writable=_check_directory_writable(volume, dst_ep, resolved_endpoints),
         btrfs=_check_btrfs_diagnostics(
-            endpoint, volume, capabilities, dst_ep, resolved_endpoints
+            endpoint, volume, capabilities, dst_ep, resolved_endpoints, host_tools
         ),
         **(
             {
@@ -111,11 +116,15 @@ def _check_btrfs_diagnostics(
     capabilities: VolumeCapabilities,
     dst_ep: str,
     resolved_endpoints: ResolvedEndpoints,
+    host_tools: HostToolCapabilities,
 ) -> BtrfsStagingSubvolumeDiagnostics | None:
-    """Check btrfs staging subvolume state."""
+    """Check btrfs staging subvolume state.
+
+    ``has_stat`` comes from the SSH endpoint level (host tool probe).
+    """
     if not (
         endpoint.btrfs_snapshots.enabled
-        and capabilities.has_stat
+        and host_tools.has_stat
         and capabilities.is_btrfs_filesystem
     ):
         return None

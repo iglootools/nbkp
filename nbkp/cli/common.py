@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import enum
 from contextlib import contextmanager
-from typing import Generator
+from typing import Callable, Generator
 
 import typer
 from rich.console import Console
@@ -34,7 +34,7 @@ from ..preflight import (
     VolumeStatus,
     check_all_syncs,
 )
-from ..sync.pipeline import INACTIVE_ERRORS, has_fatal_errors
+from ..sync.pipeline import has_fatal_errors
 
 
 class OutputFormat(str, enum.Enum):
@@ -43,8 +43,6 @@ class OutputFormat(str, enum.Enum):
     HUMAN = "human"
     JSON = "json"
 
-
-_INACTIVE_ERRORS = INACTIVE_ERRORS
 
 _INACTIVE_VOLUME_ERRORS = {
     VolumeError.DEVICE_NOT_PRESENT,
@@ -148,15 +146,24 @@ def check_all_with_progress(
     mount_observations: dict[str, MountObservation] | None = None,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
     """Run check_all_syncs with an optional progress bar."""
+    from ..preflight import PreflightResult
+
     total = _check_total(cfg, only_syncs)
-    if not use_progress or total == 0:
+
+    def _run(
+        on_progress: Callable[[str], None] | None = None,
+    ) -> PreflightResult:
         return check_all_syncs(
             cfg,
+            on_progress=on_progress,
             only_syncs=only_syncs,
             resolved_endpoints=resolved_endpoints,
             dry_run=dry_run,
             mount_observations=mount_observations,
         )
+
+    if not use_progress or total == 0:
+        result = _run()
     else:
         with Progress(
             SpinnerColumn(),
@@ -171,14 +178,9 @@ def check_all_with_progress(
             def on_progress(_slug: str) -> None:
                 progress.advance(task)
 
-            return check_all_syncs(
-                cfg,
-                on_progress=on_progress,
-                only_syncs=only_syncs,
-                resolved_endpoints=resolved_endpoints,
-                dry_run=dry_run,
-                mount_observations=mount_observations,
-            )
+            result = _run(on_progress)
+
+    return result.volume_statuses, result.sync_statuses
 
 
 def check_and_display(

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from nbkp.preflight import (
-    SyncError,
+    DestinationEndpointError,
     check_sync,
     check_volume,
 )
@@ -13,7 +13,7 @@ from nbkp.preflight.snapshot_checks import (
     check_btrfs_filesystem,
     check_btrfs_subvolume,
 )
-from nbkp.preflight.volume_checks import observe_volume
+from nbkp.preflight.volume_checks import observe_ssh_endpoint, observe_volume
 from nbkp.preflight.endpoint_checks import (
     observe_source_endpoint,
     observe_destination_endpoint,
@@ -288,7 +288,10 @@ class TestSyncCheckBtrfs:
             resolved_endpoints=resolved,
         )
         assert status.active is False
-        assert SyncError.DST_EP_STAGING_NOT_BTRFS_SUBVOLUME in status.errors
+        assert (
+            DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME
+            in status.destination_endpoint_status.errors
+        )
 
         # Cleanup
         ssh_exec(
@@ -310,15 +313,21 @@ class TestObserveRemoteVolume:
         )
         resolved = resolve_all_endpoints(config)
 
-        diag = observe_volume(docker_remote_volume, resolved)
+        ssh_diag = observe_ssh_endpoint(docker_remote_volume, resolved)
+        assert ssh_diag.host_tools is not None
+        assert ssh_diag.host_tools.has_rsync is True
+        assert ssh_diag.host_tools.rsync_version_ok is True
+        assert ssh_diag.host_tools.has_stat is True
 
-        assert diag.ssh_reachable is True
-        assert diag.location_excluded is False
+        diag = observe_volume(
+            docker_remote_volume,
+            host_tools=ssh_diag.host_tools,
+            mount_tools=ssh_diag.mount_tools,
+            resolved_endpoints=resolved,
+        )
+
         assert diag.capabilities is not None
         assert diag.capabilities.sentinel_exists is True
-        assert diag.capabilities.has_rsync is True
-        assert diag.capabilities.rsync_version_ok is True
-        assert diag.capabilities.has_stat is True
         assert diag.capabilities.is_btrfs_filesystem is False
         assert diag.capabilities.hardlink_supported is True
         assert diag.capabilities.mount is None
@@ -335,12 +344,18 @@ class TestObserveRemoteVolume:
         )
         resolved = resolve_all_endpoints(config)
 
-        diag = observe_volume(remote_btrfs_volume, resolved)
+        ssh_diag = observe_ssh_endpoint(remote_btrfs_volume, resolved)
+        assert ssh_diag.host_tools is not None
+
+        diag = observe_volume(
+            remote_btrfs_volume,
+            host_tools=ssh_diag.host_tools,
+            mount_tools=ssh_diag.mount_tools,
+            resolved_endpoints=resolved,
+        )
 
         assert diag.capabilities is not None
         assert diag.capabilities.is_btrfs_filesystem is True
-        assert diag.capabilities.has_btrfs is True
-        assert diag.capabilities.has_findmnt is True
         assert diag.capabilities.btrfs_user_subvol_rm is True
 
     def test_observe_missing_sentinel_gives_safe_defaults(
@@ -355,12 +370,18 @@ class TestObserveRemoteVolume:
         )
         resolved = resolve_all_endpoints(config)
 
-        diag = observe_volume(docker_remote_volume, resolved)
+        ssh_diag = observe_ssh_endpoint(docker_remote_volume, resolved)
+        assert ssh_diag.host_tools is not None
 
-        assert diag.ssh_reachable is True
+        diag = observe_volume(
+            docker_remote_volume,
+            host_tools=ssh_diag.host_tools,
+            mount_tools=ssh_diag.mount_tools,
+            resolved_endpoints=resolved,
+        )
+
         assert diag.capabilities is not None
         assert diag.capabilities.sentinel_exists is False
-        assert diag.capabilities.has_rsync is False
 
 
 class TestObserveEndpoints:
@@ -403,12 +424,20 @@ class TestObserveEndpoints:
         resolved = resolve_all_endpoints(config)
 
         src_endpoint = config.sync_endpoints["ep-src"]
-        # Observe volume capabilities first (needed by endpoint checks)
-        vol_diag = observe_volume(src_vol)
+        # Observe SSH endpoint + volume capabilities (needed by endpoint checks)
+        ssh_diag = observe_ssh_endpoint(src_vol)
+        assert ssh_diag.host_tools is not None
+        vol_diag = observe_volume(
+            src_vol, host_tools=ssh_diag.host_tools, mount_tools=ssh_diag.mount_tools
+        )
         assert vol_diag.capabilities is not None
 
         diag = observe_source_endpoint(
-            src_endpoint, src_vol, vol_diag.capabilities, resolved
+            src_endpoint,
+            src_vol,
+            vol_diag.capabilities,
+            resolved,
+            host_tools=ssh_diag.host_tools,
         )
 
         assert diag.sentinel_exists is True
@@ -458,12 +487,23 @@ class TestObserveEndpoints:
 
         dst_endpoint = config.sync_endpoints["ep-dst"]
         dst_vol = config.volumes[dst_endpoint.volume]
-        # Observe volume capabilities first (needed by endpoint checks)
-        vol_diag = observe_volume(dst_vol, resolved)
+        # Observe SSH endpoint + volume capabilities (needed by endpoint checks)
+        ssh_diag = observe_ssh_endpoint(dst_vol, resolved)
+        assert ssh_diag.host_tools is not None
+        vol_diag = observe_volume(
+            dst_vol,
+            host_tools=ssh_diag.host_tools,
+            mount_tools=ssh_diag.mount_tools,
+            resolved_endpoints=resolved,
+        )
         assert vol_diag.capabilities is not None
 
         diag = observe_destination_endpoint(
-            dst_endpoint, dst_vol, vol_diag.capabilities, resolved
+            dst_endpoint,
+            dst_vol,
+            vol_diag.capabilities,
+            resolved,
+            host_tools=ssh_diag.host_tools,
         )
 
         assert diag.sentinel_exists is True
@@ -512,17 +552,28 @@ class TestMountCapabilities:
             )
             resolved = resolve_all_endpoints(config)
 
-            diag = observe_volume(remote_encrypted_volume, resolved)
+            ssh_diag = observe_ssh_endpoint(
+                remote_encrypted_volume, resolved, probe_mount_tools=True
+            )
+            assert ssh_diag.host_tools is not None
+            assert ssh_diag.mount_tools is not None
+            assert ssh_diag.mount_tools.has_sudo is True
+            assert ssh_diag.mount_tools.has_mount_cmd is True
+            assert ssh_diag.mount_tools.has_umount_cmd is True
+            assert ssh_diag.mount_tools.has_mountpoint is True
+            assert ssh_diag.mount_tools.has_cryptsetup is True
+
+            diag = observe_volume(
+                remote_encrypted_volume,
+                host_tools=ssh_diag.host_tools,
+                mount_tools=ssh_diag.mount_tools,
+                resolved_endpoints=resolved,
+            )
 
             assert diag.capabilities is not None
             caps = diag.capabilities
             assert caps.mount is not None
             assert caps.mount.resolved_backend == "direct"
-            assert caps.mount.has_sudo is True
-            assert caps.mount.has_mount_cmd is True
-            assert caps.mount.has_umount_cmd is True
-            assert caps.mount.has_mountpoint is True
-            assert caps.mount.has_cryptsetup is True
             assert caps.mount.device_present is True
             assert caps.mount.luks_attached is True
             assert caps.mount.mounted is True
@@ -554,7 +605,15 @@ class TestMountCapabilities:
         )
         resolved = resolve_all_endpoints(config)
 
-        diag = observe_volume(volume, resolved)
+        ssh_diag = observe_ssh_endpoint(volume, resolved, probe_mount_tools=True)
+        assert ssh_diag.host_tools is not None
+
+        diag = observe_volume(
+            volume,
+            host_tools=ssh_diag.host_tools,
+            mount_tools=ssh_diag.mount_tools,
+            resolved_endpoints=resolved,
+        )
 
         # Volume is not mounted, so sentinel won't exist — but mount
         # capabilities are still probed via _sentinel_only_capabilities.

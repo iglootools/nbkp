@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 from .rsync import ProgressMode as ProgressMode
 
 if TYPE_CHECKING:
-    from .pipeline import INACTIVE_ERRORS as INACTIVE_ERRORS
     from .pipeline import PipelineResult as PipelineResult
     from .pipeline import check_and_run as check_and_run
     from .pipeline import has_fatal_errors as has_fatal_errors
@@ -18,7 +17,6 @@ if TYPE_CHECKING:
     from .runner import run_all_syncs as run_all_syncs
 
 __all__ = [
-    "INACTIVE_ERRORS",
     "PipelineResult",
     "ProgressMode",
     "PruneResult",
@@ -31,7 +29,6 @@ __all__ = [
 ]
 
 _LAZY_MODULES = {
-    "INACTIVE_ERRORS": "pipeline",
     "PipelineResult": "pipeline",
     "check_and_run": "pipeline",
     "has_fatal_errors": "pipeline",

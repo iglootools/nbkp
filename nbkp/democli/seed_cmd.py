@@ -382,6 +382,12 @@ def seed(
         # Prune old btrfs snapshots
         {pfx}nbkp prune --config $CFG
 
+        # Mount the volumes (the standalone bash script does not handle volume management)
+        {pfx}nbkp volumes mount --config $CFG
+
+        # Show the status of the volumes
+        {pfx}nbkp volumes status --config $CFG
+
         # Generate standalone bash script to stdout
         {pfx}nbkp sh --config $CFG
 
@@ -395,7 +401,10 @@ def seed(
         {pfx}nbkp sh --config $CFG -o $SH --relative-src --relative-dst \\
           && bash -n $SH \\
           && $SH --dry-run \\
-          && $SH""")
+          && $SH
+
+        # Unmount the volumes
+        nbkp volumes umount --config $CFG""")
         + docker_teardown
     )
     _console.print(

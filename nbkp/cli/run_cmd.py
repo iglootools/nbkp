@@ -17,7 +17,7 @@ from ..preflight.output import print_human_check
 from ..preflight import SyncStatus, VolumeStatus
 from ..sync import ProgressMode, SyncResult
 from ..sync.output import build_human_results_sections
-from ..sync.pipeline import INACTIVE_ERRORS, check_and_run
+from ..sync.pipeline import check_and_run
 from .app import app
 from .common import (
     OutputFormat,
@@ -217,9 +217,9 @@ def run(
                     }
                     if strict
                     else {
-                        slug: sorted(e.value for e in set(s.errors) - INACTIVE_ERRORS)
+                        slug: sorted(e.value for e in s.errors)
                         for slug, s in pipeline.sync_statuses.items()
-                        if set(s.errors) - INACTIVE_ERRORS
+                        if not s.active and not s.is_expected_inactive()
                     }
                 )
                 lines = [

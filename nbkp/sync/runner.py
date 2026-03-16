@@ -67,6 +67,28 @@ class PruneResult(BaseModel):
     skipped: bool = False
 
 
+def _collect_all_errors(status: SyncStatus) -> str:
+    """Collect error messages from all 4 layers into a single string."""
+    src_ep = status.source_endpoint_status
+    dst_ep = status.destination_endpoint_status
+    errors = [
+        *[
+            f"src ssh: {e.value}"
+            for e in src_ep.volume_status.ssh_endpoint_status.errors
+        ],
+        *[
+            f"dst ssh: {e.value}"
+            for e in dst_ep.volume_status.ssh_endpoint_status.errors
+        ],
+        *[f"src vol: {e.value}" for e in src_ep.volume_status.errors],
+        *[f"dst vol: {e.value}" for e in dst_ep.volume_status.errors],
+        *[f"src ep: {e.value}" for e in src_ep.errors],
+        *[f"dst ep: {e.value}" for e in dst_ep.errors],
+        *[e.value for e in status.errors],
+    ]
+    return ", ".join(errors) if errors else "unknown"
+
+
 def run_all_syncs(
     config: Config,
     sync_statuses: dict[str, SyncStatus],
@@ -125,9 +147,7 @@ def run_all_syncs(
                 rsync_exit_code=-1,
                 output="",
                 outcome=SyncOutcome.SKIPPED,
-                detail=(
-                    "Sync not active: " + ", ".join(r.value for r in status.errors)
-                ),
+                detail="Sync not active: " + _collect_all_errors(status),
             )
         else:
             result = _run_single_sync(

@@ -44,7 +44,11 @@ from ..fsprotocol import (
     VOLUME_SENTINEL,
 )
 from .status import (
+    DestinationEndpointError,
     MountCapabilities,
+    SourceEndpointError,
+    SshEndpointError,
+    SshEndpointStatus,
     SyncError,
     SyncStatus,
     VolumeCapabilities,
@@ -55,7 +59,13 @@ from .status import (
 
 def _status_text(
     active: bool,
-    errors: list[VolumeError] | list[SyncError],
+    errors: (
+        list[VolumeError]
+        | list[SyncError]
+        | list[SshEndpointError]
+        | list[SourceEndpointError]
+        | list[DestinationEndpointError]
+    ),
 ) -> Text:
     """Format status with optional errors as styled text."""
     if active:
@@ -65,54 +75,106 @@ def _status_text(
         return Text(f"\u2717inactive ({error_str})", style="red")
 
 
-# Sync errors whose diagnostic state is visible as ✓/✗ in the
-# Src/Dst Diagnostics columns.  When *all* errors for a sync are
-# diagnostic-visible, the Status column shows a plain "inactive"
-# because the diagnostics already tell the story.  Non-obvious
-# errors (disabled, unavailable, tool-version, dry-run) are always
-# shown in the Status column so they aren't silently hidden.
-_DIAGNOSTIC_VISIBLE_SYNC_ERRORS: frozenset[SyncError] = frozenset(
+def _volume_status_text(vs: VolumeStatus) -> Text:
+    """Format volume status, cascading SSH endpoint errors when the volume
+    itself has none but is inactive due to its SSH endpoint."""
+    if vs.active:
+        return Text("\u2713active", style="green")
+    errors = [
+        *[f"ssh: {e.value}" for e in vs.ssh_endpoint_status.errors],
+        *[e.value for e in vs.errors],
+    ]
+    error_str = ", ".join(errors)
+    return Text(f"\u2717inactive ({error_str})", style="red")
+
+
+def _all_sync_errors(ss: SyncStatus) -> list[str]:
+    """Collect error values from all 4 layers for a sync.
+
+    Returns a flat list of error value strings for display.
+    """
+    src_ep = ss.source_endpoint_status
+    dst_ep = ss.destination_endpoint_status
+    return [
+        *(e.value for e in src_ep.volume_status.ssh_endpoint_status.errors),
+        *(e.value for e in dst_ep.volume_status.ssh_endpoint_status.errors),
+        *(e.value for e in src_ep.volume_status.errors),
+        *(e.value for e in dst_ep.volume_status.errors),
+        *(e.value for e in src_ep.errors),
+        *(e.value for e in dst_ep.errors),
+        *(e.value for e in ss.errors),
+    ]
+
+
+# Errors from lower layers that are visible as diagnostics columns,
+# so they don't need to be repeated in the sync Status column.
+_DIAGNOSTIC_VISIBLE_ERRORS: frozenset[str] = frozenset(
     {
-        # Volume-level — shown as ✗volume(...) in src/dst diagnostics
-        SyncError.SRC_VOL_UNAVAILABLE,
-        SyncError.DST_VOL_UNAVAILABLE,
-        # Endpoint-level — shown as ✓/✗ items in src/dst diagnostics
-        SyncError.SRC_EP_SENTINEL_NOT_FOUND,
-        SyncError.SRC_EP_LATEST_SYMLINK_NOT_FOUND,
-        SyncError.SRC_EP_LATEST_SYMLINK_INVALID,
-        SyncError.SRC_EP_SNAPSHOTS_DIR_NOT_FOUND,
-        SyncError.DST_EP_SENTINEL_NOT_FOUND,
-        SyncError.DST_EP_NOT_WRITABLE,
-        SyncError.DST_EP_STAGING_NOT_BTRFS_SUBVOLUME,
-        SyncError.DST_EP_STAGING_SUBVOL_NOT_FOUND,
-        SyncError.DST_EP_SNAPSHOTS_DIR_NOT_FOUND,
-        SyncError.DST_EP_LATEST_SYMLINK_NOT_FOUND,
-        SyncError.DST_EP_LATEST_SYMLINK_INVALID,
-        SyncError.DST_EP_SNAPSHOTS_DIR_NOT_WRITABLE,
-        SyncError.DST_EP_STAGING_SUBVOL_NOT_WRITABLE,
-        SyncError.DST_VOL_NO_HARDLINK_SUPPORT,
+        # Volume-level — shown as volume(reason) in src/dst diagnostics
+        e.value
+        for e in [
+            VolumeError.SENTINEL_NOT_FOUND,
+            VolumeError.VOLUME_NOT_MOUNTED,
+            VolumeError.DEVICE_NOT_PRESENT,
+        ]
+    }
+    | {
+        # SSH endpoint — shown as volume(reason) in src/dst diagnostics
+        e.value
+        for e in [
+            SshEndpointError.UNREACHABLE,
+            SshEndpointError.LOCATION_EXCLUDED,
+        ]
+    }
+    | {
+        # Source endpoint — shown as check items in src diagnostics
+        e.value
+        for e in [
+            SourceEndpointError.SENTINEL_NOT_FOUND,
+            SourceEndpointError.LATEST_SYMLINK_NOT_FOUND,
+            SourceEndpointError.LATEST_SYMLINK_INVALID,
+            SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND,
+        ]
+    }
+    | {
+        # Destination endpoint — shown as check items in dst diagnostics
+        e.value
+        for e in [
+            DestinationEndpointError.SENTINEL_NOT_FOUND,
+            DestinationEndpointError.NOT_WRITABLE,
+            DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME,
+            DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND,
+            DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND,
+            DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND,
+            DestinationEndpointError.LATEST_SYMLINK_INVALID,
+            DestinationEndpointError.SNAPSHOTS_DIR_NOT_WRITABLE,
+            DestinationEndpointError.STAGING_SUBVOL_NOT_WRITABLE,
+            DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT,
+        ]
     }
 )
 
 
-def _sync_status_text(
-    active: bool,
-    errors: list[SyncError],
-) -> Text:
+def _sync_status_text(ss: SyncStatus) -> Text:
     """Format sync status, showing only non-obvious error reasons.
 
-    Errors that are visible as ✓/✗ in the diagnostics columns are
+    Errors that are visible as check items in the diagnostics columns are
     omitted from the status text to avoid redundancy.  Non-obvious
-    errors (disabled, unavailable, tool-version, dry-run) are shown.
+    errors (disabled, tool-version, dry-run) are shown.  When all errors
+    are diagnostic-visible, falls back to the full error list so the
+    status column is never a bare "✗inactive" with no explanation.
     """
-    if active:
+    if ss.active:
         return Text("\u2713active", style="green")
-    non_obvious = [e for e in errors if e not in _DIAGNOSTIC_VISIBLE_SYNC_ERRORS]
-    if non_obvious:
-        reason = ", ".join(e.value for e in non_obvious)
-        return Text(f"\u2717inactive ({reason})", style="red")
-    else:
-        return Text("\u2717inactive", style="red")
+    all_errors = _all_sync_errors(ss)
+    non_obvious = [e for e in all_errors if e not in _DIAGNOSTIC_VISIBLE_ERRORS]
+    errors = non_obvious if non_obvious else all_errors
+    # Deduplicate while preserving order (same SSH endpoint error
+    # can appear via both source and destination paths)
+    seen: set[str] = set()
+    unique = [e for e in errors if not (e in seen or seen.add(e))]  # type: ignore[func-returns-value]
+    reason = ", ".join(unique)
+    return Text(f"\u2717inactive ({reason})", style="red")
 
 
 def _mount_capability_items(
@@ -123,11 +185,6 @@ def _mount_capability_items(
         case "direct":
             return [
                 (True, "mnt-strategy:direct"),
-                (mount.has_sudo, "sudo"),
-                (mount.has_mount_cmd, "mount"),
-                (mount.has_umount_cmd, "umount"),
-                (mount.has_mountpoint, "mountpoint"),
-                (mount.has_cryptsetup, "cryptsetup"),
                 (mount.has_sudoers_rules, "sudoers"),
             ]
         case _:
@@ -136,11 +193,6 @@ def _mount_capability_items(
                     True,
                     f"mnt-strategy:{mount.resolved_backend or 'systemd'}",
                 ),
-                (mount.has_systemctl, "systemctl"),
-                (mount.has_systemd_escape, "systemd-escape"),
-                (mount.has_sudo, "sudo"),
-                (mount.has_cryptsetup, "cryptsetup"),
-                (mount.has_systemd_cryptsetup, "systemd-cryptsetup"),
                 (
                     mount.mount_unit is not None,
                     f"mount:{mount.mount_unit}" if mount.mount_unit else None,
@@ -157,10 +209,7 @@ def _format_capabilities(caps: VolumeCapabilities | None) -> str:
     items = [
         label
         for flag, label in [
-            (caps.has_rsync, "rsync 3.0+" if caps.rsync_version_ok else "rsync (old)"),
-            (caps.has_btrfs, "btrfs"),
-            (caps.has_stat, "stat"),
-            (caps.has_findmnt, "findmnt"),
+            (caps.sentinel_exists, "sentinel"),
             (caps.is_btrfs_filesystem, "btrfs-fs"),
             (caps.hardlink_supported, "hardlink"),
             (caps.btrfs_user_subvol_rm, "user_subvol_rm"),
@@ -172,7 +221,7 @@ def _format_capabilities(caps: VolumeCapabilities | None) -> str:
 
 
 def _check(ok: bool, label: str) -> str:
-    """Format a diagnostic item as ✓label or ✗label with color."""
+    """Format a diagnostic item as check-label or x-label with color."""
     return f"[green]\u2713{label}[/green]" if ok else f"[red]\u2717{label}[/red]"
 
 
@@ -182,7 +231,7 @@ def _format_mount_status(
 ) -> str:
     """Format runtime mount state as a compact string.
 
-    Shows ✓/✗ for each probed mount state item.  Items whose value
+    Shows check/x for each probed mount state item.  Items whose value
     is ``None`` (not probed / not applicable) are omitted, matching
     the pattern used by source/destination diagnostics columns.
     Empty when the volume has no mount config or caps are unavailable.
@@ -204,8 +253,15 @@ def _format_mount_status(
 
 
 def _format_volume_issues(vol_status: VolumeStatus) -> str:
-    """Format volume-level issues as ✗volume(reason)."""
-    reason = ", ".join(e.value for e in vol_status.errors)
+    """Format volume-level issues as x-volume(reason).
+
+    Cascades through SSH endpoint errors and volume errors to show
+    the root cause.
+    """
+    ssh_errors = vol_status.ssh_endpoint_status.errors
+    vol_errors = vol_status.errors
+    reasons = [*(e.value for e in ssh_errors), *(e.value for e in vol_errors)]
+    reason = ", ".join(reasons)
     return (
         f"[red]\u2717volume ({reason})[/red]" if reason else "[red]\u2717volume[/red]"
     )
@@ -214,15 +270,16 @@ def _format_volume_issues(vol_status: VolumeStatus) -> str:
 def _format_source_diagnostics(ss: SyncStatus) -> str:
     """Format source endpoint diagnostics as a compact comma-separated string.
 
-    When the source volume is inactive, shows ✗volume(reason) instead
+    When the source volume is inactive, shows x-volume(reason) instead
     of endpoint-level items (which weren't computed).  Otherwise shows
-    ✓/✗ for each checked item.  Items only appear when the
+    check/x for each checked item.  Items only appear when the
     corresponding feature is configured (e.g. snapshots/ and latest
     are omitted when the endpoint has no snapshot mode).
     """
-    if not ss.source_status.active:
-        return _format_volume_issues(ss.source_status)
-    diag = ss.source_diagnostics
+    src_ep = ss.source_endpoint_status
+    if not src_ep.volume_status.active:
+        return _format_volume_issues(src_ep.volume_status)
+    diag = src_ep.diagnostics
     if diag is None:
         return ""
     items = [
@@ -248,15 +305,16 @@ def _format_source_diagnostics(ss: SyncStatus) -> str:
 def _format_destination_diagnostics(ss: SyncStatus) -> str:
     """Format destination endpoint diagnostics as a compact comma-separated string.
 
-    When the destination volume is inactive, shows ✗volume(reason)
-    instead of endpoint-level items.  Otherwise shows ✓/✗ for each
+    When the destination volume is inactive, shows x-volume(reason)
+    instead of endpoint-level items.  Otherwise shows check/x for each
     checked item.  Btrfs-specific items (subvolume, staging/) only
     appear when btrfs diagnostics are present.  Snapshot items only
     appear when snapshot mode is configured.
     """
-    if not ss.destination_status.active:
-        return _format_volume_issues(ss.destination_status)
-    diag = ss.destination_diagnostics
+    dst_ep = ss.destination_endpoint_status
+    if not dst_ep.volume_status.active:
+        return _format_volume_issues(dst_ep.volume_status)
+    diag = dst_ep.diagnostics
     if diag is None:
         return ""
     items = [
@@ -290,6 +348,7 @@ def _format_destination_diagnostics(ss: SyncStatus) -> str:
 
 def _build_ssh_endpoints_section(
     config: Config,
+    ssh_endpoint_statuses: dict[str, SshEndpointStatus],
 ) -> list[RenderableType]:
     """Build the SSH Endpoints table section."""
     if not config.ssh_endpoints:
@@ -302,8 +361,14 @@ def _build_ssh_endpoints_section(
     table.add_column("Key")
     table.add_column("Proxy Jump")
     table.add_column("Locations")
+    table.add_column("Status")
 
     for server in config.ssh_endpoints.values():
+        ssh_status = ssh_endpoint_statuses.get(server.slug)
+        if ssh_status is not None:
+            status = _status_text(ssh_status.active, ssh_status.errors)
+        else:
+            status = Text("")
         table.add_row(
             server.slug,
             server.host,
@@ -312,6 +377,7 @@ def _build_ssh_endpoints_section(
             server.key or "",
             ", ".join(server.proxy_jump_chain) or "",
             ", ".join(server.location_list),
+            status,
         )
 
     return [table, Text("")]
@@ -334,7 +400,7 @@ def _build_volumes_section(
 
     for vs in vol_statuses.values():
         vol = vs.config
-        caps = vs.diagnostics.capabilities
+        caps = vs.diagnostics.capabilities if vs.diagnostics else None
         mount_caps = caps.mount if caps else None
         match vol:
             case RemoteVolume():
@@ -352,7 +418,7 @@ def _build_volumes_section(
             format_mount_summary(vol.mount),
             _format_mount_status(mount_caps, vol.mount),
             _format_capabilities(caps),
-            _status_text(vs.active, vs.errors),
+            _volume_status_text(vs),
         )
 
     return [table, Text("")]
@@ -380,7 +446,7 @@ def _build_syncs_section(
             _sync_options(ss.config, config),
             _format_source_diagnostics(ss),
             _format_destination_diagnostics(ss),
-            _sync_status_text(ss.active, ss.errors),
+            _sync_status_text(ss),
         )
 
     return [table]
@@ -412,6 +478,28 @@ def _build_orphan_warnings_section(
     return [Text(""), text]
 
 
+def _collect_ssh_endpoint_statuses(
+    vol_statuses: dict[str, VolumeStatus],
+    sync_statuses: dict[str, SyncStatus],
+) -> dict[str, SshEndpointStatus]:
+    """Collect unique SSH endpoint statuses from volumes and sync statuses.
+
+    SSH endpoint statuses are embedded in volume statuses.  This extracts
+    them for display in the SSH Endpoints table.  First-seen wins for
+    duplicate slugs.
+    """
+    all_ssh = [
+        *[vs.ssh_endpoint_status for vs in vol_statuses.values()],
+        *[
+            ep.volume_status.ssh_endpoint_status
+            for ss in sync_statuses.values()
+            for ep in [ss.source_endpoint_status, ss.destination_endpoint_status]
+        ],
+    ]
+    # dict.fromkeys-style: first occurrence wins
+    return dict({s.slug: s for s in reversed(all_ssh)})
+
+
 def build_check_sections(
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
@@ -419,8 +507,9 @@ def build_check_sections(
     resolved_endpoints: ResolvedEndpoints,
 ) -> list[RenderableType]:
     """Build renderable sections for check output."""
+    ssh_statuses = _collect_ssh_endpoint_statuses(vol_statuses, sync_statuses)
     return [
-        *_build_ssh_endpoints_section(config),
+        *_build_ssh_endpoints_section(config, ssh_statuses),
         *_build_volumes_section(vol_statuses, resolved_endpoints),
         *_build_syncs_section(sync_statuses, config),
         *_build_orphan_warnings_section(config),
@@ -565,65 +654,206 @@ def _print_ssh_troubleshoot(
     _print_cmd(console, f"{ssh_cmd} echo ok", indent=4)
 
 
-def _print_sync_error_fix(
+# ── Per-layer troubleshoot fix functions ──────────────────────
+
+
+def _print_ssh_endpoint_error_fix(
     console: Console,
-    sync: SyncConfig,
-    error: SyncError,
+    ssh_status: SshEndpointStatus,
+    error: SshEndpointError,
+    config: Config,
+) -> None:
+    """Print fix instructions for an SSH endpoint error."""
+    p2 = _INDENT * 2
+    slug = ssh_status.slug
+    # Try to find a matching SshEndpoint config for troubleshooting
+    server = config.ssh_endpoints.get(slug)
+    match error:
+        case SshEndpointError.UNREACHABLE:
+            if server is not None:
+                proxy_chain = (
+                    [config.ssh_endpoints[s] for s in server.proxy_jump_chain]
+                    if server.proxy_jump_chain
+                    else None
+                )
+                _print_ssh_troubleshoot(console, server, proxy_chain)
+            else:
+                console.print(f"{p2}SSH endpoint is unreachable.")
+        case SshEndpointError.LOCATION_EXCLUDED:
+            console.print(
+                f"{p2}All SSH endpoints for volumes on this"
+                " host are at an excluded location."
+                " Remove --exclude-location or add an"
+                " endpoint at a different location."
+            )
+        case SshEndpointError.RSYNC_NOT_FOUND:
+            console.print(f"{p2}Install rsync on {slug}:")
+            _print_cmd(console, _RSYNC_INSTALL, indent=3)
+        case SshEndpointError.RSYNC_TOO_OLD:
+            console.print(f"{p2}rsync 3.0+ is required on {slug}. Install or upgrade:")
+            _print_cmd(console, _RSYNC_INSTALL, indent=3)
+        case SshEndpointError.BTRFS_NOT_FOUND:
+            console.print(f"{p2}Install btrfs-progs on {slug}:")
+            _print_cmd(console, _BTRFS_INSTALL, indent=3)
+        case SshEndpointError.STAT_NOT_FOUND:
+            console.print(f"{p2}Install coreutils (stat) on {slug}:")
+            _print_cmd(console, _COREUTILS_INSTALL, indent=3)
+        case SshEndpointError.FINDMNT_NOT_FOUND:
+            console.print(f"{p2}Install util-linux (findmnt) on {slug}:")
+            _print_cmd(console, _UTIL_LINUX_INSTALL, indent=3)
+        case SshEndpointError.SYSTEMCTL_NOT_FOUND:
+            _print_mount_error(
+                console,
+                f"systemctl not found on {slug}.",
+                "Mount management requires systemd."
+                " Install systemd or disable mount"
+                " config for volumes on this host.",
+            )
+        case SshEndpointError.SYSTEMD_ESCAPE_NOT_FOUND:
+            _print_mount_error(
+                console,
+                f"systemd-escape not found on {slug}.",
+                "Install: sudo apt install systemd"
+                " (usually pre-installed)\n"
+                "Check: which systemd-escape",
+            )
+        case SshEndpointError.SUDO_NOT_FOUND:
+            _print_mount_error(
+                console,
+                f"sudo not found on {slug}.",
+                "sudo is required for mount"
+                " operations (cryptsetup, mount/umount).\n"
+                "Install: apt install sudo\n"
+                "Check: which sudo",
+            )
+        case SshEndpointError.CRYPTSETUP_NOT_FOUND:
+            _print_mount_error(
+                console,
+                f"cryptsetup not found on {slug}.",
+                "Install: sudo apt install cryptsetup\nCheck: which cryptsetup",
+            )
+        case SshEndpointError.SYSTEMD_CRYPTSETUP_NOT_FOUND:
+            _print_mount_error(
+                console,
+                f"systemd-cryptsetup not found on {slug}.",
+                "This binary is part of systemd but"
+                " requires the cryptsetup package"
+                " (libcryptsetup).\n"
+                "Install: sudo apt install cryptsetup\n"
+                "Check: ls /usr/lib/systemd/"
+                "systemd-cryptsetup",
+            )
+        case SshEndpointError.MOUNT_CMD_NOT_FOUND:
+            _print_mount_error(
+                console,
+                f"mount command not found on {slug}.",
+                "Install: sudo apt install util-linux\nCheck: which mount",
+            )
+        case SshEndpointError.UMOUNT_CMD_NOT_FOUND:
+            _print_mount_error(
+                console,
+                f"umount command not found on {slug}.",
+                "Install: sudo apt install util-linux\nCheck: which umount",
+            )
+        case SshEndpointError.MOUNTPOINT_CMD_NOT_FOUND:
+            _print_mount_error(
+                console,
+                f"mountpoint command not found on {slug}.",
+                "Install: sudo apt install util-linux\nCheck: which mountpoint",
+            )
+
+
+def _print_volume_error_fix(
+    console: Console,
+    vol_status: VolumeStatus,
+    error: VolumeError,
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
 ) -> None:
-    """Print fix instructions for a sync error."""
+    """Print fix instructions for a volume error."""
+    vol = vol_status.config
+    match error:
+        case VolumeError.SENTINEL_NOT_FOUND:
+            _print_sentinel_fix(
+                console,
+                vol,
+                vol.path,
+                VOLUME_SENTINEL,
+                resolved_endpoints,
+            )
+        case VolumeError.VOLUME_NOT_MOUNTED:
+            _print_mount_error(
+                console,
+                "Volume is not mounted.",
+                f"Mount the volume with: nbkp volumes mount -n {vol_status.slug}",
+            )
+        case VolumeError.DEVICE_NOT_PRESENT:
+            _print_device_not_present_fix(console, vol.mount)
+        case VolumeError.MOUNT_UNIT_NOT_CONFIGURED:
+            _print_mount_unit_not_configured_fix(
+                console,
+                vol,
+                resolved_endpoints,
+            )
+        case VolumeError.MOUNT_UNIT_MISMATCH:
+            caps = (
+                vol_status.diagnostics.capabilities if vol_status.diagnostics else None
+            )
+            _print_mount_unit_mismatch_fix(
+                console,
+                vol,
+                caps,
+                resolved_endpoints,
+            )
+        case VolumeError.CRYPTSETUP_SERVICE_NOT_CONFIGURED:
+            _print_cryptsetup_service_not_configured_fix(
+                console,
+                vol,
+                resolved_endpoints,
+            )
+        case VolumeError.CRYPTSETUP_SERVICE_MISMATCH:
+            caps = (
+                vol_status.diagnostics.capabilities if vol_status.diagnostics else None
+            )
+            _print_cryptsetup_service_mismatch_fix(
+                console,
+                vol,
+                caps,
+                resolved_endpoints,
+            )
+        case VolumeError.POLKIT_RULES_MISSING:
+            _print_polkit_rules_missing_fix(
+                console,
+                vol,
+                config,
+                resolved_endpoints,
+            )
+        case VolumeError.SUDOERS_RULES_MISSING:
+            _print_sudoers_rules_missing_fix(
+                console,
+                vol,
+                config,
+                resolved_endpoints,
+            )
+        case VolumeError.PASSPHRASE_NOT_AVAILABLE:
+            _print_passphrase_not_available_fix(console, vol.mount)
+        case VolumeError.ATTACH_LUKS_FAILED | VolumeError.MOUNT_FAILED:
+            _print_mount_failed_fix(console, vol, vol.mount, resolved_endpoints)
+
+
+def _print_source_endpoint_error_fix(
+    console: Console,
+    error: SourceEndpointError,
+    sync: SyncConfig,
+    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
+) -> None:
+    """Print fix instructions for a source endpoint error."""
     p2 = _INDENT * 2
     src_ep = config.source_endpoint(sync)
-    dst_ep = config.destination_endpoint(sync)
     src_vol = config.volumes[src_ep.volume]
-    dst_vol = config.volumes[dst_ep.volume]
     match error:
-        case SyncError.DISABLED:
-            console.print(f"{p2}Enable the sync in the configuration file.")
-        case SyncError.SRC_VOL_UNAVAILABLE:
-            match src_vol:
-                case RemoteVolume():
-                    ep = resolved_endpoints.get(src_vol.slug)
-                    if ep is not None:
-                        _print_ssh_troubleshoot(
-                            console,
-                            ep.server,
-                            ep.proxy_chain,
-                        )
-                    else:
-                        console.print(
-                            f"{p2}Source volume"
-                            f" '{src_ep.volume}'"
-                            " excluded by location"
-                            " filter."
-                        )
-                case LocalVolume():
-                    console.print(
-                        f"{p2}Source volume '{src_ep.volume}' is not available."
-                    )
-        case SyncError.DST_VOL_UNAVAILABLE:
-            match dst_vol:
-                case RemoteVolume():
-                    ep = resolved_endpoints.get(dst_vol.slug)
-                    if ep is not None:
-                        _print_ssh_troubleshoot(
-                            console,
-                            ep.server,
-                            ep.proxy_chain,
-                        )
-                    else:
-                        console.print(
-                            f"{p2}Destination volume"
-                            f" '{dst_ep.volume}'"
-                            " excluded by location"
-                            " filter."
-                        )
-                case LocalVolume():
-                    console.print(
-                        f"{p2}Destination volume '{dst_ep.volume}' is not available."
-                    )
-        case SyncError.SRC_EP_SENTINEL_NOT_FOUND:
+        case SourceEndpointError.SENTINEL_NOT_FOUND:
             path = endpoint_path(src_vol, src_ep.subdir)
             _print_sentinel_fix(
                 console,
@@ -632,7 +862,7 @@ def _print_sync_error_fix(
                 SOURCE_SENTINEL,
                 resolved_endpoints,
             )
-        case SyncError.SRC_EP_LATEST_SYMLINK_NOT_FOUND:
+        case SourceEndpointError.LATEST_SYMLINK_NOT_FOUND:
             path = endpoint_path(src_vol, src_ep.subdir)
             console.print(
                 f"{p2}Source has snapshots enabled"
@@ -647,7 +877,7 @@ def _print_sync_error_fix(
                     resolved_endpoints,
                 ),
             )
-        case SyncError.SRC_EP_LATEST_SYMLINK_INVALID:
+        case SourceEndpointError.LATEST_SYMLINK_INVALID:
             path = endpoint_path(src_vol, src_ep.subdir)
             console.print(
                 f"{p2}Source {path}/{LATEST_LINK}"
@@ -664,7 +894,7 @@ def _print_sync_error_fix(
                     resolved_endpoints,
                 ),
             )
-        case SyncError.SRC_EP_SNAPSHOTS_DIR_NOT_FOUND:
+        case SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND:
             path = endpoint_path(src_vol, src_ep.subdir)
             if src_ep.btrfs_snapshots.enabled:
                 cmds = [
@@ -678,7 +908,21 @@ def _print_sync_error_fix(
                     console,
                     wrap_cmd(cmd, src_vol, resolved_endpoints),
                 )
-        case SyncError.DST_EP_SENTINEL_NOT_FOUND:
+
+
+def _print_destination_endpoint_error_fix(
+    console: Console,
+    error: DestinationEndpointError,
+    sync: SyncConfig,
+    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
+) -> None:
+    """Print fix instructions for a destination endpoint error."""
+    p2 = _INDENT * 2
+    dst_ep = config.destination_endpoint(sync)
+    dst_vol = config.volumes[dst_ep.volume]
+    match error:
+        case DestinationEndpointError.SENTINEL_NOT_FOUND:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             _print_sentinel_fix(
                 console,
@@ -687,89 +931,7 @@ def _print_sync_error_fix(
                 DESTINATION_SENTINEL,
                 resolved_endpoints,
             )
-        case SyncError.SRC_VOL_RSYNC_NOT_FOUND:
-            host = host_label(src_vol, resolved_endpoints)
-            console.print(f"{p2}Install rsync on {host}:")
-            _print_cmd(console, _RSYNC_INSTALL, indent=3)
-        case SyncError.DST_VOL_RSYNC_NOT_FOUND:
-            host = host_label(dst_vol, resolved_endpoints)
-            console.print(f"{p2}Install rsync on {host}:")
-            _print_cmd(console, _RSYNC_INSTALL, indent=3)
-        case SyncError.SRC_VOL_RSYNC_TOO_OLD:
-            host = host_label(src_vol, resolved_endpoints)
-            console.print(f"{p2}rsync 3.0+ is required on {host}. Install or upgrade:")
-            _print_cmd(console, _RSYNC_INSTALL, indent=3)
-        case SyncError.DST_VOL_RSYNC_TOO_OLD:
-            host = host_label(dst_vol, resolved_endpoints)
-            console.print(f"{p2}rsync 3.0+ is required on {host}. Install or upgrade:")
-            _print_cmd(console, _RSYNC_INSTALL, indent=3)
-        case SyncError.DST_VOL_BTRFS_NOT_FOUND:
-            host = host_label(dst_vol, resolved_endpoints)
-            console.print(f"{p2}Install btrfs-progs on {host}:")
-            _print_cmd(console, _BTRFS_INSTALL, indent=3)
-        case SyncError.DST_VOL_STAT_NOT_FOUND:
-            host = host_label(dst_vol, resolved_endpoints)
-            console.print(f"{p2}Install coreutils (stat) on {host}:")
-            _print_cmd(console, _COREUTILS_INSTALL, indent=3)
-        case SyncError.DST_VOL_FINDMNT_NOT_FOUND:
-            host = host_label(dst_vol, resolved_endpoints)
-            console.print(f"{p2}Install util-linux (findmnt) on {host}:")
-            _print_cmd(console, _UTIL_LINUX_INSTALL, indent=3)
-        case SyncError.DST_VOL_NOT_BTRFS:
-            console.print(f"{p2}The destination is not on a btrfs filesystem.")
-        case SyncError.DST_EP_STAGING_NOT_BTRFS_SUBVOLUME:
-            path = endpoint_path(dst_vol, dst_ep.subdir)
-            cmds = [
-                f"sudo btrfs subvolume create {path}/{STAGING_DIR}",
-                f"sudo mkdir {path}/{SNAPSHOTS_DIR}",
-                "sudo chown <user>:<group>"
-                f" {path}/{STAGING_DIR}"
-                f" {path}/{SNAPSHOTS_DIR}",
-            ]
-            for cmd in cmds:
-                _print_cmd(
-                    console,
-                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
-                )
-        case SyncError.DST_VOL_NOT_MOUNTED_USER_SUBVOL_RM:
-            console.print(f"{p2}Remount the btrfs volume with user_subvol_rm_allowed:")
-            cmd = f"sudo mount -o remount,user_subvol_rm_allowed {dst_vol.path}"
-            _print_cmd(
-                console,
-                wrap_cmd(cmd, dst_vol, resolved_endpoints),
-            )
-            console.print(
-                f"{p2}To persist, add"
-                " user_subvol_rm_allowed to"
-                " the mount options in /etc/fstab"
-                f" for {dst_vol.path}."
-            )
-        case SyncError.DST_EP_STAGING_SUBVOL_NOT_FOUND:
-            path = endpoint_path(dst_vol, dst_ep.subdir)
-            cmds = [
-                f"sudo btrfs subvolume create {path}/{STAGING_DIR}",
-                f"sudo chown <user>:<group> {path}/{STAGING_DIR}",
-            ]
-            for cmd in cmds:
-                _print_cmd(
-                    console,
-                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
-                )
-        case SyncError.DST_EP_SNAPSHOTS_DIR_NOT_FOUND:
-            path = endpoint_path(dst_vol, dst_ep.subdir)
-            if dst_ep.hard_link_snapshots.enabled:
-                cmds = [f"mkdir -p {path}/{SNAPSHOTS_DIR}"]
-            else:
-                cmds = [
-                    f"sudo mkdir {path}/{SNAPSHOTS_DIR}",
-                    f"sudo chown <user>:<group> {path}/{SNAPSHOTS_DIR}",
-                ]
-            for cmd in cmds:
-                _print_cmd(
-                    console,
-                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
-                )
-        case SyncError.DST_EP_NOT_WRITABLE:
+        case DestinationEndpointError.NOT_WRITABLE:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}The destination endpoint directory"
@@ -783,22 +945,32 @@ def _print_sync_error_fix(
                     resolved_endpoints,
                 ),
             )
-        case SyncError.DST_EP_SNAPSHOTS_DIR_NOT_WRITABLE:
+        case DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME:
             path = endpoint_path(dst_vol, dst_ep.subdir)
-            console.print(
-                f"{p2}The destination {SNAPSHOTS_DIR}/"
-                f" directory ({path}/{SNAPSHOTS_DIR})"
-                " is not writable. Fix permissions:"
-            )
-            _print_cmd(
-                console,
-                wrap_cmd(
-                    f"sudo chown <user>:<group> {path}/{SNAPSHOTS_DIR}",
-                    dst_vol,
-                    resolved_endpoints,
-                ),
-            )
-        case SyncError.DST_EP_STAGING_SUBVOL_NOT_WRITABLE:
+            cmds = [
+                f"sudo btrfs subvolume create {path}/{STAGING_DIR}",
+                f"sudo mkdir {path}/{SNAPSHOTS_DIR}",
+                "sudo chown <user>:<group>"
+                f" {path}/{STAGING_DIR}"
+                f" {path}/{SNAPSHOTS_DIR}",
+            ]
+            for cmd in cmds:
+                _print_cmd(
+                    console,
+                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
+                )
+        case DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND:
+            path = endpoint_path(dst_vol, dst_ep.subdir)
+            cmds = [
+                f"sudo btrfs subvolume create {path}/{STAGING_DIR}",
+                f"sudo chown <user>:<group> {path}/{STAGING_DIR}",
+            ]
+            for cmd in cmds:
+                _print_cmd(
+                    console,
+                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
+                )
+        case DestinationEndpointError.STAGING_SUBVOL_NOT_WRITABLE:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}The destination {STAGING_DIR}/"
@@ -813,7 +985,36 @@ def _print_sync_error_fix(
                     resolved_endpoints,
                 ),
             )
-        case SyncError.DST_EP_LATEST_SYMLINK_NOT_FOUND:
+        case DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND:
+            path = endpoint_path(dst_vol, dst_ep.subdir)
+            if dst_ep.hard_link_snapshots.enabled:
+                cmds = [f"mkdir -p {path}/{SNAPSHOTS_DIR}"]
+            else:
+                cmds = [
+                    f"sudo mkdir {path}/{SNAPSHOTS_DIR}",
+                    f"sudo chown <user>:<group> {path}/{SNAPSHOTS_DIR}",
+                ]
+            for cmd in cmds:
+                _print_cmd(
+                    console,
+                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
+                )
+        case DestinationEndpointError.SNAPSHOTS_DIR_NOT_WRITABLE:
+            path = endpoint_path(dst_vol, dst_ep.subdir)
+            console.print(
+                f"{p2}The destination {SNAPSHOTS_DIR}/"
+                f" directory ({path}/{SNAPSHOTS_DIR})"
+                " is not writable. Fix permissions:"
+            )
+            _print_cmd(
+                console,
+                wrap_cmd(
+                    f"sudo chown <user>:<group> {path}/{SNAPSHOTS_DIR}",
+                    dst_vol,
+                    resolved_endpoints,
+                ),
+            )
+        case DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}Destination has snapshots enabled"
@@ -828,7 +1029,7 @@ def _print_sync_error_fix(
                     resolved_endpoints,
                 ),
             )
-        case SyncError.DST_EP_LATEST_SYMLINK_INVALID:
+        case DestinationEndpointError.LATEST_SYMLINK_INVALID:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
                 f"{p2}Destination {path}/{LATEST_LINK}"
@@ -843,12 +1044,52 @@ def _print_sync_error_fix(
                     resolved_endpoints,
                 ),
             )
-        case SyncError.DST_VOL_NO_HARDLINK_SUPPORT:
+        case DestinationEndpointError.VOL_NOT_BTRFS:
+            console.print(f"{p2}The destination is not on a btrfs filesystem.")
+        case DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM:
+            console.print(f"{p2}Remount the btrfs volume with user_subvol_rm_allowed:")
+            cmd = f"sudo mount -o remount,user_subvol_rm_allowed {dst_vol.path}"
+            _print_cmd(
+                console,
+                wrap_cmd(cmd, dst_vol, resolved_endpoints),
+            )
+            console.print(
+                f"{p2}To persist, add"
+                " user_subvol_rm_allowed to"
+                " the mount options in /etc/fstab"
+                f" for {dst_vol.path}."
+            )
+        case DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT:
             console.print(
                 f"{p2}The destination filesystem does not"
                 " support hard links (e.g. FAT/exFAT)."
                 " Use a filesystem like ext4, xfs, or"
                 " btrfs, or use btrfs-snapshots instead."
+            )
+
+
+def _print_sync_error_fix(
+    console: Console,
+    sync: SyncConfig,
+    error: SyncError,
+    config: Config,
+) -> None:
+    """Print fix instructions for a sync-level error."""
+    p2 = _INDENT * 2
+    match error:
+        case SyncError.DISABLED:
+            console.print(f"{p2}Enable the sync in the configuration file.")
+        case SyncError.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM:
+            src_ep = config.source_endpoint(sync)
+            src_vol = config.volumes[src_ep.volume]
+            path = endpoint_path(src_vol, src_ep.subdir)
+            console.print(
+                f"{p2}Source {path}/{LATEST_LINK}"
+                " points to /dev/null but there is"
+                " no upstream sync that writes to"
+                " this endpoint. Either run the"
+                " upstream sync first or reset the"
+                " symlink to point to a valid snapshot."
             )
         case SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING:
             console.print(
@@ -1132,182 +1373,83 @@ def print_human_troubleshoot(
     console: Console | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> None:
-    """Print troubleshooting instructions."""
+    """Print troubleshooting instructions for all 4 layers.
+
+    Iterates through SSH endpoints, volumes, sync endpoints (source
+    and destination), and syncs, printing fix instructions for each
+    error at the layer where it originates.
+    """
     re = resolved_endpoints or {}
     if console is None:
         console = Console()
 
-    failed_vols = [vs for vs in vol_statuses.values() if vs.errors]
-    failed_syncs = [ss for ss in sync_statuses.values() if ss.errors]
+    has_issues = False
 
+    # ── Layer 1: SSH Endpoints ────────────────────────────────
+    # Collect unique SSH endpoint statuses from volume statuses
+    ssh_statuses = _collect_ssh_endpoint_statuses(vol_statuses, sync_statuses)
+    failed_ssh = [s for s in ssh_statuses.values() if s.errors]
+    for ssh_st in failed_ssh:
+        has_issues = True
+        console.print(f"\n[bold]SSH Endpoint {ssh_st.slug!r}:[/bold]")
+        for error in ssh_st.errors:
+            console.print(f"{_INDENT}{error.value}")
+            _print_ssh_endpoint_error_fix(console, ssh_st, error, config)
+
+    # ── Layer 2: Volumes ──────────────────────────────────────
+    failed_vols = [vs for vs in vol_statuses.values() if vs.errors]
     for vs in failed_vols:
+        has_issues = True
         console.print(f"\n[bold]Volume {vs.slug!r}:[/bold]")
-        vol = vs.config
         for error in vs.errors:
             console.print(f"{_INDENT}{error.value}")
-            match error:
-                case VolumeError.SENTINEL_NOT_FOUND:
-                    _print_sentinel_fix(
-                        console,
-                        vol,
-                        vol.path,
-                        VOLUME_SENTINEL,
-                        re,
-                    )
-                case VolumeError.UNREACHABLE:
-                    match vol:
-                        case RemoteVolume():
-                            ep = re[vol.slug]
-                            _print_ssh_troubleshoot(
-                                console,
-                                ep.server,
-                                ep.proxy_chain,
-                            )
-                case VolumeError.LOCATION_EXCLUDED:
-                    p2 = _INDENT * 2
-                    console.print(
-                        f"{p2}All SSH endpoints for this"
-                        " volume are at an excluded"
-                        " location. Remove"
-                        " --exclude-location or add an"
-                        " endpoint at a different"
-                        " location."
-                    )
-                case VolumeError.VOLUME_NOT_MOUNTED:
-                    _print_mount_error(
-                        console,
-                        "Volume is not mounted.",
-                        f"Mount the volume with: nbkp volumes mount -n {vs.slug}",
-                    )
-                case VolumeError.DEVICE_NOT_PRESENT:
-                    mount = vol.mount
-                    _print_device_not_present_fix(console, mount)
-                case VolumeError.SYSTEMCTL_NOT_FOUND:
-                    host = host_label(vol, re)
-                    _print_mount_error(
-                        console,
-                        f"systemctl not found on {host}.",
-                        "Mount management requires systemd."
-                        " Install systemd or disable mount"
-                        " config for this volume.",
-                    )
-                case VolumeError.SYSTEMD_ESCAPE_NOT_FOUND:
-                    host = host_label(vol, re)
-                    _print_mount_error(
-                        console,
-                        f"systemd-escape not found on {host}.",
-                        "Install: sudo apt install systemd"
-                        " (usually pre-installed)\n"
-                        "Check: which systemd-escape",
-                    )
-                case VolumeError.MOUNT_UNIT_NOT_CONFIGURED:
-                    _print_mount_unit_not_configured_fix(
-                        console,
-                        vol,
-                        re,
-                    )
-                case VolumeError.MOUNT_UNIT_MISMATCH:
-                    _print_mount_unit_mismatch_fix(
-                        console,
-                        vol,
-                        vs.diagnostics.capabilities,
-                        re,
-                    )
-                case VolumeError.SUDO_NOT_FOUND:
-                    host = host_label(vol, re)
-                    _print_mount_error(
-                        console,
-                        f"sudo not found on {host}.",
-                        "sudo is required for mount"
-                        " operations (cryptsetup, mount/umount).\n"
-                        "Install: apt install sudo\n"
-                        "Check: which sudo",
-                    )
-                case VolumeError.CRYPTSETUP_NOT_FOUND:
-                    host = host_label(vol, re)
-                    _print_mount_error(
-                        console,
-                        f"cryptsetup not found on {host}.",
-                        "Install: sudo apt install cryptsetup\nCheck: which cryptsetup",
-                    )
-                case VolumeError.SYSTEMD_CRYPTSETUP_NOT_FOUND:
-                    host = host_label(vol, re)
-                    _print_mount_error(
-                        console,
-                        f"systemd-cryptsetup not found on {host}.",
-                        "This binary is part of systemd but"
-                        " requires the cryptsetup package"
-                        " (libcryptsetup).\n"
-                        "Install: sudo apt install cryptsetup\n"
-                        "Check: ls /usr/lib/systemd/"
-                        "systemd-cryptsetup",
-                    )
-                case VolumeError.MOUNT_CMD_NOT_FOUND:
-                    host = host_label(vol, re)
-                    _print_mount_error(
-                        console,
-                        f"mount command not found on {host}.",
-                        "Install: sudo apt install util-linux\nCheck: which mount",
-                    )
-                case VolumeError.UMOUNT_CMD_NOT_FOUND:
-                    host = host_label(vol, re)
-                    _print_mount_error(
-                        console,
-                        f"umount command not found on {host}.",
-                        "Install: sudo apt install util-linux\nCheck: which umount",
-                    )
-                case VolumeError.MOUNTPOINT_CMD_NOT_FOUND:
-                    host = host_label(vol, re)
-                    _print_mount_error(
-                        console,
-                        f"mountpoint command not found on {host}.",
-                        "Install: sudo apt install util-linux\nCheck: which mountpoint",
-                    )
-                case VolumeError.CRYPTSETUP_SERVICE_NOT_CONFIGURED:
-                    _print_cryptsetup_service_not_configured_fix(
-                        console,
-                        vol,
-                        re,
-                    )
-                case VolumeError.CRYPTSETUP_SERVICE_MISMATCH:
-                    _print_cryptsetup_service_mismatch_fix(
-                        console,
-                        vol,
-                        vs.diagnostics.capabilities,
-                        re,
-                    )
-                case VolumeError.POLKIT_RULES_MISSING:
-                    _print_polkit_rules_missing_fix(
-                        console,
-                        vol,
-                        config,
-                        re,
-                    )
-                case VolumeError.SUDOERS_RULES_MISSING:
-                    _print_sudoers_rules_missing_fix(
-                        console,
-                        vol,
-                        config,
-                        re,
-                    )
-                case VolumeError.PASSPHRASE_NOT_AVAILABLE:
-                    mount = vol.mount
-                    _print_passphrase_not_available_fix(console, mount)
-                case VolumeError.ATTACH_LUKS_FAILED | VolumeError.MOUNT_FAILED:
-                    mount = vol.mount
-                    _print_mount_failed_fix(console, vol, mount, re)
+            _print_volume_error_fix(console, vs, error, config, re)
 
+    # ── Layer 3: Sync Endpoints ───────────────────────────────
+    # Collect unique source and destination endpoint statuses from syncs
+    seen_src_eps: set[str] = set()
+    seen_dst_eps: set[str] = set()
+    for ss in sync_statuses.values():
+        src_ep = ss.source_endpoint_status
+        if src_ep.endpoint_slug not in seen_src_eps and src_ep.errors:
+            seen_src_eps.add(src_ep.endpoint_slug)
+            has_issues = True
+            console.print(f"\n[bold]Source Endpoint {src_ep.endpoint_slug!r}:[/bold]")
+            for error in src_ep.errors:
+                console.print(f"{_INDENT}{error.value}")
+                _print_source_endpoint_error_fix(
+                    console,
+                    error,
+                    ss.config,
+                    config,
+                    re,
+                )
+
+        dst_ep = ss.destination_endpoint_status
+        if dst_ep.endpoint_slug not in seen_dst_eps and dst_ep.errors:
+            seen_dst_eps.add(dst_ep.endpoint_slug)
+            has_issues = True
+            console.print(
+                f"\n[bold]Destination Endpoint {dst_ep.endpoint_slug!r}:[/bold]"
+            )
+            for error in dst_ep.errors:
+                console.print(f"{_INDENT}{error.value}")
+                _print_destination_endpoint_error_fix(
+                    console,
+                    error,
+                    ss.config,
+                    config,
+                    re,
+                )
+
+    # ── Layer 4: Syncs ────────────────────────────────────────
+    failed_syncs = [ss for ss in sync_statuses.values() if ss.errors]
     for ss in failed_syncs:
+        has_issues = True
         console.print(f"\n[bold]Sync {ss.slug!r}:[/bold]")
         for sync_error in ss.errors:
             console.print(f"{_INDENT}{sync_error.value}")
-            _print_sync_error_fix(
-                console,
-                ss.config,
-                sync_error,
-                config,
-                re,
-            )
+            _print_sync_error_fix(console, ss.config, sync_error, config)
 
-    if not failed_vols and not failed_syncs:
+    if not has_issues:
         console.print("No issues found. All volumes and syncs are active.")

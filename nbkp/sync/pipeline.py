@@ -13,62 +13,64 @@ from typing import Any, Callable
 
 from ..config import Config
 from ..config.epresolution import ResolvedEndpoints
-from ..preflight import SyncError, SyncStatus, VolumeStatus, check_all_syncs
+from ..preflight import PreflightResult, SyncStatus, VolumeStatus, check_all_syncs
 from .rsync import ProgressMode
 from .runner import SyncResult, run_all_syncs
-
-INACTIVE_ERRORS: frozenset[SyncError] = frozenset(
-    {
-        SyncError.SRC_EP_SENTINEL_NOT_FOUND,
-        SyncError.DST_EP_SENTINEL_NOT_FOUND,
-        SyncError.SRC_VOL_UNAVAILABLE,
-        SyncError.DST_VOL_UNAVAILABLE,
-        SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING,
-    }
-)
-"""Sync errors that represent expected inactivity (missing sentinels,
-unavailable volumes) rather than real failures."""
 
 
 @dataclass(frozen=True)
 class PipelineResult:
     """Outcome of a check-then-run pipeline execution."""
 
-    vol_statuses: dict[str, VolumeStatus]
-    sync_statuses: dict[str, SyncStatus]
+    preflight: PreflightResult
     results: list[SyncResult]
     """Empty when preflight found fatal errors and syncs were not executed."""
     has_preflight_errors: bool
     has_sync_failures: bool
     """True when any sync failed for a reason other than expected inactivity."""
 
+    @property
+    def vol_statuses(self) -> dict[str, VolumeStatus]:
+        """Backward-compatible access to volume statuses."""
+        return self.preflight.volume_statuses
+
+    @property
+    def sync_statuses(self) -> dict[str, SyncStatus]:
+        """Backward-compatible access to sync statuses."""
+        return self.preflight.sync_statuses
+
 
 def is_expected_skip(
     result: SyncResult,
     sync_statuses: dict[str, SyncStatus],
-    inactive_errors: frozenset[SyncError] = INACTIVE_ERRORS,
 ) -> bool:
-    """Return True if a failed sync result is an expected inactive skip."""
+    """Return True if a failed sync result is an expected inactive skip.
+
+    Uses ``SyncStatus.is_expected_inactive()`` to check all 4 layers
+    of the error model rather than a flat set of sync-level errors.
+    """
     ss = sync_statuses.get(result.sync_slug)
-    return ss is not None and bool(ss.errors) and set(ss.errors) <= inactive_errors
+    return ss is not None and ss.is_expected_inactive()
 
 
 def has_fatal_errors(
     sync_statuses: dict[str, SyncStatus],
     *,
     strict: bool = False,
-    inactive_errors: frozenset[SyncError] = INACTIVE_ERRORS,
 ) -> bool:
     """Return True if any sync has errors that should abort the run.
 
     When *strict* is True, any inactive sync (including missing
-    sentinels) is fatal.  Otherwise, only errors outside
-    *inactive_errors* are fatal.
+    sentinels) is fatal.  Otherwise, only syncs that are inactive
+    for non-expected reasons are fatal.
     """
     return (
         any(not s.active for s in sync_statuses.values())
         if strict
-        else any(set(s.errors) - inactive_errors for s in sync_statuses.values())
+        else any(
+            not s.active and not s.is_expected_inactive()
+            for s in sync_statuses.values()
+        )
     )
 
 
@@ -89,7 +91,6 @@ def check_and_run(
     on_sync_end: Callable[[str, SyncResult], None] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     mount_observations: dict[str, Any] | None = None,
-    inactive_errors: frozenset[SyncError] = INACTIVE_ERRORS,
 ) -> PipelineResult:
     """Run preflight checks, then execute syncs if no fatal errors.
 
@@ -109,10 +110,8 @@ def check_and_run(
         Called after preflight completes but before syncs start.
         Fires regardless of whether there are fatal errors, so the
         CLI can print the check table in both cases.
-    inactive_errors:
-        Set of ``SyncError`` values that represent expected inactivity.
     """
-    vol_statuses, sync_statuses = check_all_syncs(
+    preflight = check_all_syncs(
         config,
         on_progress=on_check_progress,
         only_syncs=only_syncs,
@@ -122,16 +121,13 @@ def check_and_run(
     )
 
     if on_checks_done is not None:
-        on_checks_done(vol_statuses, sync_statuses)
+        on_checks_done(preflight.volume_statuses, preflight.sync_statuses)
 
-    preflight_errors = has_fatal_errors(
-        sync_statuses, strict=strict, inactive_errors=inactive_errors
-    )
+    preflight_errors = has_fatal_errors(preflight.sync_statuses, strict=strict)
 
     if preflight_errors:
         return PipelineResult(
-            vol_statuses=vol_statuses,
-            sync_statuses=sync_statuses,
+            preflight=preflight,
             results=[],
             has_preflight_errors=True,
             has_sync_failures=True,
@@ -139,7 +135,7 @@ def check_and_run(
 
     results = run_all_syncs(
         config,
-        sync_statuses,
+        preflight.sync_statuses,
         dry_run=dry_run,
         only_syncs=only_syncs,
         progress=progress,
@@ -151,13 +147,12 @@ def check_and_run(
     )
 
     sync_failures = any(
-        not r.success and not is_expected_skip(r, sync_statuses, inactive_errors)
+        not r.success and not is_expected_skip(r, preflight.sync_statuses)
         for r in results
     )
 
     return PipelineResult(
-        vol_statuses=vol_statuses,
-        sync_statuses=sync_statuses,
+        preflight=preflight,
         results=results,
         has_preflight_errors=False,
         has_sync_failures=sync_failures,

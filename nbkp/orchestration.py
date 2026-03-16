@@ -23,8 +23,8 @@ from .mount.lifecycle import (
 )
 from .mount.observation import MountObservation, build_mount_observations
 from .mount.strategy import MountStrategy
-from .preflight import SyncError, SyncStatus, VolumeStatus
-from .sync.pipeline import INACTIVE_ERRORS, PipelineResult, check_and_run
+from .preflight import SyncStatus, VolumeStatus
+from .sync.pipeline import PipelineResult, check_and_run
 from .sync.rsync import ProgressMode
 from .sync.runner import SyncResult
 
@@ -131,7 +131,6 @@ def mount_and_run(
     on_rsync_output: Callable[[str], None] | None = None,
     on_sync_start: Callable[[str], None] | None = None,
     on_sync_end: Callable[[str, SyncResult], None] | None = None,
-    inactive_errors: frozenset[SyncError] = INACTIVE_ERRORS,
 ) -> PipelineResult:
     """Mount volumes, run the check-and-run pipeline, then umount.
 
@@ -165,5 +164,4 @@ def mount_and_run(
             on_sync_end=on_sync_end,
             resolved_endpoints=resolved,
             mount_observations=mount_observations,
-            inactive_errors=inactive_errors,
         )
