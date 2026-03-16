@@ -1,18 +1,15 @@
-"""Preflight check output formatting."""
+"""Troubleshoot output: per-error remediation instructions for all 4 layers."""
 
 from __future__ import annotations
 
 import getpass
 from textwrap import dedent
 
-from rich.console import Console, Group, RenderableType
+from rich.console import Console
 from rich.padding import Padding
-from rich.panel import Panel
 from rich.syntax import Syntax
-from rich.table import Table
-from rich.text import Text
 
-from ..config import (
+from ...config import (
     Config,
     LocalVolume,
     MountConfig,
@@ -20,22 +17,18 @@ from ..config import (
     SshEndpoint,
     SyncConfig,
 )
-from ..config.epresolution import ResolvedEndpoints
-from ..config.output import (
-    _sync_endpoint_display,
-    _sync_options,
+from ...config.epresolution import ResolvedEndpoints
+from ...config.output import (
     endpoint_path,
-    format_mount_summary,
-    format_volume_display,
     host_label,
 )
-from ..mount.auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH, generate_auth_rules
-from ..remote.ssh import (
+from ...mount.auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH, generate_auth_rules
+from ...remote.ssh import (
     format_proxy_jump_chain,
     ssh_prefix,
     wrap_cmd,
 )
-from ..fsprotocol import (
+from ...fsprotocol import (
     DESTINATION_SENTINEL,
     LATEST_LINK,
     SNAPSHOTS_DIR,
@@ -43,9 +36,8 @@ from ..fsprotocol import (
     STAGING_DIR,
     VOLUME_SENTINEL,
 )
-from .status import (
+from ..status import (
     DestinationEndpointError,
-    MountCapabilities,
     SourceEndpointError,
     SshEndpointError,
     SshEndpointStatus,
@@ -55,500 +47,8 @@ from .status import (
     VolumeError,
     VolumeStatus,
 )
+from .formatting import collect_ssh_endpoint_statuses
 
-
-def _status_text(
-    active: bool,
-    errors: (
-        list[VolumeError]
-        | list[SyncError]
-        | list[SshEndpointError]
-        | list[SourceEndpointError]
-        | list[DestinationEndpointError]
-    ),
-) -> Text:
-    """Format status with optional errors as styled text."""
-    if active:
-        return Text("\u2713active", style="green")
-    else:
-        error_str = ", ".join(r.value for r in errors)
-        return Text(f"\u2717inactive ({error_str})", style="red")
-
-
-def _volume_status_text(vs: VolumeStatus) -> Text:
-    """Format volume status, cascading SSH endpoint errors when the volume
-    itself has none but is inactive due to its SSH endpoint."""
-    if vs.active:
-        return Text("\u2713active", style="green")
-    errors = [
-        *[f"ssh: {e.value}" for e in vs.ssh_endpoint_status.errors],
-        *[e.value for e in vs.errors],
-    ]
-    error_str = ", ".join(errors)
-    return Text(f"\u2717inactive ({error_str})", style="red")
-
-
-def _all_sync_errors(ss: SyncStatus) -> list[str]:
-    """Collect error values from all 4 layers for a sync.
-
-    Returns a flat list of error value strings for display.
-    """
-    src_ep = ss.source_endpoint_status
-    dst_ep = ss.destination_endpoint_status
-    return [
-        *(e.value for e in src_ep.volume_status.ssh_endpoint_status.errors),
-        *(e.value for e in dst_ep.volume_status.ssh_endpoint_status.errors),
-        *(e.value for e in src_ep.volume_status.errors),
-        *(e.value for e in dst_ep.volume_status.errors),
-        *(e.value for e in src_ep.errors),
-        *(e.value for e in dst_ep.errors),
-        *(e.value for e in ss.errors),
-    ]
-
-
-# Errors from lower layers that are visible as diagnostics columns,
-# so they don't need to be repeated in the sync Status column.
-_DIAGNOSTIC_VISIBLE_ERRORS: frozenset[str] = frozenset(
-    {
-        # Volume-level — shown as volume(reason) in src/dst diagnostics
-        e.value
-        for e in [
-            VolumeError.SENTINEL_NOT_FOUND,
-            VolumeError.VOLUME_NOT_MOUNTED,
-            VolumeError.DEVICE_NOT_PRESENT,
-        ]
-    }
-    | {
-        # SSH endpoint — shown as volume(reason) in src/dst diagnostics
-        e.value
-        for e in [
-            SshEndpointError.UNREACHABLE,
-            SshEndpointError.LOCATION_EXCLUDED,
-        ]
-    }
-    | {
-        # Source endpoint — shown as check items in src diagnostics
-        e.value
-        for e in [
-            SourceEndpointError.SENTINEL_NOT_FOUND,
-            SourceEndpointError.LATEST_SYMLINK_NOT_FOUND,
-            SourceEndpointError.LATEST_SYMLINK_INVALID,
-            SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND,
-        ]
-    }
-    | {
-        # Destination endpoint — shown as check items in dst diagnostics
-        e.value
-        for e in [
-            DestinationEndpointError.SENTINEL_NOT_FOUND,
-            DestinationEndpointError.NOT_WRITABLE,
-            DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME,
-            DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND,
-            DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND,
-            DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND,
-            DestinationEndpointError.LATEST_SYMLINK_INVALID,
-            DestinationEndpointError.SNAPSHOTS_DIR_NOT_WRITABLE,
-            DestinationEndpointError.STAGING_SUBVOL_NOT_WRITABLE,
-            DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT,
-        ]
-    }
-)
-
-
-def _sync_status_text(ss: SyncStatus) -> Text:
-    """Format sync status, showing only non-obvious error reasons.
-
-    Errors that are visible as check items in the diagnostics columns are
-    omitted from the status text to avoid redundancy.  Non-obvious
-    errors (disabled, tool-version, dry-run) are shown.  When all errors
-    are diagnostic-visible, falls back to the full error list so the
-    status column is never a bare "✗inactive" with no explanation.
-    """
-    if ss.active:
-        return Text("\u2713active", style="green")
-    all_errors = _all_sync_errors(ss)
-    non_obvious = [e for e in all_errors if e not in _DIAGNOSTIC_VISIBLE_ERRORS]
-    errors = non_obvious if non_obvious else all_errors
-    # Deduplicate while preserving order (same SSH endpoint error
-    # can appear via both source and destination paths)
-    seen: set[str] = set()
-    unique = [e for e in errors if not (e in seen or seen.add(e))]  # type: ignore[func-returns-value]
-    reason = ", ".join(unique)
-    return Text(f"\u2717inactive ({reason})", style="red")
-
-
-def _mount_capability_items(
-    mount: MountCapabilities,
-) -> list[tuple[bool | None, str | None]]:
-    """Build capability display items based on resolved backend."""
-    match mount.resolved_backend:
-        case "direct":
-            return [
-                (True, "mnt-strategy:direct"),
-                (mount.has_sudoers_rules, "sudoers"),
-            ]
-        case _:
-            return [
-                (
-                    True,
-                    f"mnt-strategy:{mount.resolved_backend or 'systemd'}",
-                ),
-                (
-                    mount.mount_unit is not None,
-                    f"mount:{mount.mount_unit}" if mount.mount_unit else None,
-                ),
-                (mount.has_polkit_rules, "polkit"),
-                (mount.has_sudoers_rules, "sudoers"),
-            ]
-
-
-def _format_capabilities(caps: VolumeCapabilities | None) -> str:
-    """Format volume capabilities as a compact comma-separated string."""
-    if caps is None:
-        return ""
-    items = [
-        label
-        for flag, label in [
-            (caps.sentinel_exists, "sentinel"),
-            (caps.is_btrfs_filesystem, "btrfs-fs"),
-            (caps.hardlink_supported, "hardlink"),
-            (caps.btrfs_user_subvol_rm, "user_subvol_rm"),
-            *(_mount_capability_items(caps.mount) if caps.mount is not None else []),
-        ]
-        if flag and label is not None
-    ]
-    return ", ".join(items) if items else "none"
-
-
-def _check(ok: bool, label: str) -> str:
-    """Format a diagnostic item as check-label or x-label with color."""
-    return f"[green]\u2713{label}[/green]" if ok else f"[red]\u2717{label}[/red]"
-
-
-def _format_mount_status(
-    mount_caps: MountCapabilities | None,
-    mount_config: MountConfig | None,
-) -> str:
-    """Format runtime mount state as a compact string.
-
-    Shows check/x for each probed mount state item.  Items whose value
-    is ``None`` (not probed / not applicable) are omitted, matching
-    the pattern used by source/destination diagnostics columns.
-    Empty when the volume has no mount config or caps are unavailable.
-    """
-    if mount_caps is None or mount_config is None:
-        return ""
-    items = [
-        (mount_caps.device_present, "device"),
-        *(
-            [(mount_caps.luks_attached, "luks")]
-            if mount_config.encryption is not None
-            else []
-        ),
-        (mount_caps.mounted, "mounted"),
-    ]
-    return ", ".join(
-        _check(value, label) for value, label in items if value is not None
-    )
-
-
-def _format_volume_issues(vol_status: VolumeStatus) -> str:
-    """Format volume-level issues as x-volume(reason).
-
-    Cascades through SSH endpoint errors and volume errors to show
-    the root cause.
-    """
-    ssh_errors = vol_status.ssh_endpoint_status.errors
-    vol_errors = vol_status.errors
-    reasons = [*(e.value for e in ssh_errors), *(e.value for e in vol_errors)]
-    reason = ", ".join(reasons)
-    return (
-        f"[red]\u2717volume ({reason})[/red]" if reason else "[red]\u2717volume[/red]"
-    )
-
-
-def _format_source_diagnostics(ss: SyncStatus) -> str:
-    """Format source endpoint diagnostics as a compact comma-separated string.
-
-    When the source volume is inactive, shows x-volume(reason) instead
-    of endpoint-level items (which weren't computed).  Otherwise shows
-    check/x for each checked item.  Items only appear when the
-    corresponding feature is configured (e.g. snapshots/ and latest
-    are omitted when the endpoint has no snapshot mode).
-    """
-    src_ep = ss.source_endpoint_status
-    if not src_ep.volume_status.active:
-        return _format_volume_issues(src_ep.volume_status)
-    diag = src_ep.diagnostics
-    if diag is None:
-        return ""
-    items = [
-        _check(diag.sentinel_exists, "sentinel"),
-        *(
-            [_check(diag.snapshot_dirs.exists, "snapshots/")]
-            if diag.snapshot_dirs is not None
-            else []
-        ),
-        *(
-            [
-                f"[green]\u2713latest \u2192 {diag.latest.raw_target}[/green]"
-                if diag.latest.exists and diag.latest.raw_target
-                else "[red]\u2717latest[/red]"
-            ]
-            if diag.latest is not None
-            else []
-        ),
-    ]
-    return ", ".join(items)
-
-
-def _format_destination_diagnostics(ss: SyncStatus) -> str:
-    """Format destination endpoint diagnostics as a compact comma-separated string.
-
-    When the destination volume is inactive, shows x-volume(reason)
-    instead of endpoint-level items.  Otherwise shows check/x for each
-    checked item.  Btrfs-specific items (subvolume, staging/) only
-    appear when btrfs diagnostics are present.  Snapshot items only
-    appear when snapshot mode is configured.
-    """
-    dst_ep = ss.destination_endpoint_status
-    if not dst_ep.volume_status.active:
-        return _format_volume_issues(dst_ep.volume_status)
-    diag = dst_ep.diagnostics
-    if diag is None:
-        return ""
-    items = [
-        _check(diag.sentinel_exists, "sentinel"),
-        _check(diag.endpoint_writable, "writable"),
-        *(
-            [
-                _check(diag.btrfs.staging_exists, "staging/"),
-                _check(diag.btrfs.staging_is_subvolume, "staging-subvolume"),
-            ]
-            if diag.btrfs is not None
-            else []
-        ),
-        *(
-            [_check(diag.snapshot_dirs.exists, "snapshots/")]
-            if diag.snapshot_dirs is not None
-            else []
-        ),
-        *(
-            [
-                f"[green]\u2713latest \u2192 {diag.latest.raw_target}[/green]"
-                if diag.latest.exists and diag.latest.raw_target
-                else "[red]\u2717latest[/red]"
-            ]
-            if diag.latest is not None
-            else []
-        ),
-    ]
-    return ", ".join(items)
-
-
-def _build_ssh_endpoints_section(
-    config: Config,
-    ssh_endpoint_statuses: dict[str, SshEndpointStatus],
-) -> list[RenderableType]:
-    """Build the SSH Endpoints table section."""
-    if not config.ssh_endpoints:
-        return []
-    table = Table(title="SSH Endpoints:")
-    table.add_column("Name", style="bold")
-    table.add_column("Host")
-    table.add_column("Port")
-    table.add_column("User")
-    table.add_column("Key")
-    table.add_column("Proxy Jump")
-    table.add_column("Locations")
-    table.add_column("Status")
-
-    for server in config.ssh_endpoints.values():
-        ssh_status = ssh_endpoint_statuses.get(server.slug)
-        if ssh_status is not None:
-            status = _status_text(ssh_status.active, ssh_status.errors)
-        else:
-            status = Text("")
-        table.add_row(
-            server.slug,
-            server.host,
-            str(server.port),
-            server.user or "",
-            server.key or "",
-            ", ".join(server.proxy_jump_chain) or "",
-            ", ".join(server.location_list),
-            status,
-        )
-
-    return [table, Text("")]
-
-
-def _build_volumes_section(
-    vol_statuses: dict[str, VolumeStatus],
-    resolved_endpoints: ResolvedEndpoints,
-) -> list[RenderableType]:
-    """Build the Volumes table section."""
-    table = Table(title="Volumes:")
-    table.add_column("Name", style="bold")
-    table.add_column("Type")
-    table.add_column("SSH Endpoint")
-    table.add_column("URI")
-    table.add_column("Mount Config")
-    table.add_column("Mount Diagnostics")
-    table.add_column("Capabilities")
-    table.add_column("Status")
-
-    for vs in vol_statuses.values():
-        vol = vs.config
-        caps = vs.diagnostics.capabilities if vs.diagnostics else None
-        mount_caps = caps.mount if caps else None
-        match vol:
-            case RemoteVolume():
-                vol_type = "remote"
-                ep = resolved_endpoints.get(vol.slug)
-                ssh_ep = ep.server.slug if ep else vol.ssh_endpoint
-            case LocalVolume():
-                vol_type = "local"
-                ssh_ep = ""
-        table.add_row(
-            vs.slug,
-            vol_type,
-            ssh_ep,
-            format_volume_display(vol, resolved_endpoints),
-            format_mount_summary(vol.mount),
-            _format_mount_status(mount_caps, vol.mount),
-            _format_capabilities(caps),
-            _volume_status_text(vs),
-        )
-
-    return [table, Text("")]
-
-
-def _build_syncs_section(
-    sync_statuses: dict[str, SyncStatus],
-    config: Config,
-) -> list[RenderableType]:
-    """Build the Syncs table section."""
-    table = Table(title="Syncs:")
-    table.add_column("Name", style="bold")
-    table.add_column("Source")
-    table.add_column("Destination")
-    table.add_column("Options")
-    table.add_column("Src Diagnostics")
-    table.add_column("Dst Diagnostics")
-    table.add_column("Status")
-
-    for ss in sync_statuses.values():
-        table.add_row(
-            ss.slug,
-            _sync_endpoint_display(config.source_endpoint(ss.config)),
-            _sync_endpoint_display(config.destination_endpoint(ss.config)),
-            _sync_options(ss.config, config),
-            _format_source_diagnostics(ss),
-            _format_destination_diagnostics(ss),
-            _sync_status_text(ss),
-        )
-
-    return [table]
-
-
-def _build_orphan_warnings_section(
-    config: Config,
-) -> list[RenderableType]:
-    """Build warnings for orphan config items."""
-    warnings = [
-        *[
-            f"SSH endpoint '{slug}' is not referenced by any volume"
-            for slug in config.orphan_ssh_endpoints()
-        ],
-        *[
-            f"Volume '{slug}' is not referenced by any sync endpoint"
-            for slug in config.orphan_volumes()
-        ],
-        *[
-            f"Sync endpoint '{slug}' is not referenced by any sync"
-            for slug in config.orphan_sync_endpoints()
-        ],
-    ]
-    if not warnings:
-        return []
-    text = Text("\n").join(
-        Text.assemble(("warning: ", "yellow bold"), warning) for warning in warnings
-    )
-    return [Text(""), text]
-
-
-def _collect_ssh_endpoint_statuses(
-    vol_statuses: dict[str, VolumeStatus],
-    sync_statuses: dict[str, SyncStatus],
-) -> dict[str, SshEndpointStatus]:
-    """Collect unique SSH endpoint statuses from volumes and sync statuses.
-
-    SSH endpoint statuses are embedded in volume statuses.  This extracts
-    them for display in the SSH Endpoints table.  First-seen wins for
-    duplicate slugs.
-    """
-    all_ssh = [
-        *[vs.ssh_endpoint_status for vs in vol_statuses.values()],
-        *[
-            ep.volume_status.ssh_endpoint_status
-            for ss in sync_statuses.values()
-            for ep in [ss.source_endpoint_status, ss.destination_endpoint_status]
-        ],
-    ]
-    # dict.fromkeys-style: first occurrence wins
-    return dict({s.slug: s for s in reversed(all_ssh)})
-
-
-def build_check_sections(
-    vol_statuses: dict[str, VolumeStatus],
-    sync_statuses: dict[str, SyncStatus],
-    config: Config,
-    resolved_endpoints: ResolvedEndpoints,
-) -> list[RenderableType]:
-    """Build renderable sections for check output."""
-    ssh_statuses = _collect_ssh_endpoint_statuses(vol_statuses, sync_statuses)
-    return [
-        *_build_ssh_endpoints_section(config, ssh_statuses),
-        *_build_volumes_section(vol_statuses, resolved_endpoints),
-        *_build_syncs_section(sync_statuses, config),
-        *_build_orphan_warnings_section(config),
-    ]
-
-
-def print_human_check(
-    vol_statuses: dict[str, VolumeStatus],
-    sync_statuses: dict[str, SyncStatus],
-    config: Config,
-    *,
-    console: Console | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-    wrap_in_panel: bool = True,
-) -> None:
-    """Print human-readable status output."""
-    re = resolved_endpoints or {}
-    if console is None:
-        console = Console()
-
-    sections = build_check_sections(vol_statuses, sync_statuses, config, re)
-
-    if wrap_in_panel:
-        console.print(
-            Panel(
-                Group(*sections),
-                title="[bold]Preflight Checks[/bold]",
-                border_style="cyan",
-                padding=(0, 1),
-            )
-        )
-    else:
-        for section in sections:
-            console.print(section)
-
-
-# ---------------------------------------------------------------------------
-# Troubleshooting output
-# ---------------------------------------------------------------------------
 
 _INDENT = "  "
 
@@ -1102,6 +602,9 @@ def _print_sync_error_fix(
             )
 
 
+# ── Mount-specific fix helpers ────────────────────────────────
+
+
 def _print_mount_error(
     console: Console,
     title: str,
@@ -1116,7 +619,7 @@ def _print_mount_error(
 
 def _print_device_not_present_fix(
     console: Console,
-    mount: MountConfig | None,
+    mount: "MountConfig | None",
 ) -> None:
     """Print fix for device not plugged in."""
     p2 = _INDENT * 2
@@ -1259,9 +762,10 @@ def _print_cryptsetup_service_mismatch_fix(
 
 def _print_passphrase_not_available_fix(
     console: Console,
-    mount: MountConfig | None,
+    mount: "MountConfig | None",
 ) -> None:
     """Print fix for passphrase not available."""
+
     p2 = _INDENT * 2
     pid = (
         mount.encryption.passphrase_id
@@ -1278,7 +782,7 @@ def _print_passphrase_not_available_fix(
 def _print_mount_failed_fix(
     console: Console,
     vol: LocalVolume | RemoteVolume,
-    mount: MountConfig | None,
+    mount: "MountConfig | None",
     resolved_endpoints: ResolvedEndpoints,
 ) -> None:
     """Print fix for attach-luks/mount failure."""
@@ -1365,6 +869,9 @@ def _print_sudoers_rules_missing_fix(
     console.print(f"{p2}Or generate with: nbkp config setup-auth -c <config>")
 
 
+# ── Main troubleshoot entry point ─────────────────────────────
+
+
 def print_human_troubleshoot(
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
@@ -1387,7 +894,7 @@ def print_human_troubleshoot(
 
     # ── Layer 1: SSH Endpoints ────────────────────────────────
     # Collect unique SSH endpoint statuses from volume statuses
-    ssh_statuses = _collect_ssh_endpoint_statuses(vol_statuses, sync_statuses)
+    ssh_statuses = collect_ssh_endpoint_statuses(vol_statuses, sync_statuses)
     failed_ssh = [s for s in ssh_statuses.values() if s.errors]
     for ssh_st in failed_ssh:
         has_issues = True

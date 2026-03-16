@@ -10,7 +10,7 @@ from nbkp.config import (
     MountConfig,
 )
 from nbkp.mount.observation import MountObservation
-from nbkp.preflight.output import _format_mount_status
+from nbkp.preflight.output.formatting import format_mount_status
 from nbkp.preflight.status import (
     MountCapabilities,
     MountToolCapabilities,
@@ -334,41 +334,41 @@ class TestMountCapabilitiesRuntimeState:
         assert mc.mounted is False
 
 
-# ── _format_mount_status ───────────────────────────────────
+# ── format_mount_status ───────────────────────────────────
 
 
 class TestFormatMountStatus:
     def test_none_caps_returns_empty(self) -> None:
-        assert _format_mount_status(None, _encrypted_mount()) == ""
+        assert format_mount_status(None, _encrypted_mount()) == ""
 
     def test_none_config_returns_empty(self) -> None:
         mc = _base_mount_caps(device_present=True, mounted=True)
-        assert _format_mount_status(mc, None) == ""
+        assert format_mount_status(mc, None) == ""
 
     def test_encrypted_all_true(self) -> None:
         mc = _base_mount_caps(device_present=True, luks_attached=True, mounted=True)
-        result = _format_mount_status(mc, _encrypted_mount())
+        result = format_mount_status(mc, _encrypted_mount())
         assert "\u2713device" in result
         assert "\u2713luks" in result
         assert "\u2713mounted" in result
 
     def test_encrypted_all_false(self) -> None:
         mc = _base_mount_caps(device_present=False, luks_attached=False, mounted=False)
-        result = _format_mount_status(mc, _encrypted_mount())
+        result = format_mount_status(mc, _encrypted_mount())
         assert "\u2717device" in result
         assert "\u2717luks" in result
         assert "\u2717mounted" in result
 
     def test_unencrypted_no_luks_column(self) -> None:
         mc = _base_mount_caps(device_present=True, mounted=True)
-        result = _format_mount_status(mc, _unencrypted_mount())
+        result = format_mount_status(mc, _unencrypted_mount())
         assert "luks" not in result
         assert "\u2713device" in result
         assert "\u2713mounted" in result
 
     def test_not_probed_items_omitted(self) -> None:
         mc = _base_mount_caps(device_present=None, mounted=None)
-        result = _format_mount_status(mc, _unencrypted_mount())
+        result = format_mount_status(mc, _unencrypted_mount())
         assert "device" not in result
         assert "mounted" not in result
 
