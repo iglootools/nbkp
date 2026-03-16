@@ -30,7 +30,6 @@ from ..config.output import print_config_error
 from ..preflight.output import print_human_check
 from ..preflight import (
     SyncStatus,
-    VolumeError,
     VolumeStatus,
     check_all_syncs,
 )
@@ -43,11 +42,6 @@ class OutputFormat(str, enum.Enum):
     HUMAN = "human"
     JSON = "json"
 
-
-_INACTIVE_VOLUME_ERRORS = {
-    VolumeError.DEVICE_NOT_PRESENT,
-    VolumeError.VOLUME_NOT_MOUNTED,
-}
 
 
 def load_config_or_exit(

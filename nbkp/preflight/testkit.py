@@ -142,7 +142,11 @@ def _inactive_dst_ep_status(
         endpoint_slug=endpoint_slug,
         volume_status=volume_status,
         diagnostics=None,
-        errors=[],
+        errors=(
+            [DestinationEndpointError.VOLUME_INACTIVE]
+            if not volume_status.active
+            else []
+        ),
     )
 
 
@@ -155,7 +159,9 @@ def _inactive_src_ep_status(
         endpoint_slug=endpoint_slug,
         volume_status=volume_status,
         diagnostics=None,
-        errors=[],
+        errors=(
+            [SourceEndpointError.VOLUME_INACTIVE] if not volume_status.active else []
+        ),
     )
 
 
@@ -284,7 +290,7 @@ def check_data(
         config=config.volumes["nas-backup"],
         ssh_endpoint_status=nas_ssh,
         diagnostics=None,
-        errors=[],
+        errors=[VolumeError.SSH_ENDPOINT_INACTIVE],
     )
     external_vs = VolumeStatus(
         slug="external-drive",
@@ -403,7 +409,7 @@ def check_data(
             config=config.syncs["docs-to-nas"],
             source_endpoint_status=_inactive_src_ep_status("laptop-docs", laptop_vs),
             destination_endpoint_status=_inactive_dst_ep_status("nas-docs", nas_vs),
-            errors=[],
+            errors=[SyncError.DESTINATION_ENDPOINT_INACTIVE],
         ),
         "music-to-usb": SyncStatus(
             slug="music-to-usb",
@@ -428,7 +434,7 @@ def check_data(
             destination_endpoint_status=_inactive_dst_ep_status(
                 "mount-encrypted-dst", mount_encrypted_vs
             ),
-            errors=[],
+            errors=[SyncError.DESTINATION_ENDPOINT_INACTIVE],
         ),
         "backup-to-unencrypted": SyncStatus(
             slug="backup-to-unencrypted",
@@ -1173,22 +1179,22 @@ def troubleshoot_data(
         errors=[],
     )
 
-    # nas-backup: SSH unreachable (Layer 1 error, volume has no own errors)
+    # nas-backup: SSH unreachable (Layer 1 error → cascade to Layer 2)
     nas_vs = VolumeStatus(
         slug="nas-backup",
         config=config.volumes["nas-backup"],
         ssh_endpoint_status=_TROUBLESHOOT_NAS_SSH,
         diagnostics=None,
-        errors=[],
+        errors=[VolumeError.SSH_ENDPOINT_INACTIVE],
     )
 
-    # home-nas: location excluded (Layer 1 error)
+    # home-nas: location excluded (Layer 1 error → cascade to Layer 2)
     home_nas_vs = VolumeStatus(
         slug="home-nas",
         config=config.volumes["home-nas"],
         ssh_endpoint_status=_TROUBLESHOOT_HOME_NAS_SSH,
         diagnostics=None,
-        errors=[],
+        errors=[VolumeError.SSH_ENDPOINT_INACTIVE],
     )
 
     # usb-7 to usb-9: active for permissions tests
@@ -1236,6 +1242,9 @@ def troubleshoot_data(
     )
 
     # Mount management volumes: errors split across SSH endpoint and volume
+    # Note: SSH endpoint has mount tool errors (inactive) but volume errors
+    # are preserved for demo — in production, from_diagnostics() would
+    # short-circuit to SSH_ENDPOINT_INACTIVE only.
     mount_encrypted_vs = VolumeStatus(
         slug="mount-encrypted",
         config=config.volumes["mount-encrypted"],
@@ -1256,6 +1265,8 @@ def troubleshoot_data(
             VolumeError.POLKIT_RULES_MISSING,
         ],
     )
+    # Note: SSH endpoint has direct tool errors (inactive) but volume errors
+    # are preserved for demo — see mount_encrypted_vs comment.
     mount_direct_vs = VolumeStatus(
         slug="mount-direct",
         config=config.volumes["mount-direct"],
@@ -1354,6 +1365,8 @@ def troubleshoot_data(
     )
 
     # Volumes for rsync-missing scenario: NAS with rsync not found
+    # Note: SSH endpoint has RSYNC_NOT_FOUND (inactive) but volume errors=[]
+    # preserved for demo — destination endpoint errors shown independently.
     nas_rsync_missing_vs = VolumeStatus(
         slug="nas-backup",
         config=config.volumes["nas-backup"],
@@ -1370,6 +1383,8 @@ def troubleshoot_data(
     )
 
     # Volume for rsync-too-old scenario
+    # Note: SSH endpoint has RSYNC_TOO_OLD (inactive) but volume errors=[]
+    # preserved for demo.
     nas_rsync_old_vs = VolumeStatus(
         slug="nas-backup",
         config=config.volumes["nas-backup"],
@@ -1402,6 +1417,8 @@ def troubleshoot_data(
     )
 
     # usb-3: btrfs-not-detected (not btrfs filesystem + btrfs cmd missing)
+    # Note: SSH endpoint has BTRFS_NOT_FOUND (inactive) but volume errors=[]
+    # and endpoint errors are preserved for demo — see mount_encrypted_vs comment.
     usb3_vs = VolumeStatus(
         slug="usb-3",
         config=config.volumes["usb-3"],
@@ -1418,6 +1435,8 @@ def troubleshoot_data(
     )
 
     # usb-4: tools-missing (stat + findmnt missing)
+    # Note: SSH endpoint has STAT/FINDMNT/BTRFS_NOT_FOUND (inactive) but
+    # volume errors=[] and endpoint errors preserved for demo.
     usb4_vs = VolumeStatus(
         slug="usb-4",
         config=config.volumes["usb-4"],
@@ -1536,7 +1555,10 @@ def troubleshoot_data(
         config=config.syncs["unavailable-volumes"],
         source_endpoint_status=laptop_src_inactive,
         destination_endpoint_status=_inactive_dst_ep_status("dst-unavail", nas_vs),
-        errors=[],
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
     )
 
     # missing-sentinels: endpoint sentinels missing (Layer 3)
@@ -1562,10 +1584,14 @@ def troubleshoot_data(
             ),
             errors=[DestinationEndpointError.SENTINEL_NOT_FOUND],
         ),
-        errors=[],
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
     )
 
     # rsync-missing: SshEndpointError.RSYNC_NOT_FOUND (Layer 1 on NAS)
+    # Note: destination volume errors=[] (demo-preserved) so dst EP active
     sync_statuses["rsync-missing"] = SyncStatus(
         slug="rsync-missing",
         config=config.syncs["rsync-missing"],
@@ -1573,7 +1599,7 @@ def troubleshoot_data(
         destination_endpoint_status=_inactive_dst_ep_status(
             "dst-rsync-missing", nas_rsync_missing_vs
         ),
-        errors=[],
+        errors=[SyncError.SOURCE_ENDPOINT_INACTIVE],
     )
 
     # btrfs-not-detected: SshEndpointError.BTRFS_NOT_FOUND (Layer 1)
@@ -1602,7 +1628,10 @@ def troubleshoot_data(
                 DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME,
             ],
         ),
-        errors=[],
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
     )
 
     # btrfs-mount-issues: DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM
@@ -1631,16 +1660,20 @@ def troubleshoot_data(
                 DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND,
             ],
         ),
-        errors=[],
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
     )
 
     # tools-missing: SshEndpointError.STAT_NOT_FOUND + FINDMNT_NOT_FOUND (Layer 1)
+    # Note: destination volume errors=[] (demo-preserved) so dst EP active
     sync_statuses["tools-missing"] = SyncStatus(
         slug="tools-missing",
         config=config.syncs["tools-missing"],
         source_endpoint_status=laptop_src_inactive,
         destination_endpoint_status=_inactive_dst_ep_status("dst-tools", usb4_vs),
-        errors=[],
+        errors=[SyncError.SOURCE_ENDPOINT_INACTIVE],
     )
 
     # hardlink-issues: DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT
@@ -1664,10 +1697,14 @@ def troubleshoot_data(
                 DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND,
             ],
         ),
-        errors=[],
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
     )
 
     # rsync-too-old: SshEndpointError.RSYNC_TOO_OLD (Layer 1 on NAS)
+    # Note: destination volume errors=[] (demo-preserved) so dst EP active
     sync_statuses["rsync-too-old"] = SyncStatus(
         slug="rsync-too-old",
         config=config.syncs["rsync-too-old"],
@@ -1675,7 +1712,7 @@ def troubleshoot_data(
         destination_endpoint_status=_inactive_dst_ep_status(
             "dst-rsync-old", nas_rsync_old_vs
         ),
-        errors=[],
+        errors=[SyncError.SOURCE_ENDPOINT_INACTIVE],
     )
 
     # source-latest-missing: SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
@@ -1698,10 +1735,13 @@ def troubleshoot_data(
             ],
         ),
         destination_endpoint_status=_inactive_dst_ep_status("dst-src-latest", nas_vs),
-        errors=[],
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
     )
 
-    # dry-run-upstream: active (upstream writes to hl-stage)
+    # dry-run-upstream: active dst (upstream writes to hl-stage)
     sync_statuses["dry-run-upstream"] = SyncStatus(
         slug="dry-run-upstream",
         config=config.syncs["dry-run-upstream"],
@@ -1717,7 +1757,7 @@ def troubleshoot_data(
                 latest=LatestSymlinkState(exists=True, raw_target="/dev/null"),
             ),
         ),
-        errors=[],
+        errors=[SyncError.SOURCE_ENDPOINT_INACTIVE],
     )
 
     # dry-run-pending: SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING (Layer 4)
@@ -1753,7 +1793,10 @@ def troubleshoot_data(
         destination_endpoint_status=_inactive_dst_ep_status(
             "dst-loc-excluded", home_nas_vs
         ),
-        errors=[],
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
     )
 
     # btrfs-permissions: destination endpoint writability errors (Layer 3)
@@ -1782,7 +1825,10 @@ def troubleshoot_data(
                 DestinationEndpointError.SNAPSHOTS_DIR_NOT_WRITABLE,
             ],
         ),
-        errors=[],
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
     )
 
     # hardlink-permissions: destination endpoint writability errors (Layer 3)
@@ -1805,7 +1851,10 @@ def troubleshoot_data(
                 DestinationEndpointError.SNAPSHOTS_DIR_NOT_WRITABLE,
             ],
         ),
-        errors=[],
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
     )
 
     # no-snap-permissions: destination not writable (Layer 3)
@@ -1825,7 +1874,10 @@ def troubleshoot_data(
                 DestinationEndpointError.NOT_WRITABLE,
             ],
         ),
-        errors=[],
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
     )
 
     # mount-encrypted-errors: SSH endpoint has mount tool errors (Layer 1)
@@ -1837,7 +1889,10 @@ def troubleshoot_data(
         destination_endpoint_status=_inactive_dst_ep_status(
             "mount-encrypted-dst", mount_encrypted_vs
         ),
-        errors=[],
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
     )
 
     # mount-unencrypted-errors: volume has mount unit not configured (Layer 2)
@@ -1848,7 +1903,10 @@ def troubleshoot_data(
         destination_endpoint_status=_inactive_dst_ep_status(
             "mount-unencrypted-dst", mount_unencrypted_vs
         ),
-        errors=[],
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
     )
 
     # mount-direct-errors: SSH endpoint has direct mount tool errors (Layer 1)
@@ -1860,7 +1918,10 @@ def troubleshoot_data(
         destination_endpoint_status=_inactive_dst_ep_status(
             "mount-direct-dst", mount_direct_vs
         ),
-        errors=[],
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
     )
 
     # mount-mismatch-errors: unit mismatch + cryptsetup service mismatch (Layer 2)
@@ -1871,7 +1932,10 @@ def troubleshoot_data(
         destination_endpoint_status=_inactive_dst_ep_status(
             "mount-systemd-mismatch-dst", mount_mismatch_vs
         ),
-        errors=[],
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
     )
 
     # mount-luks-failed: LUKS failures + passphrase unavailable (Layer 2)
@@ -1882,7 +1946,10 @@ def troubleshoot_data(
         destination_endpoint_status=_inactive_dst_ep_status(
             "mount-luks-failed-dst", mount_luks_failed_vs
         ),
-        errors=[],
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
     )
 
     # dst-latest-missing: DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND (Layer 3)
@@ -1902,7 +1969,10 @@ def troubleshoot_data(
             ),
             errors=[DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND],
         ),
-        errors=[],
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
     )
 
     # dst-latest-invalid: DestinationEndpointError.LATEST_SYMLINK_INVALID (Layer 3)
@@ -1926,7 +1996,10 @@ def troubleshoot_data(
             ),
             errors=[DestinationEndpointError.LATEST_SYMLINK_INVALID],
         ),
-        errors=[],
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
     )
 
     # src-latest-invalid: SourceEndpointError.LATEST_SYMLINK_INVALID (Layer 3)
@@ -1951,7 +2024,7 @@ def troubleshoot_data(
         destination_endpoint_status=_active_dst_ep_status(
             "dst-src-latest-invalid", usb13_vs
         ),
-        errors=[],
+        errors=[SyncError.SOURCE_ENDPOINT_INACTIVE],
     )
 
     # src-devnull-no-upstream: SyncError.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM (Layer 4)

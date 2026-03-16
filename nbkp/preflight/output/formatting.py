@@ -37,106 +37,15 @@ def status_text(
         return Text(f"\u2717inactive ({error_str})", style="red")
 
 
-def volume_status_text(vs: VolumeStatus) -> Text:
-    """Format volume status, cascading SSH endpoint errors when the volume
-    itself has none but is inactive due to its SSH endpoint."""
-    if vs.active:
-        return Text("\u2713active", style="green")
-    errors = [
-        *[f"ssh: {e.value}" for e in vs.ssh_endpoint_status.errors],
-        *[e.value for e in vs.errors],
-    ]
-    error_str = ", ".join(errors)
-    return Text(f"\u2717inactive ({error_str})", style="red")
-
-
-def all_sync_errors(ss: SyncStatus) -> list[str]:
-    """Collect error values from all 4 layers for a sync.
-
-    Returns a flat list of error value strings for display.
-    """
-    src_ep = ss.source_endpoint_status
-    dst_ep = ss.destination_endpoint_status
-    return [
-        *(e.value for e in src_ep.volume_status.ssh_endpoint_status.errors),
-        *(e.value for e in dst_ep.volume_status.ssh_endpoint_status.errors),
-        *(e.value for e in src_ep.volume_status.errors),
-        *(e.value for e in dst_ep.volume_status.errors),
-        *(e.value for e in src_ep.errors),
-        *(e.value for e in dst_ep.errors),
-        *(e.value for e in ss.errors),
-    ]
-
-
-# Errors from lower layers that are visible as diagnostics columns,
-# so they don't need to be repeated in the sync Status column.
-DIAGNOSTIC_VISIBLE_ERRORS: frozenset[str] = frozenset(
-    {
-        # Volume-level — shown as volume(reason) in src/dst diagnostics
-        e.value
-        for e in [
-            VolumeError.SENTINEL_NOT_FOUND,
-            VolumeError.VOLUME_NOT_MOUNTED,
-            VolumeError.DEVICE_NOT_PRESENT,
-        ]
-    }
-    | {
-        # SSH endpoint — shown as volume(reason) in src/dst diagnostics
-        e.value
-        for e in [
-            SshEndpointError.UNREACHABLE,
-            SshEndpointError.LOCATION_EXCLUDED,
-        ]
-    }
-    | {
-        # Source endpoint — shown as check items in src diagnostics
-        e.value
-        for e in [
-            SourceEndpointError.SENTINEL_NOT_FOUND,
-            SourceEndpointError.LATEST_SYMLINK_NOT_FOUND,
-            SourceEndpointError.LATEST_SYMLINK_INVALID,
-            SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND,
-        ]
-    }
-    | {
-        # Destination endpoint — shown as check items in dst diagnostics
-        e.value
-        for e in [
-            DestinationEndpointError.SENTINEL_NOT_FOUND,
-            DestinationEndpointError.NOT_WRITABLE,
-            DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME,
-            DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND,
-            DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND,
-            DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND,
-            DestinationEndpointError.LATEST_SYMLINK_INVALID,
-            DestinationEndpointError.SNAPSHOTS_DIR_NOT_WRITABLE,
-            DestinationEndpointError.STAGING_SUBVOL_NOT_WRITABLE,
-            DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT,
-        ]
-    }
-)
-
-
 def sync_status_text(ss: SyncStatus) -> Text:
-    """Format sync status, showing only non-obvious error reasons.
+    """Format sync status from sync-level errors.
 
-    Errors that are visible as check items in the diagnostics columns are
-    omitted from the status text to avoid redundancy.  Non-obvious
-    errors (disabled, tool-version, dry-run) are shown.  When all errors
-    are diagnostic-visible, falls back to the full error list so the
-    status column is never a bare "✗inactive" with no explanation.
+    With cascade errors, ``ss.errors`` is self-describing — it contains
+    sync-level errors (disabled, dry-run, latest→/dev/null) plus cascade
+    pointers (source/destination endpoint inactive).  No need to walk
+    lower layers or filter diagnostic-visible errors.
     """
-    if ss.active:
-        return Text("\u2713active", style="green")
-    errors_all = all_sync_errors(ss)
-    non_obvious = [e for e in errors_all if e not in DIAGNOSTIC_VISIBLE_ERRORS]
-    errors = non_obvious if non_obvious else errors_all
-    # Deduplicate while preserving order (same SSH endpoint error
-    # can appear via both source and destination paths)
-    seen: set[str] = set()
-    unique = [e for e in errors if not (e in seen or seen.add(e))]  # type: ignore[func-returns-value]
-    reason = ", ".join(unique)
-    return Text(f"\u2717inactive ({reason})", style="red")
+    return status_text(ss.active, ss.errors)
 
 
 def mount_capability_items(
@@ -209,9 +118,7 @@ def format_mount_status(
         ),
         (mount_caps.mounted, "mounted"),
     ]
-    return ", ".join(
-        check(value, label) for value, label in items if value is not None
-    )
+    return ", ".join(check(value, label) for value, label in items if value is not None)
 
 
 def collect_ssh_endpoint_statuses(

@@ -359,6 +359,9 @@ class VolumeError(str, enum.Enum):
     POLKIT_RULES_MISSING = "polkit rules not configured"
     SUDOERS_RULES_MISSING = "sudoers rules not configured"
 
+    # Cascade — lower layer inactive
+    SSH_ENDPOINT_INACTIVE = "ssh endpoint inactive"
+
 
 class MountCapabilities(BaseModel):
     """Volume-specific mount diagnostics (config checks + runtime state).
@@ -441,7 +444,7 @@ class VolumeStatus(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def active(self) -> bool:
-        return self.ssh_endpoint_status.active and not self.errors
+        return not self.errors
 
     @staticmethod
     def from_diagnostics(
@@ -451,7 +454,15 @@ class VolumeStatus(BaseModel):
         diagnostics: VolumeDiagnostics | None,
     ) -> VolumeStatus:
         """Create status by interpreting diagnostics into errors."""
-        if not ssh_endpoint_status.active or diagnostics is None:
+        if not ssh_endpoint_status.active:
+            return VolumeStatus(
+                slug=slug,
+                config=config,
+                ssh_endpoint_status=ssh_endpoint_status,
+                diagnostics=diagnostics,
+                errors=[VolumeError.SSH_ENDPOINT_INACTIVE],
+            )
+        elif diagnostics is None:
             return VolumeStatus(
                 slug=slug,
                 config=config,
@@ -459,14 +470,15 @@ class VolumeStatus(BaseModel):
                 diagnostics=diagnostics,
                 errors=[],
             )
-        mount = getattr(config, "mount", None)
-        return VolumeStatus(
-            slug=slug,
-            config=config,
-            ssh_endpoint_status=ssh_endpoint_status,
-            diagnostics=diagnostics,
-            errors=_volume_errors(diagnostics, mount),
-        )
+        else:
+            mount = getattr(config, "mount", None)
+            return VolumeStatus(
+                slug=slug,
+                config=config,
+                ssh_endpoint_status=ssh_endpoint_status,
+                diagnostics=diagnostics,
+                errors=_volume_errors(diagnostics, mount),
+            )
 
 
 # ── Layer 2 error interpretation ───────────────────────────
@@ -614,6 +626,9 @@ class SourceEndpointError(str, enum.Enum):
     LATEST_SYMLINK_NOT_FOUND = f"{LATEST_LINK} symlink not found"
     LATEST_SYMLINK_INVALID = f"{LATEST_LINK} symlink target is invalid"
 
+    # Cascade — lower layer inactive
+    VOLUME_INACTIVE = "volume inactive"
+
 
 class DestinationEndpointError(str, enum.Enum):
     """Errors at the destination sync endpoint level.
@@ -640,6 +655,9 @@ class DestinationEndpointError(str, enum.Enum):
     VOL_NOT_BTRFS = "volume not on btrfs filesystem"
     VOL_NOT_MOUNTED_USER_SUBVOL_RM = "volume not mounted with user_subvol_rm_allowed"
     VOL_NO_HARDLINK_SUPPORT = "volume filesystem does not support hard links"
+
+    # Cascade — lower layer inactive
+    VOLUME_INACTIVE = "volume inactive"
 
 
 # Diagnostics models (shared by source and destination endpoints)
@@ -746,7 +764,7 @@ class SourceEndpointStatus(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def active(self) -> bool:
-        return self.volume_status.active and not self.errors
+        return not self.errors
 
     @staticmethod
     def from_diagnostics(
@@ -755,11 +773,12 @@ class SourceEndpointStatus(BaseModel):
         diagnostics: SourceEndpointDiagnostics | None,
     ) -> SourceEndpointStatus:
         """Create status by interpreting diagnostics into errors."""
-        errors = (
-            _source_endpoint_errors(diagnostics, endpoint)
-            if volume_status.active and diagnostics is not None
-            else []
-        )
+        if not volume_status.active:
+            errors = [SourceEndpointError.VOLUME_INACTIVE]
+        elif diagnostics is not None:
+            errors = _source_endpoint_errors(diagnostics, endpoint)
+        else:
+            errors = []
         return SourceEndpointStatus(
             endpoint_slug=endpoint.slug,
             volume_status=volume_status,
@@ -780,7 +799,7 @@ class DestinationEndpointStatus(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def active(self) -> bool:
-        return self.volume_status.active and not self.errors
+        return not self.errors
 
     @staticmethod
     def from_diagnostics(
@@ -789,18 +808,23 @@ class DestinationEndpointStatus(BaseModel):
         diagnostics: DestinationEndpointDiagnostics | None,
     ) -> DestinationEndpointStatus:
         """Create status by interpreting diagnostics into errors."""
-        # Capability-gated errors need host tools and volume capabilities
-        host_tools = volume_status.ssh_endpoint_status.diagnostics.host_tools
-        vol_caps = (
-            volume_status.diagnostics.capabilities
-            if volume_status.diagnostics is not None
-            else None
-        )
-        errors = (
-            _destination_endpoint_errors(diagnostics, vol_caps, host_tools, endpoint)
-            if volume_status.active and diagnostics is not None
-            else []
-        )
+        if not volume_status.active:
+            errors: list[DestinationEndpointError] = [
+                DestinationEndpointError.VOLUME_INACTIVE
+            ]
+        elif diagnostics is not None:
+            # Capability-gated errors need host tools and volume capabilities
+            host_tools = volume_status.ssh_endpoint_status.diagnostics.host_tools
+            vol_caps = (
+                volume_status.diagnostics.capabilities
+                if volume_status.diagnostics is not None
+                else None
+            )
+            errors = _destination_endpoint_errors(
+                diagnostics, vol_caps, host_tools, endpoint
+            )
+        else:
+            errors = []
         return DestinationEndpointStatus(
             endpoint_slug=endpoint.slug,
             volume_status=volume_status,
@@ -1018,6 +1042,10 @@ class SyncError(str, enum.Enum):
         "source snapshot not yet available (dry-run; upstream has not run)"
     )
 
+    # Cascade — lower layer inactive
+    SOURCE_ENDPOINT_INACTIVE = "source endpoint inactive"
+    DESTINATION_ENDPOINT_INACTIVE = "destination endpoint inactive"
+
 
 class SyncStatus(BaseModel):
     """Runtime status of a sync."""
@@ -1037,11 +1065,7 @@ class SyncStatus(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def active(self) -> bool:
-        return (
-            not self.errors
-            and self.source_endpoint_status.active
-            and self.destination_endpoint_status.active
-        )
+        return not self.errors
 
     def is_expected_inactive(self) -> bool:
         """Whether all errors across all 4 layers are expected-inactive.
@@ -1104,15 +1128,22 @@ class SyncStatus(BaseModel):
     ) -> SyncStatus:
         """Create status by interpreting sync-level errors."""
         if not sync.enabled:
-            return SyncStatus(
-                slug=sync.slug,
-                config=sync,
-                source_endpoint_status=src_ep_status,
-                destination_endpoint_status=dst_ep_status,
-                errors=[SyncError.DISABLED],
-            )
+            errors: list[SyncError] = [SyncError.DISABLED]
+        else:
+            errors = [
+                *_sync_errors(sync, src_endpoint, src_ep_status, all_syncs, dry_run),
+                *(
+                    [SyncError.SOURCE_ENDPOINT_INACTIVE]
+                    if not src_ep_status.active
+                    else []
+                ),
+                *(
+                    [SyncError.DESTINATION_ENDPOINT_INACTIVE]
+                    if not dst_ep_status.active
+                    else []
+                ),
+            ]
 
-        errors = _sync_errors(sync, src_endpoint, src_ep_status, all_syncs, dry_run)
         dst_diag = dst_ep_status.diagnostics
         dst_latest = dst_diag.latest.snapshot if dst_diag and dst_diag.latest else None
 
@@ -1188,24 +1219,29 @@ INACTIVE_VOLUME_ERRORS: frozenset[VolumeError] = frozenset(
         VolumeError.SENTINEL_NOT_FOUND,
         VolumeError.DEVICE_NOT_PRESENT,
         VolumeError.VOLUME_NOT_MOUNTED,
+        VolumeError.SSH_ENDPOINT_INACTIVE,
     }
 )
 
 INACTIVE_SRC_ENDPOINT_ERRORS: frozenset[SourceEndpointError] = frozenset(
     {
         SourceEndpointError.SENTINEL_NOT_FOUND,
+        SourceEndpointError.VOLUME_INACTIVE,
     }
 )
 
 INACTIVE_DST_ENDPOINT_ERRORS: frozenset[DestinationEndpointError] = frozenset(
     {
         DestinationEndpointError.SENTINEL_NOT_FOUND,
+        DestinationEndpointError.VOLUME_INACTIVE,
     }
 )
 
 INACTIVE_SYNC_ERRORS: frozenset[SyncError] = frozenset(
     {
         SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING,
+        SyncError.SOURCE_ENDPOINT_INACTIVE,
+        SyncError.DESTINATION_ENDPOINT_INACTIVE,
     }
 )
 

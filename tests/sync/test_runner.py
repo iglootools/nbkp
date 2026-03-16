@@ -16,15 +16,19 @@ from nbkp.config import (
 )
 from nbkp.preflight import (
     DestinationEndpointDiagnostics,
+    DestinationEndpointError,
     DestinationEndpointStatus,
     SourceEndpointDiagnostics,
+    SourceEndpointError,
     SourceEndpointStatus,
     SshEndpointDiagnostics,
     SshEndpointError,
     SshEndpointStatus,
+    SyncError,
     SyncStatus,
     VolumeCapabilities,
     VolumeDiagnostics,
+    VolumeError,
     VolumeStatus,
 )
 from nbkp.sync import run_all_syncs
@@ -70,7 +74,7 @@ def _inactive_vol_status(name: str, vol: Volume) -> VolumeStatus:
         config=vol,
         ssh_endpoint_status=_inactive_ssh_status(),
         diagnostics=None,
-        errors=[],
+        errors=[VolumeError.SSH_ENDPOINT_INACTIVE],
     )
 
 
@@ -112,7 +116,7 @@ def _inactive_src_ep_status(config: Config, sync: SyncConfig) -> SourceEndpointS
         endpoint_slug=ep.slug,
         volume_status=_inactive_vol_status(ep.volume, vol),
         diagnostics=None,
-        errors=[],
+        errors=[SourceEndpointError.VOLUME_INACTIVE],
     )
 
 
@@ -125,7 +129,7 @@ def _inactive_dst_ep_status(
         endpoint_slug=ep.slug,
         volume_status=_inactive_vol_status(ep.volume, vol),
         diagnostics=None,
-        errors=[],
+        errors=[DestinationEndpointError.VOLUME_INACTIVE],
     )
 
 
@@ -248,7 +252,10 @@ def _inactive_statuses(
             config=sync,
             source_endpoint_status=_inactive_src_ep_status(config, sync),
             destination_endpoint_status=_inactive_dst_ep_status(config, sync),
-            errors=[],
+            errors=[
+                SyncError.SOURCE_ENDPOINT_INACTIVE,
+                SyncError.DESTINATION_ENDPOINT_INACTIVE,
+            ],
         )
         for name, sync in config.syncs.items()
     }

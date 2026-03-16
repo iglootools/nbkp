@@ -30,6 +30,7 @@ from nbkp.preflight import (
     SshEndpointDiagnostics,
     SshEndpointError,
     SshEndpointStatus,
+    SyncError,
     SyncStatus,
     VolumeCapabilities,
     VolumeDiagnostics,
@@ -134,7 +135,7 @@ def _vol_status(
             config=config.volumes[slug],
             ssh_endpoint_status=ssh_status,
             diagnostics=None,
-            errors=[],
+            errors=[VolumeError.SSH_ENDPOINT_INACTIVE],
         )
     else:
         diag = VolumeDiagnostics(
@@ -167,7 +168,7 @@ def _src_ep_status(
             endpoint_slug=endpoint_slug,
             volume_status=vol_status,
             diagnostics=None,
-            errors=[],
+            errors=[SourceEndpointError.VOLUME_INACTIVE],
         )
     diag = SourceEndpointDiagnostics(
         endpoint_slug=endpoint_slug,
@@ -194,7 +195,7 @@ def _dst_ep_status(
             endpoint_slug=endpoint_slug,
             volume_status=vol_status,
             diagnostics=None,
-            errors=[],
+            errors=[DestinationEndpointError.VOLUME_INACTIVE],
         )
     diag = DestinationEndpointDiagnostics(
         endpoint_slug=endpoint_slug,
@@ -285,7 +286,7 @@ def _sample_sync_statuses(
             config=config.syncs["photos-to-nas"],
             source_endpoint_status=src_ep,
             destination_endpoint_status=dst_ep,
-            errors=[],
+            errors=[SyncError.DESTINATION_ENDPOINT_INACTIVE],
         ),
     }
 
@@ -306,7 +307,7 @@ def _sample_error_sync_statuses(
             config=config.syncs["photos-to-nas"],
             source_endpoint_status=src_ep,
             destination_endpoint_status=dst_ep,
-            errors=[],
+            errors=[SyncError.DESTINATION_ENDPOINT_INACTIVE],
         ),
     }
 
@@ -324,7 +325,10 @@ def _sample_sentinel_only_sync_statuses(
             config=config.syncs["photos-to-nas"],
             source_endpoint_status=src_ep,
             destination_endpoint_status=dst_ep,
-            errors=[],
+            errors=[
+                SyncError.SOURCE_ENDPOINT_INACTIVE,
+                SyncError.DESTINATION_ENDPOINT_INACTIVE,
+            ],
         ),
     }
 

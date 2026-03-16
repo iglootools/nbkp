@@ -50,6 +50,21 @@ from ..status import (
 from .formatting import collect_ssh_endpoint_statuses
 
 
+# Cascade errors are pointers to inactive lower layers — they have no
+# actionable fix at their own layer, so troubleshoot skips them.
+_CASCADE_VOLUME_ERRORS: frozenset[VolumeError] = frozenset(
+    {VolumeError.SSH_ENDPOINT_INACTIVE}
+)
+_CASCADE_SRC_EP_ERRORS: frozenset[SourceEndpointError] = frozenset(
+    {SourceEndpointError.VOLUME_INACTIVE}
+)
+_CASCADE_DST_EP_ERRORS: frozenset[DestinationEndpointError] = frozenset(
+    {DestinationEndpointError.VOLUME_INACTIVE}
+)
+_CASCADE_SYNC_ERRORS: frozenset[SyncError] = frozenset(
+    {SyncError.SOURCE_ENDPOINT_INACTIVE, SyncError.DESTINATION_ENDPOINT_INACTIVE}
+)
+
 _INDENT = "  "
 
 _RSYNC_INSTALL = dedent("""\
@@ -906,9 +921,12 @@ def print_human_troubleshoot(
     # ── Layer 2: Volumes ──────────────────────────────────────
     failed_vols = [vs for vs in vol_statuses.values() if vs.errors]
     for vs in failed_vols:
+        actionable = [e for e in vs.errors if e not in _CASCADE_VOLUME_ERRORS]
+        if not actionable:
+            continue
         has_issues = True
         console.print(f"\n[bold]Volume {vs.slug!r}:[/bold]")
-        for error in vs.errors:
+        for error in actionable:
             console.print(f"{_INDENT}{error.value}")
             _print_volume_error_fix(console, vs, error, config, re)
 
@@ -919,42 +937,55 @@ def print_human_troubleshoot(
     for ss in sync_statuses.values():
         src_ep = ss.source_endpoint_status
         if src_ep.endpoint_slug not in seen_src_eps and src_ep.errors:
+            actionable_src = [
+                e for e in src_ep.errors if e not in _CASCADE_SRC_EP_ERRORS
+            ]
             seen_src_eps.add(src_ep.endpoint_slug)
-            has_issues = True
-            console.print(f"\n[bold]Source Endpoint {src_ep.endpoint_slug!r}:[/bold]")
-            for error in src_ep.errors:
-                console.print(f"{_INDENT}{error.value}")
-                _print_source_endpoint_error_fix(
-                    console,
-                    error,
-                    ss.config,
-                    config,
-                    re,
+            if actionable_src:
+                has_issues = True
+                console.print(
+                    f"\n[bold]Source Endpoint {src_ep.endpoint_slug!r}:[/bold]"
                 )
+                for error in actionable_src:
+                    console.print(f"{_INDENT}{error.value}")
+                    _print_source_endpoint_error_fix(
+                        console,
+                        error,
+                        ss.config,
+                        config,
+                        re,
+                    )
 
         dst_ep = ss.destination_endpoint_status
         if dst_ep.endpoint_slug not in seen_dst_eps and dst_ep.errors:
+            actionable_dst = [
+                e for e in dst_ep.errors if e not in _CASCADE_DST_EP_ERRORS
+            ]
             seen_dst_eps.add(dst_ep.endpoint_slug)
-            has_issues = True
-            console.print(
-                f"\n[bold]Destination Endpoint {dst_ep.endpoint_slug!r}:[/bold]"
-            )
-            for error in dst_ep.errors:
-                console.print(f"{_INDENT}{error.value}")
-                _print_destination_endpoint_error_fix(
-                    console,
-                    error,
-                    ss.config,
-                    config,
-                    re,
+            if actionable_dst:
+                has_issues = True
+                console.print(
+                    f"\n[bold]Destination Endpoint {dst_ep.endpoint_slug!r}:[/bold]"
                 )
+                for error in actionable_dst:
+                    console.print(f"{_INDENT}{error.value}")
+                    _print_destination_endpoint_error_fix(
+                        console,
+                        error,
+                        ss.config,
+                        config,
+                        re,
+                    )
 
     # ── Layer 4: Syncs ────────────────────────────────────────
     failed_syncs = [ss for ss in sync_statuses.values() if ss.errors]
     for ss in failed_syncs:
+        actionable_sync = [e for e in ss.errors if e not in _CASCADE_SYNC_ERRORS]
+        if not actionable_sync:
+            continue
         has_issues = True
         console.print(f"\n[bold]Sync {ss.slug!r}:[/bold]")
-        for sync_error in ss.errors:
+        for sync_error in actionable_sync:
             console.print(f"{_INDENT}{sync_error.value}")
             _print_sync_error_fix(console, ss.config, sync_error, config)
 

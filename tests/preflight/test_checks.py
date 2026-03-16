@@ -1832,7 +1832,13 @@ class TestCheckSync:
         assert SshEndpointError.RSYNC_NOT_FOUND in ssh_errors
         # Volume and endpoint checks are skipped when SSH is inactive
         assert status.source_endpoint_status.volume_status.active is False
-        assert status.source_endpoint_status.errors == []
+        assert VolumeError.SSH_ENDPOINT_INACTIVE in (
+            status.source_endpoint_status.volume_status.errors
+        )
+        # Endpoint gets cascade error pointing to inactive volume
+        assert status.source_endpoint_status.errors == [
+            SourceEndpointError.VOLUME_INACTIVE
+        ]
 
     @patch(
         "nbkp.preflight.checks.observe_ssh_endpoint",

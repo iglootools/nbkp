@@ -31,20 +31,16 @@ from .formatting import (
     format_mount_status,
     status_text,
     sync_status_text,
-    volume_status_text,
 )
 
 
 def _format_volume_issues(vol_status: VolumeStatus) -> str:
     """Format volume-level issues as x-volume(reason).
 
-    Cascades through SSH endpoint errors and volume errors to show
-    the root cause.
+    With cascade errors, ``vol_status.errors`` is self-describing —
+    it includes a cascade error when the SSH endpoint is inactive.
     """
-    ssh_errors = vol_status.ssh_endpoint_status.errors
-    vol_errors = vol_status.errors
-    reasons = [*(e.value for e in ssh_errors), *(e.value for e in vol_errors)]
-    reason = ", ".join(reasons)
+    reason = ", ".join(e.value for e in vol_status.errors)
     return (
         f"[red]\u2717volume ({reason})[/red]" if reason else "[red]\u2717volume[/red]"
     )
@@ -201,7 +197,7 @@ def _build_volumes_section(
             format_mount_summary(vol.mount),
             format_mount_status(mount_caps, vol.mount),
             format_capabilities(caps),
-            volume_status_text(vs),
+            status_text(vs.active, vs.errors),
         )
 
     return [table, Text("")]
