@@ -30,7 +30,6 @@ from .formatting import (
     format_capabilities,
     format_mount_status,
     status_text,
-    sync_status_text,
 )
 
 
@@ -225,7 +224,7 @@ def _build_syncs_section(
             _sync_options(ss.config, config),
             _format_source_diagnostics(ss),
             _format_destination_diagnostics(ss),
-            sync_status_text(ss),
+            status_text(ss.active, ss.errors),
         )
 
     return [table]

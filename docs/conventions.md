@@ -80,6 +80,8 @@ In addition to the automated tests, the `nbkp demo seed --docker` command can be
 1. a similar environment as the one used in the Docker-enabled tests
 2. a set of pre-configured test data.
 
+`mise run demo-record` is a great way to iterate quickly on test scenarios: it runs the `demo seed` command as well as a few test scenarios exercising different features of the tool.
+
 The docker setup does not include a fully-functional systemd setup for managing mounts, so the demo command uses a simplified setup with direct 
 `cryptsetup` and `mount` calls instead of the production systemd-based workflow. 
 This allows testing the encrypted backup workflows end-to-end but nbkp's mount/umount logic needs to be tested manually on a real setup.

@@ -37,16 +37,6 @@ def status_text(
         return Text(f"\u2717inactive ({error_str})", style="red")
 
 
-def sync_status_text(ss: SyncStatus) -> Text:
-    """Format sync status from sync-level errors.
-
-    With cascade errors, ``ss.errors`` is self-describing — it contains
-    sync-level errors (disabled, dry-run, latest→/dev/null) plus cascade
-    pointers (source/destination endpoint inactive).  No need to walk
-    lower layers or filter diagnostic-visible errors.
-    """
-    return status_text(ss.active, ss.errors)
-
 
 def mount_capability_items(
     mount: MountCapabilities,
