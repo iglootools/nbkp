@@ -8,13 +8,6 @@ from typing import Annotated, Optional
 import typer
 from rich.console import Console, Group
 from rich.panel import Panel
-from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-)
 from rich.text import Text
 
 from ..config.epresolution import NetworkType
@@ -26,6 +19,7 @@ from ..sync.output import build_human_results_sections
 from ..sync.pipeline import check_and_run
 from .app import app
 from .common import (
+    CheckProgressBar,
     OutputFormat,
     _check_total,
     load_config_or_exit,
@@ -122,31 +116,24 @@ def run(
         cfg, resolved, mount=mount, umount=umount, output_format=output_format
     ) as (_mount_strategy, mount_observations):
         # ── Check progress bar ────────────────────────────────────
-        check_progress_ctx: Progress | None = None
-        check_task_id = None
+        total = _check_total(cfg, sync) if output_format is OutputFormat.HUMAN else 0
+        check_bar = (
+            CheckProgressBar(total)
+            if output_format is OutputFormat.HUMAN and total > 0
+            else None
+        )
 
-        if output_format is OutputFormat.HUMAN:
-            total = _check_total(cfg, sync)
-            if total > 0:
-                check_progress_ctx = Progress(
-                    SpinnerColumn(),
-                    TextColumn("[progress.description]{task.description}"),
-                    BarColumn(),
-                    MofNCompleteColumn(),
-                    transient=True,
-                )
-                check_progress_ctx.start()
-                check_task_id = check_progress_ctx.add_task(
-                    "Checking volumes, endpoints, and syncs...", total=total
-                )
+        def on_check_start(label: str) -> None:
+            if check_bar is not None:
+                check_bar.on_start(label)
 
-        def on_check_progress(_slug: str) -> None:
-            if check_progress_ctx is not None and check_task_id is not None:
-                check_progress_ctx.advance(check_task_id)
+        def on_check_end(label: str, active: bool, error_summary: str | None) -> None:
+            if check_bar is not None:
+                check_bar.on_end(label, active, error_summary)
 
         def on_checks_done(preflight: PreflightResult) -> None:
-            if check_progress_ctx is not None:
-                check_progress_ctx.stop()
+            if check_bar is not None:
+                check_bar.stop()
             if output_format is OutputFormat.HUMAN:
                 print_human_check(
                     preflight.ssh_endpoint_statuses,
@@ -196,7 +183,8 @@ def run(
             only_syncs=sync,
             progress=progress,
             prune=prune,
-            on_check_progress=on_check_progress,
+            on_check_start=on_check_start,
+            on_check_end=on_check_end,
             on_checks_done=on_checks_done,
             on_rsync_output=stream_output,
             on_sync_start=(

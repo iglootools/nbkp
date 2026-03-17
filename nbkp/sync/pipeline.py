@@ -87,7 +87,8 @@ def check_and_run(
     only_syncs: list[str] | None = None,
     progress: ProgressMode | None = None,
     prune: bool = True,
-    on_check_progress: Callable[[str], None] | None = None,
+    on_check_start: Callable[[str], None] | None = None,
+    on_check_end: Callable[[str, bool, str | None], None] | None = None,
     on_checks_done: Callable[[PreflightResult], None] | None = None,
     on_rsync_output: Callable[[str], None] | None = None,
     on_sync_start: Callable[[str], None] | None = None,
@@ -107,8 +108,10 @@ def check_and_run(
     strict:
         When True, any inactive sync (including missing sentinels) is
         treated as a fatal preflight error.
-    on_check_progress:
-        Called for each volume/endpoint checked (progress tracking).
+    on_check_start:
+        Called before each check with a label (e.g. ``"ssh:localhost"``).
+    on_check_end:
+        Called after each check with ``(label, active, error_summary)``.
     on_checks_done:
         Called after preflight completes but before syncs start.
         Fires regardless of whether there are fatal errors, so the
@@ -116,7 +119,8 @@ def check_and_run(
     """
     preflight = check_all_syncs(
         config,
-        on_progress=on_check_progress,
+        on_check_start=on_check_start,
+        on_check_end=on_check_end,
         only_syncs=only_syncs,
         resolved_endpoints=resolved_endpoints,
         dry_run=dry_run,

@@ -134,6 +134,62 @@ class VolumeProgressBar:
             self._progress.stop()
 
 
+class CheckProgressBar:
+    """Rich progress bar for preflight checks.
+
+    Shows a spinner, description (current check label), visual bar,
+    and M/N counter.  Result lines (✓/✗) are printed above the bar
+    as each check completes.
+
+    Parameters
+    ----------
+    total:
+        Number of checks to perform.
+    """
+
+    def __init__(self, total: int) -> None:
+        self._total = total
+        self._progress: Progress | None = None
+        self._task_id: TaskID | None = None
+
+    def on_start(self, label: str) -> None:
+        """Call before each check begins."""
+        if self._progress is None:
+            self._progress = Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                MofNCompleteColumn(),
+                transient=True,
+            )
+            self._progress.start()
+            self._task_id = self._progress.add_task(
+                f"Checking {label}...", total=self._total
+            )
+        else:
+            assert self._task_id is not None
+            self._progress.update(self._task_id, description=f"Checking {label}...")
+
+    def on_end(
+        self,
+        label: str,
+        active: bool,
+        error_summary: str | None = None,
+    ) -> None:
+        """Call after each check completes."""
+        if self._progress is not None:
+            assert self._task_id is not None
+            icon = "[green]\u2713[/green]" if active else "[red]\u2717[/red]"
+            detail = f" ({error_summary})" if error_summary else ""
+            self._progress.console.print(f"{icon} check {label}{detail}")
+            self._progress.advance(self._task_id)
+
+    def stop(self) -> None:
+        """Stop the progress bar (idempotent)."""
+        if self._progress is not None:
+            self._progress.stop()
+
+
 def load_config_or_exit(
     config_path: str | None,
 ) -> Config:
@@ -248,36 +304,28 @@ def check_all_with_progress(
     """Run check_all_syncs with an optional progress bar."""
     total = _check_total(cfg, only_syncs)
 
-    def _run(
-        on_progress: Callable[[str], None] | None = None,
-    ) -> PreflightResult:
+    if not use_progress or total == 0:
         return check_all_syncs(
             cfg,
-            on_progress=on_progress,
             only_syncs=only_syncs,
             resolved_endpoints=resolved_endpoints,
             dry_run=dry_run,
             mount_observations=mount_observations,
         )
 
-    if not use_progress or total == 0:
-        return _run()
-
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        MofNCompleteColumn(),
-        transient=True,
-    ) as progress:
-        task = progress.add_task(
-            "Checking volumes, endpoints, and syncs...", total=total
+    bar = CheckProgressBar(total)
+    try:
+        return check_all_syncs(
+            cfg,
+            on_check_start=bar.on_start,
+            on_check_end=bar.on_end,
+            only_syncs=only_syncs,
+            resolved_endpoints=resolved_endpoints,
+            dry_run=dry_run,
+            mount_observations=mount_observations,
         )
-
-        def on_progress(_slug: str) -> None:
-            progress.advance(task)
-
-        return _run(on_progress)
+    finally:
+        bar.stop()
 
 
 def check_and_display(

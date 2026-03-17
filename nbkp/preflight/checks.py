@@ -22,6 +22,7 @@ Four-phase check hierarchy (each level gates the next):
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Callable
 
 from ..config import (
@@ -54,7 +55,8 @@ from .volume_checks import observe_ssh_endpoint, observe_volume
 
 def check_all_syncs(
     config: Config,
-    on_progress: Callable[[str], None] | None = None,
+    on_check_start: Callable[[str], None] | None = None,
+    on_check_end: Callable[[str, bool, str | None], None] | None = None,
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     dry_run: bool = False,
@@ -70,6 +72,10 @@ def check_all_syncs(
 
     When *only_syncs* is given, only those syncs (and the
     volumes/endpoints they reference) are checked.
+
+    Progress callbacks use labels like ``"ssh:localhost"``,
+    ``"vol:usb-backup"``, ``"src:photos-local"``, ``"dst:photos-backup"``
+    to describe what is being checked.
     """
     re = resolved_endpoints or {}
     syncs = (
@@ -85,19 +91,24 @@ def check_all_syncs(
         else set(config.volumes.keys())
     )
 
-    def _track(slug: str) -> None:
-        if on_progress:
-            on_progress(slug)
+    def _start(label: str) -> None:
+        if on_check_start:
+            on_check_start(label)
+
+    def _end(label: str, active: bool, errors: Sequence[object]) -> None:
+        if on_check_end:
+            summary = ", ".join(e.value for e in errors) if errors else None  # type: ignore[attr-defined]
+            on_check_end(label, active, summary)
 
     # Phase 1: SSH endpoint observation + interpretation
-    ssh_statuses = _check_ssh_endpoints(config, needed_volumes, syncs, re)
-    for slug in ssh_statuses:
-        _track(slug)
+    ssh_statuses = _check_ssh_endpoints(config, needed_volumes, syncs, re, _start, _end)
 
     # Phase 2: Volume observation + interpretation
     mo = mount_observations or {}
     volume_statuses: dict[str, VolumeStatus] = {}
     for slug in needed_volumes:
+        label = f"vol:{slug}"
+        _start(label)
         vol = config.volumes[slug]
         ssh_slug = _ssh_endpoint_slug(vol)
         ssh_status = ssh_statuses[ssh_slug]
@@ -111,18 +122,19 @@ def check_all_syncs(
             )
         else:
             diag = None
-        volume_statuses[slug] = VolumeStatus.from_diagnostics(
+        status = VolumeStatus.from_diagnostics(
             slug=slug,
             config=vol,
             ssh_endpoint_status=ssh_status,
             diagnostics=diag,
         )
-        _track(slug)
+        volume_statuses[slug] = status
+        _end(label, status.active, status.errors)
 
     # Phase 3: Sync endpoint diagnostics + status
     #   Collect unique endpoints, observe active ones, create statuses.
     src_ep_statuses, dst_ep_statuses = _check_sync_endpoints(
-        config, syncs, volume_statuses, ssh_statuses, re, _track
+        config, syncs, volume_statuses, ssh_statuses, re, _start, _end
     )
 
     # Phase 4: Sync checks — pure computation (no I/O)
@@ -155,6 +167,8 @@ def _check_ssh_endpoints(
     needed_volumes: set[str],
     syncs: dict[str, SyncConfig],
     resolved_endpoints: ResolvedEndpoints,
+    on_start: Callable[[str], None],
+    on_end: Callable[[str, bool, Sequence[object]], None],
 ) -> dict[str, SshEndpointStatus]:
     """Observe and interpret SSH endpoint statuses.
 
@@ -171,6 +185,8 @@ def _check_ssh_endpoints(
 
     ssh_statuses: dict[str, SshEndpointStatus] = {}
     for ssh_slug, vol_slugs in ssh_to_volumes.items():
+        label = f"ssh:{ssh_slug}"
+        on_start(label)
         # Pick a representative volume for dispatching commands
         representative_vol = config.volumes[vol_slugs[0]]
         needs = _compute_tool_needs(config, vol_slugs, syncs)
@@ -182,25 +198,31 @@ def _check_ssh_endpoints(
             resolved_endpoints=resolved_endpoints,
             probe_mount_tools=probe_mount,
         )
-        ssh_statuses[ssh_slug] = SshEndpointStatus.from_diagnostics(
+        status = SshEndpointStatus.from_diagnostics(
             slug=ssh_slug,
             diagnostics=diag,
             needs=needs,
         )
+        ssh_statuses[ssh_slug] = status
+        on_end(label, status.active, status.errors)
 
     # Probe all remaining SSH endpoints not already covered by volumes
     # (bastions, alternate endpoints, orphan endpoints)
     for slug in set(config.ssh_endpoints.keys()) - ssh_statuses.keys():
+        label = f"ssh:{slug}"
+        on_start(label)
         ep = config.ssh_endpoints[slug]
         server = enrich_from_ssh_config(ep)
         proxy_chain = [
             enrich_from_ssh_config(hop) for hop in resolve_proxy_chain(config, server)
         ]
         diag = observe_standalone_endpoint(server, proxy_chain)
-        ssh_statuses[slug] = SshEndpointStatus.from_diagnostics(
+        status = SshEndpointStatus.from_diagnostics(
             slug=slug,
             diagnostics=diag,
         )
+        ssh_statuses[slug] = status
+        on_end(label, status.active, status.errors)
 
     return ssh_statuses
 
@@ -280,7 +302,8 @@ def _check_sync_endpoints(
     volume_statuses: dict[str, VolumeStatus],
     ssh_statuses: dict[str, SshEndpointStatus],
     resolved_endpoints: ResolvedEndpoints,
-    track: Callable[[str], None],
+    on_start: Callable[[str], None],
+    on_end: Callable[[str, bool, Sequence[object]], None],
 ) -> tuple[dict[str, SourceEndpointStatus], dict[str, DestinationEndpointStatus]]:
     """Observe and interpret sync endpoint statuses."""
     # Collect unique endpoints
@@ -296,6 +319,8 @@ def _check_sync_endpoints(
     # Source endpoints
     src_ep_statuses: dict[str, SourceEndpointStatus] = {}
     for slug, ep in src_eps.items():
+        label = f"src:{slug}"
+        on_start(label)
         vol_status = volume_statuses[ep.volume]
         if vol_status.active:
             vol = config.volumes[ep.volume]
@@ -311,16 +336,19 @@ def _check_sync_endpoints(
             )
         else:
             src_diag = None
-        src_ep_statuses[slug] = SourceEndpointStatus.from_diagnostics(
+        status = SourceEndpointStatus.from_diagnostics(
             endpoint=ep,
             volume_status=vol_status,
             diagnostics=src_diag,
         )
-        track(slug)
+        src_ep_statuses[slug] = status
+        on_end(label, status.active, status.errors)
 
     # Destination endpoints
     dst_ep_statuses: dict[str, DestinationEndpointStatus] = {}
     for slug, ep in dst_eps.items():
+        label = f"dst:{slug}"
+        on_start(label)
         vol_status = volume_statuses[ep.volume]
         if vol_status.active:
             vol = config.volumes[ep.volume]
@@ -338,12 +366,13 @@ def _check_sync_endpoints(
             )
         else:
             dst_diag = None
-        dst_ep_statuses[slug] = DestinationEndpointStatus.from_diagnostics(
+        status = DestinationEndpointStatus.from_diagnostics(
             endpoint=ep,
             volume_status=vol_status,
             diagnostics=dst_diag,
         )
-        track(slug)
+        dst_ep_statuses[slug] = status
+        on_end(label, status.active, status.errors)
 
     return src_ep_statuses, dst_ep_statuses
 
