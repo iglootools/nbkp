@@ -787,6 +787,7 @@ def _print_passphrase_not_available_fix(
         else "<passphrase-id>"
     )
     env_var = f"NBKP_PASSPHRASE_{pid.upper().replace('-', '_')}"
+    console.print(f"{p2}Check credential status: nbkp config keyring-status")
     console.print(f"{p2}Configure with your credential provider:")
     console.print(f"{p2}{_INDENT}keyring: keyring set nbkp {pid}")
     console.print(f"{p2}{_INDENT}env: export {env_var}=...")

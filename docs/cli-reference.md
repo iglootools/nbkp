@@ -158,6 +158,7 @@ $ nbkp config [OPTIONS] COMMAND [ARGS]...
 * `show`: Load, validate, and render the config as...
 * `graph`: Display the backup chain as a graph.
 * `setup-auth`: Generate polkit and sudoers configuration...
+* `keyring-status`: Check whether LUKS passphrases are...
 
 ### `nbkp config show`
 
@@ -206,6 +207,22 @@ $ nbkp config setup-auth [OPTIONS]
 
 * `-c, --config TEXT`: Path to config file
 * `-u, --user TEXT`: System user for auth rules  [default: ubuntu]
+* `--help`: Show this message and exit.
+
+### `nbkp config keyring-status`
+
+Check whether LUKS passphrases are available in the credential store.
+
+**Usage**:
+
+```console
+$ nbkp config keyring-status [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config TEXT`: Path to config file
+* `-o, --output [human|json]`: Output format  [default: human]
 * `--help`: Show this message and exit.
 
 ## `nbkp volumes`
