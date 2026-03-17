@@ -256,15 +256,17 @@ class TestLoadConfig:
         p.write_text(
             dedent("""\
             volumes:
-              v:
+              v-src:
                 type: local
                 path: /x
+              v-dst:
+                type: local
+                path: /y
             sync-endpoints:
               ep-src:
-                volume: v
+                volume: v-src
               ep-dst:
-                volume: v
-                subdir: dst
+                volume: v-dst
             syncs:
               s:
                 source: ep-src
@@ -284,15 +286,17 @@ class TestLoadConfig:
         p.write_text(
             dedent("""\
             volumes:
-              v:
+              v-src:
                 type: local
                 path: /x
+              v-dst:
+                type: local
+                path: /y
             sync-endpoints:
               ep-src:
-                volume: v
+                volume: v-src
               ep-dst:
-                volume: v
-                subdir: dst
+                volume: v-dst
             syncs:
               s:
                 source: ep-src
@@ -314,15 +318,17 @@ class TestLoadConfig:
         p.write_text(
             dedent("""\
             volumes:
-              v:
+              v-src:
                 type: local
                 path: /x
+              v-dst:
+                type: local
+                path: /y
             sync-endpoints:
               ep-src:
-                volume: v
+                volume: v-src
               ep-dst:
-                volume: v
-                subdir: dst
+                volume: v-dst
             syncs:
               s:
                 source: ep-src
@@ -1164,6 +1170,127 @@ class TestLoadConfig:
         cause = excinfo.value.__cause__
         assert cause is not None
         assert "both target volume" in str(cause)
+
+    def test_nested_endpoint_subdir(self, tmp_path: Path) -> None:
+        p = tmp_path / "nested.yaml"
+        p.write_text(
+            dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep-parent:
+                volume: v
+                subdir: backups
+              ep-child:
+                volume: v
+                subdir: backups/photos
+            syncs: {}
+        """)
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
+        cause = excinfo.value.__cause__
+        assert cause is not None
+        assert "nested inside" in str(cause)
+        assert "ep-child" in str(cause)
+        assert "ep-parent" in str(cause)
+
+    def test_nested_endpoint_root_contains_subdir(self, tmp_path: Path) -> None:
+        p = tmp_path / "root_nested.yaml"
+        p.write_text(
+            dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep-root:
+                volume: v
+              ep-sub:
+                volume: v
+                subdir: data
+            syncs: {}
+        """)
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
+        cause = excinfo.value.__cause__
+        assert cause is not None
+        assert "nested inside" in str(cause)
+
+    def test_nested_endpoint_deeply_nested(self, tmp_path: Path) -> None:
+        p = tmp_path / "deep_nested.yaml"
+        p.write_text(
+            dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep-shallow:
+                volume: v
+                subdir: a
+              ep-deep:
+                volume: v
+                subdir: a/b/c
+            syncs: {}
+        """)
+        )
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
+        cause = excinfo.value.__cause__
+        assert cause is not None
+        assert "nested inside" in str(cause)
+
+    def test_non_overlapping_prefix_endpoints_allowed(self, tmp_path: Path) -> None:
+        p = tmp_path / "prefix_ok.yaml"
+        p.write_text(
+            dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep1:
+                volume: v
+                subdir: backup
+              ep2:
+                volume: v
+                subdir: backup2
+            syncs: {}
+        """)
+        )
+        cfg = load_config(str(p))
+        assert len(cfg.sync_endpoints) == 2
+
+    def test_nested_paths_on_different_volumes_allowed(self, tmp_path: Path) -> None:
+        p = tmp_path / "diff_vol.yaml"
+        p.write_text(
+            dedent("""\
+            volumes:
+              v1:
+                type: local
+                path: /x
+              v2:
+                type: local
+                path: /y
+            sync-endpoints:
+              ep1:
+                volume: v1
+                subdir: data
+              ep2:
+                volume: v2
+                subdir: data/sub
+            syncs: {}
+        """)
+        )
+        cfg = load_config(str(p))
+        assert len(cfg.sync_endpoints) == 2
 
     def test_sync_endpoint_unknown_volume(self, tmp_path: Path) -> None:
         p = tmp_path / "ep_bad_vol.yaml"

@@ -369,12 +369,14 @@ class TestConfig:
         assert cfg.syncs == {}
 
     def test_with_data(self) -> None:
-        vol = LocalVolume(slug="data", path="/mnt/data")
         cfg = Config(
-            volumes={"data": vol},
+            volumes={
+                "src-vol": LocalVolume(slug="src-vol", path="/mnt/src"),
+                "dst-vol": LocalVolume(slug="dst-vol", path="/mnt/dst"),
+            },
             sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="data"),
-                "ep-dst": SyncEndpoint(slug="ep-dst", volume="data", subdir="sub"),
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src-vol"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst-vol"),
             },
             syncs={
                 "s1": SyncConfig(
@@ -384,7 +386,7 @@ class TestConfig:
                 ),
             },
         )
-        assert "data" in cfg.volumes
+        assert "src-vol" in cfg.volumes
         assert "s1" in cfg.syncs
 
 

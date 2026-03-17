@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import enum
 from collections import deque
+from itertools import combinations
 from typing import Any, Dict, List, Optional
 
 from pydantic import Field, ValidationInfo, field_validator, model_validator
@@ -264,6 +265,31 @@ class Config(_BaseModel):
                     f" '{ep.volume}'{subdir_msg}"
                 )
             seen_locations[loc] = ep_slug
+
+        # Nested (volume, subdir) paths across sync endpoints
+        endpoints_by_volume: dict[str, list[tuple[str, str]]] = {}
+        for ep_slug, ep in self.sync_endpoints.items():
+            path = ep.subdir or ""
+            endpoints_by_volume.setdefault(ep.volume, []).append((ep_slug, path))
+        for vol_slug, eps in endpoints_by_volume.items():
+            for (slug_a, path_a), (slug_b, path_b) in combinations(eps, 2):
+                if path_a == path_b:
+                    continue  # already caught by the duplicate check above
+                norm_a = f"{path_a}/" if path_a else ""
+                norm_b = f"{path_b}/" if path_b else ""
+                if norm_a.startswith(norm_b) or norm_b.startswith(norm_a):
+                    parent, child = (
+                        (slug_a, slug_b)
+                        if len(path_a) < len(path_b)
+                        else (slug_b, slug_a)
+                    )
+                    raise ValueError(
+                        f"Sync endpoint '{child}' is nested inside"
+                        f" '{parent}' on volume '{vol_slug}':"
+                        f" overlapping endpoint paths are not supported"
+                        f" because sync dependencies cannot be"
+                        f" detected between them"
+                    )
 
         # Sync source/destination endpoint references
         for sync_slug, sync in self.syncs.items():
