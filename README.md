@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/github/license/iglootools/nbkp)
 ![CI Status](https://github.com/iglootools/nbkp/actions/workflows/test.yml/badge.svg?branch=main)
 
-An rsync-based backup tool for nomadic setups where sources and destinations aren't always available — laptops on the move, removable drives, 
+A Linux-and-macOS-compatible rsync-based backup tool for nomadic setups where sources and destinations aren't always available — laptops on the move, removable drives, 
 home servers behind changing networks. 
 
 Sentinel files ensure backups only run when volumes are genuinely present, with optional btrfs or hard-link snapshots for point-in-time recovery.

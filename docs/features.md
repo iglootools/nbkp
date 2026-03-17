@@ -56,7 +56,7 @@ nbkp uses lightweight sentinel files to guard against syncing to the wrong place
 - **Removable drive awareness**: syncs only activate when both source and destination sentinels are present, preventing data loss from unmounted drives
 - **Remote reachability checks**: SSH connectivity verified before attempting any sync
 
-## Mount Management
+## Mount Management (Linux only)
 
 nbkp can automatically mount and umount volumes before and after backups, including LUKS-encrypted drives. This is especially useful for removable drives that need to be attached (LUKS) and mounted before syncing, and umounted and closed (LUKS) afterward.
 
