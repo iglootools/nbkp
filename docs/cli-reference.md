@@ -66,6 +66,8 @@ $ nbkp prune [OPTIONS]
 * `-l, --location TEXT`: Prefer endpoints at these locations
 * `-L, --exclude-location TEXT`: Exclude endpoints at these locations
 * `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--mount / --no-mount`: Mount/umount volumes with mount config  [default: mount]
+* `--umount / --no-umount`: Umount after prune (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
 
 ## `nbkp run`
