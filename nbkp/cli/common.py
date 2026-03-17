@@ -7,8 +7,14 @@ from contextlib import contextmanager
 from typing import Callable, Generator
 
 import typer
-from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TaskID,
+    TextColumn,
+)
 
 from ..config import (
     Config,
@@ -23,7 +29,7 @@ from ..config.epresolution import (
 )
 from ..remote.resolution import resolve_all_endpoints
 from ..credentials import build_passphrase_fn
-from ..mount.lifecycle import MountResult, UmountResult
+from ..mount.lifecycle import MountResult, UmountResult, mount_volume_count
 from ..mount.observation import MountObservation
 from ..mount.strategy import MountStrategy
 from ..orchestration import managed_mount as _orchestration_managed_mount
@@ -41,6 +47,91 @@ class OutputFormat(str, enum.Enum):
 
     HUMAN = "human"
     JSON = "json"
+
+
+def _format_mount_result(
+    slug: str, success: bool, detail: str | None, _warning: str | None
+) -> str:
+    icon = "[green]\u2713[/green]" if success else "[red]\u2717[/red]"
+    detail_str = f" ({detail})" if detail else ""
+    return f"{icon} mount {slug}{detail_str}"
+
+
+def _format_umount_result(
+    slug: str, success: bool, detail: str | None, warning: str | None
+) -> str:
+    icon = "[green]\u2713[/green]" if success else "[red]\u2717[/red]"
+    detail_str = f" ({detail})" if detail else ""
+    warning_str = f" [yellow]warning: {warning}[/yellow]" if warning else ""
+    return f"{icon} umount {slug}{detail_str}{warning_str}"
+
+
+class VolumeProgressBar:
+    """Rich progress bar for mount/umount operations.
+
+    Manages a transient progress bar that shows a spinner, description
+    (current volume name), visual bar, and M/N counter.  Result lines
+    are printed above the bar as each volume completes.
+
+    Parameters
+    ----------
+    total:
+        Number of volumes to process.
+    label:
+        Verb shown in the progress description (e.g. ``"Mounting"``).
+    format_result:
+        Callable that formats a result line given ``(slug, success, detail,
+        warning)``.  Called once per volume on completion.
+    """
+
+    def __init__(
+        self,
+        total: int,
+        label: str,
+        format_result: Callable[[str, bool, str | None, str | None], str],
+    ) -> None:
+        self._total = total
+        self._label = label
+        self._format_result = format_result
+        self._progress: Progress | None = None
+        self._task_id: TaskID | None = None
+
+    def on_start(self, slug: str) -> None:
+        """Call at the beginning of each volume operation."""
+        if self._progress is None:
+            self._progress = Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                MofNCompleteColumn(),
+                transient=True,
+            )
+            self._progress.start()
+            self._task_id = self._progress.add_task(
+                f"{self._label} {slug}...", total=self._total
+            )
+        else:
+            assert self._task_id is not None
+            self._progress.update(self._task_id, description=f"{self._label} {slug}...")
+
+    def on_end(
+        self,
+        slug: str,
+        success: bool,
+        detail: str | None = None,
+        warning: str | None = None,
+    ) -> None:
+        """Call at the end of each volume operation."""
+        if self._progress is not None:
+            assert self._task_id is not None
+            line = self._format_result(slug, success, detail, warning)
+            self._progress.console.print(line)
+            self._progress.advance(self._task_id)
+
+    def stop(self) -> None:
+        """Stop the progress bar (idempotent)."""
+        if self._progress is not None:
+            self._progress.stop()
 
 
 def load_config_or_exit(
@@ -175,7 +266,8 @@ def check_all_with_progress(
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
-        TextColumn("{task.completed}/{task.total}"),
+        BarColumn(),
+        MofNCompleteColumn(),
         transient=True,
     ) as progress:
         task = progress.add_task(
@@ -262,48 +354,35 @@ def managed_mount(
         cfg.credential_provider, cfg.credential_command
     )
 
-    # ── Rich mount callbacks ───────────────────────────────────
-    console_mount = Console()
-    mount_status = None
+    use_progress = output_format is OutputFormat.HUMAN
+    total = mount_volume_count(cfg)
+
+    mount_bar = (
+        VolumeProgressBar(total, "Mounting", _format_mount_result)
+        if use_progress
+        else None
+    )
+    umount_bar = (
+        VolumeProgressBar(total, "Umounting", _format_umount_result)
+        if use_progress
+        else None
+    )
 
     def on_mount_start(slug: str) -> None:
-        nonlocal mount_status
-        if output_format is OutputFormat.HUMAN:
-            mount_status = console_mount.status(f"Mounting {slug}...")
-            mount_status.start()
+        if mount_bar is not None:
+            mount_bar.on_start(slug)
 
     def on_mount_end(slug: str, result: MountResult) -> None:
-        nonlocal mount_status
-        if mount_status is not None:
-            mount_status.stop()
-            mount_status = None
-        if output_format is OutputFormat.HUMAN:
-            icon = "[green]\u2713[/green]" if result.success else "[red]\u2717[/red]"
-            detail = f" ({result.detail})" if result.detail else ""
-            console_mount.print(f"{icon} mount {slug}{detail}")
-
-    # ── Rich umount callbacks ──────────────────────────────────
-    umount_console = Console()
-    umount_status = None
+        if mount_bar is not None:
+            mount_bar.on_end(slug, result.success, result.detail)
 
     def on_umount_start(slug: str) -> None:
-        nonlocal umount_status
-        if output_format is OutputFormat.HUMAN:
-            umount_status = umount_console.status(f"Umounting {slug}...")
-            umount_status.start()
+        if umount_bar is not None:
+            umount_bar.on_start(slug)
 
     def on_umount_end(slug: str, result: UmountResult) -> None:
-        nonlocal umount_status
-        if umount_status is not None:
-            umount_status.stop()
-            umount_status = None
-        if output_format is OutputFormat.HUMAN:
-            icon = "[green]\u2713[/green]" if result.success else "[red]\u2717[/red]"
-            detail = f" ({result.detail})" if result.detail else ""
-            warning = (
-                f" [yellow]warning: {result.warning}[/yellow]" if result.warning else ""
-            )
-            umount_console.print(f"{icon} umount {slug}{detail}{warning}")
+        if umount_bar is not None:
+            umount_bar.on_end(slug, result.success, result.detail, result.warning)
 
     try:
         with _orchestration_managed_mount(
@@ -317,6 +396,10 @@ def managed_mount(
             on_umount_start=on_umount_start,
             on_umount_end=on_umount_end,
         ) as result:
+            if mount_bar is not None:
+                mount_bar.stop()
             yield result
     finally:
+        if umount_bar is not None:
+            umount_bar.stop()
         cache.clear()

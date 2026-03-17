@@ -8,7 +8,13 @@ from typing import Annotated, Optional
 import typer
 from rich.console import Console, Group
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+)
 from rich.text import Text
 
 from ..config.epresolution import NetworkType
@@ -125,7 +131,8 @@ def run(
                 check_progress_ctx = Progress(
                     SpinnerColumn(),
                     TextColumn("[progress.description]{task.description}"),
-                    TextColumn("{task.completed}/{task.total}"),
+                    BarColumn(),
+                    MofNCompleteColumn(),
                     transient=True,
                 )
                 check_progress_ctx.start()

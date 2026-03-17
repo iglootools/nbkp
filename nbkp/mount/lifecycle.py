@@ -64,6 +64,14 @@ def _volumes_with_mount_config(
     ]
 
 
+def mount_volume_count(
+    config: Config,
+    names: list[str] | None = None,
+) -> int:
+    """Return the number of volumes with mount config, optionally filtered by name."""
+    return len(_volumes_with_mount_config(config, names))
+
+
 def mount_volume(
     volume: Volume,
     mount_config: MountConfig,

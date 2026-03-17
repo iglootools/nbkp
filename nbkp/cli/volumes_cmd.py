@@ -14,12 +14,35 @@ from ..credentials import build_passphrase_fn
 from ..mount.lifecycle import (
     MountResult,
     UmountResult,
+    mount_volume_count,
     mount_volumes,
     umount_volumes,
 )
 from ..preflight import check_mount_status
 from .app import volumes_app
-from .common import OutputFormat, load_config_or_exit, resolve_endpoints
+from .common import (
+    OutputFormat,
+    VolumeProgressBar,
+    load_config_or_exit,
+    resolve_endpoints,
+)
+
+
+def _format_mount_result(
+    slug: str, success: bool, detail: str | None, _warning: str | None
+) -> str:
+    icon = "[green]\u2713[/green]" if success else "[red]\u2717[/red]"
+    detail_str = f" ({detail})" if detail else ""
+    return f"{icon} {slug}{detail_str}"
+
+
+def _format_umount_result(
+    slug: str, success: bool, detail: str | None, warning: str | None
+) -> str:
+    icon = "[green]\u2713[/green]" if success else "[red]\u2717[/red]"
+    detail_str = f" ({detail})" if detail else ""
+    warning_str = f" [yellow]warning: {warning}[/yellow]" if warning else ""
+    return f"{icon} {slug}{detail_str}{warning_str}"
 
 
 @volumes_app.command("mount")
@@ -65,24 +88,21 @@ def volumes_mount(
         cfg.credential_provider, cfg.credential_command
     )
 
-    console = Console()
-    status_display = None
+    use_progress = output == OutputFormat.HUMAN
+    total = mount_volume_count(cfg, name)
+    mount_bar = (
+        VolumeProgressBar(total, "Mounting", _format_mount_result)
+        if use_progress
+        else None
+    )
 
     def on_mount_start(slug: str) -> None:
-        nonlocal status_display
-        if output == OutputFormat.HUMAN:
-            status_display = console.status(f"Mounting {slug}...")
-            status_display.start()
+        if mount_bar is not None:
+            mount_bar.on_start(slug)
 
     def on_mount_end(slug: str, result: MountResult) -> None:
-        nonlocal status_display
-        if status_display is not None:
-            status_display.stop()
-            status_display = None
-        if output == OutputFormat.HUMAN:
-            icon = "[green]\u2713[/green]" if result.success else "[red]\u2717[/red]"
-            detail = f" ({result.detail})" if result.detail else ""
-            console.print(f"{icon} {slug}{detail}")
+        if mount_bar is not None:
+            mount_bar.on_end(slug, result.success, result.detail)
 
     try:
         _, results = mount_volumes(
@@ -94,6 +114,8 @@ def volumes_mount(
             on_mount_end=on_mount_end,
         )
     finally:
+        if mount_bar is not None:
+            mount_bar.stop()
         cache.clear()
 
     match output:
@@ -153,27 +175,21 @@ def volumes_umount(
     cfg = load_config_or_exit(config)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
 
-    console = Console()
-    status_display = None
+    use_progress = output == OutputFormat.HUMAN
+    total = mount_volume_count(cfg, name)
+    umount_bar = (
+        VolumeProgressBar(total, "Umounting", _format_umount_result)
+        if use_progress
+        else None
+    )
 
     def on_umount_start(slug: str) -> None:
-        nonlocal status_display
-        if output == OutputFormat.HUMAN:
-            status_display = console.status(f"Umounting {slug}...")
-            status_display.start()
+        if umount_bar is not None:
+            umount_bar.on_start(slug)
 
     def on_umount_end(slug: str, result: UmountResult) -> None:
-        nonlocal status_display
-        if status_display is not None:
-            status_display.stop()
-            status_display = None
-        if output == OutputFormat.HUMAN:
-            icon = "[green]\u2713[/green]" if result.success else "[red]\u2717[/red]"
-            detail = f" ({result.detail})" if result.detail else ""
-            warning = (
-                f" [yellow]warning: {result.warning}[/yellow]" if result.warning else ""
-            )
-            console.print(f"{icon} {slug}{detail}{warning}")
+        if umount_bar is not None:
+            umount_bar.on_end(slug, result.success, result.detail, result.warning)
 
     results = umount_volumes(
         cfg,
@@ -182,6 +198,8 @@ def volumes_umount(
         on_umount_start=on_umount_start,
         on_umount_end=on_umount_end,
     )
+    if umount_bar is not None:
+        umount_bar.stop()
 
     match output:
         case OutputFormat.JSON:
