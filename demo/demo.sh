@@ -34,13 +34,17 @@ pause() { sleep "${1:-2}"; }
 # ── Setup ────────────────────────────────────────────────
 rm -rf "$DEMO_DIR"
 
+p "# Display nbkp version"
+pe "nbkp --version"
+pause
+
 p "# Seed demo data"
 pe "nbkp demo seed --base-dir $DEMO_DIR --docker --luks --credential-provider env"
 pause
 
 p "# Configure the passphrase (in non-demo env, this would be a one-time setup step using the system keyring)"
 pe "export NBKP_PASSPHRASE_TEST_LUKS=test-passphrase"
-pause 3
+pause
 
 p "# Show parsed configuration"
 pe "nbkp config show --config $CFG"

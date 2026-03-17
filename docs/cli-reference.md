@@ -12,6 +12,7 @@ $ nbkp [OPTIONS] COMMAND [ARGS]...
 
 **Options**:
 
+* `-V, --version`: Show version and exit.
 * `--help`: Show this message and exit.
 
 **Commands**:
