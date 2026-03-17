@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from typing import Callable, Generator
 
 import typer
+from rich.console import Console
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -31,6 +32,7 @@ from ..remote.resolution import resolve_all_endpoints
 from ..credentials import build_passphrase_fn
 from ..mount.lifecycle import MountResult, UmountResult, mount_volume_count
 from ..mount.observation import MountObservation
+from ..mount.output import build_mount_status_table
 from ..mount.strategy import MountStrategy
 from ..orchestration import managed_mount as _orchestration_managed_mount
 from ..config.output import print_config_error
@@ -446,6 +448,11 @@ def managed_mount(
         ) as result:
             if mount_bar is not None:
                 mount_bar.stop()
+            _mount_strategy, mount_observations = result
+            if use_progress and mount_observations:
+                Console().print(
+                    build_mount_status_table(list(mount_observations.items()))
+                )
             yield result
     finally:
         if umount_bar is not None:

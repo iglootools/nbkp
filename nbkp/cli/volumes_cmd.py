@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Annotated, Optional
 
 import typer
 from rich.console import Console
-from rich.table import Table
 
 from ..config.epresolution import NetworkType
 from ..credentials import build_passphrase_fn
@@ -17,6 +17,11 @@ from ..mount.lifecycle import (
     mount_volume_count,
     mount_volumes,
     umount_volumes,
+)
+from ..mount.output import (
+    MountStatusData,
+    build_mount_status_json,
+    build_mount_status_table,
 )
 from ..preflight import check_mount_status
 from .app import volumes_app
@@ -220,15 +225,14 @@ def volumes_umount(
         raise typer.Exit(1)
 
 
-def _mount_state_icon(value: bool | None) -> str:
-    """Format a mount state value as ✓, ✗, or —."""
-    match value:
-        case True:
-            return "[green]\u2713[/green]"
-        case False:
-            return "[red]\u2717[/red]"
-        case None:
-            return "\u2014"
+@dataclass(frozen=True)
+class _ErrorStatus:
+    """Synthetic mount status for unreachable volumes."""
+
+    resolved_backend: str | None
+    device_present: bool | None = None
+    luks_attached: bool | None = None
+    mounted: bool | None = None
 
 
 @volumes_app.command("status")
@@ -284,7 +288,7 @@ def volumes_status(
         return
 
     console = Console()
-    results: list[tuple[str, str | None, bool | None, bool | None, bool | None]] = []
+    statuses: list[tuple[str, MountStatusData]] = []
 
     for slug, vol in volumes_with_mount:
         assert vol.mount is not None
@@ -293,48 +297,15 @@ def volumes_status(
             status_display = console.status(f"Checking {slug}...")
             status_display.start()
         try:
-            caps = check_mount_status(vol, vol.mount, resolved)
-            results.append(
-                (
-                    slug,
-                    caps.resolved_backend,
-                    caps.device_present,
-                    caps.luks_attached,
-                    caps.mounted,
-                )
-            )
+            statuses.append((slug, check_mount_status(vol, vol.mount, resolved)))
         except Exception as e:
-            results.append((slug, f"unreachable: {e}", None, None, None))
+            statuses.append((slug, _ErrorStatus(resolved_backend=f"unreachable: {e}")))
         finally:
             if status_display is not None:
                 status_display.stop()
 
     match output:
         case OutputFormat.JSON:
-            data = [
-                {
-                    "volume": slug,
-                    "strategy": strategy,
-                    "device_present": device,
-                    "luks_attached": luks,
-                    "mounted": mounted,
-                }
-                for slug, strategy, device, luks, mounted in results
-            ]
-            typer.echo(json.dumps(data, indent=2))
+            typer.echo(json.dumps(build_mount_status_json(statuses), indent=2))
         case OutputFormat.HUMAN:
-            table = Table(title="Volume Mount Status:")
-            table.add_column("Name", style="bold")
-            table.add_column("Strategy")
-            table.add_column("Device")
-            table.add_column("LUKS")
-            table.add_column("Mounted")
-            for slug, strategy, device, luks, mounted in results:
-                table.add_row(
-                    slug,
-                    strategy or "?",
-                    _mount_state_icon(device),
-                    _mount_state_icon(luks),
-                    _mount_state_icon(mounted),
-                )
-            console.print(table)
+            console.print(build_mount_status_table(statuses))
