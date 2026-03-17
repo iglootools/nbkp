@@ -14,12 +14,10 @@ import os
 import platform
 import shutil
 import subprocess
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
-from nbkp.fsprotocol import Snapshot
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
@@ -27,15 +25,15 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.sync.snapshots.btrfs import (
-    create_snapshot,
-    delete_snapshot,
-    prune_snapshots,
-)
-from nbkp.sync.snapshots.common import (
-    get_latest_snapshot,
-    list_snapshots,
-    update_latest_symlink,
+
+from tests.integration_docker._btrfs_helpers import (
+    BtrfsEnv,
+    run_test_creates_readonly_snapshot,
+    run_test_deletes_subvolume,
+    run_test_dry_run_preserves_all,
+    run_test_lists_sorted_oldest_first,
+    run_test_prunes_oldest_beyond_limit,
+    run_test_returns_most_recent,
 )
 
 _btrfs_available = platform.system() == "Linux" and shutil.which("btrfs") is not None
@@ -130,150 +128,81 @@ def btrfs_dst(tmp_path: Path) -> Path:
         pytest.skip(f"btrfs mount not found: {BTRFS_MOUNT}")
 
 
-def _create_staging_subvolume(dst: Path) -> None:
-    """Create the staging btrfs subvolume locally."""
-    subprocess.run(
-        ["btrfs", "subvolume", "create", str(dst / "staging")],
-        check=True,
-        capture_output=True,
+@pytest.fixture()
+def btrfs_env_local(tmp_path: Path, btrfs_dst: Path) -> BtrfsEnv:
+    """BtrfsEnv backed by a local btrfs mount."""
+    src = tmp_path / "src"
+    src.mkdir()
+
+    sync, config = _make_btrfs_config(str(src), str(btrfs_dst))
+
+    def _create_staging() -> None:
+        subprocess.run(
+            ["btrfs", "subvolume", "create", str(btrfs_dst / "staging")],
+            check=True,
+            capture_output=True,
+        )
+        (btrfs_dst / "snapshots").mkdir(exist_ok=True)
+
+    def _seed_staging(content: str) -> None:
+        (btrfs_dst / "staging" / "data.txt").write_text(content)
+
+    def _check_exists(path: str) -> bool:
+        return Path(path).is_dir()
+
+    def _check_readonly(path: str) -> bool:
+        result = subprocess.run(
+            ["btrfs", "property", "get", path, "ro"],
+            capture_output=True,
+            text=True,
+        )
+        return "ro=true" in result.stdout
+
+    return BtrfsEnv(
+        sync=sync,
+        config=config,
+        resolved={},
+        create_staging=_create_staging,
+        seed_staging=_seed_staging,
+        check_exists=_check_exists,
+        check_readonly=_check_readonly,
     )
-    (dst / "snapshots").mkdir(exist_ok=True)
 
 
-def _seed_staging(dst: Path, content: str = "test data") -> None:
-    """Put data in the staging subvolume."""
-    (dst / "staging" / "data.txt").write_text(content)
+# ── Component-level tests (delegated to shared helpers) ─────────────
 
 
 @_skip_no_btrfs
 class TestCreateSnapshot:
-    def test_creates_readonly_snapshot(self, tmp_path: Path, btrfs_dst: Path) -> None:
-        src = tmp_path / "src"
-        src.mkdir()
-
-        sync, config = _make_btrfs_config(str(src), str(btrfs_dst))
-        _create_staging_subvolume(btrfs_dst)
-        _seed_staging(btrfs_dst)
-
-        snapshot_path = create_snapshot(sync, config)
-
-        assert Path(snapshot_path).is_dir()
-
-        # Verify readonly
-        result = subprocess.run(
-            ["btrfs", "property", "get", snapshot_path, "ro"],
-            capture_output=True,
-            text=True,
-        )
-        assert "ro=true" in result.stdout
+    def test_creates_readonly_snapshot(self, btrfs_env_local: BtrfsEnv) -> None:
+        run_test_creates_readonly_snapshot(btrfs_env_local)
 
 
 @_skip_no_btrfs
 class TestListSnapshots:
-    def test_lists_sorted_oldest_first(self, tmp_path: Path, btrfs_dst: Path) -> None:
-        src = tmp_path / "src"
-        src.mkdir()
-
-        sync, config = _make_btrfs_config(str(src), str(btrfs_dst))
-        _create_staging_subvolume(btrfs_dst)
-        _seed_staging(btrfs_dst)
-
-        now1 = datetime(2024, 1, 1, tzinfo=timezone.utc)
-        now2 = datetime(2024, 1, 2, tzinfo=timezone.utc)
-
-        create_snapshot(sync, config, now=now1)
-        create_snapshot(sync, config, now=now2)
-
-        snapshots = list_snapshots(sync, config)
-        assert len(snapshots) == 2
-        assert "2024-01-01" in snapshots[0].name
-        assert "2024-01-02" in snapshots[1].name
+    def test_lists_sorted_oldest_first(self, btrfs_env_local: BtrfsEnv) -> None:
+        run_test_lists_sorted_oldest_first(btrfs_env_local)
 
 
 @_skip_no_btrfs
 class TestGetLatestSnapshot:
-    def test_returns_most_recent(self, tmp_path: Path, btrfs_dst: Path) -> None:
-        src = tmp_path / "src"
-        src.mkdir()
-
-        sync, config = _make_btrfs_config(str(src), str(btrfs_dst))
-        _create_staging_subvolume(btrfs_dst)
-        _seed_staging(btrfs_dst)
-
-        now1 = datetime(2024, 1, 1, tzinfo=timezone.utc)
-        now2 = datetime(2024, 1, 2, tzinfo=timezone.utc)
-
-        create_snapshot(sync, config, now=now1)
-        create_snapshot(sync, config, now=now2)
-
-        latest = get_latest_snapshot(sync, config)
-        assert latest is not None
-        assert "2024-01-02" in latest.name
+    def test_returns_most_recent(self, btrfs_env_local: BtrfsEnv) -> None:
+        run_test_returns_most_recent(btrfs_env_local)
 
 
 @_skip_no_btrfs
 class TestDeleteSnapshot:
-    def test_deletes_subvolume(self, tmp_path: Path, btrfs_dst: Path) -> None:
-        src = tmp_path / "src"
-        src.mkdir()
-
-        sync, config = _make_btrfs_config(str(src), str(btrfs_dst))
-        _create_staging_subvolume(btrfs_dst)
-        _seed_staging(btrfs_dst)
-
-        snapshot_path = create_snapshot(sync, config)
-        assert Path(snapshot_path).is_dir()
-
-        dst_vol = config.volumes["dst"]
-        delete_snapshot(snapshot_path, dst_vol, {})
-
-        assert not Path(snapshot_path).exists()
+    def test_deletes_subvolume(self, btrfs_env_local: BtrfsEnv) -> None:
+        run_test_deletes_subvolume(btrfs_env_local)
 
 
 @_skip_no_btrfs
 class TestPruneSnapshots:
-    def test_prunes_oldest_beyond_limit(self, tmp_path: Path, btrfs_dst: Path) -> None:
-        src = tmp_path / "src"
-        src.mkdir()
+    def test_prunes_oldest_beyond_limit(self, btrfs_env_local: BtrfsEnv) -> None:
+        run_test_prunes_oldest_beyond_limit(btrfs_env_local)
 
-        sync, config = _make_btrfs_config(str(src), str(btrfs_dst))
-        _create_staging_subvolume(btrfs_dst)
-        _seed_staging(btrfs_dst)
-
-        names = []
-        for i in range(3):
-            now = datetime(2024, 1, 1 + i, tzinfo=timezone.utc)
-            path = create_snapshot(sync, config, now=now)
-            names.append(Snapshot.from_path(path).name)
-
-        update_latest_symlink(sync, config, Snapshot.from_name(names[-1]))
-
-        deleted = prune_snapshots(sync, config, 1)
-        assert len(deleted) == 2
-
-        remaining = list_snapshots(sync, config)
-        assert len(remaining) == 1
-        assert names[-1] == remaining[0].name
-
-    def test_dry_run_preserves_all(self, tmp_path: Path, btrfs_dst: Path) -> None:
-        src = tmp_path / "src"
-        src.mkdir()
-
-        sync, config = _make_btrfs_config(str(src), str(btrfs_dst))
-        _create_staging_subvolume(btrfs_dst)
-        _seed_staging(btrfs_dst)
-
-        for i in range(3):
-            now = datetime(2024, 1, 1 + i, tzinfo=timezone.utc)
-            path = create_snapshot(sync, config, now=now)
-        snapshot = Snapshot.from_path(path)
-        update_latest_symlink(sync, config, snapshot)
-
-        deleted = prune_snapshots(sync, config, 1, dry_run=True)
-        assert len(deleted) == 2
-
-        remaining = list_snapshots(sync, config)
-        assert len(remaining) == 3
+    def test_dry_run_preserves_all(self, btrfs_env_local: BtrfsEnv) -> None:
+        run_test_dry_run_preserves_all(btrfs_env_local)
 
 
 # ── Guard: at least one execution path must be available ─────

@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
 )
 
-from nbkp.preflight import VolumeError, check_volume
+from nbkp.preflight import SshEndpointError, check_volume
 from nbkp.config import (
     Config,
     LocalVolume,
@@ -28,8 +28,8 @@ from nbkp.config import (
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
-    resolve_all_endpoints,
 )
+from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.fabricssh import (
     run_remote_command as fabric_run_remote,
 )
@@ -236,7 +236,7 @@ class TestHostKeyVerification:
         resolved = resolve_all_endpoints(config)
         status = check_volume(vol, resolved)
         assert status.active is False
-        assert VolumeError.UNREACHABLE in status.errors
+        assert SshEndpointError.UNREACHABLE in status.ssh_endpoint_status.errors
 
     def test_rsync_succeeds_with_correct_known_hosts(
         self,
@@ -427,7 +427,7 @@ class TestConnectionFailure:
         resolved = resolve_all_endpoints(config)
         status = check_volume(vol, resolved)
         assert status.active is False
-        assert VolumeError.UNREACHABLE in status.errors
+        assert SshEndpointError.UNREACHABLE in status.ssh_endpoint_status.errors
 
     def test_unreachable_volume_wrong_key(
         self,
@@ -464,7 +464,7 @@ class TestConnectionFailure:
         resolved = resolve_all_endpoints(config)
         status = check_volume(vol, resolved)
         assert status.active is False
-        assert VolumeError.UNREACHABLE in status.errors
+        assert SshEndpointError.UNREACHABLE in status.ssh_endpoint_status.errors
 
 
 # ── Agent forwarding through bastion ────────────────────────

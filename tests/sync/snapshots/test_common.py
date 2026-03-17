@@ -12,12 +12,12 @@ from nbkp.config import (
     HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
-    ResolvedEndpoint,
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
-    resolve_all_endpoints,
 )
+from nbkp.config.epresolution import ResolvedEndpoint
+from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.sync.snapshots.common import (
     create_snapshot_timestamp,
     get_latest_snapshot,
@@ -230,7 +230,7 @@ class TestCreateSnapshotTimestamp:
 
 
 class TestGetLatestSnapshotLocal:
-    @patch("nbkp.sync.snapshots.common.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -242,7 +242,7 @@ class TestGetLatestSnapshotLocal:
         assert result is not None
         assert result.name == "20240115T120000Z"
 
-    @patch("nbkp.sync.snapshots.common.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_empty(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="")
         config, sync = _local_config()
@@ -250,7 +250,7 @@ class TestGetLatestSnapshotLocal:
         result = get_latest_snapshot(sync, config)
         assert result is None
 
-    @patch("nbkp.sync.snapshots.common.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_dir_missing(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=2, stdout="")
         config, sync = _local_config()
@@ -260,7 +260,7 @@ class TestGetLatestSnapshotLocal:
 
 
 class TestGetLatestSnapshotRemote:
-    @patch("nbkp.sync.snapshots.common.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -280,7 +280,7 @@ class TestGetLatestSnapshotRemote:
 
 
 class TestGetLatestSnapshotRemoteSpaces:
-    @patch("nbkp.sync.snapshots.common.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -303,7 +303,7 @@ class TestGetLatestSnapshotRemoteSpaces:
 
 
 class TestListSnapshotsLocal:
-    @patch("nbkp.sync.snapshots.common.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -317,7 +317,7 @@ class TestListSnapshotsLocal:
             "20240115T120000Z",
         ]
 
-    @patch("nbkp.sync.snapshots.common.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_empty(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="")
         config, sync = _local_config()
@@ -325,7 +325,7 @@ class TestListSnapshotsLocal:
         result = list_snapshots(sync, config)
         assert result == []
 
-    @patch("nbkp.sync.snapshots.common.subprocess.run")
+    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_dir_missing(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=2, stdout="")
         config, sync = _local_config()
@@ -335,7 +335,7 @@ class TestListSnapshotsLocal:
 
 
 class TestListSnapshotsRemote:
-    @patch("nbkp.sync.snapshots.common.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_found(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -494,7 +494,7 @@ class TestUpdateLatestSymlink:
         assert link.is_symlink()
         assert str(link.readlink()) == f"snapshots/{_TS_LOCAL.name}"
 
-    @patch("nbkp.sync.snapshots.common.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_remote(self, mock_remote: MagicMock) -> None:
         mock_remote.return_value = MagicMock(returncode=0, stderr="")
         sync, config, re = _hl_remote_config()

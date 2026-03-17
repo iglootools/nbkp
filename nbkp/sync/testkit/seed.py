@@ -8,10 +8,24 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ...config import (
+    BtrfsSnapshotConfig,
     Config,
+    CredentialProvider,
+    HardLinkSnapshotConfig,
     LocalVolume,
+    LuksEncryptionConfig,
+    MountConfig,
     RemoteVolume,
+    RsyncOptions,
+    SshEndpoint,
+    SyncConfig,
     SyncEndpoint,
+)
+from ...remote.testkit.constants import (
+    LUKS_MAPPER_NAME,
+    REMOTE_BACKUP_PATH,
+    REMOTE_BTRFS_PATH,
+    REMOTE_BTRFS_ENCRYPTED_PATH,
 )
 from ...fsprotocol import (
     DESTINATION_SENTINEL,
@@ -225,3 +239,267 @@ def seed_volume(
                 remote_exec(f"printf %s {shlex.quote(content)} > {rp}/{name}")
             if big_file_size_bytes:
                 remote_exec(f"truncate -s {big_file_size_bytes} {rp}/large-file.bin")
+
+
+def build_local_chain_config(
+    local_dir: Path,
+    *,
+    rsync_options: RsyncOptions | None = None,
+    max_snapshots: int | None = None,
+) -> Config:
+    """Build a 2-step local-only chain config.
+
+    Volumes::
+
+      src-local-bare            — chain origin (bare source)
+      stage-local-hl-snapshots  — HL dest / HL source
+      dst-local-bare            — chain terminus (bare dest)
+
+    Optional parameters:
+
+    - *rsync_options*: applied to every sync (e.g. bandwidth limiting).
+    - *max_snapshots*: applied to the HL snapshot config.
+    """
+    hl = HardLinkSnapshotConfig(enabled=True, max_snapshots=max_snapshots)
+    rsync_opts = rsync_options if rsync_options is not None else RsyncOptions()
+
+    return Config(
+        ssh_endpoints={},
+        volumes={
+            "src-local-bare": LocalVolume(
+                slug="src-local-bare",
+                path=str(local_dir / "src-local-bare"),
+            ),
+            "stage-local-hl-snapshots": LocalVolume(
+                slug="stage-local-hl-snapshots",
+                path=str(local_dir / "stage-local-hl-snapshots"),
+            ),
+            "dst-local-bare": LocalVolume(
+                slug="dst-local-bare",
+                path=str(local_dir / "dst-local-bare"),
+            ),
+        },
+        sync_endpoints={
+            "ep-src-local-bare": SyncEndpoint(
+                slug="ep-src-local-bare",
+                volume="src-local-bare",
+            ),
+            "ep-stage-local-hl": SyncEndpoint(
+                slug="ep-stage-local-hl",
+                volume="stage-local-hl-snapshots",
+                hard_link_snapshots=hl,
+            ),
+            "ep-dst-local-bare": SyncEndpoint(
+                slug="ep-dst-local-bare",
+                volume="dst-local-bare",
+            ),
+        },
+        syncs={
+            "step-1": SyncConfig(
+                slug="step-1",
+                source="ep-src-local-bare",
+                destination="ep-stage-local-hl",
+                rsync_options=rsync_opts,
+                filters=SEED_EXCLUDE_FILTERS,
+            ),
+            "step-2": SyncConfig(
+                slug="step-2",
+                source="ep-stage-local-hl",
+                destination="ep-dst-local-bare",
+                rsync_options=rsync_opts,
+                filters=SEED_EXCLUDE_FILTERS,
+            ),
+        },
+    )
+
+
+def build_chain_config(
+    local_dir: Path,
+    bastion_endpoint: SshEndpoint,
+    proxied_endpoint: SshEndpoint,
+    *,
+    luks_uuid: str | None = None,
+    rsync_options: RsyncOptions | None = None,
+    max_snapshots: int | None = None,
+    credential_provider: CredentialProvider = CredentialProvider.KEYRING,
+) -> Config:
+    """Build a 6-hop chain config across local and remote volumes.
+
+    Volumes::
+
+      src-local-bare                — chain origin (bare source)
+      stage-local-hl-snapshots      — HL dest / HL source
+      stage-remote-bare             — bare dest / HL source
+      stage-remote-btrfs-snapshots  — btrfs dest / btrfs source (encrypted)
+      stage-remote-btrfs-bare       — bare dest / HL source
+      stage-remote-hl-snapshots     — HL dest / HL source
+      dst-local-bare                — chain terminus (bare dest)
+
+    When *luks_uuid* is provided, ``stage-remote-btrfs-snapshots``
+    gets a ``MountConfig`` so that ``mount_volumes`` /
+    ``umount_volumes`` manage the LUKS lifecycle as part of the
+    chain — same code path as ``nbkp run``.
+
+    Optional parameters:
+
+    - *rsync_options*: applied to every sync (e.g. bandwidth limiting).
+    - *max_snapshots*: applied to both HL and btrfs snapshot configs.
+    """
+    volumes: dict[str, LocalVolume | RemoteVolume] = {
+        "src-local-bare": LocalVolume(
+            slug="src-local-bare",
+            path=str(local_dir / "src-local-bare"),
+        ),
+        "stage-local-hl-snapshots": LocalVolume(
+            slug="stage-local-hl-snapshots",
+            path=str(local_dir / "stage-local-hl-snapshots"),
+        ),
+        "stage-remote-bare": RemoteVolume(
+            slug="stage-remote-bare",
+            ssh_endpoint="via-bastion",
+            path=f"{REMOTE_BACKUP_PATH}/bare",
+        ),
+        "stage-remote-btrfs-snapshots": RemoteVolume(
+            slug="stage-remote-btrfs-snapshots",
+            ssh_endpoint="via-bastion",
+            path=(
+                REMOTE_BTRFS_ENCRYPTED_PATH
+                if luks_uuid is not None
+                else f"{REMOTE_BTRFS_PATH}/snapshots"
+            ),
+            mount=(
+                MountConfig(
+                    strategy="direct",
+                    device_uuid=luks_uuid,
+                    encryption=LuksEncryptionConfig(
+                        mapper_name=LUKS_MAPPER_NAME,
+                        passphrase_id="test-luks",
+                    ),
+                )
+                if luks_uuid is not None
+                else None
+            ),
+        ),
+        "stage-remote-btrfs-bare": RemoteVolume(
+            slug="stage-remote-btrfs-bare",
+            ssh_endpoint="via-bastion",
+            path=f"{REMOTE_BTRFS_PATH}/bare",
+        ),
+        "stage-remote-hl-snapshots": RemoteVolume(
+            slug="stage-remote-hl-snapshots",
+            ssh_endpoint="via-bastion",
+            path=f"{REMOTE_BACKUP_PATH}/hl",
+        ),
+        "dst-local-bare": LocalVolume(
+            slug="dst-local-bare",
+            path=str(local_dir / "dst-local-bare"),
+        ),
+    }
+
+    hl = HardLinkSnapshotConfig(enabled=True, max_snapshots=max_snapshots)
+    btrfs = BtrfsSnapshotConfig(enabled=True, max_snapshots=max_snapshots)
+
+    sync_endpoints: dict[str, SyncEndpoint] = {
+        # step-1 source: bare local origin
+        "ep-src-local-bare": SyncEndpoint(
+            slug="ep-src-local-bare",
+            volume="src-local-bare",
+        ),
+        # step-1 dest / step-2 source: local HL snapshots
+        "ep-stage-local-hl": SyncEndpoint(
+            slug="ep-stage-local-hl",
+            volume="stage-local-hl-snapshots",
+            hard_link_snapshots=hl,
+        ),
+        # step-2 dest / step-3 source: remote bare
+        "ep-stage-remote-bare": SyncEndpoint(
+            slug="ep-stage-remote-bare",
+            volume="stage-remote-bare",
+        ),
+        # step-3 dest / step-4 source: remote btrfs snapshots
+        "ep-stage-remote-btrfs": SyncEndpoint(
+            slug="ep-stage-remote-btrfs",
+            volume="stage-remote-btrfs-snapshots",
+            btrfs_snapshots=btrfs,
+        ),
+        # step-4 dest / step-5 source: remote btrfs bare
+        "ep-stage-remote-btrfs-bare": SyncEndpoint(
+            slug="ep-stage-remote-btrfs-bare",
+            volume="stage-remote-btrfs-bare",
+        ),
+        # step-5 dest / step-6 source: remote HL snapshots
+        "ep-stage-remote-hl": SyncEndpoint(
+            slug="ep-stage-remote-hl",
+            volume="stage-remote-hl-snapshots",
+            hard_link_snapshots=hl,
+        ),
+        # step-6 dest: bare local terminus
+        "ep-dst-local-bare": SyncEndpoint(
+            slug="ep-dst-local-bare",
+            volume="dst-local-bare",
+        ),
+    }
+
+    rsync_opts = rsync_options if rsync_options is not None else RsyncOptions()
+
+    syncs: dict[str, SyncConfig] = {
+        # local->local, HL destination
+        "step-1": SyncConfig(
+            slug="step-1",
+            source="ep-src-local-bare",
+            destination="ep-stage-local-hl",
+            filters=SEED_EXCLUDE_FILTERS,
+            rsync_options=rsync_opts,
+        ),
+        # local->remote (bastion), bare destination
+        "step-2": SyncConfig(
+            slug="step-2",
+            source="ep-stage-local-hl",
+            destination="ep-stage-remote-bare",
+            filters=SEED_EXCLUDE_FILTERS,
+            rsync_options=rsync_opts,
+        ),
+        # remote->remote same-server (bastion), btrfs destination
+        "step-3": SyncConfig(
+            slug="step-3",
+            source="ep-stage-remote-bare",
+            destination="ep-stage-remote-btrfs",
+            filters=SEED_EXCLUDE_FILTERS,
+            rsync_options=rsync_opts,
+        ),
+        # remote->remote same-server (bastion), bare dest on btrfs
+        "step-4": SyncConfig(
+            slug="step-4",
+            source="ep-stage-remote-btrfs",
+            destination="ep-stage-remote-btrfs-bare",
+            filters=SEED_EXCLUDE_FILTERS,
+            rsync_options=rsync_opts,
+        ),
+        # remote->remote same-server (bastion), HL destination
+        "step-5": SyncConfig(
+            slug="step-5",
+            source="ep-stage-remote-btrfs-bare",
+            destination="ep-stage-remote-hl",
+            filters=SEED_EXCLUDE_FILTERS,
+            rsync_options=rsync_opts,
+        ),
+        # remote (bastion)->local, bare destination
+        "step-6": SyncConfig(
+            slug="step-6",
+            source="ep-stage-remote-hl",
+            destination="ep-dst-local-bare",
+            filters=SEED_EXCLUDE_FILTERS,
+            rsync_options=rsync_opts,
+        ),
+    }
+
+    return Config(
+        credential_provider=credential_provider,
+        ssh_endpoints={
+            "bastion": bastion_endpoint,
+            "via-bastion": proxied_endpoint,
+        },
+        volumes=volumes,
+        sync_endpoints=sync_endpoints,
+        syncs=syncs,
+    )

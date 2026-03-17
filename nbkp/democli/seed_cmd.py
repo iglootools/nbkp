@@ -14,35 +14,39 @@ from typing import Annotated, Callable
 import typer
 import yaml
 from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TaskID,
+    TextColumn,
+)
 from rich.syntax import Syntax
 from rich.text import Text
 
 from ..config import (
-    BtrfsSnapshotConfig,
-    Config,
-    HardLinkSnapshotConfig,
-    LocalVolume,
-    RemoteVolume,
+    CredentialProvider,
     RsyncOptions,
-    SshEndpoint,
-    SyncConfig,
-    SyncEndpoint,
 )
+from ..remote.resolution import resolve_all_endpoints
+from ..mount.lifecycle import mount_volumes, umount_volumes
+from ..mount.strategy import MountStrategy
 
 # Docker-dependent imports are deferred to seed --docker.
 # They require the 'docker' extra: pipx install nbkp[docker]
 try:
     from ..remote.testkit.docker import (
         BASTION_CONTAINER_NAME,
+        LUKS_PASSPHRASE,
         STORAGE_CONTAINER_NAME,
         DOCKER_DIR,
-        REMOTE_BACKUP_PATH,
-        REMOTE_BTRFS_PATH,
         build_docker_image,
         check_docker,
         create_docker_network,
         create_test_ssh_endpoint,
         generate_ssh_keypair,
+        read_luks_metadata,
         ssh_exec,
         start_bastion_container,
         start_storage_container,
@@ -53,7 +57,8 @@ try:
 except ImportError:
     _HAS_DOCKER = False
 from ..sync.testkit.seed import (
-    SEED_EXCLUDE_FILTERS,
+    build_chain_config,
+    build_local_chain_config,
     create_seed_sentinels,
     seed_volume,
 )
@@ -71,6 +76,31 @@ def _cmd_prefix() -> str:
     return "poetry run " if _is_dev_environment() else ""
 
 
+def _luks_setup_instructions(provider: CredentialProvider) -> list[str]:
+    """Return shell lines that set up the LUKS passphrase."""
+    match provider:
+        case CredentialProvider.ENV:
+            return [
+                f'export NBKP_PASSPHRASE_TEST_LUKS="{LUKS_PASSPHRASE}"',
+            ]
+        case CredentialProvider.KEYRING:
+            return [
+                "# Set the LUKS passphrase in the keyring (one-time):",
+                "keyring set nbkp test-luks",
+                f"#   (enter passphrase: {LUKS_PASSPHRASE})",
+            ]
+        case CredentialProvider.PROMPT:
+            return [
+                "# You will be prompted for the LUKS passphrase at runtime.",
+                f"# Passphrase: {LUKS_PASSPHRASE}",
+            ]
+        case CredentialProvider.COMMAND:
+            return [
+                "# Configure a command provider in the config to retrieve",
+                f"# the passphrase. Passphrase: {LUKS_PASSPHRASE}",
+            ]
+
+
 def _require_docker_extra() -> None:
     """Exit with install hint if docker extra is not installed."""
     if not _HAS_DOCKER:
@@ -80,6 +110,50 @@ def _require_docker_extra() -> None:
             err=True,
         )
         raise typer.Exit(1)
+
+
+class StepProgressBar:
+    """Rich progress bar for multi-step operations.
+
+    Shows a spinner, description (current step label), visual bar,
+    and M/N counter.  Result lines (✓/✗) are printed above the bar
+    as each step completes.
+    """
+
+    def __init__(self, total: int) -> None:
+        self._total = total
+        self._progress: Progress | None = None
+        self._task_id: TaskID | None = None
+
+    def on_start(self, label: str) -> None:
+        """Call before each step begins."""
+        if self._progress is None:
+            self._progress = Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                MofNCompleteColumn(),
+                transient=True,
+            )
+            self._progress.start()
+            self._task_id = self._progress.add_task(f"{label}...", total=self._total)
+        else:
+            assert self._task_id is not None
+            self._progress.update(self._task_id, description=f"{label}...")
+
+    def on_end(self, label: str, success: bool, detail: str | None = None) -> None:
+        """Call after each step completes."""
+        if self._progress is not None:
+            assert self._task_id is not None
+            icon = "[green]\u2713[/green]" if success else "[red]\u2717[/red]"
+            detail_str = f" ({detail})" if detail else ""
+            self._progress.console.print(f"{icon} {label}{detail_str}")
+            self._progress.advance(self._task_id)
+
+    def stop(self) -> None:
+        """Stop the progress bar (idempotent)."""
+        if self._progress is not None:
+            self._progress.stop()
 
 
 @app.command()
@@ -97,10 +171,18 @@ def seed(
     docker: Annotated[
         bool,
         typer.Option(
-            "--docker",
+            "--docker/--no-docker",
             help="Start a Docker container for remote syncs.",
         ),
-    ] = False,
+    ] = True,
+    luks: Annotated[
+        bool,
+        typer.Option(
+            "--luks/--no-luks",
+            help="Use LUKS-encrypted btrfs volume (requires --docker"
+            " and dm-crypt kernel module).",
+        ),
+    ] = True,
     bandwidth_limit: Annotated[
         int,
         typer.Option(
@@ -110,6 +192,14 @@ def seed(
             " Set to 0 to disable.",
         ),
     ] = 250,
+    credential_provider: Annotated[
+        CredentialProvider,
+        typer.Option(
+            "--credential-provider",
+            help="How LUKS passphrases are retrieved at runtime."
+            " Only relevant when --luks is enabled.",
+        ),
+    ] = CredentialProvider.KEYRING,
     base_dir: Annotated[
         Path | None,
         typer.Option(
@@ -142,213 +232,117 @@ def seed(
     else:
         tmp = Path(tempfile.mkdtemp(prefix="nbkp-demo-"))
 
-    # Server and bastion containers
+    # ── Step count for progress bar ────────────────────────────
+    # Docker: build image, create network, start bastion, wait bastion SSH,
+    #         start storage, wait storage SSH = 6
+    # LUKS:   read metadata, mount, umount = 3
+    # Always: seed volumes = 1
+    step_count = 1  # seed volumes
+    if docker:
+        step_count += 6
+    if docker and luks:
+        step_count += 3  # read metadata + mount + umount
+
+    bar = StepProgressBar(step_count)
+
+    # ── Server and bastion containers ────────────────────────
     storage_endpoint = None
     bastion_endpoint = None
     if docker:
         private_key, pub_key = generate_ssh_keypair(tmp)
 
-        with _console.status("Building Docker image..."):
-            build_docker_image()
+        bar.on_start("Building Docker image")
+        build_docker_image()
+        bar.on_end("Building Docker image", True)
 
-        with _console.status("Creating Docker network..."):
-            network_name = create_docker_network()
+        bar.on_start("Creating Docker network")
+        network_name = create_docker_network()
+        bar.on_end("Creating Docker network", True)
 
-        with _console.status("Starting bastion container..."):
-            bastion_port = start_bastion_container(pub_key, network_name)
+        bar.on_start("Starting bastion container")
+        bastion_port = start_bastion_container(pub_key, network_name)
+        bar.on_end("Starting bastion container", True)
+
         bastion_endpoint = create_test_ssh_endpoint(
             "bastion", "127.0.0.1", bastion_port, private_key
         )
-        with _console.status("Waiting for bastion SSH..."):
-            wait_for_ssh(bastion_endpoint)
+        bar.on_start("Waiting for bastion SSH")
+        wait_for_ssh(bastion_endpoint)
+        bar.on_end("Waiting for bastion SSH", True)
 
-        with _console.status("Starting storage container..."):
-            storage_port = start_storage_container(
-                pub_key,
-                network_name=network_name,
-                network_alias="backup-server",
-            )
+        bar.on_start("Starting storage container")
+        storage_port = start_storage_container(
+            pub_key,
+            network_name=network_name,
+            network_alias="backup-server",
+        )
+        bar.on_end("Starting storage container", True)
+
         storage_endpoint = create_test_ssh_endpoint(
             "storage", "127.0.0.1", storage_port, private_key
         )
-        with _console.status("Waiting for storage SSH..."):
-            wait_for_ssh(storage_endpoint)
+        bar.on_start("Waiting for storage SSH")
+        wait_for_ssh(storage_endpoint)
+        bar.on_end("Waiting for storage SSH", True)
 
-    # Config — chain layout matching integration test
-    hl_dst = HardLinkSnapshotConfig(enabled=True, max_snapshots=5)
-
-    ssh_endpoints: dict[str, SshEndpoint] = {}
-    volumes: dict[str, LocalVolume | RemoteVolume] = {
-        "src-local-bare": LocalVolume(
-            slug="src-local-bare",
-            path=str(tmp / "src-local-bare"),
-        ),
-        "stage-local-hl-snapshots": LocalVolume(
-            slug="stage-local-hl-snapshots",
-            path=str(tmp / "stage-local-hl-snapshots"),
-        ),
-        "dst-local-bare": LocalVolume(
-            slug="dst-local-bare",
-            path=str(tmp / "dst-local-bare"),
-        ),
-    }
-    sync_endpoints: dict[str, SyncEndpoint] = {
-        "ep-src-local": SyncEndpoint(
-            slug="ep-src-local",
-            volume="src-local-bare",
-        ),
-        "ep-stage-local-hl": SyncEndpoint(
-            slug="ep-stage-local-hl",
-            volume="stage-local-hl-snapshots",
-            hard_link_snapshots=hl_dst,
-        ),
-        "ep-dst-local": SyncEndpoint(
-            slug="ep-dst-local",
-            volume="dst-local-bare",
-        ),
-    }
-    syncs: dict[str, SyncConfig] = {
-        # local→local, HL destination
-        "step-1": SyncConfig(
-            slug="step-1",
-            source="ep-src-local",
-            destination="ep-stage-local-hl",
-            rsync_options=rsync_opts,
-            filters=SEED_EXCLUDE_FILTERS,
-        ),
-    }
-
+    # ── Config — chain layout matching integration test ──────
+    luks_uuid: str | None = None
     if docker:
-        assert storage_endpoint is not None
         assert bastion_endpoint is not None
-        btrfs_snapshots_path = f"{REMOTE_BTRFS_PATH}/snapshots"
-        btrfs_bare_path = f"{REMOTE_BTRFS_PATH}/bare"
-        btrfs_dst = BtrfsSnapshotConfig(enabled=True, max_snapshots=5)
-
-        ssh_endpoints["bastion"] = bastion_endpoint
-        ssh_endpoints["storage"] = storage_endpoint
-        ssh_endpoints["via-bastion"] = create_test_ssh_endpoint(
+        assert storage_endpoint is not None
+        proxied_endpoint = create_test_ssh_endpoint(
             "via-bastion",
             "backup-server",
             22,
             private_key,
             proxy_jump="bastion",
         )
-        volumes.update(
-            {
-                "stage-remote-bare": RemoteVolume(
-                    slug="stage-remote-bare",
-                    ssh_endpoint="via-bastion",
-                    path=f"{REMOTE_BACKUP_PATH}/bare",
-                ),
-                "stage-remote-btrfs-snapshots": RemoteVolume(
-                    slug="stage-remote-btrfs-snapshots",
-                    ssh_endpoint="via-bastion",
-                    path=btrfs_snapshots_path,
-                ),
-                "stage-remote-btrfs-bare": RemoteVolume(
-                    slug="stage-remote-btrfs-bare",
-                    ssh_endpoint="via-bastion",
-                    path=btrfs_bare_path,
-                ),
-                "stage-remote-hl-snapshots": RemoteVolume(
-                    slug="stage-remote-hl-snapshots",
-                    ssh_endpoint="via-bastion",
-                    path=f"{REMOTE_BACKUP_PATH}/hl",
-                ),
-            }
-        )
-        sync_endpoints.update(
-            {
-                "ep-remote-bare": SyncEndpoint(
-                    slug="ep-remote-bare",
-                    volume="stage-remote-bare",
-                ),
-                "ep-remote-btrfs": SyncEndpoint(
-                    slug="ep-remote-btrfs",
-                    volume="stage-remote-btrfs-snapshots",
-                    btrfs_snapshots=btrfs_dst,
-                ),
-                "ep-remote-btrfs-bare": SyncEndpoint(
-                    slug="ep-remote-btrfs-bare",
-                    volume="stage-remote-btrfs-bare",
-                ),
-                "ep-remote-hl": SyncEndpoint(
-                    slug="ep-remote-hl",
-                    volume="stage-remote-hl-snapshots",
-                    hard_link_snapshots=hl_dst,
-                ),
-            }
-        )
-        syncs.update(
-            {
-                # local→remote (bastion), bare dest
-                "step-2": SyncConfig(
-                    slug="step-2",
-                    source="ep-stage-local-hl",
-                    destination="ep-remote-bare",
-                    rsync_options=rsync_opts,
-                    filters=SEED_EXCLUDE_FILTERS,
-                ),
-                # remote→remote (bastion), btrfs dest
-                "step-3": SyncConfig(
-                    slug="step-3",
-                    source="ep-remote-bare",
-                    destination="ep-remote-btrfs",
-                    rsync_options=rsync_opts,
-                    filters=SEED_EXCLUDE_FILTERS,
-                ),
-                # remote→remote (bastion), bare on btrfs
-                "step-4": SyncConfig(
-                    slug="step-4",
-                    source="ep-remote-btrfs",
-                    destination="ep-remote-btrfs-bare",
-                    rsync_options=rsync_opts,
-                    filters=SEED_EXCLUDE_FILTERS,
-                ),
-                # remote→remote (bastion), HL dest
-                "step-5": SyncConfig(
-                    slug="step-5",
-                    source="ep-remote-btrfs-bare",
-                    destination="ep-remote-hl",
-                    rsync_options=rsync_opts,
-                    filters=SEED_EXCLUDE_FILTERS,
-                ),
-                # remote (bastion)→local, bare dest
-                "step-6": SyncConfig(
-                    slug="step-6",
-                    source="ep-remote-hl",
-                    destination="ep-dst-local",
-                    rsync_options=rsync_opts,
-                    filters=SEED_EXCLUDE_FILTERS,
-                ),
-            }
+
+        if luks:
+            bar.on_start("Reading LUKS metadata")
+            meta = read_luks_metadata(storage_endpoint)
+            if meta.available:
+                luks_uuid = meta.uuid
+                bar.on_end("Reading LUKS metadata", True)
+            else:
+                bar.on_end("Reading LUKS metadata", False, "dm-crypt unavailable")
+                bar.stop()
+                _console.print(
+                    "[red]LUKS unavailable[/red]"
+                    " (dm-crypt kernel module missing?)."
+                    "\nUse [bold]--no-luks[/bold] to skip encrypted volume setup.",
+                    highlight=False,
+                )
+                raise typer.Exit(1)
+
+        config = build_chain_config(
+            tmp,
+            bastion_endpoint,
+            proxied_endpoint,
+            luks_uuid=luks_uuid,
+            rsync_options=rsync_opts,
+            max_snapshots=5,
+            credential_provider=(
+                credential_provider
+                if luks_uuid is not None
+                else CredentialProvider.KEYRING
+            ),
         )
     else:
-        # Local-only: step-2 goes directly to dst
-        syncs["step-2"] = SyncConfig(
-            slug="step-2",
-            source="ep-stage-local-hl",
-            destination="ep-dst-local",
+        # Local-only: 2-step chain (src → HL → dst)
+        config = build_local_chain_config(
+            tmp,
             rsync_options=rsync_opts,
-            filters=SEED_EXCLUDE_FILTERS,
+            max_snapshots=5,
         )
 
-    config = Config(
-        ssh_endpoints=ssh_endpoints,
-        volumes=volumes,
-        sync_endpoints=sync_endpoints,
-        syncs=syncs,
-    )
-
-    # Create sentinels and seed data
+    # ── Create sentinels and seed data ───────────────────────
+    # When LUKS is active, temporarily mount the encrypted volume
+    # so create_seed_sentinels can set up btrfs staging subvolumes.
     size_bytes = big_file_size * 1024 * 1024
     if docker:
         assert storage_endpoint is not None
         _ep = storage_endpoint
-
-        with _console.status("Creating btrfs subvolume..."):
-            ssh_exec(_ep, f"btrfs subvolume create {btrfs_snapshots_path}")
 
         def _run_remote(cmd: str) -> None:
             ssh_exec(_ep, cmd)
@@ -357,17 +351,46 @@ def seed(
     else:
         remote_exec = None
 
-    with _console.status("Setting up volumes..."):
+    resolved = resolve_all_endpoints(config)
+
+    mount_strategy: dict[str, MountStrategy] = {}
+    if luks_uuid is not None:
+        bar.on_start("Mounting encrypted volume")
+        mount_strategy, mount_results = mount_volumes(
+            config,
+            resolved,
+            lambda _: LUKS_PASSPHRASE,
+        )
+        mount_failed = next((r for r in mount_results if not r.success), None)
+        if mount_failed is not None:
+            bar.on_end("Mounting encrypted volume", False, mount_failed.detail)
+            bar.stop()
+            raise typer.Exit(1)
+        bar.on_end("Mounting encrypted volume", True)
+
+    try:
+        bar.on_start("Seeding volumes")
         create_seed_sentinels(config, remote_exec=remote_exec)
         seed_volume(
             config.volumes["src-local-bare"],
             big_file_size_bytes=size_bytes,
         )
+        bar.on_end("Seeding volumes", True)
+    finally:
+        if luks_uuid is not None:
+            bar.on_start("Unmounting encrypted volume")
+            umount_volumes(
+                config,
+                resolved,
+                mount_strategy=mount_strategy,
+            )
+            bar.on_end("Unmounting encrypted volume", True)
+        bar.stop()
 
     config_path = tmp / "config.yaml"
     config_path.write_text(
         yaml.safe_dump(
-            config.model_dump(by_alias=True),
+            config.model_dump(by_alias=True, mode="json"),
             default_flow_style=False,
             sort_keys=False,
         )
@@ -407,11 +430,18 @@ def seed(
         if docker
         else ""
     )
+    luks_setup_lines = (
+        _luks_setup_instructions(credential_provider)
+        if luks_uuid is not None
+        else ["# No LUKS passphrase needed for this config"]
+    )
+    # 8-space indent matches the dedent() block below
+    luks_setup_line = ("\n" + " " * 8).join(luks_setup_lines)
     commands = (
         dedent(f"""\
         CFG="{config_path}"
         SH="{backup_sh}"
-
+        {luks_setup_line}
         # Show parsed configuration
         {pfx}nbkp config show --config $CFG
 
@@ -430,6 +460,12 @@ def seed(
         # Prune old btrfs snapshots
         {pfx}nbkp prune --config $CFG
 
+        # Mount the volumes (the standalone bash script does not handle volume management)
+        {pfx}nbkp volumes mount --config $CFG
+
+        # Show the status of the volumes
+        {pfx}nbkp volumes status --config $CFG
+
         # Generate standalone bash script to stdout
         {pfx}nbkp sh --config $CFG
 
@@ -443,7 +479,10 @@ def seed(
         {pfx}nbkp sh --config $CFG -o $SH --relative-src --relative-dst \\
           && bash -n $SH \\
           && $SH --dry-run \\
-          && $SH""")
+          && $SH
+
+        # Unmount the volumes
+        nbkp volumes umount --config $CFG""")
         + docker_teardown
     )
     _console.print(

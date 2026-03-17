@@ -19,7 +19,8 @@ from .snapshots.hardlinks import (
     prune_snapshots as hl_prune_snapshots,
 )
 from .snapshots.common import update_latest_symlink
-from ..config import Config, ResolvedEndpoints
+from ..config import Config
+from ..config.epresolution import ResolvedEndpoints
 from ..fsprotocol import SNAPSHOTS_DIR, STAGING_DIR, Snapshot
 from ..preflight import SyncError, SyncStatus
 from .rsync import ProgressMode, run_rsync
@@ -64,6 +65,16 @@ class PruneResult(BaseModel):
     dry_run: bool
     detail: Optional[str] = None
     skipped: bool = False
+
+
+def _collect_all_errors(status: SyncStatus) -> str:
+    """Collect error messages from sync-level errors into a single string.
+
+    With cascade errors, ``status.errors`` is self-describing — it
+    contains sync-level errors plus cascade pointers to inactive lower
+    layers.  No need to walk the full 4-layer chain.
+    """
+    return ", ".join(e.value for e in status.errors) or "unknown"
 
 
 def run_all_syncs(
@@ -124,9 +135,7 @@ def run_all_syncs(
                 rsync_exit_code=-1,
                 output="",
                 outcome=SyncOutcome.SKIPPED,
-                detail=(
-                    "Sync not active: " + ", ".join(r.value for r in status.errors)
-                ),
+                detail="Sync not active: " + _collect_all_errors(status),
             )
         else:
             result = _run_single_sync(
@@ -140,11 +149,11 @@ def run_all_syncs(
                 resolved_endpoints,
             )
 
-        # Dry-run-pending skips (skipped syncs because of DRY_RUN_SOURCE_SNAPSHOT_PENDING) should not cascade to downstream syncs:
+        # Dry-run-pending skips should not cascade to downstream syncs:
         # the chain would succeed in a real run.
         is_dry_run_pending = (
             result.outcome == SyncOutcome.SKIPPED
-            and status.errors == [SyncError.DRY_RUN_SOURCE_SNAPSHOT_PENDING]
+            and SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING in status.errors
         )
         if not result.success and not is_dry_run_pending:
             failed.add(slug)

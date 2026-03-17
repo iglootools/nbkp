@@ -56,6 +56,19 @@ nbkp uses lightweight sentinel files to guard against syncing to the wrong place
 - **Removable drive awareness**: syncs only activate when both source and destination sentinels are present, preventing data loss from unmounted drives
 - **Remote reachability checks**: SSH connectivity verified before attempting any sync
 
+## Mount Management (Linux only)
+
+nbkp can automatically mount and umount volumes before and after backups, including LUKS-encrypted drives. This is especially useful for removable drives that need to be attached (LUKS) and mounted before syncing, and umounted and closed (LUKS) afterward.
+
+- **LUKS encryption support**: automatic attach via `systemd-cryptsetup attach` with passphrase piped via stdin, close via `systemctl stop systemd-cryptsetup@<mapper>.service`
+- **Unencrypted volume mount**: `systemctl start/stop` for volumes with fstab or native .mount unit entries
+- **Credential providers**: retrieve LUKS passphrases from keyring, interactive prompt, environment variable, or external command (e.g. `pass`, 1Password CLI)
+- **Idempotent**: skips already-attached and already-mounted volumes
+- **Integrated into `run`, `check`, and `troubleshoot`**: mount before running, umount in `finally` block (even on failure). Controllable via `--mount/--no-mount` and `--umount/--no-umount`
+- **Standalone commands**: `volumes mount` and `volumes umount` for manual lifecycle management
+- **Authorization setup**: `config setup-auth` generates polkit and sudoers rules for passwordless mount/umount
+- **Pre-flight validation**: checks systemd tools, mount unit config, cryptsetup service config, polkit/sudoers rules, with actionable troubleshoot output
+
 ## Pre-flight Checks
 
 Before running any sync, nbkp validates that all required infrastructure is in place: volumes are reachable, tools are installed at the right version, and filesystem capabilities match the configured snapshot mode.
@@ -65,7 +78,7 @@ Before running any sync, nbkp validates that all required infrastructure is in p
 - **Btrfs readiness**: filesystem type, subvolume existence, mount options (`user_subvol_rm_allowed`), required directories
 - **Hard-link readiness**: filesystem hard-link support, required directory structure
 - **Orphan detection**: warns about SSH endpoints, volumes, and sync endpoints that are defined but not referenced by anything
-- **Strict mode**: optionally exit non-zero on any inactive sync
+- **Strictness control**: three modes (`ignore-none`, `ignore-inactive`, `ignore-all`) to control how preflight errors affect the exit code
 
 ## Configuration
 

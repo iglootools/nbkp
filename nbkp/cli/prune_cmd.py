@@ -7,12 +7,12 @@ from typing import Annotated, Optional
 
 import typer
 
-from ..config import NetworkType
-from ..output import OutputFormat
+from ..config.epresolution import NetworkType
 from ..sync.output import print_human_prune_results
 from ..sync.pruner import prune_all_syncs
 from .app import app
 from .common import (
+    OutputFormat,
     check_all_with_progress,
     load_config_or_exit,
     resolve_endpoints,
@@ -66,7 +66,7 @@ def prune(
     cfg = load_config_or_exit(config)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
-    _, sync_statuses = check_all_with_progress(
+    preflight = check_all_with_progress(
         cfg,
         use_progress=output_format is OutputFormat.HUMAN,
         resolved_endpoints=resolved,
@@ -74,7 +74,7 @@ def prune(
 
     results = prune_all_syncs(
         cfg,
-        sync_statuses,
+        preflight.sync_statuses,
         dry_run=dry_run,
         only_syncs=sync,
         resolved_endpoints=resolved,

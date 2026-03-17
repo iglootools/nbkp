@@ -1,7 +1,7 @@
 """Configuration protocol models."""
 
 from .base import Slug, _BaseModel
-from .config import Config
+from .config import Config, CredentialProvider
 from .ssh_endpoint import SshConnectionOptions, SshEndpoint
 from .sync import RsyncOptions, SyncConfig
 from .sync_endpoint import (
@@ -10,13 +10,24 @@ from .sync_endpoint import (
     SnapshotMode,
     SyncEndpoint,
 )
-from .volume import LocalVolume, RemoteVolume, Volume
+from .volume import (
+    EncryptionConfig,
+    LocalVolume,
+    LuksEncryptionConfig,
+    MountConfig,
+    RemoteVolume,
+    Volume,
+)
 
 __all__ = [
     "BtrfsSnapshotConfig",
     "Config",
+    "CredentialProvider",
+    "EncryptionConfig",
     "HardLinkSnapshotConfig",
     "LocalVolume",
+    "LuksEncryptionConfig",
+    "MountConfig",
     "RemoteVolume",
     "RsyncOptions",
     "Slug",

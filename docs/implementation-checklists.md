@@ -2,6 +2,9 @@
 
 These checklists serve as a reminder for things to check when implementing new features or making changes to the codebase. 
 
+## Conventions
+- Follow the [coding conventions](./conventions.md)
+
 ## Build and CI
 - Keep Github workflows and mise tasks in sync with each other
 

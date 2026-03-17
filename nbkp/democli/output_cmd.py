@@ -20,12 +20,8 @@ from ..ordering.output import (
     print_mermaid_ascii_graph,
     print_rich_tree_graph,
 )
-from ..output import (
-    print_config_error,
-    print_human_check,
-    print_human_config,
-    print_human_troubleshoot,
-)
+from ..config.output import print_config_error, print_human_config
+from ..preflight.output import print_human_check, print_human_troubleshoot
 from ..remote.resolution import resolve_all_endpoints
 from ..sync.output import (
     print_human_prune_results,
@@ -114,10 +110,11 @@ def _show_check() -> None:
     console, buf = _capture_console()
     config = check_config()
     re = resolve_all_endpoints(config)
-    vol_statuses, sync_statuses = check_data(config)
+    preflight = check_data(config)
     print_human_check(
-        vol_statuses,
-        sync_statuses,
+        preflight.ssh_endpoint_statuses,
+        preflight.volume_statuses,
+        preflight.sync_statuses,
         config,
         console=console,
         resolved_endpoints=re,
@@ -130,9 +127,9 @@ def _show_run_preview() -> None:
     console, buf = _capture_console()
     config = check_config()
     re = resolve_all_endpoints(config)
-    _vol_statuses, sync_statuses = check_data(config)
+    preflight = check_data(config)
     print_run_preview(
-        sync_statuses,
+        preflight.sync_statuses,
         config,
         console=console,
         resolved_endpoints=re,
@@ -172,10 +169,11 @@ def _show_troubleshoot() -> None:
     console, buf = _capture_console()
     config = troubleshoot_config()
     re = resolve_all_endpoints(config)
-    vol_statuses, sync_statuses = troubleshoot_data(config)
+    preflight = troubleshoot_data(config)
     print_human_troubleshoot(
-        vol_statuses,
-        sync_statuses,
+        preflight.ssh_endpoint_statuses,
+        preflight.volume_statuses,
+        preflight.sync_statuses,
         config,
         console=console,
         resolved_endpoints=re,

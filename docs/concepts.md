@@ -19,6 +19,8 @@ Volumes are defined once and shared across multiple sync endpoints.
 
 **Path normalization** — All volume paths and sync endpoint subdirectories are normalized at config load time: trailing slashes are stripped so that `path: /mnt/data/` and `path: /mnt/data` are equivalent. For local volumes, `~` is expanded to the current user's home directory (e.g. `path: ~/data` becomes `/home/user/data`). Note that bare `~` must be quoted in YAML (`path: "~"`) because YAML interprets unquoted `~` as `null`. Remote volume paths are not subject to `~` expansion because the tilde refers to the remote user's home directory, and expansion is handled by SSH/rsync on the remote side.
 
+**Mount management** — Volumes can optionally declare a `mount` section to automate the mount/umount lifecycle. See [Volume Mount Management](#volume-mount-management) for details.
+
 ### SSH Endpoints
 
 An SSH endpoint defines connection details for a remote host: hostname, port, user, key, proxy-jump configuration, and structured connection options. Endpoints are defined once and referenced by remote volumes.
@@ -117,6 +119,30 @@ The `latest` symlink is only updated after a successful sync. If a sync fails mi
 
 When `latest` is used as a **source** (in chained syncs), `latest → /dev/null` is accepted only when an enabled upstream sync writes to that endpoint. Otherwise, it is flagged as an error during pre-flight checks.
 
+### Volume Mount Management
+
+Volumes can optionally declare a `mount` section to automate the mount/umount lifecycle. This is useful for removable drives (encrypted or not) that need to be mounted before syncing and umounted afterward.
+
+**Mount config** — The `mount` section specifies a `device-uuid` for drive detection (via `/dev/disk/by-uuid/`) and an optional `encryption` block for LUKS-encrypted volumes. The `device-uuid` is the LUKS container UUID for encrypted volumes, or the filesystem UUID for unencrypted volumes.
+
+**Encrypted volumes** — For LUKS-encrypted volumes, the `encryption` block specifies a `mapper-name` (device mapper name, e.g. `seagate8tb`) and a `passphrase-id` (credential lookup key). The attach command is `sudo systemd-cryptsetup attach <mapper> /dev/disk/by-uuid/<uuid> /dev/stdin luks`, with the passphrase piped via stdin.
+
+**Unencrypted volumes** — For unencrypted volumes, only `device-uuid` is needed. The mount command is `systemctl start <mount-unit>`, where the mount unit is derived from the volume path via `systemd-escape --path`.
+
+**Credential providers** — LUKS passphrases are retrieved using the configured `credential-provider`:
+- **keyring** (default): `keyring.get_password("nbkp", passphrase_id)` — uses macOS Keychain or Linux SecretService. Store via `keyring set nbkp <passphrase-id>`.
+- **prompt**: interactive password prompt via Typer's hidden input.
+- **env**: reads `NBKP_PASSPHRASE_<ID>` environment variable (uppercased, hyphens replaced with underscores).
+- **command**: runs a configurable command template (e.g. `["pass", "show", "nbkp/{id}"]`) with `{id}` replaced by the passphrase-id.
+
+Passphrases are cached in memory during a single run, so the user is only prompted once per unique passphrase-id even if multiple volumes share it.
+
+**Lifecycle** — The `run`, `check`, and `troubleshoot` commands mount volumes before running and umount in a `finally` block (even on failure). Mount is idempotent: already-attached and already-mounted volumes are skipped. Umount always attempts to umount and close LUKS for all volumes with mount config, regardless of who mounted them — this avoids fragile action tracking across failed/restarted runs.
+
+**Authorization** — Mount management uses polkit for `systemctl start/stop` (D-Bus authorization) and sudoers NOPASSWD for `sudo systemd-cryptsetup attach`. The `config setup-auth` command generates both rule files for review and manual installation.
+
+**Shell script limitation** — Mount management is excluded from `sh` script generation because credential retrieval depends on Python-specific backends (keyring, prompt). Volumes with mount config must be manually mounted/umounted before/after running the generated script.
+
 ### Pre-flight Checks
 
 Before running any sync, nbkp validates that all required infrastructure is in place. The `check` command runs these validations independently; the `run` command runs them before executing syncs.
@@ -129,9 +155,31 @@ Checks include:
 - **Btrfs readiness** — Correct filesystem type, subvolume existence, mount options, required directories
 - **Hard-link readiness** — Filesystem hard-link support, required directory structure
 - **`latest` symlink validity** — Must exist and point to `/dev/null` or an existing snapshot (see [The `latest` Symlink](#the-latest-symlink))
-- **Strict mode** — Optionally exit non-zero on any inactive sync
+- **Mount infrastructure** — For volumes with mount config: systemctl/systemd-escape availability, mount unit configured in systemd (fstab/native .mount), mount unit What/Where match nbkp config, polkit rules. For encrypted volumes: cryptsetup/systemd-cryptsetup availability, cryptsetup service configured, sudoers rules.
+- **Strictness mode** — See below
 
 The `troubleshoot` command runs the same checks and displays step-by-step remediation instructions for each failure.
+
+#### Strictness
+
+Pre-flight checks distinguish between two categories of errors:
+
+- **Inactive errors** — Missing sentinel files (`.nbkp-vol`, `.nbkp-src`, `.nbkp-dst`), unavailable volumes, and pending snapshots in dry-run mode. These represent expected situations where a sync is not ready to run (e.g. a removable drive is not plugged in, a remote host is unreachable, or a volume is not mounted at the expected path).
+- **Infrastructure errors** — Everything else: missing rsync, wrong filesystem type, broken symlinks, misconfigured systemd units, etc. These indicate real problems that need fixing.
+
+The `--strictness` flag controls how preflight errors affect the exit code:
+
+| | `ignore-inactive` (default) | `ignore-none` | `ignore-all` |
+|---|---|---|---|
+| **Inactive errors** | Sync is silently skipped; other syncs still run | Fatal — aborts the entire run before any sync executes | Ignored |
+| **Infrastructure errors** | Fatal | Fatal | Ignored |
+| **Exit code** | 0 if only inactive syncs were skipped | 1 if any sync is inactive | 0 unless sync execution itself fails |
+
+**`ignore-inactive`** (default) is designed for configs that include syncs which are not always runnable — for example, a backup to a USB drive that is only connected on weekends, or a remote server that is only reachable from a specific network. The run succeeds as long as all *active* syncs complete, and inactive ones are skipped without noise.
+
+**`ignore-none`** is useful for scheduled/automated runs where every sync is expected to be active. A missing sentinel or unreachable volume likely indicates a problem (drive not mounted, server down) rather than an expected absence, and the operator wants to be alerted.
+
+**`ignore-all`** ignores all preflight errors — only sync execution failures cause a non-zero exit. This can be useful when you want to attempt syncs regardless of preflight check results.
 
 ### Sync Dependencies and Execution Order
 
@@ -172,3 +220,97 @@ The `sh` command compiles a config into a self-contained bash script that reprod
 ### Outputs
 
 All commands support both human-readable output (Rich-formatted tables, spinners, progress bars) and machine-readable JSON output for scripting and automation. The `run` command additionally supports four progress display modes: `none`, `overall`, `per-file`, and `full`.
+
+## External Commands Reference
+
+This section documents every external command nbkp invokes on local or remote hosts, organized by category. This gives users full visibility into what nbkp does on their system.
+
+### Preflight checks
+
+| Command | Purpose |
+|---|---|
+| `test -f <path>` | Sentinel file existence (`.nbkp-vol`, `.nbkp-src`, `.nbkp-dst`) |
+| `test -d <path>` | Directory existence |
+| `test -w <path>` | Directory writability |
+| `test -L <path>` | Symlink existence (`latest`) |
+| `test -e /dev/disk/by-uuid/<UUID>` | Drive detection (mount management) |
+| `test -b /dev/mapper/<name>` | LUKS device unlocked check |
+| `which <command>` | Command availability (rsync, btrfs, stat, findmnt, systemctl, systemd-escape, cryptsetup) |
+| `rsync --version` | Rsync version check (>= 3.0, reject macOS openrsync) |
+| `stat -f -c %T <path>` | Detect btrfs filesystem type |
+| `stat -c %i <path>` | Check btrfs subvolume (inode == 256) |
+| `findmnt -T <path> -n -o OPTIONS` | Check btrfs mount options (e.g. `user_subvol_rm_allowed`) |
+| `readlink <path>` | Read `latest` symlink target |
+| `systemd-escape --path <path>` | Derive mount unit name from volume path |
+| `systemctl is-active <mount-unit> --quiet` | Check if volume is mounted |
+| `systemctl cat <unit>` | Check if systemd unit is known (mount unit, cryptsetup service) |
+| `systemctl show <unit> -p <props> --no-pager` | Read systemd unit properties (What, Where, ExecStart) |
+
+### Rsync synchronization
+
+| Command | Purpose |
+|---|---|
+| `rsync -a --delete --delete-excluded --partial-dir=.rsync-partial --safe-links --checksum ...` | Data sync with default flags |
+| `--filter=H .nbkp-*` / `--filter=P .nbkp-*` | Hide/protect sentinel files during transfer |
+| `--compress`, `--checksum` | Optional per-sync flags |
+| `--link-dest=<prev-snapshot>` | Hard-link snapshots: reference previous snapshot for deduplication |
+| `-e ssh ...` | SSH transport for remote syncs |
+
+### Btrfs snapshot operations
+
+| Command | Purpose |
+|---|---|
+| `btrfs subvolume snapshot -r <staging> <snapshots/timestamp>` | Create read-only snapshot |
+| `btrfs property set <snapshot> ro false` | Make snapshot writable (for deletion) |
+| `btrfs subvolume delete <snapshot>` | Delete snapshot |
+
+### Hard-link snapshot operations
+
+| Command | Purpose |
+|---|---|
+| `mkdir -p <snapshots/timestamp>` | Create snapshot directory |
+| `rm -rf <snapshot>` | Delete snapshot directory (remote only; local uses Python `shutil.rmtree`) |
+| `ls <snapshots/>` | List snapshots for pruning/ordering |
+
+### Symlink management
+
+| Command | Purpose |
+|---|---|
+| `readlink <latest>` | Read current latest snapshot |
+| `ln -sfn <target> <latest>` | Update latest symlink (remote only; local uses Python `pathlib`) |
+
+### Mount management (systemd strategy)
+
+| Command | Purpose |
+|---|---|
+| `sudo <systemd-cryptsetup-path> attach <mapper> /dev/disk/by-uuid/<uuid> /dev/stdin luks` | Attach LUKS volume (passphrase piped via stdin) |
+| `systemctl start <mount-unit>` | Mount volume |
+| `systemctl stop <mount-unit>` | Umount volume |
+| `systemctl stop systemd-cryptsetup@<mapper>.service` | Close LUKS volume |
+
+### Mount management (direct strategy)
+
+| Command | Purpose |
+|---|---|
+| `sudo cryptsetup open --type luks /dev/disk/by-uuid/<uuid> <mapper> -` | Attach LUKS volume (passphrase read from stdin via `-` key-file argument) |
+| `sudo mount <volume-path>` | Mount volume (device and options from fstab) |
+| `sudo umount <volume-path>` | Umount volume |
+| `sudo cryptsetup close <mapper>` | Close LUKS volume |
+
+### SSH transport
+
+SSH arguments are constructed dynamically per endpoint. Common options:
+
+| Option | Purpose |
+|---|---|
+| `-o ConnectTimeout=X` | Connection timeout |
+| `-o BatchMode=yes` | Disable interactive prompts |
+| `-o Compression=yes` | Enable SSH compression |
+| `-o ServerAliveInterval=X` | Keepalive interval |
+| `-o StrictHostKeyChecking=no` | Disable host key verification (when configured) |
+| `-o UserKnownHostsFile=X` | Custom known hosts file |
+| `-o LogLevel=ERROR` | Suppress SSH warnings |
+| `-o ForwardAgent=yes` | Forward SSH agent |
+| `-p PORT` | Custom SSH port |
+| `-i KEY_FILE` | SSH identity file |
+| `-o ProxyCommand=...` | Proxy jump chains |

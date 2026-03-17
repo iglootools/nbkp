@@ -16,8 +16,8 @@ from nbkp.config import (
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
-    resolve_all_endpoints,
 )
+from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.sync.rsync import ProgressMode, build_rsync_command, run_rsync
 from nbkp.sync.snapshots.common import create_snapshot_timestamp
 

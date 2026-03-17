@@ -11,11 +11,11 @@ from ..config import (
     Config,
     LocalVolume,
     RemoteVolume,
-    ResolvedEndpoints,
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
 )
+from ..config.epresolution import ResolvedEndpoints
 from ..remote import (
     build_ssh_base_args,
     build_ssh_e_option,

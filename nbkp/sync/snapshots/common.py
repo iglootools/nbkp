@@ -5,7 +5,6 @@ Items shared by both hard-link and btrfs snapshot backends.
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -14,12 +13,13 @@ from ...config import (
     Config,
     LocalVolume,
     RemoteVolume,
-    ResolvedEndpoints,
     SyncConfig,
     Volume,
 )
+from ...config.epresolution import ResolvedEndpoints
 from ...fsprotocol import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR, Snapshot
 from ...remote import run_remote_command
+from ...remote.dispatch import run_on_volume
 
 
 def create_snapshot_timestamp(
@@ -46,20 +46,6 @@ def resolve_dest_path(sync: SyncConfig, config: Config) -> str:
         return vol.path
 
 
-def _run_on_volume(
-    cmd: list[str],
-    volume: Volume,
-    resolved_endpoints: ResolvedEndpoints,
-) -> subprocess.CompletedProcess[str]:
-    """Run a command on the volume's host (local or remote)."""
-    match volume:
-        case RemoteVolume():
-            ep = resolved_endpoints[volume.slug]
-            return run_remote_command(ep.server, cmd, ep.proxy_chain)
-        case LocalVolume():
-            return subprocess.run(cmd, capture_output=True, text=True)
-
-
 def list_snapshots(
     sync: SyncConfig,
     config: Config,
@@ -71,7 +57,7 @@ def list_snapshots(
     snapshots_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
     dst = config.destination_endpoint(sync)
     dst_vol = config.volumes[dst.volume]
-    result = _run_on_volume(["ls", snapshots_dir], dst_vol, re)
+    result = run_on_volume(["ls", snapshots_dir], dst_vol, re)
 
     if result.returncode != 0 or not result.stdout.strip():
         return []
@@ -165,6 +151,6 @@ def update_latest_symlink(
             p.unlink(missing_ok=True)
             p.symlink_to(target)
         case RemoteVolume():
-            result = _run_on_volume(["ln", "-sfn", target, latest_path], dst_vol, re)
+            result = run_on_volume(["ln", "-sfn", target, latest_path], dst_vol, re)
             if result.returncode != 0:
                 raise RuntimeError(f"symlink update failed: {result.stderr}")

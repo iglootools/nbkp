@@ -22,10 +22,10 @@ from .config import (
     Config,
     LocalVolume,
     RemoteVolume,
-    ResolvedEndpoints,
     SshEndpoint,
     SyncConfig,
 )
+from .config.epresolution import ResolvedEndpoints
 from .fsprotocol import (
     DESTINATION_SENTINEL,
     LATEST_LINK,

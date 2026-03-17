@@ -35,8 +35,12 @@ pause() { sleep "${1:-2}"; }
 rm -rf "$DEMO_DIR"
 
 p "# Seed demo data"
-pe "nbkp demo seed --base-dir $DEMO_DIR --docker"
+pe "nbkp demo seed --base-dir $DEMO_DIR --docker --luks --credential-provider env"
 pause
+
+p "# Configure the passphrase (in non-demo env, this would be a one-time setup step using the system keyring)"
+pe "export NBKP_PASSPHRASE_TEST_LUKS=test-passphrase"
+pause 3
 
 p "# Show parsed configuration"
 pe "nbkp config show --config $CFG"
@@ -62,9 +66,25 @@ p "# Generate standalone bash script"
 pe "nbkp sh --config $CFG -o $SH"
 pause
 
+p "# Mount the volumes (the standalone bash script does not handle volume management)"
+pe "nbkp volumes mount --config $CFG"
+pause
+
+p "# Show the status of the volumes"
+pe "nbkp volumes status --config $CFG"
+pause 3
+
 p "# Validate and run the generated script"
 pe "bash -n $SH"
 pe "$SH --dry-run"
 pause 3
 pe "$SH"
+pause 3
+
+p "# Unmount the volumes"
+pe "nbkp volumes umount --config $CFG"
+pause
+
+p "# The volume is not unmounted"
+pe "nbkp volumes status --config $CFG"
 pause 3

@@ -1,4 +1,9 @@
-"""Integration tests: remote-to-local sync (Docker)."""
+"""Integration tests: subdir-to-subdir endpoint mapping (Docker).
+
+Basic rsync for all direction combinations is covered by
+``e2e_docker/test_pipeline``.  These tests isolate subdir mapping
+for local-to-remote and remote-to-local syncs.
+"""
 
 from __future__ import annotations
 
@@ -11,8 +16,8 @@ from nbkp.config import (
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
-    resolve_all_endpoints,
 )
+from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.sync.rsync import run_rsync
 from nbkp.remote.testkit.docker import REMOTE_BACKUP_PATH
 from nbkp.sync.testkit.seed import create_seed_sentinels
@@ -20,23 +25,18 @@ from nbkp.sync.testkit.seed import create_seed_sentinels
 from tests._docker_fixtures import assert_sentinels_after_sync, ssh_exec
 
 
-class TestRemoteToLocal:
-    def test_sync_from_container(
+class TestSubdirSync:
+    def test_local_to_remote_with_subdir(
         self,
         tmp_path: Path,
         docker_ssh_endpoint: SshEndpoint,
         docker_remote_volume: RemoteVolume,
     ) -> None:
-        # Create test file on remote source
-        ssh_exec(
-            docker_ssh_endpoint,
-            f"echo 'hello from remote' > {REMOTE_BACKUP_PATH}/remote-file.txt",
-        )
+        src_dir = tmp_path / "src" / "photos"
+        src_dir.mkdir(parents=True)
+        (src_dir / "img.jpg").write_text("image-data")
 
-        dst_dir = tmp_path / "dst"
-        dst_dir.mkdir()
-
-        dst_vol = LocalVolume(slug="dst", path=str(dst_dir))
+        src_vol = LocalVolume(slug="src", path=str(tmp_path / "src"))
         sync = SyncConfig(
             slug="test-sync",
             source="ep-src",
@@ -44,10 +44,14 @@ class TestRemoteToLocal:
         )
         config = Config(
             ssh_endpoints={"test-server": docker_ssh_endpoint},
-            volumes={"src": docker_remote_volume, "dst": dst_vol},
+            volumes={"src": src_vol, "dst": docker_remote_volume},
             sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="photos"),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="dst",
+                    subdir="photos-backup",
+                ),
             },
             syncs={"test-sync": sync},
         )
@@ -58,27 +62,24 @@ class TestRemoteToLocal:
         create_seed_sentinels(config, remote_exec=_run_remote)
 
         resolved = resolve_all_endpoints(config)
-        result = run_rsync(
-            sync,
-            config,
-            resolved_endpoints=resolved,
-        )
+        result = run_rsync(sync, config, resolved_endpoints=resolved)
         assert result.returncode == 0
 
-        # Verify file arrived locally
-        local_file = dst_dir / "remote-file.txt"
-        assert local_file.exists()
-        assert local_file.read_text().strip() == "hello from remote"
+        check = ssh_exec(
+            docker_ssh_endpoint,
+            f"cat {REMOTE_BACKUP_PATH}/photos-backup/img.jpg",
+        )
+        assert check.returncode == 0
+        assert check.stdout.strip() == "image-data"
 
         assert_sentinels_after_sync(sync, config, docker_ssh_endpoint)
 
-    def test_sync_with_subdir(
+    def test_remote_to_local_with_subdir(
         self,
         tmp_path: Path,
         docker_ssh_endpoint: SshEndpoint,
         docker_remote_volume: RemoteVolume,
     ) -> None:
-        # Create test file in a subdir on remote source
         ssh_exec(
             docker_ssh_endpoint,
             f"mkdir -p {REMOTE_BACKUP_PATH}/photos",
@@ -117,11 +118,7 @@ class TestRemoteToLocal:
         create_seed_sentinels(config, remote_exec=_run_remote)
 
         resolved = resolve_all_endpoints(config)
-        result = run_rsync(
-            sync,
-            config,
-            resolved_endpoints=resolved,
-        )
+        result = run_rsync(sync, config, resolved_endpoints=resolved)
         assert result.returncode == 0
 
         local_file = dst_dir / "photos-backup" / "img.jpg"

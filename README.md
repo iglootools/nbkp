@@ -8,14 +8,14 @@
 ![License](https://img.shields.io/github/license/iglootools/nbkp)
 ![CI Status](https://github.com/iglootools/nbkp/actions/workflows/test.yml/badge.svg?branch=main)
 
-An rsync-based backup tool for nomadic setups where sources and destinations aren't always available — laptops on the move, removable drives, 
+A Linux-and-macOS-compatible rsync-based backup tool for nomadic setups where sources and destinations aren't always available — laptops on the move, removable drives, 
 home servers behind changing networks. 
 
 Sentinel files ensure backups only run when volumes are genuinely present, with optional btrfs or hard-link snapshots for point-in-time recovery.
 
 Files are backed up as-is in plain directories: no obscure storage formats and restoring is just a copy.
 
-[![asciicast](https://asciinema.org/a/jeLLTkjxU72mFoEJ.svg)](https://asciinema.org/a/jeLLTkjxU72mFoEJ)
+[![asciicast](https://asciinema.org/a/6qJOTvgeIZbj2P2T.svg)](https://asciinema.org/a/6qJOTvgeIZbj2P2T)
 
 ## Installation
 
@@ -40,6 +40,7 @@ It replaces the rsync shell scripts you'd normally maintain, adding:
 - **Btrfs and hard-link snapshots** — keeps point-in-time copies so a bad sync can't wipe good backups
 - **Declarative config** — one YAML file describes all your backup pairs
 - **Structured output** — human-readable for convenience and JSON output for scripting and automation
+- **Automatic LUKS and volume activation** — automatically mount and unlock volumes before syncs, and unmount and lock them afterward, using credentials from the system keyring on your laptop.
 
 Full feature list: [docs/features.md](https://github.com/iglootools/nbkp/blob/main/docs/features.md).
 
@@ -64,8 +65,6 @@ If you need server-to-server replication:
 - No Windows support -- Haven't used it for decades, so no idea wether Cygwin is still a thing, if WSL could work, 
   or if there is a completely different rsync-like ecosystem that's the preferred way of performing backups.
 - No cloud backends -- local and SSH only. Might explore [rclone](https://rclone.org/) integration down the road.
-- No built-in encryption -- just slap a LUKS volume underneath.
-  I'd like to integrate LUKS management someday so you don't have to manually unlock and mount every time, but that's out of scope for now.
 - No bidirectional sync -- one-way rsync, on purpose. It could be interesting to explore [unison](https://www.cis.upenn.edu/~bcpierce/unison/) 
   integration for bidirectional syncs, but I don't have a use case for it for now.
 - Not designed for always-on server-to-server replication (though you can deploy a generated shell script on a server for that).

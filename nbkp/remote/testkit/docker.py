@@ -5,6 +5,7 @@ from __future__ import annotations
 import socket
 import subprocess
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import docker as dockerlib
@@ -14,6 +15,13 @@ import typer
 from ...config import SshConnectionOptions, SshEndpoint
 from ...fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
 from ...remote.fabricssh import run_remote_command
+from .constants import (  # noqa: F401
+    LUKS_MAPPER_NAME,
+    LUKS_PASSPHRASE,
+    REMOTE_BACKUP_PATH,
+    REMOTE_BTRFS_PATH,
+    REMOTE_BTRFS_ENCRYPTED_PATH,
+)
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"
 STORAGE_CONTAINER_NAME = "nbkp-demo"
@@ -21,11 +29,16 @@ BASTION_CONTAINER_NAME = "nbkp-demo-bastion"
 _IMAGE_TAG = "nbkp-demo-server:latest"
 _NETWORK_NAME = "nbkp-demo-net"
 
-# ── Standard remote paths inside the test container ──────────
-
-REMOTE_BACKUP_PATH = "/srv/backups"
-REMOTE_BTRFS_PATH = "/srv/btrfs-backups"
 SSH_AUTHORIZED_KEYS_PATH = "/mnt/ssh-authorized-keys"
+
+
+@dataclass(frozen=True)
+class LuksMetadata:
+    """LUKS setup metadata read from the test container."""
+
+    available: bool
+    uuid: str | None = None
+    loop_device: str | None = None
 
 
 # ── SSH endpoint factory ─────────────────────────────────────
@@ -176,6 +189,13 @@ def start_storage_container(
         name=STORAGE_CONTAINER_NAME,
         privileged=True,
         ports={"22/tcp": None},
+        environment={
+            "NBKP_BACKUP_PATH": REMOTE_BACKUP_PATH,
+            "NBKP_BTRFS_PATH": REMOTE_BTRFS_PATH,
+            "NBKP_BTRFS_ENCRYPTED_PATH": REMOTE_BTRFS_ENCRYPTED_PATH,
+            "NBKP_LUKS_PASSPHRASE": LUKS_PASSPHRASE,
+            "NBKP_LUKS_MAPPER_NAME": LUKS_MAPPER_NAME,
+        },
         volumes={
             str(pub_key): {
                 "bind": SSH_AUTHORIZED_KEYS_PATH,
@@ -307,3 +327,33 @@ def prepare_hardlinks_snapshot_based_backup_dst(
     Creates the ``snapshots`` directory under *path*.
     """
     ssh_exec(server, f"mkdir -p {path}/{SNAPSHOTS_DIR}")
+
+
+# ── LUKS helpers ─────────────────────────────────────────────
+#
+# The Docker test container runs sshd as PID 1 (not systemd).
+# Tests use ``DirectMountStrategy`` and the production lifecycle
+# functions (``mount_volume`` / ``umount_volume``) for LUKS
+# operations.  Only ``read_luks_metadata`` remains here as
+# infrastructure for fixture setup.
+
+
+def read_luks_metadata(server: SshEndpoint) -> LuksMetadata:
+    """Read LUKS setup metadata from the test container.
+
+    Returns ``LuksMetadata(available=False)`` if LUKS was not set up
+    (e.g. dm-crypt kernel module unavailable on the Docker host).
+    """
+    available_result = ssh_exec(
+        server, "cat /srv/luks-available 2>/dev/null || echo 0", check=False
+    )
+    if available_result.stdout.strip() != "1":
+        return LuksMetadata(available=False)
+    else:
+        uuid_result = ssh_exec(server, "cat /srv/luks-uuid")
+        loop_result = ssh_exec(server, "cat /srv/luks-loop-device")
+        return LuksMetadata(
+            available=True,
+            uuid=uuid_result.stdout.strip(),
+            loop_device=loop_result.stdout.strip(),
+        )

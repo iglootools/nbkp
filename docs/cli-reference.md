@@ -22,6 +22,7 @@ $ nbkp [OPTIONS] COMMAND [ARGS]...
 * `sh`: Compile the config into a self-contained...
 * `troubleshoot`: Run the same checks as `check` but...
 * `config`: Configuration commands
+* `volumes`: Volume mount management commands
 * `demo`: Demo CLI: sample output rendering and seed...
 
 ## `nbkp check`
@@ -38,10 +39,12 @@ $ nbkp check [OPTIONS]
 
 * `-c, --config TEXT`: Path to config file
 * `-o, --output [human|json]`: Output format  [default: human]
-* `--strict / --no-strict`: Exit non-zero on any inactive sync, including missing sentinels  [default: no-strict]
+* `-S, --strictness [ignore-none|ignore-inactive|ignore-all]`: How to handle preflight errors: ignore-none (all errors fatal), ignore-inactive (skip expected-inactive, default), ignore-all (ignore all errors)  [default: ignore-inactive]
 * `-l, --location TEXT`: Prefer endpoints at these locations
 * `-L, --exclude-location TEXT`: Exclude endpoints at these locations
 * `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--mount / --no-mount`: Mount/umount volumes with mount config before checking  [default: mount]
+* `--umount / --no-umount`: Umount after check (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
 
 ## `nbkp prune`
@@ -83,10 +86,12 @@ $ nbkp run [OPTIONS]
 * `-o, --output [human|json]`: Output format  [default: human]
 * `-p, --progress [none|overall|per-file|full]`: Progress mode: none, overall, per-file, or full
 * `--prune / --no-prune`: Prune old snapshots after sync  [default: prune]
-* `--strict / --no-strict`: Exit non-zero on any inactive sync, including missing sentinels  [default: no-strict]
+* `-S, --strictness [ignore-none|ignore-inactive|ignore-all]`: How to handle preflight errors: ignore-none (all errors fatal), ignore-inactive (skip expected-inactive, default), ignore-all (ignore all errors)  [default: ignore-inactive]
 * `-l, --location TEXT`: Prefer endpoints at these locations
 * `-L, --exclude-location TEXT`: Exclude endpoints at these locations
 * `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--mount / --no-mount`: Mount/umount volumes with mount config  [default: mount]
+* `--umount / --no-umount`: Umount after sync (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
 
 ## `nbkp sh`
@@ -130,6 +135,8 @@ $ nbkp troubleshoot [OPTIONS]
 * `-l, --location TEXT`: Prefer endpoints at these locations
 * `-L, --exclude-location TEXT`: Exclude endpoints at these locations
 * `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--mount / --no-mount`: Mount/umount volumes with mount config before checking  [default: mount]
+* `--umount / --no-umount`: Umount after check (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
 
 ## `nbkp config`
@@ -150,6 +157,8 @@ $ nbkp config [OPTIONS] COMMAND [ARGS]...
 
 * `show`: Load, validate, and render the config as...
 * `graph`: Display the backup chain as a graph.
+* `setup-auth`: Generate polkit and sudoers configuration...
+* `keyring-status`: Check whether LUKS passphrases are...
 
 ### `nbkp config show`
 
@@ -182,6 +191,118 @@ $ nbkp config graph [OPTIONS]
 * `-c, --config TEXT`: Path to config file
 * `-o, --output [human|json]`: Output format  [default: human]
 * `-f, --format [rich-tree|mermaid-ascii|mermaid]`: Graph format (human output only)  [default: rich-tree]
+* `--help`: Show this message and exit.
+
+### `nbkp config setup-auth`
+
+Generate polkit and sudoers configuration for mount management.
+
+**Usage**:
+
+```console
+$ nbkp config setup-auth [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config TEXT`: Path to config file
+* `-u, --user TEXT`: System user for auth rules  [default: ubuntu]
+* `--help`: Show this message and exit.
+
+### `nbkp config keyring-status`
+
+Check whether LUKS passphrases are available in the credential store.
+
+**Usage**:
+
+```console
+$ nbkp config keyring-status [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config TEXT`: Path to config file
+* `-o, --output [human|json]`: Output format  [default: human]
+* `--help`: Show this message and exit.
+
+## `nbkp volumes`
+
+Volume mount management commands
+
+**Usage**:
+
+```console
+$ nbkp volumes [OPTIONS] COMMAND [ARGS]...
+```
+
+**Options**:
+
+* `--help`: Show this message and exit.
+
+**Commands**:
+
+* `mount`: Attach LUKS and mount volumes.
+* `umount`: Umount volumes and close LUKS.
+* `status`: Show mount status for volumes with mount...
+
+### `nbkp volumes mount`
+
+Attach LUKS and mount volumes. Mounts all volumes with mount config, or specific ones via --name.
+
+**Usage**:
+
+```console
+$ nbkp volumes mount [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config TEXT`: Path to config file
+* `-o, --output [human|json]`: Output format  [default: human]
+* `-n, --name TEXT`: Volume name(s) to mount
+* `-l, --location TEXT`: Prefer endpoints at these locations
+* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
+* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--help`: Show this message and exit.
+
+### `nbkp volumes umount`
+
+Umount volumes and close LUKS. Umounts all volumes with mount config, or specific ones via --name.
+
+**Usage**:
+
+```console
+$ nbkp volumes umount [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config TEXT`: Path to config file
+* `-o, --output [human|json]`: Output format  [default: human]
+* `-n, --name TEXT`: Volume name(s) to umount
+* `-l, --location TEXT`: Prefer endpoints at these locations
+* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
+* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--help`: Show this message and exit.
+
+### `nbkp volumes status`
+
+Show mount status for volumes with mount config.
+
+**Usage**:
+
+```console
+$ nbkp volumes status [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config TEXT`: Path to config file
+* `-o, --output [human|json]`: Output format  [default: human]
+* `-n, --name TEXT`: Volume name(s) to check
+* `-l, --location TEXT`: Prefer endpoints at these locations
+* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
+* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
 * `--help`: Show this message and exit.
 
 ## `nbkp demo`
@@ -230,7 +351,9 @@ $ nbkp demo seed [OPTIONS]
 **Options**:
 
 * `--big-file-size INTEGER`: Size in MB for large files (e.g. 100, 1024). When set, large files are written at this size to slow down syncs. Set to 0 to disable.  [default: 1]
-* `--docker`: Start a Docker container for remote syncs.
+* `--docker / --no-docker`: Start a Docker container for remote syncs.  [default: docker]
+* `--luks / --no-luks`: Use LUKS-encrypted btrfs volume (requires --docker and dm-crypt kernel module).  [default: luks]
 * `--bandwidth-limit INTEGER`: Rsync bandwidth limit in KiB/s (e.g. 100 for ~100 KiB/s). Set to 0 to disable.  [default: 250]
+* `--credential-provider [keyring|prompt|env|command]`: How LUKS passphrases are retrieved at runtime. Only relevant when --luks is enabled.  [default: keyring]
 * `--base-dir PATH`: Use a fixed directory instead of a random temp folder. Created if it does not exist.
 * `--help`: Show this message and exit.

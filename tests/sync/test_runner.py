@@ -12,16 +12,125 @@ from nbkp.config import (
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
+    Volume,
 )
 from nbkp.preflight import (
+    DestinationEndpointDiagnostics,
+    DestinationEndpointError,
+    DestinationEndpointStatus,
+    SourceEndpointDiagnostics,
+    SourceEndpointError,
+    SourceEndpointStatus,
+    SshEndpointDiagnostics,
+    SshEndpointError,
+    SshEndpointStatus,
     SyncError,
     SyncStatus,
+    VolumeCapabilities,
     VolumeDiagnostics,
     VolumeError,
     VolumeStatus,
 )
 from nbkp.sync import run_all_syncs
 from nbkp.sync.runner import SyncOutcome
+
+
+def _active_ssh_status() -> SshEndpointStatus:
+    return SshEndpointStatus(
+        slug="localhost",
+        diagnostics=SshEndpointDiagnostics(),
+        errors=[],
+    )
+
+
+def _inactive_ssh_status() -> SshEndpointStatus:
+    return SshEndpointStatus(
+        slug="localhost",
+        diagnostics=SshEndpointDiagnostics(ssh_reachable=False),
+        errors=[SshEndpointError.UNREACHABLE],
+    )
+
+
+def _active_vol_status(name: str, vol: Volume) -> VolumeStatus:
+    return VolumeStatus(
+        slug=name,
+        config=vol,
+        ssh_endpoint_status=_active_ssh_status(),
+        diagnostics=VolumeDiagnostics(
+            capabilities=VolumeCapabilities(
+                sentinel_exists=True,
+                is_btrfs_filesystem=False,
+                hardlink_supported=True,
+                btrfs_user_subvol_rm=False,
+            ),
+        ),
+        errors=[],
+    )
+
+
+def _inactive_vol_status(name: str, vol: Volume) -> VolumeStatus:
+    return VolumeStatus(
+        slug=name,
+        config=vol,
+        ssh_endpoint_status=_inactive_ssh_status(),
+        diagnostics=None,
+        errors=[VolumeError.SSH_ENDPOINT_INACTIVE],
+    )
+
+
+def _active_src_ep_status(config: Config, sync: SyncConfig) -> SourceEndpointStatus:
+    ep = config.source_endpoint(sync)
+    vol = config.volumes[ep.volume]
+    return SourceEndpointStatus(
+        endpoint_slug=ep.slug,
+        volume_status=_active_vol_status(ep.volume, vol),
+        diagnostics=SourceEndpointDiagnostics(
+            endpoint_slug=ep.slug,
+            sentinel_exists=True,
+        ),
+        errors=[],
+    )
+
+
+def _active_dst_ep_status(
+    config: Config, sync: SyncConfig
+) -> DestinationEndpointStatus:
+    ep = config.destination_endpoint(sync)
+    vol = config.volumes[ep.volume]
+    return DestinationEndpointStatus(
+        endpoint_slug=ep.slug,
+        volume_status=_active_vol_status(ep.volume, vol),
+        diagnostics=DestinationEndpointDiagnostics(
+            endpoint_slug=ep.slug,
+            sentinel_exists=True,
+            endpoint_writable=True,
+        ),
+        errors=[],
+    )
+
+
+def _inactive_src_ep_status(config: Config, sync: SyncConfig) -> SourceEndpointStatus:
+    ep = config.source_endpoint(sync)
+    vol = config.volumes[ep.volume]
+    return SourceEndpointStatus(
+        endpoint_slug=ep.slug,
+        volume_status=_inactive_vol_status(ep.volume, vol),
+        diagnostics=None,
+        errors=[SourceEndpointError.VOLUME_INACTIVE],
+    )
+
+
+def _inactive_dst_ep_status(
+    config: Config, sync: SyncConfig
+) -> DestinationEndpointStatus:
+    ep = config.destination_endpoint(sync)
+    vol = config.volumes[ep.volume]
+    return DestinationEndpointStatus(
+        endpoint_slug=ep.slug,
+        volume_status=_inactive_vol_status(ep.volume, vol),
+        diagnostics=None,
+        errors=[DestinationEndpointError.VOLUME_INACTIVE],
+    )
 
 
 def _make_local_config() -> Config:
@@ -121,51 +230,36 @@ def _make_remote_same_server_btrfs_config() -> Config:
 def _active_statuses(
     config: Config,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
-    vol_statuses = {
-        name: VolumeStatus(
-            slug=name,
-            config=vol,
-            diagnostics=VolumeDiagnostics(),
-            errors=[],
-        )
-        for name, vol in config.volumes.items()
-    }
     sync_statuses = {
         name: SyncStatus(
             slug=name,
             config=sync,
-            source_status=vol_statuses[config.source_endpoint(sync).volume],
-            destination_status=vol_statuses[config.destination_endpoint(sync).volume],
+            source_endpoint_status=_active_src_ep_status(config, sync),
+            destination_endpoint_status=_active_dst_ep_status(config, sync),
             errors=[],
         )
         for name, sync in config.syncs.items()
     }
-    return vol_statuses, sync_statuses
+    return {}, sync_statuses
 
 
 def _inactive_statuses(
     config: Config,
 ) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
-    vol_statuses = {
-        name: VolumeStatus(
-            slug=name,
-            config=vol,
-            diagnostics=VolumeDiagnostics(ssh_reachable=False),
-            errors=[VolumeError.UNREACHABLE],
-        )
-        for name, vol in config.volumes.items()
-    }
     sync_statuses = {
         name: SyncStatus(
             slug=name,
             config=sync,
-            source_status=vol_statuses[config.source_endpoint(sync).volume],
-            destination_status=vol_statuses[config.destination_endpoint(sync).volume],
-            errors=[SyncError.SOURCE_UNAVAILABLE],
+            source_endpoint_status=_inactive_src_ep_status(config, sync),
+            destination_endpoint_status=_inactive_dst_ep_status(config, sync),
+            errors=[
+                SyncError.SOURCE_ENDPOINT_INACTIVE,
+                SyncError.DESTINATION_ENDPOINT_INACTIVE,
+            ],
         )
         for name, sync in config.syncs.items()
     }
-    return vol_statuses, sync_statuses
+    return {}, sync_statuses
 
 
 class TestRunAllSyncs:

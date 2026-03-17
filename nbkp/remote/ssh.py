@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING
 from ..config import SshConnectionOptions, SshEndpoint
 
 if TYPE_CHECKING:
-    from ..config import LocalVolume, RemoteVolume, ResolvedEndpoints
+    from ..config import LocalVolume, RemoteVolume
+    from ..config.epresolution import ResolvedEndpoints
 
 
 # Kept in `ssh` instead of `output` as this is core to remote command execution, not just display formatting.

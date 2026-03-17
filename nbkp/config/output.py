@@ -14,10 +14,11 @@ from . import (
     ConfigError,
     LocalVolume,
     RemoteVolume,
-    ResolvedEndpoints,
     SyncConfig,
     SyncEndpoint,
 )
+from .epresolution import ResolvedEndpoints
+from .protocol.volume import MountConfig
 
 
 def format_volume_display(
@@ -66,6 +67,23 @@ def endpoint_path(
         return vol.path
 
 
+def format_mount_summary(mount: MountConfig | None) -> str:
+    """Compact mount config summary for table display."""
+    if mount is None:
+        return ""
+    return " ".join(
+        [
+            f"uuid:{mount.device_uuid[:8]}\u2026",
+            f"strategy:{mount.strategy}",
+            *(
+                [f"luks:{mount.encryption.mapper_name}"]
+                if mount.encryption is not None
+                else []
+            ),
+        ]
+    )
+
+
 def _sync_endpoint_display(endpoint: SyncEndpoint) -> str:
     """Format a sync endpoint as volume or volume/subdir."""
     if endpoint.subdir:
@@ -96,16 +114,14 @@ def _sync_options(sync: SyncConfig, config: Config) -> str:
         opt
         for opt in [
             "rsync-filter" if sync.filters or sync.filter_file else "",
-            f"src-snapshots: {src_ep.snapshot_mode}"
+            f"src-snapshots:{src_ep.snapshot_mode}"
             if src_ep.snapshot_mode != "none"
             else "",
-            _snapshot_label(
-                "dst-snapshots: btrfs", dst_ep.btrfs_snapshots.max_snapshots
-            )
+            _snapshot_label("dst-snapshots:btrfs", dst_ep.btrfs_snapshots.max_snapshots)
             if dst_ep.btrfs_snapshots.enabled
             else "",
             _snapshot_label(
-                "dst-snapshots: hard-link",
+                "dst-snapshots:hard-link",
                 dst_ep.hard_link_snapshots.max_snapshots,
             )
             if dst_ep.hard_link_snapshots.enabled
@@ -160,6 +176,7 @@ def print_human_config(
     vol_table.add_column("Type")
     vol_table.add_column("SSH Endpoint")
     vol_table.add_column("URI")
+    vol_table.add_column("Mount Config")
 
     for vol in config.volumes.values():
         match vol:
@@ -175,6 +192,7 @@ def print_human_config(
             vol_type,
             ssh_ep,
             format_volume_display(vol, re),
+            format_mount_summary(vol.mount),
         )
 
     console.print(vol_table)
