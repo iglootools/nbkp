@@ -96,14 +96,15 @@ def setup_auth(
     cfg = load_config_or_exit(config)
     rules = generate_auth_rules(cfg, user)
 
-    if rules.polkit is None:
+    if rules.polkit is None and rules.sudoers is None:
         typer.echo("No volumes with mount config found.", err=True)
         raise typer.Exit(0)
 
-    typer.echo("# polkit rules")
-    typer.echo(f"# Install to: {POLKIT_RULES_PATH}")
-    typer.echo()
-    typer.echo(rules.polkit)
+    if rules.polkit is not None:
+        typer.echo("# polkit rules")
+        typer.echo(f"# Install to: {POLKIT_RULES_PATH}")
+        typer.echo()
+        typer.echo(rules.polkit)
 
     if rules.sudoers is not None:
         typer.echo("# sudoers rules")
