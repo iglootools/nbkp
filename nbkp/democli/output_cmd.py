@@ -110,8 +110,9 @@ def _show_check() -> None:
     console, buf = _capture_console()
     config = check_config()
     re = resolve_all_endpoints(config)
-    vol_statuses, sync_statuses = check_data(config)
+    ssh_statuses, vol_statuses, sync_statuses = check_data(config)
     print_human_check(
+        ssh_statuses,
         vol_statuses,
         sync_statuses,
         config,
@@ -126,7 +127,7 @@ def _show_run_preview() -> None:
     console, buf = _capture_console()
     config = check_config()
     re = resolve_all_endpoints(config)
-    _vol_statuses, sync_statuses = check_data(config)
+    _ssh_statuses, _vol_statuses, sync_statuses = check_data(config)
     print_run_preview(
         sync_statuses,
         config,
@@ -168,8 +169,9 @@ def _show_troubleshoot() -> None:
     console, buf = _capture_console()
     config = troubleshoot_config()
     re = resolve_all_endpoints(config)
-    vol_statuses, sync_statuses = troubleshoot_data(config)
+    ssh_statuses, vol_statuses, sync_statuses = troubleshoot_data(config)
     print_human_troubleshoot(
+        ssh_statuses,
         vol_statuses,
         sync_statuses,
         config,

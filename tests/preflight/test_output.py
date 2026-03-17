@@ -71,6 +71,16 @@ def _btrfs_config() -> Config:
     )
 
 
+def _ssh_statuses_from(
+    vol_statuses: dict[str, VolumeStatus],
+) -> dict[str, SshEndpointStatus]:
+    """Extract unique SSH endpoint statuses from volume statuses."""
+    return {
+        vs.ssh_endpoint_status.slug: vs.ssh_endpoint_status
+        for vs in vol_statuses.values()
+    }
+
+
 def _make_vol_statuses(
     config: Config,
     src_errors: list[VolumeError] | None = None,
@@ -153,6 +163,7 @@ class TestTroubleshootBtrfsStagingNotFound:
         }
         console, buf = _make_console()
         print_human_troubleshoot(
+            _ssh_statuses_from(vol_statuses),
             vol_statuses,
             sync_statuses,
             config,
@@ -176,6 +187,7 @@ class TestTroubleshootBtrfsStagingNotFound:
         }
         console, buf = _make_console()
         print_human_troubleshoot(
+            _ssh_statuses_from(vol_statuses),
             vol_statuses,
             sync_statuses,
             config,
@@ -198,6 +210,7 @@ class TestTroubleshootBtrfsStagingNotFound:
         }
         console, buf = _make_console()
         print_human_troubleshoot(
+            _ssh_statuses_from(vol_statuses),
             vol_statuses,
             sync_statuses,
             config,
@@ -213,6 +226,7 @@ class TestTroubleshootBtrfsStagingNotFound:
         sync_statuses = {"btrfs-sync": _make_sync_status(config, vol_statuses)}
         console, buf = _make_console()
         print_human_troubleshoot(
+            _ssh_statuses_from(vol_statuses),
             vol_statuses,
             sync_statuses,
             config,
@@ -268,6 +282,7 @@ class TestTroubleshootBtrfsStagingNotFound:
         }
         console, buf = _make_console()
         print_human_troubleshoot(
+            _ssh_statuses_from(vol_statuses),
             vol_statuses,
             sync_statuses,
             config,
@@ -291,6 +306,7 @@ class TestTroubleshootDryRunPendingSnapshot:
         }
         console, buf = _make_console()
         print_human_troubleshoot(
+            _ssh_statuses_from(vol_statuses),
             vol_statuses,
             sync_statuses,
             config,
@@ -337,6 +353,7 @@ class TestTroubleshootLocationExcluded:
         }
         console, buf = _make_console()
         print_human_troubleshoot(
+            _ssh_statuses_from(vol_statuses),
             vol_statuses,
             {},
             config,

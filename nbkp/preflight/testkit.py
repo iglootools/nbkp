@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ..fsprotocol import Snapshot
+from .output.formatting import collect_ssh_endpoint_statuses
 from . import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
@@ -247,7 +248,11 @@ def check_config() -> Config:
 
 def check_data(
     config: Config,
-) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
+) -> tuple[
+    dict[str, SshEndpointStatus],
+    dict[str, VolumeStatus],
+    dict[str, SyncStatus],
+]:
     """Volume and sync statuses with mixed active/inactive."""
     _local_caps = VolumeCapabilities(
         sentinel_exists=True,
@@ -448,7 +453,8 @@ def check_data(
         ),
     }
 
-    return vol_statuses, sync_statuses
+    ssh_statuses = collect_ssh_endpoint_statuses(vol_statuses, sync_statuses)
+    return ssh_statuses, vol_statuses, sync_statuses
 
 
 # ── troubleshoot_config / troubleshoot_data ───────────────────
@@ -1141,7 +1147,11 @@ def troubleshoot_config() -> Config:
 
 def troubleshoot_data(
     config: Config,
-) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
+) -> tuple[
+    dict[str, SshEndpointStatus],
+    dict[str, VolumeStatus],
+    dict[str, SyncStatus],
+]:
     """Statuses covering every VolumeError and SyncError.
 
     Errors are distributed across the 4-layer hierarchy:
@@ -2052,4 +2062,5 @@ def troubleshoot_data(
         errors=[SyncError.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM],
     )
 
-    return vol_statuses, sync_statuses
+    ssh_statuses = collect_ssh_endpoint_statuses(vol_statuses, sync_statuses)
+    return ssh_statuses, vol_statuses, sync_statuses

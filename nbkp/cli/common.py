@@ -29,6 +29,7 @@ from ..orchestration import managed_mount as _orchestration_managed_mount
 from ..config.output import print_config_error
 from ..preflight.output import print_human_check
 from ..preflight import (
+    SshEndpointStatus,
     SyncStatus,
     VolumeStatus,
     check_all_syncs,
@@ -41,7 +42,6 @@ class OutputFormat(str, enum.Enum):
 
     HUMAN = "human"
     JSON = "json"
-
 
 
 def load_config_or_exit(
@@ -138,7 +138,11 @@ def check_all_with_progress(
     resolved_endpoints: ResolvedEndpoints | None = None,
     dry_run: bool = False,
     mount_observations: dict[str, MountObservation] | None = None,
-) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
+) -> tuple[
+    dict[str, SshEndpointStatus],
+    dict[str, VolumeStatus],
+    dict[str, SyncStatus],
+]:
     """Run check_all_syncs with an optional progress bar."""
     from ..preflight import PreflightResult
 
@@ -174,7 +178,11 @@ def check_all_with_progress(
 
             result = _run(on_progress)
 
-    return result.volume_statuses, result.sync_statuses
+    return (
+        result.ssh_endpoint_statuses,
+        result.volume_statuses,
+        result.sync_statuses,
+    )
 
 
 def check_and_display(
@@ -196,7 +204,7 @@ def check_and_display(
     fatal errors.  When *only_syncs* is given, only those syncs
     (and the volumes they reference) are checked.
     """
-    vol_statuses, sync_statuses = check_all_with_progress(
+    ssh_statuses, vol_statuses, sync_statuses = check_all_with_progress(
         cfg,
         use_progress=output_format is OutputFormat.HUMAN,
         only_syncs=only_syncs,
@@ -207,6 +215,7 @@ def check_and_display(
 
     if output_format is OutputFormat.HUMAN:
         print_human_check(
+            ssh_statuses,
             vol_statuses,
             sync_statuses,
             cfg,

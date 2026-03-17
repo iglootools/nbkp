@@ -13,7 +13,13 @@ from typing import Any, Callable
 
 from ..config import Config
 from ..config.epresolution import ResolvedEndpoints
-from ..preflight import PreflightResult, SyncStatus, VolumeStatus, check_all_syncs
+from ..preflight import (
+    PreflightResult,
+    SshEndpointStatus,
+    SyncStatus,
+    VolumeStatus,
+    check_all_syncs,
+)
 from .rsync import ProgressMode
 from .runner import SyncResult, run_all_syncs
 
@@ -84,7 +90,15 @@ def check_and_run(
     prune: bool = True,
     on_check_progress: Callable[[str], None] | None = None,
     on_checks_done: (
-        Callable[[dict[str, VolumeStatus], dict[str, SyncStatus]], None] | None
+        Callable[
+            [
+                dict[str, SshEndpointStatus],
+                dict[str, VolumeStatus],
+                dict[str, SyncStatus],
+            ],
+            None,
+        ]
+        | None
     ) = None,
     on_rsync_output: Callable[[str], None] | None = None,
     on_sync_start: Callable[[str], None] | None = None,
@@ -121,7 +135,11 @@ def check_and_run(
     )
 
     if on_checks_done is not None:
-        on_checks_done(preflight.volume_statuses, preflight.sync_statuses)
+        on_checks_done(
+            preflight.ssh_endpoint_statuses,
+            preflight.volume_statuses,
+            preflight.sync_statuses,
+        )
 
     preflight_errors = has_fatal_errors(preflight.sync_statuses, strict=strict)
 

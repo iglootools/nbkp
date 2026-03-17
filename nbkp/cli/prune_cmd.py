@@ -66,7 +66,7 @@ def prune(
     cfg = load_config_or_exit(config)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
-    _, sync_statuses = check_all_with_progress(
+    _, _, sync_statuses = check_all_with_progress(
         cfg,
         use_progress=output_format is OutputFormat.HUMAN,
         resolved_endpoints=resolved,

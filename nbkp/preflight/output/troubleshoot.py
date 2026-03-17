@@ -47,7 +47,6 @@ from ..status import (
     VolumeError,
     VolumeStatus,
 )
-from .formatting import collect_ssh_endpoint_statuses
 
 
 # Cascade errors are pointers to inactive lower layers — they have no
@@ -888,6 +887,7 @@ def _print_sudoers_rules_missing_fix(
 
 
 def print_human_troubleshoot(
+    ssh_statuses: dict[str, SshEndpointStatus],
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
     config: Config,
@@ -908,8 +908,6 @@ def print_human_troubleshoot(
     has_issues = False
 
     # ── Layer 1: SSH Endpoints ────────────────────────────────
-    # Collect unique SSH endpoint statuses from volume statuses
-    ssh_statuses = collect_ssh_endpoint_statuses(vol_statuses, sync_statuses)
     failed_ssh = [s for s in ssh_statuses.values() if s.errors]
     for ssh_st in failed_ssh:
         has_issues = True

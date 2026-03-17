@@ -27,7 +27,6 @@ from ..status import (
 )
 from .formatting import (
     check,
-    collect_ssh_endpoint_statuses,
     format_capabilities,
     format_mount_status,
     join_text,
@@ -76,11 +75,7 @@ def _format_source_diagnostics(ss: SyncStatus) -> Text:
             if diag.snapshot_dirs is not None
             else []
         ),
-        *(
-            [_format_latest(diag.latest)]
-            if diag.latest is not None
-            else []
-        ),
+        *([_format_latest(diag.latest)] if diag.latest is not None else []),
     ]
     return join_text(items)
 
@@ -116,11 +111,7 @@ def _format_destination_diagnostics(ss: SyncStatus) -> Text:
             if diag.snapshot_dirs is not None
             else []
         ),
-        *(
-            [_format_latest(diag.latest)]
-            if diag.latest is not None
-            else []
-        ),
+        *([_format_latest(diag.latest)] if diag.latest is not None else []),
     ]
     return join_text(items)
 
@@ -258,13 +249,13 @@ def _build_orphan_warnings_section(
 
 
 def build_check_sections(
+    ssh_statuses: dict[str, SshEndpointStatus],
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
 ) -> list[RenderableType]:
     """Build renderable sections for check output."""
-    ssh_statuses = collect_ssh_endpoint_statuses(vol_statuses, sync_statuses)
     return [
         *_build_ssh_endpoints_section(config, ssh_statuses),
         *_build_volumes_section(vol_statuses, resolved_endpoints),
@@ -274,6 +265,7 @@ def build_check_sections(
 
 
 def print_human_check(
+    ssh_statuses: dict[str, SshEndpointStatus],
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
     config: Config,
@@ -287,7 +279,9 @@ def print_human_check(
     if console is None:
         console = Console()
 
-    sections = build_check_sections(vol_statuses, sync_statuses, config, re)
+    sections = build_check_sections(
+        ssh_statuses, vol_statuses, sync_statuses, config, re
+    )
 
     if wrap_in_panel:
         console.print(
