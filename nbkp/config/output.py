@@ -114,16 +114,14 @@ def _sync_options(sync: SyncConfig, config: Config) -> str:
         opt
         for opt in [
             "rsync-filter" if sync.filters or sync.filter_file else "",
-            f"src-snapshots: {src_ep.snapshot_mode}"
+            f"src-snapshots:{src_ep.snapshot_mode}"
             if src_ep.snapshot_mode != "none"
             else "",
-            _snapshot_label(
-                "dst-snapshots: btrfs", dst_ep.btrfs_snapshots.max_snapshots
-            )
+            _snapshot_label("dst-snapshots:btrfs", dst_ep.btrfs_snapshots.max_snapshots)
             if dst_ep.btrfs_snapshots.enabled
             else "",
             _snapshot_label(
-                "dst-snapshots: hard-link",
+                "dst-snapshots:hard-link",
                 dst_ep.hard_link_snapshots.max_snapshots,
             )
             if dst_ep.hard_link_snapshots.enabled

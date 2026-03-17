@@ -37,7 +37,6 @@ def status_text(
         return Text(f"\u2717inactive ({error_str})", style="red")
 
 
-
 def mount_capability_items(
     mount: MountCapabilities,
 ) -> list[tuple[bool | None, str | None]]:
