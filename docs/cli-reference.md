@@ -39,7 +39,7 @@ $ nbkp check [OPTIONS]
 
 * `-c, --config TEXT`: Path to config file
 * `-o, --output [human|json]`: Output format  [default: human]
-* `--strict / --no-strict`: Exit non-zero on any inactive sync, including missing sentinels  [default: no-strict]
+* `-S, --strictness [ignore-none|ignore-inactive|ignore-all]`: How to handle preflight errors: ignore-none (all errors fatal), ignore-inactive (skip expected-inactive, default), ignore-all (ignore all errors)  [default: ignore-inactive]
 * `-l, --location TEXT`: Prefer endpoints at these locations
 * `-L, --exclude-location TEXT`: Exclude endpoints at these locations
 * `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
@@ -86,7 +86,7 @@ $ nbkp run [OPTIONS]
 * `-o, --output [human|json]`: Output format  [default: human]
 * `-p, --progress [none|overall|per-file|full]`: Progress mode: none, overall, per-file, or full
 * `--prune / --no-prune`: Prune old snapshots after sync  [default: prune]
-* `--strict / --no-strict`: Exit non-zero on any inactive sync, including missing sentinels  [default: no-strict]
+* `-S, --strictness [ignore-none|ignore-inactive|ignore-all]`: How to handle preflight errors: ignore-none (all errors fatal), ignore-inactive (skip expected-inactive, default), ignore-all (ignore all errors)  [default: ignore-inactive]
 * `-l, --location TEXT`: Prefer endpoints at these locations
 * `-L, --exclude-location TEXT`: Exclude endpoints at these locations
 * `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints

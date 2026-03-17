@@ -38,7 +38,7 @@ from nbkp.config import (
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.testkit.docker import REMOTE_BACKUP_PATH
 from nbkp.orchestration import managed_mount
-from nbkp.sync.pipeline import check_and_run
+from nbkp.sync.pipeline import Strictness, check_and_run
 from nbkp.sync.runner import SyncOutcome
 
 from nbkp.sync.testkit.seed import build_chain_config
@@ -82,7 +82,7 @@ class TestChainSync:
             # 4–5. Preflight checks + run all syncs (production pipeline)
             pipeline = check_and_run(
                 config,
-                strict=True,
+                strictness=Strictness.IGNORE_NONE,
                 resolved_endpoints=resolved,
                 mount_observations=mount_observations,
             )
@@ -140,7 +140,7 @@ class TestChainSync:
             #    cause skips rather than a hard preflight failure
             pipeline = check_and_run(
                 config,
-                strict=False,
+                strictness=Strictness.IGNORE_INACTIVE,
                 resolved_endpoints=resolved,
                 mount_observations=mount_observations,
             )

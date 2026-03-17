@@ -16,7 +16,7 @@ from ..preflight import PreflightResult
 from ..preflight.output import print_human_check
 from ..sync import ProgressMode, SyncResult
 from ..sync.output import build_human_results_sections
-from ..sync.pipeline import check_and_run
+from ..sync.pipeline import Strictness, check_and_run
 from .app import app
 from .common import (
     CheckProgressBar,
@@ -61,13 +61,19 @@ def run(
             help="Prune old snapshots after sync",
         ),
     ] = True,
-    strict: Annotated[
-        bool,
+    strictness: Annotated[
+        Strictness,
         typer.Option(
-            "--strict/--no-strict",
-            help=("Exit non-zero on any inactive sync, including missing sentinels"),
+            "--strictness",
+            "-S",
+            help=(
+                "How to handle preflight errors:"
+                " ignore-none (all errors fatal),"
+                " ignore-inactive (skip expected-inactive, default),"
+                " ignore-all (ignore all errors)"
+            ),
         ),
-    ] = False,
+    ] = Strictness.IGNORE_INACTIVE,
     location: Annotated[
         Optional[list[str]],
         typer.Option(
@@ -178,7 +184,7 @@ def run(
         # ── Pipeline ──────────────────────────────────────────────
         pipeline = check_and_run(
             cfg,
-            strict=strict,
+            strictness=strictness,
             dry_run=dry_run,
             only_syncs=sync,
             progress=progress,
@@ -211,7 +217,7 @@ def run(
                         for slug, s in pipeline.sync_statuses.items()
                         if not s.active
                     }
-                    if strict
+                    if strictness is Strictness.IGNORE_NONE
                     else {
                         slug: sorted(e.value for e in s.errors)
                         for slug, s in pipeline.sync_statuses.items()

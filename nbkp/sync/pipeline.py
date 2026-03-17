@@ -8,6 +8,7 @@ caller's responsibility.
 
 from __future__ import annotations
 
+import enum
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -58,31 +59,48 @@ def is_expected_skip(
     return ss is not None and ss.is_expected_inactive()
 
 
+class Strictness(str, enum.Enum):
+    """Controls how preflight errors affect the exit code.
+
+    - ``IGNORE_NONE``: All errors are fatal — any inactive sync
+      (including missing sentinels) aborts the run.
+    - ``IGNORE_INACTIVE``: Expected-inactive errors (missing sentinels,
+      unreachable hosts) are silently skipped; infrastructure errors
+      are still fatal.  This is the default.
+    - ``IGNORE_ALL``: All preflight errors are ignored — only sync
+      execution failures cause a non-zero exit.
+    """
+
+    IGNORE_NONE = "ignore-none"
+    IGNORE_INACTIVE = "ignore-inactive"
+    IGNORE_ALL = "ignore-all"
+
+
 def has_fatal_errors(
     sync_statuses: dict[str, SyncStatus],
     *,
-    strict: bool = False,
+    strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> bool:
     """Return True if any sync has errors that should abort the run.
 
-    When *strict* is True, any inactive sync (including missing
-    sentinels) is fatal.  Otherwise, only syncs that are inactive
-    for non-expected reasons are fatal.
+    See :class:`Strictness` for the three modes.
     """
-    return (
-        any(not s.active for s in sync_statuses.values())
-        if strict
-        else any(
-            not s.active and not s.is_expected_inactive()
-            for s in sync_statuses.values()
-        )
-    )
+    match strictness:
+        case Strictness.IGNORE_NONE:
+            return any(not s.active for s in sync_statuses.values())
+        case Strictness.IGNORE_INACTIVE:
+            return any(
+                not s.active and not s.is_expected_inactive()
+                for s in sync_statuses.values()
+            )
+        case Strictness.IGNORE_ALL:
+            return False
 
 
 def check_and_run(
     config: Config,
     *,
-    strict: bool = False,
+    strictness: Strictness = Strictness.IGNORE_INACTIVE,
     dry_run: bool = False,
     only_syncs: list[str] | None = None,
     progress: ProgressMode | None = None,
@@ -105,9 +123,9 @@ def check_and_run(
 
     Parameters
     ----------
-    strict:
-        When True, any inactive sync (including missing sentinels) is
-        treated as a fatal preflight error.
+    strictness:
+        Controls how preflight errors are treated.  See
+        :class:`Strictness` for details.
     on_check_start:
         Called before each check with a label (e.g. ``"ssh:localhost"``).
     on_check_end:
@@ -130,7 +148,7 @@ def check_and_run(
     if on_checks_done is not None:
         on_checks_done(preflight)
 
-    preflight_errors = has_fatal_errors(preflight.sync_statuses, strict=strict)
+    preflight_errors = has_fatal_errors(preflight.sync_statuses, strictness=strictness)
 
     if preflight_errors:
         return PipelineResult(

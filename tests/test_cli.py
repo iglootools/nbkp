@@ -645,7 +645,8 @@ class TestCheckCommand:
                 "check",
                 "--config",
                 "/fake.yaml",
-                "--strict",
+                "--strictness",
+                "ignore-none",
             ],
         )
         assert result.exit_code == 1
@@ -970,7 +971,8 @@ class TestRunCommand:
                 "run",
                 "--config",
                 "/fake.yaml",
-                "--strict",
+                "--strictness",
+                "ignore-none",
             ],
         )
         assert result.exit_code == 1

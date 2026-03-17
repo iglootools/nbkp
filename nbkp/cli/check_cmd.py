@@ -8,6 +8,7 @@ from typing import Annotated, Optional
 import typer
 
 from ..config.epresolution import NetworkType
+from ..sync.pipeline import Strictness
 from .app import app
 from .common import (
     OutputFormat,
@@ -28,13 +29,19 @@ def check(
         OutputFormat,
         typer.Option("--output", "-o", help="Output format"),
     ] = OutputFormat.HUMAN,
-    strict: Annotated[
-        bool,
+    strictness: Annotated[
+        Strictness,
         typer.Option(
-            "--strict/--no-strict",
-            help=("Exit non-zero on any inactive sync, including missing sentinels"),
+            "--strictness",
+            "-S",
+            help=(
+                "How to handle preflight errors:"
+                " ignore-none (all errors fatal),"
+                " ignore-inactive (skip expected-inactive, default),"
+                " ignore-all (ignore all errors)"
+            ),
         ),
-    ] = False,
+    ] = Strictness.IGNORE_INACTIVE,
     location: Annotated[
         Optional[list[str]],
         typer.Option(
@@ -85,7 +92,7 @@ def check(
         preflight, has_errors = check_and_display(
             cfg,
             output_format,
-            strict,
+            strictness,
             resolved_endpoints=resolved,
             mount_observations=mount_observations,
         )

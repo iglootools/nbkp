@@ -23,7 +23,7 @@ from .mount.lifecycle import (
 from .mount.observation import MountObservation, build_mount_observations
 from .mount.strategy import MountStrategy
 from .preflight import PreflightResult
-from .sync.pipeline import PipelineResult, check_and_run
+from .sync.pipeline import Strictness, PipelineResult, check_and_run
 from .sync.rsync import ProgressMode
 from .sync.runner import SyncResult
 
@@ -117,7 +117,7 @@ def mount_and_run(
     on_umount_start: Callable[[str], None] | None = None,
     on_umount_end: Callable[[str, UmountResult], None] | None = None,
     # check_and_run options
-    strict: bool = False,
+    strictness: Strictness = Strictness.IGNORE_INACTIVE,
     dry_run: bool = False,
     only_syncs: list[str] | None = None,
     progress: ProgressMode | None = None,
@@ -149,7 +149,7 @@ def mount_and_run(
     ) as (_, mount_observations):
         return check_and_run(
             config,
-            strict=strict,
+            strictness=strictness,
             dry_run=dry_run,
             only_syncs=only_syncs,
             progress=progress,

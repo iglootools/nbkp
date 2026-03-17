@@ -39,7 +39,7 @@ from ..preflight import (
     PreflightResult,
     check_all_syncs,
 )
-from ..sync.pipeline import has_fatal_errors
+from ..sync.pipeline import Strictness, has_fatal_errors
 
 
 class OutputFormat(str, enum.Enum):
@@ -331,7 +331,7 @@ def check_all_with_progress(
 def check_and_display(
     cfg: Config,
     output_format: OutputFormat,
-    strict: bool,
+    strictness: Strictness,
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     dry_run: bool = False,
@@ -361,7 +361,7 @@ def check_and_display(
             resolved_endpoints=resolved_endpoints,
         )
 
-    return preflight, has_fatal_errors(preflight.sync_statuses, strict=strict)
+    return preflight, has_fatal_errors(preflight.sync_statuses, strictness=strictness)
 
 
 @contextmanager
