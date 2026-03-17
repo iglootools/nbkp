@@ -13,8 +13,8 @@ from rich.text import Text
 
 from ..config.epresolution import NetworkType
 from ..ordering.output import build_rich_tree_sections
+from ..preflight import PreflightResult
 from ..preflight.output import print_human_check
-from ..preflight import SshEndpointStatus, SyncStatus, VolumeStatus
 from ..sync import ProgressMode, SyncResult
 from ..sync.output import build_human_results_sections
 from ..sync.pipeline import check_and_run
@@ -137,18 +137,14 @@ def run(
             if check_progress_ctx is not None and check_task_id is not None:
                 check_progress_ctx.advance(check_task_id)
 
-        def on_checks_done(
-            ssh_statuses: dict[str, SshEndpointStatus],
-            vol_statuses: dict[str, VolumeStatus],
-            sync_statuses: dict[str, SyncStatus],
-        ) -> None:
+        def on_checks_done(preflight: PreflightResult) -> None:
             if check_progress_ctx is not None:
                 check_progress_ctx.stop()
             if output_format is OutputFormat.HUMAN:
                 print_human_check(
-                    ssh_statuses,
-                    vol_statuses,
-                    sync_statuses,
+                    preflight.ssh_endpoint_statuses,
+                    preflight.volume_statuses,
+                    preflight.sync_statuses,
                     cfg,
                     resolved_endpoints=resolved,
                 )

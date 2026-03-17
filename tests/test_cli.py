@@ -217,15 +217,25 @@ def _preflight(
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
 ) -> PreflightResult:
-    """Build a PreflightResult, collecting SSH endpoint statuses from volumes."""
+    """Build a PreflightResult, collecting statuses from volumes and syncs."""
     ssh_statuses: dict[str, SshEndpointStatus] = {}
     for vs in vol_statuses.values():
         ssh_s = vs.ssh_endpoint_status
         if ssh_s.slug not in ssh_statuses:
             ssh_statuses[ssh_s.slug] = ssh_s
+    src_ep_statuses = {
+        ss.source_endpoint_status.endpoint_slug: ss.source_endpoint_status
+        for ss in sync_statuses.values()
+    }
+    dst_ep_statuses = {
+        ss.destination_endpoint_status.endpoint_slug: ss.destination_endpoint_status
+        for ss in sync_statuses.values()
+    }
     return PreflightResult(
         ssh_endpoint_statuses=ssh_statuses,
         volume_statuses=vol_statuses,
+        source_endpoint_statuses=src_ep_statuses,
+        destination_endpoint_statuses=dst_ep_statuses,
         sync_statuses=sync_statuses,
     )
 

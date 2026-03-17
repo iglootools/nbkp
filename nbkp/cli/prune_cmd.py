@@ -66,7 +66,7 @@ def prune(
     cfg = load_config_or_exit(config)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
-    _, _, sync_statuses = check_all_with_progress(
+    preflight = check_all_with_progress(
         cfg,
         use_progress=output_format is OutputFormat.HUMAN,
         resolved_endpoints=resolved,
@@ -74,7 +74,7 @@ def prune(
 
     results = prune_all_syncs(
         cfg,
-        sync_statuses,
+        preflight.sync_statuses,
         dry_run=dry_run,
         only_syncs=sync,
         resolved_endpoints=resolved,

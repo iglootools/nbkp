@@ -70,16 +70,16 @@ def troubleshoot(
         _mount_strategy,
         mount_observations,
     ):
-        ssh_statuses, vol_statuses, sync_statuses = check_all_with_progress(
+        preflight = check_all_with_progress(
             cfg,
             use_progress=True,
             resolved_endpoints=resolved,
             mount_observations=mount_observations,
         )
         print_human_troubleshoot(
-            ssh_statuses,
-            vol_statuses,
-            sync_statuses,
+            preflight.ssh_endpoint_statuses,
+            preflight.volume_statuses,
+            preflight.sync_statuses,
             cfg,
             resolved_endpoints=resolved,
         )

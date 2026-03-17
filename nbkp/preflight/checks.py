@@ -139,6 +139,8 @@ def check_all_syncs(
     return PreflightResult(
         ssh_endpoint_statuses=ssh_statuses,
         volume_statuses=volume_statuses,
+        source_endpoint_statuses=src_ep_statuses,
+        destination_endpoint_statuses=dst_ep_statuses,
         sync_statuses=sync_statuses,
     )
 

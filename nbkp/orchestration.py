@@ -23,7 +23,7 @@ from .mount.lifecycle import (
 )
 from .mount.observation import MountObservation, build_mount_observations
 from .mount.strategy import MountStrategy
-from .preflight import SshEndpointStatus, SyncStatus, VolumeStatus
+from .preflight import PreflightResult
 from .sync.pipeline import PipelineResult, check_and_run
 from .sync.rsync import ProgressMode
 from .sync.runner import SyncResult
@@ -125,17 +125,7 @@ def mount_and_run(
     progress: ProgressMode | None = None,
     prune: bool = True,
     on_check_progress: Callable[[str], None] | None = None,
-    on_checks_done: (
-        Callable[
-            [
-                dict[str, SshEndpointStatus],
-                dict[str, VolumeStatus],
-                dict[str, SyncStatus],
-            ],
-            None,
-        ]
-        | None
-    ) = None,
+    on_checks_done: Callable[[PreflightResult], None] | None = None,
     on_rsync_output: Callable[[str], None] | None = None,
     on_sync_start: Callable[[str], None] | None = None,
     on_sync_end: Callable[[str, SyncResult], None] | None = None,

@@ -82,7 +82,7 @@ def check(
     with managed_mount(
         cfg, resolved, mount=mount, umount=umount, output_format=output_format
     ) as (_mount_strategy, mount_observations):
-        vol_statuses, sync_statuses, has_errors = check_and_display(
+        preflight, has_errors = check_and_display(
             cfg,
             output_format,
             strict,
@@ -92,8 +92,8 @@ def check(
 
         if output_format is OutputFormat.JSON:
             data = {
-                "volumes": [v.model_dump() for v in vol_statuses.values()],
-                "syncs": [s.model_dump() for s in sync_statuses.values()],
+                "volumes": [v.model_dump() for v in preflight.volume_statuses.values()],
+                "syncs": [s.model_dump() for s in preflight.sync_statuses.values()],
             }
             typer.echo(json.dumps(data, indent=2))
 

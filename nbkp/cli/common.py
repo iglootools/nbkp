@@ -29,9 +29,7 @@ from ..orchestration import managed_mount as _orchestration_managed_mount
 from ..config.output import print_config_error
 from ..preflight.output import print_human_check
 from ..preflight import (
-    SshEndpointStatus,
-    SyncStatus,
-    VolumeStatus,
+    PreflightResult,
     check_all_syncs,
 )
 from ..sync.pipeline import has_fatal_errors
@@ -138,14 +136,8 @@ def check_all_with_progress(
     resolved_endpoints: ResolvedEndpoints | None = None,
     dry_run: bool = False,
     mount_observations: dict[str, MountObservation] | None = None,
-) -> tuple[
-    dict[str, SshEndpointStatus],
-    dict[str, VolumeStatus],
-    dict[str, SyncStatus],
-]:
+) -> PreflightResult:
     """Run check_all_syncs with an optional progress bar."""
-    from ..preflight import PreflightResult
-
     total = _check_total(cfg, only_syncs)
 
     def _run(
@@ -161,28 +153,22 @@ def check_all_with_progress(
         )
 
     if not use_progress or total == 0:
-        result = _run()
-    else:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            TextColumn("{task.completed}/{task.total}"),
-            transient=True,
-        ) as progress:
-            task = progress.add_task(
-                "Checking volumes, endpoints, and syncs...", total=total
-            )
+        return _run()
 
-            def on_progress(_slug: str) -> None:
-                progress.advance(task)
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        TextColumn("{task.completed}/{task.total}"),
+        transient=True,
+    ) as progress:
+        task = progress.add_task(
+            "Checking volumes, endpoints, and syncs...", total=total
+        )
 
-            result = _run(on_progress)
+        def on_progress(_slug: str) -> None:
+            progress.advance(task)
 
-    return (
-        result.ssh_endpoint_statuses,
-        result.volume_statuses,
-        result.sync_statuses,
-    )
+        return _run(on_progress)
 
 
 def check_and_display(
@@ -193,18 +179,14 @@ def check_and_display(
     resolved_endpoints: ResolvedEndpoints | None = None,
     dry_run: bool = False,
     mount_observations: dict[str, MountObservation] | None = None,
-) -> tuple[
-    dict[str, VolumeStatus],
-    dict[str, SyncStatus],
-    bool,
-]:
+) -> tuple[PreflightResult, bool]:
     """Compute statuses, display human output, and check for errors.
 
-    Returns volume statuses, sync statuses, and whether there are
-    fatal errors.  When *only_syncs* is given, only those syncs
-    (and the volumes they reference) are checked.
+    Returns the preflight result and whether there are fatal errors.
+    When *only_syncs* is given, only those syncs (and the volumes
+    they reference) are checked.
     """
-    ssh_statuses, vol_statuses, sync_statuses = check_all_with_progress(
+    preflight = check_all_with_progress(
         cfg,
         use_progress=output_format is OutputFormat.HUMAN,
         only_syncs=only_syncs,
@@ -215,14 +197,14 @@ def check_and_display(
 
     if output_format is OutputFormat.HUMAN:
         print_human_check(
-            ssh_statuses,
-            vol_statuses,
-            sync_statuses,
+            preflight.ssh_endpoint_statuses,
+            preflight.volume_statuses,
+            preflight.sync_statuses,
             cfg,
             resolved_endpoints=resolved_endpoints,
         )
 
-    return vol_statuses, sync_statuses, has_fatal_errors(sync_statuses, strict=strict)
+    return preflight, has_fatal_errors(preflight.sync_statuses, strict=strict)
 
 
 @contextmanager

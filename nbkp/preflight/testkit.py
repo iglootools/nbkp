@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ..fsprotocol import Snapshot
 from .output.formatting import collect_ssh_endpoint_statuses
+from .status import PreflightResult
 from . import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
@@ -248,11 +249,7 @@ def check_config() -> Config:
 
 def check_data(
     config: Config,
-) -> tuple[
-    dict[str, SshEndpointStatus],
-    dict[str, VolumeStatus],
-    dict[str, SyncStatus],
-]:
+) -> PreflightResult:
     """Volume and sync statuses with mixed active/inactive."""
     _local_caps = VolumeCapabilities(
         sentinel_exists=True,
@@ -454,7 +451,19 @@ def check_data(
     }
 
     ssh_statuses = collect_ssh_endpoint_statuses(vol_statuses, sync_statuses)
-    return ssh_statuses, vol_statuses, sync_statuses
+    src_ep_statuses = {
+        slug: ss.source_endpoint_status for slug, ss in sync_statuses.items()
+    }
+    dst_ep_statuses = {
+        slug: ss.destination_endpoint_status for slug, ss in sync_statuses.items()
+    }
+    return PreflightResult(
+        ssh_endpoint_statuses=ssh_statuses,
+        volume_statuses=vol_statuses,
+        source_endpoint_statuses=src_ep_statuses,
+        destination_endpoint_statuses=dst_ep_statuses,
+        sync_statuses=sync_statuses,
+    )
 
 
 # ── troubleshoot_config / troubleshoot_data ───────────────────
@@ -1147,11 +1156,7 @@ def troubleshoot_config() -> Config:
 
 def troubleshoot_data(
     config: Config,
-) -> tuple[
-    dict[str, SshEndpointStatus],
-    dict[str, VolumeStatus],
-    dict[str, SyncStatus],
-]:
+) -> PreflightResult:
     """Statuses covering every VolumeError and SyncError.
 
     Errors are distributed across the 4-layer hierarchy:
@@ -2063,4 +2068,16 @@ def troubleshoot_data(
     )
 
     ssh_statuses = collect_ssh_endpoint_statuses(vol_statuses, sync_statuses)
-    return ssh_statuses, vol_statuses, sync_statuses
+    src_ep_statuses = {
+        slug: ss.source_endpoint_status for slug, ss in sync_statuses.items()
+    }
+    dst_ep_statuses = {
+        slug: ss.destination_endpoint_status for slug, ss in sync_statuses.items()
+    }
+    return PreflightResult(
+        ssh_endpoint_statuses=ssh_statuses,
+        volume_statuses=vol_statuses,
+        source_endpoint_statuses=src_ep_statuses,
+        destination_endpoint_statuses=dst_ep_statuses,
+        sync_statuses=sync_statuses,
+    )

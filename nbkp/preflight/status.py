@@ -1255,4 +1255,6 @@ class PreflightResult:
 
     ssh_endpoint_statuses: dict[str, SshEndpointStatus]
     volume_statuses: dict[str, VolumeStatus]
+    source_endpoint_statuses: dict[str, SourceEndpointStatus]
+    destination_endpoint_statuses: dict[str, DestinationEndpointStatus]
     sync_statuses: dict[str, SyncStatus]
