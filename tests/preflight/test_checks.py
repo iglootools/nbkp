@@ -34,9 +34,11 @@ from nbkp.preflight.snapshot_checks import (
     check_btrfs_subvolume,
 )
 from nbkp.preflight.status import (
+    DestinationEndpointDiagnostics,
     DestinationEndpointError,
     DestinationEndpointStatus,
     HostToolCapabilities,
+    SourceEndpointDiagnostics,
     SourceEndpointError,
     SourceEndpointStatus,
     SshEndpointDiagnostics,
@@ -2878,6 +2880,314 @@ class TestCheckAllSyncs:
         assert set(result.sync_statuses.keys()) == {"s1"}
         assert set(result.volume_statuses.keys()) == {"src1", "dst1"}
         assert result.sync_statuses["s1"].active is True
+
+
+class TestStandaloneEndpointProbing:
+    """Tests for standalone SSH endpoint probing (bastions, orphans) in Phase 1."""
+
+    def _make_bastion_config(self, tmp_path: Path) -> Config:
+        """Config with a remote volume that goes through a bastion."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / ".nbkp-vol").touch()
+        (src / ".nbkp-src").touch()
+        (src / ".nbkp-dst").touch()
+
+        bastion = SshEndpoint(
+            slug="bastion",
+            host="bastion.example.com",
+            user="admin",
+        )
+        target = SshEndpoint(
+            slug="target",
+            host="target.internal",
+            user="backup",
+            proxy_jump="bastion",
+        )
+        return Config(
+            ssh_endpoints={"bastion": bastion, "target": target},
+            volumes={
+                "local": LocalVolume(slug="local", path=str(src)),
+                "remote": RemoteVolume(
+                    slug="remote",
+                    ssh_endpoint="target",
+                    path="/data",
+                ),
+            },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="local"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="remote"),
+            },
+            syncs={
+                "s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst"),
+            },
+        )
+
+    def _bastion_patches(
+        self,
+        bastion_diag: SshEndpointDiagnostics = SshEndpointDiagnostics(
+            ssh_reachable=True
+        ),
+    ):  # type: ignore[no-untyped-def]
+        """Stack of patches common to all bastion tests.
+
+        Mocks SSH endpoint observation, volume observation, endpoint
+        observations, and bastion-specific functions to avoid real
+        SSH/DNS calls.
+        """
+        from contextlib import ExitStack
+        from functools import wraps
+
+        def decorator(fn):  # type: ignore[no-untyped-def]
+            @wraps(fn)
+            def wrapper(self_inner, tmp_path, *args, **kwargs):  # type: ignore[no-untyped-def]
+                with ExitStack() as stack:
+                    stack.enter_context(
+                        patch(
+                            "nbkp.preflight.checks.observe_standalone_endpoint",
+                            return_value=bastion_diag,
+                        )
+                    )
+                    stack.enter_context(
+                        patch(
+                            "nbkp.preflight.checks.enrich_from_ssh_config",
+                            side_effect=lambda ep: ep,
+                        )
+                    )
+                    stack.enter_context(
+                        patch(
+                            "nbkp.preflight.checks.observe_ssh_endpoint",
+                            return_value=_ssh_diag(),
+                        )
+                    )
+                    stack.enter_context(
+                        patch(
+                            "nbkp.preflight.checks.observe_volume",
+                            return_value=VolumeDiagnostics(capabilities=_STUB_CAPS),
+                        )
+                    )
+                    stack.enter_context(
+                        patch(
+                            "nbkp.preflight.checks.observe_source_endpoint",
+                            return_value=SourceEndpointDiagnostics(
+                                endpoint_slug="ep-src", sentinel_exists=True
+                            ),
+                        )
+                    )
+                    stack.enter_context(
+                        patch(
+                            "nbkp.preflight.checks.observe_destination_endpoint",
+                            return_value=DestinationEndpointDiagnostics(
+                                endpoint_slug="ep-dst",
+                                sentinel_exists=True,
+                                endpoint_writable=True,
+                            ),
+                        )
+                    )
+                    fn(self_inner, tmp_path, *args, **kwargs)
+
+            return wrapper
+
+        return decorator
+
+    def test_bastion_appears_in_ssh_statuses(self, tmp_path: Path) -> None:
+        """Bastion endpoints appear in ssh_endpoint_statuses after check_all_syncs."""
+
+        @self._bastion_patches()
+        def _run(self_inner: TestStandaloneEndpointProbing, tmp_path: Path) -> None:
+            config = self_inner._make_bastion_config(tmp_path)
+            result = check_all_syncs(
+                config,
+                resolved_endpoints={
+                    "remote": ResolvedEndpoint(
+                        server=config.ssh_endpoints["target"],
+                        proxy_chain=[config.ssh_endpoints["bastion"]],
+                    ),
+                },
+            )
+            assert "bastion" in result.ssh_endpoint_statuses
+            assert result.ssh_endpoint_statuses["bastion"].active is True
+            # No tool errors — bastions have default (empty) tool needs
+            assert result.ssh_endpoint_statuses["bastion"].errors == []
+            # host_tools is None — no tool probing on bastions
+            assert (
+                result.ssh_endpoint_statuses["bastion"].diagnostics.host_tools is None
+            )
+
+        _run(self, tmp_path)
+
+    def test_unreachable_bastion(self, tmp_path: Path) -> None:
+        """Unreachable bastion gets UNREACHABLE error."""
+
+        @self._bastion_patches(bastion_diag=SshEndpointDiagnostics(ssh_reachable=False))
+        def _run(self_inner: TestStandaloneEndpointProbing, tmp_path: Path) -> None:
+            config = self_inner._make_bastion_config(tmp_path)
+            result = check_all_syncs(
+                config,
+                resolved_endpoints={
+                    "remote": ResolvedEndpoint(
+                        server=config.ssh_endpoints["target"],
+                        proxy_chain=[config.ssh_endpoints["bastion"]],
+                    ),
+                },
+            )
+            assert "bastion" in result.ssh_endpoint_statuses
+            bastion_status = result.ssh_endpoint_statuses["bastion"]
+            assert bastion_status.active is False
+            assert SshEndpointError.UNREACHABLE in bastion_status.errors
+
+        _run(self, tmp_path)
+
+    def test_multi_hop_bastion_chain(self, tmp_path: Path) -> None:
+        """All hops in a multi-hop bastion chain appear in statuses."""
+
+        @self._bastion_patches()
+        def _run(self_inner: TestStandaloneEndpointProbing, tmp_path: Path) -> None:
+            src = tmp_path / "src"
+            src.mkdir(exist_ok=True)
+            (src / ".nbkp-vol").touch()
+            (src / ".nbkp-src").touch()
+            (src / ".nbkp-dst").touch()
+
+            bastion1 = SshEndpoint(
+                slug="bastion1", host="bastion1.example.com", user="admin"
+            )
+            bastion2 = SshEndpoint(
+                slug="bastion2",
+                host="bastion2.internal",
+                user="admin",
+                proxy_jump="bastion1",
+            )
+            target = SshEndpoint(
+                slug="target",
+                host="target.internal",
+                user="backup",
+                proxy_jump="bastion2",
+            )
+            config = Config(
+                ssh_endpoints={
+                    "bastion1": bastion1,
+                    "bastion2": bastion2,
+                    "target": target,
+                },
+                volumes={
+                    "local": LocalVolume(slug="local", path=str(src)),
+                    "remote": RemoteVolume(
+                        slug="remote", ssh_endpoint="target", path="/data"
+                    ),
+                },
+                sync_endpoints={
+                    "ep-src": SyncEndpoint(slug="ep-src", volume="local"),
+                    "ep-dst": SyncEndpoint(slug="ep-dst", volume="remote"),
+                },
+                syncs={
+                    "s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst"),
+                },
+            )
+
+            result = check_all_syncs(
+                config,
+                resolved_endpoints={
+                    "remote": ResolvedEndpoint(
+                        server=target,
+                        proxy_chain=[bastion1, bastion2],
+                    ),
+                },
+            )
+            assert "bastion1" in result.ssh_endpoint_statuses
+            assert "bastion2" in result.ssh_endpoint_statuses
+            assert result.ssh_endpoint_statuses["bastion1"].active is True
+            assert result.ssh_endpoint_statuses["bastion2"].active is True
+
+        _run(self, tmp_path)
+
+    @patch(
+        "nbkp.preflight.checks.observe_ssh_endpoint",
+        return_value=_ssh_diag(),
+    )
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
+    def test_no_bastions_when_no_proxy_jumps(
+        self,
+        _mock_caps: MagicMock,
+        _mock_ssh: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Config without proxy jumps has no bastion statuses."""
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        (src / ".nbkp-vol").touch()
+        (dst / ".nbkp-vol").touch()
+        (src / ".nbkp-src").touch()
+        (dst / ".nbkp-dst").touch()
+
+        config = Config(
+            volumes={
+                "src": LocalVolume(slug="src", path=str(src)),
+                "dst": LocalVolume(slug="dst", path=str(dst)),
+            },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+            },
+            syncs={
+                "s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst"),
+            },
+        )
+        result = check_all_syncs(config)
+        # Only "localhost" — no standalone endpoints
+        assert set(result.ssh_endpoint_statuses.keys()) == {"localhost"}
+
+    def test_orphan_endpoint_probed(self, tmp_path: Path) -> None:
+        """Orphan endpoints (defined but not referenced by volumes) are probed."""
+
+        @self._bastion_patches()
+        def _run(self_inner: TestStandaloneEndpointProbing, tmp_path: Path) -> None:
+            src = tmp_path / "src"
+            src.mkdir(exist_ok=True)
+            (src / ".nbkp-vol").touch()
+            (src / ".nbkp-src").touch()
+            (src / ".nbkp-dst").touch()
+
+            orphan = SshEndpoint(slug="orphan", host="orphan.example.com", user="admin")
+            target = SshEndpoint(slug="target", host="target.internal", user="backup")
+            config = Config(
+                ssh_endpoints={"orphan": orphan, "target": target},
+                volumes={
+                    "local": LocalVolume(slug="local", path=str(src)),
+                    "remote": RemoteVolume(
+                        slug="remote", ssh_endpoint="target", path="/data"
+                    ),
+                },
+                sync_endpoints={
+                    "ep-src": SyncEndpoint(slug="ep-src", volume="local"),
+                    "ep-dst": SyncEndpoint(slug="ep-dst", volume="remote"),
+                },
+                syncs={
+                    "s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst"),
+                },
+            )
+            result = check_all_syncs(
+                config,
+                resolved_endpoints={
+                    "remote": ResolvedEndpoint(
+                        server=target,
+                        proxy_chain=[],
+                    ),
+                },
+            )
+            # Orphan endpoint is probed and appears in statuses
+            assert "orphan" in result.ssh_endpoint_statuses
+            assert result.ssh_endpoint_statuses["orphan"].active is True
+            assert result.ssh_endpoint_statuses["orphan"].errors == []
+            # No tool probing on standalone endpoints
+            assert result.ssh_endpoint_statuses["orphan"].diagnostics.host_tools is None
+
+        _run(self, tmp_path)
 
 
 class TestCheckHardLinkDest:

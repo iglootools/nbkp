@@ -75,6 +75,15 @@ _LOCALHOST_SSH_STATUS_BTRFS = SshEndpointStatus.from_diagnostics(
     ),
 )
 
+
+def _standalone_ssh_status(slug: str, *, reachable: bool = True) -> SshEndpointStatus:
+    """SSH-reachability-only status for endpoints not tied to a volume."""
+    return SshEndpointStatus.from_diagnostics(
+        slug=slug,
+        diagnostics=SshEndpointDiagnostics(ssh_reachable=reachable),
+    )
+
+
 _SENTINEL_MISSING_CAPS = VolumeCapabilities(
     sentinel_exists=False,
     is_btrfs_filesystem=False,
@@ -450,7 +459,14 @@ def check_data(
         ),
     }
 
-    ssh_statuses = collect_ssh_endpoint_statuses(vol_statuses, sync_statuses)
+    ssh_statuses = {
+        # Standalone endpoints: SSH reachable, no tool probing
+        "bastion": _standalone_ssh_status("bastion"),
+        "bastion2": _standalone_ssh_status("bastion2"),
+        "nas-public": _standalone_ssh_status("nas-public"),
+        "orphan-server": _standalone_ssh_status("orphan-server"),
+        **collect_ssh_endpoint_statuses(vol_statuses, sync_statuses),
+    }
     src_ep_statuses = {
         slug: ss.source_endpoint_status for slug, ss in sync_statuses.items()
     }
@@ -2067,7 +2083,13 @@ def troubleshoot_data(
         errors=[SyncError.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM],
     )
 
-    ssh_statuses = collect_ssh_endpoint_statuses(vol_statuses, sync_statuses)
+    ssh_statuses = {
+        # Standalone endpoints: bastion reachable, bastion2 unreachable
+        "bastion": _standalone_ssh_status("bastion"),
+        "bastion2": _standalone_ssh_status("bastion2", reachable=False),
+        "nas-public": _standalone_ssh_status("nas-public"),
+        **collect_ssh_endpoint_statuses(vol_statuses, sync_statuses),
+    }
     src_ep_statuses = {
         slug: ss.source_endpoint_status for slug, ss in sync_statuses.items()
     }

@@ -33,7 +33,9 @@ from ..config import (
 )
 from ..config.epresolution import ResolvedEndpoints
 from ..mount.observation import MountObservation
+from ..remote.resolution import enrich_from_ssh_config, resolve_proxy_chain
 from .endpoint_checks import observe_destination_endpoint, observe_source_endpoint
+from .ssh_checks import observe_standalone_endpoint
 from .status import (
     DestinationEndpointDiagnostics,
     DestinationEndpointStatus,
@@ -184,6 +186,20 @@ def _check_ssh_endpoints(
             slug=ssh_slug,
             diagnostics=diag,
             needs=needs,
+        )
+
+    # Probe all remaining SSH endpoints not already covered by volumes
+    # (bastions, alternate endpoints, orphan endpoints)
+    for slug in set(config.ssh_endpoints.keys()) - ssh_statuses.keys():
+        ep = config.ssh_endpoints[slug]
+        server = enrich_from_ssh_config(ep)
+        proxy_chain = [
+            enrich_from_ssh_config(hop) for hop in resolve_proxy_chain(config, server)
+        ]
+        diag = observe_standalone_endpoint(server, proxy_chain)
+        ssh_statuses[slug] = SshEndpointStatus.from_diagnostics(
+            slug=slug,
+            diagnostics=diag,
         )
 
     return ssh_statuses

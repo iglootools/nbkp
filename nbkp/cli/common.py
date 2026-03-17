@@ -13,6 +13,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from ..config import (
     Config,
     ConfigError,
+    LocalVolume,
     load_config,
 )
 from ..config.epresolution import (
@@ -112,7 +113,12 @@ def resolve_endpoints(
 
 
 def _check_total(cfg: Config, only_syncs: list[str] | None) -> int:
-    """Count progress steps: volumes + sync endpoints (I/O phases only)."""
+    """Count progress steps: SSH endpoints + volumes + sync endpoints.
+
+    Matches the ``_track()`` calls in ``check_all_syncs``: one per SSH
+    endpoint (volume-referenced + all remaining defined endpoints), one
+    per volume, and one per source/destination sync endpoint.
+    """
     syncs = (
         {s: sc for s, sc in cfg.syncs.items() if s in only_syncs}
         if only_syncs
@@ -126,7 +132,18 @@ def _check_total(cfg: Config, only_syncs: list[str] | None) -> int:
         if only_syncs
         else set(cfg.volumes.keys())
     )
-    return len(volumes) + len(src_eps) + len(dst_eps)
+
+    # SSH endpoints: volume-referenced + all remaining defined endpoints
+    volume_ssh_slugs = {
+        "localhost"
+        if isinstance(cfg.volumes[v_slug], LocalVolume)
+        else cfg.volumes[v_slug].ssh_endpoint  # type: ignore[union-attr]
+        for v_slug in volumes
+    }
+    remaining_slugs = set(cfg.ssh_endpoints.keys()) - volume_ssh_slugs
+    ssh_count = len(volume_ssh_slugs) + len(remaining_slugs)
+
+    return ssh_count + len(volumes) + len(src_eps) + len(dst_eps)
 
 
 def check_all_with_progress(
