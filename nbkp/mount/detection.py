@@ -6,7 +6,10 @@ so these functions are separate and have no dependencies on preflight code.
 
 from __future__ import annotations
 
+import enum
 import shutil
+from dataclasses import dataclass
+from typing import Callable
 
 from ..config import (
     Config,
@@ -18,6 +21,20 @@ from ..config.epresolution import ResolvedEndpoints
 from ..remote.dispatch import run_on_volume
 from .auth import CRYPTSETUP_PATHS
 from .strategy import DirectMountStrategy, MountStrategy, SystemdMountStrategy
+
+
+class StrategyErrorReason(str, enum.Enum):
+    """Structured reason for a strategy resolution failure."""
+
+    UNREACHABLE = "unreachable"
+
+
+@dataclass(frozen=True)
+class StrategyResolutionError:
+    """Structured error from strategy resolution."""
+
+    reason: StrategyErrorReason
+    detail: str
 
 
 def detect_device_present(
@@ -137,18 +154,47 @@ def _resolve_mount_strategy(
         return DirectMountStrategy(volume_path=volume.path)
 
 
+def _try_resolve_mount_strategy(
+    vol: Volume,
+    mount_config: MountConfig,
+    resolved_endpoints: ResolvedEndpoints,
+) -> MountStrategy | StrategyResolutionError:
+    """Attempt to resolve a mount strategy, returning structured error on failure."""
+    try:
+        return _resolve_mount_strategy(vol, mount_config, resolved_endpoints)
+    except Exception as e:
+        return StrategyResolutionError(
+            reason=StrategyErrorReason.UNREACHABLE,
+            detail=f"unreachable: {e}",
+        )
+
+
 def resolve_mount_strategy(
     cfg: Config,
     resolved_endpoints: ResolvedEndpoints,
     names: list[str] | None,
+    on_strategy_error: Callable[[str, str], None] | None = None,
 ) -> dict[str, MountStrategy]:
     """Resolve a ``MountStrategy`` per volume with mount config.
 
     ``auto`` probes for systemctl: present → ``SystemdMountStrategy``,
     absent → ``DirectMountStrategy``.
+
+    Catches connection failures per-volume. Unreachable volumes are
+    omitted from the result (``mount_volumes`` will produce a
+    ``STRATEGY_NOT_RESOLVED`` result for them). The optional
+    ``on_strategy_error`` callback receives ``(slug, error_message)``
+    for each failure.
     """
-    return {
-        slug: _resolve_mount_strategy(vol, vol.mount, resolved_endpoints)
-        for slug, vol in cfg.volumes.items()
-        if vol.mount is not None and (names is None or slug in names)
-    }
+    results: dict[str, MountStrategy] = {}
+    for slug, vol in cfg.volumes.items():
+        if vol.mount is None or (names is not None and slug not in names):
+            continue
+        outcome = _try_resolve_mount_strategy(vol, vol.mount, resolved_endpoints)
+        match outcome:
+            case StrategyResolutionError() as error:
+                if on_strategy_error is not None:
+                    on_strategy_error(slug, error.detail)
+            case _:
+                results[slug] = outcome
+    return results

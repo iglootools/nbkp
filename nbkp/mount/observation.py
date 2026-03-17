@@ -111,5 +111,8 @@ def build_mount_observations(
             case MountFailureReason.STRATEGY_NOT_RESOLVED:
                 # No useful observation — skip
                 pass
+            case MountFailureReason.UNREACHABLE:
+                # Host unreachable — no useful observation
+                pass
 
     return observations

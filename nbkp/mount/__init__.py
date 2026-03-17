@@ -10,6 +10,8 @@ from .auth import (
 )
 from .strategy import DirectMountStrategy, MountStrategy, SystemdMountStrategy
 from .detection import (
+    StrategyErrorReason,
+    StrategyResolutionError,
     detect_device_present,
     detect_luks_attached,
     detect_systemd_cryptsetup_path,
@@ -42,6 +44,8 @@ __all__ = [
     "MountResult",
     "POLKIT_RULES_PATH",
     "SUDOERS_RULES_PATH",
+    "StrategyErrorReason",
+    "StrategyResolutionError",
     "SystemdMountStrategy",
     "UmountResult",
     "build_mount_observations",

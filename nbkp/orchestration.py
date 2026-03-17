@@ -14,7 +14,6 @@ from typing import Callable, Generator
 
 from .config import Config
 from .config.epresolution import ResolvedEndpoints
-from .mount.detection import resolve_mount_strategy
 from .mount.lifecycle import (
     MountResult,
     UmountResult,
@@ -79,12 +78,11 @@ def managed_mount(
     mount_observations: dict[str, MountObservation] = {}
 
     if do_mount:
-        mount_strategy = resolve_mount_strategy(config, resolved, names=names)
-        mount_results = mount_volumes(
+        mount_strategy, mount_results = mount_volumes(
             config,
             resolved,
             passphrase_fn,
-            mount_strategy=mount_strategy,
+            names=names,
             on_mount_start=on_mount_start,
             on_mount_end=on_mount_end,
         )
@@ -147,7 +145,7 @@ def mount_and_run(
         on_mount_end=on_mount_end,
         on_umount_start=on_umount_start,
         on_umount_end=on_umount_end,
-    ) as (_mount_strategy, mount_observations):
+    ) as (_, mount_observations):
         return check_and_run(
             config,
             strict=strict,

@@ -11,7 +11,6 @@ from rich.table import Table
 
 from ..config.epresolution import NetworkType
 from ..credentials import build_passphrase_fn
-from ..mount.detection import resolve_mount_strategy
 from ..mount.lifecycle import (
     MountResult,
     UmountResult,
@@ -66,8 +65,6 @@ def volumes_mount(
         cfg.credential_provider, cfg.credential_command
     )
 
-    mount_strategy = resolve_mount_strategy(cfg, resolved, name)
-
     console = Console()
     status_display = None
 
@@ -88,12 +85,11 @@ def volumes_mount(
             console.print(f"{icon} {slug}{detail}")
 
     try:
-        results = mount_volumes(
+        _, results = mount_volumes(
             cfg,
             resolved,
             passphrase_fn,
             names=name,
-            mount_strategy=mount_strategy,
             on_mount_start=on_mount_start,
             on_mount_end=on_mount_end,
         )
@@ -157,8 +153,6 @@ def volumes_umount(
     cfg = load_config_or_exit(config)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
 
-    mount_strategy = resolve_mount_strategy(cfg, resolved, name)
-
     console = Console()
     status_display = None
 
@@ -185,7 +179,6 @@ def volumes_umount(
         cfg,
         resolved,
         names=name,
-        mount_strategy=mount_strategy,
         on_umount_start=on_umount_start,
         on_umount_end=on_umount_end,
     )
@@ -281,18 +274,22 @@ def volumes_status(
         if output == OutputFormat.HUMAN:
             status_display = console.status(f"Checking {slug}...")
             status_display.start()
-        caps = check_mount_status(vol, vol.mount, resolved)
-        if status_display is not None:
-            status_display.stop()
-        results.append(
-            (
-                slug,
-                caps.resolved_backend,
-                caps.device_present,
-                caps.luks_attached,
-                caps.mounted,
+        try:
+            caps = check_mount_status(vol, vol.mount, resolved)
+            results.append(
+                (
+                    slug,
+                    caps.resolved_backend,
+                    caps.device_present,
+                    caps.luks_attached,
+                    caps.mounted,
+                )
             )
-        )
+        except Exception as e:
+            results.append((slug, f"unreachable: {e}", None, None, None))
+        finally:
+            if status_display is not None:
+                status_display.stop()
 
     match output:
         case OutputFormat.JSON:

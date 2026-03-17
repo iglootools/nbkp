@@ -15,6 +15,8 @@ from ..config.epresolution import ResolvedEndpoints
 from ..remote.dispatch import run_on_volume
 from .strategy import MountStrategy
 from .detection import (
+    StrategyResolutionError,
+    _try_resolve_mount_strategy,
     detect_device_present,
     detect_luks_attached,
 )
@@ -27,6 +29,7 @@ class MountFailureReason(str, enum.Enum):
     ATTACH_LUKS_FAILED = "attach_luks_failed"
     MOUNT_FAILED = "mount_failed"
     STRATEGY_NOT_RESOLVED = "strategy_not_resolved"
+    UNREACHABLE = "unreachable"
 
 
 @dataclass(frozen=True)
@@ -68,7 +71,34 @@ def mount_volume(
     passphrase_fn: Callable[[str], str],
     mount_strategy: MountStrategy,
 ) -> MountResult:
-    """Mount a single volume. Idempotent: skips already mounted."""
+    """Mount a single volume. Idempotent: skips already mounted.
+
+    Catches connection failures (timeout, DNS, SSH errors) and returns
+    a failed ``MountResult`` with ``UNREACHABLE`` rather than crashing.
+    """
+    slug = volume.slug
+
+    try:
+        return _mount_volume_inner(
+            volume, mount_config, resolved_endpoints, passphrase_fn, mount_strategy
+        )
+    except Exception as e:
+        return MountResult(
+            volume_slug=slug,
+            success=False,
+            detail=f"unreachable: {e}",
+            failure_reason=MountFailureReason.UNREACHABLE,
+        )
+
+
+def _mount_volume_inner(
+    volume: Volume,
+    mount_config: MountConfig,
+    resolved_endpoints: ResolvedEndpoints,
+    passphrase_fn: Callable[[str], str],
+    mount_strategy: MountStrategy,
+) -> MountResult:
+    """Core mount logic, separated for exception boundary in ``mount_volume``."""
     slug = volume.slug
 
     # 1. Check device present
@@ -126,7 +156,31 @@ def umount_volume(
     """Umount and close LUKS for a single volume.
 
     Always attempts umount + close LUKS regardless of who mounted.
+    Catches connection failures and returns a failed ``UmountResult``
+    rather than crashing.
     """
+    slug = volume.slug
+
+    try:
+        return _umount_volume_inner(
+            volume, mount_config, resolved_endpoints, mount_strategy
+        )
+    except Exception as e:
+        return UmountResult(
+            volume_slug=slug,
+            success=False,
+            detail=f"unreachable: {e}",
+            warning="volume may still be mounted, manual umount needed",
+        )
+
+
+def _umount_volume_inner(
+    volume: Volume,
+    mount_config: MountConfig,
+    resolved_endpoints: ResolvedEndpoints,
+    mount_strategy: MountStrategy,
+) -> UmountResult:
+    """Core umount logic, separated for exception boundary in ``umount_volume``."""
     slug = volume.slug
 
     # 1. Umount
@@ -172,21 +226,53 @@ def mount_volumes(
     names: list[str] | None = None,
     on_mount_start: Callable[[str], None] | None = None,
     on_mount_end: Callable[[str, MountResult], None] | None = None,
-) -> list[MountResult]:
-    """Mount all volumes with mount config. Idempotent: skips already mounted."""
-    ms = mount_strategy or {}
+) -> tuple[dict[str, MountStrategy], list[MountResult]]:
+    """Mount all volumes with mount config. Idempotent: skips already mounted.
+
+    When ``mount_strategy`` is ``None``, strategies are resolved
+    per-volume inside the ``on_mount_start``/``on_mount_end`` window
+    so that callers can show a spinner covering the entire lifecycle
+    (strategy resolution + mount).
+
+    Returns ``(resolved_strategies, results)`` — the strategy dict is
+    needed by the umount phase and by observation building.
+    """
+    ms = dict(mount_strategy) if mount_strategy is not None else None
 
     def _mount_one(slug: str, vol: Volume, mount_cfg: MountConfig) -> MountResult:
-        strategy = ms.get(slug)
-        if strategy is None:
-            return MountResult(
-                volume_slug=slug,
-                success=False,
-                detail="mount strategy not resolved",
-                failure_reason=MountFailureReason.STRATEGY_NOT_RESOLVED,
-            )
         if on_mount_start is not None:
             on_mount_start(slug)
+
+        # Resolve strategy inline when not pre-resolved
+        if ms is not None:
+            strategy = ms.get(slug)
+            if strategy is None:
+                result = MountResult(
+                    volume_slug=slug,
+                    success=False,
+                    detail="mount strategy not resolved",
+                    failure_reason=MountFailureReason.STRATEGY_NOT_RESOLVED,
+                )
+                if on_mount_end is not None:
+                    on_mount_end(slug, result)
+                return result
+        else:
+            outcome = _try_resolve_mount_strategy(vol, mount_cfg, resolved_endpoints)
+            match outcome:
+                case StrategyResolutionError() as error:
+                    result = MountResult(
+                        volume_slug=slug,
+                        success=False,
+                        detail=error.detail,
+                        failure_reason=MountFailureReason.UNREACHABLE,
+                    )
+                    if on_mount_end is not None:
+                        on_mount_end(slug, result)
+                    return result
+                case _:
+                    strategy = outcome
+                    resolved_strategies[slug] = strategy
+
         result = mount_volume(
             volume=vol,
             mount_config=mount_cfg,
@@ -198,10 +284,12 @@ def mount_volumes(
             on_mount_end(slug, result)
         return result
 
-    return [
+    resolved_strategies: dict[str, MountStrategy] = dict(ms) if ms is not None else {}
+    results = [
         _mount_one(slug, vol, mount_cfg)
         for slug, vol, mount_cfg in _volumes_with_mount_config(config, names)
     ]
+    return resolved_strategies, results
 
 
 def umount_volumes(
@@ -218,23 +306,46 @@ def umount_volumes(
     Always umounts regardless of who mounted — avoids fragile
     action tracking across failed/restarted runs.
     Umounts in reverse order.
+
+    When ``mount_strategy`` is ``None``, strategies are resolved
+    per-volume inside the ``on_umount_start``/``on_umount_end`` window.
     """
-    ms = mount_strategy or {}
+    ms = dict(mount_strategy) if mount_strategy is not None else None
 
     def _umount_one(
         slug: str,
         vol: Volume,
         mount_cfg: MountConfig,
     ) -> UmountResult:
-        strategy = ms.get(slug)
-        if strategy is None:
-            return UmountResult(
-                volume_slug=slug,
-                success=False,
-                detail="mount strategy not resolved",
-            )
         if on_umount_start is not None:
             on_umount_start(slug)
+
+        if ms is not None:
+            strategy = ms.get(slug)
+            if strategy is None:
+                result = UmountResult(
+                    volume_slug=slug,
+                    success=False,
+                    detail="mount strategy not resolved",
+                )
+                if on_umount_end is not None:
+                    on_umount_end(slug, result)
+                return result
+        else:
+            outcome = _try_resolve_mount_strategy(vol, mount_cfg, resolved_endpoints)
+            match outcome:
+                case StrategyResolutionError() as error:
+                    result = UmountResult(
+                        volume_slug=slug,
+                        success=False,
+                        detail=error.detail,
+                    )
+                    if on_umount_end is not None:
+                        on_umount_end(slug, result)
+                    return result
+                case _:
+                    strategy = outcome
+
         result = umount_volume(
             volume=vol,
             mount_config=mount_cfg,

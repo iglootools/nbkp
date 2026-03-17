@@ -22,8 +22,8 @@ from ..config import (
     RsyncOptions,
 )
 from ..remote.resolution import resolve_all_endpoints
-from ..mount.detection import resolve_mount_strategy
 from ..mount.lifecycle import mount_volumes, umount_volumes
+from ..mount.strategy import MountStrategy
 
 # Docker-dependent imports are deferred to seed --docker.
 # They require the 'docker' extra: pipx install nbkp[docker]
@@ -276,15 +276,14 @@ def seed(
         remote_exec = None
 
     resolved = resolve_all_endpoints(config)
-    mount_strategy = resolve_mount_strategy(config, resolved, names=None)
 
+    mount_strategy: dict[str, MountStrategy] = {}
     if luks_uuid is not None:
         with _console.status("Mounting encrypted volume..."):
-            mount_results = mount_volumes(
+            mount_strategy, mount_results = mount_volumes(
                 config,
                 resolved,
                 lambda _: LUKS_PASSPHRASE,
-                mount_strategy=mount_strategy,
             )
             for r in mount_results:
                 if not r.success:

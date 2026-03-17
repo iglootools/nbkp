@@ -15,6 +15,7 @@ from nbkp.config import (
 )
 from nbkp.mount.strategy import DirectMountStrategy, SystemdMountStrategy
 from nbkp.mount.lifecycle import (
+    MountFailureReason,
     mount_volume,
     mount_volumes,
     umount_volume,
@@ -167,6 +168,43 @@ class TestMountVolume:
             )
         assert result.success
 
+    def test_ssh_timeout_returns_unreachable(self) -> None:
+        """SSH timeout during mount returns UNREACHABLE, not a crash."""
+        vol = _encrypted_vol()
+        strategy = _systemd_strategy()
+        with patch(
+            "nbkp.mount.lifecycle.detect_device_present",
+            side_effect=TimeoutError("timed out"),
+        ):
+            result = mount_volume(
+                vol,
+                vol.mount,
+                {},
+                lambda x: "pass",  # type: ignore[arg-type]
+                strategy,
+            )
+        assert not result.success
+        assert result.failure_reason == MountFailureReason.UNREACHABLE
+        assert "timed out" in (result.detail or "")
+
+    def test_connection_refused_returns_unreachable(self) -> None:
+        """Connection refused during mount returns UNREACHABLE."""
+        vol = _encrypted_vol()
+        strategy = _systemd_strategy()
+        with patch(
+            "nbkp.mount.lifecycle.detect_device_present",
+            side_effect=ConnectionRefusedError("Connection refused"),
+        ):
+            result = mount_volume(
+                vol,
+                vol.mount,
+                {},
+                lambda x: "pass",  # type: ignore[arg-type]
+                strategy,
+            )
+        assert not result.success
+        assert result.failure_reason == MountFailureReason.UNREACHABLE
+
 
 class TestUmountVolume:
     def test_umount_and_close_luks(self) -> None:
@@ -231,6 +269,24 @@ class TestUmountVolume:
         assert not result.success
         assert result.warning is not None
 
+    def test_ssh_timeout_returns_failed(self) -> None:
+        """SSH timeout during umount returns failed result, not a crash."""
+        vol = _encrypted_vol()
+        strategy = _systemd_strategy()
+        with patch(
+            "nbkp.mount.strategy.run_on_volume",
+            side_effect=TimeoutError("timed out"),
+        ):
+            result = umount_volume(
+                vol,
+                vol.mount,
+                {},
+                strategy,
+            )
+        assert not result.success
+        assert "timed out" in (result.detail or "")
+        assert result.warning is not None
+
     def test_unencrypted_umount(self) -> None:
         vol = _unencrypted_vol()
         strategy = _systemd_strategy(mount_unit="mnt-usb.mount", cryptsetup_path=None)
@@ -279,7 +335,7 @@ class TestMountVolumes:
             # detect_mounted -> True
             patch("nbkp.mount.strategy.run_on_volume", return_value=_mock_run(0)),
         ):
-            results = mount_volumes(
+            _, results = mount_volumes(
                 cfg,
                 {},
                 lambda x: "pass",
@@ -299,7 +355,7 @@ class TestMountVolumes:
             # detect_mounted -> True
             patch("nbkp.mount.strategy.run_on_volume", return_value=_mock_run(0)),
         ):
-            results = mount_volumes(
+            _, results = mount_volumes(
                 cfg,
                 {},
                 lambda x: "pass",
@@ -311,7 +367,7 @@ class TestMountVolumes:
 
     def test_missing_strategy_fails(self) -> None:
         cfg = self._config_with_mount()
-        results = mount_volumes(
+        _, results = mount_volumes(
             cfg,
             {},
             lambda x: "pass",

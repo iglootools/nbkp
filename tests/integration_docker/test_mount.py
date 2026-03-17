@@ -534,7 +534,7 @@ class TestMountObservations:
         """Observations from a successful mount reflect actual state."""
         config, resolved = _make_config(docker_ssh_endpoint, remote_encrypted_volume)
         strategies = resolve_mount_strategy(config, resolved, names=None)
-        mount_results = mount_volumes(
+        _, mount_results = mount_volumes(
             config,
             resolved,
             lambda _: LUKS_PASSPHRASE,
@@ -576,7 +576,7 @@ class TestMountObservations:
         )
         config, resolved = _make_config(docker_ssh_endpoint, volume)
         strategies = resolve_mount_strategy(config, resolved, names=None)
-        mount_results = mount_volumes(
+        _, mount_results = mount_volumes(
             config,
             resolved,
             lambda _: LUKS_PASSPHRASE,
