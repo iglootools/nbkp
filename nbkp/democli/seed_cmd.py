@@ -14,6 +14,14 @@ from typing import Annotated, Callable
 import typer
 import yaml
 from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TaskID,
+    TextColumn,
+)
 from rich.syntax import Syntax
 from rich.text import Text
 
@@ -104,6 +112,50 @@ def _require_docker_extra() -> None:
         raise typer.Exit(1)
 
 
+class StepProgressBar:
+    """Rich progress bar for multi-step operations.
+
+    Shows a spinner, description (current step label), visual bar,
+    and M/N counter.  Result lines (✓/✗) are printed above the bar
+    as each step completes.
+    """
+
+    def __init__(self, total: int) -> None:
+        self._total = total
+        self._progress: Progress | None = None
+        self._task_id: TaskID | None = None
+
+    def on_start(self, label: str) -> None:
+        """Call before each step begins."""
+        if self._progress is None:
+            self._progress = Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                MofNCompleteColumn(),
+                transient=True,
+            )
+            self._progress.start()
+            self._task_id = self._progress.add_task(f"{label}...", total=self._total)
+        else:
+            assert self._task_id is not None
+            self._progress.update(self._task_id, description=f"{label}...")
+
+    def on_end(self, label: str, success: bool, detail: str | None = None) -> None:
+        """Call after each step completes."""
+        if self._progress is not None:
+            assert self._task_id is not None
+            icon = "[green]\u2713[/green]" if success else "[red]\u2717[/red]"
+            detail_str = f" ({detail})" if detail else ""
+            self._progress.console.print(f"{icon} {label}{detail_str}")
+            self._progress.advance(self._task_id)
+
+    def stop(self) -> None:
+        """Stop the progress bar (idempotent)."""
+        if self._progress is not None:
+            self._progress.stop()
+
+
 @app.command()
 def seed(
     big_file_size: Annotated[
@@ -180,39 +232,60 @@ def seed(
     else:
         tmp = Path(tempfile.mkdtemp(prefix="nbkp-demo-"))
 
-    # Server and bastion containers
+    # ── Step count for progress bar ────────────────────────────
+    # Docker: build image, create network, start bastion, wait bastion SSH,
+    #         start storage, wait storage SSH = 6
+    # LUKS:   read metadata, mount, umount = 3
+    # Always: seed volumes = 1
+    step_count = 1  # seed volumes
+    if docker:
+        step_count += 6
+    if docker and luks:
+        step_count += 3  # read metadata + mount + umount
+
+    bar = StepProgressBar(step_count)
+
+    # ── Server and bastion containers ────────────────────────
     storage_endpoint = None
     bastion_endpoint = None
     if docker:
         private_key, pub_key = generate_ssh_keypair(tmp)
 
-        with _console.status("Building Docker image..."):
-            build_docker_image()
+        bar.on_start("Building Docker image")
+        build_docker_image()
+        bar.on_end("Building Docker image", True)
 
-        with _console.status("Creating Docker network..."):
-            network_name = create_docker_network()
+        bar.on_start("Creating Docker network")
+        network_name = create_docker_network()
+        bar.on_end("Creating Docker network", True)
 
-        with _console.status("Starting bastion container..."):
-            bastion_port = start_bastion_container(pub_key, network_name)
+        bar.on_start("Starting bastion container")
+        bastion_port = start_bastion_container(pub_key, network_name)
+        bar.on_end("Starting bastion container", True)
+
         bastion_endpoint = create_test_ssh_endpoint(
             "bastion", "127.0.0.1", bastion_port, private_key
         )
-        with _console.status("Waiting for bastion SSH..."):
-            wait_for_ssh(bastion_endpoint)
+        bar.on_start("Waiting for bastion SSH")
+        wait_for_ssh(bastion_endpoint)
+        bar.on_end("Waiting for bastion SSH", True)
 
-        with _console.status("Starting storage container..."):
-            storage_port = start_storage_container(
-                pub_key,
-                network_name=network_name,
-                network_alias="backup-server",
-            )
+        bar.on_start("Starting storage container")
+        storage_port = start_storage_container(
+            pub_key,
+            network_name=network_name,
+            network_alias="backup-server",
+        )
+        bar.on_end("Starting storage container", True)
+
         storage_endpoint = create_test_ssh_endpoint(
             "storage", "127.0.0.1", storage_port, private_key
         )
-        with _console.status("Waiting for storage SSH..."):
-            wait_for_ssh(storage_endpoint)
+        bar.on_start("Waiting for storage SSH")
+        wait_for_ssh(storage_endpoint)
+        bar.on_end("Waiting for storage SSH", True)
 
-    # Config — chain layout matching integration test
+    # ── Config — chain layout matching integration test ──────
     luks_uuid: str | None = None
     if docker:
         assert bastion_endpoint is not None
@@ -226,11 +299,14 @@ def seed(
         )
 
         if luks:
-            with _console.status("Reading LUKS metadata..."):
-                meta = read_luks_metadata(storage_endpoint)
+            bar.on_start("Reading LUKS metadata")
+            meta = read_luks_metadata(storage_endpoint)
             if meta.available:
                 luks_uuid = meta.uuid
+                bar.on_end("Reading LUKS metadata", True)
             else:
+                bar.on_end("Reading LUKS metadata", False, "dm-crypt unavailable")
+                bar.stop()
                 _console.print(
                     "[red]LUKS unavailable[/red]"
                     " (dm-crypt kernel module missing?)."
@@ -260,7 +336,7 @@ def seed(
             max_snapshots=5,
         )
 
-    # Create sentinels and seed data.
+    # ── Create sentinels and seed data ───────────────────────
     # When LUKS is active, temporarily mount the encrypted volume
     # so create_seed_sentinels can set up btrfs staging subvolumes.
     size_bytes = big_file_size * 1024 * 1024
@@ -279,34 +355,37 @@ def seed(
 
     mount_strategy: dict[str, MountStrategy] = {}
     if luks_uuid is not None:
-        with _console.status("Mounting encrypted volume..."):
-            mount_strategy, mount_results = mount_volumes(
-                config,
-                resolved,
-                lambda _: LUKS_PASSPHRASE,
-            )
-            for r in mount_results:
-                if not r.success:
-                    _console.print(
-                        f"[red]Mount failed:[/red] {r.volume_slug}: {r.detail}"
-                    )
-                    raise typer.Exit(1)
+        bar.on_start("Mounting encrypted volume")
+        mount_strategy, mount_results = mount_volumes(
+            config,
+            resolved,
+            lambda _: LUKS_PASSPHRASE,
+        )
+        mount_failed = next((r for r in mount_results if not r.success), None)
+        if mount_failed is not None:
+            bar.on_end("Mounting encrypted volume", False, mount_failed.detail)
+            bar.stop()
+            raise typer.Exit(1)
+        bar.on_end("Mounting encrypted volume", True)
 
     try:
-        with _console.status("Setting up volumes..."):
-            create_seed_sentinels(config, remote_exec=remote_exec)
-            seed_volume(
-                config.volumes["src-local-bare"],
-                big_file_size_bytes=size_bytes,
-            )
+        bar.on_start("Seeding volumes")
+        create_seed_sentinels(config, remote_exec=remote_exec)
+        seed_volume(
+            config.volumes["src-local-bare"],
+            big_file_size_bytes=size_bytes,
+        )
+        bar.on_end("Seeding volumes", True)
     finally:
         if luks_uuid is not None:
-            with _console.status("Unmounting encrypted volume..."):
-                umount_volumes(
-                    config,
-                    resolved,
-                    mount_strategy=mount_strategy,
-                )
+            bar.on_start("Unmounting encrypted volume")
+            umount_volumes(
+                config,
+                resolved,
+                mount_strategy=mount_strategy,
+            )
+            bar.on_end("Unmounting encrypted volume", True)
+        bar.stop()
 
     config_path = tmp / "config.yaml"
     config_path.write_text(
