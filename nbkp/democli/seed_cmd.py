@@ -126,7 +126,11 @@ class StepProgressBar:
         self._task_id: TaskID | None = None
 
     def on_start(self, label: str) -> None:
-        """Call before each step begins."""
+        """Call before each step begins.
+
+        *label* is the in-progress description shown next to the
+        spinner (e.g. ``"Building Docker image..."``).
+        """
         if self._progress is None:
             self._progress = Progress(
                 SpinnerColumn(),
@@ -136,13 +140,17 @@ class StepProgressBar:
                 transient=True,
             )
             self._progress.start()
-            self._task_id = self._progress.add_task(f"{label}...", total=self._total)
+            self._task_id = self._progress.add_task(label, total=self._total)
         else:
             assert self._task_id is not None
-            self._progress.update(self._task_id, description=f"{label}...")
+            self._progress.update(self._task_id, description=label)
 
     def on_end(self, label: str, success: bool, detail: str | None = None) -> None:
-        """Call after each step completes."""
+        """Call after each step completes.
+
+        *label* is the shorter result line printed above the bar
+        (e.g. ``"build Docker image"``).
+        """
         if self._progress is not None:
             assert self._task_id is not None
             icon = "[green]\u2713[/green]" if success else "[red]\u2717[/red]"
@@ -251,39 +259,39 @@ def seed(
     if docker:
         private_key, pub_key = generate_ssh_keypair(tmp)
 
-        bar.on_start("Building Docker image")
+        bar.on_start("Building Docker image...")
         build_docker_image()
-        bar.on_end("Building Docker image", True)
+        bar.on_end("build Docker image", True)
 
-        bar.on_start("Creating Docker network")
+        bar.on_start("Creating Docker network...")
         network_name = create_docker_network()
-        bar.on_end("Creating Docker network", True)
+        bar.on_end("create Docker network", True)
 
-        bar.on_start("Starting bastion container")
+        bar.on_start("Starting bastion container...")
         bastion_port = start_bastion_container(pub_key, network_name)
-        bar.on_end("Starting bastion container", True)
+        bar.on_end("start bastion container", True)
 
         bastion_endpoint = create_test_ssh_endpoint(
             "bastion", "127.0.0.1", bastion_port, private_key
         )
-        bar.on_start("Waiting for bastion SSH")
+        bar.on_start("Waiting for bastion SSH...")
         wait_for_ssh(bastion_endpoint)
-        bar.on_end("Waiting for bastion SSH", True)
+        bar.on_end("bastion SSH", True)
 
-        bar.on_start("Starting storage container")
+        bar.on_start("Starting storage container...")
         storage_port = start_storage_container(
             pub_key,
             network_name=network_name,
             network_alias="backup-server",
         )
-        bar.on_end("Starting storage container", True)
+        bar.on_end("start storage container", True)
 
         storage_endpoint = create_test_ssh_endpoint(
             "storage", "127.0.0.1", storage_port, private_key
         )
-        bar.on_start("Waiting for storage SSH")
+        bar.on_start("Waiting for storage SSH...")
         wait_for_ssh(storage_endpoint)
-        bar.on_end("Waiting for storage SSH", True)
+        bar.on_end("storage SSH", True)
 
     # ── Config — chain layout matching integration test ──────
     luks_uuid: str | None = None
@@ -299,13 +307,13 @@ def seed(
         )
 
         if luks:
-            bar.on_start("Reading LUKS metadata")
+            bar.on_start("Reading LUKS metadata...")
             meta = read_luks_metadata(storage_endpoint)
             if meta.available:
                 luks_uuid = meta.uuid
-                bar.on_end("Reading LUKS metadata", True)
+                bar.on_end("read LUKS metadata", True)
             else:
-                bar.on_end("Reading LUKS metadata", False, "dm-crypt unavailable")
+                bar.on_end("read LUKS metadata", False, "dm-crypt unavailable")
                 bar.stop()
                 _console.print(
                     "[red]LUKS unavailable[/red]"
@@ -355,7 +363,7 @@ def seed(
 
     mount_strategy: dict[str, MountStrategy] = {}
     if luks_uuid is not None:
-        bar.on_start("Mounting encrypted volume")
+        bar.on_start("Mounting encrypted volume...")
         mount_strategy, mount_results = mount_volumes(
             config,
             resolved,
@@ -363,28 +371,28 @@ def seed(
         )
         mount_failed = next((r for r in mount_results if not r.success), None)
         if mount_failed is not None:
-            bar.on_end("Mounting encrypted volume", False, mount_failed.detail)
+            bar.on_end("mount encrypted volume", False, mount_failed.detail)
             bar.stop()
             raise typer.Exit(1)
-        bar.on_end("Mounting encrypted volume", True)
+        bar.on_end("mount encrypted volume", True)
 
     try:
-        bar.on_start("Seeding volumes")
+        bar.on_start("Seeding volumes...")
         create_seed_sentinels(config, remote_exec=remote_exec)
         seed_volume(
             config.volumes["src-local-bare"],
             big_file_size_bytes=size_bytes,
         )
-        bar.on_end("Seeding volumes", True)
+        bar.on_end("seed volumes", True)
     finally:
         if luks_uuid is not None:
-            bar.on_start("Unmounting encrypted volume")
+            bar.on_start("Unmounting encrypted volume...")
             umount_volumes(
                 config,
                 resolved,
                 mount_strategy=mount_strategy,
             )
-            bar.on_end("Unmounting encrypted volume", True)
+            bar.on_end("umount encrypted volume", True)
         bar.stop()
 
     config_path = tmp / "config.yaml"
