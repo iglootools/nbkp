@@ -10,6 +10,8 @@ from nbkp.config import (
     MountConfig,
 )
 from nbkp.mount.observation import MountObservation
+from rich.text import Text
+
 from nbkp.preflight.output.formatting import format_mount_status
 from nbkp.preflight.status import (
     MountCapabilities,
@@ -339,11 +341,11 @@ class TestMountCapabilitiesRuntimeState:
 
 class TestFormatMountStatus:
     def test_none_caps_returns_empty(self) -> None:
-        assert format_mount_status(None, _encrypted_mount()) == ""
+        assert format_mount_status(None, _encrypted_mount()) == Text("")
 
     def test_none_config_returns_empty(self) -> None:
         mc = _base_mount_caps(device_present=True, mounted=True)
-        assert format_mount_status(mc, None) == ""
+        assert format_mount_status(mc, None) == Text("")
 
     def test_encrypted_all_true(self) -> None:
         mc = _base_mount_caps(device_present=True, luks_attached=True, mounted=True)

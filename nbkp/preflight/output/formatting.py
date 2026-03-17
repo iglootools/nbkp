@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from rich.text import Text
 
 from ..status import (
@@ -17,6 +19,16 @@ from ..status import (
     VolumeStatus,
 )
 from ...config import MountConfig
+
+
+def join_text(items: Iterable[Text], separator: str = ", ") -> Text:
+    """Join styled Text fragments with a plain separator."""
+    result = Text()
+    for i, item in enumerate(items):
+        if i > 0:
+            result.append(separator)
+        result.append_text(item)
+    return result
 
 
 def status_text(
@@ -62,10 +74,10 @@ def mount_capability_items(
             ]
 
 
-def format_capabilities(caps: VolumeCapabilities | None) -> str:
-    """Format volume capabilities as a compact comma-separated string."""
+def format_capabilities(caps: VolumeCapabilities | None) -> Text:
+    """Format volume capabilities as styled text."""
     if caps is None:
-        return ""
+        return Text("")
     items = [
         label
         for flag, label in [
@@ -77,19 +89,22 @@ def format_capabilities(caps: VolumeCapabilities | None) -> str:
         ]
         if flag and label is not None
     ]
-    return ", ".join(items) if items else "none"
+    return Text(", ".join(items) if items else "none")
 
 
-def check(ok: bool, label: str) -> str:
+def check(ok: bool, label: str) -> Text:
     """Format a diagnostic item as check-label or x-label with color."""
-    return f"[green]\u2713{label}[/green]" if ok else f"[red]\u2717{label}[/red]"
+    if ok:
+        return Text(f"\u2713{label}", style="green")
+    else:
+        return Text(f"\u2717{label}", style="red")
 
 
 def format_mount_status(
     mount_caps: MountCapabilities | None,
     mount_config: MountConfig | None,
-) -> str:
-    """Format runtime mount state as a compact string.
+) -> Text:
+    """Format runtime mount state as styled text.
 
     Shows check/x for each probed mount state item.  Items whose value
     is ``None`` (not probed / not applicable) are omitted, matching
@@ -97,7 +112,7 @@ def format_mount_status(
     Empty when the volume has no mount config or caps are unavailable.
     """
     if mount_caps is None or mount_config is None:
-        return ""
+        return Text("")
     items = [
         (mount_caps.device_present, "device"),
         *(
@@ -107,7 +122,7 @@ def format_mount_status(
         ),
         (mount_caps.mounted, "mounted"),
     ]
-    return ", ".join(check(value, label) for value, label in items if value is not None)
+    return join_text(check(value, label) for value, label in items if value is not None)
 
 
 def collect_ssh_endpoint_statuses(

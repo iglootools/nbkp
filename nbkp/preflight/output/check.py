@@ -20,6 +20,7 @@ from ...config.output import (
     format_volume_display,
 )
 from ..status import (
+    LatestSymlinkState,
     SshEndpointStatus,
     SyncStatus,
     VolumeStatus,
@@ -29,24 +30,32 @@ from .formatting import (
     collect_ssh_endpoint_statuses,
     format_capabilities,
     format_mount_status,
+    join_text,
     status_text,
 )
 
 
-def _format_volume_issues(vol_status: VolumeStatus) -> str:
+def _format_latest(latest: LatestSymlinkState) -> Text:
+    """Format latest symlink state as styled text."""
+    if latest.exists and latest.raw_target:
+        return Text(f"\u2713latest \u2192 {latest.raw_target}", style="green")
+    else:
+        return Text("\u2717latest", style="red")
+
+
+def _format_volume_issues(vol_status: VolumeStatus) -> Text:
     """Format volume-level issues as x-volume(reason).
 
     With cascade errors, ``vol_status.errors`` is self-describing —
     it includes a cascade error when the SSH endpoint is inactive.
     """
     reason = ", ".join(e.value for e in vol_status.errors)
-    return (
-        f"[red]\u2717volume ({reason})[/red]" if reason else "[red]\u2717volume[/red]"
-    )
+    label = f"\u2717volume ({reason})" if reason else "\u2717volume"
+    return Text(label, style="red")
 
 
-def _format_source_diagnostics(ss: SyncStatus) -> str:
-    """Format source endpoint diagnostics as a compact comma-separated string.
+def _format_source_diagnostics(ss: SyncStatus) -> Text:
+    """Format source endpoint diagnostics as styled text.
 
     When the source volume is inactive, shows x-volume(reason) instead
     of endpoint-level items (which weren't computed).  Otherwise shows
@@ -59,7 +68,7 @@ def _format_source_diagnostics(ss: SyncStatus) -> str:
         return _format_volume_issues(src_ep.volume_status)
     diag = src_ep.diagnostics
     if diag is None:
-        return ""
+        return Text("")
     items = [
         check(diag.sentinel_exists, "sentinel"),
         *(
@@ -68,20 +77,16 @@ def _format_source_diagnostics(ss: SyncStatus) -> str:
             else []
         ),
         *(
-            [
-                f"[green]\u2713latest \u2192 {diag.latest.raw_target}[/green]"
-                if diag.latest.exists and diag.latest.raw_target
-                else "[red]\u2717latest[/red]"
-            ]
+            [_format_latest(diag.latest)]
             if diag.latest is not None
             else []
         ),
     ]
-    return ", ".join(items)
+    return join_text(items)
 
 
-def _format_destination_diagnostics(ss: SyncStatus) -> str:
-    """Format destination endpoint diagnostics as a compact comma-separated string.
+def _format_destination_diagnostics(ss: SyncStatus) -> Text:
+    """Format destination endpoint diagnostics as styled text.
 
     When the destination volume is inactive, shows x-volume(reason)
     instead of endpoint-level items.  Otherwise shows check/x for each
@@ -94,7 +99,7 @@ def _format_destination_diagnostics(ss: SyncStatus) -> str:
         return _format_volume_issues(dst_ep.volume_status)
     diag = dst_ep.diagnostics
     if diag is None:
-        return ""
+        return Text("")
     items = [
         check(diag.sentinel_exists, "sentinel"),
         check(diag.endpoint_writable, "writable"),
@@ -112,16 +117,12 @@ def _format_destination_diagnostics(ss: SyncStatus) -> str:
             else []
         ),
         *(
-            [
-                f"[green]\u2713latest \u2192 {diag.latest.raw_target}[/green]"
-                if diag.latest.exists and diag.latest.raw_target
-                else "[red]\u2717latest[/red]"
-            ]
+            [_format_latest(diag.latest)]
             if diag.latest is not None
             else []
         ),
     ]
-    return ", ".join(items)
+    return join_text(items)
 
 
 def _build_ssh_endpoints_section(
