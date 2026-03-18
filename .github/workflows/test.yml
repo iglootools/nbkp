@@ -30,7 +30,11 @@ jobs:
     strategy:
       max-parallel: 2
       matrix:
-        python-version: ["3.12.13", "3.14.3"]
+        python-version: [
+          "3.12.13", 
+          # Let's disable 3.14 in CI for now to save on CI minutes. 
+          # "3.14.3"
+        ]
     name: test (python ${{ matrix.python-version }})
     steps:
       - uses: actions/checkout@v6

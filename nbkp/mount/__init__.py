@@ -29,6 +29,12 @@ from .lifecycle import (
     umount_volumes,
 )
 from .observation import MountObservation, build_mount_observations
+from .output import (
+    MountStatusData,
+    build_mount_status_json,
+    build_mount_status_table,
+    mount_state_icon,
+)
 from .systemd import (
     build_close_luks_command,
     build_mount_command,
@@ -41,6 +47,7 @@ __all__ = [
     "DirectMountStrategy",
     "MountFailureReason",
     "MountObservation",
+    "MountStatusData",
     "MountStrategy",
     "MountResult",
     "POLKIT_RULES_PATH",
@@ -50,6 +57,8 @@ __all__ = [
     "SystemdMountStrategy",
     "UmountResult",
     "build_mount_observations",
+    "build_mount_status_json",
+    "build_mount_status_table",
     "build_close_luks_command",
     "build_mount_command",
     "build_attach_luks_command",
@@ -60,6 +69,7 @@ __all__ = [
     "generate_auth_rules",
     "generate_polkit_rules",
     "generate_sudoers_rules",
+    "mount_state_icon",
     "mount_volume",
     "mount_volume_count",
     "mount_volumes",

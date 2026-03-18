@@ -776,15 +776,17 @@ def _build_hard_link_orphan_cleanup_block(
     )
     # fmt: on
     return dedent(f"""\
-        NBKP_LATEST_LINK=$({rl_cmd} 2>/dev/null || true)
-        {guard}
-            NBKP_LATEST_NAME="${{NBKP_LATEST_LINK##*/}}"
-            for snap in $({ls_cmd} 2>/dev/null | sort); do
-                if [ "$snap" \\> "$NBKP_LATEST_NAME" ]; then
-                    nbkp_log "Removing orphaned snapshot: $snap"
-                    {rm_cmd}
-                fi
-            done
+        if [ "$NBKP_DRY_RUN" = false ]; then
+            NBKP_LATEST_LINK=$({rl_cmd} 2>/dev/null || true)
+            {guard}
+                NBKP_LATEST_NAME="${{NBKP_LATEST_LINK##*/}}"
+                for snap in $({ls_cmd} 2>/dev/null | sort); do
+                    if [ "$snap" \\> "$NBKP_LATEST_NAME" ]; then
+                        nbkp_log "Removing orphaned snapshot: $snap"
+                        {rm_cmd}
+                    fi
+                done
+            fi
         fi""")
 
 
@@ -805,7 +807,9 @@ def _build_hard_link_mkdir_block(
     date_fmt = _snapshot_date_format(dst_vol, platform)
     return dedent(f"""\
         NBKP_TS=$(date -u +{date_fmt})
-        {mkdir_cmd}""")
+        if [ "$NBKP_DRY_RUN" = false ]; then
+            {mkdir_cmd}
+        fi""")
 
 
 def _build_hard_link_symlink_block(

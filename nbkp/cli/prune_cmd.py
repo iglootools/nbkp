@@ -15,6 +15,7 @@ from .common import (
     OutputFormat,
     check_all_with_progress,
     load_config_or_exit,
+    managed_mount,
     resolve_endpoints,
 )
 
@@ -61,35 +62,54 @@ def prune(
             help="Prefer private (LAN) or public (WAN) endpoints",
         ),
     ] = None,
+    mount: Annotated[
+        bool,
+        typer.Option(
+            "--mount/--no-mount",
+            help="Mount/umount volumes with mount config",
+        ),
+    ] = True,
+    umount: Annotated[
+        bool,
+        typer.Option(
+            "--umount/--no-umount",
+            help="Umount after prune (use --no-umount for debugging)",
+        ),
+    ] = True,
 ) -> None:
     """Remove snapshots beyond the `max-snapshots` limit. Normally handled automatically by `run`, but can be invoked manually."""
     cfg = load_config_or_exit(config)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
-    preflight = check_all_with_progress(
-        cfg,
-        use_progress=output_format is OutputFormat.HUMAN,
-        resolved_endpoints=resolved,
-    )
 
-    results = prune_all_syncs(
-        cfg,
-        preflight.sync_statuses,
-        dry_run=dry_run,
-        only_syncs=sync,
-        resolved_endpoints=resolved,
-    )
+    with managed_mount(
+        cfg, resolved, mount=mount, umount=umount, output_format=output_format
+    ) as (_mount_strategy, mount_observations):
+        preflight = check_all_with_progress(
+            cfg,
+            use_progress=output_format is OutputFormat.HUMAN,
+            resolved_endpoints=resolved,
+            mount_observations=mount_observations,
+        )
 
-    match output_format:
-        case OutputFormat.JSON:
-            typer.echo(
-                json.dumps(
-                    [r.model_dump() for r in results],
-                    indent=2,
+        results = prune_all_syncs(
+            cfg,
+            preflight.sync_statuses,
+            dry_run=dry_run,
+            only_syncs=sync,
+            resolved_endpoints=resolved,
+        )
+
+        match output_format:
+            case OutputFormat.JSON:
+                typer.echo(
+                    json.dumps(
+                        [r.model_dump() for r in results],
+                        indent=2,
+                    )
                 )
-            )
-        case OutputFormat.HUMAN:
-            print_human_prune_results(results, dry_run)
+            case OutputFormat.HUMAN:
+                print_human_prune_results(results, dry_run)
 
-    if any(r.detail and not r.skipped for r in results):
-        raise typer.Exit(1)
+        if any(r.detail and not r.skipped for r in results):
+            raise typer.Exit(1)

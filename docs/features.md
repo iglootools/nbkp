@@ -62,7 +62,7 @@ nbkp can automatically mount and umount volumes before and after backups, includ
 
 - **LUKS encryption support**: automatic attach via `systemd-cryptsetup attach` with passphrase piped via stdin, close via `systemctl stop systemd-cryptsetup@<mapper>.service`
 - **Unencrypted volume mount**: `systemctl start/stop` for volumes with fstab or native .mount unit entries
-- **Credential providers**: retrieve LUKS passphrases from keyring, interactive prompt, environment variable, or external command (e.g. `pass`, 1Password CLI)
+- **Credential providers**: retrieve LUKS passphrases from keyring, interactive prompt, environment variable, or external command (e.g. `pass`, 1Password CLI). The keyring provider delegates to the [keyring](https://github.com/jaraco/keyring) library, which supports macOS Keychain, GNOME Keyring / libsecret, KDE Wallet, and Windows Credential Locker. The `keyring` package is an optional dependency (`pip install nbkp[keyring]`)
 - **Idempotent**: skips already-attached and already-mounted volumes
 - **Integrated into `run`, `check`, and `troubleshoot`**: mount before running, umount in `finally` block (even on failure). Controllable via `--mount/--no-mount` and `--umount/--no-umount`
 - **Standalone commands**: `volumes mount` and `volumes umount` for manual lifecycle management

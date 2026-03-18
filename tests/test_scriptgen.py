@@ -759,7 +759,7 @@ class TestEdgeCases:
             volumes={"src": src, "dst": dst},
             sync_endpoints={
                 "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst1": SyncEndpoint(slug="ep-dst1", volume="dst"),
+                "ep-dst1": SyncEndpoint(slug="ep-dst1", volume="dst", subdir="one"),
                 "ep-dst2": SyncEndpoint(slug="ep-dst2", volume="dst", subdir="two"),
             },
             syncs={
@@ -856,7 +856,7 @@ class TestEdgeCases:
             volumes={"src": src, "dst": dst},
             sync_endpoints={
                 "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst1": SyncEndpoint(slug="ep-dst1", volume="dst"),
+                "ep-dst1": SyncEndpoint(slug="ep-dst1", volume="dst", subdir="on"),
                 "ep-dst2": SyncEndpoint(slug="ep-dst2", volume="dst", subdir="off"),
             },
             syncs={
