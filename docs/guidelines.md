@@ -57,7 +57,9 @@ A set of [implementation checklists](./implementation-checklists.md) serve as a 
 - Whenever safe (i.e. not affecting production), enable `workflow_dispatch` and `repository_dispatch` to allow manual triggering of workflows from the GitHub UI or CLI, which is useful for testing and debugging.
 - Use OpenID Connect (OIDC) authentication for publishing to PyPI, and set up a separate workflow for testing releases to Test PyPI. This allows testing the release and publish process without affecting the real PyPI index, and provides more detailed logs for debugging.
 
-## Application-Specific Coding Guidelines
+## Application-Specific Guidelines
+
+### Coding
 - **Naming Conventions**
   - `kebab-case` for CLI commands and config keys
 - **CLI**
@@ -72,9 +74,9 @@ A set of [implementation checklists](./implementation-checklists.md) serve as a 
   - Generate YAML test data using the Pydantic data models and `model.model_dump()` instead of hardcoding YAML strings.
     This ensures the test data is always valid and consistent with the models.
 
-## Testing Strategy
+### Testing
 
-### Manual Testing
+#### Manual Testing
 
 In addition to the automated tests, the `nbkp demo seed --docker` command can be used for manual testing and debugging. It generates:
 1. a similar environment as the one used in the Docker-enabled tests
@@ -86,7 +88,7 @@ The docker setup does not include a fully-functional systemd setup for managing 
 `cryptsetup` and `mount` calls instead of the production systemd-based workflow. 
 This allows testing the encrypted backup workflows end-to-end but nbkp's mount/umount logic needs to be tested manually on a real setup.
 
-### Automated tests
+#### Automated tests
 
 Automated tests are organized into 4 categories based on what they test and what infrastructure they require:
 
