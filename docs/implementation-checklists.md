@@ -3,7 +3,7 @@
 These checklists serve as a reminder for things to check when implementing new features or making changes to the codebase. 
 
 ## Guidelines
-- Follow the [coding guidelines](./guidelines.md)
+- Follow the [common guidelines](https://github.com/iglootools/common-guidelines) and [project-specific guidelines](./guidelines.md)
 
 ## Build and CI
 - Keep Github workflows and mise tasks in sync with each other

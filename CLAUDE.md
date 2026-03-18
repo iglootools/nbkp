@@ -12,7 +12,17 @@ Explanations of key concepts such as volumes, syncs, and the configuration model
 
 ## Guidelines and Workflow
 
-Before writing any code, read `docs/guidelines.md` and `docs/implementation-checklists.md`. Apply guidelines (functional style, module-level imports, comprehensions over mutable accumulators) at write time, not as a post-hoc review. Walk the implementation checklist item by item before considering a task done.
+Before writing any code, apply the guidelines at write time, not as a post-hoc review. Walk the implementation checklist item by item before considering a task done.
+
+Common guidelines (shared across iglootools projects):
+
+@../common-guidelines/coding.md
+@../common-guidelines/python.md
+@../common-guidelines/tooling.md
+
+Project-specific guidelines: @docs/guidelines.md
+
+Implementation checklists: @docs/implementation-checklists.md
 
 ## Build & Test Commands
 
