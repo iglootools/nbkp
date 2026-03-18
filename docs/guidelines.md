@@ -1,8 +1,8 @@
-# Conventions
+# Guidelines
 
 A set of [implementation checklists](./implementation-checklists.md) serve as a reminder for things to check when implementing new features or making changes to the codebase. 
 
-## General Coding Conventions
+## General Coding Guidelines
 - **Functional Style**:
   - Prefer functional programming style over procedural style. Use pure functions and avoid mutability when possible.
 - **Code comments**: When making changes to the codebase, explain the reasoning when the implementation is non-obvious, and document any non-trivial design decisions or trade-offs that were made.
@@ -29,7 +29,7 @@ A set of [implementation checklists](./implementation-checklists.md) serve as a 
 - **No Silent Failures**
   - Avoid silent failures and ensure that all errors are surfaced with clear messages. This includes validating inputs and configurations early, and providing informative error messages when something goes wrong.
 
-## General Python Coding Conventions
+## General Python Coding Guidelines
 - **Functional Style**:
   - Avoid mutable accumulator lists (`errors = []; errors.append(...)`). Instead, build lists as single expressions using `[*(...), *(...)]` unpacking, conditional `[item] if cond else []` fragments, and helper functions that return lists.
   - Prefer dict/list comprehensions over imperative loops for building collections.
@@ -57,7 +57,7 @@ A set of [implementation checklists](./implementation-checklists.md) serve as a 
 - Whenever safe (i.e. not affecting production), enable `workflow_dispatch` and `repository_dispatch` to allow manual triggering of workflows from the GitHub UI or CLI, which is useful for testing and debugging.
 - Use OpenID Connect (OIDC) authentication for publishing to PyPI, and set up a separate workflow for testing releases to Test PyPI. This allows testing the release and publish process without affecting the real PyPI index, and provides more detailed logs for debugging.
 
-## Application-Specific Coding Conventions
+## Application-Specific Coding Guidelines
 - **Naming Conventions**
   - `kebab-case` for CLI commands and config keys
 - **CLI**

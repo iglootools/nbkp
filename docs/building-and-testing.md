@@ -1,6 +1,6 @@
 # Building and Testing
 
-The unit tests cover the core logic of the tool. Integration and end-to-end tests exercise the real rsync/SSH/btrfs pipeline against Docker containers and local filesystems. See [Testing Strategy](conventions.md#testing-strategy) for details on each test category.
+The unit tests cover the core logic of the tool. Integration and end-to-end tests exercise the real rsync/SSH/btrfs pipeline against Docker containers and local filesystems. See [Testing Strategy](guidelines.md#testing-strategy) for details on each test category.
 
 Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/QA. The `seed --docker` command requires the `docker` extra: `pipx install nbkp[docker]`. In dev: `poetry run nbkp demo`.
 
@@ -52,7 +52,7 @@ It is scheduled to run weekly, but can also be triggered manually using `gh work
 
 ## Testing Strategy
 
-See [Testing Strategy](conventions.md#testing-strategy) for details on test categories, automated vs manual testing, and intentionally untested areas.
+See [Testing Strategy](guidelines.md#testing-strategy) for details on test categories, automated vs manual testing, and intentionally untested areas.
 
 The Docker-based test suites use [testcontainers](https://testcontainers-python.readthedocs.io/) and automatically:
 - Generate an ephemeral SSH key pair

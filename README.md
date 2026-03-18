@@ -110,7 +110,7 @@ Practical information:
 - [docs/setup-development-environment.md](https://github.com/iglootools/nbkp/blob/main/docs/setup-development-environment.md) — development setup
 - [docs/building-and-testing.md](https://github.com/iglootools/nbkp/blob/main/docs/building-and-testing.md) — running tests and checks
 - [docs/releasing-and-publishing.md](https://github.com/iglootools/nbkp/blob/main/docs/releasing-and-publishing.md) — releases and PyPI publishing
-- [docs/conventions.md](https://github.com/iglootools/nbkp/blob/main/docs/conventions.md) — coding conventions and guidelines
+- [docs/guidelines.md](https://github.com/iglootools/nbkp/blob/main/docs/guidelines.md) — coding guidelines
 
 Conceptual information:
 - [docs/concepts.md](https://github.com/iglootools/nbkp/blob/main/docs/concepts.md) - key concepts and terminology

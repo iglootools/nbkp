@@ -2,8 +2,8 @@
 
 These checklists serve as a reminder for things to check when implementing new features or making changes to the codebase. 
 
-## Conventions
-- Follow the [coding conventions](./conventions.md)
+## Guidelines
+- Follow the [coding guidelines](./guidelines.md)
 
 ## Build and CI
 - Keep Github workflows and mise tasks in sync with each other
@@ -12,7 +12,7 @@ These checklists serve as a reminder for things to check when implementing new f
 
 In general, keep the documentation in sync with the codebase. In particular:
 - **Reference documentation**: 
-  - When making changes to the CLI or config schema, make sure to update the documentation in `docs/` to reflect the changes, especially: `features.md`, `usage.md` and `conventions.md`. `build-scripts/configdocs.py` sometimes needs manual additions to document aspects that cannot be derived from the models.
+  - When making changes to the CLI or config schema, make sure to update the documentation in `docs/` to reflect the changes, especially: `features.md`, `usage.md` and `guidelines.md`. `build-scripts/configdocs.py` sometimes needs manual additions to document aspects that cannot be derived from the models.
 
 ## Domain Logic
 
@@ -27,4 +27,4 @@ In general, keep the documentation in sync with the codebase. In particular:
   - When adding a dependency on an external tool (e.g. `stat`, `findfmt`), add a preflight check
 
 ## Tests
-- Ensure that all new functionality is covered by tests according to the [testing strategy](./conventions.md#testing-strategy).
+- Ensure that all new functionality is covered by tests according to the [testing strategy](./guidelines.md#testing-strategy).
