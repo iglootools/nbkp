@@ -53,11 +53,24 @@ A set of [implementation checklists](./implementation-checklists.md) serve as a 
   - Prefer dict unpacking with a filtered comprehension over if-chains when conditionally
     including keys (e.g. `**{k: v for k, v in {...}.items() if v is not None}`).
 
-## Github Workflows
+## Framework-Specific Guidelines
+### Github Workflows
 - Whenever safe (i.e. not affecting production), enable `workflow_dispatch` and `repository_dispatch` to allow manual triggering of workflows from the GitHub UI or CLI, which is useful for testing and debugging.
 - Use OpenID Connect (OIDC) authentication for publishing to PyPI, and set up a separate workflow for testing releases to Test PyPI. This allows testing the release and publish process without affecting the real PyPI index, and provides more detailed logs for debugging.
 
-## Application-Specific Guidelines
+### New Project Setup
+Guidelines to follow when setting up new projects.
+
+#### Python Projects
+- Mise + Poetry: Use poetry `virtualenvs.in-project = true` with mise `_.python.venv = { path = ".venv", create = true }` to ensure that the virtual environment is created inside the project directory and automatically activated when running commands with `mise run`. 
+- Use `ruff` for linting and formatting, `pyright` for type-checking, and `vermin` for validating the desired Python version compatibility.
+
+### IDE-Specific Guidelines
+
+### VSCode
+- Install the Ruff, Pylance, and tombi extensions
+
+## Project-Specific Guidelines
 
 ### Coding
 - **Naming Conventions**
@@ -100,7 +113,7 @@ Automated tests are organized into 4 categories based on what they test and what
 
 4. **Integration (filesystem)** (`tests/integration_fs/`) — Component-level tests using real local filesystem operations (local-to-local syncs with real rsync, hard-link snapshots, symlinks, inode verification, shell script generation). Runs on any OS that supports hard links.
 
-### Known Gaps in Test Coverage
+#### Known Gaps in Test Coverage
 
 The following functionality is covered by unit tests but intentionally excluded from Docker/integration testing, with reasoning:
 
