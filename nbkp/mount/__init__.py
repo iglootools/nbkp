@@ -34,6 +34,7 @@ from .output import (
     build_mount_status_json,
     build_mount_status_table,
     mount_state_icon,
+    volume_display_name,
 )
 from .systemd import (
     build_close_luks_command,
@@ -77,4 +78,5 @@ __all__ = [
     "resolve_mount_unit",
     "umount_volume",
     "umount_volumes",
+    "volume_display_name",
 ]

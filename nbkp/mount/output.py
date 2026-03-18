@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Protocol, Sequence
+from typing import TYPE_CHECKING, Protocol, Sequence
 
 from rich.table import Table
+
+if TYPE_CHECKING:
+    from ..config.protocol.volume import LocalVolume, RemoteVolume
 
 
 class MountStatusData(Protocol):
@@ -25,6 +28,13 @@ class MountStatusData(Protocol):
 
     @property
     def mounted(self) -> bool | None: ...
+
+
+def volume_display_name(vol: LocalVolume | RemoteVolume) -> str:
+    """Display name for a volume: ``ssh-endpoint:slug`` for remote, ``slug`` for local."""
+    from ..config.protocol.volume import RemoteVolume
+
+    return f"{vol.ssh_endpoint}:{vol.slug}" if isinstance(vol, RemoteVolume) else vol.slug
 
 
 def mount_state_icon(value: bool | None) -> str:
