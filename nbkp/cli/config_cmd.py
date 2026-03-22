@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import enum
 import json
+from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
@@ -37,8 +38,15 @@ class GraphFormat(str, enum.Enum):
 @config_app.command()
 def show(
     config: Annotated[
-        Optional[str],
-        typer.Option("--config", "-c", help="Path to config file"),
+        Optional[Path],
+        typer.Option(
+            "--config",
+            "-c",
+            help="Path to config file",
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
     ] = None,
     output: Annotated[
         OutputFormat,
@@ -59,8 +67,15 @@ def show(
 @config_app.command()
 def graph(
     config: Annotated[
-        Optional[str],
-        typer.Option("--config", "-c", help="Path to config file"),
+        Optional[Path],
+        typer.Option(
+            "--config",
+            "-c",
+            help="Path to config file",
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
     ] = None,
     output: Annotated[
         OutputFormat,
@@ -89,8 +104,15 @@ def graph(
 @config_app.command("setup-auth")
 def setup_auth(
     config: Annotated[
-        Optional[str],
-        typer.Option("--config", "-c", help="Path to config file"),
+        Optional[Path],
+        typer.Option(
+            "--config",
+            "-c",
+            help="Path to config file",
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
     ] = None,
     user: Annotated[
         str,
@@ -131,8 +153,15 @@ def _collect_passphrase_ids(cfg: Config) -> dict[str, list[str]]:
 @config_app.command("keyring-status")
 def keyring_status(
     config: Annotated[
-        Optional[str],
-        typer.Option("--config", "-c", help="Path to config file"),
+        Optional[Path],
+        typer.Option(
+            "--config",
+            "-c",
+            help="Path to config file",
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
     ] = None,
     output: Annotated[
         OutputFormat,

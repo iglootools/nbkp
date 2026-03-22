@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import enum
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Callable, Generator
 
 import typer
@@ -193,7 +194,7 @@ class CheckProgressBar:
 
 
 def load_config_or_exit(
-    config_path: str | None,
+    config_path: str | Path | None,
 ) -> Config:
     """Load config or exit with code 2 on error."""
     try:

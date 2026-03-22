@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
@@ -140,8 +141,15 @@ def _format_umount_result(
 @volumes_app.command("mount")
 def volumes_mount(
     config: Annotated[
-        Optional[str],
-        typer.Option("--config", "-c", help="Path to config file"),
+        Optional[Path],
+        typer.Option(
+            "--config",
+            "-c",
+            help="Path to config file",
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
     ] = None,
     output: Annotated[
         OutputFormat,
@@ -236,8 +244,15 @@ def volumes_mount(
 @volumes_app.command("umount")
 def volumes_umount(
     config: Annotated[
-        Optional[str],
-        typer.Option("--config", "-c", help="Path to config file"),
+        Optional[Path],
+        typer.Option(
+            "--config",
+            "-c",
+            help="Path to config file",
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
     ] = None,
     output: Annotated[
         OutputFormat,
@@ -327,8 +342,15 @@ class _ErrorStatus:
 @volumes_app.command("status")
 def volumes_status(
     config: Annotated[
-        Optional[str],
-        typer.Option("--config", "-c", help="Path to config file"),
+        Optional[Path],
+        typer.Option(
+            "--config",
+            "-c",
+            help="Path to config file",
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
     ] = None,
     output: Annotated[
         OutputFormat,
