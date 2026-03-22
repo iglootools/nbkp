@@ -148,8 +148,10 @@ If you believe that the representation is inaccurate or if there are other tools
 #### Deduplicating
 
 - **[BorgBackup](https://www.borgbackup.org/)** — chunk-level deduplication with compression and authenticated encryption. Proprietary repository format (not plain directories); requires `borg` on the remote side; no removable-drive detection.
+- **[borgmatic](https://torsion.org/borgmatic/)** — configuration-driven wrapper around BorgBackup that adds YAML config, scheduling, database dumps (PostgreSQL, MySQL, SQLite, etc.), monitoring integrations, and credential management. Same proprietary Borg format underneath; no rsync or removable-drive support.
 - **[Restic](https://restic.net/)** — content-addressable backups with encryption by default, supporting many backends (local, S3, SFTP, B2). Proprietary format; restoring requires the restic tool; no volume detection.
 - **[Kopia](https://kopia.io/)** — content-addressable storage with encryption, compression, and both CLI/GUI. Proprietary format; includes an optional scheduling server; no removable-drive or btrfs support.
+- **[Vykar](https://vykar.borgbase.com/)** — fast, encrypted, deduplicated backup tool written in Rust with content-defined chunking. Supports local, S3, SFTP, and a dedicated REST server; includes a desktop GUI and built-in WebDAV for browsing snapshots. Proprietary repository format; no rsync, btrfs, or removable-drive support.
 
 #### Btrfs / snapshot-focused
 
