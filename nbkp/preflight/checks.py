@@ -112,7 +112,7 @@ def check_all_syncs(
         vol = config.volumes[slug]
         ssh_slug = _ssh_endpoint_slug(vol)
         ssh_status = ssh_statuses[ssh_slug]
-        if ssh_status.active:
+        if ssh_status.active or isinstance(vol, LocalVolume):
             diag = observe_volume(
                 vol,
                 host_tools=ssh_status.diagnostics.host_tools,  # type: ignore[arg-type]
