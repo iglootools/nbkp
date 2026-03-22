@@ -118,6 +118,22 @@ Pre-flight checks verify that userspace tools (`cryptsetup`, `systemd-cryptsetup
 
 Mount unit names (e.g. `/mnt/seagate8tb` → `mnt-seagate8tb.mount`) are derived by running `systemd-escape --path <volume-path>` on the target host rather than being hardcoded or computed in Python. This is because systemd's escaping rules are non-trivial (hyphens in path components become `\x2d`, among other edge cases), and `systemd-escape` is the canonical implementation. The result is cached in `VolumeCapabilities.mount_unit` after the first preflight probe.
 
+### Rsync Defaults
+
+#### Why `--hard-links` is not enabled by default
+
+The default rsync flags use `-a` (archive mode), which expands to `-rlptgoD`. This preserves symlinks (`-l`) but does **not** include `-H` (`--hard-links`). Hard-link preservation is deliberately left opt-in for four reasons:
+
+1. **Memory overhead** — rsync must build an in-memory hash table of every `(device, inode)` pair on the source to detect hard-link relationships. For large file trees with millions of files, this can consume significant RAM on both the sending and receiving side.
+
+2. **Slower transfer startup** — The hard-link detection pass adds time proportional to the number of files, even when no hard links exist in the source.
+
+3. **Interaction with `--link-dest` in hard-link snapshots** — nbkp's hard-link snapshot mode uses `--link-dest` to deduplicate unchanged files across snapshots. Adding `-H` on top means rsync must also track *source-side* hard-link groups, which can interact unpredictably with `--link-dest` (e.g. files that are hard-linked on the source might get deduplicated differently than intended across snapshots).
+
+4. **No benefit for most backup workloads** — Typical user data (documents, photos, media) rarely contains intentional hard links. The overhead would be paid on every run for no practical gain.
+
+Users who need hard-link preservation for a specific sync (e.g. backing up a filesystem that heavily uses hard links like a mail spool or package cache) can enable it per-sync via `extra-options: ["--hard-links"]`.
+
 ### Preflight Conditional Probing
 
 The preflight check system uses two layers: an **observation layer** (`volume_checks.py`, `endpoint_checks.py`) that probes raw state, and an **error interpretation layer** (`status.py`) that decides what constitutes a problem based on config. Not all capabilities are checked for every volume or endpoint — probing is selective. This is an intentional design choice driven by three categories of conditional logic.
