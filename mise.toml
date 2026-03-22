@@ -193,11 +193,11 @@ description = "Check that CLI reference in docs/cli-reference.md is up to date"
 run = "poetry run python build-scripts/clidocs.py --check"
 
 [tasks.configdocs]
-description = "Regenerate config reference in docs/config-reference.md"
+description = "Regenerate config reference tables in docs/concepts.md"
 run = "poetry run python build-scripts/configdocs.py"
 
 [tasks.configdocs-check]
-description = "Check that config reference in docs/config-reference.md is up to date"
+description = "Check that config reference tables in docs/concepts.md are up to date"
 run = "poetry run python build-scripts/configdocs.py --check"
 
 [tasks.depgraph]

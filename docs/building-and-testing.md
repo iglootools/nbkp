@@ -30,8 +30,8 @@ mise run compat-check       # vermin (enforce Python >=3.12 compatibility)
 
 mise run clidocs            # regenerate CLI reference in docs/cli-reference.md
 mise run clidocs-check      # check CLI reference is up to date
-mise run configdocs         # regenerate config reference in docs/config-reference.md
-mise run configdocs-check   # check config reference is up to date
+mise run configdocs         # regenerate config reference tables in docs/concepts.md
+mise run configdocs-check   # check config reference tables in docs/concepts.md are up to date
 mise run depgraph           # regenerate Module Overview in docs/architecture.md
 mise run depgraph-check     # check Module Overview is up to date
 

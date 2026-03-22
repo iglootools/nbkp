@@ -230,8 +230,7 @@ def run(
                 Console(stderr=True).print(
                     f"\n[bold red]Aborting:[/bold red] preflight checks"
                     f" found errors in {len(errored)}"
-                    f" sync{'s' if len(errored) != 1 else ''}:\n"
-                    + "\n".join(lines)
+                    f" sync{'s' if len(errored) != 1 else ''}:\n" + "\n".join(lines)
                 )
         else:
             match output_format:

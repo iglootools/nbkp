@@ -34,7 +34,9 @@ def volume_display_name(vol: LocalVolume | RemoteVolume) -> str:
     """Display name for a volume: ``ssh-endpoint:slug`` for remote, ``slug`` for local."""
     from ..config.protocol.volume import RemoteVolume
 
-    return f"{vol.ssh_endpoint}:{vol.slug}" if isinstance(vol, RemoteVolume) else vol.slug
+    return (
+        f"{vol.ssh_endpoint}:{vol.slug}" if isinstance(vol, RemoteVolume) else vol.slug
+    )
 
 
 def mount_state_icon(value: bool | None) -> str:

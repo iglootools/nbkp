@@ -74,7 +74,7 @@ nbkp searches for config in this order:
 
 ### Configuration Reference
 
-See the [Configuration Reference](./config-reference.md) for the full schema documentation.
+See the [Concepts](./concepts.md) documentation for the full configuration reference.
 
 
 ### Example 1: Home NAS backup

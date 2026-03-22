@@ -2,7 +2,7 @@
 
 polkit rules authorize `systemctl start/stop` (D-Bus → systemd).
 sudoers rules authorize `sudo systemd-cryptsetup attach` (direct binary).
-See docs/architecture.md § "Why polkit + sudoers (hybrid authorization)".
+See docs/internals.md § "Why polkit + sudoers (hybrid authorization)".
 """
 
 from __future__ import annotations

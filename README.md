@@ -114,8 +114,9 @@ Practical information:
 - [common-guidelines](https://github.com/iglootools/common-guidelines) — shared coding guidelines
 
 Conceptual information:
-- [docs/concepts.md](https://github.com/iglootools/nbkp/blob/main/docs/concepts.md) - key concepts and terminology
-- [docs/architecture.md](https://github.com/iglootools/nbkp/blob/main/docs/architecture.md) - architecture overview
+- [docs/concepts.md](https://github.com/iglootools/nbkp/blob/main/docs/concepts.md) — domain model and configuration reference
+- [docs/internals.md](https://github.com/iglootools/nbkp/blob/main/docs/internals.md) — runtime behavior, design decisions, and external commands
+- [docs/architecture.md](https://github.com/iglootools/nbkp/blob/main/docs/architecture.md) — module dependency graph
 
 ## Resources
 - [Releases](https://pypi.org/project/nbkp/#history)

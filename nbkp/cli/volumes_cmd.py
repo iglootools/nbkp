@@ -51,7 +51,9 @@ def _unmanaged_statuses(
 
 def _error_status(detail: str | None) -> _ErrorStatus:
     """Build an error status with red styling for the strategy column."""
-    return _ErrorStatus(resolved_backend=f"[red]\u2717 {detail}[/red]" if detail else None)
+    return _ErrorStatus(
+        resolved_backend=f"[red]\u2717 {detail}[/red]" if detail else None
+    )
 
 
 def _probe_volume_status(
@@ -217,10 +219,7 @@ def volumes_mount(
 
     observations = build_mount_observations(results, strategies, cfg)
     statuses: list[tuple[str, MountStatusData]] = [
-        *(
-            (display_names.get(slug, slug), obs)
-            for slug, obs in observations.items()
-        ),
+        *((display_names.get(slug, slug), obs) for slug, obs in observations.items()),
         *(
             (display_names.get(r.volume_slug, r.volume_slug), _error_status(r.detail))
             for r in results
@@ -375,7 +374,9 @@ def volumes_status(
         if output == OutputFormat.HUMAN and managed
         else None
     )
-    managed_statuses = [_probe_volume_status(vol, resolved, bar) for _slug, vol in managed]
+    managed_statuses = [
+        _probe_volume_status(vol, resolved, bar) for _slug, vol in managed
+    ]
     if bar is not None:
         bar.stop()
 

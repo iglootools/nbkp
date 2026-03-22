@@ -4,11 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture
 
-Detailed overview of the architecture, design patterns, and execution flow: @docs/architecture.md
+Module dependency graph: @docs/architecture.md
 
 ## Concepts
 
-Explanations of key concepts such as volumes, syncs, and the configuration model: @docs/concepts.md
+Domain model (volumes, endpoints, syncs, snapshots) and configuration reference: @docs/concepts.md
+
+Runtime behavior, design decisions, and external commands reference: @docs/internals.md
 
 ## Guidelines and Workflow
 

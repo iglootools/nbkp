@@ -3,7 +3,7 @@
 This section provides a high-level overview of nbkp's core capabilities.
 
 To understand how to use these features, refer to the [Usage](./usage.md) documentation. 
-To understand how these features are implemented, refer to the [Concepts](./concepts.md) documentation.
+To understand how these features are implemented, refer to the [Concepts](./concepts.md) and [Internals](./internals.md) documentation.
 
 ## Sync Engine
 
