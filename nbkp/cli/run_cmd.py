@@ -232,8 +232,6 @@ def run(
                     f" found errors in {len(errored)}"
                     f" sync{'s' if len(errored) != 1 else ''}:\n"
                     + "\n".join(lines)
-                    + "\n\nRun [bold]nbkp troubleshoot[/bold] for"
-                    " detailed remediation steps."
                 )
         else:
             match output_format:
