@@ -110,6 +110,12 @@ sync-endpoints:
     hard-link-snapshots:
       enabled: true
       max-snapshots: 10
+  rocketnano1tb-backups-home-config:
+    volume: rocketnano1tb
+    subdir: backups/home-config
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 30
 
   # rocketnano2tb: original data
   rocketnano2tb-photos:
@@ -123,6 +129,12 @@ sync-endpoints:
     hard-link-snapshots:
       enabled: true
       max-snapshots: 10
+  rocketnano2tb-backups-home-config:
+    volume: rocketnano2tb
+    subdir: backups/home-config
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 30
 
   # seagate1tb: backups
   seagate1tb-backups-applications:
@@ -274,11 +286,36 @@ syncs:
     filters:
       - dir-merge: .rsync-filter
   
+  laptop-home-config-to-rocketnano1tb:
+    source: laptop-home
+    destination: rocketnano1tb-backups-home-config
+    filters:
+      - "+ /.config/nbkp/***"
+      - "+ /.config/photree/***"
+      - "+ /.config/mise/***"
+      # cruft
+      - "- /**"
+
+  laptop-home-config-to-rocketnano2tb:
+    source: laptop-home
+    destination: rocketnano2tb-backups-home-config
+    filters:
+      - "+ /.config/nbkp/***"
+      - "+ /.config/photree/***"
+      - "+ /.config/mise/***"
+      # cruft
+      - "- /**"
+  
   # laptop-home
   laptop-home-to-seagate8tb:
     source: laptop-home
     destination: seagate8tb-backups-home
     filters:
+      # config
+      - "+ /.config/nbkp/***"
+      - "+ /.config/photree/***"
+      - "+ /.config/mise/***"
+      # other: TODO: cleanup
       - "+ /.bash*"
       - "+ /.gitconfig"
       - "+ /.gnupg/***"
