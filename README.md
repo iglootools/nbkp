@@ -15,7 +15,7 @@ Sentinel files ensure backups only run when volumes are genuinely present, with 
 
 Files are backed up as-is in plain directories: no obscure storage formats and restoring is just a copy.
 
-[![asciicast](https://asciinema.org/a/f71NJNxiHNuAbdhM.svg)](https://asciinema.org/a/f71NJNxiHNuAbdhM)
+[![asciicast](https://asciinema.org/a/FqOCT4lY8oFUBNre.svg)](https://asciinema.org/a/FqOCT4lY8oFUBNre)
 
 ## Installation
 
@@ -110,11 +110,13 @@ Practical information:
 - [docs/setup-development-environment.md](https://github.com/iglootools/nbkp/blob/main/docs/setup-development-environment.md) — development setup
 - [docs/building-and-testing.md](https://github.com/iglootools/nbkp/blob/main/docs/building-and-testing.md) — running tests and checks
 - [docs/releasing-and-publishing.md](https://github.com/iglootools/nbkp/blob/main/docs/releasing-and-publishing.md) — releases and PyPI publishing
-- [docs/conventions.md](https://github.com/iglootools/nbkp/blob/main/docs/conventions.md) — coding conventions and guidelines
+- [docs/guidelines.md](https://github.com/iglootools/nbkp/blob/main/docs/guidelines.md) — project-specific guidelines
+- [common-guidelines](https://github.com/iglootools/common-guidelines) — shared coding guidelines
 
 Conceptual information:
-- [docs/concepts.md](https://github.com/iglootools/nbkp/blob/main/docs/concepts.md) - key concepts and terminology
-- [docs/architecture.md](https://github.com/iglootools/nbkp/blob/main/docs/architecture.md) - architecture overview
+- [docs/concepts.md](https://github.com/iglootools/nbkp/blob/main/docs/concepts.md) — domain model and configuration reference
+- [docs/internals.md](https://github.com/iglootools/nbkp/blob/main/docs/internals.md) — runtime behavior, design decisions, and external commands
+- [docs/architecture.md](https://github.com/iglootools/nbkp/blob/main/docs/architecture.md) — module dependency graph
 
 ## Resources
 - [Releases](https://pypi.org/project/nbkp/#history)
@@ -147,8 +149,10 @@ If you believe that the representation is inaccurate or if there are other tools
 #### Deduplicating
 
 - **[BorgBackup](https://www.borgbackup.org/)** — chunk-level deduplication with compression and authenticated encryption. Proprietary repository format (not plain directories); requires `borg` on the remote side; no removable-drive detection.
+- **[borgmatic](https://torsion.org/borgmatic/)** — configuration-driven wrapper around BorgBackup that adds YAML config, scheduling, database dumps (PostgreSQL, MySQL, SQLite, etc.), monitoring integrations, and credential management. Same proprietary Borg format underneath; no rsync or removable-drive support.
 - **[Restic](https://restic.net/)** — content-addressable backups with encryption by default, supporting many backends (local, S3, SFTP, B2). Proprietary format; restoring requires the restic tool; no volume detection.
 - **[Kopia](https://kopia.io/)** — content-addressable storage with encryption, compression, and both CLI/GUI. Proprietary format; includes an optional scheduling server; no removable-drive or btrfs support.
+- **[Vykar](https://vykar.borgbase.com/)** — fast, encrypted, deduplicated backup tool written in Rust with content-defined chunking. Supports local, S3, SFTP, and a dedicated REST server; includes a desktop GUI and built-in WebDAV for browsing snapshots. Proprietary repository format; no rsync, btrfs, or removable-drive support.
 
 #### Btrfs / snapshot-focused
 

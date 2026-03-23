@@ -42,5 +42,8 @@ jobs:
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y graphviz
       - uses: jdx/mise-action@v4
+        with:
+          install: false
       - run: mise use python@${{ matrix.python-version }}
+      - run: mise install
       - run: mise run ci-test

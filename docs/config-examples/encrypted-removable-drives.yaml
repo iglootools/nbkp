@@ -1,0 +1,64 @@
+credential-provider: keyring  # or: prompt, env, command
+# credential-command: ["pass", "show", "nbkp/{id}"]  # only needed for command provider
+
+volumes:
+  laptop:
+    type: local
+    path: "~"
+
+  seagate8tb:
+    type: local
+    path: /mnt/seagate8tb
+    mount:
+      device-uuid: 5941f273-f73c-44c5-a3ef-fae7248db1b6  # LUKS container UUID
+      encryption:
+        type: luks
+        mapper-name: seagate8tb
+        passphrase-id: seagate8tb
+
+  iomega1tb:
+    type: local
+    path: /mnt/iomega1tb
+    mount:
+      device-uuid: ad5542e5-5365-4951-a1f2-fe81c4d6fe43
+      encryption:
+        type: luks
+        mapper-name: iomega1tb
+        passphrase-id: backup-drives  # shared passphrase across drives
+
+  usb-plain:
+    type: local
+    path: /mnt/usb-plain
+    mount:
+      device-uuid: 8a3b2c1d-4e5f-6789-abcd-ef0123456789  # filesystem UUID
+
+sync-endpoints:
+  laptop-photos:
+    volume: laptop
+    subdir: photos
+
+  seagate-photos:
+    volume: seagate8tb
+    subdir: photos
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  iomega-photos:
+    volume: iomega1tb
+
+  usb-photos:
+    volume: usb-plain
+
+syncs:
+  photos-to-seagate:
+    source: laptop-photos
+    destination: seagate-photos
+
+  photos-to-iomega:
+    source: laptop-photos
+    destination: iomega-photos
+
+  photos-to-usb:
+    source: laptop-photos
+    destination: usb-photos

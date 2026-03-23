@@ -1,0 +1,74 @@
+ssh-endpoints:
+  nas:
+    host: nas                     # matches "Host nas" in ~/.ssh/config
+    location: home
+
+  nas-public:
+    extends: nas                  # inherits all fields from nas
+    host: nas.example.com         # override with public hostname
+    location: travel
+
+volumes:
+  laptop:
+    type: local
+    path: "~"                     # quote ~ (YAML treats bare ~ as null)
+
+  usb-drive:
+    type: local
+    path: /mnt/usb-backup
+
+  nas-backups:
+    type: remote
+    ssh-endpoint: nas             # or, for specifying multiple endpoints:
+    ssh-endpoints:                # candidates for auto-selection
+      - nas
+      - nas-public
+    path: /volume1/backups
+
+sync-endpoints:
+  laptop-photos:
+    volume: laptop
+    subdir: photos
+
+  laptop-documents:
+    volume: laptop
+    subdir: documents
+
+  nas-photos:
+    volume: nas-backups
+    subdir: photos
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  nas-documents:
+    volume: nas-backups
+    subdir: documents
+
+  usb-documents:
+    volume: usb-drive
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 10
+
+syncs:
+  photos-to-nas:
+    source: laptop-photos
+    destination: nas-photos
+    filters:
+      - include: "*.jpg"
+      - include: "*.png"
+      - include: "*.heic"
+      - include: "*.mp4"
+      - exclude: "*.tmp"
+      - exclude: ".thumbs/"
+
+  documents-to-nas:
+    source: laptop-documents
+    destination: nas-documents
+    rsync-options:
+      compress: true
+
+  documents-to-usb:
+    source: laptop-documents
+    destination: usb-documents

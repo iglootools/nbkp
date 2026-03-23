@@ -1,6 +1,6 @@
 # Building and Testing
 
-The unit tests cover the core logic of the tool. Integration and end-to-end tests exercise the real rsync/SSH/btrfs pipeline against Docker containers and local filesystems. See [Testing Strategy](conventions.md#testing-strategy) for details on each test category.
+The unit tests cover the core logic of the tool. Integration and end-to-end tests exercise the real rsync/SSH/btrfs pipeline against Docker containers and local filesystems. See [Testing Strategy](guidelines.md#testing-strategy) for details on each test category.
 
 Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/QA. The `seed --docker` command requires the `docker` extra: `pipx install nbkp[docker]`. In dev: `poetry run nbkp demo`.
 
@@ -30,8 +30,8 @@ mise run compat-check       # vermin (enforce Python >=3.12 compatibility)
 
 mise run clidocs            # regenerate CLI reference in docs/cli-reference.md
 mise run clidocs-check      # check CLI reference is up to date
-mise run configdocs         # regenerate config reference in docs/config-reference.md
-mise run configdocs-check   # check config reference is up to date
+mise run configdocs         # regenerate config reference tables in docs/concepts.md
+mise run configdocs-check   # check config reference tables in docs/concepts.md are up to date
 mise run depgraph           # regenerate Module Overview in docs/architecture.md
 mise run depgraph-check     # check Module Overview is up to date
 
@@ -52,7 +52,7 @@ It is scheduled to run weekly, but can also be triggered manually using `gh work
 
 ## Testing Strategy
 
-See [Testing Strategy](conventions.md#testing-strategy) for details on test categories, automated vs manual testing, and intentionally untested areas.
+See [Testing Strategy](guidelines.md#testing-strategy) for details on test categories, automated vs manual testing, and intentionally untested areas.
 
 The Docker-based test suites use [testcontainers](https://testcontainers-python.readthedocs.io/) and automatically:
 - Generate an ephemeral SSH key pair
@@ -72,6 +72,7 @@ The Docker-based test suites use [testcontainers](https://testcontainers-python.
 
 ## Github Config
 - The `main` branch is protected against force pushes.
+- Settings > Advanced Security > Enable Dependency graph
 - Set up the following Github secrets:
     - `ASCIINEMA_INSTALL_ID`:
         1. Execute `asciinema auth` in your terminal

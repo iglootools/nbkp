@@ -1,0 +1,124 @@
+ssh-endpoints:
+  bastion:
+    host: bastion.example.com
+    user: admin
+    connection-options:
+      server-alive-interval: 60
+
+  storage:
+    host: storage.internal
+    port: 2222
+    user: backup
+    key: ~/.ssh/storage_ed25519
+    proxy-jump: bastion
+    connection-options:
+      strict-host-key-checking: false
+      known-hosts-file: /dev/null
+      connect-timeout: 30
+
+volumes:
+  # Local volumes
+  src-local:
+    type: local
+    path: /mnt/data/source
+
+  stage-local:
+    type: local
+    path: /mnt/data/stage
+
+  dst-local:
+    type: local
+    path: /mnt/data/final
+
+  # Remote volumes (all on the same server, via bastion)
+  stage-remote-bare:
+    type: remote
+    ssh-endpoint: storage
+    path: /srv/backups/bare
+
+  stage-remote-btrfs:
+    type: remote
+    ssh-endpoint: storage
+    path: /srv/btrfs-pool/snapshots
+
+  stage-remote-btrfs-bare:
+    type: remote
+    ssh-endpoint: storage
+    path: /srv/btrfs-pool/bare
+
+  stage-remote-hl:
+    type: remote
+    ssh-endpoint: storage
+    path: /srv/backups/hl
+
+sync-endpoints:
+  ep-src:
+    volume: src-local
+
+  # Hard-link snapshots on local stage — used as destination for step-1
+  # and as source for step-2 (reads from latest/ snapshot)
+  ep-stage-local:
+    volume: stage-local
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 7
+
+  ep-remote-bare:
+    volume: stage-remote-bare
+
+  # Btrfs snapshots on remote — used as destination for step-3
+  # and as source for step-4 (reads from latest/ snapshot)
+  ep-remote-btrfs:
+    volume: stage-remote-btrfs
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 14
+
+  ep-remote-btrfs-bare:
+    volume: stage-remote-btrfs-bare
+
+  # Hard-link snapshots on remote — used as destination for step-5
+  # and as source for step-6 (reads from latest/ snapshot)
+  ep-remote-hl:
+    volume: stage-remote-hl
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 5
+
+  ep-dst:
+    volume: dst-local
+
+syncs:
+  # Step 1: local → local with hard-link snapshots
+  step-1:
+    source: ep-src
+    destination: ep-stage-local
+
+  # Step 2: local → remote (through bastion), bare
+  step-2:
+    source: ep-stage-local        # reads from latest/ snapshot
+    destination: ep-remote-bare
+    rsync-options:
+      compress: true
+
+  # Step 3: remote → remote (same server), btrfs snapshots
+  step-3:
+    source: ep-remote-bare
+    destination: ep-remote-btrfs
+
+  # Step 4: remote → remote (same server), bare on btrfs
+  step-4:
+    source: ep-remote-btrfs       # reads from latest/ snapshot
+    destination: ep-remote-btrfs-bare
+
+  # Step 5: remote → remote (same server), hard-link snapshots
+  step-5:
+    source: ep-remote-btrfs-bare
+    destination: ep-remote-hl
+
+  # Step 6: remote → local, bare
+  step-6:
+    source: ep-remote-hl          # reads from latest/ snapshot
+    destination: ep-dst
+    rsync-options:
+      compress: true

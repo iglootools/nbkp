@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
@@ -23,8 +24,15 @@ from .common import (
 @app.command()
 def prune(
     config: Annotated[
-        Optional[str],
-        typer.Option("--config", "-c", help="Path to config file"),
+        Optional[Path],
+        typer.Option(
+            "--config",
+            "-c",
+            help="Path to config file",
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
     ] = None,
     sync: Annotated[
         Optional[list[str]],

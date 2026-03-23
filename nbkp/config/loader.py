@@ -52,7 +52,7 @@ def _config_search_paths() -> list[Path]:
     return list(dict.fromkeys(candidates))
 
 
-def find_config_file(config_path: str | None = None) -> Path:
+def find_config_file(config_path: str | Path | None = None) -> Path:
     """Find the configuration file using search order.
 
     Order: explicit path > XDG > platform user config > platform site config
@@ -78,7 +78,7 @@ def find_config_file(config_path: str | None = None) -> Path:
             )
 
 
-def load_config(config_path: str | None = None) -> Config:
+def load_config(config_path: str | Path | None = None) -> Config:
     """Load and validate configuration from a YAML file."""
     path = find_config_file(config_path)
     try:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
@@ -31,8 +32,15 @@ from .common import (
 @app.command()
 def run(
     config: Annotated[
-        Optional[str],
-        typer.Option("--config", "-c", help="Path to config file"),
+        Optional[Path],
+        typer.Option(
+            "--config",
+            "-c",
+            help="Path to config file",
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
     ] = None,
     dry_run: Annotated[
         bool,
@@ -230,10 +238,7 @@ def run(
                 Console(stderr=True).print(
                     f"\n[bold red]Aborting:[/bold red] preflight checks"
                     f" found errors in {len(errored)}"
-                    f" sync{'s' if len(errored) != 1 else ''}:\n"
-                    + "\n".join(lines)
-                    + "\n\nRun [bold]nbkp troubleshoot[/bold] for"
-                    " detailed remediation steps."
+                    f" sync{'s' if len(errored) != 1 else ''}:\n" + "\n".join(lines)
                 )
         else:
             match output_format:

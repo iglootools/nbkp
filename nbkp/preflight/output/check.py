@@ -283,6 +283,15 @@ def print_human_check(
         ssh_statuses, vol_statuses, sync_statuses, config, re
     )
 
+    has_errors = any(not s.active for s in sync_statuses.values())
+    if has_errors:
+        sections.append(Text(""))
+        sections.append(
+            Text.from_markup(
+                "Run [bold]nbkp troubleshoot[/bold] for detailed remediation steps."
+            )
+        )
+
     if wrap_in_panel:
         console.print(
             Panel(

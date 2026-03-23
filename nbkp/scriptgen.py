@@ -13,6 +13,7 @@ import os
 import shlex
 import sys
 from dataclasses import dataclass, replace
+from pathlib import Path
 from datetime import datetime, timezone
 from textwrap import dedent
 
@@ -44,8 +45,8 @@ from .sync.rsync import build_rsync_command
 class ScriptOptions:
     """Options for script generation."""
 
-    config_path: str | None = None
-    output_file: str | None = None
+    config_path: str | Path | None = None
+    output_file: str | Path | None = None
     relative_src: bool = False
     relative_dst: bool = False
     portable: bool = True

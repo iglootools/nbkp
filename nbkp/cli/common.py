@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import enum
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Callable, Generator
 
 import typer
@@ -32,7 +33,7 @@ from ..remote.resolution import resolve_all_endpoints
 from ..credentials import build_passphrase_fn
 from ..mount.lifecycle import MountResult, UmountResult, mount_volume_count
 from ..mount.observation import MountObservation
-from ..mount.output import build_mount_status_table
+from ..mount.output import build_mount_status_table, volume_display_name
 from ..mount.strategy import MountStrategy
 from ..orchestration import managed_mount as _orchestration_managed_mount
 from ..config.output import print_config_error
@@ -193,7 +194,7 @@ class CheckProgressBar:
 
 
 def load_config_or_exit(
-    config_path: str | None,
+    config_path: str | Path | None,
 ) -> Config:
     """Load config or exit with code 2 on error."""
     try:
@@ -406,6 +407,11 @@ def managed_mount(
 
     use_progress = output_format is OutputFormat.HUMAN
     total = mount_volume_count(cfg)
+    display_names = {
+        slug: volume_display_name(vol)
+        for slug, vol in cfg.volumes.items()
+        if vol.mount is not None
+    }
 
     mount_bar = (
         VolumeProgressBar(total, "Mounting", _format_mount_result)
@@ -420,19 +426,26 @@ def managed_mount(
 
     def on_mount_start(slug: str) -> None:
         if mount_bar is not None:
-            mount_bar.on_start(slug)
+            mount_bar.on_start(display_names.get(slug, slug))
 
     def on_mount_end(slug: str, result: MountResult) -> None:
         if mount_bar is not None:
-            mount_bar.on_end(slug, result.success, result.detail)
+            mount_bar.on_end(
+                display_names.get(slug, slug), result.success, result.detail
+            )
 
     def on_umount_start(slug: str) -> None:
         if umount_bar is not None:
-            umount_bar.on_start(slug)
+            umount_bar.on_start(display_names.get(slug, slug))
 
     def on_umount_end(slug: str, result: UmountResult) -> None:
         if umount_bar is not None:
-            umount_bar.on_end(slug, result.success, result.detail, result.warning)
+            umount_bar.on_end(
+                display_names.get(slug, slug),
+                result.success,
+                result.detail,
+                result.warning,
+            )
 
     try:
         with _orchestration_managed_mount(
@@ -450,9 +463,11 @@ def managed_mount(
                 mount_bar.stop()
             _mount_strategy, mount_observations = result
             if use_progress and mount_observations:
-                Console().print(
-                    build_mount_status_table(list(mount_observations.items()))
-                )
+                display_statuses = [
+                    (display_names.get(slug, slug), obs)
+                    for slug, obs in mount_observations.items()
+                ]
+                Console().print(build_mount_status_table(display_statuses))
             yield result
     finally:
         if umount_bar is not None:

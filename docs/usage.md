@@ -74,89 +74,14 @@ nbkp searches for config in this order:
 
 ### Configuration Reference
 
-See the [Configuration Reference](./config-reference.md) for the full schema documentation.
+See the [Concepts](./concepts.md) documentation for the full configuration reference.
 
 
 ### Example 1: Home NAS backup
 
 A laptop backing up photos and documents to a Linux-powered NAS, with a USB drive as a secondary destination. The NAS is accessible both on the home LAN and remotely via a public hostname.
 
-```yaml
-ssh-endpoints:
-  nas:
-    host: nas                     # matches "Host nas" in ~/.ssh/config
-    location: home
-
-  nas-public:
-    extends: nas                  # inherits all fields from nas
-    host: nas.example.com         # override with public hostname
-    location: travel
-
-volumes:
-  laptop:
-    type: local
-    path: "~"                     # quote ~ (YAML treats bare ~ as null)
-
-  usb-drive:
-    type: local
-    path: /mnt/usb-backup
-
-  nas-backups:
-    type: remote
-    ssh-endpoint: nas             # or, for specifying multiple endpoints:
-    ssh-endpoints:                # candidates for auto-selection
-      - nas
-      - nas-public
-    path: /volume1/backups
-
-sync-endpoints:
-  laptop-photos:
-    volume: laptop
-    subdir: photos
-
-  laptop-documents:
-    volume: laptop
-    subdir: documents
-
-  nas-photos:
-    volume: nas-backups
-    subdir: photos
-    hard-link-snapshots:
-      enabled: true
-      max-snapshots: 30
-
-  nas-documents:
-    volume: nas-backups
-    subdir: documents
-
-  usb-documents:
-    volume: usb-drive
-    hard-link-snapshots:
-      enabled: true
-      max-snapshots: 10
-
-syncs:
-  photos-to-nas:
-    source: laptop-photos
-    destination: nas-photos
-    filters:
-      - include: "*.jpg"
-      - include: "*.png"
-      - include: "*.heic"
-      - include: "*.mp4"
-      - exclude: "*.tmp"
-      - exclude: ".thumbs/"
-
-  documents-to-nas:
-    source: laptop-documents
-    destination: nas-documents
-    rsync-options:
-      compress: true
-
-  documents-to-usb:
-    source: laptop-documents
-    destination: usb-documents
-```
+See [config-examples/home-nas-backup.yaml](config-examples/home-nas-backup.yaml).
 
 Usage:
 
@@ -186,132 +111,7 @@ nbkp sh -o /mnt/usb-backup/backup.sh --relative-dst
 
 A more complex setup with a bastion host, chained syncs across local and remote volumes, mixed snapshot modes (btrfs and hard-link), and strict connection options. Data flows through a 6-step pipeline: local source, through a bastion to a remote server, across different snapshot backends, and back to a local destination.
 
-```yaml
-ssh-endpoints:
-  bastion:
-    host: bastion.example.com
-    user: admin
-    connection-options:
-      server-alive-interval: 60
-
-  storage:
-    host: storage.internal
-    port: 2222
-    user: backup
-    key: ~/.ssh/storage_ed25519
-    proxy-jump: bastion
-    connection-options:
-      strict-host-key-checking: false
-      known-hosts-file: /dev/null
-      connect-timeout: 30
-
-volumes:
-  # Local volumes
-  src-local:
-    type: local
-    path: /mnt/data/source
-
-  stage-local:
-    type: local
-    path: /mnt/data/stage
-
-  dst-local:
-    type: local
-    path: /mnt/data/final
-
-  # Remote volumes (all on the same server, via bastion)
-  stage-remote-bare:
-    type: remote
-    ssh-endpoint: storage
-    path: /srv/backups/bare
-
-  stage-remote-btrfs:
-    type: remote
-    ssh-endpoint: storage
-    path: /srv/btrfs-pool/snapshots
-
-  stage-remote-btrfs-bare:
-    type: remote
-    ssh-endpoint: storage
-    path: /srv/btrfs-pool/bare
-
-  stage-remote-hl:
-    type: remote
-    ssh-endpoint: storage
-    path: /srv/backups/hl
-
-sync-endpoints:
-  ep-src:
-    volume: src-local
-
-  # Hard-link snapshots on local stage — used as destination for step-1
-  # and as source for step-2 (reads from latest/ snapshot)
-  ep-stage-local:
-    volume: stage-local
-    hard-link-snapshots:
-      enabled: true
-      max-snapshots: 7
-
-  ep-remote-bare:
-    volume: stage-remote-bare
-
-  # Btrfs snapshots on remote — used as destination for step-3
-  # and as source for step-4 (reads from latest/ snapshot)
-  ep-remote-btrfs:
-    volume: stage-remote-btrfs
-    btrfs-snapshots:
-      enabled: true
-      max-snapshots: 14
-
-  ep-remote-btrfs-bare:
-    volume: stage-remote-btrfs-bare
-
-  # Hard-link snapshots on remote — used as destination for step-5
-  # and as source for step-6 (reads from latest/ snapshot)
-  ep-remote-hl:
-    volume: stage-remote-hl
-    hard-link-snapshots:
-      enabled: true
-      max-snapshots: 5
-
-  ep-dst:
-    volume: dst-local
-
-syncs:
-  # Step 1: local → local with hard-link snapshots
-  step-1:
-    source: ep-src
-    destination: ep-stage-local
-
-  # Step 2: local → remote (through bastion), bare
-  step-2:
-    source: ep-stage-local        # reads from latest/ snapshot
-    destination: ep-remote-bare
-    rsync-options:
-      compress: true
-
-  # Step 3: remote → remote (same server), btrfs snapshots
-  step-3:
-    source: ep-remote-bare
-    destination: ep-remote-btrfs
-
-  # Step 4: remote → remote (same server), bare on btrfs
-  step-4:
-    source: ep-remote-btrfs       # reads from latest/ snapshot
-    destination: ep-remote-btrfs-bare
-
-  # Step 5: remote → remote (same server), hard-link snapshots
-  step-5:
-    source: ep-remote-btrfs-bare
-    destination: ep-remote-hl
-
-  # Step 6: remote → local, bare
-  step-6:
-    source: ep-remote-hl          # reads from latest/ snapshot
-    destination: ep-dst
-    rsync-options:
-      compress: true
-```
+See [config-examples/multi-hop-chain.yaml](config-examples/multi-hop-chain.yaml).
 
 The syncs form a chain: `step-1 → step-2 → step-3 → step-4 → step-5 → step-6`. nbkp detects these dependencies automatically and runs them in order. If any step fails, all downstream steps are cancelled.
 
@@ -338,72 +138,7 @@ nbkp sh -o backup.sh
 
 A laptop backing up to two LUKS-encrypted external drives and one unencrypted USB drive. nbkp automatically unlocks, mounts, syncs, umounts, and locks the drives.
 
-```yaml
-credential-provider: keyring  # or: prompt, env, command
-# credential-command: ["pass", "show", "nbkp/{id}"]  # only needed for command provider
-
-volumes:
-  laptop:
-    type: local
-    path: "~"
-
-  seagate8tb:
-    type: local
-    path: /mnt/seagate8tb
-    mount:
-      device-uuid: 5941f273-f73c-44c5-a3ef-fae7248db1b6  # LUKS container UUID
-      encryption:
-        type: luks
-        mapper-name: seagate8tb
-        passphrase-id: seagate8tb
-
-  iomega1tb:
-    type: local
-    path: /mnt/iomega1tb
-    mount:
-      device-uuid: ad5542e5-5365-4951-a1f2-fe81c4d6fe43
-      encryption:
-        type: luks
-        mapper-name: iomega1tb
-        passphrase-id: backup-drives  # shared passphrase across drives
-
-  usb-plain:
-    type: local
-    path: /mnt/usb-plain
-    mount:
-      device-uuid: 8a3b2c1d-4e5f-6789-abcd-ef0123456789  # filesystem UUID
-
-sync-endpoints:
-  laptop-photos:
-    volume: laptop
-    subdir: photos
-
-  seagate-photos:
-    volume: seagate8tb
-    subdir: photos
-    hard-link-snapshots:
-      enabled: true
-      max-snapshots: 30
-
-  iomega-photos:
-    volume: iomega1tb
-
-  usb-photos:
-    volume: usb-plain
-
-syncs:
-  photos-to-seagate:
-    source: laptop-photos
-    destination: seagate-photos
-
-  photos-to-iomega:
-    source: laptop-photos
-    destination: iomega-photos
-
-  photos-to-usb:
-    source: laptop-photos
-    destination: usb-photos
-```
+See [config-examples/encrypted-removable-drives.yaml](config-examples/encrypted-removable-drives.yaml).
 
 System setup (one-time, on the target host):
 
@@ -449,3 +184,8 @@ nbkp volumes umount --name seagate8tb
 nbkp troubleshoot
 ```
 
+### Example 4: Sami's Personal Config
+
+A real-world example of a complex multi-volume, multi-snapshot backup setup.
+
+See [config-examples/personal-setup.yaml](config-examples/personal-setup.yaml).

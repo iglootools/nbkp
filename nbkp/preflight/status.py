@@ -29,6 +29,7 @@ from pydantic import BaseModel, ConfigDict, computed_field
 
 from ..config import (
     MountConfig,
+    RemoteVolume,
     SyncConfig,
     SyncEndpoint,
     Volume,
@@ -454,7 +455,7 @@ class VolumeStatus(BaseModel):
         diagnostics: VolumeDiagnostics | None,
     ) -> VolumeStatus:
         """Create status by interpreting diagnostics into errors."""
-        if not ssh_endpoint_status.active:
+        if isinstance(config, RemoteVolume) and not ssh_endpoint_status.active:
             return VolumeStatus(
                 slug=slug,
                 config=config,

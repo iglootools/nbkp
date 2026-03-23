@@ -1157,6 +1157,8 @@ class TestCheckSync:
     def test_rsync_not_found_on_source(
         self, _mock_caps: MagicMock, _mock_ssh: MagicMock, tmp_path: Path
     ) -> None:
+        """Rsync missing on a local volume: reported at SSH endpoint level,
+        but local volumes are still probed (no SSH_ENDPOINT_INACTIVE cascade)."""
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -1166,12 +1168,13 @@ class TestCheckSync:
         config, sync = self._make_config(src, dst)
 
         status = check_sync(sync, config)
-        assert status.active is False
         # rsync errors are at the SSH endpoint level (shared by both volumes)
         ssh_errors = (
             status.source_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
         assert SshEndpointError.RSYNC_NOT_FOUND in ssh_errors
+        # Local volumes don't cascade SSH_ENDPOINT_INACTIVE — volume is active
+        assert status.source_endpoint_status.volume_status.active is True
 
     @patch(
         "nbkp.preflight.checks.observe_ssh_endpoint",
@@ -1813,7 +1816,10 @@ class TestCheckSync:
     def test_multiple_failures_accumulated(
         self, _mock_caps: MagicMock, _mock_ssh: MagicMock, tmp_path: Path
     ) -> None:
-        """Rsync missing makes SSH endpoint inactive, cascading to all layers."""
+        """Rsync missing on local volume: SSH endpoint reports the error,
+        but the volume is still probed (local volumes don't cascade
+        SSH_ENDPOINT_INACTIVE).  The sync is inactive because the source
+        endpoint sentinel is missing."""
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -1829,20 +1835,18 @@ class TestCheckSync:
 
         status = check_sync(sync, config)
         assert status.active is False
-        # SSH endpoint is inactive due to missing rsync — cascades to all layers
+        # SSH endpoint reports rsync missing
         ssh_errors = (
             status.source_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
         assert SshEndpointError.RSYNC_NOT_FOUND in ssh_errors
-        # Volume and endpoint checks are skipped when SSH is inactive
-        assert status.source_endpoint_status.volume_status.active is False
-        assert VolumeError.SSH_ENDPOINT_INACTIVE in (
-            status.source_endpoint_status.volume_status.errors
+        # Local volume is still probed despite SSH endpoint errors —
+        # no SSH_ENDPOINT_INACTIVE cascade for local volumes
+        assert status.source_endpoint_status.volume_status.active is True
+        # Source endpoint is inactive because .nbkp-src sentinel is missing
+        assert SourceEndpointError.SENTINEL_NOT_FOUND in (
+            status.source_endpoint_status.errors
         )
-        # Endpoint gets cascade error pointing to inactive volume
-        assert status.source_endpoint_status.errors == [
-            SourceEndpointError.VOLUME_INACTIVE
-        ]
 
     @patch(
         "nbkp.preflight.checks.observe_ssh_endpoint",

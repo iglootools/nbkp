@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import stat
 import sys
 from pathlib import Path
@@ -19,15 +18,25 @@ from .common import load_config_or_exit, resolve_endpoints
 @app.command()
 def sh(
     config: Annotated[
-        Optional[str],
-        typer.Option("--config", "-c", help="Path to config file"),
+        Optional[Path],
+        typer.Option(
+            "--config",
+            "-c",
+            help="Path to config file",
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
     ] = None,
     output_file: Annotated[
-        Optional[str],
+        Optional[Path],
         typer.Option(
             "--output-file",
             "-o",
             help="Write script to file (made executable)",
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
         ),
     ] = None,
     relative_src: Annotated[
@@ -112,7 +121,7 @@ def sh(
         cfg,
         ScriptOptions(
             config_path=config,
-            output_file=(os.path.abspath(output_file) if output_file else None),
+            output_file=output_file,
             relative_src=relative_src,
             relative_dst=relative_dst,
             portable=portable,
@@ -121,9 +130,8 @@ def sh(
         resolved_endpoints=resolved,
     )
     if output_file is not None:
-        path = Path(output_file)
-        path.write_text(script, encoding="utf-8")
-        path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
+        output_file.write_text(script, encoding="utf-8")
+        output_file.chmod(output_file.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
         typer.echo(f"Written to {output_file}", err=True)
     else:
         typer.echo(script)

@@ -1,0 +1,407 @@
+ssh-endpoints:
+  raspberry-pi4-lan:
+    host: 10.0.0.43
+    location: home
+  raspberry-pi4-wan:
+    host: sami.example.com
+    location: travel
+
+volumes:
+  # apfs, dmg
+  laptop-docs:
+    type: local
+    path: /Volumes/docs
+  
+  # apfs
+  laptop-home:
+    type: local
+    path: "~"
+
+  # apfs
+  rocketnano1tb:
+    type: local
+    path: /Volumes/rocketnano1tb
+
+  # apfs
+  rocketnano2tb:
+    type: local
+    path: /Volumes/rocketnano2tb
+
+  # btrfs, luks
+  seagate1tb:
+    type: remote
+    ssh-endpoint: raspberry-pi4-lan
+    path: /mnt/seagate1tb
+    mount:
+      device-uuid: 256c3f2b-6f62-4213-b278-fae76c35b804
+      encryption:
+        type: luks
+        mapper-name: seagate1tb
+        passphrase-id: seagate1tb
+
+  # btrfs, luks
+  seagate2tb:
+    type: remote
+    ssh-endpoint: raspberry-pi4-lan
+    path: /mnt/seagate2tb
+    mount:
+      device-uuid: 791586c3-5947-46bf-bb5e-fc1a35084a4b
+      encryption:
+        type: luks
+        mapper-name: seagate2tb
+        passphrase-id: seagate2tb
+
+  # btrfs, luks
+  seagate8tb:
+    type: remote
+    ssh-endpoint: raspberry-pi4-lan
+    path: /mnt/seagate8tb
+    mount:
+      device-uuid: 5941f273-f73c-44c5-a3ef-fae7248db1b6
+      encryption:
+        type: luks
+        mapper-name: seagate8tb
+        passphrase-id: seagate8tb
+
+  # btrfs: currently formatted as apfs, but we should backup from seagate8tb to this drive and convert it to btrfs (TODO)
+  # TODO: add LUKS encryption, crypttab entry, fstab entry, and mount config once converted to btrfs
+  wd6tb:
+    type: remote
+    ssh-endpoint: raspberry-pi4-lan
+    path: /mnt/wd6tb
+
+  # btrfs, luks
+  # TODO: fix typo in /etc/crypttab on raspberry-pi4: "luke" → "luks" for iomega1tb
+  iomega1tb:
+    type: remote
+    ssh-endpoint: raspberry-pi4-lan
+    path: /mnt/iomega1tb
+    mount:
+      device-uuid: ad5542e5-5365-4951-a1f2-fe81c4d6fe43
+      encryption:
+        type: luks
+        mapper-name: iomega1tb
+        passphrase-id: iomega1tb
+    
+sync-endpoints:
+  laptop-docs:
+    volume: laptop-docs
+  
+  laptop-home:
+    volume: laptop-home
+
+  # rocketnano1tb: original data
+  rocketnano1tb-applications:
+    volume: rocketnano1tb
+    subdir: applications
+
+  rocketnano1tb-audio:
+    volume: rocketnano1tb
+    subdir: audio
+
+  rocketnano1tb-education:
+    volume: rocketnano1tb
+    subdir: education
+
+  # rocketnano1tb: backups
+  rocketnano1tb-backups-docs:
+    volume: rocketnano1tb
+    subdir: backups/docs
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 10
+  rocketnano1tb-backups-home-config:
+    volume: rocketnano1tb
+    subdir: backups/home-config
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  # rocketnano2tb: original data
+  rocketnano2tb-photos:
+    volume: rocketnano2tb
+    subdir: photos
+
+  # rocketnano2tb: backups
+  rocketnano2tb-backups-docs:
+    volume: rocketnano2tb
+    subdir: backups/docs
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 10
+  rocketnano2tb-backups-home-config:
+    volume: rocketnano2tb
+    subdir: backups/home-config
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  # seagate1tb: backups
+  seagate1tb-backups-applications:
+    volume: seagate1tb
+    subdir: backups/applications
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+  
+  seagate1tb-backups-audio:
+    volume: seagate1tb
+    subdir: backups/audio
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  seagate1tb-backups-docs:
+    volume: seagate1tb
+    subdir: backups/docs
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  seagate1tb-backups-education:
+    volume: seagate1tb
+    subdir: backups/education
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  # seagate2tb: backups
+  seagate2tb-backups-docs:
+    volume: seagate2tb
+    subdir: backups/docs
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  seagate2tb-backups-photos:
+    volume: seagate2tb
+    subdir: backups/photos
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+      
+  # seagate8tb: backups
+  seagate8tb-backups-applications:
+    volume: seagate8tb
+    subdir: backups/applications
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+  
+  seagate8tb-backups-audio:
+    volume: seagate8tb
+    subdir: backups/audio
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  seagate8tb-backups-docs:
+    volume: seagate8tb
+    subdir: backups/docs
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  seagate8tb-backups-education:
+    volume: seagate8tb
+    subdir: backups/education
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+  
+  seagate8tb-backups-home:
+    volume: seagate8tb
+    subdir: backups/home
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  seagate8tb-backups-photos:
+    volume: seagate8tb
+    subdir: backups/photos
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  # wd6tb: backups
+  wd6tb-backups-applications:
+    volume: wd6tb
+    subdir: backups/applications
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+  
+  wd6tb-backups-audio:
+    volume: wd6tb
+    subdir: backups/audio
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  wd6tb-backups-docs:
+    volume: wd6tb
+    subdir: backups/docs
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  wd6tb-backups-education:
+    volume: wd6tb
+    subdir: backups/education
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+  
+  wd6tb-backups-home:
+    volume: wd6tb
+    subdir: backups/home
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  wd6tb-backups-photos:
+    volume: wd6tb
+    subdir: backups/photos
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+syncs:
+  # laptop-docs
+  laptop-docs-to-rocketnano1tb:
+    source: laptop-docs
+    destination: rocketnano1tb-backups-docs
+    filters:
+      - dir-merge: .rsync-filter
+
+  laptop-docs-to-rocketnano2tb:
+    source: laptop-docs
+    destination: rocketnano2tb-backups-docs
+    filters:
+      - dir-merge: .rsync-filter
+
+  laptop-docs-to-seagate8tb:
+    source: laptop-docs
+    destination: seagate8tb-backups-docs
+    filters:
+      - dir-merge: .rsync-filter
+  
+  laptop-home-config-to-rocketnano1tb:
+    source: laptop-home
+    destination: rocketnano1tb-backups-home-config
+    filters:
+      - "+ /.config/nbkp/***"
+      - "+ /.config/photree/***"
+      - "+ /.config/mise/***"
+      # cruft
+      - "- /**"
+
+  laptop-home-config-to-rocketnano2tb:
+    source: laptop-home
+    destination: rocketnano2tb-backups-home-config
+    filters:
+      - "+ /.config/nbkp/***"
+      - "+ /.config/photree/***"
+      - "+ /.config/mise/***"
+      # cruft
+      - "- /**"
+  
+  # laptop-home
+  laptop-home-to-seagate8tb:
+    source: laptop-home
+    destination: seagate8tb-backups-home
+    filters:
+      # config
+      - "+ /.config/nbkp/***"
+      - "+ /.config/photree/***"
+      - "+ /.config/mise/***"
+      # other: TODO: cleanup
+      - "+ /.bash*"
+      - "+ /.gitconfig"
+      - "+ /.gnupg/***"
+      - "+ /.local/bin/**"
+      - "+ /.rsync-filter"
+      - "+ /.ssb-src"
+      - "+ /.ssh/***"
+      - "+ /.zsh*"
+      - "+ /Desktop/***"
+      - "+ /Documents/***"
+      - "+ /Downloads/***"
+      - "- /Movies/iMovie Library.imovielibrary/***"
+      - "+ /Movies/***"
+      - "+ /Music/***"
+      - "+ /Pictures/to-upload/***"
+      - "+ /Pictures/Scans/***"
+      # cruft
+      - "- /**"
+
+  # rocketnano1tb
+  rocketnano1tb-applications-to-seagate8tb:
+    source: rocketnano1tb-applications
+    destination: seagate8tb-backups-applications
+
+  rocketnano1tb-audio-to-seagate8tb:
+    source: rocketnano1tb-audio
+    destination: seagate8tb-backups-audio
+  
+  rocketnano1tb-education-to-seagate8tb:
+    source: rocketnano1tb-education
+    destination: seagate8tb-backups-education
+    
+  # rocketnano2tb
+  rocketnano2tb-photos-to-seagate8tb:
+    source: rocketnano2tb-photos
+    destination: seagate8tb-backups-photos
+  
+  # seagate8tb-backups
+  seagate8tb-backups-applications-to-seagate1tb:
+    source: seagate8tb-backups-applications
+    destination: seagate1tb-backups-applications
+
+  seagate8tb-backups-applications-to-wd6tb:
+    source: seagate8tb-backups-applications
+    destination: wd6tb-backups-applications
+
+  seagate8tb-backups-audio-to-seagate1tb:
+    source: seagate8tb-backups-audio
+    destination: seagate1tb-backups-audio
+
+  seagate8tb-backups-audio-to-seagate1tb:
+    source: seagate8tb-backups-audio
+    destination: seagate1tb-backups-audio
+
+  seagate8tb-backups-audio-to-wd6tb:
+    source: seagate8tb-backups-audio
+    destination: wd6tb-backups-audio
+
+  seagate8tb-backups-docs-to-seagate1tb:
+    source: seagate8tb-backups-docs
+    destination: seagate1tb-backups-docs
+
+  seagate8tb-backups-docs-to-seagate2tb:
+    source: seagate8tb-backups-docs
+    destination: seagate2tb-backups-docs
+
+  seagate8tb-backups-docs-to-wd6tb:
+    source: seagate8tb-backups-docs
+    destination: wd6tb-backups-docs
+
+  seagate8tb-backups-education-to-seagate1tb:
+    source: seagate8tb-backups-education
+    destination: seagate1tb-backups-education
+  
+  seagate8tb-backups-education-to-wd6tb:
+    source: seagate8tb-backups-education
+    destination: wd6tb-backups-education
+  
+  seagate8tb-backups-home-to-wd6tb:
+    source: seagate8tb-backups-home
+    destination: wd6tb-backups-home
+
+  seagate8tb-backups-photos-to-seagate2tb:
+    source: seagate8tb-backups-photos
+    destination: seagate2tb-backups-photos
+
+  seagate8tb-backups-photos-to-wd6tb:
+    source: seagate8tb-backups-photos
+    destination: wd6tb-backups-photos

@@ -38,7 +38,7 @@ $ nbkp check [OPTIONS]
 
 **Options**:
 
-* `-c, --config TEXT`: Path to config file
+* `-c, --config FILE`: Path to config file
 * `-o, --output [human|json]`: Output format  [default: human]
 * `-S, --strictness [ignore-none|ignore-inactive|ignore-all]`: How to handle preflight errors: ignore-none (all errors fatal), ignore-inactive (skip expected-inactive, default), ignore-all (ignore all errors)  [default: ignore-inactive]
 * `-l, --location TEXT`: Prefer endpoints at these locations
@@ -60,7 +60,7 @@ $ nbkp prune [OPTIONS]
 
 **Options**:
 
-* `-c, --config TEXT`: Path to config file
+* `-c, --config FILE`: Path to config file
 * `-s, --sync TEXT`: Sync name(s) to prune
 * `-n, --dry-run`: Perform a dry run
 * `-o, --output [human|json]`: Output format  [default: human]
@@ -83,7 +83,7 @@ $ nbkp run [OPTIONS]
 
 **Options**:
 
-* `-c, --config TEXT`: Path to config file
+* `-c, --config FILE`: Path to config file
 * `-n, --dry-run`: Perform a dry run
 * `-s, --sync TEXT`: Sync name(s) to run
 * `-o, --output [human|json]`: Output format  [default: human]
@@ -111,8 +111,8 @@ $ nbkp sh [OPTIONS]
 
 **Options**:
 
-* `-c, --config TEXT`: Path to config file
-* `-o, --output-file TEXT`: Write script to file (made executable)
+* `-c, --config FILE`: Path to config file
+* `-o, --output-file FILE`: Write script to file (made executable)
 * `--relative-src`: Make source paths relative to script location (requires --output-file)
 * `--relative-dst`: Make destination paths relative to script location (requires --output-file)
 * `-l, --location TEXT`: Prefer endpoints at these locations
@@ -134,7 +134,7 @@ $ nbkp troubleshoot [OPTIONS]
 
 **Options**:
 
-* `-c, --config TEXT`: Path to config file
+* `-c, --config FILE`: Path to config file
 * `-l, --location TEXT`: Prefer endpoints at these locations
 * `-L, --exclude-location TEXT`: Exclude endpoints at these locations
 * `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
@@ -175,7 +175,7 @@ $ nbkp config show [OPTIONS]
 
 **Options**:
 
-* `-c, --config TEXT`: Path to config file
+* `-c, --config FILE`: Path to config file
 * `-o, --output [human|json]`: Output format  [default: human]
 * `--help`: Show this message and exit.
 
@@ -191,7 +191,7 @@ $ nbkp config graph [OPTIONS]
 
 **Options**:
 
-* `-c, --config TEXT`: Path to config file
+* `-c, --config FILE`: Path to config file
 * `-o, --output [human|json]`: Output format  [default: human]
 * `-f, --format [rich-tree|mermaid-ascii|mermaid]`: Graph format (human output only)  [default: rich-tree]
 * `--help`: Show this message and exit.
@@ -208,7 +208,7 @@ $ nbkp config setup-auth [OPTIONS]
 
 **Options**:
 
-* `-c, --config TEXT`: Path to config file
+* `-c, --config FILE`: Path to config file
 * `-u, --user TEXT`: System user for auth rules  [default: ubuntu]
 * `--help`: Show this message and exit.
 
@@ -224,7 +224,7 @@ $ nbkp config keyring-status [OPTIONS]
 
 **Options**:
 
-* `-c, --config TEXT`: Path to config file
+* `-c, --config FILE`: Path to config file
 * `-o, --output [human|json]`: Output format  [default: human]
 * `--help`: Show this message and exit.
 
@@ -260,7 +260,7 @@ $ nbkp volumes mount [OPTIONS]
 
 **Options**:
 
-* `-c, --config TEXT`: Path to config file
+* `-c, --config FILE`: Path to config file
 * `-o, --output [human|json]`: Output format  [default: human]
 * `-n, --name TEXT`: Volume name(s) to mount
 * `-l, --location TEXT`: Prefer endpoints at these locations
@@ -280,7 +280,7 @@ $ nbkp volumes umount [OPTIONS]
 
 **Options**:
 
-* `-c, --config TEXT`: Path to config file
+* `-c, --config FILE`: Path to config file
 * `-o, --output [human|json]`: Output format  [default: human]
 * `-n, --name TEXT`: Volume name(s) to umount
 * `-l, --location TEXT`: Prefer endpoints at these locations
@@ -300,7 +300,7 @@ $ nbkp volumes status [OPTIONS]
 
 **Options**:
 
-* `-c, --config TEXT`: Path to config file
+* `-c, --config FILE`: Path to config file
 * `-o, --output [human|json]`: Output format  [default: human]
 * `-n, --name TEXT`: Volume name(s) to check
 * `-l, --location TEXT`: Prefer endpoints at these locations
@@ -358,5 +358,5 @@ $ nbkp demo seed [OPTIONS]
 * `--luks / --no-luks`: Use LUKS-encrypted btrfs volume (requires --docker and dm-crypt kernel module).  [default: luks]
 * `--bandwidth-limit INTEGER`: Rsync bandwidth limit in KiB/s (e.g. 100 for ~100 KiB/s). Set to 0 to disable.  [default: 250]
 * `--credential-provider [keyring|prompt|env|command]`: How LUKS passphrases are retrieved at runtime. Only relevant when --luks is enabled.  [default: keyring]
-* `--base-dir PATH`: Use a fixed directory instead of a random temp folder. Created if it does not exist.
+* `--base-dir DIRECTORY`: Use a fixed directory instead of a random temp folder. Created if it does not exist.
 * `--help`: Show this message and exit.

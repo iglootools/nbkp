@@ -214,6 +214,9 @@ def seed(
             "--base-dir",
             help="Use a fixed directory instead of a random"
             " temp folder. Created if it does not exist.",
+            file_okay=False,
+            dir_okay=True,
+            resolve_path=True,
         ),
     ] = None,
 ) -> None:

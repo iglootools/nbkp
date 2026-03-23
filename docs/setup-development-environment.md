@@ -1,17 +1,25 @@
 # Setup Development Environment
 
 ## System Setup
-1. [Install and activate mise](https://mise.jdx.dev/installing-mise.html)
 
-2. Install Docker Desktop (or Docker Engine on Linux)
+1. Clone the [common-guidelines](https://github.com/iglootools/common-guidelines) repo as a sibling directory:
+   ```bash
+   # From the parent directory of nbkp (e.g. iglootools/)
+   git clone git@github.com:iglootools/common-guidelines.git
+   ```
+   This is required for Claude Code to load shared coding guidelines via `@` imports in `CLAUDE.md`.
 
-3. Configure github CLI with `gh auth login` and ensure you have access to the repository (optional, for convenience).
+2. [Install and activate mise](https://mise.jdx.dev/installing-mise.html)
 
-4. Install the graphviz dependency
+3. Install Docker Desktop (or Docker Engine on Linux)
+
+4. Configure github CLI with `gh auth login` and ensure you have access to the repository (optional, for convenience).
+
+5. Install the graphviz dependency
    - macOS: `brew install graphviz`
    - Linux: `apt install graphviz`
 
-5. Activate the virtual environment:
+6. Activate the virtual environment:
    ```bash
    # - Install all the tools defined in mise.toml
    # - Set up the .venv with the correct Python version
@@ -24,12 +32,12 @@
    poetry env remove --all
    ```
 
-6. Upgrade rsync if you're on macOS, as the default version is too old and lacks some features nbkp relies on:
+7. Upgrade rsync if you're on macOS, as the default version is too old and lacks some features nbkp relies on:
    ```bash
    brew install rsync
    ```
 
-7. (Optional) If you want to record the demo, install pv:
+8. (Optional) If you want to record the demo, install pv:
    ```bash
    brew install pv
    ```

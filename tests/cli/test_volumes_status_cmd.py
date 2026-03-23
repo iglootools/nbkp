@@ -74,13 +74,15 @@ class TestVolumesStatusCommand:
         )
         assert result.exit_code == 0
         data = json.loads(result.output)
-        assert len(data) == 2
+        assert len(data) == 3
         assert data[0]["volume"] == "encrypted-drive"
         assert data[0]["device_present"] is True
         assert data[0]["luks_attached"] is True
         assert data[0]["mounted"] is False
         assert data[1]["volume"] == "plain-drive"
         assert data[1]["mounted"] is True
+        assert data[2]["volume"] == "no-mount"
+        assert data[2]["strategy"] == "not managed"
 
     @patch("nbkp.cli.volumes_cmd.check_mount_status")
     @patch("nbkp.cli.common.load_config")
@@ -143,4 +145,7 @@ class TestVolumesStatusCommand:
             app, ["volumes", "status", "--config", "/f.yaml", "-o", "json"]
         )
         assert result.exit_code == 0
-        assert json.loads(result.output) == []
+        data = json.loads(result.output)
+        assert len(data) == 1
+        assert data[0]["volume"] == "plain"
+        assert data[0]["strategy"] == "not managed"
