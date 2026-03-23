@@ -213,9 +213,12 @@ def _type_str(info: FieldInfo) -> str:
         return _type_str(inner_info)
 
     # Optional[X] → show the inner type with original constraints
+    # On Python < 3.14, typing.Union and types.UnionType are distinct classes.
+    # get_origin(Optional[X]) returns typing.Union, not types.UnionType.
     from types import UnionType
+    from typing import Union
 
-    if origin in (type(None),) or origin is UnionType:
+    if origin in (type(None),) or origin is UnionType or origin is Union:
         non_none = [a for a in args if a is not type(None)]
         if len(non_none) == 1:
             # Pass original info to preserve constraints
