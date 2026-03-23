@@ -72,6 +72,7 @@ The Docker-based test suites use [testcontainers](https://testcontainers-python.
 
 ## Github Config
 - The `main` branch is protected against force pushes.
+- Settings > Advanced Security > Enable Dependency graph
 - Set up the following Github secrets:
     - `ASCIINEMA_INSTALL_ID`:
         1. Execute `asciinema auth` in your terminal
