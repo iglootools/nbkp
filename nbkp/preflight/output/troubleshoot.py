@@ -22,7 +22,7 @@ from ...config.output import (
     endpoint_path,
     host_label,
 )
-from ...mount.auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH, generate_auth_rules
+from ...disks.auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH, generate_auth_rules
 from ...remote.ssh import (
     format_proxy_jump_chain,
     ssh_prefix,

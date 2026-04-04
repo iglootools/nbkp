@@ -33,7 +33,7 @@ from ..config import (
     Volume,
 )
 from ..config.epresolution import ResolvedEndpoints
-from ..mount.observation import MountObservation
+from ..disks.observation import MountObservation
 from ..remote.resolution import enrich_from_ssh_config, resolve_proxy_chain
 from .endpoint_checks import observe_destination_endpoint, observe_source_endpoint
 from .ssh_checks import observe_standalone_endpoint

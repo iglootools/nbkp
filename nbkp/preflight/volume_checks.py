@@ -26,10 +26,10 @@ from ..config import (
 )
 from ..config.epresolution import ResolvedEndpoints
 from ..fsprotocol import VOLUME_SENTINEL
-from ..mount.auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH
-from ..mount import direct as direct_cmds
-from ..mount import systemd as systemd_cmds
-from ..mount.detection import (
+from ..disks.auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH
+from ..disks import direct as direct_cmds
+from ..disks import systemd as systemd_cmds
+from ..disks.detection import (
     detect_device_present,
     detect_luks_attached,
     detect_systemd_cryptsetup_path,
@@ -49,7 +49,7 @@ from .snapshot_checks import (
     check_btrfs_mount_option,
     check_hardlink_support,
 )
-from ..mount.observation import MountObservation
+from ..disks.observation import MountObservation
 from .status import (
     HostToolCapabilities,
     MountCapabilities,

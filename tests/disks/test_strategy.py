@@ -1,10 +1,10 @@
-"""Tests for nbkp.mount.strategy implementations."""
+"""Tests for nbkp.disks.strategy implementations."""
 
 from __future__ import annotations
 
 import pytest
 
-from nbkp.mount.strategy import DirectMountStrategy, SystemdMountStrategy
+from nbkp.disks.strategy import DirectMountStrategy, SystemdMountStrategy
 
 
 class TestSystemdMountStrategy:

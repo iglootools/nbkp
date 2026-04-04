@@ -22,21 +22,21 @@ from nbkp.config import (
     SshEndpoint,
 )
 from nbkp.config.epresolution import ResolvedEndpoints
-from nbkp.mount.detection import (
+from nbkp.disks.detection import (
     detect_device_present,
     detect_luks_attached,
     detect_systemd_cryptsetup_path,
     resolve_mount_strategy,
 )
-from nbkp.mount.lifecycle import (
+from nbkp.disks.lifecycle import (
     MountFailureReason,
     mount_volume,
     mount_volumes,
     umount_volume,
     umount_volumes,
 )
-from nbkp.mount.observation import build_mount_observations
-from nbkp.mount.strategy import DirectMountStrategy, SystemdMountStrategy
+from nbkp.disks.observation import build_mount_observations
+from nbkp.disks.strategy import DirectMountStrategy, SystemdMountStrategy
 from nbkp.orchestration import managed_mount
 from nbkp.remote.dispatch import run_on_volume
 

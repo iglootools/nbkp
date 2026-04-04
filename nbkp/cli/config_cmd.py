@@ -15,7 +15,7 @@ from rich.text import Text
 from ..config import Config
 from ..credentials import CredentialError, retrieve_passphrase
 from ..remote.resolution import resolve_all_endpoints
-from ..mount.auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH, generate_auth_rules
+from ..disks.auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH, generate_auth_rules
 from ..ordering.output import (
     build_graph_json,
     print_mermaid_ascii_graph,

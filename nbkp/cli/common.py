@@ -31,10 +31,10 @@ from ..config.epresolution import (
 )
 from ..remote.resolution import resolve_all_endpoints
 from ..credentials import build_passphrase_fn
-from ..mount.lifecycle import MountResult, UmountResult, mount_volume_count
-from ..mount.observation import MountObservation
-from ..mount.output import build_mount_status_table, volume_display_name
-from ..mount.strategy import MountStrategy
+from ..disks.lifecycle import MountResult, UmountResult, mount_volume_count
+from ..disks.observation import MountObservation
+from ..disks.output import build_mount_status_table, volume_display_name
+from ..disks.strategy import MountStrategy
 from ..orchestration import managed_mount as _orchestration_managed_mount
 from ..config.output import print_config_error
 from ..preflight.output import print_human_check

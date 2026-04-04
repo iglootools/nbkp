@@ -1,8 +1,8 @@
-"""Tests for nbkp.mount.direct command builders."""
+"""Tests for nbkp.disks.direct command builders."""
 
 from __future__ import annotations
 
-from nbkp.mount.direct import (
+from nbkp.disks.direct import (
     build_close_luks_command,
     build_mount_command,
     build_attach_luks_command,

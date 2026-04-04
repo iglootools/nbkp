@@ -14,14 +14,14 @@ from typing import Callable, Generator
 
 from .config import Config
 from .config.epresolution import ResolvedEndpoints
-from .mount.lifecycle import (
+from .disks.lifecycle import (
     MountResult,
     UmountResult,
     mount_volumes,
     umount_volumes,
 )
-from .mount.observation import MountObservation, build_mount_observations
-from .mount.strategy import MountStrategy
+from .disks.observation import MountObservation, build_mount_observations
+from .disks.strategy import MountStrategy
 from .preflight import PreflightResult
 from .sync.pipeline import Strictness, PipelineResult, check_and_run
 from .sync.rsync import ProgressMode

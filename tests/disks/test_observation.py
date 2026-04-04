@@ -8,9 +8,9 @@ from nbkp.config import (
     LuksEncryptionConfig,
     MountConfig,
 )
-from nbkp.mount.lifecycle import MountFailureReason, MountResult
-from nbkp.mount.observation import MountObservation, build_mount_observations
-from nbkp.mount.strategy import DirectMountStrategy, SystemdMountStrategy
+from nbkp.disks.lifecycle import MountFailureReason, MountResult
+from nbkp.disks.observation import MountObservation, build_mount_observations
+from nbkp.disks.strategy import DirectMountStrategy, SystemdMountStrategy
 
 
 def _config_with_volumes(*volumes: LocalVolume) -> Config:

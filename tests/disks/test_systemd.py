@@ -1,8 +1,8 @@
-"""Tests for nbkp.mount.systemd command builders."""
+"""Tests for nbkp.disks.systemd command builders."""
 
 from __future__ import annotations
 
-from nbkp.mount.systemd import (
+from nbkp.disks.systemd import (
     build_close_luks_command,
     build_mount_command,
     build_attach_luks_command,

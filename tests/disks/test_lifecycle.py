@@ -1,4 +1,4 @@
-"""Tests for nbkp.mount.lifecycle."""
+"""Tests for nbkp.disks.lifecycle."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.mount.strategy import DirectMountStrategy, SystemdMountStrategy
-from nbkp.mount.lifecycle import (
+from nbkp.disks.strategy import DirectMountStrategy, SystemdMountStrategy
+from nbkp.disks.lifecycle import (
     MountFailureReason,
     mount_volume,
     mount_volumes,
@@ -73,7 +73,7 @@ class TestMountVolume:
     def test_device_not_present(self) -> None:
         vol = _encrypted_vol()
         strategy = _systemd_strategy()
-        with patch("nbkp.mount.lifecycle.detect_device_present", return_value=False):
+        with patch("nbkp.disks.lifecycle.detect_device_present", return_value=False):
             result = mount_volume(
                 vol,
                 vol.mount,
@@ -88,11 +88,11 @@ class TestMountVolume:
         vol = _encrypted_vol()
         strategy = _systemd_strategy()
         with (
-            patch("nbkp.mount.lifecycle.detect_device_present", return_value=True),
-            patch("nbkp.mount.lifecycle.detect_luks_attached", return_value=True),
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.detect_luks_attached", return_value=True),
             # Patch run_on_volume in the strategy module so detect_mounted returns True
             patch(
-                "nbkp.mount.strategy.run_on_volume",
+                "nbkp.disks.strategy.run_on_volume",
                 return_value=_mock_run(0),
             ),
         ):
@@ -109,13 +109,13 @@ class TestMountVolume:
         vol = _unencrypted_vol()
         strategy = _systemd_strategy(mount_unit="mnt-usb.mount", cryptsetup_path=None)
         with (
-            patch("nbkp.mount.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
             # detect_mounted -> False (systemctl is-active returns 3 for inactive)
             patch(
-                "nbkp.mount.strategy.run_on_volume",
+                "nbkp.disks.strategy.run_on_volume",
                 return_value=_mock_run(3),
             ),
-            patch("nbkp.mount.lifecycle.run_on_volume", return_value=_mock_run(0)),
+            patch("nbkp.disks.lifecycle.run_on_volume", return_value=_mock_run(0)),
         ):
             result = mount_volume(
                 vol,
@@ -130,10 +130,10 @@ class TestMountVolume:
         vol = _encrypted_vol()
         strategy = _systemd_strategy()
         with (
-            patch("nbkp.mount.lifecycle.detect_device_present", return_value=True),
-            patch("nbkp.mount.lifecycle.detect_luks_attached", return_value=False),
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.detect_luks_attached", return_value=False),
             patch(
-                "nbkp.mount.lifecycle.run_on_volume",
+                "nbkp.disks.lifecycle.run_on_volume",
                 return_value=_mock_run(1, stderr="permission denied"),
             ),
         ):
@@ -151,13 +151,13 @@ class TestMountVolume:
         vol = _unencrypted_vol()
         strategy = _direct_strategy(volume_path="/mnt/usb")
         with (
-            patch("nbkp.mount.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
             # detect_mounted -> False (mountpoint -q returns 1 for not mounted)
             patch(
-                "nbkp.mount.strategy.run_on_volume",
+                "nbkp.disks.strategy.run_on_volume",
                 return_value=_mock_run(1),
             ),
-            patch("nbkp.mount.lifecycle.run_on_volume", return_value=_mock_run(0)),
+            patch("nbkp.disks.lifecycle.run_on_volume", return_value=_mock_run(0)),
         ):
             result = mount_volume(
                 vol,
@@ -173,7 +173,7 @@ class TestMountVolume:
         vol = _encrypted_vol()
         strategy = _systemd_strategy()
         with patch(
-            "nbkp.mount.lifecycle.detect_device_present",
+            "nbkp.disks.lifecycle.detect_device_present",
             side_effect=TimeoutError("timed out"),
         ):
             result = mount_volume(
@@ -192,7 +192,7 @@ class TestMountVolume:
         vol = _encrypted_vol()
         strategy = _systemd_strategy()
         with patch(
-            "nbkp.mount.lifecycle.detect_device_present",
+            "nbkp.disks.lifecycle.detect_device_present",
             side_effect=ConnectionRefusedError("Connection refused"),
         ):
             result = mount_volume(
@@ -219,9 +219,9 @@ class TestUmountVolume:
 
         with (
             # detect_mounted -> True
-            patch("nbkp.mount.strategy.run_on_volume", return_value=_mock_run(0)),
-            patch("nbkp.mount.lifecycle.detect_luks_attached", return_value=True),
-            patch("nbkp.mount.lifecycle.run_on_volume", side_effect=mock_run),
+            patch("nbkp.disks.strategy.run_on_volume", return_value=_mock_run(0)),
+            patch("nbkp.disks.lifecycle.detect_luks_attached", return_value=True),
+            patch("nbkp.disks.lifecycle.run_on_volume", side_effect=mock_run),
         ):
             result = umount_volume(
                 vol,
@@ -237,9 +237,9 @@ class TestUmountVolume:
         strategy = _systemd_strategy()
         with (
             # detect_mounted -> False
-            patch("nbkp.mount.strategy.run_on_volume", return_value=_mock_run(3)),
-            patch("nbkp.mount.lifecycle.detect_luks_attached", return_value=True),
-            patch("nbkp.mount.lifecycle.run_on_volume", return_value=_mock_run(0)),
+            patch("nbkp.disks.strategy.run_on_volume", return_value=_mock_run(3)),
+            patch("nbkp.disks.lifecycle.detect_luks_attached", return_value=True),
+            patch("nbkp.disks.lifecycle.run_on_volume", return_value=_mock_run(0)),
         ):
             result = umount_volume(
                 vol,
@@ -254,9 +254,9 @@ class TestUmountVolume:
         strategy = _systemd_strategy()
         with (
             # detect_mounted -> True
-            patch("nbkp.mount.strategy.run_on_volume", return_value=_mock_run(0)),
+            patch("nbkp.disks.strategy.run_on_volume", return_value=_mock_run(0)),
             patch(
-                "nbkp.mount.lifecycle.run_on_volume",
+                "nbkp.disks.lifecycle.run_on_volume",
                 return_value=_mock_run(1, stderr="busy"),
             ),
         ):
@@ -274,7 +274,7 @@ class TestUmountVolume:
         vol = _encrypted_vol()
         strategy = _systemd_strategy()
         with patch(
-            "nbkp.mount.strategy.run_on_volume",
+            "nbkp.disks.strategy.run_on_volume",
             side_effect=TimeoutError("timed out"),
         ):
             result = umount_volume(
@@ -292,8 +292,8 @@ class TestUmountVolume:
         strategy = _systemd_strategy(mount_unit="mnt-usb.mount", cryptsetup_path=None)
         with (
             # detect_mounted -> True
-            patch("nbkp.mount.strategy.run_on_volume", return_value=_mock_run(0)),
-            patch("nbkp.mount.lifecycle.run_on_volume", return_value=_mock_run(0)),
+            patch("nbkp.disks.strategy.run_on_volume", return_value=_mock_run(0)),
+            patch("nbkp.disks.lifecycle.run_on_volume", return_value=_mock_run(0)),
         ):
             result = umount_volume(
                 vol,
@@ -330,10 +330,10 @@ class TestMountVolumes:
             mount_unit="mnt-usb.mount", cryptsetup_path=None
         )
         with (
-            patch("nbkp.mount.lifecycle.detect_device_present", return_value=True),
-            patch("nbkp.mount.lifecycle.detect_luks_attached", return_value=True),
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.detect_luks_attached", return_value=True),
             # detect_mounted -> True
-            patch("nbkp.mount.strategy.run_on_volume", return_value=_mock_run(0)),
+            patch("nbkp.disks.strategy.run_on_volume", return_value=_mock_run(0)),
         ):
             _, results = mount_volumes(
                 cfg,
@@ -351,9 +351,9 @@ class TestMountVolumes:
             mount_unit="mnt-usb.mount", cryptsetup_path=None
         )
         with (
-            patch("nbkp.mount.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
             # detect_mounted -> True
-            patch("nbkp.mount.strategy.run_on_volume", return_value=_mock_run(0)),
+            patch("nbkp.disks.strategy.run_on_volume", return_value=_mock_run(0)),
         ):
             _, results = mount_volumes(
                 cfg,
@@ -406,8 +406,8 @@ class TestUmountVolumes:
         slugs: list[str] = []
         with (
             # detect_mounted -> False
-            patch("nbkp.mount.strategy.run_on_volume", return_value=_mock_run(3)),
-            patch("nbkp.mount.lifecycle.detect_luks_attached", return_value=False),
+            patch("nbkp.disks.strategy.run_on_volume", return_value=_mock_run(3)),
+            patch("nbkp.disks.lifecycle.detect_luks_attached", return_value=False),
         ):
             umount_volumes(
                 cfg,

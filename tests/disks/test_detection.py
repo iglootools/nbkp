@@ -1,4 +1,4 @@
-"""Tests for nbkp.mount.detection."""
+"""Tests for nbkp.disks.detection."""
 
 from __future__ import annotations
 
@@ -12,9 +12,9 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.mount import direct as direct_cmds
-from nbkp.mount import systemd as systemd_cmds
-from nbkp.mount.detection import (
+from nbkp.disks import direct as direct_cmds
+from nbkp.disks import systemd as systemd_cmds
+from nbkp.disks.detection import (
     detect_device_present,
     detect_luks_attached,
     detect_systemd_cryptsetup_path,
@@ -183,12 +183,12 @@ class TestResolveMountStrategy:
             call_count += 1
             if call_count == 1:
                 raise TimeoutError("timed out")
-            from nbkp.mount.strategy import DirectMountStrategy
+            from nbkp.disks.strategy import DirectMountStrategy
 
             return DirectMountStrategy(volume_path=vol.path)
 
         with patch(
-            "nbkp.mount.detection._resolve_mount_strategy",
+            "nbkp.disks.detection._resolve_mount_strategy",
             side_effect=mock_resolve,
         ):
             strategies = resolve_mount_strategy(cfg, {}, names=None)
@@ -202,7 +202,7 @@ class TestResolveMountStrategy:
         errors: list[tuple[str, str]] = []
 
         with patch(
-            "nbkp.mount.detection._resolve_mount_strategy",
+            "nbkp.disks.detection._resolve_mount_strategy",
             side_effect=TimeoutError("timed out"),
         ):
             strategies = resolve_mount_strategy(

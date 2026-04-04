@@ -30,8 +30,8 @@ from ..config import (
     RsyncOptions,
 )
 from ..remote.resolution import resolve_all_endpoints
-from ..mount.lifecycle import mount_volumes, umount_volumes
-from ..mount.strategy import MountStrategy
+from ..disks.lifecycle import mount_volumes, umount_volumes
+from ..disks.strategy import MountStrategy
 
 # Docker-dependent imports are deferred to seed --docker.
 # They require the 'docker' extra: pipx install nbkp[docker]

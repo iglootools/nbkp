@@ -66,7 +66,7 @@ def build_mount_observations(
         has_encryption = (
             vol is not None
             and vol.mount is not None
-            and vol.mount.encryption is not None
+            and vol.disks.encryption is not None
         )
 
         # Infer runtime state from mount result

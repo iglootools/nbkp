@@ -9,7 +9,7 @@ from nbkp.config import (
     LuksEncryptionConfig,
     MountConfig,
 )
-from nbkp.mount.observation import MountObservation
+from nbkp.disks.observation import MountObservation
 from rich.text import Text
 
 from nbkp.preflight.output.formatting import format_mount_status

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from nbkp.mount.observation import MountObservation
-from nbkp.mount.output import (
+from nbkp.disks.observation import MountObservation
+from nbkp.disks.output import (
     build_mount_status_json,
     build_mount_status_table,
     mount_state_icon,

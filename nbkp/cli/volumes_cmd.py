@@ -13,15 +13,15 @@ from rich.console import Console
 from ..config import Config, LocalVolume, RemoteVolume
 from ..config.epresolution import NetworkType, ResolvedEndpoints
 from ..credentials import build_passphrase_fn
-from ..mount.lifecycle import (
+from ..disks.lifecycle import (
     MountResult,
     UmountResult,
     mount_volume_count,
     mount_volumes,
     umount_volumes,
 )
-from ..mount.observation import build_mount_observations
-from ..mount.output import (
+from ..disks.observation import build_mount_observations
+from ..disks.output import (
     MountStatusData,
     build_mount_status_json,
     build_mount_status_table,
