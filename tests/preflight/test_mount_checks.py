@@ -9,7 +9,7 @@ from nbkp.config import (
     LuksEncryptionConfig,
     MountConfig,
 )
-from nbkp.mount.observation import MountObservation
+from nbkp.disks.observation import MountObservation
 from rich.text import Text
 
 from nbkp.preflight.output.formatting import format_mount_status
@@ -381,14 +381,14 @@ class TestFormatMountStatus:
 class TestObservationReuse:
     """Verify that mount observation values bypass runtime detection probes."""
 
-    @patch("nbkp.preflight.volume_checks.detect_device_present")
-    @patch("nbkp.preflight.volume_checks.detect_luks_attached")
-    @patch("nbkp.preflight.volume_checks.resolve_mount_unit")
-    @patch("nbkp.preflight.volume_checks.detect_systemd_cryptsetup_path")
-    @patch("nbkp.preflight.volume_checks._check_command_available", return_value=True)
-    @patch("nbkp.preflight.volume_checks._check_file_exists", return_value=True)
-    @patch("nbkp.preflight.volume_checks._check_systemctl_cat", return_value=True)
-    @patch("nbkp.preflight.volume_checks._run_systemctl_show", return_value={})
+    @patch("nbkp.disks.mount_checks.detect_device_present")
+    @patch("nbkp.disks.mount_checks.detect_luks_attached")
+    @patch("nbkp.disks.mount_checks.resolve_mount_unit")
+    @patch("nbkp.disks.mount_checks.detect_systemd_cryptsetup_path")
+    @patch("nbkp.disks.mount_checks._check_command_available", return_value=True)
+    @patch("nbkp.disks.mount_checks._check_file_exists", return_value=True)
+    @patch("nbkp.disks.mount_checks._check_systemctl_cat", return_value=True)
+    @patch("nbkp.disks.mount_checks._run_systemctl_show", return_value={})
     def test_systemd_observation_skips_runtime_probes(
         self,
         _mock_show: object,
@@ -401,7 +401,7 @@ class TestObservationReuse:
         mock_device: object,
     ) -> None:
         """When observation is provided, runtime detection functions are not called."""
-        from nbkp.preflight.volume_checks import _check_systemd_mount_capabilities
+        from nbkp.disks.mount_checks import _check_systemd_mount_capabilities
 
         obs = MountObservation(
             resolved_backend="systemd",
@@ -437,11 +437,11 @@ class TestObservationReuse:
         assert result.mounted is True
         assert result.mount_unit == "mnt-encrypted.mount"
 
-    @patch("nbkp.preflight.volume_checks.detect_device_present")
-    @patch("nbkp.preflight.volume_checks.detect_luks_attached")
-    @patch("nbkp.preflight.volume_checks.run_on_volume")
-    @patch("nbkp.preflight.volume_checks._check_command_available", return_value=True)
-    @patch("nbkp.preflight.volume_checks._check_file_exists", return_value=True)
+    @patch("nbkp.disks.mount_checks.detect_device_present")
+    @patch("nbkp.disks.mount_checks.detect_luks_attached")
+    @patch("nbkp.disks.mount_checks.run_on_volume")
+    @patch("nbkp.disks.mount_checks._check_command_available", return_value=True)
+    @patch("nbkp.disks.mount_checks._check_file_exists", return_value=True)
     def test_direct_observation_skips_runtime_probes(
         self,
         _mock_file: object,
@@ -451,7 +451,7 @@ class TestObservationReuse:
         mock_device: object,
     ) -> None:
         """When observation is provided for direct backend, runtime probes are skipped."""
-        from nbkp.preflight.volume_checks import _check_direct_mount_capabilities
+        from nbkp.disks.mount_checks import _check_direct_mount_capabilities
 
         obs = MountObservation(
             resolved_backend="direct",
@@ -479,10 +479,10 @@ class TestObservationReuse:
         assert result.device_present is False
         assert result.mounted is None
 
-    @patch("nbkp.preflight.volume_checks._check_command_available", return_value=True)
-    @patch("nbkp.preflight.volume_checks._check_file_exists", return_value=True)
-    @patch("nbkp.preflight.volume_checks._check_systemctl_cat", return_value=True)
-    @patch("nbkp.preflight.volume_checks._run_systemctl_show", return_value={})
+    @patch("nbkp.disks.mount_checks._check_command_available", return_value=True)
+    @patch("nbkp.disks.mount_checks._check_file_exists", return_value=True)
+    @patch("nbkp.disks.mount_checks._check_systemctl_cat", return_value=True)
+    @patch("nbkp.disks.mount_checks._run_systemctl_show", return_value={})
     def test_observation_decides_backend(
         self,
         _mock_show: object,
@@ -491,7 +491,9 @@ class TestObservationReuse:
         mock_cmd: object,
     ) -> None:
         """Observation's resolved_backend is used instead of probing systemctl."""
-        from nbkp.preflight.volume_checks import _check_mount_capabilities
+        from nbkp.disks.mount_checks import (
+            check_mount_capabilities as _check_mount_capabilities,
+        )
 
         obs = MountObservation(
             resolved_backend="systemd",

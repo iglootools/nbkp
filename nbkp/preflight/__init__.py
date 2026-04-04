@@ -39,8 +39,8 @@ from .status import (
     VolumeError,
     VolumeStatus,
 )
+from ..disks.mount_checks import check_mount_status as check_mount_status
 from .volume_checks import (
-    check_mount_status,
     check_volume_capabilities,
     observe_ssh_endpoint,
     observe_volume,

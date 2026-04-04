@@ -17,59 +17,15 @@ $ nbkp [OPTIONS] COMMAND [ARGS]...
 
 **Commands**:
 
-* `check`: Verify that volumes are reachable,...
-* `prune`: Remove snapshots beyond the...
 * `run`: Execute all active syncs in dependency order.
 * `sh`: Compile the config into a self-contained...
-* `troubleshoot`: Run the same checks as `check` but...
 * `config`: Configuration commands
-* `volumes`: Volume mount management commands
+* `credentials`: Credential management commands
+* `disks`: Disk mount management commands
+* `ordering`: Sync dependency graph commands
+* `preflight`: Pre-flight check commands
+* `snapshots`: Snapshot management commands
 * `demo`: Demo CLI: sample output rendering and seed...
-
-## `nbkp check`
-
-Verify that volumes are reachable, sentinel files exist, SSH connectivity works, and required tools are available. Use this before `run` to confirm everything is ready.
-
-**Usage**:
-
-```console
-$ nbkp check [OPTIONS]
-```
-
-**Options**:
-
-* `-c, --config FILE`: Path to config file
-* `-o, --output [human|json]`: Output format  [default: human]
-* `-S, --strictness [ignore-none|ignore-inactive|ignore-all]`: How to handle preflight errors: ignore-none (all errors fatal), ignore-inactive (skip expected-inactive, default), ignore-all (ignore all errors)  [default: ignore-inactive]
-* `-l, --location TEXT`: Prefer endpoints at these locations
-* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
-* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
-* `--mount / --no-mount`: Mount/umount volumes with mount config before checking  [default: mount]
-* `--umount / --no-umount`: Umount after check (use --no-umount for debugging)  [default: umount]
-* `--help`: Show this message and exit.
-
-## `nbkp prune`
-
-Remove snapshots beyond the `max-snapshots` limit. Normally handled automatically by `run`, but can be invoked manually.
-
-**Usage**:
-
-```console
-$ nbkp prune [OPTIONS]
-```
-
-**Options**:
-
-* `-c, --config FILE`: Path to config file
-* `-s, --sync TEXT`: Sync name(s) to prune
-* `-n, --dry-run`: Perform a dry run
-* `-o, --output [human|json]`: Output format  [default: human]
-* `-l, --location TEXT`: Prefer endpoints at these locations
-* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
-* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
-* `--mount / --no-mount`: Mount/umount volumes with mount config  [default: mount]
-* `--umount / --no-umount`: Umount after prune (use --no-umount for debugging)  [default: umount]
-* `--help`: Show this message and exit.
 
 ## `nbkp run`
 
@@ -122,26 +78,6 @@ $ nbkp sh [OPTIONS]
 * `--platform TEXT`: Target platform for snapshot timestamp format (e.g. &#x27;darwin&#x27;, &#x27;linux&#x27;). Defaults to the current OS.
 * `--help`: Show this message and exit.
 
-## `nbkp troubleshoot`
-
-Run the same checks as `check` but displays step-by-step fix instructions for every failure. Useful when `check` reports problems.
-
-**Usage**:
-
-```console
-$ nbkp troubleshoot [OPTIONS]
-```
-
-**Options**:
-
-* `-c, --config FILE`: Path to config file
-* `-l, --location TEXT`: Prefer endpoints at these locations
-* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
-* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
-* `--mount / --no-mount`: Mount/umount volumes with mount config before checking  [default: mount]
-* `--umount / --no-umount`: Umount after check (use --no-umount for debugging)  [default: umount]
-* `--help`: Show this message and exit.
-
 ## `nbkp config`
 
 Configuration commands
@@ -159,9 +95,6 @@ $ nbkp config [OPTIONS] COMMAND [ARGS]...
 **Commands**:
 
 * `show`: Load, validate, and render the config as...
-* `graph`: Display the backup chain as a graph.
-* `setup-auth`: Generate polkit and sudoers configuration...
-* `keyring-status`: Check whether LUKS passphrases are...
 
 ### `nbkp config show`
 
@@ -179,47 +112,32 @@ $ nbkp config show [OPTIONS]
 * `-o, --output [human|json]`: Output format  [default: human]
 * `--help`: Show this message and exit.
 
-### `nbkp config graph`
+## `nbkp credentials`
 
-Display the backup chain as a graph.
-
-**Usage**:
-
-```console
-$ nbkp config graph [OPTIONS]
-```
-
-**Options**:
-
-* `-c, --config FILE`: Path to config file
-* `-o, --output [human|json]`: Output format  [default: human]
-* `-f, --format [rich-tree|mermaid-ascii|mermaid]`: Graph format (human output only)  [default: rich-tree]
-* `--help`: Show this message and exit.
-
-### `nbkp config setup-auth`
-
-Generate polkit and sudoers configuration for mount management.
+Credential management commands
 
 **Usage**:
 
 ```console
-$ nbkp config setup-auth [OPTIONS]
+$ nbkp credentials [OPTIONS] COMMAND [ARGS]...
 ```
 
 **Options**:
 
-* `-c, --config FILE`: Path to config file
-* `-u, --user TEXT`: System user for auth rules  [default: ubuntu]
 * `--help`: Show this message and exit.
 
-### `nbkp config keyring-status`
+**Commands**:
+
+* `keyring-status`: Check whether LUKS passphrases are...
+
+### `nbkp credentials keyring-status`
 
 Check whether LUKS passphrases are available in the credential store.
 
 **Usage**:
 
 ```console
-$ nbkp config keyring-status [OPTIONS]
+$ nbkp credentials keyring-status [OPTIONS]
 ```
 
 **Options**:
@@ -228,14 +146,14 @@ $ nbkp config keyring-status [OPTIONS]
 * `-o, --output [human|json]`: Output format  [default: human]
 * `--help`: Show this message and exit.
 
-## `nbkp volumes`
+## `nbkp disks`
 
-Volume mount management commands
+Disk mount management commands
 
 **Usage**:
 
 ```console
-$ nbkp volumes [OPTIONS] COMMAND [ARGS]...
+$ nbkp disks [OPTIONS] COMMAND [ARGS]...
 ```
 
 **Options**:
@@ -247,15 +165,16 @@ $ nbkp volumes [OPTIONS] COMMAND [ARGS]...
 * `mount`: Attach LUKS and mount volumes.
 * `umount`: Umount volumes and close LUKS.
 * `status`: Show mount status for volumes with mount...
+* `setup-auth`: Generate polkit and sudoers configuration...
 
-### `nbkp volumes mount`
+### `nbkp disks mount`
 
 Attach LUKS and mount volumes. Mounts all volumes with mount config, or specific ones via --name.
 
 **Usage**:
 
 ```console
-$ nbkp volumes mount [OPTIONS]
+$ nbkp disks mount [OPTIONS]
 ```
 
 **Options**:
@@ -268,14 +187,14 @@ $ nbkp volumes mount [OPTIONS]
 * `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
 * `--help`: Show this message and exit.
 
-### `nbkp volumes umount`
+### `nbkp disks umount`
 
 Umount volumes and close LUKS. Umounts all volumes with mount config, or specific ones via --name.
 
 **Usage**:
 
 ```console
-$ nbkp volumes umount [OPTIONS]
+$ nbkp disks umount [OPTIONS]
 ```
 
 **Options**:
@@ -288,14 +207,14 @@ $ nbkp volumes umount [OPTIONS]
 * `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
 * `--help`: Show this message and exit.
 
-### `nbkp volumes status`
+### `nbkp disks status`
 
 Show mount status for volumes with mount config.
 
 **Usage**:
 
 ```console
-$ nbkp volumes status [OPTIONS]
+$ nbkp disks status [OPTIONS]
 ```
 
 **Options**:
@@ -306,6 +225,182 @@ $ nbkp volumes status [OPTIONS]
 * `-l, --location TEXT`: Prefer endpoints at these locations
 * `-L, --exclude-location TEXT`: Exclude endpoints at these locations
 * `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--help`: Show this message and exit.
+
+### `nbkp disks setup-auth`
+
+Generate polkit and sudoers configuration for mount management.
+
+**Usage**:
+
+```console
+$ nbkp disks setup-auth [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config FILE`: Path to config file
+* `-u, --user TEXT`: System user for auth rules  [default: ubuntu]
+* `--help`: Show this message and exit.
+
+## `nbkp ordering`
+
+Sync dependency graph commands
+
+**Usage**:
+
+```console
+$ nbkp ordering [OPTIONS] COMMAND [ARGS]...
+```
+
+**Options**:
+
+* `--help`: Show this message and exit.
+
+**Commands**:
+
+* `graph`: Display the backup chain as a graph.
+
+### `nbkp ordering graph`
+
+Display the backup chain as a graph.
+
+**Usage**:
+
+```console
+$ nbkp ordering graph [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config FILE`: Path to config file
+* `-o, --output [human|json]`: Output format  [default: human]
+* `-f, --format [rich-tree|mermaid-ascii|mermaid]`: Graph format (human output only)  [default: rich-tree]
+* `--help`: Show this message and exit.
+
+## `nbkp preflight`
+
+Pre-flight check commands
+
+**Usage**:
+
+```console
+$ nbkp preflight [OPTIONS] COMMAND [ARGS]...
+```
+
+**Options**:
+
+* `--help`: Show this message and exit.
+
+**Commands**:
+
+* `check`: Verify that volumes are reachable,...
+* `troubleshoot`: Run the same checks as `check` but...
+
+### `nbkp preflight check`
+
+Verify that volumes are reachable, sentinel files exist, SSH connectivity works, and required tools are available. Use this before `run` to confirm everything is ready.
+
+**Usage**:
+
+```console
+$ nbkp preflight check [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config FILE`: Path to config file
+* `-o, --output [human|json]`: Output format  [default: human]
+* `-S, --strictness [ignore-none|ignore-inactive|ignore-all]`: How to handle preflight errors: ignore-none (all errors fatal), ignore-inactive (skip expected-inactive, default), ignore-all (ignore all errors)  [default: ignore-inactive]
+* `-l, --location TEXT`: Prefer endpoints at these locations
+* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
+* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--mount / --no-mount`: Mount/umount volumes with mount config before checking  [default: mount]
+* `--umount / --no-umount`: Umount after check (use --no-umount for debugging)  [default: umount]
+* `--help`: Show this message and exit.
+
+### `nbkp preflight troubleshoot`
+
+Run the same checks as `check` but displays step-by-step fix instructions for every failure. Useful when `check` reports problems.
+
+**Usage**:
+
+```console
+$ nbkp preflight troubleshoot [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config FILE`: Path to config file
+* `-l, --location TEXT`: Prefer endpoints at these locations
+* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
+* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--mount / --no-mount`: Mount/umount volumes with mount config before checking  [default: mount]
+* `--umount / --no-umount`: Umount after check (use --no-umount for debugging)  [default: umount]
+* `--help`: Show this message and exit.
+
+## `nbkp snapshots`
+
+Snapshot management commands
+
+**Usage**:
+
+```console
+$ nbkp snapshots [OPTIONS] COMMAND [ARGS]...
+```
+
+**Options**:
+
+* `--help`: Show this message and exit.
+
+**Commands**:
+
+* `prune`: Remove snapshots beyond the...
+* `show`: Display snapshot information for each sync...
+
+### `nbkp snapshots prune`
+
+Remove snapshots beyond the `max-snapshots` limit. Normally handled automatically by `run`, but can be invoked manually.
+
+**Usage**:
+
+```console
+$ nbkp snapshots prune [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config FILE`: Path to config file
+* `-s, --sync TEXT`: Sync name(s) to prune
+* `-n, --dry-run`: Perform a dry run
+* `-o, --output [human|json]`: Output format  [default: human]
+* `-l, --location TEXT`: Prefer endpoints at these locations
+* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
+* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--mount / --no-mount`: Mount/umount volumes with mount config  [default: mount]
+* `--umount / --no-umount`: Umount after prune (use --no-umount for debugging)  [default: umount]
+* `--help`: Show this message and exit.
+
+### `nbkp snapshots show`
+
+Display snapshot information for each sync endpoint.
+
+**Usage**:
+
+```console
+$ nbkp snapshots show [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config FILE`: Path to config file
+* `-s, --sync TEXT`: Sync name(s) to show
+* `-o, --output [human|json]`: Output format  [default: human]
+* `-l, --location TEXT`: Prefer endpoints at these locations
+* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
+* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--mount / --no-mount`: Mount/umount volumes with mount config  [default: mount]
+* `--umount / --no-umount`: Umount after show (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
 
 ## `nbkp demo`

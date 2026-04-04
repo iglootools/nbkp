@@ -37,7 +37,7 @@ from nbkp.remote.testkit.docker import (
     REMOTE_BTRFS_ENCRYPTED_PATH,
 )
 from nbkp.sync.testkit.seed import create_seed_sentinels
-from nbkp.mount.lifecycle import mount_volume, umount_volume
+from nbkp.disks.lifecycle import mount_volume, umount_volume
 
 from tests._docker_fixtures import (
     create_sentinels,

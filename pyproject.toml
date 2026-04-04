@@ -33,7 +33,7 @@ keyring = ["keyring (>=25.0,<26.0)"]
 
 [project.scripts]
 nbkp = "nbkp.cli:main"
-nbkp-demo = "nbkp.democli:main"
+nbkp-demo = "nbkp.demo:main"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.15"

@@ -14,12 +14,12 @@ from typing import Callable
 from nbkp.config import Config, SyncConfig
 from nbkp.config.epresolution import ResolvedEndpoints
 from nbkp.fsprotocol import Snapshot
-from nbkp.sync.snapshots.btrfs import (
+from nbkp.snapshots.btrfs import (
     create_snapshot,
     delete_snapshot,
     prune_snapshots,
 )
-from nbkp.sync.snapshots.common import (
+from nbkp.snapshots.common import (
     get_latest_snapshot,
     list_snapshots,
     update_latest_symlink,

@@ -48,7 +48,7 @@ mkdir -p /mnt/backups/photos/snapshots
 3. Verify everything is healthy:
 
 ```bash
-nbkp check
+nbkp preflight check
 ```
 
 4. Run the backup:
@@ -125,10 +125,10 @@ nbkp run
 nbkp run --dry-run --progress per-file
 
 # Prune old snapshots manually
-nbkp prune --sync step-1 --sync step-3
+nbkp snapshots prune --sync step-1 --sync step-3
 
 # Diagnose issues
-nbkp troubleshoot
+nbkp preflight troubleshoot
 
 # Generate standalone script
 nbkp sh -o backup.sh
@@ -158,7 +158,7 @@ keyring set nbkp backup-drives
 sudo systemctl daemon-reload
 
 # 3. Generate and install authorization rules
-nbkp config setup-auth -c config.yaml
+nbkp disks setup-auth -c config.yaml
 # Review output, then install:
 # sudo cp polkit-rules /etc/polkit-1/rules.d/50-nbkp.rules
 # sudo visudo -f /etc/sudoers.d/nbkp  # paste sudoers content
@@ -177,11 +177,11 @@ nbkp run
 nbkp run --no-mount --no-umount
 
 # Manually mount/umount specific volumes
-nbkp volumes mount --name seagate8tb
-nbkp volumes umount --name seagate8tb
+nbkp disks mount --name seagate8tb
+nbkp disks umount --name seagate8tb
 
 # Diagnose mount issues
-nbkp troubleshoot
+nbkp preflight troubleshoot
 ```
 
 ### Example 4: Sami's Personal Config

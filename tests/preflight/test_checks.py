@@ -19,11 +19,11 @@ from nbkp.config import (
 )
 from nbkp.config.epresolution import ResolvedEndpoint, ResolvedEndpoints
 from nbkp.remote.resolution import resolve_proxy_chain
-from nbkp.cli.common import OutputFormat
+from nbkp.clihelpers import OutputFormat
 from nbkp.sync import SyncResult
-from nbkp.sync.snapshots.common import create_snapshot_timestamp
+from nbkp.snapshots.common import create_snapshot_timestamp
 from nbkp.preflight.checks import check_all_syncs, check_sync
-from nbkp.preflight.queries import (
+from nbkp.remote.queries import (
     _check_command_available,
     _check_rsync_version,
     parse_rsync_version,
@@ -776,14 +776,14 @@ class TestCheckRemoteVolumeLocationExcluded:
 
 
 class TestCheckCommandAvailableLocal:
-    @patch("nbkp.preflight.queries.shutil.which")
+    @patch("nbkp.remote.queries.shutil.which")
     def test_command_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = "/usr/bin/rsync"
         vol = LocalVolume(slug="data", path="/mnt/data")
         assert _check_command_available(vol, "rsync", {}) is True
         mock_which.assert_called_once_with("rsync")
 
-    @patch("nbkp.preflight.queries.shutil.which")
+    @patch("nbkp.remote.queries.shutil.which")
     def test_command_not_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = None
         vol = LocalVolume(slug="data", path="/mnt/data")

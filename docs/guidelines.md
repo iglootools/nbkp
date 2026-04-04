@@ -37,7 +37,7 @@ This allows testing the encrypted backup workflows end-to-end but nbkp's mount/u
 
 Automated tests are organized into 4 categories based on what they test and what infrastructure they require:
 
-1. **Unit tests** (`tests/`, `tests/sync/`, `tests/remote/`, `tests/mount/`, …) — Mock all external calls (rsync, SSH, filesystem). Test logic and command building. No external dependencies.
+1. **Unit tests** (`tests/`, `tests/sync/`, `tests/remote/`, `tests/disks/`, …) — Mock all external calls (rsync, SSH, filesystem). Test logic and command building. No external dependencies.
 
 2. **E2E (Docker)** (`tests/e2e_docker/`) — Full pipeline tests against Docker containers. The chain sync test exercises a 6-hop pipeline covering all four sync direction combinations (local→local, local→remote, remote→remote, remote→local), both snapshot modes (hard-link and btrfs), bastion/proxy-jump, LUKS-encrypted volumes, filter exclusion, topological ordering, and failure propagation. The shell script test generates and executes the equivalent standalone bash script.
 
@@ -56,4 +56,4 @@ The following functionality is covered by unit tests but intentionally excluded 
 - **SSH `compress` / `server_alive_interval` behavior** — Verifying actual compression or keepalive behavior over the wire is impractical. Correct flag generation is unit-tested.
 - **Per-hop connection options** — Multi-hop proxy tests use identical options on all hops. Per-hop option variation is covered by unit tests (each hop generates options independently).
 - **Sync ordering** — Pure graph logic with no external commands. Topological sort and cycle detection are thoroughly unit-tested. Ordering is implicitly validated by the e2e chain sync test which asserts step execution order.
-- **Shell script generation internals** — The `integration_fs` test suite already generates and executes a full backup script against real filesystems, validating the end-to-end scriptgen path.
+- **Shell script generation internals** — The `integration_fs` test suite already generates and executes a full backup script against real filesystems, validating the end-to-end sh path.

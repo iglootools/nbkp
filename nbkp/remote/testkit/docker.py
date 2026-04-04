@@ -168,6 +168,8 @@ def start_storage_container(
     pub_key: Path,
     network_name: str | None = None,
     network_alias: str | None = None,
+    *,
+    luks_enabled: bool = False,
 ) -> int:
     """Destroy old container, start new. Return SSH port.
 
@@ -195,6 +197,7 @@ def start_storage_container(
             "NBKP_BTRFS_ENCRYPTED_PATH": REMOTE_BTRFS_ENCRYPTED_PATH,
             "NBKP_LUKS_PASSPHRASE": LUKS_PASSPHRASE,
             "NBKP_LUKS_MAPPER_NAME": LUKS_MAPPER_NAME,
+            "NBKP_LUKS_ENABLED": "1" if luks_enabled else "0",
         },
         volumes={
             str(pub_key): {

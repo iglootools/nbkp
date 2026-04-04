@@ -62,7 +62,7 @@ One YAML config describes all your volumes, SSH endpoints, and syncs. `nbkp run`
 
 To illustrate with a concrete example, here is my personal [config.yaml](https://github.com/iglootools/nbkp/blob/main/marketing/r-backup-intro/config.yaml). 
 
-`nbkp config graph` outputs a visualization of the sync topology, which looks like this:
+`nbkp ordering graph` outputs a visualization of the sync topology, which looks like this:
 
 ```
 laptop-docs

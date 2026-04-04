@@ -9,16 +9,16 @@ from typing import Callable, Optional
 
 from pydantic import BaseModel, model_validator
 
-from .snapshots.btrfs import (
+from ..snapshots.btrfs import (
     create_snapshot,
     prune_snapshots as btrfs_prune_snapshots,
 )
-from .snapshots.hardlinks import (
+from ..snapshots.hardlinks import (
     cleanup_orphaned_snapshots,
     create_snapshot_dir,
     prune_snapshots as hl_prune_snapshots,
 )
-from .snapshots.common import update_latest_symlink
+from ..snapshots.common import update_latest_symlink
 from ..config import Config
 from ..config.epresolution import ResolvedEndpoints
 from ..fsprotocol import SNAPSHOTS_DIR, STAGING_DIR, Snapshot
@@ -54,17 +54,6 @@ class SyncResult(BaseModel):
         if not self.success and self.outcome == SyncOutcome.SUCCESS:
             self.outcome = SyncOutcome.FAILED
         return self
-
-
-class PruneResult(BaseModel):
-    """Result of pruning snapshots for a sync."""
-
-    sync_slug: str
-    deleted: list[str]
-    kept: int
-    dry_run: bool
-    detail: Optional[str] = None
-    skipped: bool = False
 
 
 def _collect_all_errors(status: SyncStatus) -> str:

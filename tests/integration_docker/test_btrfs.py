@@ -24,11 +24,11 @@ from nbkp.config import (
 from nbkp.config.epresolution import ResolvedEndpoints
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.sync.rsync import run_rsync
-from nbkp.sync.snapshots.btrfs import (
+from nbkp.snapshots.btrfs import (
     create_snapshot,
     prune_snapshots,
 )
-from nbkp.sync.snapshots.common import (
+from nbkp.snapshots.common import (
     get_latest_snapshot,
     list_snapshots,
     update_latest_symlink,

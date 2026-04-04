@@ -14,8 +14,8 @@ from nbkp.config import (
     SshEndpoint,
 )
 from nbkp.remote.resolution import resolve_all_endpoints
-from nbkp.orchestration import managed_mount
-from nbkp.scriptgen import ScriptOptions, generate_script
+from nbkp.disks.context import managed_mount
+from nbkp.sh import ScriptOptions, generate_script
 
 from nbkp.sync.testkit.seed import build_chain_config
 

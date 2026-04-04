@@ -15,7 +15,7 @@ Sentinel files ensure backups only run when volumes are genuinely present, with 
 
 Files are backed up as-is in plain directories: no obscure storage formats and restoring is just a copy.
 
-[![asciicast](https://asciinema.org/a/FqOCT4lY8oFUBNre.svg)](https://asciinema.org/a/FqOCT4lY8oFUBNre)
+[![asciicast](https://asciinema.org/a/IftXBf4YYf1KLIDI.svg)](https://asciinema.org/a/IftXBf4YYf1KLIDI)
 
 ## Installation
 
@@ -144,6 +144,7 @@ If you believe that the representation is inaccurate or if there are other tools
 - **[rdiff-backup](https://rdiff-backup.net/)** — keeps the latest backup as a plain mirror, stores reverse diffs for older versions. Older versions require the tool to reconstruct; no removable-drive awareness.
 - **[Dirvish](https://dirvish.org/)** — rotating network backup system using rsync + hard links. Oriented toward server-pull workflows; no removable-drive detection or btrfs support.
 - **[VaultSync](https://github.com/ATAC-Helicopter/VaultSync)** — cross-platform desktop and CLI backup tool using rsync (macOS/Linux) and robocopy (Windows). Provides a GUI, scheduled backups, snapshot history, encryption, and retention policies. Stores backups as plain directories; no btrfs integration or sentinel-file mechanism.
+- **[BmuS](https://github.com/back-me-up-scotty/bmus)** — bash-based backup tool using rsync + hard-link snapshots with GFS retention, gocryptfs/GPG encryption, MySQL/MariaDB dumps, and rclone cloud uploads. Stores backups as plain directories; generates an HTML dashboard; no btrfs integration or sentinel-file mechanism.
 - **[Duplicity](https://duplicity.us/)** — GPG-encrypted tar volumes with librsync incremental transfers. Not browsable as plain directories; full+incremental chain model; no btrfs integration.
 
 #### Deduplicating
@@ -151,8 +152,10 @@ If you believe that the representation is inaccurate or if there are other tools
 - **[BorgBackup](https://www.borgbackup.org/)** — chunk-level deduplication with compression and authenticated encryption. Proprietary repository format (not plain directories); requires `borg` on the remote side; no removable-drive detection.
 - **[borgmatic](https://torsion.org/borgmatic/)** — configuration-driven wrapper around BorgBackup that adds YAML config, scheduling, database dumps (PostgreSQL, MySQL, SQLite, etc.), monitoring integrations, and credential management. Same proprietary Borg format underneath; no rsync or removable-drive support.
 - **[Restic](https://restic.net/)** — content-addressable backups with encryption by default, supporting many backends (local, S3, SFTP, B2). Proprietary format; restoring requires the restic tool; no volume detection.
+- **[Backrest](https://github.com/garethgeorge/backrest)** — web-based backup orchestrator built on restic, distributed as a single Go binary. Provides a web UI for cron-scheduled backups, snapshot browsing, and file restoration across all restic backends (local, SFTP, S3, B2, rclone). Proprietary restic format; no rsync, btrfs, or removable-drive support.
 - **[Kopia](https://kopia.io/)** — content-addressable storage with encryption, compression, and both CLI/GUI. Proprietary format; includes an optional scheduling server; no removable-drive or btrfs support.
 - **[Vykar](https://vykar.borgbase.com/)** — fast, encrypted, deduplicated backup tool written in Rust with content-defined chunking. Supports local, S3, SFTP, and a dedicated REST server; includes a desktop GUI and built-in WebDAV for browsing snapshots. Proprietary repository format; no rsync, btrfs, or removable-drive support.
+
 
 #### Btrfs / snapshot-focused
 

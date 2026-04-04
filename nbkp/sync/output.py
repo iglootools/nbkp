@@ -18,8 +18,9 @@ from ..config.epresolution import ResolvedEndpoints
 from ..config.output import endpoint_path
 from ..fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
 from ..preflight.status import SyncStatus
+from ..snapshots.output import retention_display as _retention_display
 from .rsync import build_rsync_command
-from .runner import PruneResult, SyncOutcome, SyncResult
+from .runner import SyncOutcome, SyncResult
 
 
 # ---------------------------------------------------------------------------
@@ -35,14 +36,6 @@ def _resolve_dest_display_path(
     dst_ep = config.destination_endpoint(sync_status.config)
     vol = config.volumes[dst_ep.volume]
     return endpoint_path(vol, dst_ep.subdir)
-
-
-def _retention_display(max_snapshots: int | None) -> str:
-    """Format a max_snapshots value for display."""
-    if max_snapshots is None:
-        return "unlimited"
-    else:
-        return f"keep {max_snapshots}"
 
 
 def _snapshot_preview_commands(
@@ -273,43 +266,3 @@ def print_human_results(
         results, dry_run, config, resolved_endpoints
     ):
         c.print(section)
-
-
-def print_human_prune_results(
-    results: list[PruneResult],
-    dry_run: bool,
-    *,
-    console: Console | None = None,
-) -> None:
-    """Print human-readable prune results."""
-    c = console or Console()
-    mode = " (dry run)" if dry_run else ""
-
-    table = Table(
-        title=f"NBKP prune{mode}:",
-    )
-    table.add_column("Name", style="bold")
-    table.add_column("Deleted")
-    table.add_column("Kept")
-    table.add_column("Status")
-
-    for r in results:
-        status = _prune_status_text(r)
-        table.add_row(
-            r.sync_slug,
-            str(len(r.deleted)),
-            str(r.kept),
-            status,
-        )
-
-    c.print(table)
-
-
-def _prune_status_text(r: PruneResult) -> Text:
-    """Map a prune result to a styled Rich Text label."""
-    if r.skipped:
-        return Text(f"SKIPPED ({r.detail})", style="dim")
-    elif r.detail:
-        return Text("FAILED", style="red")
-    else:
-        return Text("OK", style="green")

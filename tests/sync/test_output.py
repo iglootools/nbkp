@@ -28,7 +28,7 @@ from nbkp.preflight import (
     VolumeStatus,
 )
 from nbkp.sync.output import build_run_preview_sections
-from nbkp.sync.snapshots.common import create_snapshot_timestamp
+from nbkp.snapshots.common import create_snapshot_timestamp
 
 
 def _localhost_ssh_status() -> SshEndpointStatus:

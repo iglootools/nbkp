@@ -1,11 +1,19 @@
-"""CLI app and sub-app definitions."""
+"""CLI app: root Typer app with domain sub-apps wired in."""
 
 import importlib.metadata
 from typing import Annotated, Optional
 
 import typer
 
-from ..democli import app as demo_app
+from ..config.cli import app as config_app
+from ..credentials.cli import app as credentials_app
+from ..demo import app as demo_app
+from ..disks.cli import app as disks_app
+from ..ordering.cli import app as ordering_app
+from ..preflight.cli import app as preflight_app
+from ..run.cli.run_cmd import run as run_fn
+from ..sh.cli.sh_cmd import sh as sh_fn
+from ..snapshots.cli import app as snapshots_app
 
 
 def _version_callback(value: bool) -> None:
@@ -37,22 +45,19 @@ def _main(
     pass
 
 
-config_app = typer.Typer(
-    name="config",
-    help="Configuration commands",
-    no_args_is_help=True,
-)
+# ── Sub-apps ────────────────────────────────────────────────────────
 app.add_typer(config_app)
-
-volumes_app = typer.Typer(
-    name="volumes",
-    help="Volume mount management commands",
-    no_args_is_help=True,
-)
-app.add_typer(volumes_app)
-
+app.add_typer(credentials_app)
+app.add_typer(disks_app)
+app.add_typer(ordering_app)
+app.add_typer(preflight_app)
+app.add_typer(snapshots_app)
 app.add_typer(
     demo_app,
     name="demo",
     help="Demo CLI: sample output rendering and seed data",
 )
+
+# ── Top-level commands ──────────────────────────────────────────────
+app.command()(run_fn)
+app.command(name="sh")(sh_fn)

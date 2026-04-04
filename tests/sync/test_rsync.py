@@ -19,7 +19,7 @@ from nbkp.config import (
 )
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.sync.rsync import ProgressMode, build_rsync_command, run_rsync
-from nbkp.sync.snapshots.common import create_snapshot_timestamp
+from nbkp.snapshots.common import create_snapshot_timestamp
 
 _SSH_KEY = str(Path("~/.ssh/key").expanduser())
 
