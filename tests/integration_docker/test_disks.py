@@ -37,7 +37,7 @@ from nbkp.disks.lifecycle import (
 )
 from nbkp.disks.observation import build_mount_observations
 from nbkp.disks.strategy import DirectMountStrategy, SystemdMountStrategy
-from nbkp.orchestration import managed_mount
+from nbkp.disks.context import managed_mount
 from nbkp.remote.dispatch import run_on_volume
 
 from tests._docker_fixtures import (

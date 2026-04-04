@@ -37,7 +37,7 @@ from nbkp.config import (
 )
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.testkit.docker import REMOTE_BACKUP_PATH
-from nbkp.orchestration import managed_mount
+from nbkp.disks.context import managed_mount
 from nbkp.run.pipeline import Strictness, check_and_run
 from nbkp.sync.runner import SyncOutcome
 
