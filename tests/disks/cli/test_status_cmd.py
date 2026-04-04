@@ -50,7 +50,7 @@ def _mount_config_for_status() -> Config:
 
 
 class TestVolumesStatusCommand:
-    @patch("nbkp.disks.cli.helpers.check_mount_status")
+    @patch("nbkp.disks.cli.helpers.status.check_mount_status")
     @patch("nbkp.config.cli.helpers.load_config")
     def test_json_output(self, mock_load: MagicMock, mock_check: MagicMock) -> None:
         config = _mount_config_for_status()
@@ -84,7 +84,7 @@ class TestVolumesStatusCommand:
         assert data[2]["volume"] == "no-mount"
         assert data[2]["strategy"] == "not managed"
 
-    @patch("nbkp.disks.cli.helpers.check_mount_status")
+    @patch("nbkp.disks.cli.helpers.status.check_mount_status")
     @patch("nbkp.config.cli.helpers.load_config")
     def test_human_output(self, mock_load: MagicMock, mock_check: MagicMock) -> None:
         config = _mount_config_for_status()
@@ -100,7 +100,7 @@ class TestVolumesStatusCommand:
         assert result.exit_code == 0
         assert "Volume Mount Status" in result.output
 
-    @patch("nbkp.disks.cli.helpers.check_mount_status")
+    @patch("nbkp.disks.cli.helpers.status.check_mount_status")
     @patch("nbkp.config.cli.helpers.load_config")
     def test_name_filter(self, mock_load: MagicMock, mock_check: MagicMock) -> None:
         config = _mount_config_for_status()
