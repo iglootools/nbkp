@@ -9,7 +9,7 @@ import typer
 
 from ...clihelpers import OutputFormat
 from ...clihelpers import StepProgressBar
-from ...config.clihelpers import load_config_or_exit, resolve_endpoints
+from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
 from . import app
 from .helpers import _probe_volume_status, _show_status_table, _unmanaged_statuses

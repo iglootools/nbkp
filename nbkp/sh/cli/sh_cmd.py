@@ -9,7 +9,7 @@ from typing import Annotated, Optional
 
 import typer
 
-from ...config.clihelpers import load_config_or_exit, resolve_endpoints
+from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
 from .. import ScriptOptions, generate_script
 

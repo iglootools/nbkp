@@ -9,7 +9,7 @@ from typing import Annotated, Optional
 import typer
 
 from ...clihelpers import OutputFormat
-from ...config.clihelpers import load_config_or_exit, resolve_endpoints
+from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
 from ..output import print_human_prune_results
 from ..cmd_handler import prune_all_syncs

@@ -13,7 +13,7 @@ from rich.text import Text
 
 from ...clihelpers import OutputFormat
 from ...clihelpers import StepProgressBar
-from ...config.clihelpers import load_config_or_exit, resolve_endpoints
+from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
 from ...ordering.output import build_rich_tree_sections
 from ...preflight import PreflightResult

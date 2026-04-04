@@ -12,7 +12,7 @@ from rich.table import Table
 from rich.text import Text
 
 from ...clihelpers import OutputFormat
-from ...config.clihelpers import load_config_or_exit
+from ...config.cli.helpers import load_config_or_exit
 from ...config import Config
 from .. import CredentialError, retrieve_passphrase
 from . import app

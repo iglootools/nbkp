@@ -7,7 +7,7 @@ from typing import Annotated, Optional
 
 import typer
 
-from ...config.clihelpers import load_config_or_exit
+from ...config.cli.helpers import load_config_or_exit
 from ..auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH, generate_auth_rules
 from . import app
 

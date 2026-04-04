@@ -6,14 +6,14 @@ from pathlib import Path
 
 import typer
 
-from . import Config, ConfigError, load_config
-from .epresolution import (
+from .. import Config, ConfigError, load_config
+from ..epresolution import (
     EndpointFilter,
     NetworkType,
     ResolvedEndpoints,
 )
-from .output import print_config_error
-from ..remote.resolution import resolve_all_endpoints
+from ..output import print_config_error
+from ...remote.resolution import resolve_all_endpoints
 
 
 def load_config_or_exit(

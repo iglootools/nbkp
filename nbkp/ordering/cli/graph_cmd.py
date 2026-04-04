@@ -10,7 +10,7 @@ from typing import Annotated, Optional
 import typer
 
 from ...clihelpers import OutputFormat
-from ...config.clihelpers import load_config_or_exit
+from ...config.cli.helpers import load_config_or_exit
 from ..output import (
     build_graph_json,
     print_mermaid_ascii_graph,
