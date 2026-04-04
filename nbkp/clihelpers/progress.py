@@ -14,7 +14,7 @@ from rich.progress import (
 )
 
 
-class VolumeProgressBar:
+class DisksProgressBar:
     """Rich progress bar for mount/umount operations.
 
     Manages a transient progress bar that shows a spinner, description

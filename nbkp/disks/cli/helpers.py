@@ -10,7 +10,7 @@ from typing import Generator
 import typer
 from rich.console import Console
 
-from ...clihelpers import CheckProgressBar, OutputFormat, VolumeProgressBar
+from ...clihelpers import CheckProgressBar, OutputFormat, DisksProgressBar
 from ...config import Config, LocalVolume, RemoteVolume
 from ...config.epresolution import ResolvedEndpoints
 from ...credentials import build_passphrase_fn
@@ -204,12 +204,12 @@ def managed_mount(
     }
 
     mount_bar = (
-        VolumeProgressBar(total, "Mounting", _managed_format_mount_result)
+        DisksProgressBar(total, "Mounting", _managed_format_mount_result)
         if use_progress
         else None
     )
     umount_bar = (
-        VolumeProgressBar(total, "Umounting", _managed_format_umount_result)
+        DisksProgressBar(total, "Umounting", _managed_format_umount_result)
         if use_progress
         else None
     )

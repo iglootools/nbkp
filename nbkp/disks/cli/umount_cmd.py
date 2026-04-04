@@ -7,7 +7,7 @@ from typing import Annotated, Optional
 
 import typer
 
-from ...clihelpers import OutputFormat, VolumeProgressBar, load_config_or_exit
+from ...clihelpers import OutputFormat, DisksProgressBar, load_config_or_exit
 from ...clihelpers.endpoints import resolve_endpoints
 from ...config.epresolution import NetworkType
 from ..lifecycle import UmountResult, mount_volume_count, umount_volumes
@@ -70,7 +70,7 @@ def volumes_umount(
     }
     total = mount_volume_count(cfg, name)
     umount_bar = (
-        VolumeProgressBar(total, "Umounting", _format_umount_result)
+        DisksProgressBar(total, "Umounting", _format_umount_result)
         if use_progress
         else None
     )

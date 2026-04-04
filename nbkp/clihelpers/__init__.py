@@ -7,4 +7,4 @@ from .endpoints import (
 )
 from .output import OutputFormat as OutputFormat
 from .progress import CheckProgressBar as CheckProgressBar
-from .progress import VolumeProgressBar as VolumeProgressBar
+from .progress import DisksProgressBar as DisksProgressBar

@@ -7,7 +7,7 @@ from typing import Annotated, Optional
 
 import typer
 
-from ...clihelpers import OutputFormat, VolumeProgressBar, load_config_or_exit
+from ...clihelpers import OutputFormat, DisksProgressBar, load_config_or_exit
 from ...clihelpers.endpoints import resolve_endpoints
 from ...config.epresolution import NetworkType
 from ...credentials import build_passphrase_fn
@@ -81,7 +81,7 @@ def volumes_mount(
     }
     total = mount_volume_count(cfg, name)
     mount_bar = (
-        VolumeProgressBar(total, "Mounting", _format_mount_result)
+        DisksProgressBar(total, "Mounting", _format_mount_result)
         if use_progress
         else None
     )
