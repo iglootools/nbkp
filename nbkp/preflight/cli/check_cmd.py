@@ -12,7 +12,7 @@ from ...disks.cli.helpers import managed_mount
 from ...clihelpers import OutputFormat
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
-from ...run.pipeline import Strictness
+from ..strictness import Strictness
 from . import app
 from .helpers import check_and_display
 

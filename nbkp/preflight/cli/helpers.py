@@ -9,7 +9,7 @@ from ...config.epresolution import ResolvedEndpoints
 from ...disks.observation import MountObservation
 from ...preflight import PreflightResult, check_all_syncs
 from ...preflight.output import print_human_check
-from ...run.pipeline import Strictness, has_fatal_errors
+from ..strictness import Strictness, has_fatal_errors
 
 
 def _check_total(cfg: Config, only_syncs: list[str] | None) -> int:

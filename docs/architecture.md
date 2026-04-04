@@ -57,7 +57,6 @@ graph TD
     preflight --> disks
     preflight --> fsprotocol
     preflight --> remote
-    preflight --> run
     remote --> config
     remote --> fsprotocol
     run --> clihelpers
