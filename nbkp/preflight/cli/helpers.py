@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from ...clihelpers import CheckProgressBar, OutputFormat
+from ...clihelpers import OutputFormat
+from ..progress import CheckProgressBar
 from ...config import Config, LocalVolume
 from ...config.epresolution import ResolvedEndpoints
 from ...disks.observation import MountObservation

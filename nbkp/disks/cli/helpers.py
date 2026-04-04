@@ -10,7 +10,9 @@ from typing import Generator
 import typer
 from rich.console import Console
 
-from ...clihelpers import CheckProgressBar, OutputFormat, DisksProgressBar
+from ...clihelpers import OutputFormat
+from ...preflight.progress import CheckProgressBar
+from .progress import DisksProgressBar
 from ...config import Config, LocalVolume, RemoteVolume
 from ...config.epresolution import ResolvedEndpoints
 from ...credentials import build_passphrase_fn

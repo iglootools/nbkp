@@ -7,7 +7,8 @@ from typing import Annotated, Optional
 
 import typer
 
-from ...clihelpers import OutputFormat, DisksProgressBar, load_config_or_exit
+from ...clihelpers import OutputFormat, load_config_or_exit
+from .progress import DisksProgressBar
 from ...clihelpers.endpoints import resolve_endpoints
 from ...config.epresolution import NetworkType
 from ..lifecycle import UmountResult, mount_volume_count, umount_volumes

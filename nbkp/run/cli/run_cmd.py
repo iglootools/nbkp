@@ -11,7 +11,8 @@ from rich.console import Console, Group
 from rich.panel import Panel
 from rich.text import Text
 
-from ...clihelpers import CheckProgressBar, OutputFormat, load_config_or_exit
+from ...clihelpers import OutputFormat, load_config_or_exit
+from ...preflight.progress import CheckProgressBar
 from ...clihelpers.endpoints import resolve_endpoints
 from ...config.epresolution import NetworkType
 from ...ordering.output import build_rich_tree_sections

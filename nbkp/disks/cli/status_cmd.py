@@ -7,7 +7,8 @@ from typing import Annotated, Optional
 
 import typer
 
-from ...clihelpers import CheckProgressBar, OutputFormat, load_config_or_exit
+from ...clihelpers import OutputFormat, load_config_or_exit
+from ...preflight.progress import CheckProgressBar
 from ...clihelpers.endpoints import resolve_endpoints
 from ...config.epresolution import NetworkType
 from . import app
