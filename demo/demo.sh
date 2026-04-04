@@ -62,6 +62,10 @@ p "# Execute backup syncs"
 pe "nbkp run --config $CFG"
 pause 3
 
+p "# Show snapshot details"
+pe "nbkp snapshots show --config $CFG"
+pause 3
+
 p "# Prune old snapshots"
 pe "nbkp snapshots prune --config $CFG"
 pause 3

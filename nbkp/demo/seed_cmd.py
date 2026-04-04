@@ -468,6 +468,9 @@ def seed(
         # Execute backup syncs
         {pfx}nbkp run --config $CFG
 
+        # Show snapshot details
+        {pfx}nbkp snapshots show --config $CFG
+
         # Prune old btrfs snapshots
         {pfx}nbkp snapshots prune --config $CFG
 
