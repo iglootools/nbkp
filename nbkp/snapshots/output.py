@@ -6,8 +6,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from .cmd_handler.show import ShowResult
-from .models import PruneResult
+from .models import PruneResult, ShowResult
 
 
 def retention_display(max_snapshots: int | None) -> str:

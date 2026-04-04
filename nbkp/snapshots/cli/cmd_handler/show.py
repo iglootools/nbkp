@@ -2,28 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
-from pydantic import BaseModel
-
-from ...config import Config
-from ...config.epresolution import ResolvedEndpoints
-from ...config.protocol.sync_endpoint import SyncEndpoint
-from ...fsprotocol import Snapshot
-from ...preflight import SyncStatus
-from ..common import list_snapshots, read_latest_symlink
-
-
-class ShowResult(BaseModel):
-    """Result of showing snapshots for a sync."""
-
-    sync_slug: str
-    snapshot_mode: str
-    snapshots: list[Snapshot]
-    latest: Snapshot | None
-    max_snapshots: int | None
-    detail: Optional[str] = None
-    skipped: bool = False
+from ....config import Config
+from ....config.epresolution import ResolvedEndpoints
+from ....config.protocol.sync_endpoint import SyncEndpoint
+from ....preflight import SyncStatus
+from ...common import list_snapshots, read_latest_symlink
+from ...models import ShowResult
 
 
 def _max_snapshots(dst_ep: SyncEndpoint) -> int | None:

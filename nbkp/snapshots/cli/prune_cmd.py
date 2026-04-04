@@ -12,7 +12,7 @@ from ...clihelpers import OutputFormat
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
 from ..output import print_human_prune_results
-from ..cmd_handler import prune_all_syncs
+from .cmd_handler import prune_all_syncs
 
 from ...disks.cli.helpers import managed_mount
 from ...preflight.cli.helpers import check_all_with_progress

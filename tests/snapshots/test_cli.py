@@ -84,8 +84,8 @@ def _prune_active_statuses(
 
 
 class TestPruneCommand:
-    @patch("nbkp.snapshots.cmd_handler.prune.list_snapshots")
-    @patch("nbkp.snapshots.cmd_handler.prune.btrfs_prune_snapshots")
+    @patch("nbkp.snapshots.cli.cmd_handler.prune.list_snapshots")
+    @patch("nbkp.snapshots.cli.cmd_handler.prune.btrfs_prune_snapshots")
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
     @patch("nbkp.config.cli.helpers.load_config")
     def test_successful_prune(
@@ -112,8 +112,8 @@ class TestPruneCommand:
         assert "OK" in result.output
         mock_prune.assert_called_once()
 
-    @patch("nbkp.snapshots.cmd_handler.prune.list_snapshots")
-    @patch("nbkp.snapshots.cmd_handler.prune.btrfs_prune_snapshots")
+    @patch("nbkp.snapshots.cli.cmd_handler.prune.list_snapshots")
+    @patch("nbkp.snapshots.cli.cmd_handler.prune.btrfs_prune_snapshots")
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
     @patch("nbkp.config.cli.helpers.load_config")
     def test_dry_run(
@@ -145,8 +145,8 @@ class TestPruneCommand:
         call_kwargs = mock_prune.call_args
         assert call_kwargs.kwargs.get("dry_run") is True
 
-    @patch("nbkp.snapshots.cmd_handler.prune.list_snapshots")
-    @patch("nbkp.snapshots.cmd_handler.prune.btrfs_prune_snapshots")
+    @patch("nbkp.snapshots.cli.cmd_handler.prune.list_snapshots")
+    @patch("nbkp.snapshots.cli.cmd_handler.prune.btrfs_prune_snapshots")
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
     @patch("nbkp.config.cli.helpers.load_config")
     def test_json_output(
@@ -213,8 +213,8 @@ _SNAP_2 = Snapshot(
 
 
 class TestShowCommand:
-    @patch("nbkp.snapshots.cmd_handler.show.read_latest_symlink")
-    @patch("nbkp.snapshots.cmd_handler.show.list_snapshots")
+    @patch("nbkp.snapshots.cli.cmd_handler.show.read_latest_symlink")
+    @patch("nbkp.snapshots.cli.cmd_handler.show.list_snapshots")
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
     @patch("nbkp.config.cli.helpers.load_config")
     def test_successful_show(
@@ -235,8 +235,8 @@ class TestShowCommand:
         assert result.exit_code == 0
         assert "OK" in result.output
 
-    @patch("nbkp.snapshots.cmd_handler.show.read_latest_symlink")
-    @patch("nbkp.snapshots.cmd_handler.show.list_snapshots")
+    @patch("nbkp.snapshots.cli.cmd_handler.show.read_latest_symlink")
+    @patch("nbkp.snapshots.cli.cmd_handler.show.list_snapshots")
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
     @patch("nbkp.config.cli.helpers.load_config")
     def test_json_output(
@@ -283,8 +283,8 @@ class TestShowCommand:
         assert result.exit_code == 0
         assert "SKIPPED" in result.output
 
-    @patch("nbkp.snapshots.cmd_handler.show.read_latest_symlink")
-    @patch("nbkp.snapshots.cmd_handler.show.list_snapshots")
+    @patch("nbkp.snapshots.cli.cmd_handler.show.read_latest_symlink")
+    @patch("nbkp.snapshots.cli.cmd_handler.show.list_snapshots")
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
     @patch("nbkp.config.cli.helpers.load_config")
     def test_sync_filter(
@@ -344,7 +344,7 @@ class TestShowCommand:
         assert "inactive" in result.output
 
     @patch(
-        "nbkp.snapshots.cmd_handler.show.list_snapshots",
+        "nbkp.snapshots.cli.cmd_handler.show.list_snapshots",
         side_effect=RuntimeError("connection failed"),
     )
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
