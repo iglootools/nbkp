@@ -1,42 +1,24 @@
-"""Shared CLI helpers: config loading, endpoint resolution, pre-flight checks."""
+"""Shared CLI helpers: re-exports from clihelpers + domain-specific helpers.
+
+This module is a transitional shim. Shared helpers live in clihelpers/,
+domain-specific helpers will move to their respective <domain>.cli packages.
+"""
 
 from __future__ import annotations
 
-import enum
 from contextlib import contextmanager
-from pathlib import Path
-from typing import Callable, Generator
+from typing import Generator
 
-import typer
 from rich.console import Console
-from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    SpinnerColumn,
-    TaskID,
-    TextColumn,
-)
 
-from ..config import (
-    Config,
-    ConfigError,
-    LocalVolume,
-    load_config,
-)
-from ..config.epresolution import (
-    EndpointFilter,
-    NetworkType,
-    ResolvedEndpoints,
-)
-from ..remote.resolution import resolve_all_endpoints
+from ..config import Config, LocalVolume
+from ..config.epresolution import ResolvedEndpoints
 from ..credentials import build_passphrase_fn
 from ..disks.lifecycle import MountResult, UmountResult, mount_volume_count
 from ..disks.observation import MountObservation
 from ..disks.output import build_mount_status_table, volume_display_name
 from ..disks.strategy import MountStrategy
 from ..disks.context import managed_mount as _disks_managed_mount
-from ..config.output import print_config_error
 from ..preflight.output import print_human_check
 from ..preflight import (
     PreflightResult,
@@ -44,13 +26,20 @@ from ..preflight import (
 )
 from ..run.pipeline import Strictness, has_fatal_errors
 
+# ── Re-exports from clihelpers ──────────────────────────────────────
+from ..clihelpers.output import OutputFormat as OutputFormat
+from ..clihelpers.config import load_config_or_exit as load_config_or_exit
+from ..clihelpers.endpoints import (
+    build_endpoint_filter as build_endpoint_filter,
+    resolve_endpoints as resolve_endpoints,
+)
+from ..clihelpers.progress import (
+    CheckProgressBar as CheckProgressBar,
+    VolumeProgressBar as VolumeProgressBar,
+)
 
-class OutputFormat(str, enum.Enum):
-    """Output format for CLI commands."""
 
-    HUMAN = "human"
-    JSON = "json"
-
+# ── Disks-specific helpers (will move to disks/cli/helpers.py) ──────
 
 def _format_mount_result(
     slug: str, success: bool, detail: str | None, _warning: str | None
@@ -69,198 +58,115 @@ def _format_umount_result(
     return f"{icon} umount {slug}{detail_str}{warning_str}"
 
 
-class VolumeProgressBar:
-    """Rich progress bar for mount/umount operations.
+@contextmanager
+def managed_mount(
+    cfg: Config,
+    resolved: ResolvedEndpoints,
+    *,
+    mount: bool = True,
+    umount: bool = True,
+    output_format: OutputFormat = OutputFormat.HUMAN,
+) -> Generator[
+    tuple[dict[str, MountStrategy], dict[str, MountObservation]],
+    None,
+    None,
+]:
+    """Context manager that mounts volumes on entry and umounts on exit.
 
-    Manages a transient progress bar that shows a spinner, description
-    (current volume name), visual bar, and M/N counter.  Result lines
-    are printed above the bar as each volume completes.
+    Thin wrapper around :func:`disks.context.managed_mount` that adds
+    Rich display callbacks and credential management.
 
-    Parameters
-    ----------
-    total:
-        Number of volumes to process.
-    label:
-        Verb shown in the progress description (e.g. ``"Mounting"``).
-    format_result:
-        Callable that formats a result line given ``(slug, success, detail,
-        warning)``.  Called once per volume on completion.
-    """
-
-    def __init__(
-        self,
-        total: int,
-        label: str,
-        format_result: Callable[[str, bool, str | None, str | None], str],
-    ) -> None:
-        self._total = total
-        self._label = label
-        self._format_result = format_result
-        self._progress: Progress | None = None
-        self._task_id: TaskID | None = None
-
-    def on_start(self, slug: str) -> None:
-        """Call at the beginning of each volume operation."""
-        if self._progress is None:
-            self._progress = Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                MofNCompleteColumn(),
-                transient=True,
-            )
-            self._progress.start()
-            self._task_id = self._progress.add_task(
-                f"{self._label} {slug}...", total=self._total
-            )
-        else:
-            assert self._task_id is not None
-            self._progress.update(self._task_id, description=f"{self._label} {slug}...")
-
-    def on_end(
-        self,
-        slug: str,
-        success: bool,
-        detail: str | None = None,
-        warning: str | None = None,
-    ) -> None:
-        """Call at the end of each volume operation."""
-        if self._progress is not None:
-            assert self._task_id is not None
-            line = self._format_result(slug, success, detail, warning)
-            self._progress.console.print(line)
-            self._progress.advance(self._task_id)
-
-    def stop(self) -> None:
-        """Stop the progress bar (idempotent)."""
-        if self._progress is not None:
-            self._progress.stop()
-
-
-class CheckProgressBar:
-    """Rich progress bar for preflight checks.
-
-    Shows a spinner, description (current check label), visual bar,
-    and M/N counter.  Result lines (✓/✗) are printed above the bar
-    as each check completes.
+    Yields a tuple of ``(mount_strategy, mount_observations)``.  When
+    mounting is skipped both dicts are empty.  Observations capture
+    the runtime state discovered during mount so that preflight checks
+    can reuse it instead of re-probing.
 
     Parameters
     ----------
-    total:
-        Number of checks to perform.
+    mount:
+        When ``False`` (or no volumes have mount config), mounting and
+        umounting are both skipped.
+    umount:
+        When ``False``, the umount phase is skipped even if volumes
+        were mounted.  Useful for debugging (``run --no-umount``).
+    output_format:
+        Controls whether Rich spinner / result lines are printed.
     """
+    passphrase_fn, cache = build_passphrase_fn(
+        cfg.credential_provider, cfg.credential_command
+    )
 
-    def __init__(self, total: int) -> None:
-        self._total = total
-        self._progress: Progress | None = None
-        self._task_id: TaskID | None = None
+    use_progress = output_format is OutputFormat.HUMAN
+    total = mount_volume_count(cfg)
+    display_names = {
+        slug: volume_display_name(vol)
+        for slug, vol in cfg.volumes.items()
+        if vol.mount is not None
+    }
 
-    def on_start(self, label: str) -> None:
-        """Call before each check begins."""
-        if self._progress is None:
-            self._progress = Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                MofNCompleteColumn(),
-                transient=True,
-            )
-            self._progress.start()
-            self._task_id = self._progress.add_task(
-                f"Checking {label}...", total=self._total
-            )
-        else:
-            assert self._task_id is not None
-            self._progress.update(self._task_id, description=f"Checking {label}...")
-
-    def on_end(
-        self,
-        label: str,
-        active: bool,
-        error_summary: str | None = None,
-    ) -> None:
-        """Call after each check completes."""
-        if self._progress is not None:
-            assert self._task_id is not None
-            icon = "[green]\u2713[/green]" if active else "[red]\u2717[/red]"
-            detail = f" ({error_summary})" if error_summary else ""
-            self._progress.console.print(f"{icon} check {label}{detail}")
-            self._progress.advance(self._task_id)
-
-    def stop(self) -> None:
-        """Stop the progress bar (idempotent)."""
-        if self._progress is not None:
-            self._progress.stop()
-
-
-def load_config_or_exit(
-    config_path: str | Path | None,
-) -> Config:
-    """Load config or exit with code 2 on error."""
-    try:
-        return load_config(config_path)
-    except ConfigError as e:
-        print_config_error(e)
-        raise typer.Exit(2)
-
-
-def build_endpoint_filter(
-    locations: list[str] | None,
-    exclude_locations: list[str] | None,
-    network: NetworkType | None,
-) -> EndpointFilter | None:
-    """Build an EndpointFilter from CLI options."""
-    locs = locations or []
-    excl = exclude_locations or []
-    return (
-        EndpointFilter(locations=locs, exclude_locations=excl, network=network)
-        if locs or excl or network is not None
+    mount_bar = (
+        VolumeProgressBar(total, "Mounting", _format_mount_result)
+        if use_progress
+        else None
+    )
+    umount_bar = (
+        VolumeProgressBar(total, "Umounting", _format_umount_result)
+        if use_progress
         else None
     )
 
+    def on_mount_start(slug: str) -> None:
+        if mount_bar is not None:
+            mount_bar.on_start(display_names.get(slug, slug))
 
-def _validate_locations(
-    cfg: Config,
-    locations: list[str] | None,
-    exclude_locations: list[str] | None,
-) -> None:
-    """Exit with an error if any location value is not defined in the config."""
-    known = set(cfg.known_locations())
-    if not known:
-        all_values = [*(locations or []), *(exclude_locations or [])]
-        if all_values:
-            typer.echo(
-                "Error: no locations are defined in the configuration."
-                " --location and --exclude-location cannot be used.",
-                err=True,
+    def on_mount_end(slug: str, result: MountResult) -> None:
+        if mount_bar is not None:
+            mount_bar.on_end(
+                display_names.get(slug, slug), result.success, result.detail
             )
-            raise typer.Exit(2)
-        return
-    for label, values in [
-        ("--location", locations),
-        ("--exclude-location", exclude_locations),
-    ]:
-        for v in values or []:
-            if v not in known:
-                typer.echo(
-                    f"Error: unknown location '{v}' passed to {label}."
-                    f" Known locations: {', '.join(sorted(known))}",
-                    err=True,
-                )
-                raise typer.Exit(2)
+
+    def on_umount_start(slug: str) -> None:
+        if umount_bar is not None:
+            umount_bar.on_start(display_names.get(slug, slug))
+
+    def on_umount_end(slug: str, result: UmountResult) -> None:
+        if umount_bar is not None:
+            umount_bar.on_end(
+                display_names.get(slug, slug),
+                result.success,
+                result.detail,
+                result.warning,
+            )
+
+    try:
+        with _disks_managed_mount(
+            cfg,
+            resolved,
+            passphrase_fn,
+            mount=mount,
+            umount=umount,
+            on_mount_start=on_mount_start,
+            on_mount_end=on_mount_end,
+            on_umount_start=on_umount_start,
+            on_umount_end=on_umount_end,
+        ) as result:
+            if mount_bar is not None:
+                mount_bar.stop()
+            _mount_strategy, mount_observations = result
+            if use_progress and mount_observations:
+                display_statuses = [
+                    (display_names.get(slug, slug), obs)
+                    for slug, obs in mount_observations.items()
+                ]
+                Console().print(build_mount_status_table(display_statuses))
+            yield result
+    finally:
+        if umount_bar is not None:
+            umount_bar.stop()
+        cache.clear()
 
 
-def resolve_endpoints(
-    cfg: Config,
-    locations: list[str] | None,
-    exclude_locations: list[str] | None,
-    network: NetworkType | None,
-) -> ResolvedEndpoints:
-    """Build filter and resolve all endpoints once."""
-    _validate_locations(cfg, locations, exclude_locations)
-    ef = build_endpoint_filter(locations, exclude_locations, network)
-    return resolve_all_endpoints(cfg, ef)
-
+# ── Preflight-specific helpers (will move to preflight/cli/helpers.py) ──
 
 def _check_total(cfg: Config, only_syncs: list[str] | None) -> int:
     """Count progress steps: SSH endpoints + volumes + sync endpoints.
@@ -365,111 +271,3 @@ def check_and_display(
         )
 
     return preflight, has_fatal_errors(preflight.sync_statuses, strictness=strictness)
-
-
-@contextmanager
-def managed_mount(
-    cfg: Config,
-    resolved: ResolvedEndpoints,
-    *,
-    mount: bool = True,
-    umount: bool = True,
-    output_format: OutputFormat = OutputFormat.HUMAN,
-) -> Generator[
-    tuple[dict[str, MountStrategy], dict[str, MountObservation]],
-    None,
-    None,
-]:
-    """Context manager that mounts volumes on entry and umounts on exit.
-
-    Thin wrapper around :func:`orchestration.managed_mount` that adds
-    Rich display callbacks and credential management.
-
-    Yields a tuple of ``(mount_strategy, mount_observations)``.  When
-    mounting is skipped both dicts are empty.  Observations capture
-    the runtime state discovered during mount so that preflight checks
-    can reuse it instead of re-probing.
-
-    Parameters
-    ----------
-    mount:
-        When ``False`` (or no volumes have mount config), mounting and
-        umounting are both skipped.
-    umount:
-        When ``False``, the umount phase is skipped even if volumes
-        were mounted.  Useful for debugging (``run --no-umount``).
-    output_format:
-        Controls whether Rich spinner / result lines are printed.
-    """
-    passphrase_fn, cache = build_passphrase_fn(
-        cfg.credential_provider, cfg.credential_command
-    )
-
-    use_progress = output_format is OutputFormat.HUMAN
-    total = mount_volume_count(cfg)
-    display_names = {
-        slug: volume_display_name(vol)
-        for slug, vol in cfg.volumes.items()
-        if vol.mount is not None
-    }
-
-    mount_bar = (
-        VolumeProgressBar(total, "Mounting", _format_mount_result)
-        if use_progress
-        else None
-    )
-    umount_bar = (
-        VolumeProgressBar(total, "Umounting", _format_umount_result)
-        if use_progress
-        else None
-    )
-
-    def on_mount_start(slug: str) -> None:
-        if mount_bar is not None:
-            mount_bar.on_start(display_names.get(slug, slug))
-
-    def on_mount_end(slug: str, result: MountResult) -> None:
-        if mount_bar is not None:
-            mount_bar.on_end(
-                display_names.get(slug, slug), result.success, result.detail
-            )
-
-    def on_umount_start(slug: str) -> None:
-        if umount_bar is not None:
-            umount_bar.on_start(display_names.get(slug, slug))
-
-    def on_umount_end(slug: str, result: UmountResult) -> None:
-        if umount_bar is not None:
-            umount_bar.on_end(
-                display_names.get(slug, slug),
-                result.success,
-                result.detail,
-                result.warning,
-            )
-
-    try:
-        with _disks_managed_mount(
-            cfg,
-            resolved,
-            passphrase_fn,
-            mount=mount,
-            umount=umount,
-            on_mount_start=on_mount_start,
-            on_mount_end=on_mount_end,
-            on_umount_start=on_umount_start,
-            on_umount_end=on_umount_end,
-        ) as result:
-            if mount_bar is not None:
-                mount_bar.stop()
-            _mount_strategy, mount_observations = result
-            if use_progress and mount_observations:
-                display_statuses = [
-                    (display_names.get(slug, slug), obs)
-                    for slug, obs in mount_observations.items()
-                ]
-                Console().print(build_mount_status_table(display_statuses))
-            yield result
-    finally:
-        if umount_bar is not None:
-            umount_bar.stop()
-        cache.clear()

@@ -372,7 +372,7 @@ def _sample_all_active_sync_statuses(
 
 
 class TestConfigShowCommand:
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_human_output(self, mock_load: MagicMock) -> None:
         config = _sample_config()
         mock_load.return_value = config
@@ -385,7 +385,7 @@ class TestConfigShowCommand:
         assert "nas" in result.output
         assert "photos" in result.output
 
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_human_output_shows_servers(self, mock_load: MagicMock) -> None:
         config = _sample_config()
         mock_load.return_value = config
@@ -396,7 +396,7 @@ class TestConfigShowCommand:
         assert "nas-server" in result.output
         assert "nas.example.com" in result.output
 
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_json_output(self, mock_load: MagicMock) -> None:
         config = _sample_config()
         mock_load.return_value = config
@@ -419,7 +419,7 @@ class TestConfigShowCommand:
         assert "ssh-endpoints" in data
 
     @patch(
-        "nbkp.cli.common.load_config",
+        "nbkp.clihelpers.config.load_config",
         side_effect=__import__("nbkp.config", fromlist=["ConfigError"]).ConfigError(
             "bad config",
             reason=__import__(
@@ -461,7 +461,7 @@ def _config_with_locations() -> Config:
 
 class TestLocationValidation:
     @patch("nbkp.cli.common.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_unknown_location_rejected(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -475,7 +475,7 @@ class TestLocationValidation:
         assert "travel" in result.output
 
     @patch("nbkp.cli.common.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_unknown_exclude_location_rejected(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -488,7 +488,7 @@ class TestLocationValidation:
         assert "--exclude-location" in result.output
 
     @patch("nbkp.cli.common.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_known_location_accepted(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -518,7 +518,7 @@ class TestLocationValidation:
         )
         assert result.exit_code == 0
 
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_location_on_config_without_locations(self, mock_load: MagicMock) -> None:
         mock_load.return_value = _sample_config()
         result = runner.invoke(
@@ -530,7 +530,7 @@ class TestLocationValidation:
 
 class TestCheckCommand:
     @patch("nbkp.cli.common.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_human_output_inactive(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -548,7 +548,7 @@ class TestCheckCommand:
         assert "Preflight" in result.output
 
     @patch("nbkp.cli.common.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_human_output_all_active(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -562,7 +562,7 @@ class TestCheckCommand:
         assert result.exit_code == 0
 
     @patch("nbkp.cli.common.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_json_output_inactive(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -589,7 +589,7 @@ class TestCheckCommand:
         assert "syncs" in data
 
     @patch("nbkp.cli.common.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_json_output_all_active(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -615,7 +615,7 @@ class TestCheckCommand:
         assert "syncs" in data
 
     @patch("nbkp.cli.common.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_sentinel_only_exit_0_by_default(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -629,7 +629,7 @@ class TestCheckCommand:
         assert result.exit_code == 0
 
     @patch("nbkp.cli.common.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_sentinel_only_exit_1_when_strict(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -655,7 +655,7 @@ class TestCheckCommand:
 class TestRunCommand:
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_successful_run(
         self,
         mock_load: MagicMock,
@@ -688,7 +688,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_displays_status_before_results(
         self,
         mock_load: MagicMock,
@@ -721,7 +721,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_failed_run(
         self,
         mock_load: MagicMock,
@@ -750,7 +750,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_dry_run(
         self,
         mock_load: MagicMock,
@@ -784,7 +784,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_json_output(
         self,
         mock_load: MagicMock,
@@ -827,7 +827,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_sync_filter(
         self,
         mock_load: MagicMock,
@@ -867,7 +867,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_progress(
         self,
         mock_load: MagicMock,
@@ -905,7 +905,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_exits_before_syncs_on_status_error(
         self,
         mock_load: MagicMock,
@@ -924,7 +924,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_sentinel_only_proceeds_by_default(
         self,
         mock_load: MagicMock,
@@ -952,7 +952,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_sentinel_only_exits_when_strict(
         self,
         mock_load: MagicMock,
@@ -1030,7 +1030,7 @@ class TestPruneCommand:
     @patch("nbkp.snapshots.pruner.list_snapshots")
     @patch("nbkp.snapshots.pruner.btrfs_prune_snapshots")
     @patch("nbkp.cli.common.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_successful_prune(
         self,
         mock_load: MagicMock,
@@ -1058,7 +1058,7 @@ class TestPruneCommand:
     @patch("nbkp.snapshots.pruner.list_snapshots")
     @patch("nbkp.snapshots.pruner.btrfs_prune_snapshots")
     @patch("nbkp.cli.common.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_dry_run(
         self,
         mock_load: MagicMock,
@@ -1089,7 +1089,7 @@ class TestPruneCommand:
     @patch("nbkp.snapshots.pruner.list_snapshots")
     @patch("nbkp.snapshots.pruner.btrfs_prune_snapshots")
     @patch("nbkp.cli.common.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_json_output(
         self,
         mock_load: MagicMock,
@@ -1126,7 +1126,7 @@ class TestPruneCommand:
         assert len(data[0]["deleted"]) == 1
 
     @patch("nbkp.cli.common.check_all_syncs")
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_no_syncs_to_prune(
         self,
         mock_load: MagicMock,
@@ -1144,7 +1144,7 @@ class TestPruneCommand:
 
 class TestConfigError:
     @patch(
-        "nbkp.cli.common.load_config",
+        "nbkp.clihelpers.config.load_config",
         side_effect=__import__("nbkp.config", fromlist=["ConfigError"]).ConfigError(
             "bad config",
             reason=__import__(
@@ -1157,7 +1157,7 @@ class TestConfigError:
         assert result.exit_code == 2
 
     @patch(
-        "nbkp.cli.common.load_config",
+        "nbkp.clihelpers.config.load_config",
         side_effect=__import__("nbkp.config", fromlist=["ConfigError"]).ConfigError(
             "bad config",
             reason=__import__(
@@ -1178,7 +1178,7 @@ class TestConfigError:
             "Config file not found: /bad.yaml",
             reason=ConfigErrorReason.FILE_NOT_FOUND,
         )
-        with patch("nbkp.cli.common.load_config", side_effect=err):
+        with patch("nbkp.clihelpers.config.load_config", side_effect=err):
             result = runner.invoke(app, ["check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
         out = _strip_panel(result.output)
@@ -1195,7 +1195,7 @@ class TestConfigError:
             err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
             err.__cause__ = ve
 
-        with patch("nbkp.cli.common.load_config", side_effect=err):
+        with patch("nbkp.clihelpers.config.load_config", side_effect=err):
             result = runner.invoke(app, ["check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
         out = _strip_panel(result.output)
@@ -1215,7 +1215,7 @@ class TestConfigError:
             )
             err.__cause__ = ye
 
-        with patch("nbkp.cli.common.load_config", side_effect=err):
+        with patch("nbkp.clihelpers.config.load_config", side_effect=err):
             result = runner.invoke(app, ["check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
         out = _strip_panel(result.output)
@@ -1244,7 +1244,7 @@ class TestConfigError:
             err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
             err.__cause__ = ve
 
-        with patch("nbkp.cli.common.load_config", side_effect=err):
+        with patch("nbkp.clihelpers.config.load_config", side_effect=err):
             result = runner.invoke(app, ["check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
         out = _strip_panel(result.output)
@@ -1252,7 +1252,7 @@ class TestConfigError:
 
 
 class TestShCommand:
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_generates_script(self, mock_load: MagicMock) -> None:
         config = _sample_config()
         mock_load.return_value = config
@@ -1263,7 +1263,7 @@ class TestShCommand:
         assert "set -euo pipefail" in result.output
         assert "sync_photos_to_nas()" in result.output
 
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_config_path_in_header(self, mock_load: MagicMock) -> None:
         config = _sample_config()
         mock_load.return_value = config
@@ -1272,7 +1272,7 @@ class TestShCommand:
         assert result.exit_code == 0
         assert "# Config: /fake.yaml" in result.output
 
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_output_file(self, mock_load: MagicMock, tmp_path: object) -> None:
         import pathlib
         import stat
@@ -1302,7 +1302,7 @@ class TestShCommand:
         )
         assert result.exit_code == 2
 
-    @patch("nbkp.cli.common.load_config")
+    @patch("nbkp.clihelpers.config.load_config")
     def test_relative_with_output_file(
         self,
         mock_load: MagicMock,
@@ -1332,7 +1332,7 @@ class TestShCommand:
         assert "NBKP_SCRIPT_DIR" in content
 
     @patch(
-        "nbkp.cli.common.load_config",
+        "nbkp.clihelpers.config.load_config",
         side_effect=__import__("nbkp.config", fromlist=["ConfigError"]).ConfigError(
             "bad config",
             reason=__import__(
