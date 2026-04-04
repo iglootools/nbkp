@@ -175,25 +175,21 @@ def seed(
     else:
         tmp = Path(tempfile.mkdtemp(prefix="nbkp-demo-"))
 
-    bar = StepProgressBar(_step_count(docker, luks))
-
-    try:
-        result = seed_demo(
-            tmp,
-            docker=docker,
-            luks=luks,
-            big_file_size=big_file_size,
-            bandwidth_limit=bandwidth_limit,
-            credential_provider=credential_provider,
-            on_step_start=bar.on_start,
-            on_step_end=bar.on_end,
-        )
-    except SeedError as e:
-        bar.stop()
-        _console.print(f"[red]{e}[/red]", highlight=False)
-        raise typer.Exit(1)
-    finally:
-        bar.stop()
+    with StepProgressBar(_step_count(docker, luks)) as bar:
+        try:
+            result = seed_demo(
+                tmp,
+                docker=docker,
+                luks=luks,
+                big_file_size=big_file_size,
+                bandwidth_limit=bandwidth_limit,
+                credential_provider=credential_provider,
+                on_step_start=bar.on_start,
+                on_step_end=bar.on_end,
+            )
+        except SeedError as e:
+            _console.print(f"[red]{e}[/red]", highlight=False)
+            raise typer.Exit(1)
 
     _print_summary(result, docker, credential_provider)
 

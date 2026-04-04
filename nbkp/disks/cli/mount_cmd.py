@@ -97,6 +97,8 @@ def mount(
                 display_names.get(slug, slug), result.success, result.detail
             )
 
+    # try/finally instead of `with` because mount_bar is conditionally
+    # created (None when output is JSON), and cache.clear() must also run.
     try:
         strategies, results = mount_volumes(
             cfg,

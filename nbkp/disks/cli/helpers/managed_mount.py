@@ -116,6 +116,9 @@ def managed_mount(
                 result.warning,
             )
 
+    # try/finally instead of `with` because mount_bar/umount_bar are
+    # conditionally created (None when output is JSON), and cache.clear()
+    # must also run.
     try:
         with _disks_managed_mount(
             cfg,

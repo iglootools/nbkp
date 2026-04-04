@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import TracebackType
+
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -72,3 +74,14 @@ class StepProgressBar:
         """Stop the progress bar (idempotent)."""
         if self._progress is not None:
             self._progress.stop()
+
+    def __enter__(self) -> StepProgressBar:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        self.stop()

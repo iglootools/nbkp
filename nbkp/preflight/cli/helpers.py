@@ -66,15 +66,14 @@ def check_all_with_progress(
             mount_observations=mount_observations,
         )
 
-    bar = StepProgressBar(total)
+    with StepProgressBar(total) as bar:
 
-    def _on_start(label: str) -> None:
-        bar.on_start(f"Checking {label}...")
+        def _on_start(label: str) -> None:
+            bar.on_start(f"Checking {label}...")
 
-    def _on_end(label: str, active: bool, error_summary: str | None) -> None:
-        bar.on_end(f"check {label}", active, error_summary)
+        def _on_end(label: str, active: bool, error_summary: str | None) -> None:
+            bar.on_end(f"check {label}", active, error_summary)
 
-    try:
         return check_all_syncs(
             cfg,
             on_check_start=_on_start,
@@ -84,8 +83,6 @@ def check_all_with_progress(
             dry_run=dry_run,
             mount_observations=mount_observations,
         )
-    finally:
-        bar.stop()
 
 
 def check_and_display(
