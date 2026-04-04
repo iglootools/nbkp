@@ -26,7 +26,7 @@ from ..output import (
     volume_display_name,
 )
 from ..strategy import MountStrategy
-from ...preflight import check_mount_status
+from ..mount_checks import check_mount_status
 
 
 @dataclass(frozen=True)

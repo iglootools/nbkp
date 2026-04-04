@@ -25,7 +25,6 @@ graph TD
     snapshots["snapshots/"]
     sync["sync/"]
 
-    cli --> clihelpers
     cli --> config
     cli --> credentials
     cli --> demo
@@ -46,15 +45,14 @@ graph TD
     demo --> ordering
     demo --> preflight
     demo --> remote
+    demo --> snapshots
     demo --> sync
     disks --> clihelpers
     disks --> config
     disks --> credentials
-    disks --> preflight
     disks --> remote
     ordering --> clihelpers
     ordering --> config
-    preflight --> cli
     preflight --> clihelpers
     preflight --> config
     preflight --> disks
@@ -63,7 +61,6 @@ graph TD
     preflight --> run
     remote --> config
     remote --> fsprotocol
-    run --> cli
     run --> clihelpers
     run --> config
     run --> disks
@@ -76,13 +73,12 @@ graph TD
     sh --> ordering
     sh --> remote
     sh --> sync
-    snapshots --> cli
     snapshots --> clihelpers
     snapshots --> config
+    snapshots --> disks
     snapshots --> fsprotocol
     snapshots --> preflight
     snapshots --> remote
-    snapshots --> sync
     sync --> config
     sync --> fsprotocol
     sync --> ordering

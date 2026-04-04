@@ -776,14 +776,14 @@ class TestCheckRemoteVolumeLocationExcluded:
 
 
 class TestCheckCommandAvailableLocal:
-    @patch("nbkp.preflight.queries.shutil.which")
+    @patch("nbkp.remote.queries.shutil.which")
     def test_command_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = "/usr/bin/rsync"
         vol = LocalVolume(slug="data", path="/mnt/data")
         assert _check_command_available(vol, "rsync", {}) is True
         mock_which.assert_called_once_with("rsync")
 
-    @patch("nbkp.preflight.queries.shutil.which")
+    @patch("nbkp.remote.queries.shutil.which")
     def test_command_not_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = None
         vol = LocalVolume(slug="data", path="/mnt/data")
