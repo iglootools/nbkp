@@ -35,7 +35,7 @@ from ..disks.lifecycle import MountResult, UmountResult, mount_volume_count
 from ..disks.observation import MountObservation
 from ..disks.output import build_mount_status_table, volume_display_name
 from ..disks.strategy import MountStrategy
-from ..orchestration import managed_mount as _orchestration_managed_mount
+from ..disks.context import managed_mount as _disks_managed_mount
 from ..config.output import print_config_error
 from ..preflight.output import print_human_check
 from ..preflight import (
@@ -448,7 +448,7 @@ def managed_mount(
             )
 
     try:
-        with _orchestration_managed_mount(
+        with _disks_managed_mount(
             cfg,
             resolved,
             passphrase_fn,
