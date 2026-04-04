@@ -1,4 +1,4 @@
-"""CLI volumes mount/umount/status commands."""
+"""CLI disks mount/umount/status commands."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from ..disks.output import (
     volume_display_name,
 )
 from ..preflight import check_mount_status
-from .app import volumes_app
+from .app import disks_app
 from .common import (
     CheckProgressBar,
     OutputFormat,
@@ -138,7 +138,7 @@ def _format_umount_result(
     return f"{icon} {slug}{detail_str}{warning_str}"
 
 
-@volumes_app.command("mount")
+@disks_app.command("mount")
 def volumes_mount(
     config: Annotated[
         Optional[Path],
@@ -241,7 +241,7 @@ def volumes_mount(
         raise typer.Exit(1)
 
 
-@volumes_app.command("umount")
+@disks_app.command("umount")
 def volumes_umount(
     config: Annotated[
         Optional[Path],
@@ -339,7 +339,7 @@ class _ErrorStatus:
     mounted: bool | None = None
 
 
-@volumes_app.command("status")
+@disks_app.command("status")
 def volumes_status(
     config: Annotated[
         Optional[Path],

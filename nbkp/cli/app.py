@@ -44,12 +44,12 @@ config_app = typer.Typer(
 )
 app.add_typer(config_app)
 
-volumes_app = typer.Typer(
-    name="volumes",
-    help="Volume mount management commands",
+disks_app = typer.Typer(
+    name="disks",
+    help="Disk mount management commands",
     no_args_is_help=True,
 )
-app.add_typer(volumes_app)
+app.add_typer(disks_app)
 
 app.add_typer(
     demo_app,

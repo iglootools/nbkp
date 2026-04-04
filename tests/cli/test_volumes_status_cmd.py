@@ -70,7 +70,7 @@ class TestVolumesStatusCommand:
         ]
 
         result = runner.invoke(
-            app, ["volumes", "status", "--config", "/f.yaml", "-o", "json"]
+            app, ["disks", "status", "--config", "/f.yaml", "-o", "json"]
         )
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -96,7 +96,7 @@ class TestVolumesStatusCommand:
             mounted=True,
         )
 
-        result = runner.invoke(app, ["volumes", "status", "--config", "/f.yaml"])
+        result = runner.invoke(app, ["disks", "status", "--config", "/f.yaml"])
         assert result.exit_code == 0
         assert "Volume Mount Status" in result.output
 
@@ -114,7 +114,7 @@ class TestVolumesStatusCommand:
         result = runner.invoke(
             app,
             [
-                "volumes",
+                "disks",
                 "status",
                 "--config",
                 "/f.yaml",
@@ -142,7 +142,7 @@ class TestVolumesStatusCommand:
         mock_load.return_value = config
 
         result = runner.invoke(
-            app, ["volumes", "status", "--config", "/f.yaml", "-o", "json"]
+            app, ["disks", "status", "--config", "/f.yaml", "-o", "json"]
         )
         assert result.exit_code == 0
         data = json.loads(result.output)
