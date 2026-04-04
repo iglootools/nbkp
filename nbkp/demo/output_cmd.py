@@ -23,8 +23,8 @@ from ..ordering.output import (
 from ..config.output import print_config_error, print_human_config
 from ..preflight.output import print_human_check, print_human_troubleshoot
 from ..remote.resolution import resolve_all_endpoints
+from ..snapshots.output import print_human_prune_results
 from ..sync.output import (
-    print_human_prune_results,
     print_human_results,
     print_run_preview,
 )

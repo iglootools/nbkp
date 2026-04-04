@@ -11,7 +11,7 @@ import typer
 from ...clihelpers import OutputFormat, load_config_or_exit
 from ...clihelpers.endpoints import resolve_endpoints
 from ...config.epresolution import NetworkType
-from ...sync.output import print_human_prune_results
+from ..output import print_human_prune_results
 from ..cmd_handler import prune_all_syncs
 
 # Transitional imports — these will move out of cli.common later.
