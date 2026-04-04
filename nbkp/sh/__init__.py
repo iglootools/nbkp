@@ -100,7 +100,7 @@ class _SyncContext:
 def _load_template() -> Template:
     """Load the Jinja2 template with custom delimiters."""
     tpl_text = (
-        importlib.resources.files("nbkp.templates")
+        importlib.resources.files("nbkp.sh.templates")
         .joinpath("backup.sh.j2")
         .read_text(encoding="utf-8")
     )
