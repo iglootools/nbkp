@@ -299,7 +299,7 @@ def _print_volume_error_fix(
             _print_mount_error(
                 console,
                 "Volume is not mounted.",
-                f"Mount the volume with: nbkp volumes mount -n {vol_status.slug}",
+                f"Mount the volume with: nbkp disks mount -n {vol_status.slug}",
             )
         case VolumeError.DEVICE_NOT_PRESENT:
             _print_device_not_present_fix(console, vol.mount)
@@ -787,7 +787,7 @@ def _print_passphrase_not_available_fix(
         else "<passphrase-id>"
     )
     env_var = f"NBKP_PASSPHRASE_{pid.upper().replace('-', '_')}"
-    console.print(f"{p2}Check credential status: nbkp config keyring-status")
+    console.print(f"{p2}Check credential status: nbkp credentials keyring-status")
     console.print(f"{p2}Configure with your credential provider:")
     console.print(f"{p2}{_INDENT}keyring: keyring set nbkp {pid}")
     console.print(f"{p2}{_INDENT}env: export {env_var}=...")
@@ -862,7 +862,7 @@ def _print_polkit_rules_missing_fix(
     if rules.polkit:
         console.print(f"{p2}Install to: {POLKIT_RULES_PATH}")
         _print_cmd(console, rules.polkit.rstrip(), indent=3)
-    console.print(f"{p2}Or generate with: nbkp config setup-auth -c <config>")
+    console.print(f"{p2}Or generate with: nbkp disks setup-auth -c <config>")
 
 
 def _print_sudoers_rules_missing_fix(
@@ -881,7 +881,7 @@ def _print_sudoers_rules_missing_fix(
     if rules.sudoers:
         console.print(f"{p2}Install with: sudo visudo -f {SUDOERS_RULES_PATH}")
         _print_cmd(console, rules.sudoers.rstrip(), indent=3)
-    console.print(f"{p2}Or generate with: nbkp config setup-auth -c <config>")
+    console.print(f"{p2}Or generate with: nbkp disks setup-auth -c <config>")
 
 
 # ── Main troubleshoot entry point ─────────────────────────────

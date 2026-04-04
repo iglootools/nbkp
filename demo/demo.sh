@@ -51,7 +51,7 @@ pe "nbkp config show --config $CFG"
 pause 3
 
 p "# Volume and sync health checks"
-pe "nbkp check --config $CFG"
+pe "nbkp preflight check --config $CFG"
 pause 3
 
 p "# Preview what rsync would do (dry run)"
@@ -63,7 +63,7 @@ pe "nbkp run --config $CFG"
 pause 3
 
 p "# Prune old snapshots"
-pe "nbkp prune --config $CFG"
+pe "nbkp snapshots prune --config $CFG"
 pause 3
 
 p "# Generate standalone bash script"
@@ -71,11 +71,11 @@ pe "nbkp sh --config $CFG -o $SH"
 pause
 
 p "# Mount the volumes (the standalone bash script does not handle volume management)"
-pe "nbkp volumes mount --config $CFG"
+pe "nbkp disks mount --config $CFG"
 pause
 
 p "# Show the status of the volumes"
-pe "nbkp volumes status --config $CFG"
+pe "nbkp disks status --config $CFG"
 pause 3
 
 p "# Validate and run the generated script"
@@ -86,9 +86,9 @@ pe "$SH"
 pause 3
 
 p "# Unmount the volumes"
-pe "nbkp volumes umount --config $CFG"
+pe "nbkp disks umount --config $CFG"
 pause
 
 p "# The volume is not unmounted"
-pe "nbkp volumes status --config $CFG"
+pe "nbkp disks status --config $CFG"
 pause 3

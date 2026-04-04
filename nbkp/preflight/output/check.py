@@ -288,7 +288,7 @@ def print_human_check(
         sections.append(Text(""))
         sections.append(
             Text.from_markup(
-                "Run [bold]nbkp troubleshoot[/bold] for detailed remediation steps."
+                "Run [bold]nbkp preflight troubleshoot[/bold] for detailed remediation steps."
             )
         )
 

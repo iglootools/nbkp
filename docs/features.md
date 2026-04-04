@@ -64,9 +64,9 @@ nbkp can automatically mount and umount volumes before and after backups, includ
 - **Unencrypted volume mount**: `systemctl start/stop` for volumes with fstab or native .mount unit entries
 - **Credential providers**: retrieve LUKS passphrases from keyring, interactive prompt, environment variable, or external command (e.g. `pass`, 1Password CLI). The keyring provider delegates to the [keyring](https://github.com/jaraco/keyring) library, which supports macOS Keychain, GNOME Keyring / libsecret, KDE Wallet, and Windows Credential Locker. The `keyring` package is an optional dependency (`pip install nbkp[keyring]`)
 - **Idempotent**: skips already-attached and already-mounted volumes
-- **Integrated into `run`, `check`, and `troubleshoot`**: mount before running, umount in `finally` block (even on failure). Controllable via `--mount/--no-mount` and `--umount/--no-umount`
-- **Standalone commands**: `volumes mount` and `volumes umount` for manual lifecycle management
-- **Authorization setup**: `config setup-auth` generates polkit and sudoers rules for passwordless mount/umount
+- **Integrated into `run`, `preflight check`, and `preflight troubleshoot`**: mount before running, umount in `finally` block (even on failure). Controllable via `--mount/--no-mount` and `--umount/--no-umount`
+- **Standalone commands**: `disks mount` and `disks umount` for manual lifecycle management
+- **Authorization setup**: `disks setup-auth` generates polkit and sudoers rules for passwordless mount/umount
 - **Pre-flight validation**: checks systemd tools, mount unit config, cryptsetup service config, polkit/sudoers rules, with actionable troubleshoot output
 
 ## Pre-flight Checks
@@ -88,7 +88,7 @@ Backup configuration is expressed in a single YAML file that defines SSH endpoin
 - **Reusable sync endpoints**: define (volume, subdir, snapshot config) once, reference by slug from syncs — prevents duplication and conflicting configurations
 - **Pydantic validation**: structured errors with context for invalid configs
 - **Config display**: `config show` renders parsed config as tables or JSON
-- **Graph visualization**: `config graph` displays the backup chain as a Rich tree, ASCII art (mermaid-ascii), raw mermaid syntax, or JSON
+- **Graph visualization**: `ordering graph` displays the backup chain as a Rich tree, ASCII art (mermaid-ascii), raw mermaid syntax, or JSON
 - **Cross-reference validation**: circular `extends` and `proxy-jump` chains, unique (volume, subdir) per endpoint, unique destination per sync — all detected at load time
 
 ## Shell Script Generation (`sh`)

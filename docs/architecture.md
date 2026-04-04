@@ -11,57 +11,83 @@ Dependencies between top-level modules (auto-generated via `mise run depgraph`):
 ```mermaid
 graph TD
     cli["cli/"]
+    clihelpers["clihelpers/"]
     config["config/"]
-    credentials["credentials"]
-    democli["democli/"]
+    credentials["credentials/"]
+    demo["demo/"]
+    disks["disks/"]
     fsprotocol["fsprotocol"]
-    mount["mount/"]
-    orchestration["orchestration"]
     ordering["ordering/"]
     preflight["preflight/"]
     remote["remote/"]
-    scriptgen["scriptgen"]
+    run["run/"]
+    sh["sh/"]
+    snapshots["snapshots/"]
     sync["sync/"]
 
+    cli --> clihelpers
     cli --> config
     cli --> credentials
-    cli --> democli
-    cli --> mount
-    cli --> orchestration
+    cli --> demo
+    cli --> disks
     cli --> ordering
     cli --> preflight
-    cli --> remote
-    cli --> scriptgen
-    cli --> sync
+    cli --> run
+    cli --> sh
+    cli --> snapshots
+    clihelpers --> config
+    clihelpers --> remote
+    config --> clihelpers
+    config --> remote
+    credentials --> clihelpers
     credentials --> config
-    democli --> config
-    democli --> mount
-    democli --> ordering
-    democli --> preflight
-    democli --> remote
-    democli --> sync
-    mount --> config
-    mount --> remote
-    orchestration --> config
-    orchestration --> mount
-    orchestration --> preflight
-    orchestration --> sync
+    demo --> config
+    demo --> disks
+    demo --> ordering
+    demo --> preflight
+    demo --> remote
+    demo --> sync
+    disks --> clihelpers
+    disks --> config
+    disks --> credentials
+    disks --> preflight
+    disks --> remote
+    ordering --> clihelpers
     ordering --> config
+    preflight --> cli
+    preflight --> clihelpers
     preflight --> config
+    preflight --> disks
     preflight --> fsprotocol
-    preflight --> mount
     preflight --> remote
+    preflight --> run
     remote --> config
     remote --> fsprotocol
-    scriptgen --> config
-    scriptgen --> fsprotocol
-    scriptgen --> ordering
-    scriptgen --> remote
-    scriptgen --> sync
+    run --> cli
+    run --> clihelpers
+    run --> config
+    run --> disks
+    run --> ordering
+    run --> preflight
+    run --> sync
+    sh --> clihelpers
+    sh --> config
+    sh --> fsprotocol
+    sh --> ordering
+    sh --> remote
+    sh --> sync
+    snapshots --> cli
+    snapshots --> clihelpers
+    snapshots --> config
+    snapshots --> fsprotocol
+    snapshots --> preflight
+    snapshots --> remote
+    snapshots --> sync
     sync --> config
     sync --> fsprotocol
     sync --> ordering
     sync --> preflight
     sync --> remote
+    sync --> snapshots
 ```
 <!-- END MODULE OVERVIEW -->

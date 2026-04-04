@@ -460,7 +460,7 @@ def seed(
         {pfx}nbkp config show --config $CFG --output json
 
         # Volume and sync health checks
-        {pfx}nbkp check --config $CFG
+        {pfx}nbkp preflight check --config $CFG
 
         # Preview what rsync would do without changes
         {pfx}nbkp run --config $CFG --dry-run
@@ -469,13 +469,13 @@ def seed(
         {pfx}nbkp run --config $CFG
 
         # Prune old btrfs snapshots
-        {pfx}nbkp prune --config $CFG
+        {pfx}nbkp snapshots prune --config $CFG
 
         # Mount the volumes (the standalone bash script does not handle volume management)
-        {pfx}nbkp volumes mount --config $CFG
+        {pfx}nbkp disks mount --config $CFG
 
         # Show the status of the volumes
-        {pfx}nbkp volumes status --config $CFG
+        {pfx}nbkp disks status --config $CFG
 
         # Generate standalone bash script to stdout
         {pfx}nbkp sh --config $CFG
@@ -493,7 +493,7 @@ def seed(
           && $SH
 
         # Unmount the volumes
-        nbkp volumes umount --config $CFG""")
+        nbkp disks umount --config $CFG""")
         + docker_teardown
     )
     _console.print(

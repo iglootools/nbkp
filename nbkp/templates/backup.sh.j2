@@ -21,7 +21,7 @@ ${{ config_line }}
 #   - Volume mount management (LUKS attach/close, systemctl mount/umount) → credential
 #     retrieval depends on keyring/prompt/command backends that don't translate to shell.
 #     Volumes with mount config must be manually mounted/umounted before/after running
-#     this script. Use: nbkp volumes mount -c <config> / nbkp volumes umount -c <config>
+#     this script. Use: nbkp disks mount -c <config> / nbkp disks umount -c <config>
 
 # Unofficial bash strict mode (http://redsymbol.net/articles/unofficial-bash-strict-mode/)
 set -euo pipefail
