@@ -356,6 +356,7 @@ $ nbkp snapshots [OPTIONS] COMMAND [ARGS]...
 **Commands**:
 
 * `prune`: Remove snapshots beyond the...
+* `show`: Display snapshot information for each sync...
 
 ### `nbkp snapshots prune`
 
@@ -378,6 +379,28 @@ $ nbkp snapshots prune [OPTIONS]
 * `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
 * `--mount / --no-mount`: Mount/umount volumes with mount config  [default: mount]
 * `--umount / --no-umount`: Umount after prune (use --no-umount for debugging)  [default: umount]
+* `--help`: Show this message and exit.
+
+### `nbkp snapshots show`
+
+Display snapshot information for each sync endpoint.
+
+**Usage**:
+
+```console
+$ nbkp snapshots show [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config FILE`: Path to config file
+* `-s, --sync TEXT`: Sync name(s) to show
+* `-o, --output [human|json]`: Output format  [default: human]
+* `-l, --location TEXT`: Prefer endpoints at these locations
+* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
+* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `--mount / --no-mount`: Mount/umount volumes with mount config  [default: mount]
+* `--umount / --no-umount`: Umount after show (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
 
 ## `nbkp demo`

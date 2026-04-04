@@ -1,4 +1,4 @@
-"""Snapshot output formatting (prune results)."""
+"""Snapshot output formatting (prune and show results)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
+from .cmd_handler.show import ShowResult
 from .models import PruneResult
 
 
@@ -58,5 +59,54 @@ def print_human_prune_results(
             str(r.kept),
             status,
         )
+
+    c.print(table)
+
+
+# ---------------------------------------------------------------------------
+# Show results
+# ---------------------------------------------------------------------------
+
+
+def _show_status_text(r: ShowResult) -> Text:
+    """Map a show result to a styled Rich Text label."""
+    if r.skipped:
+        return Text(f"SKIPPED ({r.detail})", style="dim")
+    elif r.detail:
+        return Text("FAILED", style="red")
+    else:
+        return Text("OK", style="green")
+
+
+def print_human_show_results(
+    results: list[ShowResult],
+    *,
+    console: Console | None = None,
+) -> None:
+    """Print human-readable snapshot show results."""
+    c = console or Console()
+
+    table = Table(title="Snapshots:")
+    table.add_column("Name", style="bold")
+    table.add_column("Mode")
+    table.add_column("Snapshots")
+    table.add_column("Latest")
+    table.add_column("Retention")
+    table.add_column("Status")
+
+    for r in results:
+        status = _show_status_text(r)
+        if r.skipped and r.snapshot_mode == "none":
+            mode = "--"
+            count = "--"
+            latest = "--"
+            retention = "--"
+        else:
+            mode = r.snapshot_mode
+            count = str(len(r.snapshots))
+            latest = r.latest.name if r.latest else "--"
+            retention = retention_display(r.max_snapshots)
+
+        table.add_row(r.sync_slug, mode, count, latest, retention, status)
 
     c.print(table)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from nbkp.cli import app
@@ -13,7 +14,9 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.fsprotocol import Snapshot
 from nbkp.preflight import (
+    SyncError,
     SyncStatus,
     VolumeStatus,
 )
@@ -197,3 +200,166 @@ class TestPruneCommand:
 
         result = runner.invoke(app, ["snapshots", "prune", "--config", "/fake.yaml"])
         assert result.exit_code == 0
+
+
+_SNAP_1 = Snapshot(
+    name="2026-03-01T10:00:00.000Z",
+    timestamp=datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc),
+)
+_SNAP_2 = Snapshot(
+    name="2026-03-06T14:30:00.000Z",
+    timestamp=datetime(2026, 3, 6, 14, 30, 0, tzinfo=timezone.utc),
+)
+
+
+class TestShowCommand:
+    @patch("nbkp.snapshots.cmd_handler.show.read_latest_symlink")
+    @patch("nbkp.snapshots.cmd_handler.show.list_snapshots")
+    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.clihelpers.config.load_config")
+    def test_successful_show(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+        mock_list: MagicMock,
+        mock_latest: MagicMock,
+    ) -> None:
+        config = _prune_config()
+        mock_load.return_value = config
+        vol_s, sync_s = _prune_active_statuses(config)
+        mock_checks.return_value = preflight(vol_s, sync_s)
+        mock_list.return_value = [_SNAP_1, _SNAP_2]
+        mock_latest.return_value = _SNAP_2
+
+        result = runner.invoke(app, ["snapshots", "show", "--config", "/fake.yaml"])
+        assert result.exit_code == 0
+        assert "OK" in result.output
+
+    @patch("nbkp.snapshots.cmd_handler.show.read_latest_symlink")
+    @patch("nbkp.snapshots.cmd_handler.show.list_snapshots")
+    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.clihelpers.config.load_config")
+    def test_json_output(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+        mock_list: MagicMock,
+        mock_latest: MagicMock,
+    ) -> None:
+        config = _prune_config()
+        mock_load.return_value = config
+        vol_s, sync_s = _prune_active_statuses(config)
+        mock_checks.return_value = preflight(vol_s, sync_s)
+        mock_list.return_value = [_SNAP_1, _SNAP_2]
+        mock_latest.return_value = _SNAP_2
+
+        result = runner.invoke(
+            app,
+            ["snapshots", "show", "--config", "/fake.yaml", "--output", "json"],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert len(data) == 1
+        assert data[0]["sync_slug"] == "s1"
+        assert data[0]["snapshot_mode"] == "btrfs"
+        assert len(data[0]["snapshots"]) == 2
+        assert data[0]["latest"]["name"] == "2026-03-06T14:30:00.000Z"
+        assert data[0]["max_snapshots"] == 3
+
+    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.clihelpers.config.load_config")
+    def test_no_snapshots_configured(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+    ) -> None:
+        config = sample_config()  # no snapshots
+        mock_load.return_value = config
+        vol_s = sample_all_active_vol_statuses(config)
+        sync_s = sample_all_active_sync_statuses(config, vol_s)
+        mock_checks.return_value = preflight(vol_s, sync_s)
+
+        result = runner.invoke(app, ["snapshots", "show", "--config", "/fake.yaml"])
+        assert result.exit_code == 0
+        assert "SKIPPED" in result.output
+
+    @patch("nbkp.snapshots.cmd_handler.show.read_latest_symlink")
+    @patch("nbkp.snapshots.cmd_handler.show.list_snapshots")
+    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.clihelpers.config.load_config")
+    def test_sync_filter(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+        mock_list: MagicMock,
+        mock_latest: MagicMock,
+    ) -> None:
+        config = _prune_config()
+        mock_load.return_value = config
+        vol_s, sync_s = _prune_active_statuses(config)
+        mock_checks.return_value = preflight(vol_s, sync_s)
+        mock_list.return_value = [_SNAP_1]
+        mock_latest.return_value = _SNAP_1
+
+        result = runner.invoke(
+            app,
+            ["snapshots", "show", "--config", "/fake.yaml", "--sync", "s1"],
+        )
+        assert result.exit_code == 0
+        assert "OK" in result.output
+
+    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.clihelpers.config.load_config")
+    def test_inactive_sync(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+    ) -> None:
+        config = _prune_config()
+        mock_load.return_value = config
+        local_ssh = localhost_ssh_status()
+        vol_s = {name: vol_status(name, config, local_ssh) for name in config.volumes}
+        sync_s = {
+            name: SyncStatus(
+                slug=name,
+                config=sync,
+                source_endpoint_status=src_ep_status(
+                    sync.source,
+                    vol_s[config.sync_endpoints[sync.source].volume],
+                    sentinel_exists=False,
+                ),
+                destination_endpoint_status=dst_ep_status(
+                    sync.destination,
+                    vol_s[config.sync_endpoints[sync.destination].volume],
+                ),
+                errors=[SyncError.SOURCE_ENDPOINT_INACTIVE],
+            )
+            for name, sync in config.syncs.items()
+        }
+        mock_checks.return_value = preflight(vol_s, sync_s)
+
+        result = runner.invoke(app, ["snapshots", "show", "--config", "/fake.yaml"])
+        assert result.exit_code == 0
+        assert "SKIPPED" in result.output
+        assert "inactive" in result.output
+
+    @patch(
+        "nbkp.snapshots.cmd_handler.show.list_snapshots",
+        side_effect=RuntimeError("connection failed"),
+    )
+    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.clihelpers.config.load_config")
+    def test_runtime_error(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+        mock_list: MagicMock,
+    ) -> None:
+        config = _prune_config()
+        mock_load.return_value = config
+        vol_s, sync_s = _prune_active_statuses(config)
+        mock_checks.return_value = preflight(vol_s, sync_s)
+
+        result = runner.invoke(app, ["snapshots", "show", "--config", "/fake.yaml"])
+        assert result.exit_code == 1
+        assert "FAILED" in result.output

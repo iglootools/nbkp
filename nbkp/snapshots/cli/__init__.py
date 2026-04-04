@@ -7,3 +7,4 @@ app = typer.Typer(
 )
 
 from . import prune_cmd as _prune_cmd  # noqa: E402, F401
+from . import show_cmd as _show_cmd  # noqa: E402, F401
