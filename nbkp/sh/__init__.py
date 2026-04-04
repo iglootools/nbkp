@@ -19,15 +19,15 @@ from textwrap import dedent
 
 from jinja2 import Environment, Template
 
-from .config import (
+from ..config import (
     Config,
     LocalVolume,
     RemoteVolume,
     SshEndpoint,
     SyncConfig,
 )
-from .config.epresolution import ResolvedEndpoints
-from .fsprotocol import (
+from ..config.epresolution import ResolvedEndpoints
+from ..fsprotocol import (
     DESTINATION_SENTINEL,
     LATEST_LINK,
     SNAPSHOTS_DIR,
@@ -35,8 +35,8 @@ from .fsprotocol import (
     STAGING_DIR,
     VOLUME_SENTINEL,
 )
-from .remote.ssh import build_ssh_base_args
-from .sync.rsync import build_rsync_command
+from ..remote.ssh import build_ssh_base_args
+from ..sync.rsync import build_rsync_command
 
 # ── Public API ────────────────────────────────────────────────
 
@@ -1194,7 +1194,7 @@ def _build_script_context(
     resolved_endpoints: ResolvedEndpoints,
 ) -> dict[str, object]:
     """Build the full template context dict."""
-    from .ordering.graph import sort_syncs, sync_predecessors
+    from ..ordering.graph import sort_syncs, sync_predecessors
 
     timestamp = now.isoformat(timespec="seconds").replace("+00:00", "Z")
     config_line = (

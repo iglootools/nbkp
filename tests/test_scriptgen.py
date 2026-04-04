@@ -1,4 +1,4 @@
-"""Tests for nbkp.scriptgen."""
+"""Tests for nbkp.sh."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.remote.resolution import resolve_all_endpoints
-from nbkp.scriptgen import ScriptOptions, generate_script
+from nbkp.sh import ScriptOptions, generate_script
 
 _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=timezone.utc)
 _OPTIONS = ScriptOptions(config_path="/etc/nbkp/config.yaml")

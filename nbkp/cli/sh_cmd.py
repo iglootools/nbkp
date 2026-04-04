@@ -10,7 +10,7 @@ from typing import Annotated, Optional
 import typer
 
 from ..config.epresolution import NetworkType
-from ..scriptgen import ScriptOptions, generate_script
+from ..sh import ScriptOptions, generate_script
 from .app import app
 from .common import load_config_or_exit, resolve_endpoints
 

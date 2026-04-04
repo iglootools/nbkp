@@ -9,7 +9,7 @@ from typing import Callable
 import typer
 from pydantic import SecretStr
 
-from .config import CredentialProvider
+from ..config import CredentialProvider
 
 
 class CredentialError(Exception):

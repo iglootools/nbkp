@@ -16,7 +16,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.scriptgen import ScriptOptions, generate_script
+from nbkp.sh import ScriptOptions, generate_script
 from nbkp.sync.testkit.seed import (
     SEED_EXCLUDE_FILTERS,
     create_seed_sentinels,
