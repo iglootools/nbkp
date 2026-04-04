@@ -135,11 +135,11 @@ def run(
 
         def on_check_start(label: str) -> None:
             if check_bar is not None:
-                check_bar.on_start(label)
+                check_bar.on_start(f"Checking {label}...")
 
         def on_check_end(label: str, active: bool, error_summary: str | None) -> None:
             if check_bar is not None:
-                check_bar.on_end(label, active, error_summary)
+                check_bar.on_end(f"check {label}", active, error_summary)
 
         def on_checks_done(preflight: PreflightResult) -> None:
             if check_bar is not None:
