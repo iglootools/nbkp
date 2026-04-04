@@ -17,7 +17,7 @@ from ..preflight import PreflightResult
 from ..preflight.output import print_human_check
 from ..sync import ProgressMode, SyncResult
 from ..sync.output import build_human_results_sections
-from ..sync.pipeline import Strictness, check_and_run
+from ..run.pipeline import Strictness, check_and_run
 from .app import app
 from .common import (
     CheckProgressBar,

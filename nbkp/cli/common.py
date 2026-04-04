@@ -42,7 +42,7 @@ from ..preflight import (
     PreflightResult,
     check_all_syncs,
 )
-from ..sync.pipeline import Strictness, has_fatal_errors
+from ..run.pipeline import Strictness, has_fatal_errors
 
 
 class OutputFormat(str, enum.Enum):

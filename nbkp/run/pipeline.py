@@ -20,8 +20,8 @@ from ..preflight import (
     VolumeStatus,
     check_all_syncs,
 )
-from .rsync import ProgressMode
-from .runner import SyncResult, run_all_syncs
+from ..sync.rsync import ProgressMode
+from ..sync.runner import SyncResult, run_all_syncs
 
 
 @dataclass(frozen=True)

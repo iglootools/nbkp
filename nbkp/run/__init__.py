@@ -14,7 +14,7 @@ from ..config.epresolution import ResolvedEndpoints
 from ..disks.context import managed_mount
 from ..disks.lifecycle import MountResult, UmountResult
 from ..preflight import PreflightResult
-from ..sync.pipeline import Strictness, PipelineResult, check_and_run
+from .pipeline import Strictness, PipelineResult, check_and_run
 from ..sync.rsync import ProgressMode
 from ..sync.runner import SyncResult
 
@@ -48,7 +48,7 @@ def mount_and_run(
     """Mount volumes, run the check-and-run pipeline, then umount.
 
     Combines :func:`~nbkp.disks.context.managed_mount` with
-    :func:`~nbkp.sync.pipeline.check_and_run` into a single call.
+    :func:`~nbkp.run.pipeline.check_and_run` into a single call.
     Mount observations are automatically forwarded to preflight checks
     so they don't re-probe device/mount state.
     """

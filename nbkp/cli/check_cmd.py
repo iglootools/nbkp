@@ -9,7 +9,7 @@ from typing import Annotated, Optional
 import typer
 
 from ..config.epresolution import NetworkType
-from ..sync.pipeline import Strictness
+from ..run.pipeline import Strictness
 from .app import app
 from .common import (
     OutputFormat,
