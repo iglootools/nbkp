@@ -123,6 +123,7 @@ def seed_demo(
             pub_key,
             network_name=network_name,
             network_alias="backup-server",
+            luks_enabled=luks,
         )
         _end("start storage container", True)
 

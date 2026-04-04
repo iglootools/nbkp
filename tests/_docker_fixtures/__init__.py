@@ -337,7 +337,12 @@ def remote_hardlink_volume() -> RemoteVolume:
 
 @pytest.fixture(scope="session")
 def luks_metadata(docker_ssh_endpoint: SshEndpoint) -> LuksMetadata:
-    """Read LUKS setup metadata from the Docker container."""
+    """Lazily set up LUKS and read metadata from the Docker container.
+
+    Triggers /setup-luks.sh on first use (idempotent), so tests that
+    don't request this fixture skip the ~5-10s cryptsetup overhead.
+    """
+    ssh_exec(docker_ssh_endpoint, "sudo /setup-luks.sh")
     return read_luks_metadata(docker_ssh_endpoint)
 
 
@@ -386,11 +391,75 @@ def remote_encrypted_volume_unencrypted(luks_uuid: str) -> RemoteVolume:
 # ── Cleanup ─────────────────────────────────────────────────────
 
 
+def _build_cleanup_script() -> str:
+    """Build a single bash script that cleans all test artifacts.
+
+    Batched into one SSH round-trip instead of N individual commands,
+    which significantly reduces cleanup time per test.
+    """
+    return f"""\
+#!/bin/bash
+set -e
+
+# Helper: clean btrfs snapshot artifacts at a given base path
+clean_btrfs_base() {{
+    local base="$1"
+    if [ -d "$base/snapshots" ]; then
+        for snap in "$base"/snapshots/*/; do
+            [ -d "$snap" ] || continue
+            btrfs property set "$snap" ro false 2>/dev/null || true
+            btrfs subvolume delete "$snap" 2>/dev/null || true
+        done
+    fi
+    btrfs subvolume delete "$base/staging" 2>/dev/null || true
+    rm -f "$base/latest" 2>/dev/null || true
+    rm -rf "$base/snapshots" 2>/dev/null || true
+}}
+
+# Clean /srv/backups
+rm -rf {REMOTE_BACKUP_PATH}/*
+find {REMOTE_BACKUP_PATH} -name '.nbkp-*' -delete 2>/dev/null || true
+
+# Clean btrfs root and subpaths
+clean_btrfs_base {REMOTE_BTRFS_PATH}
+clean_btrfs_base {REMOTE_BTRFS_PATH}/snapshots
+rm -rf {REMOTE_BTRFS_PATH}/bare 2>/dev/null || true
+find {REMOTE_BTRFS_PATH} -name '.nbkp-*' -delete 2>/dev/null || true
+
+# Clean encrypted volume (if LUKS was set up)
+if [ -f /srv/luks-uuid ]; then
+    LUKS_UUID=$(cat /srv/luks-uuid)
+    if [ -n "$LUKS_UUID" ]; then
+        echo -n '{LUKS_PASSPHRASE}' | sudo cryptsetup open \
+            --type luks "/dev/disk/by-uuid/$LUKS_UUID" \
+            {LUKS_MAPPER_NAME} - 2>/dev/null || true
+        sudo mount -o user_subvol_rm_allowed \
+            /dev/mapper/{LUKS_MAPPER_NAME} {REMOTE_BTRFS_ENCRYPTED_PATH} \
+            2>/dev/null || true
+
+        clean_btrfs_base {REMOTE_BTRFS_ENCRYPTED_PATH}/snapshots
+        btrfs subvolume delete {REMOTE_BTRFS_ENCRYPTED_PATH}/snapshots 2>/dev/null || true
+        rm -rf {REMOTE_BTRFS_ENCRYPTED_PATH}/bare 2>/dev/null || true
+        find {REMOTE_BTRFS_ENCRYPTED_PATH} -name '.nbkp-*' -delete 2>/dev/null || true
+
+        sudo umount {REMOTE_BTRFS_ENCRYPTED_PATH} 2>/dev/null || true
+        sudo cryptsetup close {LUKS_MAPPER_NAME} 2>/dev/null || true
+    fi
+fi
+"""
+
+
+_CLEANUP_SCRIPT = _build_cleanup_script()
+
+
 @pytest.fixture(autouse=True)
 def _cleanup_remote(
     request: pytest.FixtureRequest,
 ) -> Generator[None, None, None]:
-    """Clean up /srv/backups and /srv/btrfs-backups between tests."""
+    """Clean up /srv/backups and /srv/btrfs-backups between tests.
+
+    All cleanup runs in a single SSH round-trip for performance.
+    """
     yield
 
     # Only clean up if docker_ssh_endpoint was used by this test
@@ -398,101 +467,4 @@ def _cleanup_remote(
         return
 
     server: SshEndpoint = request.getfixturevalue("docker_ssh_endpoint")
-
-    def run(cmd: str) -> None:
-        ssh_exec(server, cmd, check=False)
-
-    # Clean /srv/backups (glob * skips dotfiles, so also remove
-    # sentinels)
-    run(f"rm -rf {REMOTE_BACKUP_PATH}/*")
-    run(f"find {REMOTE_BACKUP_PATH} -name '.nbkp-*' -delete")
-
-    # Clean btrfs snapshot artifacts at a given base path:
-    # snapshot subvolumes, staging subvolume, latest symlink.
-    def _clean_btrfs_base(base: str) -> None:
-        snaps = ssh_exec(
-            server,
-            f"ls {base}/snapshots 2>/dev/null || true",
-            check=False,
-        )
-        if snaps.stdout.strip():
-            for snap in snaps.stdout.strip().split("\n"):
-                snap = snap.strip()
-                if snap:
-                    run(
-                        "btrfs property set"
-                        f" {base}/snapshots/{snap}"
-                        " ro false 2>/dev/null || true"
-                    )
-                    run(
-                        "btrfs subvolume delete"
-                        f" {base}/snapshots/{snap}"
-                        " 2>/dev/null || true"
-                    )
-        run(f"btrfs subvolume delete {base}/staging 2>/dev/null || true")
-        run(f"rm -f {base}/latest 2>/dev/null || true")
-        run(f"rm -rf {base}/snapshots 2>/dev/null || true")
-
-    # Clean btrfs root (used by direct integration tests)
-    _clean_btrfs_base(REMOTE_BTRFS_PATH)
-
-    # Clean btrfs subpath used by chain tests — inner snapshot/staging
-    # artifacts live under the endpoint subdir.
-    _clean_btrfs_base(f"{REMOTE_BTRFS_PATH}/snapshots")
-
-    # Clean bare subpath on btrfs (regular dir, used by chain test)
-    run(f"rm -rf {REMOTE_BTRFS_PATH}/bare 2>/dev/null || true")
-
-    run(f"find {REMOTE_BTRFS_PATH} -name '.nbkp-*' -delete")
-
-    # Clean encrypted volume — try to mount for btrfs cleanup, then
-    # umount and close LUKS.  Each step is idempotent (|| true).
-    #
-    # Open LUKS if closed (read UUID from entrypoint-saved file)
-    run(
-        f"LUKS_UUID=$(cat /srv/luks-uuid 2>/dev/null) && "
-        f'[ -n "$LUKS_UUID" ] && '
-        f"echo -n '{LUKS_PASSPHRASE}' | sudo cryptsetup open"
-        f" --type luks /dev/disk/by-uuid/$LUKS_UUID"
-        f" {LUKS_MAPPER_NAME} - 2>/dev/null || true"
-    )
-    # Mount if not already mounted
-    run(
-        f"sudo mount -o user_subvol_rm_allowed"
-        f" /dev/mapper/{LUKS_MAPPER_NAME} {REMOTE_BTRFS_ENCRYPTED_PATH}"
-        f" 2>/dev/null || true"
-    )
-    # Clean btrfs artifacts on the encrypted volume (chain test puts
-    # btrfs subvolumes here).  Same pattern as /srv/btrfs-backups
-    # cleanup above.
-    enc_snap_base = f"{REMOTE_BTRFS_ENCRYPTED_PATH}/snapshots"
-    enc_snaps_result = ssh_exec(
-        server,
-        f"ls {enc_snap_base}/snapshots 2>/dev/null || true",
-        check=False,
-    )
-    if enc_snaps_result.stdout.strip():
-        for snap in enc_snaps_result.stdout.strip().split("\n"):
-            snap = snap.strip()
-            if snap:
-                run(
-                    "btrfs property set"
-                    f" {enc_snap_base}/snapshots/{snap}"
-                    " ro false 2>/dev/null || true"
-                )
-                run(
-                    "btrfs subvolume delete"
-                    f" {enc_snap_base}/snapshots/{snap}"
-                    " 2>/dev/null || true"
-                )
-    run(f"btrfs subvolume delete {enc_snap_base}/staging 2>/dev/null || true")
-    run(f"rm -f {enc_snap_base}/latest 2>/dev/null || true")
-    run(f"rm -rf {enc_snap_base}/snapshots 2>/dev/null || true")
-    run(f"btrfs subvolume delete {enc_snap_base} 2>/dev/null || true")
-    run(f"rm -rf {REMOTE_BTRFS_ENCRYPTED_PATH}/bare 2>/dev/null || true")
-    run(
-        f"find {REMOTE_BTRFS_ENCRYPTED_PATH} -name '.nbkp-*' -delete 2>/dev/null || true"
-    )
-    # Umount and close LUKS
-    run(f"sudo umount {REMOTE_BTRFS_ENCRYPTED_PATH} 2>/dev/null || true")
-    run(f"sudo cryptsetup close {LUKS_MAPPER_NAME} 2>/dev/null || true")
+    ssh_exec(server, _CLEANUP_SCRIPT, check=False)
