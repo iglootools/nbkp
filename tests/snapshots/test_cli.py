@@ -87,7 +87,7 @@ class TestPruneCommand:
     @patch("nbkp.snapshots.cmd_handler.prune.list_snapshots")
     @patch("nbkp.snapshots.cmd_handler.prune.btrfs_prune_snapshots")
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_successful_prune(
         self,
         mock_load: MagicMock,
@@ -115,7 +115,7 @@ class TestPruneCommand:
     @patch("nbkp.snapshots.cmd_handler.prune.list_snapshots")
     @patch("nbkp.snapshots.cmd_handler.prune.btrfs_prune_snapshots")
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_dry_run(
         self,
         mock_load: MagicMock,
@@ -148,7 +148,7 @@ class TestPruneCommand:
     @patch("nbkp.snapshots.cmd_handler.prune.list_snapshots")
     @patch("nbkp.snapshots.cmd_handler.prune.btrfs_prune_snapshots")
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_json_output(
         self,
         mock_load: MagicMock,
@@ -186,7 +186,7 @@ class TestPruneCommand:
         assert len(data[0]["deleted"]) == 1
 
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_no_syncs_to_prune(
         self,
         mock_load: MagicMock,
@@ -216,7 +216,7 @@ class TestShowCommand:
     @patch("nbkp.snapshots.cmd_handler.show.read_latest_symlink")
     @patch("nbkp.snapshots.cmd_handler.show.list_snapshots")
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_successful_show(
         self,
         mock_load: MagicMock,
@@ -238,7 +238,7 @@ class TestShowCommand:
     @patch("nbkp.snapshots.cmd_handler.show.read_latest_symlink")
     @patch("nbkp.snapshots.cmd_handler.show.list_snapshots")
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_json_output(
         self,
         mock_load: MagicMock,
@@ -267,7 +267,7 @@ class TestShowCommand:
         assert data[0]["max_snapshots"] == 3
 
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_no_snapshots_configured(
         self,
         mock_load: MagicMock,
@@ -286,7 +286,7 @@ class TestShowCommand:
     @patch("nbkp.snapshots.cmd_handler.show.read_latest_symlink")
     @patch("nbkp.snapshots.cmd_handler.show.list_snapshots")
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_sync_filter(
         self,
         mock_load: MagicMock,
@@ -309,7 +309,7 @@ class TestShowCommand:
         assert "OK" in result.output
 
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_inactive_sync(
         self,
         mock_load: MagicMock,
@@ -348,7 +348,7 @@ class TestShowCommand:
         side_effect=RuntimeError("connection failed"),
     )
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_runtime_error(
         self,
         mock_load: MagicMock,

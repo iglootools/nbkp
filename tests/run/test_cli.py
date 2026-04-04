@@ -22,7 +22,7 @@ from tests.clihelpers import (
 class TestRunCommand:
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_successful_run(
         self,
         mock_load: MagicMock,
@@ -55,7 +55,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_displays_status_before_results(
         self,
         mock_load: MagicMock,
@@ -87,7 +87,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_failed_run(
         self,
         mock_load: MagicMock,
@@ -116,7 +116,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_dry_run(
         self,
         mock_load: MagicMock,
@@ -149,7 +149,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_json_output(
         self,
         mock_load: MagicMock,
@@ -186,7 +186,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_sync_filter(
         self,
         mock_load: MagicMock,
@@ -220,7 +220,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_progress(
         self,
         mock_load: MagicMock,
@@ -252,7 +252,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_exits_before_syncs_on_status_error(
         self,
         mock_load: MagicMock,
@@ -271,7 +271,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_sentinel_only_proceeds_by_default(
         self,
         mock_load: MagicMock,
@@ -299,7 +299,7 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_sentinel_only_exits_when_strict(
         self,
         mock_load: MagicMock,

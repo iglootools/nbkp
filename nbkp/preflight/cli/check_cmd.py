@@ -9,8 +9,8 @@ from typing import Annotated, Optional
 import typer
 
 from ...disks.cli.helpers import managed_mount
-from ...clihelpers import OutputFormat, load_config_or_exit
-from ...clihelpers.endpoints import resolve_endpoints
+from ...clihelpers import OutputFormat
+from ...config.clihelpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
 from ...run.pipeline import Strictness
 from . import app

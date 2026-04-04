@@ -51,7 +51,7 @@ def _mount_config_for_status() -> Config:
 
 class TestVolumesStatusCommand:
     @patch("nbkp.disks.cli.helpers.check_mount_status")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_json_output(self, mock_load: MagicMock, mock_check: MagicMock) -> None:
         config = _mount_config_for_status()
         mock_load.return_value = config
@@ -85,7 +85,7 @@ class TestVolumesStatusCommand:
         assert data[2]["strategy"] == "not managed"
 
     @patch("nbkp.disks.cli.helpers.check_mount_status")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_human_output(self, mock_load: MagicMock, mock_check: MagicMock) -> None:
         config = _mount_config_for_status()
         mock_load.return_value = config
@@ -101,7 +101,7 @@ class TestVolumesStatusCommand:
         assert "Volume Mount Status" in result.output
 
     @patch("nbkp.disks.cli.helpers.check_mount_status")
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_name_filter(self, mock_load: MagicMock, mock_check: MagicMock) -> None:
         config = _mount_config_for_status()
         mock_load.return_value = config
@@ -129,7 +129,7 @@ class TestVolumesStatusCommand:
         assert len(data) == 1
         assert data[0]["volume"] == "encrypted-drive"
 
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_no_mount_config(self, mock_load: MagicMock) -> None:
         config = Config(
             ssh_endpoints={},

@@ -1,16 +1,30 @@
-"""Endpoint resolution helpers for CLI commands."""
+"""Config and endpoint resolution helpers for CLI commands."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import typer
 
-from ..config import Config
-from ..config.epresolution import (
+from . import Config, ConfigError, load_config
+from .epresolution import (
     EndpointFilter,
     NetworkType,
     ResolvedEndpoints,
 )
+from .output import print_config_error
 from ..remote.resolution import resolve_all_endpoints
+
+
+def load_config_or_exit(
+    config_path: str | Path | None,
+) -> Config:
+    """Load config or exit with code 2 on error."""
+    try:
+        return load_config(config_path)
+    except ConfigError as e:
+        print_config_error(e)
+        raise typer.Exit(2)
 
 
 def build_endpoint_filter(

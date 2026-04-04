@@ -12,7 +12,7 @@ from tests.clihelpers import (
 
 
 class TestShCommand:
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_generates_script(self, mock_load: MagicMock) -> None:
         config = sample_config()
         mock_load.return_value = config
@@ -23,7 +23,7 @@ class TestShCommand:
         assert "set -euo pipefail" in result.output
         assert "sync_photos_to_nas()" in result.output
 
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_config_path_in_header(self, mock_load: MagicMock) -> None:
         config = sample_config()
         mock_load.return_value = config
@@ -32,7 +32,7 @@ class TestShCommand:
         assert result.exit_code == 0
         assert "# Config: /fake.yaml" in result.output
 
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_output_file(self, mock_load: MagicMock, tmp_path: object) -> None:
         import pathlib
         import stat
@@ -62,7 +62,7 @@ class TestShCommand:
         )
         assert result.exit_code == 2
 
-    @patch("nbkp.clihelpers.config.load_config")
+    @patch("nbkp.config.clihelpers.load_config")
     def test_relative_with_output_file(
         self,
         mock_load: MagicMock,
@@ -92,7 +92,7 @@ class TestShCommand:
         assert "NBKP_SCRIPT_DIR" in content
 
     @patch(
-        "nbkp.clihelpers.config.load_config",
+        "nbkp.config.clihelpers.load_config",
         side_effect=__import__("nbkp.config", fromlist=["ConfigError"]).ConfigError(
             "bad config",
             reason=__import__(

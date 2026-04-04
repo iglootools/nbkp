@@ -8,7 +8,8 @@ from typing import Annotated, Optional
 
 import typer
 
-from ...clihelpers import OutputFormat, load_config_or_exit
+from ...clihelpers import OutputFormat
+from ..clihelpers import load_config_or_exit
 from ...remote.resolution import resolve_all_endpoints
 from ..output import print_human_config
 from . import app

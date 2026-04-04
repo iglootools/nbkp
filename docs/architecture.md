@@ -34,8 +34,6 @@ graph TD
     cli --> run
     cli --> sh
     cli --> snapshots
-    clihelpers --> config
-    clihelpers --> remote
     config --> clihelpers
     config --> remote
     credentials --> clihelpers
@@ -67,7 +65,6 @@ graph TD
     run --> ordering
     run --> preflight
     run --> sync
-    sh --> clihelpers
     sh --> config
     sh --> fsprotocol
     sh --> ordering
