@@ -23,7 +23,7 @@ from nbkp.clihelpers import OutputFormat
 from nbkp.sync import SyncResult
 from nbkp.snapshots.common import create_snapshot_timestamp
 from nbkp.preflight.checks import check_all_syncs, check_sync
-from nbkp.preflight.queries import (
+from nbkp.remote.queries import (
     _check_command_available,
     _check_rsync_version,
     parse_rsync_version,

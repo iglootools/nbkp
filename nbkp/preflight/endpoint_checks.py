@@ -26,7 +26,7 @@ from ..fsprotocol import (
     STAGING_DIR,
     Snapshot,
 )
-from .queries import (
+from ..remote.queries import (
     _check_directory_writable,
     _check_endpoint_sentinel,
     _check_symlink_exists,

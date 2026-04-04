@@ -31,7 +31,7 @@ from ..disks.mount_checks import (
     probe_mount_tools as _probe_mount_tools,
 )
 from ..remote import run_remote_command
-from .queries import (
+from ..remote.queries import (
     _check_command_available,
     _check_rsync_version,
 )

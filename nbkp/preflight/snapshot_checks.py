@@ -8,7 +8,7 @@ from __future__ import annotations
 from ..config import Volume
 from ..config.epresolution import ResolvedEndpoints
 from ..remote.dispatch import run_on_volume
-from .queries import (
+from ..remote.queries import (
     resolve_endpoint,
 )
 
