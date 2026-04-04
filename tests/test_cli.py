@@ -460,34 +460,34 @@ def _config_with_locations() -> Config:
 
 
 class TestLocationValidation:
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
     @patch("nbkp.clihelpers.config.load_config")
     def test_unknown_location_rejected(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
         mock_load.return_value = _config_with_locations()
         result = runner.invoke(
-            app, ["check", "--config", "/f.yaml", "--location", "office"]
+            app, ["preflight", "check", "--config", "/f.yaml", "--location", "office"]
         )
         assert result.exit_code == 2
         assert "unknown location 'office'" in result.output
         assert "home" in result.output
         assert "travel" in result.output
 
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
     @patch("nbkp.clihelpers.config.load_config")
     def test_unknown_exclude_location_rejected(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
         mock_load.return_value = _config_with_locations()
         result = runner.invoke(
-            app, ["check", "--config", "/f.yaml", "--exclude-location", "office"]
+            app, ["preflight", "check", "--config", "/f.yaml", "--exclude-location", "office"]
         )
         assert result.exit_code == 2
         assert "unknown location 'office'" in result.output
         assert "--exclude-location" in result.output
 
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
     @patch("nbkp.clihelpers.config.load_config")
     def test_known_location_accepted(
         self, mock_load: MagicMock, mock_checks: MagicMock
@@ -514,7 +514,7 @@ class TestLocationValidation:
         }
         mock_checks.return_value = _preflight(vol_s, sync_s)
         result = runner.invoke(
-            app, ["check", "--config", "/f.yaml", "--location", "home"]
+            app, ["preflight", "check", "--config", "/f.yaml", "--location", "home"]
         )
         assert result.exit_code == 0
 
@@ -522,14 +522,14 @@ class TestLocationValidation:
     def test_location_on_config_without_locations(self, mock_load: MagicMock) -> None:
         mock_load.return_value = _sample_config()
         result = runner.invoke(
-            app, ["check", "--config", "/f.yaml", "--location", "home"]
+            app, ["preflight", "check", "--config", "/f.yaml", "--location", "home"]
         )
         assert result.exit_code == 2
         assert "no locations are defined" in result.output
 
 
 class TestCheckCommand:
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
     @patch("nbkp.clihelpers.config.load_config")
     def test_human_output_inactive(
         self, mock_load: MagicMock, mock_checks: MagicMock
@@ -540,14 +540,14 @@ class TestCheckCommand:
         sync_s = _sample_sync_statuses(config, vol_s)
         mock_checks.return_value = _preflight(vol_s, sync_s)
 
-        result = runner.invoke(app, ["check", "--config", "/fake.yaml"])
+        result = runner.invoke(app, ["preflight", "check", "--config", "/fake.yaml"])
         # Unreachable is not an error in non-strict mode
         assert result.exit_code == 0
         # Rich truncates heavily in narrow test terminals, so only
         # check that the panel rendered (contains the title).
         assert "Preflight" in result.output
 
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
     @patch("nbkp.clihelpers.config.load_config")
     def test_human_output_all_active(
         self, mock_load: MagicMock, mock_checks: MagicMock
@@ -558,10 +558,10 @@ class TestCheckCommand:
         sync_s = _sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = _preflight(vol_s, sync_s)
 
-        result = runner.invoke(app, ["check", "--config", "/fake.yaml"])
+        result = runner.invoke(app, ["preflight", "check", "--config", "/fake.yaml"])
         assert result.exit_code == 0
 
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
     @patch("nbkp.clihelpers.config.load_config")
     def test_json_output_inactive(
         self, mock_load: MagicMock, mock_checks: MagicMock
@@ -575,6 +575,7 @@ class TestCheckCommand:
         result = runner.invoke(
             app,
             [
+                "preflight",
                 "check",
                 "--config",
                 "/fake.yaml",
@@ -588,7 +589,7 @@ class TestCheckCommand:
         assert "volumes" in data
         assert "syncs" in data
 
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
     @patch("nbkp.clihelpers.config.load_config")
     def test_json_output_all_active(
         self, mock_load: MagicMock, mock_checks: MagicMock
@@ -602,6 +603,7 @@ class TestCheckCommand:
         result = runner.invoke(
             app,
             [
+                "preflight",
                 "check",
                 "--config",
                 "/fake.yaml",
@@ -614,7 +616,7 @@ class TestCheckCommand:
         assert "volumes" in data
         assert "syncs" in data
 
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
     @patch("nbkp.clihelpers.config.load_config")
     def test_sentinel_only_exit_0_by_default(
         self, mock_load: MagicMock, mock_checks: MagicMock
@@ -625,10 +627,10 @@ class TestCheckCommand:
         sync_s = _sample_sentinel_only_sync_statuses(config, vol_s)
         mock_checks.return_value = _preflight(vol_s, sync_s)
 
-        result = runner.invoke(app, ["check", "--config", "/fake.yaml"])
+        result = runner.invoke(app, ["preflight", "check", "--config", "/fake.yaml"])
         assert result.exit_code == 0
 
-    @patch("nbkp.cli.common.check_all_syncs")
+    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
     @patch("nbkp.clihelpers.config.load_config")
     def test_sentinel_only_exit_1_when_strict(
         self, mock_load: MagicMock, mock_checks: MagicMock
@@ -642,6 +644,7 @@ class TestCheckCommand:
         result = runner.invoke(
             app,
             [
+                "preflight",
                 "check",
                 "--config",
                 "/fake.yaml",
@@ -1050,7 +1053,7 @@ class TestPruneCommand:
             "/dst/snapshots/s3",
         ]
 
-        result = runner.invoke(app, ["prune", "--config", "/fake.yaml"])
+        result = runner.invoke(app, ["snapshots", "prune", "--config", "/fake.yaml"])
         assert result.exit_code == 0
         assert "OK" in result.output
         mock_prune.assert_called_once()
@@ -1079,7 +1082,7 @@ class TestPruneCommand:
             "/dst/snapshots/s3",
         ]
 
-        result = runner.invoke(app, ["prune", "--config", "/fake.yaml", "--dry-run"])
+        result = runner.invoke(app, ["snapshots", "prune", "--config", "/fake.yaml", "--dry-run"])
         assert result.exit_code == 0
         assert "dry run" in result.output
         mock_prune.assert_called_once()
@@ -1112,6 +1115,7 @@ class TestPruneCommand:
         result = runner.invoke(
             app,
             [
+                "snapshots",
                 "prune",
                 "--config",
                 "/fake.yaml",
@@ -1138,7 +1142,7 @@ class TestPruneCommand:
         sync_s = _sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = _preflight(vol_s, sync_s)
 
-        result = runner.invoke(app, ["prune", "--config", "/fake.yaml"])
+        result = runner.invoke(app, ["snapshots", "prune", "--config", "/fake.yaml"])
         assert result.exit_code == 0
 
 
@@ -1153,7 +1157,7 @@ class TestConfigError:
         ),
     )
     def test_check_config_error(self, mock_load: MagicMock) -> None:
-        result = runner.invoke(app, ["check", "--config", "/bad.yaml"])
+        result = runner.invoke(app, ["preflight", "check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
 
     @patch(
@@ -1179,7 +1183,7 @@ class TestConfigError:
             reason=ConfigErrorReason.FILE_NOT_FOUND,
         )
         with patch("nbkp.clihelpers.config.load_config", side_effect=err):
-            result = runner.invoke(app, ["check", "--config", "/bad.yaml"])
+            result = runner.invoke(app, ["preflight", "check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
         out = _strip_panel(result.output)
         assert "Config file not found: /bad.yaml" in out
@@ -1196,7 +1200,7 @@ class TestConfigError:
             err.__cause__ = ve
 
         with patch("nbkp.clihelpers.config.load_config", side_effect=err):
-            result = runner.invoke(app, ["check", "--config", "/bad.yaml"])
+            result = runner.invoke(app, ["preflight", "check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
         out = _strip_panel(result.output)
         assert "volumes → v" in out
@@ -1216,7 +1220,7 @@ class TestConfigError:
             err.__cause__ = ye
 
         with patch("nbkp.clihelpers.config.load_config", side_effect=err):
-            result = runner.invoke(app, ["check", "--config", "/bad.yaml"])
+            result = runner.invoke(app, ["preflight", "check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
         out = _strip_panel(result.output)
         assert "Invalid YAML" in out
@@ -1245,7 +1249,7 @@ class TestConfigError:
             err.__cause__ = ve
 
         with patch("nbkp.clihelpers.config.load_config", side_effect=err):
-            result = runner.invoke(app, ["check", "--config", "/bad.yaml"])
+            result = runner.invoke(app, ["preflight", "check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
         out = _strip_panel(result.output)
         assert "unknown ssh-endpoint 'missing'" in out
