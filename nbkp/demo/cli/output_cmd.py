@@ -10,38 +10,38 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from ..config import (
+from ...config import (
     Config,
     ConfigError,
     ConfigErrorReason,
 )
-from ..ordering.output import (
+from ...ordering.output import (
     build_mermaid_graph,
     print_mermaid_ascii_graph,
     print_rich_tree_graph,
 )
-from ..config.output import print_config_error, print_human_config
-from ..preflight.output import print_human_check, print_human_troubleshoot
-from ..remote.resolution import resolve_all_endpoints
-from ..snapshots.output import print_human_prune_results
-from ..sync.output import (
+from ...config.output import print_config_error, print_human_config
+from ...preflight.output import print_human_check, print_human_troubleshoot
+from ...remote.resolution import resolve_all_endpoints
+from ...snapshots.output import print_human_prune_results
+from ...sync.output import (
     print_human_results,
     print_run_preview,
 )
-from ..config.testkit import config_show_config
-from ..preflight.testkit import (
+from ...config.testkit import config_show_config
+from ...preflight.testkit import (
     check_config,
     check_data,
     troubleshoot_config,
     troubleshoot_data,
 )
-from ..sync.testkit.runner import (
+from ...sync.testkit.runner import (
     dry_run_results,
     prune_dry_run_results,
     prune_results,
     run_results,
 )
-from .app import app, console as _console
+from . import app, console as _console
 
 
 def _capture_console() -> tuple[Console, StringIO]:

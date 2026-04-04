@@ -25,18 +25,18 @@ from rich.progress import (
 from rich.syntax import Syntax
 from rich.text import Text
 
-from ..config import (
+from ...config import (
     CredentialProvider,
     RsyncOptions,
 )
-from ..remote.resolution import resolve_all_endpoints
-from ..disks.lifecycle import mount_volumes, umount_volumes
-from ..disks.strategy import MountStrategy
+from ...remote.resolution import resolve_all_endpoints
+from ...disks.lifecycle import mount_volumes, umount_volumes
+from ...disks.strategy import MountStrategy
 
 # Docker-dependent imports are deferred to seed --docker.
 # They require the 'docker' extra: pipx install nbkp[docker]
 try:
-    from ..remote.testkit.docker import (
+    from ...remote.testkit.docker import (
         BASTION_CONTAINER_NAME,
         LUKS_PASSPHRASE,
         STORAGE_CONTAINER_NAME,
@@ -56,13 +56,13 @@ try:
     _HAS_DOCKER = True
 except ImportError:
     _HAS_DOCKER = False
-from ..sync.testkit.seed import (
+from ...sync.testkit.seed import (
     build_chain_config,
     build_local_chain_config,
     create_seed_sentinels,
     seed_volume,
 )
-from .app import app, console as _console
+from . import app, console as _console
 
 
 def _is_dev_environment() -> bool:
