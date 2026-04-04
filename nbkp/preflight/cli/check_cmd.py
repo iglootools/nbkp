@@ -8,7 +8,7 @@ from typing import Annotated, Optional
 
 import typer
 
-from ...cli.common import managed_mount
+from ...disks.cli.helpers import managed_mount
 from ...clihelpers import OutputFormat, load_config_or_exit
 from ...clihelpers.endpoints import resolve_endpoints
 from ...config.epresolution import NetworkType

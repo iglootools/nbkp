@@ -14,8 +14,8 @@ from ...config.epresolution import NetworkType
 from ..output import print_human_prune_results
 from ..cmd_handler import prune_all_syncs
 
-# Transitional imports — these will move out of cli.common later.
-from ...cli.common import check_all_with_progress, managed_mount
+from ...disks.cli.helpers import managed_mount
+from ...preflight.cli.helpers import check_all_with_progress
 
 from . import app
 

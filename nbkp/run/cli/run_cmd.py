@@ -21,8 +21,8 @@ from ...sync import ProgressMode, SyncResult
 from ...sync.output import build_human_results_sections
 from ..pipeline import Strictness, check_and_run
 
-# Transitional imports — these will move out of cli.common later.
-from ...cli.common import managed_mount, _check_total
+from ...disks.cli.helpers import managed_mount
+from ...preflight.cli.helpers import _check_total
 
 
 def run(

@@ -19,7 +19,7 @@ from nbkp.config import (
 )
 from nbkp.config.epresolution import ResolvedEndpoint, ResolvedEndpoints
 from nbkp.remote.resolution import resolve_proxy_chain
-from nbkp.cli.common import OutputFormat
+from nbkp.clihelpers import OutputFormat
 from nbkp.sync import SyncResult
 from nbkp.snapshots.common import create_snapshot_timestamp
 from nbkp.preflight.checks import check_all_syncs, check_sync
