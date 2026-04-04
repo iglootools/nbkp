@@ -5,10 +5,10 @@ from __future__ import annotations
 from ..config import Config
 from ..config.epresolution import ResolvedEndpoints
 from ..preflight import SyncStatus
-from .runner import PruneResult
-from .snapshots.btrfs import prune_snapshots as btrfs_prune_snapshots
-from .snapshots.common import list_snapshots
-from .snapshots.hardlinks import prune_snapshots as hl_prune_snapshots
+from .models import PruneResult
+from .btrfs import prune_snapshots as btrfs_prune_snapshots
+from .common import list_snapshots
+from .hardlinks import prune_snapshots as hl_prune_snapshots
 
 
 def _skip_reason(

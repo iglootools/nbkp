@@ -9,17 +9,17 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from ...config import (
+from ..config import (
     Config,
     LocalVolume,
     RemoteVolume,
     SyncConfig,
     Volume,
 )
-from ...config.epresolution import ResolvedEndpoints
-from ...fsprotocol import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR, Snapshot
-from ...remote import run_remote_command
-from ...remote.dispatch import run_on_volume
+from ..config.epresolution import ResolvedEndpoints
+from ..fsprotocol import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR, Snapshot
+from ..remote import run_remote_command
+from ..remote.dispatch import run_on_volume
 
 
 def create_snapshot_timestamp(

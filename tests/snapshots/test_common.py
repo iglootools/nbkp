@@ -1,4 +1,4 @@
-"""Tests for nbkp.sync.snapshots.common (shared snapshot helpers)."""
+"""Tests for nbkp.snapshots.common (shared snapshot helpers)."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from nbkp.config import (
 )
 from nbkp.config.epresolution import ResolvedEndpoint
 from nbkp.remote.resolution import resolve_all_endpoints
-from nbkp.sync.snapshots.common import (
+from nbkp.snapshots.common import (
     create_snapshot_timestamp,
     get_latest_snapshot,
     list_snapshots,
@@ -405,7 +405,7 @@ class TestReadLatestSymlink:
         result = read_latest_symlink(sync, config)
         assert result is None
 
-    @patch("nbkp.sync.snapshots.common.run_remote_command")
+    @patch("nbkp.snapshots.common.run_remote_command")
     def test_remote_exists(self, mock_remote: MagicMock) -> None:
         mock_remote.return_value = MagicMock(
             returncode=0,
@@ -416,7 +416,7 @@ class TestReadLatestSymlink:
         result = read_latest_symlink(sync, config, resolved_endpoints=re)
         assert result == _TS_REMOTE
 
-    @patch("nbkp.sync.snapshots.common.run_remote_command")
+    @patch("nbkp.snapshots.common.run_remote_command")
     def test_remote_missing(self, mock_remote: MagicMock) -> None:
         mock_remote.return_value = MagicMock(returncode=1, stdout="")
         sync, config, re = _hl_remote_config()
@@ -451,7 +451,7 @@ class TestReadLatestSymlink:
         result = read_latest_symlink(sync, config)
         assert result is None
 
-    @patch("nbkp.sync.snapshots.common.run_remote_command")
+    @patch("nbkp.snapshots.common.run_remote_command")
     def test_remote_devnull(self, mock_remote: MagicMock) -> None:
         """Remote latest -> /dev/null returns None."""
         mock_remote.return_value = MagicMock(

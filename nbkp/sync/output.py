@@ -19,7 +19,8 @@ from ..config.output import endpoint_path
 from ..fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
 from ..preflight.status import SyncStatus
 from .rsync import build_rsync_command
-from .runner import PruneResult, SyncOutcome, SyncResult
+from ..snapshots.models import PruneResult
+from .runner import SyncOutcome, SyncResult
 
 
 # ---------------------------------------------------------------------------

@@ -14,12 +14,12 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.fsprotocol import Snapshot
-from nbkp.sync.snapshots.common import (
+from nbkp.snapshots.common import (
     create_snapshot_timestamp,
     list_snapshots,
     update_latest_symlink,
 )
-from nbkp.sync.snapshots.hardlinks import (
+from nbkp.snapshots.hardlinks import (
     cleanup_orphaned_snapshots,
     create_snapshot_dir,
     delete_snapshot,

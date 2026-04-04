@@ -1,14 +1,14 @@
 """Snapshot backends: shared helpers, btrfs, and hard-link snapshots.
 
 Re-exports all public names so that external code can import from
-``nbkp.sync.snapshots`` without knowing which submodule provides
+``nbkp.snapshots`` without knowing which submodule provides
 a given symbol.
 """
 
 from __future__ import annotations
 
 # ── conventions ──────────────────────────────────────────────
-from ...fsprotocol import (
+from ..fsprotocol import (
     DEVNULL_TARGET as DEVNULL_TARGET,
     LATEST_LINK as LATEST_LINK,
     SNAPSHOTS_DIR as SNAPSHOTS_DIR,

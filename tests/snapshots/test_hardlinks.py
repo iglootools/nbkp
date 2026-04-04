@@ -1,4 +1,4 @@
-"""Tests for nbkp.sync.snapshots.hardlinks."""
+"""Tests for nbkp.snapshots.hardlinks."""
 
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ from nbkp.config import (
 )
 from nbkp.config.epresolution import ResolvedEndpoint
 from nbkp.fsprotocol import Snapshot
-from nbkp.sync.snapshots.common import create_snapshot_timestamp
-from nbkp.sync.snapshots.hardlinks import (
+from nbkp.snapshots.common import create_snapshot_timestamp
+from nbkp.snapshots.hardlinks import (
     cleanup_orphaned_snapshots,
     create_snapshot_dir,
     delete_snapshot,
@@ -120,7 +120,7 @@ class TestCreateSnapshotDir:
 
 
 class TestCleanupOrphanedSnapshots:
-    @patch("nbkp.sync.snapshots.hardlinks.list_snapshots")
+    @patch("nbkp.snapshots.hardlinks.list_snapshots")
     def test_deletes_orphans(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
@@ -160,7 +160,7 @@ class TestCleanupOrphanedSnapshots:
         assert "2024-01-02T00:00:00.000Z" in deleted[0]
         assert not (snaps / "2024-01-02T00:00:00.000Z").exists()
 
-    @patch("nbkp.sync.snapshots.hardlinks.list_snapshots")
+    @patch("nbkp.snapshots.hardlinks.list_snapshots")
     def test_no_orphans(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
@@ -192,7 +192,7 @@ class TestCleanupOrphanedSnapshots:
         deleted = cleanup_orphaned_snapshots(sync, config)
         assert deleted == []
 
-    @patch("nbkp.sync.snapshots.hardlinks.list_snapshots")
+    @patch("nbkp.snapshots.hardlinks.list_snapshots")
     def test_no_latest_symlink(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
@@ -248,7 +248,7 @@ _S3 = "2024-01-03T00:00:00.000Z"
 
 
 class TestPruneSnapshots:
-    @patch("nbkp.sync.snapshots.hardlinks.list_snapshots")
+    @patch("nbkp.snapshots.hardlinks.list_snapshots")
     def test_prune_excess(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
@@ -290,7 +290,7 @@ class TestPruneSnapshots:
         assert len(deleted) == 1
         assert _S1 in deleted[0]
 
-    @patch("nbkp.sync.snapshots.hardlinks.list_snapshots")
+    @patch("nbkp.snapshots.hardlinks.list_snapshots")
     def test_never_prunes_latest(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
@@ -332,7 +332,7 @@ class TestPruneSnapshots:
         assert _S2 in deleted[0]
         assert (snaps / _S1).exists()
 
-    @patch("nbkp.sync.snapshots.hardlinks.list_snapshots")
+    @patch("nbkp.snapshots.hardlinks.list_snapshots")
     def test_dry_run(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
@@ -373,7 +373,7 @@ class TestPruneSnapshots:
         assert (snaps / _S1).exists()
         assert (snaps / _S2).exists()
 
-    @patch("nbkp.sync.snapshots.hardlinks.list_snapshots")
+    @patch("nbkp.snapshots.hardlinks.list_snapshots")
     def test_no_excess(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
