@@ -12,7 +12,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from ...clihelpers import OutputFormat, load_config_or_exit
-from ...preflight.progress import CheckProgressBar
+from ...clihelpers import StepProgressBar
 from ...clihelpers.endpoints import resolve_endpoints
 from ...config.epresolution import NetworkType
 from ...ordering.output import build_rich_tree_sections
@@ -128,7 +128,7 @@ def run(
         # -- Check progress bar ----------------------------------------
         total = _check_total(cfg, sync) if output_format is OutputFormat.HUMAN else 0
         check_bar = (
-            CheckProgressBar(total)
+            StepProgressBar(total)
             if output_format is OutputFormat.HUMAN and total > 0
             else None
         )

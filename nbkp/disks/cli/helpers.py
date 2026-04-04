@@ -11,7 +11,7 @@ import typer
 from rich.console import Console
 
 from ...clihelpers import OutputFormat
-from ...preflight.progress import CheckProgressBar
+from ...clihelpers import StepProgressBar
 from .progress import DisksProgressBar
 from ...config import Config, LocalVolume, RemoteVolume
 from ...config.epresolution import ResolvedEndpoints
@@ -61,7 +61,7 @@ def _error_status(detail: str | None) -> _ErrorStatus:
 def _probe_volume_status(
     vol: LocalVolume | RemoteVolume,
     resolved: ResolvedEndpoints,
-    bar: CheckProgressBar | None,
+    bar: StepProgressBar | None,
 ) -> tuple[str, MountStatusData]:
     """Probe a single volume's mount status with progress bar updates."""
     assert vol.mount is not None
@@ -108,7 +108,7 @@ def _probe_and_show_status(
     ]
 
     bar = (
-        CheckProgressBar(len(managed))
+        StepProgressBar(len(managed))
         if output_format is OutputFormat.HUMAN and managed
         else None
     )

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ...clihelpers import OutputFormat
-from ..progress import CheckProgressBar
+from ...clihelpers import StepProgressBar
 from ...config import Config, LocalVolume
 from ...config.epresolution import ResolvedEndpoints
 from ...disks.observation import MountObservation
@@ -66,7 +66,7 @@ def check_all_with_progress(
             mount_observations=mount_observations,
         )
 
-    bar = CheckProgressBar(total)
+    bar = StepProgressBar(total)
     try:
         return check_all_syncs(
             cfg,

@@ -1,4 +1,4 @@
-"""Rich progress bar for preflight checks."""
+"""Generic Rich progress bar for step-by-step operations."""
 
 from __future__ import annotations
 
@@ -12,17 +12,17 @@ from rich.progress import (
 )
 
 
-class CheckProgressBar:
-    """Rich progress bar for preflight checks.
+class StepProgressBar:
+    """Rich progress bar for step-by-step check operations.
 
-    Shows a spinner, description (current check label), visual bar,
-    and M/N counter.  Result lines (pass/fail) are printed above the bar
-    as each check completes.
+    Shows a spinner, description (current step label), visual bar,
+    and M/N counter.  Result lines are printed above the bar
+    as each step completes.
 
     Parameters
     ----------
     total:
-        Number of checks to perform.
+        Number of steps to perform.
     """
 
     def __init__(self, total: int) -> None:
@@ -31,7 +31,7 @@ class CheckProgressBar:
         self._task_id: TaskID | None = None
 
     def on_start(self, label: str) -> None:
-        """Call before each check begins."""
+        """Call before each step begins."""
         if self._progress is None:
             self._progress = Progress(
                 SpinnerColumn(),
@@ -54,7 +54,7 @@ class CheckProgressBar:
         active: bool,
         error_summary: str | None = None,
     ) -> None:
-        """Call after each check completes."""
+        """Call after each step completes."""
         if self._progress is not None:
             assert self._task_id is not None
             icon = "[green]\u2713[/green]" if active else "[red]\u2717[/red]"

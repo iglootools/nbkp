@@ -8,7 +8,7 @@ from typing import Annotated, Optional
 import typer
 
 from ...clihelpers import OutputFormat, load_config_or_exit
-from ...preflight.progress import CheckProgressBar
+from ...clihelpers import StepProgressBar
 from ...clihelpers.endpoints import resolve_endpoints
 from ...config.epresolution import NetworkType
 from . import app
@@ -68,7 +68,7 @@ def volumes_status(
     ]
 
     bar = (
-        CheckProgressBar(len(managed))
+        StepProgressBar(len(managed))
         if output == OutputFormat.HUMAN and managed
         else None
     )
