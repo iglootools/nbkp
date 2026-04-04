@@ -38,6 +38,7 @@ graph TD
     config --> remote
     credentials --> clihelpers
     credentials --> config
+    demo --> clihelpers
     demo --> config
     demo --> disks
     demo --> ordering
