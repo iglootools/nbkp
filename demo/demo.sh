@@ -50,7 +50,7 @@ p "# Show parsed configuration"
 pe "nbkp config show --config $CFG"
 pause 3
 
-p "# Volume and sync health checks"
+p "# Disk and sync health checks"
 pe "nbkp preflight check --config $CFG"
 pause 3
 
@@ -74,11 +74,11 @@ p "# Generate standalone bash script"
 pe "nbkp sh --config $CFG -o $SH"
 pause
 
-p "# Mount the volumes (the standalone bash script does not handle volume management)"
+p "# Mount the disks (the standalone bash script does not handle disk management)"
 pe "nbkp disks mount --config $CFG"
 pause
 
-p "# Show the status of the volumes"
+p "# Show the status of the disks"
 pe "nbkp disks status --config $CFG"
 pause 3
 
@@ -89,10 +89,10 @@ pause 3
 pe "$SH"
 pause 3
 
-p "# Unmount the volumes"
+p "# Unmount the disks"
 pe "nbkp disks umount --config $CFG"
 pause
 
-p "# The volume is not unmounted"
+p "# The disk is unmounted"
 pe "nbkp disks status --config $CFG"
 pause 3

@@ -265,7 +265,7 @@ def _print_commands(
         # Show configuration as JSON
         {pfx}nbkp config show --config $CFG --output json
 
-        # Volume and sync health checks
+        # Disk and sync health checks
         {pfx}nbkp preflight check --config $CFG
 
         # Preview what rsync would do without changes
@@ -280,10 +280,10 @@ def _print_commands(
         # Prune old btrfs snapshots
         {pfx}nbkp snapshots prune --config $CFG
 
-        # Mount the volumes (the standalone bash script does not handle volume management)
+        # Mount the disks (the standalone bash script does not handle disk management)
         {pfx}nbkp disks mount --config $CFG
 
-        # Show the status of the volumes
+        # Show the status of the disks
         {pfx}nbkp disks status --config $CFG
 
         # Generate standalone bash script to stdout
@@ -301,7 +301,7 @@ def _print_commands(
           && $SH --dry-run \\
           && $SH
 
-        # Unmount the volumes
+        # Unmount the disks
         nbkp disks umount --config $CFG""")
         + docker_teardown
     )
