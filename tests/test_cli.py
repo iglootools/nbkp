@@ -481,7 +481,15 @@ class TestLocationValidation:
     ) -> None:
         mock_load.return_value = _config_with_locations()
         result = runner.invoke(
-            app, ["preflight", "check", "--config", "/f.yaml", "--exclude-location", "office"]
+            app,
+            [
+                "preflight",
+                "check",
+                "--config",
+                "/f.yaml",
+                "--exclude-location",
+                "office",
+            ],
         )
         assert result.exit_code == 2
         assert "unknown location 'office'" in result.output
@@ -1082,7 +1090,9 @@ class TestPruneCommand:
             "/dst/snapshots/s3",
         ]
 
-        result = runner.invoke(app, ["snapshots", "prune", "--config", "/fake.yaml", "--dry-run"])
+        result = runner.invoke(
+            app, ["snapshots", "prune", "--config", "/fake.yaml", "--dry-run"]
+        )
         assert result.exit_code == 0
         assert "dry run" in result.output
         mock_prune.assert_called_once()

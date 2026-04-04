@@ -41,6 +41,7 @@ from ..clihelpers.progress import (
 
 # ── Disks-specific helpers (will move to disks/cli/helpers.py) ──────
 
+
 def _format_mount_result(
     slug: str, success: bool, detail: str | None, _warning: str | None
 ) -> str:
@@ -167,6 +168,7 @@ def managed_mount(
 
 
 # ── Preflight-specific helpers (will move to preflight/cli/helpers.py) ──
+
 
 def _check_total(cfg: Config, only_syncs: list[str] | None) -> int:
     """Count progress steps: SSH endpoints + volumes + sync endpoints.

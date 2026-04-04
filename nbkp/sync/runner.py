@@ -56,7 +56,6 @@ class SyncResult(BaseModel):
         return self
 
 
-
 def _collect_all_errors(status: SyncStatus) -> str:
     """Collect error messages from sync-level errors into a single string.
 
