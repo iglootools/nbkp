@@ -12,9 +12,9 @@ from ....config import Config
 from ....config.epresolution import ResolvedEndpoints
 from ....credentials import build_passphrase_fn
 from ...context import managed_mount as _disks_managed_mount
-from ...lifecycle import MountResult, UmountResult, mount_volume_count
+from ...lifecycle import MountResult, UmountResult, mount_count
 from ...observation import MountObservation
-from ...output import build_mount_status_table, volume_display_name
+from ...output import build_mount_status_table, display_name
 from ...strategy import MountStrategy
 from .progress import DisksProgressBar
 
@@ -75,9 +75,9 @@ def managed_mount(
     )
 
     use_progress = output_format is OutputFormat.HUMAN
-    total = mount_volume_count(cfg)
+    total = mount_count(cfg)
     display_names = {
-        slug: volume_display_name(vol)
+        slug: display_name(vol)
         for slug, vol in cfg.volumes.items()
         if vol.mount is not None
     }

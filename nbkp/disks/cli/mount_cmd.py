@@ -12,9 +12,9 @@ from .helpers import DisksProgressBar
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
 from ...credentials import build_passphrase_fn
-from ..lifecycle import MountResult, mount_volume_count, mount_volumes
+from ..lifecycle import MountResult, mount_count, mount_volumes
 from ..observation import build_mount_observations
-from ..output import volume_display_name
+from ..output import display_name
 from . import app
 from .helpers import (
     _error_status,
@@ -25,7 +25,7 @@ from .helpers import (
 
 
 @app.command("mount")
-def volumes_mount(
+def mount(
     config: Annotated[
         Optional[Path],
         typer.Option(
@@ -76,11 +76,11 @@ def volumes_mount(
 
     use_progress = output == OutputFormat.HUMAN
     display_names = {
-        slug: volume_display_name(vol)
+        slug: display_name(vol)
         for slug, vol in cfg.volumes.items()
         if vol.mount is not None
     }
-    total = mount_volume_count(cfg, name)
+    total = mount_count(cfg, name)
     mount_bar = (
         DisksProgressBar(total, "Mounting", _format_mount_result)
         if use_progress

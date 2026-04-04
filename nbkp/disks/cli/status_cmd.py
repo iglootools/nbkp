@@ -16,7 +16,7 @@ from .helpers import _probe_volume_status, _show_status_table, _unmanaged_status
 
 
 @app.command("status")
-def volumes_status(
+def status(
     config: Annotated[
         Optional[Path],
         typer.Option(

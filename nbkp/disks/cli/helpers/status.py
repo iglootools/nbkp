@@ -16,7 +16,7 @@ from ...output import (
     MountStatusData,
     build_mount_status_json,
     build_mount_status_table,
-    volume_display_name,
+    display_name,
 )
 
 
@@ -36,7 +36,7 @@ def _unmanaged_statuses(
 ) -> list[tuple[str, MountStatusData]]:
     """Build status entries for volumes without mount config."""
     return [
-        (volume_display_name(vol), _ErrorStatus(resolved_backend="not managed"))
+        (display_name(vol), _ErrorStatus(resolved_backend="not managed"))
         for slug, vol in cfg.volumes.items()
         if vol.mount is None and (names is None or slug in names)
     ]
@@ -56,7 +56,7 @@ def _probe_volume_status(
 ) -> tuple[str, MountStatusData]:
     """Probe a single volume's mount status with progress bar updates."""
     assert vol.mount is not None
-    label = volume_display_name(vol)
+    label = display_name(vol)
     if bar is not None:
         bar.on_start(label)
     try:

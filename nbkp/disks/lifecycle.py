@@ -64,7 +64,7 @@ def _volumes_with_mount_config(
     ]
 
 
-def mount_volume_count(
+def mount_count(
     config: Config,
     names: list[str] | None = None,
 ) -> int:

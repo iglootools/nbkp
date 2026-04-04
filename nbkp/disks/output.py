@@ -30,7 +30,7 @@ class MountStatusData(Protocol):
     def mounted(self) -> bool | None: ...
 
 
-def volume_display_name(vol: LocalVolume | RemoteVolume) -> str:
+def display_name(vol: LocalVolume | RemoteVolume) -> str:
     """Display name for a volume: ``ssh-endpoint:slug`` for remote, ``slug`` for local."""
     from ..config.protocol.volume import RemoteVolume
 

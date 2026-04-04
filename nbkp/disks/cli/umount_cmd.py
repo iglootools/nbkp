@@ -11,14 +11,14 @@ from ...clihelpers import OutputFormat
 from .helpers import DisksProgressBar
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
-from ..lifecycle import UmountResult, mount_volume_count, umount_volumes
-from ..output import volume_display_name
+from ..lifecycle import UmountResult, mount_count, umount_volumes
+from ..output import display_name
 from . import app
 from .helpers import _format_umount_result, _probe_and_show_status
 
 
 @app.command("umount")
-def volumes_umount(
+def umount(
     config: Annotated[
         Optional[Path],
         typer.Option(
@@ -65,11 +65,11 @@ def volumes_umount(
 
     use_progress = output == OutputFormat.HUMAN
     display_names = {
-        slug: volume_display_name(vol)
+        slug: display_name(vol)
         for slug, vol in cfg.volumes.items()
         if vol.mount is not None
     }
-    total = mount_volume_count(cfg, name)
+    total = mount_count(cfg, name)
     umount_bar = (
         DisksProgressBar(total, "Umounting", _format_umount_result)
         if use_progress
