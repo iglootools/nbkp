@@ -37,12 +37,13 @@ description = "Install dependencies"
 run = "poetry install --all-extras"
 
 [tasks.check]
-description = "Run all checks (format, lint, type-check, compat-check, clidocs-check, configdocs-check, depgraph-check)"
+description = "Run all checks (format, lint, type-check, compat-check, lock-check, clidocs-check, configdocs-check, depgraph-check)"
 run = [
   { task = "format" },
   { task = "lint" },
   { task = "type-check" },
   { task = "compat-check" },
+  { task = "lock-check" },
   { task = "clidocs-check" },
   { task = "configdocs-check" },
   { task = "depgraph-check" },
@@ -158,6 +159,29 @@ run = "poetry run pyright nbkp/ build-scripts/"
 [tasks.compat-check]
 description = "Verify no Python features above 3.12 are used"
 run = "poetry run vermin --target=3.12- --no-tips --no-parse-comments nbkp/ tests/"
+
+# The CI test workflow runs `mise use python@<version>` before tests, which modifies mise.toml.
+# Without the save/restore, `mise lock` would generate checksums for the overridden version
+# instead of the committed one, causing a false positive diff.
+# The task temporarily reverts mise.toml to its git state for the check.
+[tasks.lock-check]
+description = "Check that mise.lock is up to date"
+run = """
+# Save any local mise.toml modifications (e.g. CI python version override via `mise use`)
+cp mise.toml mise.toml.lock-check-bak
+git checkout mise.toml
+mise lock
+result=0
+if ! git diff --quiet mise.lock; then
+  echo "mise.lock is out of date. Run 'mise lock' and commit the result." >&2
+  git diff mise.lock
+  git checkout mise.lock
+  result=1
+fi
+# Restore any local mise.toml modifications
+mv mise.toml.lock-check-bak mise.toml
+exit $result
+"""
 
 # Demo Tasks
 [tasks.demo]

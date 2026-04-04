@@ -7,7 +7,7 @@ Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/Q
 Run automated tests and checks (no external dependencies):
 ```bash
 # mise tasks
-mise run check              # Run all checks: format + lint + type-check + clidocs-check + configdocs-check + depgraph-check
+mise run check              # Run all checks: format + lint + type-check + lock-check + clidocs-check + configdocs-check + depgraph-check
 mise run check-all          # Run all checks: regular checks + all tests
 
 mise run test-all           # All tests
@@ -27,6 +27,7 @@ mise run format             # ruff format
 mise run lint               # ruff check
 mise run type-check         # pyright
 mise run compat-check       # vermin (enforce Python >=3.12 compatibility)
+mise run lock-check         # check mise.lock is up to date
 
 mise run clidocs            # regenerate CLI reference in docs/cli-reference.md
 mise run clidocs-check      # check CLI reference is up to date
