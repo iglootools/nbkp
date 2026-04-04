@@ -97,7 +97,7 @@ class TestVolumeWithMount:
             ),
         )
         assert vol.mount is not None
-        assert vol.disks.encryption is not None
+        assert vol.mount.encryption is not None
 
     def test_local_volume_without_mount(self) -> None:
         vol = LocalVolume(slug="data", path="/mnt/data")

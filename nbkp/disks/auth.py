@@ -70,7 +70,7 @@ def generate_sudoers_rules(
 def _volume_mount_unit(vol: LocalVolume | RemoteVolume) -> str:
     """Derive the systemd mount unit name from a volume path.
 
-    Simplified convention: strip leading /, replace / with -, append .disks.
+    Simplified convention: strip leading /, replace / with -, append .mount.
     The real unit name is derived at runtime via `systemd-escape --path`,
     but this approximation is sufficient for auth rule generation.
     """

@@ -573,10 +573,10 @@ class TestMountCapabilities:
             assert diag.capabilities is not None
             caps = diag.capabilities
             assert caps.mount is not None
-            assert caps.disks.resolved_backend == "direct"
-            assert caps.disks.device_present is True
-            assert caps.disks.luks_attached is True
-            assert caps.disks.mounted is True
+            assert caps.mount.resolved_backend == "direct"
+            assert caps.mount.device_present is True
+            assert caps.mount.luks_attached is True
+            assert caps.mount.mounted is True
         finally:
             umount_volume(remote_encrypted_volume, mount_config, resolved, strategy)
 
@@ -619,4 +619,4 @@ class TestMountCapabilities:
         # capabilities are still probed via _sentinel_only_capabilities.
         assert diag.capabilities is not None
         assert diag.capabilities.mount is not None
-        assert diag.capabilities.disks.device_present is False
+        assert diag.capabilities.mount.device_present is False
