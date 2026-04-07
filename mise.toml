@@ -1,5 +1,5 @@
 [tools]
-python = "3.14.3"
+python = "3.14.4"
 poetry = "2.3.3"
 github-cli = "2.89.0"
 "aqua:asciinema/asciinema" = "3.2.0"
