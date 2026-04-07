@@ -3,13 +3,13 @@
     "extends": [
         "config:base"
     ],
+    "minimumReleaseAge": "14 days",
     "packageRules": [
         {
-            "managers": [
-                "poetry"
-            ],
-            "enabled": true,
             "groupName": "all dependencies",
+            "matchManagers": [
+                "*"
+            ],
             "schedule": [
                 "at any time"
             ],
