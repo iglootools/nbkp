@@ -1,9 +1,10 @@
 {
     "$schema": "https://docs.renovatebot.com/renovate-schema.json",
     "extends": [
-        "config:base"
+        "config:recommended"
     ],
     "minimumReleaseAge": "14 days",
+    "separateMajorMinor": false,
     "packageRules": [
         {
             "groupName": "all dependencies",
