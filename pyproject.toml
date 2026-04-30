@@ -11,7 +11,7 @@ dependencies = [
   "jinja2 (>=3.0,<4.0)",
   "pydantic (>=2.12.5,<3.0.0)",
   "pyyaml (>=6.0,<7.0)",
-  "typer (>=0.24.0,<1.0.0)",
+  "typer (>=0.25.0,<1.0.0)",
   "platformdirs (>=4.0,<5.0)",
   "mermaid-ascii-diagrams (>=0.1.1)",
 ]
