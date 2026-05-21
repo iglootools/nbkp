@@ -268,6 +268,73 @@ class TestVolumeStatusFromDiagnostics:
         )
         assert status.active
 
+    def test_sudoers_refused_upgrades_volume_not_mounted(self) -> None:
+        """When the mount step recorded a sudo-refused failure, preflight
+        should surface SUDOERS_RULES_MISSING instead of the generic
+        VOLUME_NOT_MOUNTED so troubleshoot points at the real fix."""
+        caps = VolumeCapabilities(
+            sentinel_exists=False,
+            is_btrfs_filesystem=False,
+            hardlink_supported=True,
+            btrfs_user_subvol_rm=False,
+            mount=_base_mount_caps(
+                mounted=False,
+                mount_failure_reason="sudoers_refused",
+            ),
+        )
+        diag = VolumeDiagnostics(capabilities=caps)
+        ssh_ep = _active_ssh_endpoint_status()
+        status = VolumeStatus.from_diagnostics(
+            "encrypted", _encrypted_vol(), ssh_ep, diag
+        )
+        assert VolumeError.SUDOERS_RULES_MISSING in status.errors
+        assert VolumeError.VOLUME_NOT_MOUNTED not in status.errors
+        assert VolumeError.SENTINEL_NOT_FOUND not in status.errors
+
+    def test_sudoers_refused_with_mounted_none_upgrades_sentinel_not_found(
+        self,
+    ) -> None:
+        """Real-world LUKS-fails-before-mount: mounted=None because the
+        mount step never ran. The lifecycle failure reason must still
+        upgrade SENTINEL_NOT_FOUND to SUDOERS_RULES_MISSING."""
+        caps = VolumeCapabilities(
+            sentinel_exists=False,
+            is_btrfs_filesystem=False,
+            hardlink_supported=True,
+            btrfs_user_subvol_rm=False,
+            mount=_base_mount_caps(
+                device_present=True,
+                luks_attached=False,
+                mounted=None,
+                mount_failure_reason="sudoers_refused",
+            ),
+        )
+        diag = VolumeDiagnostics(capabilities=caps)
+        ssh_ep = _active_ssh_endpoint_status()
+        status = VolumeStatus.from_diagnostics(
+            "encrypted", _encrypted_vol(), ssh_ep, diag
+        )
+        assert VolumeError.SUDOERS_RULES_MISSING in status.errors
+        assert VolumeError.SENTINEL_NOT_FOUND not in status.errors
+        assert VolumeError.VOLUME_NOT_MOUNTED not in status.errors
+
+    def test_volume_not_mounted_without_specific_reason(self) -> None:
+        """Without a lifecycle failure reason, fall back to VOLUME_NOT_MOUNTED."""
+        caps = VolumeCapabilities(
+            sentinel_exists=False,
+            is_btrfs_filesystem=False,
+            hardlink_supported=True,
+            btrfs_user_subvol_rm=False,
+            mount=_base_mount_caps(mounted=False),
+        )
+        diag = VolumeDiagnostics(capabilities=caps)
+        ssh_ep = _active_ssh_endpoint_status()
+        status = VolumeStatus.from_diagnostics(
+            "encrypted", _encrypted_vol(), ssh_ep, diag
+        )
+        assert VolumeError.VOLUME_NOT_MOUNTED in status.errors
+        assert VolumeError.SUDOERS_RULES_MISSING not in status.errors
+
 
 # ── Direct backend errors ───────────────────────────────────
 

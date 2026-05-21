@@ -110,6 +110,25 @@ class TestBuildMountObservations:
         assert obs["enc"].device_present is True
         assert obs["enc"].luks_attached is False
         assert obs["enc"].mounted is None
+        assert obs["enc"].failure_reason == MountFailureReason.ATTACH_LUKS_FAILED
+
+    def test_sudoers_refused_propagated(self) -> None:
+        cfg = _config_with_volumes(_ENCRYPTED_VOLUME)
+        strategy = {"enc": SystemdMountStrategy(mount_unit="mnt-encrypted.mount")}
+        results = [
+            MountResult(
+                volume_slug="enc",
+                success=False,
+                failure_reason=MountFailureReason.SUDOERS_REFUSED,
+            )
+        ]
+
+        obs = build_mount_observations(results, strategy, cfg)
+
+        assert obs["enc"].device_present is True
+        assert obs["enc"].luks_attached is False
+        assert obs["enc"].mounted is None
+        assert obs["enc"].failure_reason == MountFailureReason.SUDOERS_REFUSED
 
     def test_mount_failed_encrypted(self) -> None:
         cfg = _config_with_volumes(_ENCRYPTED_VOLUME)

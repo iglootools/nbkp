@@ -64,3 +64,9 @@ class MountCapabilities(BaseModel):
     device_present: bool | None = None
     luks_attached: bool | None = None
     mounted: bool | None = None
+    mount_failure_reason: str | None = None
+    """Raw ``MountFailureReason`` value (string) when the lifecycle step
+    failed for a known cause. Used by preflight to upgrade the generic
+    VOLUME_NOT_MOUNTED to a more specific error like SUDOERS_RULES_MISSING.
+    Stored as a string here to keep ``models.py`` free of cross-module
+    enum imports."""

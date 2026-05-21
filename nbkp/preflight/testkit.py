@@ -550,6 +550,18 @@ def _troubleshoot_volumes() -> dict[str, LocalVolume]:
                 ),
             ),
         ),
+        "mount-sudo-refused": LocalVolume(
+            slug="mount-sudo-refused",
+            path="/mnt/sudo-refused",
+            mount=MountConfig(
+                strategy="systemd",
+                device_uuid="77777777-8888-9999-aaaa-bbbbbbbbbbbb",
+                encryption=LuksEncryptionConfig(
+                    mapper_name="sudo-refused",
+                    passphrase_id="sudo-refused",
+                ),
+            ),
+        ),
         "usb-10": LocalVolume(slug="usb-10", path="/mnt/usb-10"),
         "usb-11": LocalVolume(slug="usb-11", path="/mnt/usb-11"),
         "usb-12": LocalVolume(slug="usb-12", path="/mnt/usb-12"),
@@ -846,6 +858,39 @@ _MOUNT_SYSTEMD_MISMATCH_CAPS = VolumeCapabilities(
     ),
 )
 
+# mount-sudo-refused: device present, sudoers rule file exists on disk but
+# sudo refused to attach (e.g. NOPASSWD rule covers a different mapper).
+# Exercises the lifecycle→preflight upgrade path: VOLUME_NOT_MOUNTED is
+# upgraded to SUDOERS_RULES_MISSING via ``mount_failure_reason``.
+_MOUNT_SUDO_REFUSED_CAPS = VolumeCapabilities(
+    sentinel_exists=False,
+    is_btrfs_filesystem=False,
+    hardlink_supported=True,
+    btrfs_user_subvol_rm=False,
+    mount=MountCapabilities(
+        resolved_backend="systemd",
+        mount_unit="mnt-sudo\\x2drefused.mount",
+        has_mount_unit_config=True,
+        mount_unit_what="/dev/mapper/sudo-refused",
+        mount_unit_where="/mnt/sudo-refused",
+        has_cryptsetup_service_config=True,
+        cryptsetup_service_exec_start=(
+            "/usr/lib/systemd/systemd-cryptsetup attach sudo-refused"
+            " /dev/disk/by-uuid/77777777-8888-9999-aaaa-bbbbbbbbbbbb"
+            " /dev/stdin luks"
+        ),
+        has_polkit_rules=True,
+        has_sudoers_rules=True,
+        device_present=True,
+        luks_attached=False,
+        # mounted=None reflects reality: LUKS attach failed before the
+        # mount step ran, so mount state was never probed.
+        mounted=None,
+        mount_failure_reason="sudoers_refused",
+    ),
+)
+
+
 # mount-luks-failed: device present, LUKS attach failed, passphrase unavailable
 _MOUNT_LUKS_FAILED_CAPS = VolumeCapabilities(
     sentinel_exists=False,
@@ -998,6 +1043,10 @@ def troubleshoot_config() -> Config:
             slug="mount-luks-failed-dst",
             volume="mount-luks-failed",
         ),
+        "mount-sudo-refused-dst": SyncEndpoint(
+            slug="mount-sudo-refused-dst",
+            volume="mount-sudo-refused",
+        ),
         # Symlink error endpoints
         "dst-latest-missing": SyncEndpoint(
             slug="dst-latest-missing",
@@ -1145,6 +1194,11 @@ def troubleshoot_config() -> Config:
                 slug="mount-luks-failed",
                 source="laptop-src",
                 destination="mount-luks-failed-dst",
+            ),
+            "mount-sudo-refused": SyncConfig(
+                slug="mount-sudo-refused",
+                source="laptop-src",
+                destination="mount-sudo-refused-dst",
             ),
             "dst-latest-missing": SyncConfig(
                 slug="dst-latest-missing",
@@ -1334,6 +1388,16 @@ def troubleshoot_data(
             VolumeError.ATTACH_LUKS_FAILED,
             VolumeError.MOUNT_FAILED,
         ],
+    )
+
+    # mount-sudo-refused: lifecycle reported SUDOERS_REFUSED → preflight
+    # surfaces SUDOERS_RULES_MISSING instead of VOLUME_NOT_MOUNTED.
+    mount_sudo_refused_vs = VolumeStatus(
+        slug="mount-sudo-refused",
+        config=config.volumes["mount-sudo-refused"],
+        ssh_endpoint_status=_TROUBLESHOOT_LOCALHOST_LUKS_FAILED_SSH,
+        diagnostics=VolumeDiagnostics(capabilities=_MOUNT_SUDO_REFUSED_CAPS),
+        errors=[VolumeError.SUDOERS_RULES_MISSING],
     )
 
     # usb-10 to usb-12: active for symlink/devnull scenarios
@@ -1544,6 +1608,7 @@ def troubleshoot_data(
         "mount-direct": mount_direct_vs,
         "mount-systemd-mismatch": mount_mismatch_vs,
         "mount-luks-failed": mount_luks_failed_vs,
+        "mount-sudo-refused": mount_sudo_refused_vs,
     }
 
     # ── Source endpoint status (shared by most syncs) ─────────
@@ -1976,6 +2041,20 @@ def troubleshoot_data(
         source_endpoint_status=laptop_src_inactive,
         destination_endpoint_status=_inactive_dst_ep_status(
             "mount-luks-failed-dst", mount_luks_failed_vs
+        ),
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
+    )
+
+    # mount-sudo-refused: sudo refused without NOPASSWD rule (Layer 2)
+    sync_statuses["mount-sudo-refused"] = SyncStatus(
+        slug="mount-sudo-refused",
+        config=config.syncs["mount-sudo-refused"],
+        source_endpoint_status=laptop_src_inactive,
+        destination_endpoint_status=_inactive_dst_ep_status(
+            "mount-sudo-refused-dst", mount_sudo_refused_vs
         ),
         errors=[
             SyncError.SOURCE_ENDPOINT_INACTIVE,

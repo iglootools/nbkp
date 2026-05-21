@@ -434,18 +434,42 @@ def _volume_errors(
 ) -> list[VolumeError]:
     """Translate volume diagnostics into VolumeError values."""
     if diag.capabilities is not None and not diag.capabilities.sentinel_exists:
-        # When a volume has mount config and is not mounted, report
-        # "not mounted" instead of the misleading "sentinel not found" —
-        # the sentinel can only exist once the volume is mounted.
+        # When a volume has mount config and the mount step didn't
+        # succeed, prefer the most specific signal we have. Order:
+        # 1. Lifecycle recorded a known cause (e.g. SUDOERS_REFUSED) —
+        #    surface that so troubleshoot points at the real fix. This
+        #    fires whether ``mounted`` is False (mount step reached and
+        #    failed) or None (mount step never ran because an earlier
+        #    step like LUKS attach failed first).
+        # 2. mount step ran and ended unmounted — generic VOLUME_NOT_MOUNTED.
+        # 3. Otherwise, fall back to SENTINEL_NOT_FOUND.
         mount_caps = diag.capabilities.mount
-        if mount is not None and mount_caps is not None and mount_caps.mounted is False:
-            return [VolumeError.VOLUME_NOT_MOUNTED]
-        else:
-            return [VolumeError.SENTINEL_NOT_FOUND]
+        if mount is not None and mount_caps is not None:
+            specific = _mount_lifecycle_failure_error(mount_caps)
+            if specific is not None:
+                return [specific]
+            if mount_caps.mounted is False:
+                return [VolumeError.VOLUME_NOT_MOUNTED]
+        return [VolumeError.SENTINEL_NOT_FOUND]
     elif diag.capabilities is not None and mount is not None:
         return _mount_errors(diag.capabilities.mount, mount)
     else:
         return []
+
+
+def _mount_lifecycle_failure_error(
+    mount_caps: MountCapabilities,
+) -> VolumeError | None:
+    """Map a lifecycle ``MountFailureReason`` to a more specific VolumeError.
+
+    Returns ``None`` when no upgrade is available — caller should fall
+    back to the generic VOLUME_NOT_MOUNTED.
+    """
+    match mount_caps.mount_failure_reason:
+        case "sudoers_refused":
+            return VolumeError.SUDOERS_RULES_MISSING
+        case _:
+            return None
 
 
 def _mount_errors(

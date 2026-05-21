@@ -148,7 +148,9 @@ class TestMountVolume:
         assert "attach-luks failed" in (result.detail or "")
         assert result.failure_reason == MountFailureReason.ATTACH_LUKS_FAILED
 
-    def test_attach_luks_sudo_password_required_points_to_setup_auth(self) -> None:
+    def test_attach_luks_sudo_password_required_classified_as_sudoers_refused(
+        self,
+    ) -> None:
         """Sudo without NOPASSWD emits 'a password is required' to stderr."""
         vol = _encrypted_vol()
         strategy = _systemd_strategy()
@@ -168,11 +170,12 @@ class TestMountVolume:
                 strategy,
             )
         assert not result.success
-        assert result.failure_reason == MountFailureReason.ATTACH_LUKS_FAILED
-        assert "nbkp disks setup-auth" in (result.detail or "")
+        assert result.failure_reason == MountFailureReason.SUDOERS_REFUSED
         assert "passwordless sudo" in (result.detail or "")
+        # Remediation belongs in troubleshoot, not in the mount line.
+        assert "setup-auth" not in (result.detail or "")
 
-    def test_attach_luks_stdin_closed_points_to_setup_auth(self) -> None:
+    def test_attach_luks_stdin_closed_classified_as_sudoers_refused(self) -> None:
         """When sudo exits before consuming stdin, fabricssh emits the marker."""
         from nbkp.remote.fabricssh import STDIN_CLOSED_MARKER
 
@@ -194,8 +197,8 @@ class TestMountVolume:
                 strategy,
             )
         assert not result.success
-        assert result.failure_reason == MountFailureReason.ATTACH_LUKS_FAILED
-        assert "nbkp disks setup-auth" in (result.detail or "")
+        assert result.failure_reason == MountFailureReason.SUDOERS_REFUSED
+        assert "passwordless sudo" in (result.detail or "")
 
     def test_mount_volume_swallows_multiline_exception(self) -> None:
         """Unexpected exceptions should not leak multi-line tracebacks into detail."""

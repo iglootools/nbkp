@@ -245,6 +245,11 @@ def _check_systemd_mount_capabilities(
         device_present=device_present,
         luks_attached=luks_attached,
         mounted=mounted,
+        mount_failure_reason=(
+            obs.failure_reason.value
+            if obs is not None and obs.failure_reason is not None
+            else None
+        ),
     )
 
 
@@ -312,4 +317,9 @@ def _check_direct_mount_capabilities(
         device_present=device_present,
         luks_attached=luks_attached,
         mounted=mounted,
+        mount_failure_reason=(
+            obs.failure_reason.value
+            if obs is not None and obs.failure_reason is not None
+            else None
+        ),
     )

@@ -33,13 +33,16 @@ _SUDO_AUTH_REFUSED_SIGNATURES = (
 )
 
 
-def _attach_luks_failure_detail(result: subprocess.CompletedProcess[str]) -> str:
-    """Build a user-facing detail for a failed attach-luks step.
+def _classify_attach_luks_failure(
+    result: subprocess.CompletedProcess[str],
+) -> tuple[MountFailureReason, str]:
+    """Classify a failed attach-luks step into a reason and user-facing detail.
 
     When the remote sudo refused without a NOPASSWD rule, either we see
     the message in stderr (normal exit) or the channel closed mid-stdin
-    write (STDIN_CLOSED_MARKER from fabricssh). In both cases, point the
-    user at ``nbkp disks setup-auth`` rather than dumping raw stderr.
+    write (STDIN_CLOSED_MARKER from fabricssh). In both cases we surface
+    SUDOERS_REFUSED so preflight can route to the sudoers-rules fix; the
+    detail stays terse since troubleshoot carries the remediation steps.
     """
     stderr = result.stderr.strip()
     refused = stderr == STDIN_CLOSED_MARKER or any(
@@ -47,10 +50,13 @@ def _attach_luks_failure_detail(result: subprocess.CompletedProcess[str]) -> str
     )
     if refused:
         return (
-            "passwordless sudo not configured for systemd-cryptsetup attach"
-            " — run `nbkp disks setup-auth` to generate the NOPASSWD rule"
+            MountFailureReason.SUDOERS_REFUSED,
+            "passwordless sudo not configured for systemd-cryptsetup attach",
         )
-    return f"attach-luks failed (exit {result.returncode}): {stderr}"
+    return (
+        MountFailureReason.ATTACH_LUKS_FAILED,
+        f"attach-luks failed (exit {result.returncode}): {stderr}",
+    )
 
 
 class MountFailureReason(str, enum.Enum):
@@ -58,6 +64,7 @@ class MountFailureReason(str, enum.Enum):
 
     DEVICE_NOT_PRESENT = "device_not_present"
     ATTACH_LUKS_FAILED = "attach_luks_failed"
+    SUDOERS_REFUSED = "sudoers_refused"
     MOUNT_FAILED = "mount_failed"
     STRATEGY_NOT_RESOLVED = "strategy_not_resolved"
     UNREACHABLE = "unreachable"
@@ -168,11 +175,12 @@ def _mount_volume_inner(
             )
             result = run_on_volume(cmd, volume, resolved_endpoints, input=passphrase)
             if result.returncode != 0:
+                reason, detail = _classify_attach_luks_failure(result)
                 return MountResult(
                     volume_slug=slug,
                     success=False,
-                    detail=_attach_luks_failure_detail(result),
-                    failure_reason=MountFailureReason.ATTACH_LUKS_FAILED,
+                    detail=detail,
+                    failure_reason=reason,
                 )
 
     # 3. Mount if not already mounted
