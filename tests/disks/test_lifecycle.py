@@ -146,6 +146,78 @@ class TestMountVolume:
             )
         assert not result.success
         assert "attach-luks failed" in (result.detail or "")
+        assert result.failure_reason == MountFailureReason.ATTACH_LUKS_FAILED
+
+    def test_attach_luks_sudo_password_required_points_to_setup_auth(self) -> None:
+        """Sudo without NOPASSWD emits 'a password is required' to stderr."""
+        vol = _encrypted_vol()
+        strategy = _systemd_strategy()
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.detect_luks_attached", return_value=False),
+            patch(
+                "nbkp.disks.lifecycle.run_on_volume",
+                return_value=_mock_run(1, stderr="sudo: a password is required"),
+            ),
+        ):
+            result = mount_volume(
+                vol,
+                vol.mount,
+                {},
+                lambda x: "pass",  # type: ignore[arg-type]
+                strategy,
+            )
+        assert not result.success
+        assert result.failure_reason == MountFailureReason.ATTACH_LUKS_FAILED
+        assert "nbkp disks setup-auth" in (result.detail or "")
+        assert "passwordless sudo" in (result.detail or "")
+
+    def test_attach_luks_stdin_closed_points_to_setup_auth(self) -> None:
+        """When sudo exits before consuming stdin, fabricssh emits the marker."""
+        from nbkp.remote.fabricssh import STDIN_CLOSED_MARKER
+
+        vol = _encrypted_vol()
+        strategy = _systemd_strategy()
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.detect_luks_attached", return_value=False),
+            patch(
+                "nbkp.disks.lifecycle.run_on_volume",
+                return_value=_mock_run(1, stderr=STDIN_CLOSED_MARKER),
+            ),
+        ):
+            result = mount_volume(
+                vol,
+                vol.mount,
+                {},
+                lambda x: "pass",  # type: ignore[arg-type]
+                strategy,
+            )
+        assert not result.success
+        assert result.failure_reason == MountFailureReason.ATTACH_LUKS_FAILED
+        assert "nbkp disks setup-auth" in (result.detail or "")
+
+    def test_mount_volume_swallows_multiline_exception(self) -> None:
+        """Unexpected exceptions should not leak multi-line tracebacks into detail."""
+        vol = _encrypted_vol()
+        strategy = _systemd_strategy()
+        multiline_msg = "first line\nsecond line\nthird line"
+        with patch(
+            "nbkp.disks.lifecycle.detect_device_present",
+            side_effect=RuntimeError(multiline_msg),
+        ):
+            result = mount_volume(
+                vol,
+                vol.mount,
+                {},
+                lambda x: "pass",  # type: ignore[arg-type]
+                strategy,
+            )
+        assert not result.success
+        assert result.failure_reason == MountFailureReason.UNREACHABLE
+        assert "\n" not in (result.detail or "")
+        assert "first line" in (result.detail or "")
+        assert "second line" not in (result.detail or "")
 
     def test_direct_strategy_mount(self) -> None:
         vol = _unencrypted_vol()

@@ -6,6 +6,8 @@ import enum
 from dataclasses import dataclass
 from typing import Callable
 
+import subprocess
+
 from ..config import (
     Config,
     MountConfig,
@@ -13,6 +15,7 @@ from ..config import (
 )
 from ..config.epresolution import ResolvedEndpoints
 from ..remote.dispatch import run_on_volume
+from ..remote.fabricssh import STDIN_CLOSED_MARKER
 from .strategy import MountStrategy
 from .detection import (
     StrategyResolutionError,
@@ -20,6 +23,34 @@ from .detection import (
     detect_device_present,
     detect_luks_attached,
 )
+
+# stderr fragments that indicate sudo refused to run without prompting.
+# These match the messages sudo emits with BatchMode=yes / sudo -n.
+_SUDO_AUTH_REFUSED_SIGNATURES = (
+    "a password is required",
+    "interactive authentication is required",
+    "a terminal is required",
+)
+
+
+def _attach_luks_failure_detail(result: subprocess.CompletedProcess[str]) -> str:
+    """Build a user-facing detail for a failed attach-luks step.
+
+    When the remote sudo refused without a NOPASSWD rule, either we see
+    the message in stderr (normal exit) or the channel closed mid-stdin
+    write (STDIN_CLOSED_MARKER from fabricssh). In both cases, point the
+    user at ``nbkp disks setup-auth`` rather than dumping raw stderr.
+    """
+    stderr = result.stderr.strip()
+    refused = stderr == STDIN_CLOSED_MARKER or any(
+        sig in stderr for sig in _SUDO_AUTH_REFUSED_SIGNATURES
+    )
+    if refused:
+        return (
+            "passwordless sudo not configured for systemd-cryptsetup attach"
+            " — run `nbkp disks setup-auth` to generate the NOPASSWD rule"
+        )
+    return f"attach-luks failed (exit {result.returncode}): {stderr}"
 
 
 class MountFailureReason(str, enum.Enum):
@@ -91,10 +122,19 @@ def mount_volume(
             volume, mount_config, resolved_endpoints, passphrase_fn, mount_strategy
         )
     except Exception as e:
+        # Last-resort safety net. Most expected failures (sudo refused,
+        # remote process exits, channel closed mid-stdin-write) are now
+        # converted to clean CompletedProcess results inside fabricssh.
+        # Only collapse the first line so multi-line tracebacks don't
+        # leak into the user-facing output.
+        first_line = next(
+            (line for line in str(e).splitlines() if line.strip()),
+            type(e).__name__,
+        )
         return MountResult(
             volume_slug=slug,
             success=False,
-            detail=f"unreachable: {e}",
+            detail=f"unreachable: {first_line}",
             failure_reason=MountFailureReason.UNREACHABLE,
         )
 
@@ -131,10 +171,7 @@ def _mount_volume_inner(
                 return MountResult(
                     volume_slug=slug,
                     success=False,
-                    detail=(
-                        f"attach-luks failed (exit {result.returncode}):"
-                        f" {result.stderr.strip()}"
-                    ),
+                    detail=_attach_luks_failure_detail(result),
                     failure_reason=MountFailureReason.ATTACH_LUKS_FAILED,
                 )
 
@@ -174,10 +211,14 @@ def umount_volume(
             volume, mount_config, resolved_endpoints, mount_strategy
         )
     except Exception as e:
+        first_line = next(
+            (line for line in str(e).splitlines() if line.strip()),
+            type(e).__name__,
+        )
         return UmountResult(
             volume_slug=slug,
             success=False,
-            detail=f"unreachable: {e}",
+            detail=f"unreachable: {first_line}",
             warning="volume may still be mounted, manual umount needed",
         )
 
