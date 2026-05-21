@@ -6,6 +6,8 @@ import enum
 from dataclasses import dataclass
 from typing import Callable
 
+import subprocess
+
 from ..config import (
     Config,
     MountConfig,
@@ -13,6 +15,7 @@ from ..config import (
 )
 from ..config.epresolution import ResolvedEndpoints
 from ..remote.dispatch import run_on_volume
+from ..remote.fabricssh import STDIN_CLOSED_MARKER
 from .strategy import MountStrategy
 from .detection import (
     StrategyResolutionError,
@@ -21,12 +24,74 @@ from .detection import (
     detect_luks_attached,
 )
 
+# stderr fragments that indicate sudo refused to run without prompting.
+# These match the messages sudo emits with BatchMode=yes / sudo -n.
+_SUDO_AUTH_REFUSED_SIGNATURES = (
+    "a password is required",
+    "interactive authentication is required",
+    "a terminal is required",
+)
+
+# stderr fragments emitted by systemctl when polkit refuses authorization
+# under BatchMode=yes (no tty / no auth agent available).
+_POLKIT_REFUSED_SIGNATURES = ("interactive authentication required",)
+
+
+def _classify_attach_luks_failure(
+    result: subprocess.CompletedProcess[str],
+) -> tuple[MountFailureReason, str]:
+    """Classify a failed attach-luks step into a reason and user-facing detail.
+
+    When the remote sudo refused without a NOPASSWD rule, either we see
+    the message in stderr (normal exit) or the channel closed mid-stdin
+    write (STDIN_CLOSED_MARKER from fabricssh). In both cases we surface
+    SUDOERS_REFUSED so preflight can route to the sudoers-rules fix; the
+    detail stays terse since troubleshoot carries the remediation steps.
+    """
+    stderr = result.stderr.strip()
+    refused = stderr == STDIN_CLOSED_MARKER or any(
+        sig in stderr.lower() for sig in _SUDO_AUTH_REFUSED_SIGNATURES
+    )
+    if refused:
+        return (
+            MountFailureReason.SUDOERS_REFUSED,
+            "passwordless sudo not configured for systemd-cryptsetup attach",
+        )
+    return (
+        MountFailureReason.ATTACH_LUKS_FAILED,
+        f"attach-luks failed (exit {result.returncode}): {stderr}",
+    )
+
+
+def _classify_mount_failure(
+    result: subprocess.CompletedProcess[str],
+) -> tuple[MountFailureReason, str]:
+    """Classify a failed systemctl-start (mount) step.
+
+    When polkit refuses authorization under BatchMode=yes, systemd prints
+    "Interactive authentication required." Surface POLKIT_REFUSED so
+    preflight can route to the polkit-rules fix; troubleshoot carries
+    the actionable remediation.
+    """
+    stderr = result.stderr.strip()
+    if any(sig in stderr.lower() for sig in _POLKIT_REFUSED_SIGNATURES):
+        return (
+            MountFailureReason.POLKIT_REFUSED,
+            "polkit refused systemctl start — rules not configured",
+        )
+    return (
+        MountFailureReason.MOUNT_FAILED,
+        f"mount failed (exit {result.returncode}): {stderr}",
+    )
+
 
 class MountFailureReason(str, enum.Enum):
     """Structured reason for a mount failure."""
 
     DEVICE_NOT_PRESENT = "device_not_present"
     ATTACH_LUKS_FAILED = "attach_luks_failed"
+    SUDOERS_REFUSED = "sudoers_refused"
+    POLKIT_REFUSED = "polkit_refused"
     MOUNT_FAILED = "mount_failed"
     STRATEGY_NOT_RESOLVED = "strategy_not_resolved"
     UNREACHABLE = "unreachable"
@@ -91,10 +156,19 @@ def mount_volume(
             volume, mount_config, resolved_endpoints, passphrase_fn, mount_strategy
         )
     except Exception as e:
+        # Last-resort safety net. Most expected failures (sudo refused,
+        # remote process exits, channel closed mid-stdin-write) are now
+        # converted to clean CompletedProcess results inside fabricssh.
+        # Only collapse the first line so multi-line tracebacks don't
+        # leak into the user-facing output.
+        first_line = next(
+            (line for line in str(e).splitlines() if line.strip()),
+            type(e).__name__,
+        )
         return MountResult(
             volume_slug=slug,
             success=False,
-            detail=f"unreachable: {e}",
+            detail=f"unreachable: {first_line}",
             failure_reason=MountFailureReason.UNREACHABLE,
         )
 
@@ -128,14 +202,12 @@ def _mount_volume_inner(
             )
             result = run_on_volume(cmd, volume, resolved_endpoints, input=passphrase)
             if result.returncode != 0:
+                reason, detail = _classify_attach_luks_failure(result)
                 return MountResult(
                     volume_slug=slug,
                     success=False,
-                    detail=(
-                        f"attach-luks failed (exit {result.returncode}):"
-                        f" {result.stderr.strip()}"
-                    ),
-                    failure_reason=MountFailureReason.ATTACH_LUKS_FAILED,
+                    detail=detail,
+                    failure_reason=reason,
                 )
 
     # 3. Mount if not already mounted
@@ -143,13 +215,12 @@ def _mount_volume_inner(
         cmd = mount_strategy.build_mount_command()
         result = run_on_volume(cmd, volume, resolved_endpoints)
         if result.returncode != 0:
+            reason, detail = _classify_mount_failure(result)
             return MountResult(
                 volume_slug=slug,
                 success=False,
-                detail=(
-                    f"mount failed (exit {result.returncode}): {result.stderr.strip()}"
-                ),
-                failure_reason=MountFailureReason.MOUNT_FAILED,
+                detail=detail,
+                failure_reason=reason,
             )
 
     return MountResult(volume_slug=slug, success=True)
@@ -174,10 +245,14 @@ def umount_volume(
             volume, mount_config, resolved_endpoints, mount_strategy
         )
     except Exception as e:
+        first_line = next(
+            (line for line in str(e).splitlines() if line.strip()),
+            type(e).__name__,
+        )
         return UmountResult(
             volume_slug=slug,
             success=False,
-            detail=f"unreachable: {e}",
+            detail=f"unreachable: {first_line}",
             warning="volume may still be mounted, manual umount needed",
         )
 

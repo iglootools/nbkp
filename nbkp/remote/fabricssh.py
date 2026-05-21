@@ -7,6 +7,7 @@ import shlex
 import subprocess
 from functools import reduce
 
+import invoke.exceptions  # type: ignore[import-untyped]
 import paramiko
 from fabric import Connection  # type: ignore[import-untyped]
 
@@ -14,6 +15,12 @@ from ..config import SshEndpoint
 from .ssh import build_ssh_base_args as build_ssh_base_args  # noqa: F401
 from .ssh import build_ssh_e_option as build_ssh_e_option  # noqa: F401
 from .ssh import format_remote_path as format_remote_path  # noqa: F401
+
+# Marker used in stderr when the remote process exits before the stdin
+# writer thread finishes (e.g. sudo refuses without NOPASSWD under
+# BatchMode=yes). Callers can match this string to classify the failure
+# instead of crashing on the raw Paramiko/Fabric thread exception.
+STDIN_CLOSED_MARKER = "remote process exited before consuming stdin"
 
 
 def _build_single_connection(
@@ -89,7 +96,20 @@ def run_remote_command(
             conn.transport.set_keepalive(  # pyright: ignore[reportOptionalMemberAccess]
                 server.connection_options.server_alive_interval
             )
-        result = conn.run(cmd_string, warn=True, hide=True, in_stream=in_stream)
+        try:
+            result = conn.run(cmd_string, warn=True, hide=True, in_stream=in_stream)
+        except invoke.exceptions.ThreadException:
+            # Stdin/stdout/stderr worker raised — usually because the remote
+            # process exited before the stdin writer finished sending data
+            # (Paramiko then raises OSError("Socket is closed")). The actual
+            # remote stderr is lost with the channel, so we surface a clean
+            # marker and let callers classify based on context.
+            return subprocess.CompletedProcess(
+                args=cmd_string,
+                returncode=1,
+                stdout="",
+                stderr=STDIN_CLOSED_MARKER,
+            )
     return subprocess.CompletedProcess(
         args=cmd_string,
         returncode=result.exited,

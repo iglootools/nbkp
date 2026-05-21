@@ -28,6 +28,9 @@ class MountObservation:
     device_present: bool = False
     luks_attached: bool | None = None
     mounted: bool | None = None
+    failure_reason: MountFailureReason | None = None
+    """Specific cause when the mount step failed, for preflight to
+    upgrade the generic VOLUME_NOT_MOUNTED to a more actionable error."""
 
 
 def build_mount_observations(
@@ -90,7 +93,10 @@ def build_mount_observations(
                     luks_attached=None,
                     mounted=None,
                 )
-            case MountFailureReason.ATTACH_LUKS_FAILED:
+            case (
+                MountFailureReason.ATTACH_LUKS_FAILED
+                | MountFailureReason.SUDOERS_REFUSED
+            ):
                 observations[slug] = MountObservation(
                     resolved_backend=backend,
                     mount_unit=mount_unit,
@@ -98,8 +104,9 @@ def build_mount_observations(
                     device_present=True,
                     luks_attached=False,
                     mounted=None,
+                    failure_reason=result.failure_reason,
                 )
-            case MountFailureReason.MOUNT_FAILED:
+            case MountFailureReason.MOUNT_FAILED | MountFailureReason.POLKIT_REFUSED:
                 observations[slug] = MountObservation(
                     resolved_backend=backend,
                     mount_unit=mount_unit,
@@ -107,6 +114,7 @@ def build_mount_observations(
                     device_present=True,
                     luks_attached=True if has_encryption else None,
                     mounted=False,
+                    failure_reason=result.failure_reason,
                 )
             case MountFailureReason.STRATEGY_NOT_RESOLVED:
                 # No useful observation — skip

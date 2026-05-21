@@ -146,6 +146,145 @@ class TestMountVolume:
             )
         assert not result.success
         assert "attach-luks failed" in (result.detail or "")
+        assert result.failure_reason == MountFailureReason.ATTACH_LUKS_FAILED
+
+    def test_attach_luks_sudo_password_required_classified_as_sudoers_refused(
+        self,
+    ) -> None:
+        """Sudo without NOPASSWD emits 'a password is required' to stderr."""
+        vol = _encrypted_vol()
+        strategy = _systemd_strategy()
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.detect_luks_attached", return_value=False),
+            patch(
+                "nbkp.disks.lifecycle.run_on_volume",
+                return_value=_mock_run(1, stderr="sudo: a password is required"),
+            ),
+        ):
+            result = mount_volume(
+                vol,
+                vol.mount,
+                {},
+                lambda x: "pass",  # type: ignore[arg-type]
+                strategy,
+            )
+        assert not result.success
+        assert result.failure_reason == MountFailureReason.SUDOERS_REFUSED
+        assert "passwordless sudo" in (result.detail or "")
+        # Remediation belongs in troubleshoot, not in the mount line.
+        assert "setup-auth" not in (result.detail or "")
+
+    def test_attach_luks_stdin_closed_classified_as_sudoers_refused(self) -> None:
+        """When sudo exits before consuming stdin, fabricssh emits the marker."""
+        from nbkp.remote.fabricssh import STDIN_CLOSED_MARKER
+
+        vol = _encrypted_vol()
+        strategy = _systemd_strategy()
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.detect_luks_attached", return_value=False),
+            patch(
+                "nbkp.disks.lifecycle.run_on_volume",
+                return_value=_mock_run(1, stderr=STDIN_CLOSED_MARKER),
+            ),
+        ):
+            result = mount_volume(
+                vol,
+                vol.mount,
+                {},
+                lambda x: "pass",  # type: ignore[arg-type]
+                strategy,
+            )
+        assert not result.success
+        assert result.failure_reason == MountFailureReason.SUDOERS_REFUSED
+        assert "passwordless sudo" in (result.detail or "")
+
+    def test_mount_step_polkit_refused_classified(self) -> None:
+        """systemctl start failing with 'Interactive authentication required'
+        should be classified as POLKIT_REFUSED."""
+        vol = _encrypted_vol()
+        strategy = _systemd_strategy()
+        # detect_mounted via strategy.run_on_volume returns 3 (not mounted),
+        # then lifecycle.run_on_volume runs systemctl start which fails.
+        polkit_stderr = (
+            "Failed to start mnt-encrypted.mount:"
+            " Interactive authentication required.\n"
+            "See system logs and 'systemctl status mnt-encrypted.mount' for details."
+        )
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.detect_luks_attached", return_value=True),
+            patch(
+                "nbkp.disks.strategy.run_on_volume",
+                return_value=_mock_run(3),
+            ),
+            patch(
+                "nbkp.disks.lifecycle.run_on_volume",
+                return_value=_mock_run(1, stderr=polkit_stderr),
+            ),
+        ):
+            result = mount_volume(
+                vol,
+                vol.mount,
+                {},
+                lambda x: "pass",  # type: ignore[arg-type]
+                strategy,
+            )
+        assert not result.success
+        assert result.failure_reason == MountFailureReason.POLKIT_REFUSED
+        assert "polkit refused" in (result.detail or "")
+        # Remediation belongs in troubleshoot, not in the mount line.
+        assert "setup-auth" not in (result.detail or "")
+
+    def test_mount_step_generic_failure_classified_as_mount_failed(self) -> None:
+        """Other systemctl-start failures (not polkit) remain MOUNT_FAILED."""
+        vol = _encrypted_vol()
+        strategy = _systemd_strategy()
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.detect_luks_attached", return_value=True),
+            patch(
+                "nbkp.disks.strategy.run_on_volume",
+                return_value=_mock_run(3),
+            ),
+            patch(
+                "nbkp.disks.lifecycle.run_on_volume",
+                return_value=_mock_run(1, stderr="Unit not loaded"),
+            ),
+        ):
+            result = mount_volume(
+                vol,
+                vol.mount,
+                {},
+                lambda x: "pass",  # type: ignore[arg-type]
+                strategy,
+            )
+        assert not result.success
+        assert result.failure_reason == MountFailureReason.MOUNT_FAILED
+        assert "mount failed" in (result.detail or "")
+
+    def test_mount_volume_swallows_multiline_exception(self) -> None:
+        """Unexpected exceptions should not leak multi-line tracebacks into detail."""
+        vol = _encrypted_vol()
+        strategy = _systemd_strategy()
+        multiline_msg = "first line\nsecond line\nthird line"
+        with patch(
+            "nbkp.disks.lifecycle.detect_device_present",
+            side_effect=RuntimeError(multiline_msg),
+        ):
+            result = mount_volume(
+                vol,
+                vol.mount,
+                {},
+                lambda x: "pass",  # type: ignore[arg-type]
+                strategy,
+            )
+        assert not result.success
+        assert result.failure_reason == MountFailureReason.UNREACHABLE
+        assert "\n" not in (result.detail or "")
+        assert "first line" in (result.detail or "")
+        assert "second line" not in (result.detail or "")
 
     def test_direct_strategy_mount(self) -> None:
         vol = _unencrypted_vol()

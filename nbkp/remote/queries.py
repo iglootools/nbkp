@@ -126,24 +126,6 @@ def read_symlink_target(
             return result.stdout.strip() if result.returncode == 0 else None
 
 
-def _check_file_exists(
-    volume: Volume,
-    path: str,
-    resolved_endpoints: ResolvedEndpoints,
-) -> bool:
-    """Check if a file exists on the volume's host."""
-    match volume:
-        case LocalVolume():
-            return Path(path).is_file()
-        case RemoteVolume():
-            return (
-                run_on_volume(
-                    ["test", "-f", path], volume, resolved_endpoints
-                ).returncode
-                == 0
-            )
-
-
 def _run_systemctl_show(
     volume: Volume,
     unit: str,

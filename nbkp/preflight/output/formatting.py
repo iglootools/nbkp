@@ -57,7 +57,6 @@ def mount_capability_items(
         case "direct":
             return [
                 (True, "mnt-strategy:direct"),
-                (mount.has_sudoers_rules, "sudoers"),
             ]
         case _:
             return [
@@ -69,8 +68,6 @@ def mount_capability_items(
                     mount.mount_unit is not None,
                     f"mount:{mount.mount_unit}" if mount.mount_unit else None,
                 ),
-                (mount.has_polkit_rules, "polkit"),
-                (mount.has_sudoers_rules, "sudoers"),
             ]
 
 

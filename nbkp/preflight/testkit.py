@@ -346,7 +346,6 @@ def check_data(
                     resolved_backend="systemd",
                     mount_unit="mnt-usb\\x2dbackup\\x2dmount.mount",
                     has_mount_unit_config=True,
-                    has_polkit_rules=True,
                     device_present=True,
                     mounted=True,
                 ),
@@ -547,6 +546,30 @@ def _troubleshoot_volumes() -> dict[str, LocalVolume]:
                 encryption=LuksEncryptionConfig(
                     mapper_name="luks-failed",
                     passphrase_id="luks-failed",
+                ),
+            ),
+        ),
+        "mount-sudo-refused": LocalVolume(
+            slug="mount-sudo-refused",
+            path="/mnt/sudo-refused",
+            mount=MountConfig(
+                strategy="systemd",
+                device_uuid="77777777-8888-9999-aaaa-bbbbbbbbbbbb",
+                encryption=LuksEncryptionConfig(
+                    mapper_name="sudo-refused",
+                    passphrase_id="sudo-refused",
+                ),
+            ),
+        ),
+        "mount-polkit-refused": LocalVolume(
+            slug="mount-polkit-refused",
+            path="/mnt/polkit-refused",
+            mount=MountConfig(
+                strategy="systemd",
+                device_uuid="88888888-9999-aaaa-bbbb-cccccccccccc",
+                encryption=LuksEncryptionConfig(
+                    mapper_name="polkit-refused",
+                    passphrase_id="polkit-refused",
                 ),
             ),
         ),
@@ -787,8 +810,6 @@ _MOUNT_ENCRYPTED_CAPS = VolumeCapabilities(
         resolved_backend="systemd",
         has_mount_unit_config=None,
         has_cryptsetup_service_config=None,
-        has_polkit_rules=False,
-        has_sudoers_rules=False,
         device_present=False,
         luks_attached=None,
         mounted=None,
@@ -804,7 +825,6 @@ _MOUNT_UNENCRYPTED_CAPS = VolumeCapabilities(
         resolved_backend="systemd",
         mount_unit="mnt-usb\\x2dbackup.mount",
         has_mount_unit_config=False,
-        has_polkit_rules=False,
         device_present=True,
         mounted=False,
     ),
@@ -817,7 +837,6 @@ _MOUNT_DIRECT_ENCRYPTED_CAPS = VolumeCapabilities(
     btrfs_user_subvol_rm=False,
     mount=MountCapabilities(
         resolved_backend="direct",
-        has_sudoers_rules=False,
         device_present=False,
         luks_attached=None,
         mounted=None,
@@ -838,13 +857,71 @@ _MOUNT_SYSTEMD_MISMATCH_CAPS = VolumeCapabilities(
         mount_unit_where="/mnt/wrong-path",
         has_cryptsetup_service_config=True,
         cryptsetup_service_exec_start="/usr/bin/cryptsetup attach wrong-mapper",
-        has_polkit_rules=True,
-        has_sudoers_rules=True,
         device_present=True,
         luks_attached=False,
         mounted=False,
     ),
 )
+
+# mount-sudo-refused: device present, sudoers rule file exists on disk but
+# sudo refused to attach (e.g. NOPASSWD rule covers a different mapper).
+# Exercises the lifecycle→preflight upgrade path: VOLUME_NOT_MOUNTED is
+# upgraded to SUDOERS_RULES_MISSING via ``mount_failure_reason``.
+_MOUNT_SUDO_REFUSED_CAPS = VolumeCapabilities(
+    sentinel_exists=False,
+    is_btrfs_filesystem=False,
+    hardlink_supported=True,
+    btrfs_user_subvol_rm=False,
+    mount=MountCapabilities(
+        resolved_backend="systemd",
+        mount_unit="mnt-sudo\\x2drefused.mount",
+        has_mount_unit_config=True,
+        mount_unit_what="/dev/mapper/sudo-refused",
+        mount_unit_where="/mnt/sudo-refused",
+        has_cryptsetup_service_config=True,
+        cryptsetup_service_exec_start=(
+            "/usr/lib/systemd/systemd-cryptsetup attach sudo-refused"
+            " /dev/disk/by-uuid/77777777-8888-9999-aaaa-bbbbbbbbbbbb"
+            " /dev/stdin luks"
+        ),
+        device_present=True,
+        luks_attached=False,
+        # mounted=None reflects reality: LUKS attach failed before the
+        # mount step ran, so mount state was never probed.
+        mounted=None,
+        mount_failure_reason="sudoers_refused",
+    ),
+)
+
+
+# mount-polkit-refused: LUKS attach succeeded, but `systemctl start
+# <mount-unit>` failed because no polkit rule auto-allows the action.
+# Exercises the lifecycle→preflight upgrade path: VOLUME_NOT_MOUNTED is
+# upgraded to POLKIT_RULES_MISSING via ``mount_failure_reason``.
+_MOUNT_POLKIT_REFUSED_CAPS = VolumeCapabilities(
+    sentinel_exists=False,
+    is_btrfs_filesystem=False,
+    hardlink_supported=True,
+    btrfs_user_subvol_rm=False,
+    mount=MountCapabilities(
+        resolved_backend="systemd",
+        mount_unit="mnt-polkit\\x2drefused.mount",
+        has_mount_unit_config=True,
+        mount_unit_what="/dev/mapper/polkit-refused",
+        mount_unit_where="/mnt/polkit-refused",
+        has_cryptsetup_service_config=True,
+        cryptsetup_service_exec_start=(
+            "/usr/lib/systemd/systemd-cryptsetup attach polkit-refused"
+            " /dev/disk/by-uuid/88888888-9999-aaaa-bbbb-cccccccccccc"
+            " /dev/stdin luks"
+        ),
+        device_present=True,
+        luks_attached=True,
+        mounted=False,
+        mount_failure_reason="polkit_refused",
+    ),
+)
+
 
 # mount-luks-failed: device present, LUKS attach failed, passphrase unavailable
 _MOUNT_LUKS_FAILED_CAPS = VolumeCapabilities(
@@ -854,7 +931,6 @@ _MOUNT_LUKS_FAILED_CAPS = VolumeCapabilities(
     btrfs_user_subvol_rm=False,
     mount=MountCapabilities(
         resolved_backend="direct",
-        has_sudoers_rules=True,
         device_present=True,
         luks_attached=False,
         mounted=False,
@@ -997,6 +1073,14 @@ def troubleshoot_config() -> Config:
         "mount-luks-failed-dst": SyncEndpoint(
             slug="mount-luks-failed-dst",
             volume="mount-luks-failed",
+        ),
+        "mount-sudo-refused-dst": SyncEndpoint(
+            slug="mount-sudo-refused-dst",
+            volume="mount-sudo-refused",
+        ),
+        "mount-polkit-refused-dst": SyncEndpoint(
+            slug="mount-polkit-refused-dst",
+            volume="mount-polkit-refused",
         ),
         # Symlink error endpoints
         "dst-latest-missing": SyncEndpoint(
@@ -1145,6 +1229,16 @@ def troubleshoot_config() -> Config:
                 slug="mount-luks-failed",
                 source="laptop-src",
                 destination="mount-luks-failed-dst",
+            ),
+            "mount-sudo-refused": SyncConfig(
+                slug="mount-sudo-refused",
+                source="laptop-src",
+                destination="mount-sudo-refused-dst",
+            ),
+            "mount-polkit-refused": SyncConfig(
+                slug="mount-polkit-refused",
+                source="laptop-src",
+                destination="mount-polkit-refused-dst",
             ),
             "dst-latest-missing": SyncConfig(
                 slug="dst-latest-missing",
@@ -1334,6 +1428,26 @@ def troubleshoot_data(
             VolumeError.ATTACH_LUKS_FAILED,
             VolumeError.MOUNT_FAILED,
         ],
+    )
+
+    # mount-sudo-refused: lifecycle reported SUDOERS_REFUSED → preflight
+    # surfaces SUDOERS_RULES_MISSING instead of VOLUME_NOT_MOUNTED.
+    mount_sudo_refused_vs = VolumeStatus(
+        slug="mount-sudo-refused",
+        config=config.volumes["mount-sudo-refused"],
+        ssh_endpoint_status=_TROUBLESHOOT_LOCALHOST_LUKS_FAILED_SSH,
+        diagnostics=VolumeDiagnostics(capabilities=_MOUNT_SUDO_REFUSED_CAPS),
+        errors=[VolumeError.SUDOERS_RULES_MISSING],
+    )
+
+    # mount-polkit-refused: lifecycle reported POLKIT_REFUSED → preflight
+    # surfaces POLKIT_RULES_MISSING instead of VOLUME_NOT_MOUNTED.
+    mount_polkit_refused_vs = VolumeStatus(
+        slug="mount-polkit-refused",
+        config=config.volumes["mount-polkit-refused"],
+        ssh_endpoint_status=_TROUBLESHOOT_LOCALHOST_LUKS_FAILED_SSH,
+        diagnostics=VolumeDiagnostics(capabilities=_MOUNT_POLKIT_REFUSED_CAPS),
+        errors=[VolumeError.POLKIT_RULES_MISSING],
     )
 
     # usb-10 to usb-12: active for symlink/devnull scenarios
@@ -1544,6 +1658,8 @@ def troubleshoot_data(
         "mount-direct": mount_direct_vs,
         "mount-systemd-mismatch": mount_mismatch_vs,
         "mount-luks-failed": mount_luks_failed_vs,
+        "mount-sudo-refused": mount_sudo_refused_vs,
+        "mount-polkit-refused": mount_polkit_refused_vs,
     }
 
     # ── Source endpoint status (shared by most syncs) ─────────
@@ -1976,6 +2092,34 @@ def troubleshoot_data(
         source_endpoint_status=laptop_src_inactive,
         destination_endpoint_status=_inactive_dst_ep_status(
             "mount-luks-failed-dst", mount_luks_failed_vs
+        ),
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
+    )
+
+    # mount-sudo-refused: sudo refused without NOPASSWD rule (Layer 2)
+    sync_statuses["mount-sudo-refused"] = SyncStatus(
+        slug="mount-sudo-refused",
+        config=config.syncs["mount-sudo-refused"],
+        source_endpoint_status=laptop_src_inactive,
+        destination_endpoint_status=_inactive_dst_ep_status(
+            "mount-sudo-refused-dst", mount_sudo_refused_vs
+        ),
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
+    )
+
+    # mount-polkit-refused: polkit refused systemctl start (Layer 2)
+    sync_statuses["mount-polkit-refused"] = SyncStatus(
+        slug="mount-polkit-refused",
+        config=config.syncs["mount-polkit-refused"],
+        source_endpoint_status=laptop_src_inactive,
+        destination_endpoint_status=_inactive_dst_ep_status(
+            "mount-polkit-refused-dst", mount_polkit_refused_vs
         ),
         errors=[
             SyncError.SOURCE_ENDPOINT_INACTIVE,

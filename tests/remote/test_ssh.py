@@ -451,6 +451,37 @@ class TestRunRemoteCommand:
 
     @patch("nbkp.remote.fabricssh.paramiko")
     @patch("nbkp.remote.fabricssh.Connection")
+    def test_thread_exception_returns_clean_failure(
+        self,
+        mock_conn_cls: MagicMock,
+        mock_paramiko: MagicMock,
+        ssh_endpoint: SshEndpoint,
+    ) -> None:
+        """ThreadException from stdin writer must not leak as a traceback.
+
+        Reproduces the case where sudo without NOPASSWD exits before
+        consuming the passphrase, Paramiko raises OSError on the closed
+        channel, and Fabric wraps it in invoke.exceptions.ThreadException.
+        """
+        import invoke.exceptions
+
+        from nbkp.remote.fabricssh import STDIN_CLOSED_MARKER
+
+        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_conn.run.side_effect = invoke.exceptions.ThreadException(
+            [MagicMock(value=OSError("Socket is closed"))]
+        )
+
+        result = run_remote_command(
+            ssh_endpoint, ["sudo", "systemd-cryptsetup", "attach"], input="pw"
+        )
+
+        assert result.returncode == 1
+        assert result.stderr == STDIN_CLOSED_MARKER
+        assert result.stdout == ""
+
+    @patch("nbkp.remote.fabricssh.paramiko")
+    @patch("nbkp.remote.fabricssh.Connection")
     def test_proxy_server_creates_gateway(
         self,
         mock_conn_cls: MagicMock,

@@ -434,30 +434,62 @@ def _volume_errors(
 ) -> list[VolumeError]:
     """Translate volume diagnostics into VolumeError values."""
     if diag.capabilities is not None and not diag.capabilities.sentinel_exists:
-        # When a volume has mount config and is not mounted, report
-        # "not mounted" instead of the misleading "sentinel not found" —
-        # the sentinel can only exist once the volume is mounted.
+        # When a volume has mount config and the mount step didn't
+        # succeed, prefer the most specific signal we have. Order:
+        # 1. Lifecycle recorded a known cause (e.g. SUDOERS_REFUSED) —
+        #    surface that so troubleshoot points at the real fix. This
+        #    fires whether ``mounted`` is False (mount step reached and
+        #    failed) or None (mount step never ran because an earlier
+        #    step like LUKS attach failed first).
+        # 2. mount step ran and ended unmounted — generic VOLUME_NOT_MOUNTED.
+        # 3. Otherwise, fall back to SENTINEL_NOT_FOUND.
         mount_caps = diag.capabilities.mount
-        if mount is not None and mount_caps is not None and mount_caps.mounted is False:
-            return [VolumeError.VOLUME_NOT_MOUNTED]
-        else:
-            return [VolumeError.SENTINEL_NOT_FOUND]
+        if mount is not None and mount_caps is not None:
+            specific = _mount_lifecycle_failure_error(mount_caps)
+            if specific is not None:
+                return [specific]
+            if mount_caps.mounted is False:
+                return [VolumeError.VOLUME_NOT_MOUNTED]
+        return [VolumeError.SENTINEL_NOT_FOUND]
     elif diag.capabilities is not None and mount is not None:
         return _mount_errors(diag.capabilities.mount, mount)
     else:
         return []
 
 
+def _mount_lifecycle_failure_error(
+    mount_caps: MountCapabilities,
+) -> VolumeError | None:
+    """Map a lifecycle ``MountFailureReason`` to a more specific VolumeError.
+
+    Returns ``None`` when no upgrade is available — caller should fall
+    back to the generic VOLUME_NOT_MOUNTED.
+    """
+    match mount_caps.mount_failure_reason:
+        case "sudoers_refused":
+            return VolumeError.SUDOERS_RULES_MISSING
+        case "polkit_refused":
+            return VolumeError.POLKIT_RULES_MISSING
+        case _:
+            return None
+
+
 def _mount_errors(
     mount_caps: MountCapabilities | None,
     mount: MountConfig,
 ) -> list[VolumeError]:
-    """Translate mount-related capabilities into VolumeError values."""
+    """Translate mount-related capabilities into VolumeError values.
+
+    Direct-backend has no static-config errors to report — auth-rule
+    errors are surfaced via the runtime path. Only the systemd backend
+    has volume-specific static config (mount unit, cryptsetup service)
+    that can fail validation.
+    """
     if mount_caps is None:
         return []
     match mount_caps.resolved_backend:
         case "direct":
-            return _direct_mount_errors(mount_caps, mount)
+            return []
         case _:
             # "systemd" or None (legacy/unresolved) — use systemd checks
             return _systemd_mount_errors(mount_caps, mount)
@@ -498,35 +530,10 @@ def _systemd_mount_errors(
             and _cryptsetup_service_mismatches(mount_caps, mount)
             else []
         ),
-        *(
-            [VolumeError.POLKIT_RULES_MISSING]
-            if mount_caps.has_polkit_rules is False
-            else []
-        ),
-        *(
-            [VolumeError.SUDOERS_RULES_MISSING]
-            if has_encryption and mount_caps.has_sudoers_rules is False
-            else []
-        ),
-    ]
-
-
-def _direct_mount_errors(
-    mount_caps: MountCapabilities,
-    mount: MountConfig,
-) -> list[VolumeError]:
-    """Translate direct-backend mount config into VolumeError values.
-
-    Tool availability errors (sudo, mount, umount, etc.) are now at the
-    SSH endpoint level.  Only volume-specific config validation remains.
-    """
-    has_encryption = mount.encryption is not None
-    return [
-        *(
-            [VolumeError.SUDOERS_RULES_MISSING]
-            if has_encryption and mount_caps.has_sudoers_rules is False
-            else []
-        ),
+        # POLKIT_RULES_MISSING and SUDOERS_RULES_MISSING are no longer
+        # emitted from the static-config layer because the parent dirs
+        # (0750) defeat the file-exists probe. Both are now surfaced
+        # via the runtime path in _mount_lifecycle_failure_error.
     ]
 
 
