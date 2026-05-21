@@ -1,9 +1,11 @@
 ssh-endpoints:
   raspberry-pi4-lan:
-    host: 10.0.0.43
+    host: 10.0.0.42
+    user: ubuntu
     location: home
   raspberry-pi4-wan:
     host: sami.example.com
+    user: ubuntu
     location: travel
 
 volumes:
