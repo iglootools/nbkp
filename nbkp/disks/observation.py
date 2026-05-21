@@ -106,7 +106,7 @@ def build_mount_observations(
                     mounted=None,
                     failure_reason=result.failure_reason,
                 )
-            case MountFailureReason.MOUNT_FAILED:
+            case MountFailureReason.MOUNT_FAILED | MountFailureReason.POLKIT_REFUSED:
                 observations[slug] = MountObservation(
                     resolved_backend=backend,
                     mount_unit=mount_unit,
@@ -114,6 +114,7 @@ def build_mount_observations(
                     device_present=True,
                     luks_attached=True if has_encryption else None,
                     mounted=False,
+                    failure_reason=result.failure_reason,
                 )
             case MountFailureReason.STRATEGY_NOT_RESOLVED:
                 # No useful observation — skip

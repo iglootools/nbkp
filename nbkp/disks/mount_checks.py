@@ -12,7 +12,6 @@ from ..config import (
     Volume,
 )
 from ..config.epresolution import ResolvedEndpoints
-from .auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH
 from . import direct as direct_cmds
 from . import systemd as systemd_cmds
 from .detection import (
@@ -25,7 +24,6 @@ from .models import MountCapabilities, MountToolCapabilities
 from .observation import MountObservation
 from ..remote.queries import (
     _check_command_available,
-    _check_file_exists,
     _check_systemctl_cat,
     _run_systemctl_show,
 )
@@ -172,8 +170,6 @@ def _check_systemd_mount_capabilities(
         else {}
     )
 
-    has_encryption = mount.encryption is not None
-
     # Cryptsetup service config check
     mapper_name = mount.encryption.mapper_name if mount.encryption else None
     cryptsetup_service = (
@@ -192,17 +188,12 @@ def _check_systemd_mount_capabilities(
         else {}
     )
 
-    # Polkit and sudoers checks
-    has_polkit_rules = _check_file_exists(
-        volume,
-        POLKIT_RULES_PATH,
-        resolved_endpoints,
-    )
-    has_sudoers_rules = (
-        _check_file_exists(volume, SUDOERS_RULES_PATH, resolved_endpoints)
-        if has_encryption
-        else None
-    )
+    # Auth rules (polkit, sudoers) are no longer probed statically — the
+    # parent dirs (/etc/polkit-1/rules.d, /etc/sudoers.d) are typically
+    # 0750 so the probe couldn't distinguish "missing" from "hidden".
+    # Detection now happens at runtime via MountFailureReason classification
+    # in the mount lifecycle (see _classify_attach_luks_failure and
+    # _classify_mount_failure in lifecycle.py).
 
     # Runtime mount state — reuse from observation when available
     device_present = (
@@ -240,8 +231,6 @@ def _check_systemd_mount_capabilities(
         mount_unit_where=mount_unit_props.get("Where"),
         has_cryptsetup_service_config=has_cryptsetup_service_config,
         cryptsetup_service_exec_start=cryptsetup_service_props.get("ExecStart"),
-        has_polkit_rules=has_polkit_rules,
-        has_sudoers_rules=has_sudoers_rules,
         device_present=device_present,
         luks_attached=luks_attached,
         mounted=mounted,
@@ -272,16 +261,11 @@ def _check_direct_mount_capabilities(
     ``luks_attached``, and ``mounted`` from the prior mount lifecycle.
     """
     obs = mount_observation
-    has_encryption = mount.encryption is not None
     has_mountpoint = (
         bool(mount_tools.has_mountpoint) if mount_tools is not None else False
     )
 
-    has_sudoers_rules = (
-        _check_file_exists(volume, SUDOERS_RULES_PATH, resolved_endpoints)
-        if has_encryption
-        else None
-    )
+    # Sudoers rules no longer probed statically — see _check_systemd_mount_capabilities.
 
     # Runtime mount state — reuse from observation when available
     device_present = (
@@ -313,7 +297,6 @@ def _check_direct_mount_capabilities(
 
     return MountCapabilities(
         resolved_backend="direct",
-        has_sudoers_rules=has_sudoers_rules,
         device_present=device_present,
         luks_attached=luks_attached,
         mounted=mounted,

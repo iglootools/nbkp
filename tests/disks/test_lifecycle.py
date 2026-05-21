@@ -200,6 +200,70 @@ class TestMountVolume:
         assert result.failure_reason == MountFailureReason.SUDOERS_REFUSED
         assert "passwordless sudo" in (result.detail or "")
 
+    def test_mount_step_polkit_refused_classified(self) -> None:
+        """systemctl start failing with 'Interactive authentication required'
+        should be classified as POLKIT_REFUSED."""
+        vol = _encrypted_vol()
+        strategy = _systemd_strategy()
+        # detect_mounted via strategy.run_on_volume returns 3 (not mounted),
+        # then lifecycle.run_on_volume runs systemctl start which fails.
+        polkit_stderr = (
+            "Failed to start mnt-encrypted.mount:"
+            " Interactive authentication required.\n"
+            "See system logs and 'systemctl status mnt-encrypted.mount' for details."
+        )
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.detect_luks_attached", return_value=True),
+            patch(
+                "nbkp.disks.strategy.run_on_volume",
+                return_value=_mock_run(3),
+            ),
+            patch(
+                "nbkp.disks.lifecycle.run_on_volume",
+                return_value=_mock_run(1, stderr=polkit_stderr),
+            ),
+        ):
+            result = mount_volume(
+                vol,
+                vol.mount,
+                {},
+                lambda x: "pass",  # type: ignore[arg-type]
+                strategy,
+            )
+        assert not result.success
+        assert result.failure_reason == MountFailureReason.POLKIT_REFUSED
+        assert "polkit refused" in (result.detail or "")
+        # Remediation belongs in troubleshoot, not in the mount line.
+        assert "setup-auth" not in (result.detail or "")
+
+    def test_mount_step_generic_failure_classified_as_mount_failed(self) -> None:
+        """Other systemctl-start failures (not polkit) remain MOUNT_FAILED."""
+        vol = _encrypted_vol()
+        strategy = _systemd_strategy()
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.detect_luks_attached", return_value=True),
+            patch(
+                "nbkp.disks.strategy.run_on_volume",
+                return_value=_mock_run(3),
+            ),
+            patch(
+                "nbkp.disks.lifecycle.run_on_volume",
+                return_value=_mock_run(1, stderr="Unit not loaded"),
+            ),
+        ):
+            result = mount_volume(
+                vol,
+                vol.mount,
+                {},
+                lambda x: "pass",  # type: ignore[arg-type]
+                strategy,
+            )
+        assert not result.success
+        assert result.failure_reason == MountFailureReason.MOUNT_FAILED
+        assert "mount failed" in (result.detail or "")
+
     def test_mount_volume_swallows_multiline_exception(self) -> None:
         """Unexpected exceptions should not leak multi-line tracebacks into detail."""
         vol = _encrypted_vol()

@@ -130,6 +130,26 @@ class TestBuildMountObservations:
         assert obs["enc"].mounted is None
         assert obs["enc"].failure_reason == MountFailureReason.SUDOERS_REFUSED
 
+    def test_polkit_refused_propagated(self) -> None:
+        cfg = _config_with_volumes(_ENCRYPTED_VOLUME)
+        strategy = {"enc": SystemdMountStrategy(mount_unit="mnt-encrypted.mount")}
+        results = [
+            MountResult(
+                volume_slug="enc",
+                success=False,
+                failure_reason=MountFailureReason.POLKIT_REFUSED,
+            )
+        ]
+
+        obs = build_mount_observations(results, strategy, cfg)
+
+        # POLKIT_REFUSED means systemctl start was refused, so LUKS was
+        # attached but mount didn't happen.
+        assert obs["enc"].device_present is True
+        assert obs["enc"].luks_attached is True
+        assert obs["enc"].mounted is False
+        assert obs["enc"].failure_reason == MountFailureReason.POLKIT_REFUSED
+
     def test_mount_failed_encrypted(self) -> None:
         cfg = _config_with_volumes(_ENCRYPTED_VOLUME)
         strategy = {"enc": SystemdMountStrategy(mount_unit="mnt-encrypted.mount")}

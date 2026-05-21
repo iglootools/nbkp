@@ -39,8 +39,6 @@ _MOUNT_DEFAULTS = dict(
         " /dev/disk/by-uuid/5941f273-f73c-44c5-a3ef-fae7248db1b6"
         " /dev/stdin luks"
     ),
-    has_polkit_rules=True,
-    has_sudoers_rules=True,
 )
 
 
@@ -145,23 +143,10 @@ class TestMountErrors:
         )
         assert VolumeError.CRYPTSETUP_SERVICE_MISMATCH in errors
 
-    def test_polkit_rules_missing(self) -> None:
-        errors = _mount_errors(
-            _base_mount_caps(has_polkit_rules=False), _encrypted_mount()
-        )
-        assert VolumeError.POLKIT_RULES_MISSING in errors
-
-    def test_sudoers_rules_missing(self) -> None:
-        errors = _mount_errors(
-            _base_mount_caps(has_sudoers_rules=False), _encrypted_mount()
-        )
-        assert VolumeError.SUDOERS_RULES_MISSING in errors
-
     def test_unencrypted_skips_encryption_checks(self) -> None:
         """Unencrypted volumes should not trigger encryption-specific errors."""
         mc = _base_mount_caps(
             has_cryptsetup_service_config=None,
-            has_sudoers_rules=None,
             mount_unit_what="/dev/disk/by-uuid/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
         )
         errors = _mount_errors(mc, _unencrypted_mount())
@@ -171,11 +156,9 @@ class TestMountErrors:
         """When capability is None (not probed), no error should be generated."""
         mc = _base_mount_caps(
             has_mount_unit_config=None,
-            has_polkit_rules=None,
         )
         errors = _mount_errors(mc, _encrypted_mount())
         assert VolumeError.MOUNT_UNIT_NOT_CONFIGURED not in errors
-        assert VolumeError.POLKIT_RULES_MISSING not in errors
 
     def test_none_mount_caps_no_errors(self) -> None:
         """When mount capabilities are None, no mount errors should be generated."""
@@ -318,6 +301,30 @@ class TestVolumeStatusFromDiagnostics:
         assert VolumeError.SENTINEL_NOT_FOUND not in status.errors
         assert VolumeError.VOLUME_NOT_MOUNTED not in status.errors
 
+    def test_polkit_refused_upgrades_volume_not_mounted(self) -> None:
+        """When the mount step failed because polkit refused systemctl start,
+        preflight should surface POLKIT_RULES_MISSING via the runtime path."""
+        caps = VolumeCapabilities(
+            sentinel_exists=False,
+            is_btrfs_filesystem=False,
+            hardlink_supported=True,
+            btrfs_user_subvol_rm=False,
+            mount=_base_mount_caps(
+                device_present=True,
+                luks_attached=True,
+                mounted=False,
+                mount_failure_reason="polkit_refused",
+            ),
+        )
+        diag = VolumeDiagnostics(capabilities=caps)
+        ssh_ep = _active_ssh_endpoint_status()
+        status = VolumeStatus.from_diagnostics(
+            "encrypted", _encrypted_vol(), ssh_ep, diag
+        )
+        assert VolumeError.POLKIT_RULES_MISSING in status.errors
+        assert VolumeError.VOLUME_NOT_MOUNTED not in status.errors
+        assert VolumeError.SENTINEL_NOT_FOUND not in status.errors
+
     def test_volume_not_mounted_without_specific_reason(self) -> None:
         """Without a lifecycle failure reason, fall back to VOLUME_NOT_MOUNTED."""
         caps = VolumeCapabilities(
@@ -341,7 +348,6 @@ class TestVolumeStatusFromDiagnostics:
 
 _DIRECT_DEFAULTS = dict(
     resolved_backend="direct",
-    has_sudoers_rules=True,
 )
 
 
@@ -350,20 +356,17 @@ def _direct_mount_caps(**overrides: object) -> MountCapabilities:
 
 
 class TestDirectMountErrors:
+    """Direct backend has no static-config mount errors — auth rules are
+    surfaced at runtime via mount_failure_reason."""
+
     def test_all_caps_present_no_errors(self) -> None:
         errors = _mount_errors(_direct_mount_caps(), _encrypted_mount())
         assert errors == []
 
-    def test_sudoers_rules_missing(self) -> None:
-        errors = _mount_errors(
-            _direct_mount_caps(has_sudoers_rules=False), _encrypted_mount()
-        )
-        assert VolumeError.SUDOERS_RULES_MISSING in errors
-
-    def test_unencrypted_skips_encryption_checks(self) -> None:
-        mc = _direct_mount_caps(has_sudoers_rules=None)
+    def test_unencrypted_no_errors(self) -> None:
+        mc = _direct_mount_caps()
         errors = _mount_errors(mc, _unencrypted_mount())
-        assert VolumeError.SUDOERS_RULES_MISSING not in errors
+        assert errors == []
 
     def test_no_systemd_errors_for_direct(self) -> None:
         """Direct backend should never produce systemd-specific errors."""
@@ -453,14 +456,12 @@ class TestObservationReuse:
     @patch("nbkp.disks.mount_checks.resolve_mount_unit")
     @patch("nbkp.disks.mount_checks.detect_systemd_cryptsetup_path")
     @patch("nbkp.disks.mount_checks._check_command_available", return_value=True)
-    @patch("nbkp.disks.mount_checks._check_file_exists", return_value=True)
     @patch("nbkp.disks.mount_checks._check_systemctl_cat", return_value=True)
     @patch("nbkp.disks.mount_checks._run_systemctl_show", return_value={})
     def test_systemd_observation_skips_runtime_probes(
         self,
         _mock_show: object,
         _mock_cat: object,
-        _mock_file: object,
         _mock_cmd: object,
         mock_cryptsetup_path: object,
         mock_mount_unit: object,
@@ -508,10 +509,8 @@ class TestObservationReuse:
     @patch("nbkp.disks.mount_checks.detect_luks_attached")
     @patch("nbkp.disks.mount_checks.run_on_volume")
     @patch("nbkp.disks.mount_checks._check_command_available", return_value=True)
-    @patch("nbkp.disks.mount_checks._check_file_exists", return_value=True)
     def test_direct_observation_skips_runtime_probes(
         self,
-        _mock_file: object,
         _mock_cmd: object,
         mock_run: object,
         mock_luks: object,
@@ -547,14 +546,12 @@ class TestObservationReuse:
         assert result.mounted is None
 
     @patch("nbkp.disks.mount_checks._check_command_available", return_value=True)
-    @patch("nbkp.disks.mount_checks._check_file_exists", return_value=True)
     @patch("nbkp.disks.mount_checks._check_systemctl_cat", return_value=True)
     @patch("nbkp.disks.mount_checks._run_systemctl_show", return_value={})
     def test_observation_decides_backend(
         self,
         _mock_show: object,
         _mock_cat: object,
-        _mock_file: object,
         mock_cmd: object,
     ) -> None:
         """Observation's resolved_backend is used instead of probing systemctl."""

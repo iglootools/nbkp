@@ -32,6 +32,10 @@ _SUDO_AUTH_REFUSED_SIGNATURES = (
     "a terminal is required",
 )
 
+# stderr fragments emitted by systemctl when polkit refuses authorization
+# under BatchMode=yes (no tty / no auth agent available).
+_POLKIT_REFUSED_SIGNATURES = ("interactive authentication required",)
+
 
 def _classify_attach_luks_failure(
     result: subprocess.CompletedProcess[str],
@@ -46,7 +50,7 @@ def _classify_attach_luks_failure(
     """
     stderr = result.stderr.strip()
     refused = stderr == STDIN_CLOSED_MARKER or any(
-        sig in stderr for sig in _SUDO_AUTH_REFUSED_SIGNATURES
+        sig in stderr.lower() for sig in _SUDO_AUTH_REFUSED_SIGNATURES
     )
     if refused:
         return (
@@ -59,12 +63,35 @@ def _classify_attach_luks_failure(
     )
 
 
+def _classify_mount_failure(
+    result: subprocess.CompletedProcess[str],
+) -> tuple[MountFailureReason, str]:
+    """Classify a failed systemctl-start (mount) step.
+
+    When polkit refuses authorization under BatchMode=yes, systemd prints
+    "Interactive authentication required." Surface POLKIT_REFUSED so
+    preflight can route to the polkit-rules fix; troubleshoot carries
+    the actionable remediation.
+    """
+    stderr = result.stderr.strip()
+    if any(sig in stderr.lower() for sig in _POLKIT_REFUSED_SIGNATURES):
+        return (
+            MountFailureReason.POLKIT_REFUSED,
+            "polkit refused systemctl start — rules not configured",
+        )
+    return (
+        MountFailureReason.MOUNT_FAILED,
+        f"mount failed (exit {result.returncode}): {stderr}",
+    )
+
+
 class MountFailureReason(str, enum.Enum):
     """Structured reason for a mount failure."""
 
     DEVICE_NOT_PRESENT = "device_not_present"
     ATTACH_LUKS_FAILED = "attach_luks_failed"
     SUDOERS_REFUSED = "sudoers_refused"
+    POLKIT_REFUSED = "polkit_refused"
     MOUNT_FAILED = "mount_failed"
     STRATEGY_NOT_RESOLVED = "strategy_not_resolved"
     UNREACHABLE = "unreachable"
@@ -188,13 +215,12 @@ def _mount_volume_inner(
         cmd = mount_strategy.build_mount_command()
         result = run_on_volume(cmd, volume, resolved_endpoints)
         if result.returncode != 0:
+            reason, detail = _classify_mount_failure(result)
             return MountResult(
                 volume_slug=slug,
                 success=False,
-                detail=(
-                    f"mount failed (exit {result.returncode}): {result.stderr.strip()}"
-                ),
-                failure_reason=MountFailureReason.MOUNT_FAILED,
+                detail=detail,
+                failure_reason=reason,
             )
 
     return MountResult(volume_slug=slug, success=True)
