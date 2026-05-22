@@ -441,13 +441,16 @@ def _volume_errors(
         #    fires whether ``mounted`` is False (mount step reached and
         #    failed) or None (mount step never ran because an earlier
         #    step like LUKS attach failed first).
-        # 2. mount step ran and ended unmounted — generic VOLUME_NOT_MOUNTED.
-        # 3. Otherwise, fall back to SENTINEL_NOT_FOUND.
+        # 2. device not plugged in — DEVICE_NOT_PRESENT.
+        # 3. device present but mount step ran and ended unmounted — VOLUME_NOT_MOUNTED.
+        # 4. Otherwise, fall back to SENTINEL_NOT_FOUND.
         mount_caps = diag.capabilities.mount
         if mount is not None and mount_caps is not None:
             specific = _mount_lifecycle_failure_error(mount_caps)
             if specific is not None:
                 return [specific]
+            if mount_caps.device_present is False:
+                return [VolumeError.DEVICE_NOT_PRESENT]
             if mount_caps.mounted is False:
                 return [VolumeError.VOLUME_NOT_MOUNTED]
         return [VolumeError.SENTINEL_NOT_FOUND]

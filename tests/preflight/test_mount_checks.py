@@ -332,7 +332,7 @@ class TestVolumeStatusFromDiagnostics:
             is_btrfs_filesystem=False,
             hardlink_supported=True,
             btrfs_user_subvol_rm=False,
-            mount=_base_mount_caps(mounted=False),
+            mount=_base_mount_caps(device_present=True, mounted=False),
         )
         diag = VolumeDiagnostics(capabilities=caps)
         ssh_ep = _active_ssh_endpoint_status()
@@ -341,6 +341,67 @@ class TestVolumeStatusFromDiagnostics:
         )
         assert VolumeError.VOLUME_NOT_MOUNTED in status.errors
         assert VolumeError.SUDOERS_RULES_MISSING not in status.errors
+
+    def test_device_not_present_emits_device_error(self) -> None:
+        """device_present=False should emit DEVICE_NOT_PRESENT (not SENTINEL_NOT_FOUND).
+
+        Mirrors the real preflight-check path where the lifecycle never
+        ran (mounted=None) but ``detect_device_present`` returned False.
+        """
+        caps = VolumeCapabilities(
+            sentinel_exists=False,
+            is_btrfs_filesystem=False,
+            hardlink_supported=True,
+            btrfs_user_subvol_rm=False,
+            mount=_base_mount_caps(device_present=False, mounted=None),
+        )
+        diag = VolumeDiagnostics(capabilities=caps)
+        ssh_ep = _active_ssh_endpoint_status()
+        status = VolumeStatus.from_diagnostics(
+            "encrypted", _encrypted_vol(), ssh_ep, diag
+        )
+        assert VolumeError.DEVICE_NOT_PRESENT in status.errors
+        assert VolumeError.SENTINEL_NOT_FOUND not in status.errors
+        assert VolumeError.VOLUME_NOT_MOUNTED not in status.errors
+
+    def test_device_present_but_unmounted_emits_volume_not_mounted(self) -> None:
+        """device_present=True + mounted=False → VOLUME_NOT_MOUNTED, not DEVICE_NOT_PRESENT."""
+        caps = VolumeCapabilities(
+            sentinel_exists=False,
+            is_btrfs_filesystem=False,
+            hardlink_supported=True,
+            btrfs_user_subvol_rm=False,
+            mount=_base_mount_caps(device_present=True, mounted=False),
+        )
+        diag = VolumeDiagnostics(capabilities=caps)
+        ssh_ep = _active_ssh_endpoint_status()
+        status = VolumeStatus.from_diagnostics(
+            "encrypted", _encrypted_vol(), ssh_ep, diag
+        )
+        assert VolumeError.VOLUME_NOT_MOUNTED in status.errors
+        assert VolumeError.DEVICE_NOT_PRESENT not in status.errors
+
+    def test_sentinel_missing_when_device_mounted_falls_back_to_sentinel(self) -> None:
+        """Drive mounted but sentinel file missing → SENTINEL_NOT_FOUND.
+
+        Only fires after the bug fix when the drive is actually up — i.e.
+        a genuine first-time setup state for a mount-config volume.
+        """
+        caps = VolumeCapabilities(
+            sentinel_exists=False,
+            is_btrfs_filesystem=False,
+            hardlink_supported=True,
+            btrfs_user_subvol_rm=False,
+            mount=_base_mount_caps(device_present=True, mounted=True),
+        )
+        diag = VolumeDiagnostics(capabilities=caps)
+        ssh_ep = _active_ssh_endpoint_status()
+        status = VolumeStatus.from_diagnostics(
+            "encrypted", _encrypted_vol(), ssh_ep, diag
+        )
+        assert VolumeError.SENTINEL_NOT_FOUND in status.errors
+        assert VolumeError.DEVICE_NOT_PRESENT not in status.errors
+        assert VolumeError.VOLUME_NOT_MOUNTED not in status.errors
 
 
 # ── Direct backend errors ───────────────────────────────────
