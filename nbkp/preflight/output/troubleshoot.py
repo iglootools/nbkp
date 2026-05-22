@@ -22,7 +22,7 @@ from ...config.output import (
     endpoint_path,
     host_label,
 )
-from ...disks.auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH, generate_auth_rules
+from ...disks.auth import generate_auth_rules
 from ...remote.ssh import (
     format_proxy_jump_chain,
     ssh_prefix,
@@ -852,12 +852,12 @@ def _print_polkit_rules_missing_fix(
     p2 = _INDENT * 2
     host = host_label(vol, resolved_endpoints)
     user = _resolve_volume_user(vol, resolved_endpoints)
-    rules = generate_auth_rules(config, user)
+    block = generate_auth_rules(config, user).polkit_block()
     console.print(f"{p2}polkit rules not configured on {host}.")
     console.print(f"{p2}Required for systemctl start/stop authorization without sudo.")
-    if rules.polkit:
-        console.print(f"{p2}Install to: {POLKIT_RULES_PATH}")
-        _print_cmd(console, rules.polkit.rstrip(), indent=3)
+    if block is not None:
+        console.print(f"{p2}{block.install_hint}")
+        _print_cmd(console, block.content.rstrip(), indent=3)
     console.print(f"{p2}Or generate with: nbkp disks setup-auth -c <config>")
 
 
@@ -871,12 +871,12 @@ def _print_sudoers_rules_missing_fix(
     p2 = _INDENT * 2
     host = host_label(vol, resolved_endpoints)
     user = _resolve_volume_user(vol, resolved_endpoints)
-    rules = generate_auth_rules(config, user)
+    block = generate_auth_rules(config, user).sudoers_block()
     console.print(f"{p2}sudoers rules not configured on {host}.")
     console.print(f"{p2}Required for passwordless sudo systemd-cryptsetup attach.")
-    if rules.sudoers:
-        console.print(f"{p2}Install to: {SUDOERS_RULES_PATH}")
-        _print_cmd(console, rules.sudoers.rstrip(), indent=3)
+    if block is not None:
+        console.print(f"{p2}{block.install_hint}")
+        _print_cmd(console, block.content.rstrip(), indent=3)
     console.print(f"{p2}Or generate with: nbkp disks setup-auth -c <config>")
 
 

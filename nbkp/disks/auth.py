@@ -7,6 +7,7 @@ See docs/internals.md § "Why polkit + sudoers (hybrid authorization)".
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from textwrap import dedent
 
@@ -24,6 +25,20 @@ SUDOERS_RULES_PATH = "/etc/sudoers.d/nbkp"
 
 
 @dataclass(frozen=True)
+class AuthRuleBlock:
+    """A single auth-rule file to install: human name, target path, body."""
+
+    name: str
+    path: str
+    content: str
+
+    @property
+    def install_hint(self) -> str:
+        """Single-line "Install to: <path>" hint used in user-facing output."""
+        return f"Install to: {self.path}"
+
+
+@dataclass(frozen=True)
 class AuthRules:
     """Generated authorization rules for mount management."""
 
@@ -32,6 +47,27 @@ class AuthRules:
 
     sudoers: str | None
     """sudoers content, or None if no encrypted volumes."""
+
+    def polkit_block(self) -> AuthRuleBlock | None:
+        """Polkit block, or None when no polkit rules were generated."""
+        if self.polkit:
+            return AuthRuleBlock("polkit rules", POLKIT_RULES_PATH, self.polkit)
+        return None
+
+    def sudoers_block(self) -> AuthRuleBlock | None:
+        """Sudoers block, or None when no sudoers rules were generated."""
+        if self.sudoers:
+            return AuthRuleBlock("sudoers rules", SUDOERS_RULES_PATH, self.sudoers)
+        return None
+
+    def blocks(self) -> Iterator[AuthRuleBlock]:
+        """Yield each non-empty auth-rule block in install order."""
+        polkit = self.polkit_block()
+        if polkit is not None:
+            yield polkit
+        sudoers = self.sudoers_block()
+        if sudoers is not None:
+            yield sudoers
 
 
 def generate_polkit_rules(
