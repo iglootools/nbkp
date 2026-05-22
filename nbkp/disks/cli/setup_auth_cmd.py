@@ -46,6 +46,6 @@ def setup_auth(
 
     if rules.sudoers is not None:
         typer.echo("# sudoers rules")
-        typer.echo(f"# Install with: sudo visudo -f {SUDOERS_RULES_PATH}")
+        typer.echo(f"# Install to: {SUDOERS_RULES_PATH}")
         typer.echo()
         typer.echo(rules.sudoers)

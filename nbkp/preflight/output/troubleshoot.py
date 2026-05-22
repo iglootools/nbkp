@@ -875,7 +875,7 @@ def _print_sudoers_rules_missing_fix(
     console.print(f"{p2}sudoers rules not configured on {host}.")
     console.print(f"{p2}Required for passwordless sudo systemd-cryptsetup attach.")
     if rules.sudoers:
-        console.print(f"{p2}Install with: sudo visudo -f {SUDOERS_RULES_PATH}")
+        console.print(f"{p2}Install to: {SUDOERS_RULES_PATH}")
         _print_cmd(console, rules.sudoers.rstrip(), indent=3)
     console.print(f"{p2}Or generate with: nbkp disks setup-auth -c <config>")
 
