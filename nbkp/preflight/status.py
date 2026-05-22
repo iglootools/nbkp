@@ -839,7 +839,16 @@ def _destination_endpoint_errors(
     host_tools: HostToolCapabilities | None,
     endpoint: SyncEndpoint,
 ) -> list[DestinationEndpointError]:
-    """Translate destination endpoint diagnostics into errors."""
+    """Translate destination endpoint diagnostics into errors.
+
+    ``NOT_WRITABLE`` is only emitted when the endpoint directory is
+    known to exist — approximated via ``sentinel_exists`` (the sentinel
+    lives inside the endpoint dir, so its presence proves the dir
+    exists).  When the sentinel is missing we suppress NOT_WRITABLE
+    because the ``test -w`` probe also fails on non-existent paths, and
+    the SENTINEL_NOT_FOUND fix already covers the "create the dir"
+    case.
+    """
     return [
         *(
             [DestinationEndpointError.SENTINEL_NOT_FOUND]
@@ -849,7 +858,7 @@ def _destination_endpoint_errors(
         *_destination_snapshot_backend_ep_errors(diag, caps, host_tools, endpoint),
         *(
             [DestinationEndpointError.NOT_WRITABLE]
-            if not diag.endpoint_writable
+            if not diag.endpoint_writable and diag.sentinel_exists
             else []
         ),
         *(

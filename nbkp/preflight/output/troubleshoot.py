@@ -410,18 +410,15 @@ def _print_source_endpoint_error_fix(
             )
         case SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND:
             path = endpoint_path(src_vol, src_ep.subdir)
-            if src_ep.btrfs_snapshots.enabled:
-                cmds = [
-                    f"sudo mkdir {path}/{SNAPSHOTS_DIR}",
-                    f"sudo chown <user>:<group> {path}/{SNAPSHOTS_DIR}",
-                ]
-            else:
-                cmds = [f"mkdir -p {path}/{SNAPSHOTS_DIR}"]
-            for cmd in cmds:
-                _print_cmd(
-                    console,
-                    wrap_cmd(cmd, src_vol, resolved_endpoints),
-                )
+            # Endpoint dir is expected to be user-writable by this
+            # point (fixed via NOT_WRITABLE if needed), so a plain
+            # mkdir suffices regardless of snapshot backend.
+            _print_cmd(
+                console,
+                wrap_cmd(
+                    f"mkdir -p {path}/{SNAPSHOTS_DIR}", src_vol, resolved_endpoints
+                ),
+            )
 
 
 def _print_destination_endpoint_error_fix(
@@ -475,15 +472,17 @@ def _print_destination_endpoint_error_fix(
                 )
         case DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND:
             path = endpoint_path(dst_vol, dst_ep.subdir)
-            cmds = [
-                f"sudo btrfs subvolume create {path}/{STAGING_DIR}",
-                f"sudo chown <user>:<group> {path}/{STAGING_DIR}",
-            ]
-            for cmd in cmds:
-                _print_cmd(
-                    console,
-                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
-                )
+            # Endpoint dir is expected to be user-writable by this
+            # point (fixed via NOT_WRITABLE if needed), so subvolume
+            # create runs without sudo (kernel 5.8+).
+            _print_cmd(
+                console,
+                wrap_cmd(
+                    f"btrfs subvolume create {path}/{STAGING_DIR}",
+                    dst_vol,
+                    resolved_endpoints,
+                ),
+            )
         case DestinationEndpointError.STAGING_SUBVOL_NOT_WRITABLE:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
@@ -501,18 +500,15 @@ def _print_destination_endpoint_error_fix(
             )
         case DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND:
             path = endpoint_path(dst_vol, dst_ep.subdir)
-            if dst_ep.hard_link_snapshots.enabled:
-                cmds = [f"mkdir -p {path}/{SNAPSHOTS_DIR}"]
-            else:
-                cmds = [
-                    f"sudo mkdir {path}/{SNAPSHOTS_DIR}",
-                    f"sudo chown <user>:<group> {path}/{SNAPSHOTS_DIR}",
-                ]
-            for cmd in cmds:
-                _print_cmd(
-                    console,
-                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
-                )
+            # Endpoint dir is expected to be user-writable by this
+            # point (fixed via NOT_WRITABLE if needed), so a plain
+            # mkdir suffices regardless of snapshot backend.
+            _print_cmd(
+                console,
+                wrap_cmd(
+                    f"mkdir -p {path}/{SNAPSHOTS_DIR}", dst_vol, resolved_endpoints
+                ),
+            )
         case DestinationEndpointError.SNAPSHOTS_DIR_NOT_WRITABLE:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
