@@ -6,6 +6,18 @@ from collections.abc import Iterable
 
 from rich.text import Text
 
+from ...clihelpers import (
+    OK_SYMBOL,
+    Severity,
+    severity_style,
+    severity_symbol,
+)
+from ...disks.output import (
+    device_fail_severity,
+    luks_fail_severity,
+    mounted_fail_severity,
+)
+from ..severity import PreflightError, severity_for_error, severity_for_errors
 from ..status import (
     DestinationEndpointError,
     MountCapabilities,
@@ -18,6 +30,7 @@ from ..status import (
     VolumeError,
     VolumeStatus,
 )
+from ..strictness import Strictness
 from ...config import MountConfig
 
 
@@ -40,13 +53,22 @@ def status_text(
         | list[SourceEndpointError]
         | list[DestinationEndpointError]
     ),
+    strictness: Strictness,
 ) -> Text:
-    """Format status with optional errors as styled text."""
+    """Format status with optional errors as styled text.
+
+    Inactive statuses use the warning icon when their errors are all
+    non-fatal under *strictness* (e.g. missing sentinels with the
+    default ``IGNORE_INACTIVE``), and the error icon otherwise.
+    """
     if active:
-        return Text("\u2713active", style="green")
-    else:
-        error_str = ", ".join(r.value for r in errors)
-        return Text(f"\u2717inactive ({error_str})", style="red")
+        return Text(f"{OK_SYMBOL}active", style=severity_style(Severity.OK))
+    severity = severity_for_errors(errors, strictness)
+    error_str = ", ".join(r.value for r in errors)
+    return Text(
+        f"{severity_symbol(severity)}inactive ({error_str})",
+        style=severity_style(severity),
+    )
 
 
 def mount_capability_items(
@@ -89,37 +111,75 @@ def format_capabilities(caps: VolumeCapabilities | None) -> Text:
     return Text(", ".join(items) if items else "none")
 
 
-def check(ok: bool, label: str) -> Text:
-    """Format a diagnostic item as check-label or x-label with color."""
+def check(
+    ok: bool,
+    label: str,
+    fail_error: PreflightError | None = None,
+    fail_severity: Severity | None = None,
+    strictness: Strictness = Strictness.IGNORE_INACTIVE,
+) -> Text:
+    """Format a diagnostic item as \u2713label (green) or \u26a0/\u2717label.
+
+    The failure icon is picked from (in order of priority):
+
+    - *fail_severity* if given \u2014 caller has already classified the
+      failure (e.g. mount-state columns use shared helpers).
+    - Otherwise, *fail_error* classified via ``severity_for_error``
+      under *strictness*.
+    - Otherwise, ``Severity.ERROR``.
+    """
     if ok:
-        return Text(f"\u2713{label}", style="green")
+        return Text(f"{OK_SYMBOL}{label}", style=severity_style(Severity.OK))
+    if fail_severity is not None:
+        severity = fail_severity
+    elif fail_error is not None:
+        severity = severity_for_error(fail_error, strictness)
     else:
-        return Text(f"\u2717{label}", style="red")
+        severity = Severity.ERROR
+    return Text(
+        f"{severity_symbol(severity)}{label}",
+        style=severity_style(severity),
+    )
 
 
 def format_mount_status(
     mount_caps: MountCapabilities | None,
     mount_config: MountConfig | None,
+    strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Text:
     """Format runtime mount state as styled text.
 
-    Shows check/x for each probed mount state item.  Items whose value
+    Shows \u2713/\u26a0/\u2717 for each probed mount state item.  Items whose value
     is ``None`` (not probed / not applicable) are omitted, matching
     the pattern used by source/destination diagnostics columns.
     Empty when the volume has no mount config or caps are unavailable.
+
+    Failure-icon severity is delegated to the shared
+    ``{device,luks,mounted}_fail_severity`` helpers in
+    :mod:`nbkp.disks.output`, which inspect ``mount_failure_reason`` to
+    distinguish real failures (\u2717) from observation/cascade states (\u26a0).
+    The "drive not plugged in \u2192 \u26a0 luks" cascade emerges naturally:
+    when no LUKS-attach attempt was made the failure_reason isn't in
+    ``LUKS_STAGE_FAILURES``, so the helper returns the inactive-class
+    severity for the active strictness.
     """
     if mount_caps is None or mount_config is None:
         return Text("")
-    items = [
-        (mount_caps.device_present, "device"),
+    reason = mount_caps.mount_failure_reason
+    items: list[tuple[bool | None, str, Severity]] = [
+        (mount_caps.device_present, "device", device_fail_severity(strictness)),
         *(
-            [(mount_caps.luks_attached, "luks")]
+            [(mount_caps.luks_attached, "luks", luks_fail_severity(reason, strictness))]
             if mount_config.encryption is not None
             else []
         ),
-        (mount_caps.mounted, "mounted"),
+        (mount_caps.mounted, "mounted", mounted_fail_severity(reason, strictness)),
     ]
-    return join_text(check(value, label) for value, label in items if value is not None)
+    return join_text(
+        check(bool(value), label, fail_severity=fail_sev)
+        for value, label, fail_sev in items
+        if value is not None
+    )
 
 
 def collect_ssh_endpoint_statuses(

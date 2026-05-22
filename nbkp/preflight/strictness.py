@@ -1,27 +1,15 @@
-"""Preflight error strictness policy."""
+"""Preflight error strictness policy.
+
+The :class:`Strictness` enum itself lives in :mod:`nbkp.clihelpers.strictness`
+so CLI code in sibling packages can read it without creating a cycle
+through ``preflight``.  This module re-exports it and owns the
+preflight-status-aware :func:`has_fatal_errors` helper.
+"""
 
 from __future__ import annotations
 
-import enum
-
+from ..clihelpers.strictness import Strictness as Strictness
 from .status import SyncStatus
-
-
-class Strictness(str, enum.Enum):
-    """Controls how preflight errors affect the exit code.
-
-    - ``IGNORE_NONE``: All errors are fatal — any inactive sync
-      (including missing sentinels) aborts the run.
-    - ``IGNORE_INACTIVE``: Expected-inactive errors (missing sentinels,
-      unreachable hosts) are silently skipped; infrastructure errors
-      are still fatal.  This is the default.
-    - ``IGNORE_ALL``: All preflight errors are ignored — only sync
-      execution failures cause a non-zero exit.
-    """
-
-    IGNORE_NONE = "ignore-none"
-    IGNORE_INACTIVE = "ignore-inactive"
-    IGNORE_ALL = "ignore-all"
 
 
 def has_fatal_errors(

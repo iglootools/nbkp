@@ -12,6 +12,7 @@ from typing import Callable, Optional
 import yaml
 from pydantic import BaseModel
 
+from ....clihelpers import Severity
 from ....config import (
     Config,
     CredentialProvider,
@@ -63,7 +64,7 @@ def seed_demo(
     bandwidth_limit: int = 250,
     credential_provider: CredentialProvider = CredentialProvider.KEYRING,
     on_step_start: Callable[[str], None] | None = None,
-    on_step_end: Callable[[str, bool, str | None], None] | None = None,
+    on_step_end: Callable[[str, Severity, str | None], None] | None = None,
 ) -> SeedResult:
     """Create a demo environment with config and test data.
 
@@ -73,7 +74,7 @@ def seed_demo(
         Called before each step with an in-progress label
         (e.g. ``"Building Docker image..."``).
     on_step_end:
-        Called after each step with ``(label, success, detail)``.
+        Called after each step with ``(label, severity, detail)``.
     """
     rsync_opts = (
         RsyncOptions(extra_options=[f"--bwlimit={bandwidth_limit}"])
@@ -87,7 +88,9 @@ def seed_demo(
 
     def _end(label: str, success: bool, detail: str | None = None) -> None:
         if on_step_end is not None:
-            on_step_end(label, success, detail)
+            on_step_end(
+                label, Severity.OK if success else Severity.ERROR, detail
+            )
 
     # ── Server and bastion containers ────────────────────────
     storage_endpoint = None

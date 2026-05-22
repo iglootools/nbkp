@@ -13,6 +13,8 @@ from rich.progress import (
     TextColumn,
 )
 
+from .severity import Severity, severity_icon
+
 
 class StepProgressBar:
     """Rich progress bar for multi-step operations.
@@ -55,7 +57,7 @@ class StepProgressBar:
     def on_end(
         self,
         label: str,
-        success: bool,
+        severity: Severity,
         detail: str | None = None,
     ) -> None:
         """Call after each step completes.
@@ -65,7 +67,7 @@ class StepProgressBar:
         """
         if self._progress is not None:
             assert self._task_id is not None
-            icon = "[green]\u2713[/green]" if success else "[red]\u2717[/red]"
+            icon = severity_icon(severity)
             detail_str = f" ({detail})" if detail else ""
             self._progress.console.print(f"{icon} {label}{detail_str}")
             self._progress.advance(self._task_id)

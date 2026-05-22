@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from ...clihelpers import OutputFormat
-from ...clihelpers import StepProgressBar
+from collections.abc import Sequence
+
+from ...clihelpers import OutputFormat, StepProgressBar
 from ...config import Config, LocalVolume
 from ...config.epresolution import ResolvedEndpoints
 from ...disks.observation import MountObservation
 from ...preflight import PreflightResult, check_all_syncs
 from ...preflight.output import print_human_check
+from ..severity import PreflightError, severity_for_errors
 from ..strictness import Strictness, has_fatal_errors
 
 
@@ -53,8 +55,15 @@ def check_all_with_progress(
     resolved_endpoints: ResolvedEndpoints | None = None,
     dry_run: bool = False,
     mount_observations: dict[str, MountObservation] | None = None,
+    strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> PreflightResult:
-    """Run check_all_syncs with an optional progress bar."""
+    """Run check_all_syncs with an optional progress bar.
+
+    *strictness* picks the per-step icon: errors that are fatal under
+    the current policy show ``✗`` (red), errors that are non-fatal
+    (e.g. inactive volumes under ``IGNORE_INACTIVE``) show ``⚠``
+    (orange).
+    """
     total = _check_total(cfg, only_syncs)
 
     if not use_progress or total == 0:
@@ -71,8 +80,14 @@ def check_all_with_progress(
         def _on_start(label: str) -> None:
             bar.on_start(f"Checking {label}...")
 
-        def _on_end(label: str, active: bool, error_summary: str | None) -> None:
-            bar.on_end(f"check {label}", active, error_summary)
+        def _on_end(label: str, errors: Sequence[object]) -> None:
+            # The checks-layer callback passes any-enum errors; the
+            # severity helper handles them uniformly via duck-typing
+            # on _is_inactive's match-case.
+            typed_errors: list[PreflightError] = list(errors)  # type: ignore[arg-type]
+            severity = severity_for_errors(typed_errors, strictness)
+            summary = ", ".join(e.value for e in typed_errors) if typed_errors else None
+            bar.on_end(f"check {label}", severity, summary)
 
         return check_all_syncs(
             cfg,
@@ -107,6 +122,7 @@ def check_and_display(
         resolved_endpoints=resolved_endpoints,
         dry_run=dry_run,
         mount_observations=mount_observations,
+        strictness=strictness,
     )
 
     if output_format is OutputFormat.HUMAN:
@@ -116,6 +132,7 @@ def check_and_display(
             preflight.sync_statuses,
             cfg,
             resolved_endpoints=resolved_endpoints,
+            strictness=strictness,
         )
 
     return preflight, has_fatal_errors(preflight.sync_statuses, strictness=strictness)

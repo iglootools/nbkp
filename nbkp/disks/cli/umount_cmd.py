@@ -7,7 +7,7 @@ from typing import Annotated, Optional
 
 import typer
 
-from ...clihelpers import OutputFormat
+from ...clihelpers import OutputFormat, Severity
 from .helpers import DisksProgressBar
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
@@ -84,7 +84,7 @@ def umount(
         if umount_bar is not None:
             umount_bar.on_end(
                 display_names.get(slug, slug),
-                result.success,
+                Severity.OK if result.success else Severity.ERROR,
                 result.detail,
                 result.warning,
             )

@@ -9,6 +9,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from ..clihelpers import Severity, Strictness, classify_severity
 from ..config import (
     Config,
     LocalVolume,
@@ -210,6 +211,38 @@ def _outcome_text(outcome: SyncOutcome) -> Text:
             return Text("SKIPPED", style="dim")
         case SyncOutcome.FAILED:
             return Text("FAILED", style="red")
+
+
+def outcome_severity(
+    outcome: SyncOutcome,
+    strictness: Strictness = Strictness.IGNORE_INACTIVE,
+) -> Severity:
+    """Map a sync outcome to a display severity under *strictness*.
+
+    SKIPPED and CANCELLED reflect preflight-driven non-actions and are
+    classified by *strictness*: warning under ``IGNORE_INACTIVE`` /
+    ``IGNORE_ALL``, error under ``IGNORE_NONE`` (which would normally
+    abort before reaching the runner, so this branch is defensive).
+    FAILED is a runtime failure and is always an error.
+
+    CANCELLED is a known oversimplification: ``failed`` (the runner's
+    cascade trigger set) is populated by both ``FAILED`` upstreams and
+    ``SKIPPED`` upstreams, so CANCELLED's cause is ambiguous from the
+    result alone.  Treating it as ⚠ matches the SKIPPED-upstream case
+    cleanly and is acceptable for FAILED-upstream because the real
+    error is already visible on the upstream's own line, and the run's
+    exit code reflects the runtime failure regardless of how cancelled
+    downstreams render.  Threading the cause through ``SyncResult``
+    would let CANCELLED inherit the upstream's severity, but we don't
+    do that today.
+    """
+    match outcome:
+        case SyncOutcome.SUCCESS:
+            return Severity.OK
+        case SyncOutcome.FAILED:
+            return Severity.ERROR
+        case SyncOutcome.SKIPPED | SyncOutcome.CANCELLED:
+            return classify_severity(is_inactive=True, strictness=strictness)
 
 
 def build_human_results_sections(

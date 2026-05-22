@@ -485,11 +485,54 @@ class TestFormatMountStatus:
         assert "\u2713luks" in result
         assert "\u2713mounted" in result
 
-    def test_encrypted_all_false(self) -> None:
+    def test_encrypted_device_absent_cascades_luks_to_warning(self) -> None:
+        """When the device isn't plugged in, the luks/mounted failures are
+        downstream consequences and should all render as warnings \u2014 an
+        absent disk shouldn't look like an authentication failure.
+        """
         mc = _base_mount_caps(device_present=False, luks_attached=False, mounted=False)
         result = format_mount_status(mc, _encrypted_mount())
-        assert "\u2717device" in result
+        assert "\u26a0device" in result
+        assert "\u26a0luks" in result
+        assert "\u26a0mounted" in result
+
+    def test_encrypted_device_present_luks_probe_only_is_warning(self) -> None:
+        """Device present, ``luks_attached=False`` with no recorded
+        ``mount_failure_reason`` \u2014 e.g. ``preflight check`` on a
+        plugged-in but locked drive.  Treated as observation (\u26a0), not
+        a failure (\u2717).
+        """
+        mc = _base_mount_caps(device_present=True, luks_attached=False, mounted=False)
+        result = format_mount_status(mc, _encrypted_mount())
+        assert "\u2713device" in result
+        assert "\u26a0luks" in result
+        assert "\u26a0mounted" in result
+
+    def test_encrypted_device_present_luks_attach_failed_is_fatal(self) -> None:
+        """A real LUKS-stage failure (``ATTACH_LUKS_FAILED``) on a present
+        device renders \u2717 on the LUKS column.
+        """
+        mc = _base_mount_caps(
+            device_present=True,
+            luks_attached=False,
+            mounted=None,
+            mount_failure_reason="attach_luks_failed",
+        )
+        result = format_mount_status(mc, _encrypted_mount())
+        assert "\u2713device" in result
         assert "\u2717luks" in result
+
+    def test_mount_failed_renders_mounted_as_fatal(self) -> None:
+        """A real mount-stage failure (``MOUNT_FAILED``) renders \u2717 on Mounted."""
+        mc = _base_mount_caps(
+            device_present=True,
+            luks_attached=True,
+            mounted=False,
+            mount_failure_reason="mount_failed",
+        )
+        result = format_mount_status(mc, _encrypted_mount())
+        assert "\u2713device" in result
+        assert "\u2713luks" in result
         assert "\u2717mounted" in result
 
     def test_unencrypted_no_luks_column(self) -> None:
