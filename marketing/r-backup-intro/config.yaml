@@ -29,29 +29,64 @@ volumes:
     type: local
     path: /Volumes/rocketnano2tb
 
-  # btrfs
+  # btrfs, luks
   seagate1tb:
     type: remote
     ssh-endpoint: raspberry-pi4-lan
     path: /mnt/seagate1tb
+    mount:
+      device-uuid: 256c3f2b-6f62-4213-b278-fae76c35b804
+      encryption:
+        type: luks
+        mapper-name: seagate1tb
+        passphrase-id: seagate1tb
 
-  # btrfs
+  # btrfs, luks
   seagate2tb:
     type: remote
     ssh-endpoint: raspberry-pi4-lan
     path: /mnt/seagate2tb
+    mount:
+      device-uuid: 791586c3-5947-46bf-bb5e-fc1a35084a4b
+      encryption:
+        type: luks
+        mapper-name: seagate2tb
+        passphrase-id: seagate2tb
 
-  # btrfs
+  # btrfs, luks
   seagate8tb:
     type: remote
     ssh-endpoint: raspberry-pi4-lan
     path: /mnt/seagate8tb
+    mount:
+      device-uuid: 5941f273-f73c-44c5-a3ef-fae7248db1b6
+      encryption:
+        type: luks
+        mapper-name: seagate8tb
+        passphrase-id: seagate8tb
 
-  # btrfs: currently formatted as apfs, but we should backup from seagate8tb to this drive and convert it to btrfs (TODO)
   wd6tb:
     type: remote
     ssh-endpoint: raspberry-pi4-lan
     path: /mnt/wd6tb
+    mount:
+      device-uuid: 1467358c-d25f-44c7-a330-9cc6576075b7
+      encryption:
+        type: luks
+        mapper-name: wd6tb
+        passphrase-id: wd6tb
+
+  # btrfs, luks
+  iomega1tb:
+    type: remote
+    ssh-endpoint: raspberry-pi4-lan
+    path: /mnt/iomega1tb
+    mount:
+      device-uuid: ad5542e5-5365-4951-a1f2-fe81c4d6fe43
+      encryption:
+        type: luks
+        mapper-name: iomega1tb
+        passphrase-id: iomega1tb
     
 sync-endpoints:
   laptop-docs:
@@ -80,6 +115,12 @@ sync-endpoints:
     hard-link-snapshots:
       enabled: true
       max-snapshots: 10
+  rocketnano1tb-backups-home-config:
+    volume: rocketnano1tb
+    subdir: backups/home-config
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 30
 
   # rocketnano2tb: original data
   rocketnano2tb-photos:
@@ -93,6 +134,12 @@ sync-endpoints:
     hard-link-snapshots:
       enabled: true
       max-snapshots: 10
+  rocketnano2tb-backups-home-config:
+    volume: rocketnano2tb
+    subdir: backups/home-config
+    hard-link-snapshots:
+      enabled: true
+      max-snapshots: 30
 
   # seagate1tb: backups
   seagate1tb-backups-applications:
@@ -137,7 +184,22 @@ sync-endpoints:
     btrfs-snapshots:
       enabled: true
       max-snapshots: 30
-      
+
+  # iomega1tb: backups
+  iomega1tb-backups-docs:
+    volume: iomega1tb
+    subdir: backups/docs
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+
+  iomega1tb-backups-photos:
+    volume: iomega1tb
+    subdir: backups/photos
+    btrfs-snapshots:
+      enabled: true
+      max-snapshots: 30
+
   # seagate8tb: backups
   seagate8tb-backups-applications:
     volume: seagate8tb
@@ -241,13 +303,37 @@ syncs:
   laptop-docs-to-seagate8tb:
     source: laptop-docs
     destination: seagate8tb-backups-docs
+    rsync-options:
+      checksum: false
     filters:
       - dir-merge: .rsync-filter
+  
+  laptop-home-config-to-rocketnano1tb:
+    source: laptop-home
+    destination: rocketnano1tb-backups-home-config
+    filters:
+      - "+ /.config/nbkp/***"
+      - "+ /.config/photree/***"
+      - "+ /.config/mise/***"
+      # cruft
+      - "- /**"
+
+  laptop-home-config-to-rocketnano2tb:
+    source: laptop-home
+    destination: rocketnano2tb-backups-home-config
+    filters:
+      - "+ /.config/nbkp/***"
+      - "+ /.config/photree/***"
+      - "+ /.config/mise/***"
+      # cruft
+      - "- /**"
   
   # laptop-home
   laptop-home-to-seagate8tb:
     source: laptop-home
     destination: seagate8tb-backups-home
+    rsync-options:
+      checksum: false
     filters:
       - "+ /.bash*"
       - "+ /.gitconfig"
@@ -259,7 +345,6 @@ syncs:
       - "+ /.zsh*"
       - "+ /Desktop/***"
       - "+ /Documents/***"
-      - "+ /Downloads/***"
       - "- /Movies/iMovie Library.imovielibrary/***"
       - "+ /Movies/***"
       - "+ /Music/***"
@@ -272,69 +357,118 @@ syncs:
   rocketnano1tb-applications-to-seagate8tb:
     source: rocketnano1tb-applications
     destination: seagate8tb-backups-applications
+    rsync-options:
+      checksum: false
 
   rocketnano1tb-audio-to-seagate8tb:
     source: rocketnano1tb-audio
     destination: seagate8tb-backups-audio
-  
+    rsync-options:
+      checksum: false
+
   rocketnano1tb-education-to-seagate8tb:
     source: rocketnano1tb-education
     destination: seagate8tb-backups-education
-    
+    rsync-options:
+      checksum: false
+
   # rocketnano2tb
   rocketnano2tb-photos-to-seagate8tb:
     source: rocketnano2tb-photos
     destination: seagate8tb-backups-photos
+    rsync-options:
+      checksum: false
   
   # seagate8tb-backups
   seagate8tb-backups-applications-to-seagate1tb:
     source: seagate8tb-backups-applications
     destination: seagate1tb-backups-applications
-
-  seagate8tb-backups-applications-to-wd6tb:
-    source: seagate8tb-backups-applications
-    destination: wd6tb-backups-applications
+    rsync-options:
+      checksum: false
 
   seagate8tb-backups-audio-to-seagate1tb:
     source: seagate8tb-backups-audio
     destination: seagate1tb-backups-audio
-
-  seagate8tb-backups-audio-to-seagate1tb:
-    source: seagate8tb-backups-audio
-    destination: seagate1tb-backups-audio
-
-  seagate8tb-backups-audio-to-wd6tb:
-    source: seagate8tb-backups-audio
-    destination: wd6tb-backups-audio
+    rsync-options:
+      checksum: false
 
   seagate8tb-backups-docs-to-seagate1tb:
     source: seagate8tb-backups-docs
     destination: seagate1tb-backups-docs
+    rsync-options:
+      checksum: false
+  
+  seagate8tb-backups-education-to-seagate1tb:
+    source: seagate8tb-backups-education
+    destination: seagate1tb-backups-education
+    rsync-options:
+      checksum: false
 
-  seagate8tb-backups-docs-to-seagate2tb:
-    source: seagate8tb-backups-docs
-    destination: seagate2tb-backups-docs
+  seagate8tb-backups-applications-to-wd6tb:
+    source: seagate8tb-backups-applications
+    destination: wd6tb-backups-applications
+    rsync-options:
+      checksum: false
+
+  seagate8tb-backups-audio-to-wd6tb:
+    source: seagate8tb-backups-audio
+    destination: wd6tb-backups-audio
+    rsync-options:
+      checksum: false
 
   seagate8tb-backups-docs-to-wd6tb:
     source: seagate8tb-backups-docs
     destination: wd6tb-backups-docs
+    rsync-options:
+      checksum: false
 
-  seagate8tb-backups-education-to-seagate1tb:
-    source: seagate8tb-backups-education
-    destination: seagate1tb-backups-education
-  
   seagate8tb-backups-education-to-wd6tb:
     source: seagate8tb-backups-education
     destination: wd6tb-backups-education
+    rsync-options:
+      checksum: false
   
   seagate8tb-backups-home-to-wd6tb:
     source: seagate8tb-backups-home
     destination: wd6tb-backups-home
-
-  seagate8tb-backups-photos-to-seagate2tb:
-    source: seagate8tb-backups-photos
-    destination: seagate2tb-backups-photos
+    rsync-options:
+      checksum: false
 
   seagate8tb-backups-photos-to-wd6tb:
     source: seagate8tb-backups-photos
     destination: wd6tb-backups-photos
+    rsync-options:
+      checksum: false
+
+  seagate8tb-backups-docs-to-seagate2tb:
+    source: seagate8tb-backups-docs
+    destination: seagate2tb-backups-docs
+    rsync-options:
+      checksum: false
+
+  seagate8tb-backups-photos-to-seagate2tb:
+    source: seagate8tb-backups-photos
+    destination: seagate2tb-backups-photos
+    rsync-options:
+      checksum: false
+
+  seagate8tb-backups-docs-to-iomega1tb:
+    source: seagate8tb-backups-docs
+    destination: iomega1tb-backups-docs
+    rsync-options:
+      checksum: false
+
+  seagate8tb-backups-photos-to-iomega1tb:
+    source: seagate8tb-backups-photos
+    destination: iomega1tb-backups-photos
+    rsync-options:
+      checksum: false
+    filters:
+      # Only recent photos (from 2020 onwards: photos/albums/YYYY/) as the disk is only 1TB
+      - "+ /photos/albums/"
+      - "+ /photos/albums/202[0-9]/***"
+      - "+ /photos/albums/203[0-9]/***"
+      - "+ /photos/albums/204[0-9]/***"
+      - "- /**"
+
+  
