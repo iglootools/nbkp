@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -11,15 +12,16 @@ from rich.console import Console, Group
 from rich.panel import Panel
 from rich.text import Text
 
-from ...clihelpers import OutputFormat
+from ...clihelpers import OutputFormat, severity_icon
 from ...clihelpers import StepProgressBar
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
 from ...ordering.output import build_rich_tree_sections
 from ...preflight import PreflightResult
 from ...preflight.output import print_human_check
+from ...preflight.severity import PreflightError, severity_for_errors
 from ...sync import ProgressMode, SyncResult
-from ...sync.output import build_human_results_sections
+from ...sync.output import build_human_results_sections, outcome_severity
 from ..pipeline import Strictness, check_and_run
 
 from ...disks.cli.helpers import managed_mount
@@ -123,7 +125,12 @@ def run(
     output_format = output
 
     with managed_mount(
-        cfg, resolved, mount=mount, umount=umount, output_format=output_format
+        cfg,
+        resolved,
+        mount=mount,
+        umount=umount,
+        output_format=output_format,
+        strictness=strictness,
     ) as (_mount_strategy, mount_observations):
         # -- Check progress bar ----------------------------------------
         total = _check_total(cfg, sync) if output_format is OutputFormat.HUMAN else 0
@@ -137,9 +144,14 @@ def run(
             if check_bar is not None:
                 check_bar.on_start(f"Checking {label}...")
 
-        def on_check_end(label: str, active: bool, error_summary: str | None) -> None:
+        def on_check_end(label: str, errors: Sequence[object]) -> None:
             if check_bar is not None:
-                check_bar.on_end(f"check {label}", active, error_summary)
+                typed_errors: list[PreflightError] = list(errors)  # type: ignore[arg-type]
+                severity = severity_for_errors(typed_errors, strictness)
+                summary = (
+                    ", ".join(e.value for e in typed_errors) if typed_errors else None
+                )
+                check_bar.on_end(f"check {label}", severity, summary)
 
         def on_checks_done(preflight: PreflightResult) -> None:
             if check_bar is not None:
@@ -151,6 +163,7 @@ def run(
                     preflight.sync_statuses,
                     cfg,
                     resolved_endpoints=resolved,
+                    strictness=strictness,
                 )
 
         # -- Sync progress callbacks -----------------------------------
@@ -165,7 +178,6 @@ def run(
         )
 
         console = Console()
-        progress_lines: list[Text] = []
         status_display = None
 
         def on_sync_start(slug: str) -> None:
@@ -181,9 +193,8 @@ def run(
             if status_display is not None:
                 status_display.stop()
                 status_display = None
-            icon = "[green]\u2713[/green]" if result.success else "[red]\u2717[/red]"
+            icon = severity_icon(outcome_severity(result.outcome, strictness))
             console.print(f"{icon} {slug}")
-            progress_lines.append(Text.from_markup(f"{icon} {slug}"))
 
         # -- Pipeline --------------------------------------------------
         pipeline = check_and_run(
@@ -250,10 +261,12 @@ def run(
                     }
                     typer.echo(json.dumps(data, indent=2))
                 case OutputFormat.HUMAN:
+                    sync_severities = {
+                        r.sync_slug: outcome_severity(r.outcome, strictness)
+                        for r in pipeline.results
+                    }
                     sections = [
-                        *build_rich_tree_sections(cfg),
-                        Text(""),
-                        *progress_lines,
+                        *build_rich_tree_sections(cfg, sync_severities),
                         Text(""),
                         *build_human_results_sections(
                             pipeline.results, dry_run, cfg, resolved

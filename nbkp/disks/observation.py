@@ -32,6 +32,16 @@ class MountObservation:
     """Specific cause when the mount step failed, for preflight to
     upgrade the generic VOLUME_NOT_MOUNTED to a more actionable error."""
 
+    @property
+    def mount_failure_reason(self) -> str | None:
+        """Stringified ``failure_reason``.
+
+        Mirrors ``MountCapabilities.mount_failure_reason`` so that the
+        ``MountStatusData`` protocol can expose a single accessor for
+        both pre-lifecycle and post-lifecycle status objects.
+        """
+        return self.failure_reason.value if self.failure_reason is not None else None
+
 
 def build_mount_observations(
     mount_results: list[MountResult],

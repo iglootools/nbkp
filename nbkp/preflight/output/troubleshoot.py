@@ -22,7 +22,7 @@ from ...config.output import (
     endpoint_path,
     host_label,
 )
-from ...disks.auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH, generate_auth_rules
+from ...disks.auth import generate_auth_rules
 from ...remote.ssh import (
     format_proxy_jump_chain,
     ssh_prefix,
@@ -410,18 +410,15 @@ def _print_source_endpoint_error_fix(
             )
         case SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND:
             path = endpoint_path(src_vol, src_ep.subdir)
-            if src_ep.btrfs_snapshots.enabled:
-                cmds = [
-                    f"sudo mkdir {path}/{SNAPSHOTS_DIR}",
-                    f"sudo chown <user>:<group> {path}/{SNAPSHOTS_DIR}",
-                ]
-            else:
-                cmds = [f"mkdir -p {path}/{SNAPSHOTS_DIR}"]
-            for cmd in cmds:
-                _print_cmd(
-                    console,
-                    wrap_cmd(cmd, src_vol, resolved_endpoints),
-                )
+            # Endpoint dir is expected to be user-writable by this
+            # point (fixed via NOT_WRITABLE if needed), so a plain
+            # mkdir suffices regardless of snapshot backend.
+            _print_cmd(
+                console,
+                wrap_cmd(
+                    f"mkdir -p {path}/{SNAPSHOTS_DIR}", src_vol, resolved_endpoints
+                ),
+            )
 
 
 def _print_destination_endpoint_error_fix(
@@ -475,15 +472,17 @@ def _print_destination_endpoint_error_fix(
                 )
         case DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND:
             path = endpoint_path(dst_vol, dst_ep.subdir)
-            cmds = [
-                f"sudo btrfs subvolume create {path}/{STAGING_DIR}",
-                f"sudo chown <user>:<group> {path}/{STAGING_DIR}",
-            ]
-            for cmd in cmds:
-                _print_cmd(
-                    console,
-                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
-                )
+            # Endpoint dir is expected to be user-writable by this
+            # point (fixed via NOT_WRITABLE if needed), so subvolume
+            # create runs without sudo (kernel 5.8+).
+            _print_cmd(
+                console,
+                wrap_cmd(
+                    f"btrfs subvolume create {path}/{STAGING_DIR}",
+                    dst_vol,
+                    resolved_endpoints,
+                ),
+            )
         case DestinationEndpointError.STAGING_SUBVOL_NOT_WRITABLE:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
@@ -501,18 +500,15 @@ def _print_destination_endpoint_error_fix(
             )
         case DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND:
             path = endpoint_path(dst_vol, dst_ep.subdir)
-            if dst_ep.hard_link_snapshots.enabled:
-                cmds = [f"mkdir -p {path}/{SNAPSHOTS_DIR}"]
-            else:
-                cmds = [
-                    f"sudo mkdir {path}/{SNAPSHOTS_DIR}",
-                    f"sudo chown <user>:<group> {path}/{SNAPSHOTS_DIR}",
-                ]
-            for cmd in cmds:
-                _print_cmd(
-                    console,
-                    wrap_cmd(cmd, dst_vol, resolved_endpoints),
-                )
+            # Endpoint dir is expected to be user-writable by this
+            # point (fixed via NOT_WRITABLE if needed), so a plain
+            # mkdir suffices regardless of snapshot backend.
+            _print_cmd(
+                console,
+                wrap_cmd(
+                    f"mkdir -p {path}/{SNAPSHOTS_DIR}", dst_vol, resolved_endpoints
+                ),
+            )
         case DestinationEndpointError.SNAPSHOTS_DIR_NOT_WRITABLE:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             console.print(
@@ -856,12 +852,12 @@ def _print_polkit_rules_missing_fix(
     p2 = _INDENT * 2
     host = host_label(vol, resolved_endpoints)
     user = _resolve_volume_user(vol, resolved_endpoints)
-    rules = generate_auth_rules(config, user)
+    block = generate_auth_rules(config, user).polkit_block()
     console.print(f"{p2}polkit rules not configured on {host}.")
     console.print(f"{p2}Required for systemctl start/stop authorization without sudo.")
-    if rules.polkit:
-        console.print(f"{p2}Install to: {POLKIT_RULES_PATH}")
-        _print_cmd(console, rules.polkit.rstrip(), indent=3)
+    if block is not None:
+        console.print(f"{p2}{block.install_hint}")
+        _print_cmd(console, block.content.rstrip(), indent=3)
     console.print(f"{p2}Or generate with: nbkp disks setup-auth -c <config>")
 
 
@@ -875,12 +871,12 @@ def _print_sudoers_rules_missing_fix(
     p2 = _INDENT * 2
     host = host_label(vol, resolved_endpoints)
     user = _resolve_volume_user(vol, resolved_endpoints)
-    rules = generate_auth_rules(config, user)
+    block = generate_auth_rules(config, user).sudoers_block()
     console.print(f"{p2}sudoers rules not configured on {host}.")
     console.print(f"{p2}Required for passwordless sudo systemd-cryptsetup attach.")
-    if rules.sudoers:
-        console.print(f"{p2}Install with: sudo visudo -f {SUDOERS_RULES_PATH}")
-        _print_cmd(console, rules.sudoers.rstrip(), indent=3)
+    if block is not None:
+        console.print(f"{p2}{block.install_hint}")
+        _print_cmd(console, block.content.rstrip(), indent=3)
     console.print(f"{p2}Or generate with: nbkp disks setup-auth -c <config>")
 
 

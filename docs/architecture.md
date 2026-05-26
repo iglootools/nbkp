@@ -76,6 +76,7 @@ graph TD
     snapshots --> fsprotocol
     snapshots --> preflight
     snapshots --> remote
+    sync --> clihelpers
     sync --> config
     sync --> fsprotocol
     sync --> ordering

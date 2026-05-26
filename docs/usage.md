@@ -159,9 +159,9 @@ sudo systemctl daemon-reload
 
 # 3. Generate and install authorization rules
 nbkp disks setup-auth -c config.yaml
-# Review output, then install:
-# sudo cp polkit-rules /etc/polkit-1/rules.d/50-nbkp.rules
-# sudo visudo -f /etc/sudoers.d/nbkp  # paste sudoers content
+# Review output, then install each block to the listed path:
+#   /etc/polkit-1/rules.d/50-nbkp.rules
+#   /etc/sudoers.d/nbkp
 
 # 4. Create sentinel files
 touch /mnt/seagate8tb/.nbkp-vol /mnt/iomega1tb/.nbkp-vol /mnt/usb-plain/.nbkp-vol

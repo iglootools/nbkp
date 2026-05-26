@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import typer
 from rich.console import Console
 
-from ....clihelpers import OutputFormat, StepProgressBar
+from ....clihelpers import OutputFormat, Severity, StepProgressBar, severity_icon
 from ....config import Config, LocalVolume, RemoteVolume
 from ....config.epresolution import ResolvedEndpoints
 from ...mount_checks import check_mount_status
@@ -28,6 +28,7 @@ class _ErrorStatus:
     device_present: bool | None = None
     luks_attached: bool | None = None
     mounted: bool | None = None
+    mount_failure_reason: str | None = None
 
 
 def _unmanaged_statuses(
@@ -54,19 +55,26 @@ def _probe_volume_status(
     resolved: ResolvedEndpoints,
     bar: StepProgressBar | None,
 ) -> tuple[str, MountStatusData]:
-    """Probe a single volume's mount status with progress bar updates."""
+    """Probe a single volume's mount status with progress bar updates.
+
+    Per-volume result lines are prefixed with ``status`` so they're
+    distinguishable from ``mount`` / ``umount`` action lines printed by
+    the same Rich console (e.g. ``disks umount`` runs the umount step
+    and then this probe back-to-back).
+    """
     assert vol.mount is not None
     label = display_name(vol)
+    line = f"status {label}"
     if bar is not None:
-        bar.on_start(label)
+        bar.on_start(line)
     try:
         status: MountStatusData = check_mount_status(vol, vol.mount, resolved)
         if bar is not None:
-            bar.on_end(label, True)
+            bar.on_end(line, Severity.OK)
         return label, status
     except Exception as e:
         if bar is not None:
-            bar.on_end(label, False, str(e))
+            bar.on_end(line, Severity.ERROR, str(e))
         return label, _error_status(f"unreachable: {e}")
 
 
@@ -114,17 +122,15 @@ def _probe_and_show_status(
 
 
 def _format_mount_result(
-    slug: str, success: bool, detail: str | None, _warning: str | None
+    slug: str, severity: Severity, detail: str | None, _warning: str | None
 ) -> str:
-    icon = "[green]\u2713[/green]" if success else "[red]\u2717[/red]"
     detail_str = f" ({detail})" if detail else ""
-    return f"{icon} {slug}{detail_str}"
+    return f"{severity_icon(severity)} mount {slug}{detail_str}"
 
 
 def _format_umount_result(
-    slug: str, success: bool, detail: str | None, warning: str | None
+    slug: str, severity: Severity, detail: str | None, warning: str | None
 ) -> str:
-    icon = "[green]\u2713[/green]" if success else "[red]\u2717[/red]"
     detail_str = f" ({detail})" if detail else ""
     warning_str = f" [yellow]warning: {warning}[/yellow]" if warning else ""
-    return f"{icon} {slug}{detail_str}{warning_str}"
+    return f"{severity_icon(severity)} umount {slug}{detail_str}{warning_str}"

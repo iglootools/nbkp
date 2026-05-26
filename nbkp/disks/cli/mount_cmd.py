@@ -22,6 +22,7 @@ from .helpers import (
     _show_status_table,
     _unmanaged_statuses,
 )
+from .helpers.managed_mount import mount_result_severity
 
 
 @app.command("mount")
@@ -94,7 +95,9 @@ def mount(
     def on_mount_end(slug: str, result: MountResult) -> None:
         if mount_bar is not None:
             mount_bar.on_end(
-                display_names.get(slug, slug), result.success, result.detail
+                display_names.get(slug, slug),
+                mount_result_severity(result),
+                result.detail,
             )
 
     # try/finally instead of `with` because mount_bar is conditionally

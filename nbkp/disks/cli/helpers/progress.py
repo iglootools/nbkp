@@ -14,6 +14,8 @@ from rich.progress import (
     TextColumn,
 )
 
+from ....clihelpers import Severity
+
 
 class DisksProgressBar:
     """Rich progress bar for mount/umount operations.
@@ -29,15 +31,15 @@ class DisksProgressBar:
     label:
         Verb shown in the progress description (e.g. ``"Mounting"``).
     format_result:
-        Callable that formats a result line given ``(slug, success, detail,
-        warning)``.  Called once per volume on completion.
+        Callable that formats a result line given ``(slug, severity,
+        detail, warning)``.  Called once per volume on completion.
     """
 
     def __init__(
         self,
         total: int,
         label: str,
-        format_result: Callable[[str, bool, str | None, str | None], str],
+        format_result: Callable[[str, Severity, str | None, str | None], str],
     ) -> None:
         self._total = total
         self._label = label
@@ -66,14 +68,14 @@ class DisksProgressBar:
     def on_end(
         self,
         slug: str,
-        success: bool,
+        severity: Severity,
         detail: str | None = None,
         warning: str | None = None,
     ) -> None:
         """Call at the end of each volume operation."""
         if self._progress is not None:
             assert self._task_id is not None
-            line = self._format_result(slug, success, detail, warning)
+            line = self._format_result(slug, severity, detail, warning)
             self._progress.console.print(line)
             self._progress.advance(self._task_id)
 

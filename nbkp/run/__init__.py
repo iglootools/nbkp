@@ -7,6 +7,7 @@ Composes mount lifecycle with the check-and-run sync pipeline:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Callable
 
 from ..config import Config
@@ -39,7 +40,7 @@ def mount_and_run(
     progress: ProgressMode | None = None,
     prune: bool = True,
     on_check_start: Callable[[str], None] | None = None,
-    on_check_end: Callable[[str, bool, str | None], None] | None = None,
+    on_check_end: Callable[[str, Sequence[object]], None] | None = None,
     on_checks_done: Callable[[PreflightResult], None] | None = None,
     on_rsync_output: Callable[[str], None] | None = None,
     on_sync_start: Callable[[str], None] | None = None,

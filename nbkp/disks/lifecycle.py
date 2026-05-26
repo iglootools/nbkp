@@ -97,6 +97,35 @@ class MountFailureReason(str, enum.Enum):
     UNREACHABLE = "unreachable"
 
 
+# Partition of MountFailureReason by lifecycle stage.  Kept adjacent to
+# the enum so that adding/renaming a reason prompts a review of these
+# sets too.  Consumed by ``nbkp.disks.output`` to disambiguate
+# "real failure at this stage" (✗) from "no action attempted" (⚠).
+#
+# Reasons not in either set are intentionally pre-stage
+# (``DEVICE_NOT_PRESENT`` — never reaches LUKS or mount;
+# ``STRATEGY_NOT_RESOLVED`` / ``UNREACHABLE`` — no observation created
+# at all, see ``disks.observation``).
+
+
+# LUKS-attach step actually ran and failed.
+LUKS_STAGE_FAILURES: frozenset[MountFailureReason] = frozenset(
+    {
+        MountFailureReason.ATTACH_LUKS_FAILED,
+        MountFailureReason.SUDOERS_REFUSED,
+    }
+)
+
+
+# Mount step actually ran and failed.
+MOUNT_STAGE_FAILURES: frozenset[MountFailureReason] = frozenset(
+    {
+        MountFailureReason.MOUNT_FAILED,
+        MountFailureReason.POLKIT_REFUSED,
+    }
+)
+
+
 @dataclass(frozen=True)
 class MountResult:
     """Result of attempting to mount a single volume."""

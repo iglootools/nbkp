@@ -8,7 +8,7 @@ from typing import Annotated, Optional
 import typer
 
 from ...config.cli.helpers import load_config_or_exit
-from ..auth import POLKIT_RULES_PATH, SUDOERS_RULES_PATH, generate_auth_rules
+from ..auth import generate_auth_rules
 from . import app
 
 
@@ -34,18 +34,13 @@ def setup_auth(
     cfg = load_config_or_exit(config)
     rules = generate_auth_rules(cfg, user)
 
-    if rules.polkit is None and rules.sudoers is None:
+    blocks = list(rules.blocks())
+    if not blocks:
         typer.echo("No volumes with mount config found.", err=True)
         raise typer.Exit(0)
 
-    if rules.polkit is not None:
-        typer.echo("# polkit rules")
-        typer.echo(f"# Install to: {POLKIT_RULES_PATH}")
+    for block in blocks:
+        typer.echo(f"# {block.name}")
+        typer.echo(f"# {block.install_hint}")
         typer.echo()
-        typer.echo(rules.polkit)
-
-    if rules.sudoers is not None:
-        typer.echo("# sudoers rules")
-        typer.echo(f"# Install with: sudo visudo -f {SUDOERS_RULES_PATH}")
-        typer.echo()
-        typer.echo(rules.sudoers)
+        typer.echo(block.content)

@@ -8,6 +8,7 @@ caller's responsibility.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -68,7 +69,7 @@ def check_and_run(
     progress: ProgressMode | None = None,
     prune: bool = True,
     on_check_start: Callable[[str], None] | None = None,
-    on_check_end: Callable[[str, bool, str | None], None] | None = None,
+    on_check_end: Callable[[str, Sequence[object]], None] | None = None,
     on_checks_done: Callable[[PreflightResult], None] | None = None,
     on_rsync_output: Callable[[str], None] | None = None,
     on_sync_start: Callable[[str], None] | None = None,
@@ -91,7 +92,8 @@ def check_and_run(
     on_check_start:
         Called before each check with a label (e.g. ``"ssh:localhost"``).
     on_check_end:
-        Called after each check with ``(label, active, error_summary)``.
+        Called after each check with ``(label, errors)`` where errors
+        is the list of error enum values (possibly empty).
     on_checks_done:
         Called after preflight completes but before syncs start.
         Fires regardless of whether there are fatal errors, so the

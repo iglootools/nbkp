@@ -56,7 +56,7 @@ from .volume_checks import observe_ssh_endpoint, observe_volume
 def check_all_syncs(
     config: Config,
     on_check_start: Callable[[str], None] | None = None,
-    on_check_end: Callable[[str, bool, str | None], None] | None = None,
+    on_check_end: Callable[[str, Sequence[object]], None] | None = None,
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     dry_run: bool = False,
@@ -95,10 +95,9 @@ def check_all_syncs(
         if on_check_start:
             on_check_start(label)
 
-    def _end(label: str, active: bool, errors: Sequence[object]) -> None:
+    def _end(label: str, errors: Sequence[object]) -> None:
         if on_check_end:
-            summary = ", ".join(e.value for e in errors) if errors else None  # type: ignore[attr-defined]
-            on_check_end(label, active, summary)
+            on_check_end(label, errors)
 
     # Phase 1: SSH endpoint observation + interpretation
     ssh_statuses = _check_ssh_endpoints(config, needed_volumes, syncs, re, _start, _end)
@@ -129,7 +128,7 @@ def check_all_syncs(
             diagnostics=diag,
         )
         volume_statuses[slug] = status
-        _end(label, status.active, status.errors)
+        _end(label, status.errors)
 
     # Phase 3: Sync endpoint diagnostics + status
     #   Collect unique endpoints, observe active ones, create statuses.
@@ -168,7 +167,7 @@ def _check_ssh_endpoints(
     syncs: dict[str, SyncConfig],
     resolved_endpoints: ResolvedEndpoints,
     on_start: Callable[[str], None],
-    on_end: Callable[[str, bool, Sequence[object]], None],
+    on_end: Callable[[str, Sequence[object]], None],
 ) -> dict[str, SshEndpointStatus]:
     """Observe and interpret SSH endpoint statuses.
 
@@ -204,7 +203,7 @@ def _check_ssh_endpoints(
             needs=needs,
         )
         ssh_statuses[ssh_slug] = status
-        on_end(label, status.active, status.errors)
+        on_end(label, status.errors)
 
     # Probe all remaining SSH endpoints not already covered by volumes
     # (bastions, alternate endpoints, orphan endpoints)
@@ -222,7 +221,7 @@ def _check_ssh_endpoints(
             diagnostics=diag,
         )
         ssh_statuses[slug] = status
-        on_end(label, status.active, status.errors)
+        on_end(label, status.errors)
 
     return ssh_statuses
 
@@ -303,7 +302,7 @@ def _check_sync_endpoints(
     ssh_statuses: dict[str, SshEndpointStatus],
     resolved_endpoints: ResolvedEndpoints,
     on_start: Callable[[str], None],
-    on_end: Callable[[str, bool, Sequence[object]], None],
+    on_end: Callable[[str, Sequence[object]], None],
 ) -> tuple[dict[str, SourceEndpointStatus], dict[str, DestinationEndpointStatus]]:
     """Observe and interpret sync endpoint statuses."""
     # Collect unique endpoints
@@ -342,7 +341,7 @@ def _check_sync_endpoints(
             diagnostics=src_diag,
         )
         src_ep_statuses[slug] = status
-        on_end(label, status.active, status.errors)
+        on_end(label, status.errors)
 
     # Destination endpoints
     dst_ep_statuses: dict[str, DestinationEndpointStatus] = {}
@@ -372,7 +371,7 @@ def _check_sync_endpoints(
             diagnostics=dst_diag,
         )
         dst_ep_statuses[slug] = status
-        on_end(label, status.active, status.errors)
+        on_end(label, status.errors)
 
     return src_ep_statuses, dst_ep_statuses
 

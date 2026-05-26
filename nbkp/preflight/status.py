@@ -441,13 +441,16 @@ def _volume_errors(
         #    fires whether ``mounted`` is False (mount step reached and
         #    failed) or None (mount step never ran because an earlier
         #    step like LUKS attach failed first).
-        # 2. mount step ran and ended unmounted — generic VOLUME_NOT_MOUNTED.
-        # 3. Otherwise, fall back to SENTINEL_NOT_FOUND.
+        # 2. device not plugged in — DEVICE_NOT_PRESENT.
+        # 3. device present but mount step ran and ended unmounted — VOLUME_NOT_MOUNTED.
+        # 4. Otherwise, fall back to SENTINEL_NOT_FOUND.
         mount_caps = diag.capabilities.mount
         if mount is not None and mount_caps is not None:
             specific = _mount_lifecycle_failure_error(mount_caps)
             if specific is not None:
                 return [specific]
+            if mount_caps.device_present is False:
+                return [VolumeError.DEVICE_NOT_PRESENT]
             if mount_caps.mounted is False:
                 return [VolumeError.VOLUME_NOT_MOUNTED]
         return [VolumeError.SENTINEL_NOT_FOUND]
@@ -836,7 +839,16 @@ def _destination_endpoint_errors(
     host_tools: HostToolCapabilities | None,
     endpoint: SyncEndpoint,
 ) -> list[DestinationEndpointError]:
-    """Translate destination endpoint diagnostics into errors."""
+    """Translate destination endpoint diagnostics into errors.
+
+    ``NOT_WRITABLE`` is only emitted when the endpoint directory is
+    known to exist — approximated via ``sentinel_exists`` (the sentinel
+    lives inside the endpoint dir, so its presence proves the dir
+    exists).  When the sentinel is missing we suppress NOT_WRITABLE
+    because the ``test -w`` probe also fails on non-existent paths, and
+    the SENTINEL_NOT_FOUND fix already covers the "create the dir"
+    case.
+    """
     return [
         *(
             [DestinationEndpointError.SENTINEL_NOT_FOUND]
@@ -846,7 +858,7 @@ def _destination_endpoint_errors(
         *_destination_snapshot_backend_ep_errors(diag, caps, host_tools, endpoint),
         *(
             [DestinationEndpointError.NOT_WRITABLE]
-            if not diag.endpoint_writable
+            if not diag.endpoint_writable and diag.sentinel_exists
             else []
         ),
         *(
