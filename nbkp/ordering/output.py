@@ -6,6 +6,7 @@ from mermaid_ascii import parse_mermaid, render_ascii
 from rich.console import Console, RenderableType
 from rich.tree import Tree
 
+from ..clihelpers import Severity, severity_icon
 from ..config import Config, SyncEndpoint
 from .graph import build_adjacency
 
@@ -63,18 +64,31 @@ def print_mermaid_ascii_graph(
     console.print(render_ascii(diagram), highlight=False)
 
 
-def build_rich_tree_sections(config: Config) -> list[RenderableType]:
-    """Build Rich Tree renderables for the sync dependency graph."""
+def build_rich_tree_sections(
+    config: Config,
+    sync_severities: dict[str, Severity] | None = None,
+) -> list[RenderableType]:
+    """Build Rich Tree renderables for the sync dependency graph.
+
+    When *sync_severities* is given, each sync node's label is
+    prefixed with the matching severity icon (``✓`` / ``⚠`` / ``✗``)
+    so the tree doubles as a per-sync result summary.  Syncs missing
+    from the map render without an icon (e.g. config preview where
+    no run results are available).
+    """
     children, roots = build_adjacency(config.syncs)
+    severities = sync_severities or {}
 
     def _add_children(tree: Tree, ep_slug: str, visited: set[str]) -> None:
         for sync in children.get(ep_slug, []):
             dst_slug = sync.destination
             annotation = _endpoint_annotation(config.sync_endpoints[dst_slug])
+            severity = severities.get(sync.slug)
+            icon_prefix = f"{severity_icon(severity)} " if severity is not None else ""
             label = " ".join(
                 part
                 for part in [
-                    f"[bold]{sync.slug}[/bold] -> {dst_slug}",
+                    f"{icon_prefix}[bold]{sync.slug}[/bold] -> {dst_slug}",
                     f"({annotation})" if annotation else "",
                     "(disabled)" if not sync.enabled else "",
                 ]

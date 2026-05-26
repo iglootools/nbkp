@@ -178,7 +178,6 @@ def run(
         )
 
         console = Console()
-        progress_lines: list[Text] = []
         status_display = None
 
         def on_sync_start(slug: str) -> None:
@@ -196,7 +195,6 @@ def run(
                 status_display = None
             icon = severity_icon(outcome_severity(result.outcome, strictness))
             console.print(f"{icon} {slug}")
-            progress_lines.append(Text.from_markup(f"{icon} {slug}"))
 
         # -- Pipeline --------------------------------------------------
         pipeline = check_and_run(
@@ -263,10 +261,12 @@ def run(
                     }
                     typer.echo(json.dumps(data, indent=2))
                 case OutputFormat.HUMAN:
+                    sync_severities = {
+                        r.sync_slug: outcome_severity(r.outcome, strictness)
+                        for r in pipeline.results
+                    }
                     sections = [
-                        *build_rich_tree_sections(cfg),
-                        Text(""),
-                        *progress_lines,
+                        *build_rich_tree_sections(cfg, sync_severities),
                         Text(""),
                         *build_human_results_sections(
                             pipeline.results, dry_run, cfg, resolved
