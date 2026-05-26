@@ -55,19 +55,26 @@ def _probe_volume_status(
     resolved: ResolvedEndpoints,
     bar: StepProgressBar | None,
 ) -> tuple[str, MountStatusData]:
-    """Probe a single volume's mount status with progress bar updates."""
+    """Probe a single volume's mount status with progress bar updates.
+
+    Per-volume result lines are prefixed with ``status`` so they're
+    distinguishable from ``mount`` / ``umount`` action lines printed by
+    the same Rich console (e.g. ``disks umount`` runs the umount step
+    and then this probe back-to-back).
+    """
     assert vol.mount is not None
     label = display_name(vol)
+    line = f"status {label}"
     if bar is not None:
-        bar.on_start(label)
+        bar.on_start(line)
     try:
         status: MountStatusData = check_mount_status(vol, vol.mount, resolved)
         if bar is not None:
-            bar.on_end(label, Severity.OK)
+            bar.on_end(line, Severity.OK)
         return label, status
     except Exception as e:
         if bar is not None:
-            bar.on_end(label, Severity.ERROR, str(e))
+            bar.on_end(line, Severity.ERROR, str(e))
         return label, _error_status(f"unreachable: {e}")
 
 
@@ -118,7 +125,7 @@ def _format_mount_result(
     slug: str, severity: Severity, detail: str | None, _warning: str | None
 ) -> str:
     detail_str = f" ({detail})" if detail else ""
-    return f"{severity_icon(severity)} {slug}{detail_str}"
+    return f"{severity_icon(severity)} mount {slug}{detail_str}"
 
 
 def _format_umount_result(
@@ -126,4 +133,4 @@ def _format_umount_result(
 ) -> str:
     detail_str = f" ({detail})" if detail else ""
     warning_str = f" [yellow]warning: {warning}[/yellow]" if warning else ""
-    return f"{severity_icon(severity)} {slug}{detail_str}{warning_str}"
+    return f"{severity_icon(severity)} umount {slug}{detail_str}{warning_str}"
