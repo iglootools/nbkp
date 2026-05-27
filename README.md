@@ -15,7 +15,7 @@ Sentinel files ensure backups only run when volumes are genuinely present, with 
 
 Files are backed up as-is in plain directories: no obscure storage formats and restoring is just a copy.
 
-[![asciicast](https://asciinema.org/a/TCImL4inCyMTQU85.svg)](https://asciinema.org/a/TCImL4inCyMTQU85)
+[![asciicast](https://asciinema.org/a/WV85xwUM7x5M3t6r.svg)](https://asciinema.org/a/WV85xwUM7x5M3t6r)
 
 ## Installation
 
