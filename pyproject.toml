@@ -12,7 +12,7 @@ dependencies = [
   "pydantic (>=2.13.4,<3.0.0)",
   "pyyaml (>=6.0,<7.0)",
   "typer (>=0.24.0,<1.0.0)",
-  "platformdirs (>=4.0,<5.0)",
+  "platformdirs (>=4.10.0,<5.0)",
   "mermaid-ascii-diagrams (>=0.1.1)",
 ]
 dynamic = ["version"]
