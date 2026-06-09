@@ -14,7 +14,34 @@
 pipx install nbkp
 ```
 
-To upgrade to the latest version:
+### Optional Extras
+
+nbkp ships with optional extras that pull in additional dependencies:
+
+| Extra | Pulls in | When you need it |
+|---|---|---|
+| `keyring` | `keyring` | Default `credential-provider: keyring` (LUKS passphrases from macOS Keychain / Linux SecretService). Not needed for `prompt`, `env`, or `command` providers. |
+| `docker` | `docker` | `nbkp demo seed --docker` for manual testing against a Docker container. |
+
+Install with a single extra:
+
+```bash
+pipx install 'nbkp[keyring]'
+```
+
+Install with all extras:
+
+```bash
+pipx install 'nbkp[keyring,docker]'
+```
+
+Add an extra to an existing install without reinstalling:
+
+```bash
+pipx inject nbkp keyring
+```
+
+To upgrade to the latest version (extras are preserved):
 
 ```bash
 pipx upgrade nbkp

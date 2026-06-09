@@ -88,9 +88,7 @@ def seed_demo(
 
     def _end(label: str, success: bool, detail: str | None = None) -> None:
         if on_step_end is not None:
-            on_step_end(
-                label, Severity.OK if success else Severity.ERROR, detail
-            )
+            on_step_end(label, Severity.OK if success else Severity.ERROR, detail)
 
     # ── Server and bastion containers ────────────────────────
     storage_endpoint = None
