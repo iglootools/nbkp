@@ -1,0 +1,51 @@
+name: renovate-mise-lock
+
+# Renovate's hosted runner has no `mise` binary, so it can bump tool versions in
+# mise.toml but cannot regenerate mise.lock (the per-platform checksum/attestation
+# lockfile). That leaves the renovate/artifacts check red. This workflow runs mise
+# on Renovate branches to regenerate mise.lock and commits it back if it changed.
+
+on:
+  push:
+    branches:
+      - 'renovate/**'
+
+# Avoid overlapping runs racing to push to the same branch.
+concurrency:
+  group: renovate-mise-lock-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mise-lock:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # Install the mise binary only. We must NOT let mise-action run its default
+      # `mise install`: when a mise.lock is present it auto-adds `--locked`, which
+      # *fails* on a tool version that's in mise.toml but not yet in the lock —
+      # exactly the case this workflow exists to fix. So we regenerate explicitly.
+      - name: Setup mise
+        uses: jdx/mise-action@v4
+        with:
+          install: false
+
+      # `mise lock` regenerates checksums/URLs for all platforms in the lockfile,
+      # picking up any tool versions Renovate bumped in mise.toml.
+      - name: Regenerate mise.lock
+        run: mise lock
+
+      - name: Commit mise.lock if changed
+        run: |
+          if git diff --quiet -- mise.lock; then
+            echo "mise.lock is up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mise.lock
+          git commit -m "chore(deps): regenerate mise.lock"
+          git push
