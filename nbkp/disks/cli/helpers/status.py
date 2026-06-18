@@ -22,11 +22,14 @@ from ...output import (
 
 @dataclass(frozen=True)
 class _ErrorStatus:
-    """Synthetic mount status for unreachable volumes."""
+    """Synthetic, all-unknown mount status for unreachable/unmanaged volumes.
 
-    resolved_backend: str | None
+    The detail (error text, ``not managed``) is folded into the Name column
+    by the caller since the status table only shows device/unlock/mount state.
+    """
+
     device_present: bool | None = None
-    luks_attached: bool | None = None
+    luks_unlocked: bool | None = None
     mounted: bool | None = None
     mount_failure_reason: str | None = None
 
@@ -37,17 +40,15 @@ def _unmanaged_statuses(
 ) -> list[tuple[str, MountStatusData]]:
     """Build status entries for volumes without mount config."""
     return [
-        (display_name(vol), _ErrorStatus(resolved_backend="not managed"))
+        (f"{display_name(vol)} [dim](not managed)[/dim]", _ErrorStatus())
         for slug, vol in cfg.volumes.items()
         if vol.mount is None and (names is None or slug in names)
     ]
 
 
-def _error_status(detail: str | None) -> _ErrorStatus:
-    """Build an error status with red styling for the strategy column."""
-    return _ErrorStatus(
-        resolved_backend=f"[red]\u2717 {detail}[/red]" if detail else None
-    )
+def _error_label(name: str, detail: str | None) -> str:
+    """Fold an error detail into the volume's display name (red)."""
+    return f"{name} [red]\u2717 {detail}[/red]" if detail else name
 
 
 def _probe_volume_status(
@@ -75,7 +76,7 @@ def _probe_volume_status(
     except Exception as e:
         if bar is not None:
             bar.on_end(line, Severity.ERROR, str(e))
-        return label, _error_status(f"unreachable: {e}")
+        return _error_label(label, f"unreachable: {e}"), _ErrorStatus()
 
 
 def _show_status_table(

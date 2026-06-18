@@ -34,7 +34,6 @@ class TestChainSyncSh:
         bastion_container: SshEndpoint,
         proxied_ssh_endpoint: SshEndpoint,
         luks_uuid: str,
-        luks_mapper_name: str,
     ) -> None:
         """Generated script propagates data through the
         full 6-hop chain, same as the Python runner.
@@ -49,14 +48,13 @@ class TestChainSyncSh:
             bastion_container,
             proxied_ssh_endpoint,
             luks_uuid=luks_uuid,
-            luks_mapper_name=luks_mapper_name,
         )
         resolved = resolve_all_endpoints(config)
 
         # 2. Mount encrypted volume, then run the generated script
         with managed_mount(config, resolved, lambda _: LUKS_PASSPHRASE):
             # 3. Setup: btrfs subvolume, sentinels, seed data
-            src = setup_chain(config, tmp_path, docker_ssh_endpoint)
+            src = setup_chain(config, tmp_path, docker_ssh_endpoint, resolved)
 
             # 4. Generate script
             script = generate_script(

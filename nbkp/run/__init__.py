@@ -64,9 +64,9 @@ def mount_and_run(
         on_mount_end=on_mount_end,
         on_umount_start=on_umount_start,
         on_umount_end=on_umount_end,
-    ) as (_, mount_observations):
+    ) as (resolved_config, mount_observations):
         return check_and_run(
-            config,
+            resolved_config,
             strictness=strictness,
             dry_run=dry_run,
             only_syncs=only_syncs,

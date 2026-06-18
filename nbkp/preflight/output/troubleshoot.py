@@ -23,6 +23,7 @@ from ...config.output import (
     host_label,
 )
 from ...disks.auth import generate_auth_rules
+from ...disks.udisks import cleartext_mapper_name
 from ...remote.ssh import (
     format_proxy_jump_chain,
     ssh_prefix,
@@ -43,7 +44,6 @@ from ..status import (
     SshEndpointStatus,
     SyncError,
     SyncStatus,
-    VolumeCapabilities,
     VolumeError,
     VolumeStatus,
 )
@@ -215,65 +215,37 @@ def _print_ssh_endpoint_error_fix(
         case SshEndpointError.FINDMNT_NOT_FOUND:
             console.print(f"{p2}Install util-linux (findmnt) on {slug}:")
             _print_cmd(console, _UTIL_LINUX_INSTALL, indent=3)
-        case SshEndpointError.SYSTEMCTL_NOT_FOUND:
+        case SshEndpointError.UDISKSCTL_NOT_FOUND:
             _print_mount_error(
                 console,
-                f"systemctl not found on {slug}.",
-                "Mount management requires systemd."
-                " Install systemd or disable mount"
-                " config for volumes on this host.",
+                f"udisksctl not found on {slug}.",
+                "Mount management uses udisks2 (udisksctl).\n"
+                "Install: sudo apt install udisks2\n"
+                "(add udisks2-btrfs for btrfs volumes)\n"
+                "Check: which udisksctl",
             )
-        case SshEndpointError.SYSTEMD_ESCAPE_NOT_FOUND:
+        case SshEndpointError.UDISKSD_NOT_RUNNING:
             _print_mount_error(
                 console,
-                f"systemd-escape not found on {slug}.",
-                "Install: sudo apt install systemd"
-                " (usually pre-installed)\n"
-                "Check: which systemd-escape",
+                f"udisksd (the udisks2 daemon) is not running on {slug}.",
+                "Mount management talks to udisksd over D-Bus.\n"
+                "Start it: sudo systemctl enable --now udisks2\n"
+                "On headless hosts ensure dbus and udisksd are up\n"
+                "Check: systemctl status udisks2",
             )
-        case SshEndpointError.SUDO_NOT_FOUND:
+        case SshEndpointError.LSBLK_NOT_FOUND:
             _print_mount_error(
                 console,
-                f"sudo not found on {slug}.",
-                "sudo is required for mount"
-                " operations (cryptsetup, mount/umount).\n"
-                "Install: apt install sudo\n"
-                "Check: which sudo",
+                f"lsblk not found on {slug}.",
+                "Install: sudo apt install util-linux\nCheck: which lsblk",
             )
-        case SshEndpointError.CRYPTSETUP_NOT_FOUND:
+        case SshEndpointError.UDISKS_BTRFS_MODULE_MISSING:
             _print_mount_error(
                 console,
-                f"cryptsetup not found on {slug}.",
-                "Install: sudo apt install cryptsetup\nCheck: which cryptsetup",
-            )
-        case SshEndpointError.SYSTEMD_CRYPTSETUP_NOT_FOUND:
-            _print_mount_error(
-                console,
-                f"systemd-cryptsetup not found on {slug}.",
-                "This binary is part of systemd but"
-                " requires the cryptsetup package"
-                " (libcryptsetup).\n"
-                "Install: sudo apt install cryptsetup\n"
-                "Check: ls /usr/lib/systemd/"
-                "systemd-cryptsetup",
-            )
-        case SshEndpointError.MOUNT_CMD_NOT_FOUND:
-            _print_mount_error(
-                console,
-                f"mount command not found on {slug}.",
-                "Install: sudo apt install util-linux\nCheck: which mount",
-            )
-        case SshEndpointError.UMOUNT_CMD_NOT_FOUND:
-            _print_mount_error(
-                console,
-                f"umount command not found on {slug}.",
-                "Install: sudo apt install util-linux\nCheck: which umount",
-            )
-        case SshEndpointError.MOUNTPOINT_CMD_NOT_FOUND:
-            _print_mount_error(
-                console,
-                f"mountpoint command not found on {slug}.",
-                "Install: sudo apt install util-linux\nCheck: which mountpoint",
+                f"udisks2 btrfs module not installed on {slug}.",
+                "Required to mount btrfs volumes via udisks.\n"
+                "Install: sudo apt install udisks2 udisks2-btrfs\n"
+                "Then restart udisks2: sudo systemctl restart udisks2",
             )
 
 
@@ -291,7 +263,7 @@ def _print_volume_error_fix(
             _print_sentinel_fix(
                 console,
                 vol,
-                vol.path,
+                vol.path or "<volume-path>",
                 VOLUME_SENTINEL,
                 resolved_endpoints,
             )
@@ -303,36 +275,10 @@ def _print_volume_error_fix(
             )
         case VolumeError.DEVICE_NOT_PRESENT:
             _print_device_not_present_fix(console, vol.mount)
-        case VolumeError.MOUNT_UNIT_NOT_CONFIGURED:
-            _print_mount_unit_not_configured_fix(
+        case VolumeError.FSTAB_MOUNTPOINT_MISMATCH:
+            _print_fstab_mountpoint_mismatch_fix(
                 console,
                 vol,
-                resolved_endpoints,
-            )
-        case VolumeError.MOUNT_UNIT_MISMATCH:
-            caps = (
-                vol_status.diagnostics.capabilities if vol_status.diagnostics else None
-            )
-            _print_mount_unit_mismatch_fix(
-                console,
-                vol,
-                caps,
-                resolved_endpoints,
-            )
-        case VolumeError.CRYPTSETUP_SERVICE_NOT_CONFIGURED:
-            _print_cryptsetup_service_not_configured_fix(
-                console,
-                vol,
-                resolved_endpoints,
-            )
-        case VolumeError.CRYPTSETUP_SERVICE_MISMATCH:
-            caps = (
-                vol_status.diagnostics.capabilities if vol_status.diagnostics else None
-            )
-            _print_cryptsetup_service_mismatch_fix(
-                console,
-                vol,
-                caps,
                 resolved_endpoints,
             )
         case VolumeError.POLKIT_RULES_MISSING:
@@ -342,16 +288,11 @@ def _print_volume_error_fix(
                 config,
                 resolved_endpoints,
             )
-        case VolumeError.SUDOERS_RULES_MISSING:
-            _print_sudoers_rules_missing_fix(
-                console,
-                vol,
-                config,
-                resolved_endpoints,
-            )
         case VolumeError.PASSPHRASE_NOT_AVAILABLE:
             _print_passphrase_not_available_fix(console, vol.mount)
-        case VolumeError.ATTACH_LUKS_FAILED | VolumeError.MOUNT_FAILED:
+        case VolumeError.UNLOCK_FAILED:
+            _print_unlock_failed_fix(console, vol.mount)
+        case VolumeError.MOUNT_FAILED:
             _print_mount_failed_fix(console, vol, vol.mount, resolved_endpoints)
 
 
@@ -557,18 +498,7 @@ def _print_destination_endpoint_error_fix(
         case DestinationEndpointError.VOL_NOT_BTRFS:
             console.print(f"{p2}The destination is not on a btrfs filesystem.")
         case DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM:
-            console.print(f"{p2}Remount the btrfs volume with user_subvol_rm_allowed:")
-            cmd = f"sudo mount -o remount,user_subvol_rm_allowed {dst_vol.path}"
-            _print_cmd(
-                console,
-                wrap_cmd(cmd, dst_vol, resolved_endpoints),
-            )
-            console.print(
-                f"{p2}To persist, add"
-                " user_subvol_rm_allowed to"
-                " the mount options in /etc/fstab"
-                f" for {dst_vol.path}."
-            )
+            _print_user_subvol_rm_fix(console, dst_vol, resolved_endpoints)
         case DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT:
             console.print(
                 f"{p2}The destination filesystem does not"
@@ -640,134 +570,122 @@ def _print_device_not_present_fix(
     _print_cmd(console, f"udevadm info /dev/disk/by-uuid/{uuid}")
 
 
-def _print_mount_unit_not_configured_fix(
+def _print_fstab_mountpoint_mismatch_fix(
     console: Console,
     vol: LocalVolume | RemoteVolume,
     resolved_endpoints: ResolvedEndpoints,
 ) -> None:
-    """Print fix for mount unit not configured in systemd."""
+    """Print fix for a declared path with no matching fstab entry.
+
+    The volume declares a fixed ``path`` but no ``/etc/fstab`` entry maps the
+    device to that path, so udisks would mount it at its own
+    ``/run/media/<user>/<label>`` location instead.  Two remediations:
+    add an fstab entry, or drop ``path`` to accept udisks's mountpoint.
+    """
     p2 = _INDENT * 2
     host = host_label(vol, resolved_endpoints)
     mount = vol.mount
-    console.print(f"{p2}Mount unit not configured in systemd on {host}.")
+    path = vol.path or "<volume-path>"
+    console.print(f"{p2}No /etc/fstab entry maps the device to {path} on {host}.")
     console.print(
-        f"{p2}The volume path must have a corresponding"
-        " fstab entry or native .mount unit."
+        f"{p2}With a fixed 'path', udisks must mount the device there; without"
+        " a matching fstab entry it would mount at /run/media/<user>/<label>."
     )
+    console.print(f"{p2}Option A — add an /etc/fstab entry (no crypttab needed):")
     if mount and mount.encryption:
-        console.print(f"{p2}fstab example (encrypted):")
+        mapper = cleartext_mapper_name(mount.device_uuid)
         _print_cmd(
             console,
-            f"/dev/mapper/{mount.encryption.mapper_name}"
-            f"  {vol.path}  btrfs  defaults,noauto  0  0",
+            f"/dev/mapper/{mapper}  {path}  <FS>  noauto,nofail,x-udisks-auth  0 0",
             indent=3,
         )
     else:
-        uuid = mount.device_uuid if mount else "<uuid>"
-        console.print(f"{p2}fstab example (unencrypted):")
+        uuid = mount.device_uuid if mount else "<fs-uuid>"
         _print_cmd(
             console,
-            f"UUID={uuid}  {vol.path}  ext4  defaults,noauto  0  0",
+            f"UUID={uuid}  {path}  <FS>  noauto,nofail  0 0",
             indent=3,
         )
-    console.print(f"{p2}After editing fstab:")
-    _print_cmd(console, "sudo systemctl daemon-reload", indent=3)
+    console.print(
+        f"{p2}{_INDENT}Replace <FS> with the volume's filesystem type"
+        " (e.g. btrfs, ext4); for btrfs also add user_subvol_rm_allowed"
+        " to the options."
+    )
+    console.print(
+        f"{p2}Option B — remove 'path' from the volume config to use the"
+        " mountpoint udisks discovers (/run/media/<user>/<label>)."
+    )
 
 
-def _print_mount_unit_mismatch_fix(
+def _print_user_subvol_rm_fix(
     console: Console,
     vol: LocalVolume | RemoteVolume,
-    caps: VolumeCapabilities | None,
     resolved_endpoints: ResolvedEndpoints,
 ) -> None:
-    """Print fix for mount unit config mismatch."""
+    """Print fix for a btrfs volume not mounted with user_subvol_rm_allowed.
+
+    The option is required for snapshot pruning.  nbkp does not pass it to
+    udisks at mount time — udisks rejects any non-allowlisted mount option
+    (``OptionNotPermitted``), which would fail the mount — so the option must
+    come from operator config: ``/etc/fstab`` (udisks honors fstab verbatim) or,
+    for the discovered ``/run/media`` model, the udisks mount-options allowlist.
+    """
     p2 = _INDENT * 2
-    host = host_label(vol, resolved_endpoints)
-    mount = vol.mount
-    mc = caps.mount if caps else None
-    mount_unit = mc.mount_unit if mc else "<mount-unit>"
-    actual_what = mc.mount_unit_what if mc else "?"
-    actual_where = mc.mount_unit_where if mc else "?"
-    if mount and mount.encryption:
-        expected_what = f"/dev/mapper/{mount.encryption.mapper_name}"
-    elif mount:
-        expected_what = f"/dev/disk/by-uuid/{mount.device_uuid}"
+    p3 = _INDENT * 3
+    path = vol.path or "<volume-path>"
+    mount = getattr(vol, "mount", None)
+
+    console.print(
+        f"{p2}The btrfs volume must be mounted with user_subvol_rm_allowed"
+        " (needed for snapshot pruning).  Remount now (ephemeral):"
+    )
+    _print_cmd(
+        console,
+        wrap_cmd(
+            f"sudo mount -o remount,user_subvol_rm_allowed {path}",
+            vol,
+            resolved_endpoints,
+        ),
+    )
+
+    if mount is None:
+        # Externally-mounted volume: fstab is the only persistence mechanism.
+        console.print(
+            f"{p2}To persist, add user_subvol_rm_allowed to the /etc/fstab"
+            f" options for {path}."
+        )
+        return
+
+    # udisks-managed volume: two persistence routes.
+    console.print(f"{p2}To persist (udisks-managed volume), use ONE of:")
+    if mount.encryption:
+        device = f"/dev/mapper/{cleartext_mapper_name(mount.device_uuid)}"
     else:
-        expected_what = "?"
-    console.print(f"{p2}Mount unit config does not match on {host}.")
-    console.print(f"{p2}Expected:")
-    console.print(f"{p2}{_INDENT}Where={vol.path}")
-    console.print(f"{p2}{_INDENT}What={expected_what}")
-    console.print(f"{p2}Actual:")
-    console.print(f"{p2}{_INDENT}Where={actual_where}")
-    console.print(f"{p2}{_INDENT}What={actual_what}")
-    console.print(f"{p2}Check with:")
+        device = f"UUID={mount.device_uuid}"
+    console.print(f"{p2}Option A — /etc/fstab (udisks honors fstab options):")
     _print_cmd(
         console,
-        f"systemctl show {mount_unit} -p What -p Where --no-pager",
+        f"{device}  {path}  btrfs"
+        "  noauto,nofail,x-udisks-auth,user_subvol_rm_allowed  0 0",
         indent=3,
-    )
-    console.print(f"{p2}Fix fstab or .mount unit, then:")
-    _print_cmd(console, "sudo systemctl daemon-reload", indent=3)
-
-
-def _print_cryptsetup_service_not_configured_fix(
-    console: Console,
-    vol: LocalVolume | RemoteVolume,
-    resolved_endpoints: ResolvedEndpoints,
-) -> None:
-    """Print fix for cryptsetup service not configured."""
-    p2 = _INDENT * 2
-    host = host_label(vol, resolved_endpoints)
-    mount = vol.mount
-    mapper = mount.encryption.mapper_name if mount and mount.encryption else "<mapper>"
-    uuid = mount.device_uuid if mount else "<uuid>"
-    console.print(
-        f"{p2}Cryptsetup service"
-        f" systemd-cryptsetup@{mapper}.service"
-        f" not configured in systemd on {host}."
     )
     console.print(
-        f"{p2}The encrypted volume must have a"
-        " corresponding crypttab entry or native"
-        " service unit."
+        f"{p2}Option B — /etc/udisks2/mount_options.conf, then restart udisksd"
+        " (for the discovered /run/media mountpoint):"
     )
-    console.print(f"{p2}crypttab example:")
     _print_cmd(
         console,
-        f"{mapper}  UUID={uuid}  none  luks,noauto",
+        "[defaults]\nbtrfs_allow=user_subvol_rm_allowed\n"
+        "btrfs_defaults=user_subvol_rm_allowed",
         indent=3,
     )
-    console.print(f"{p2}After editing crypttab:")
-    _print_cmd(console, "sudo systemctl daemon-reload", indent=3)
-
-
-def _print_cryptsetup_service_mismatch_fix(
-    console: Console,
-    vol: LocalVolume | RemoteVolume,
-    caps: VolumeCapabilities | None,
-    resolved_endpoints: ResolvedEndpoints,
-) -> None:
-    """Print fix for cryptsetup service config mismatch."""
-    p2 = _INDENT * 2
-    host = host_label(vol, resolved_endpoints)
-    mount = vol.mount
-    mapper = mount.encryption.mapper_name if mount and mount.encryption else "<mapper>"
-    uuid = mount.device_uuid if mount else "<uuid>"
-    mc = caps.mount if caps else None
-    actual_exec = mc.cryptsetup_service_exec_start if mc else "?"
-    service = f"systemd-cryptsetup@{mapper}.service"
-    console.print(f"{p2}Cryptsetup service config does not match on {host}.")
-    console.print(f"{p2}Expected ExecStart to contain mapper={mapper} and UUID={uuid}.")
-    console.print(f"{p2}Actual ExecStart: {actual_exec}")
-    console.print(f"{p2}Check with:")
-    _print_cmd(
-        console,
-        f"systemctl show {service} -p ExecStart --no-pager",
-        indent=3,
+    console.print(
+        f"{p3}Both keys are required: btrfs_allow permits the option,"
+        " btrfs_defaults applies it.  Scope to one device with a"
+        " [/dev/disk/by-uuid/<uuid>] section (the unlocked cleartext"
+        " device for encrypted volumes); see man udisks2.conf.",
+        markup=False,
     )
-    console.print(f"{p2}Fix crypttab or service unit, then:")
-    _print_cmd(console, "sudo systemctl daemon-reload", indent=3)
 
 
 def _print_passphrase_not_available_fix(
@@ -790,36 +708,67 @@ def _print_passphrase_not_available_fix(
     console.print(f"{p2}{_INDENT}command: ensure <credential-command> works")
 
 
+def _print_unlock_failed_fix(
+    console: Console,
+    mount: "MountConfig | None",
+) -> None:
+    """Print fix for a failed LUKS unlock via udisks."""
+    p2 = _INDENT * 2
+    uuid = mount.device_uuid if mount else "<uuid>"
+    pid = (
+        mount.encryption.passphrase_id
+        if mount and mount.encryption
+        else "<passphrase-id>"
+    )
+    console.print(f"{p2}udisksctl failed to unlock the LUKS container.")
+    console.print(
+        f"{p2}Verify the passphrase from your credential provider"
+        f" (passphrase-id '{pid}') is correct: nbkp credentials keyring-status"
+    )
+    console.print(f"{p2}Confirm the device is a LUKS container:")
+    _print_cmd(console, f"sudo cryptsetup isLuks /dev/disk/by-uuid/{uuid}", indent=3)
+    console.print(f"{p2}Try unlocking manually to see the error:")
+    _print_cmd(
+        console,
+        f"udisksctl unlock -b /dev/disk/by-uuid/{uuid}",
+        indent=3,
+    )
+
+
 def _print_mount_failed_fix(
     console: Console,
     vol: LocalVolume | RemoteVolume,
     mount: "MountConfig | None",
     resolved_endpoints: ResolvedEndpoints,
 ) -> None:
-    """Print fix for attach-luks/mount failure."""
+    """Print fix for a failed udisks mount."""
     p2 = _INDENT * 2
     if mount and mount.encryption:
-        mapper = mount.encryption.mapper_name
-        uuid = mount.device_uuid
-        console.print(f"{p2}Manual steps:")
-        _print_cmd(
-            console,
-            wrap_cmd(
-                f"sudo systemd-cryptsetup attach {mapper}"
-                f" /dev/disk/by-uuid/{uuid} /dev/stdin luks",
-                vol,
-                resolved_endpoints,
-            ),
-            indent=3,
-        )
-        console.print(f"{p2}Check journal:")
-        _print_cmd(
-            console,
-            f"journalctl -u systemd-cryptsetup@{mapper}.service",
-            indent=3,
-        )
+        device = f"/dev/mapper/{cleartext_mapper_name(mount.device_uuid)}"
+    elif mount:
+        device = f"/dev/disk/by-uuid/{mount.device_uuid}"
     else:
-        console.print(f"{p2}Check journal for mount errors.")
+        device = "<device>"
+    console.print(f"{p2}udisksctl failed to mount the volume.")
+    console.print(
+        f"{p2}Check the filesystem and, for a fixed 'path', that an /etc/fstab"
+        " entry maps the device there (otherwise udisks mounts at"
+        " /run/media/<user>/<label>)."
+    )
+    console.print(
+        f"{p2}Ensure the polkit rule is installed (see polkit rules not"
+        " configured); without it udisks denies the mount over SSH."
+    )
+    console.print(f"{p2}Try mounting manually to see the error:")
+    _print_cmd(
+        console,
+        wrap_cmd(
+            f"udisksctl mount -b {device}",
+            vol,
+            resolved_endpoints,
+        ),
+        indent=3,
+    )
 
 
 def _resolve_volume_user(
@@ -854,26 +803,10 @@ def _print_polkit_rules_missing_fix(
     user = _resolve_volume_user(vol, resolved_endpoints)
     block = generate_auth_rules(config, user).polkit_block()
     console.print(f"{p2}polkit rules not configured on {host}.")
-    console.print(f"{p2}Required for systemctl start/stop authorization without sudo.")
-    if block is not None:
-        console.print(f"{p2}{block.install_hint}")
-        _print_cmd(console, block.content.rstrip(), indent=3)
-    console.print(f"{p2}Or generate with: nbkp disks setup-auth -c <config>")
-
-
-def _print_sudoers_rules_missing_fix(
-    console: Console,
-    vol: LocalVolume | RemoteVolume,
-    config: Config,
-    resolved_endpoints: ResolvedEndpoints,
-) -> None:
-    """Print fix for missing sudoers rules, including generated content."""
-    p2 = _INDENT * 2
-    host = host_label(vol, resolved_endpoints)
-    user = _resolve_volume_user(vol, resolved_endpoints)
-    block = generate_auth_rules(config, user).sudoers_block()
-    console.print(f"{p2}sudoers rules not configured on {host}.")
-    console.print(f"{p2}Required for passwordless sudo systemd-cryptsetup attach.")
+    console.print(
+        f"{p2}Required so udisks authorizes unlock/mount/unmount/lock without"
+        " an interactive prompt (nbkp runs over SSH / in inactive sessions)."
+    )
     if block is not None:
         console.print(f"{p2}{block.install_hint}")
         _print_cmd(console, block.content.rstrip(), indent=3)

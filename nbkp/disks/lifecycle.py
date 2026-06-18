@@ -1,8 +1,9 @@
-"""Mount/umount lifecycle orchestration."""
+"""Mount/umount lifecycle orchestration via udisks2 (``udisksctl``)."""
 
 from __future__ import annotations
 
 import enum
+import time
 from dataclasses import dataclass
 from typing import Callable
 
@@ -16,124 +17,149 @@ from ..config import (
 from ..config.epresolution import ResolvedEndpoints
 from ..remote.dispatch import run_on_volume
 from ..remote.fabricssh import STDIN_CLOSED_MARKER
-from .strategy import MountStrategy
 from .detection import (
-    StrategyResolutionError,
-    _try_resolve_mount_strategy,
     detect_device_present,
-    detect_luks_attached,
+    discover_cleartext_device,
+    find_mountpoint,
+    resolve_target_device,
+)
+from .udisks import (
+    build_lock_command,
+    build_mount_command,
+    build_unlock_command,
+    build_unmount_command,
+    parse_unlocked_device,
 )
 
-# stderr fragments that indicate sudo refused to run without prompting.
-# These match the messages sudo emits with BatchMode=yes / sudo -n.
-_SUDO_AUTH_REFUSED_SIGNATURES = (
-    "a password is required",
-    "interactive authentication is required",
-    "a terminal is required",
+# stderr fragments emitted by udisks/polkit when authorization is refused
+# under ``--no-user-interaction`` (no active session, no polkit rule).
+_NOT_AUTHORIZED_SIGNATURES = (
+    "not authorized",
+    "notauthorized",
 )
 
-# stderr fragments emitted by systemctl when polkit refuses authorization
-# under BatchMode=yes (no tty / no auth agent available).
-_POLKIT_REFUSED_SIGNATURES = ("interactive authentication required",)
+# stderr fragments indicating udisksctl/udisksd is unavailable.
+_UDISKS_UNAVAILABLE_SIGNATURES = (
+    "command not found",
+    "not found",
+    "error connecting to the system message bus",
+    "org.freedesktop.dbus.error.serviceunknown",
+)
+
+# Transient post-unlock races worth a brief retry: right after unlock, udisks
+# may not have probed the cleartext filesystem yet (blkid/udev run
+# asynchronously), so the mount momentarily reports the device as having no
+# mountable filesystem, or can't look up its D-Bus object.  Also covers
+# slow/loaded remote hosts where udev lags.
+_TRANSIENT_MOUNT_SIGNATURES = (
+    "is not a mountable filesystem",
+    "looking up object",
+    "no such interface",
+)
+
+_MOUNT_RETRY_ATTEMPTS = 8
+_MOUNT_RETRY_DELAY_S = 0.5
 
 
-def _classify_attach_luks_failure(
-    result: subprocess.CompletedProcess[str],
-) -> tuple[MountFailureReason, str]:
-    """Classify a failed attach-luks step into a reason and user-facing detail.
-
-    When the remote sudo refused without a NOPASSWD rule, either we see
-    the message in stderr (normal exit) or the channel closed mid-stdin
-    write (STDIN_CLOSED_MARKER from fabricssh). In both cases we surface
-    SUDOERS_REFUSED so preflight can route to the sudoers-rules fix; the
-    detail stays terse since troubleshoot carries the remediation steps.
-    """
-    stderr = result.stderr.strip()
-    refused = stderr == STDIN_CLOSED_MARKER or any(
-        sig in stderr.lower() for sig in _SUDO_AUTH_REFUSED_SIGNATURES
-    )
-    if refused:
-        return (
-            MountFailureReason.SUDOERS_REFUSED,
-            "passwordless sudo not configured for systemd-cryptsetup attach",
-        )
-    return (
-        MountFailureReason.ATTACH_LUKS_FAILED,
-        f"attach-luks failed (exit {result.returncode}): {stderr}",
-    )
-
-
-def _classify_mount_failure(
-    result: subprocess.CompletedProcess[str],
-) -> tuple[MountFailureReason, str]:
-    """Classify a failed systemctl-start (mount) step.
-
-    When polkit refuses authorization under BatchMode=yes, systemd prints
-    "Interactive authentication required." Surface POLKIT_REFUSED so
-    preflight can route to the polkit-rules fix; troubleshoot carries
-    the actionable remediation.
-    """
-    stderr = result.stderr.strip()
-    if any(sig in stderr.lower() for sig in _POLKIT_REFUSED_SIGNATURES):
-        return (
-            MountFailureReason.POLKIT_REFUSED,
-            "polkit refused systemctl start — rules not configured",
-        )
-    return (
-        MountFailureReason.MOUNT_FAILED,
-        f"mount failed (exit {result.returncode}): {stderr}",
-    )
+def _mount_with_retry(
+    device: str,
+    volume: Volume,
+    resolved_endpoints: ResolvedEndpoints,
+) -> subprocess.CompletedProcess[str]:
+    """Run ``udisksctl mount`` for *device*, retrying transient post-unlock races."""
+    result = run_on_volume(build_mount_command(device), volume, resolved_endpoints)
+    attempts = 1
+    while (
+        result.returncode != 0
+        and attempts < _MOUNT_RETRY_ATTEMPTS
+        and any(sig in result.stderr.lower() for sig in _TRANSIENT_MOUNT_SIGNATURES)
+    ):
+        time.sleep(_MOUNT_RETRY_DELAY_S)
+        result = run_on_volume(build_mount_command(device), volume, resolved_endpoints)
+        attempts += 1
+    return result
 
 
 class MountFailureReason(str, enum.Enum):
     """Structured reason for a mount failure."""
 
     DEVICE_NOT_PRESENT = "device_not_present"
-    ATTACH_LUKS_FAILED = "attach_luks_failed"
-    SUDOERS_REFUSED = "sudoers_refused"
-    POLKIT_REFUSED = "polkit_refused"
+    UNLOCK_FAILED = "unlock_failed"
     MOUNT_FAILED = "mount_failed"
-    STRATEGY_NOT_RESOLVED = "strategy_not_resolved"
+    NOT_AUTHORIZED = "not_authorized"
+    UDISKS_NOT_AVAILABLE = "udisks_not_available"
     UNREACHABLE = "unreachable"
 
 
-# Partition of MountFailureReason by lifecycle stage.  Kept adjacent to
-# the enum so that adding/renaming a reason prompts a review of these
-# sets too.  Consumed by ``nbkp.disks.output`` to disambiguate
-# "real failure at this stage" (✗) from "no action attempted" (⚠).
-#
-# Reasons not in either set are intentionally pre-stage
-# (``DEVICE_NOT_PRESENT`` — never reaches LUKS or mount;
-# ``STRATEGY_NOT_RESOLVED`` / ``UNREACHABLE`` — no observation created
-# at all, see ``disks.observation``).
-
-
-# LUKS-attach step actually ran and failed.
+# Partition of MountFailureReason by lifecycle stage.  Consumed by
+# ``nbkp.disks.output`` to disambiguate "real failure at this stage" (✗)
+# from "no action attempted" (⚠).  ``NOT_AUTHORIZED`` appears in both
+# because polkit can refuse at either the unlock or the mount step; the
+# column that is actually ``False`` is the one that failed, so including it
+# in both colours only the failed cell.
 LUKS_STAGE_FAILURES: frozenset[MountFailureReason] = frozenset(
     {
-        MountFailureReason.ATTACH_LUKS_FAILED,
-        MountFailureReason.SUDOERS_REFUSED,
+        MountFailureReason.UNLOCK_FAILED,
+        MountFailureReason.NOT_AUTHORIZED,
     }
 )
 
 
-# Mount step actually ran and failed.
 MOUNT_STAGE_FAILURES: frozenset[MountFailureReason] = frozenset(
     {
         MountFailureReason.MOUNT_FAILED,
-        MountFailureReason.POLKIT_REFUSED,
+        MountFailureReason.NOT_AUTHORIZED,
     }
 )
+
+
+def _classify_udisks_failure(
+    result: subprocess.CompletedProcess[str],
+    failed: MountFailureReason,
+    action: str,
+) -> tuple[MountFailureReason, str]:
+    """Classify a failed udisksctl step into a reason + user-facing detail.
+
+    A polkit refusal (``--no-user-interaction`` with no rule) maps to
+    ``NOT_AUTHORIZED`` so preflight can route to the polkit-rules fix; a
+    missing daemon/binary maps to ``UDISKS_NOT_AVAILABLE``; anything else is
+    the stage-specific ``failed`` reason.
+    """
+    stderr = result.stderr.strip()
+    lowered = stderr.lower()
+    if stderr == STDIN_CLOSED_MARKER or any(
+        sig in lowered for sig in _NOT_AUTHORIZED_SIGNATURES
+    ):
+        return (
+            MountFailureReason.NOT_AUTHORIZED,
+            f"{action} not authorized — polkit rule not configured",
+        )
+    if any(sig in lowered for sig in _UDISKS_UNAVAILABLE_SIGNATURES):
+        return (
+            MountFailureReason.UDISKS_NOT_AVAILABLE,
+            f"{action} failed — udisks2 not available: {stderr}",
+        )
+    return (failed, f"{action} failed (exit {result.returncode}): {stderr}")
 
 
 @dataclass(frozen=True)
 class MountResult:
-    """Result of attempting to mount a single volume."""
+    """Result of attempting to mount a single volume.
+
+    Carries the runtime state observed during the lifecycle so that
+    ``build_mount_observations`` can reuse it without re-probing, and so the
+    effective mountpoint (declared or discovered) can be plumbed downstream.
+    """
 
     volume_slug: str
     success: bool
     detail: str | None = None
     failure_reason: MountFailureReason | None = None
+    device_present: bool | None = None
+    luks_unlocked: bool | None = None
+    mounted: bool | None = None
+    cleartext_device: str | None = None
+    effective_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -171,9 +197,8 @@ def mount_volume(
     mount_config: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
     passphrase_fn: Callable[[str], str],
-    mount_strategy: MountStrategy,
 ) -> MountResult:
-    """Mount a single volume. Idempotent: skips already mounted.
+    """Mount a single volume via udisks. Idempotent: skips already mounted.
 
     Catches connection failures (timeout, DNS, SSH errors) and returns
     a failed ``MountResult`` with ``UNREACHABLE`` rather than crashing.
@@ -182,14 +207,9 @@ def mount_volume(
 
     try:
         return _mount_volume_inner(
-            volume, mount_config, resolved_endpoints, passphrase_fn, mount_strategy
+            volume, mount_config, resolved_endpoints, passphrase_fn
         )
     except Exception as e:
-        # Last-resort safety net. Most expected failures (sudo refused,
-        # remote process exits, channel closed mid-stdin-write) are now
-        # converted to clean CompletedProcess results inside fabricssh.
-        # Only collapse the first line so multi-line tracebacks don't
-        # leak into the user-facing output.
         first_line = next(
             (line for line in str(e).splitlines() if line.strip()),
             type(e).__name__,
@@ -207,10 +227,11 @@ def _mount_volume_inner(
     mount_config: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
     passphrase_fn: Callable[[str], str],
-    mount_strategy: MountStrategy,
 ) -> MountResult:
     """Core mount logic, separated for exception boundary in ``mount_volume``."""
     slug = volume.slug
+    enc = mount_config.encryption
+    encrypted = enc is not None
 
     # 1. Check device present
     if not detect_device_present(volume, mount_config.device_uuid, resolved_endpoints):
@@ -219,60 +240,106 @@ def _mount_volume_inner(
             success=False,
             detail=f"device not plugged in (UUID: {mount_config.device_uuid})",
             failure_reason=MountFailureReason.DEVICE_NOT_PRESENT,
+            device_present=False,
         )
 
-    # 2. Attach LUKS if encrypted and not yet attached
-    if mount_config.encryption is not None:
-        enc = mount_config.encryption
-        if not detect_luks_attached(volume, enc.mapper_name, resolved_endpoints):
+    # 2. Unlock LUKS if encrypted and not yet unlocked
+    cleartext_device: str | None = None
+    if enc is not None:
+        cleartext_device = discover_cleartext_device(
+            volume, mount_config.device_uuid, resolved_endpoints
+        )
+        if cleartext_device is None:
             passphrase = passphrase_fn(enc.passphrase_id)
-            cmd = mount_strategy.build_attach_luks_command(
-                enc.mapper_name, mount_config.device_uuid
+            result = run_on_volume(
+                build_unlock_command(mount_config.device_uuid),
+                volume,
+                resolved_endpoints,
+                input=passphrase,
             )
-            result = run_on_volume(cmd, volume, resolved_endpoints, input=passphrase)
             if result.returncode != 0:
-                reason, detail = _classify_attach_luks_failure(result)
+                reason, detail = _classify_udisks_failure(
+                    result, MountFailureReason.UNLOCK_FAILED, "unlock"
+                )
                 return MountResult(
                     volume_slug=slug,
                     success=False,
                     detail=detail,
                     failure_reason=reason,
+                    device_present=True,
+                    luks_unlocked=False,
                 )
+            # Prefer the device udisks reports on stdout ("Unlocked X as
+            # /dev/dm-N"); re-probing with lsblk here races the cleartext
+            # device's sysfs entry appearing asynchronously after unlock.
+            cleartext_device = parse_unlocked_device(
+                result.stdout
+            ) or discover_cleartext_device(
+                volume, mount_config.device_uuid, resolved_endpoints
+            )
 
-    # 3. Mount if not already mounted
-    if not mount_strategy.detect_mounted(volume, resolved_endpoints):
-        cmd = mount_strategy.build_mount_command()
-        result = run_on_volume(cmd, volume, resolved_endpoints)
+    # 3. Determine the device to mount
+    device = (
+        cleartext_device
+        if encrypted
+        else f"/dev/disk/by-uuid/{mount_config.device_uuid}"
+    )
+    if device is None:
+        return MountResult(
+            volume_slug=slug,
+            success=False,
+            detail="unlocked device could not be resolved",
+            failure_reason=MountFailureReason.UNLOCK_FAILED,
+            device_present=True,
+            luks_unlocked=False,
+        )
+
+    # 4. Mount if not already mounted
+    effective_path = find_mountpoint(volume, device, resolved_endpoints)
+    if effective_path is None:
+        result = _mount_with_retry(device, volume, resolved_endpoints)
         if result.returncode != 0:
-            reason, detail = _classify_mount_failure(result)
+            reason, detail = _classify_udisks_failure(
+                result, MountFailureReason.MOUNT_FAILED, "mount"
+            )
             return MountResult(
                 volume_slug=slug,
                 success=False,
                 detail=detail,
                 failure_reason=reason,
+                device_present=True,
+                luks_unlocked=True if encrypted else None,
+                mounted=False,
+                cleartext_device=cleartext_device,
             )
+        effective_path = find_mountpoint(volume, device, resolved_endpoints)
 
-    return MountResult(volume_slug=slug, success=True)
+    return MountResult(
+        volume_slug=slug,
+        success=True,
+        device_present=True,
+        luks_unlocked=True if encrypted else None,
+        mounted=True,
+        cleartext_device=cleartext_device,
+        effective_path=effective_path,
+    )
 
 
 def umount_volume(
     volume: Volume,
     mount_config: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
-    mount_strategy: MountStrategy,
 ) -> UmountResult:
-    """Umount and close LUKS for a single volume.
+    """Umount and lock LUKS for a single volume.
 
-    Always attempts umount + close LUKS regardless of who mounted.
+    Always attempts umount + lock LUKS regardless of who mounted.
     Catches connection failures and returns a failed ``UmountResult``
     rather than crashing.
     """
     slug = volume.slug
 
     try:
-        return _umount_volume_inner(
-            volume, mount_config, resolved_endpoints, mount_strategy
-        )
+        return _umount_volume_inner(volume, mount_config, resolved_endpoints)
     except Exception as e:
         first_line = next(
             (line for line in str(e).splitlines() if line.strip()),
@@ -290,15 +357,17 @@ def _umount_volume_inner(
     volume: Volume,
     mount_config: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
-    mount_strategy: MountStrategy,
 ) -> UmountResult:
     """Core umount logic, separated for exception boundary in ``umount_volume``."""
     slug = volume.slug
 
-    # 1. Umount
-    if mount_strategy.detect_mounted(volume, resolved_endpoints):
-        cmd = mount_strategy.build_umount_command()
-        result = run_on_volume(cmd, volume, resolved_endpoints)
+    device = resolve_target_device(volume, mount_config, resolved_endpoints)
+
+    # 1. Umount if mounted
+    if device is not None and find_mountpoint(volume, device, resolved_endpoints):
+        result = run_on_volume(
+            build_unmount_command(device), volume, resolved_endpoints
+        )
         if result.returncode != 0:
             return UmountResult(
                 volume_slug=slug,
@@ -309,22 +378,23 @@ def _umount_volume_inner(
                 warning="device may still be mounted, manual umount needed",
             )
 
-    # 2. Close LUKS if encrypted and still attached
-    if mount_config.encryption is not None:
-        enc = mount_config.encryption
-        if detect_luks_attached(volume, enc.mapper_name, resolved_endpoints):
-            cmd = mount_strategy.build_close_luks_command(enc.mapper_name)
-            result = run_on_volume(cmd, volume, resolved_endpoints)
-            if result.returncode != 0:
-                return UmountResult(
-                    volume_slug=slug,
-                    success=True,
-                    warning=(
-                        "umounted but close-luks failed"
-                        f" (exit {result.returncode}):"
-                        f" {result.stderr.strip()}"
-                    ),
-                )
+    # 2. Lock LUKS if encrypted and still unlocked
+    if mount_config.encryption is not None and device is not None:
+        result = run_on_volume(
+            build_lock_command(mount_config.device_uuid),
+            volume,
+            resolved_endpoints,
+        )
+        if result.returncode != 0:
+            return UmountResult(
+                volume_slug=slug,
+                success=True,
+                warning=(
+                    "umounted but lock-luks failed"
+                    f" (exit {result.returncode}):"
+                    f" {result.stderr.strip()}"
+                ),
+            )
 
     return UmountResult(volume_slug=slug, success=True)
 
@@ -334,135 +404,52 @@ def mount_volumes(
     resolved_endpoints: ResolvedEndpoints,
     passphrase_fn: Callable[[str], str],
     *,
-    mount_strategy: dict[str, MountStrategy] | None = None,
     names: list[str] | None = None,
     on_mount_start: Callable[[str], None] | None = None,
     on_mount_end: Callable[[str, MountResult], None] | None = None,
-) -> tuple[dict[str, MountStrategy], list[MountResult]]:
-    """Mount all volumes with mount config. Idempotent: skips already mounted.
-
-    When ``mount_strategy`` is ``None``, strategies are resolved
-    per-volume inside the ``on_mount_start``/``on_mount_end`` window
-    so that callers can show a spinner covering the entire lifecycle
-    (strategy resolution + mount).
-
-    Returns ``(resolved_strategies, results)`` — the strategy dict is
-    needed by the umount phase and by observation building.
-    """
-    ms = dict(mount_strategy) if mount_strategy is not None else None
+) -> list[MountResult]:
+    """Mount all volumes with mount config. Idempotent: skips already mounted."""
 
     def _mount_one(slug: str, vol: Volume, mount_cfg: MountConfig) -> MountResult:
         if on_mount_start is not None:
             on_mount_start(slug)
-
-        # Resolve strategy inline when not pre-resolved
-        if ms is not None:
-            strategy = ms.get(slug)
-            if strategy is None:
-                result = MountResult(
-                    volume_slug=slug,
-                    success=False,
-                    detail="mount strategy not resolved",
-                    failure_reason=MountFailureReason.STRATEGY_NOT_RESOLVED,
-                )
-                if on_mount_end is not None:
-                    on_mount_end(slug, result)
-                return result
-        else:
-            outcome = _try_resolve_mount_strategy(vol, mount_cfg, resolved_endpoints)
-            match outcome:
-                case StrategyResolutionError() as error:
-                    result = MountResult(
-                        volume_slug=slug,
-                        success=False,
-                        detail=error.detail,
-                        failure_reason=MountFailureReason.UNREACHABLE,
-                    )
-                    if on_mount_end is not None:
-                        on_mount_end(slug, result)
-                    return result
-                case _:
-                    strategy = outcome
-                    resolved_strategies[slug] = strategy
-
         result = mount_volume(
             volume=vol,
             mount_config=mount_cfg,
             resolved_endpoints=resolved_endpoints,
             passphrase_fn=passphrase_fn,
-            mount_strategy=strategy,
         )
         if on_mount_end is not None:
             on_mount_end(slug, result)
         return result
 
-    resolved_strategies: dict[str, MountStrategy] = dict(ms) if ms is not None else {}
-    results = [
+    return [
         _mount_one(slug, vol, mount_cfg)
         for slug, vol, mount_cfg in _volumes_with_mount_config(config, names)
     ]
-    return resolved_strategies, results
 
 
 def umount_volumes(
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
     *,
-    mount_strategy: dict[str, MountStrategy] | None = None,
     names: list[str] | None = None,
     on_umount_start: Callable[[str], None] | None = None,
     on_umount_end: Callable[[str, UmountResult], None] | None = None,
 ) -> list[UmountResult]:
-    """Umount and close LUKS for all volumes with mount config.
+    """Umount and lock LUKS for all volumes with mount config.
 
     Always umounts regardless of who mounted — avoids fragile
-    action tracking across failed/restarted runs.
-    Umounts in reverse order.
-
-    When ``mount_strategy`` is ``None``, strategies are resolved
-    per-volume inside the ``on_umount_start``/``on_umount_end`` window.
+    action tracking across failed/restarted runs.  Umounts in reverse order.
     """
-    ms = dict(mount_strategy) if mount_strategy is not None else None
 
-    def _umount_one(
-        slug: str,
-        vol: Volume,
-        mount_cfg: MountConfig,
-    ) -> UmountResult:
+    def _umount_one(slug: str, vol: Volume, mount_cfg: MountConfig) -> UmountResult:
         if on_umount_start is not None:
             on_umount_start(slug)
-
-        if ms is not None:
-            strategy = ms.get(slug)
-            if strategy is None:
-                result = UmountResult(
-                    volume_slug=slug,
-                    success=False,
-                    detail="mount strategy not resolved",
-                )
-                if on_umount_end is not None:
-                    on_umount_end(slug, result)
-                return result
-        else:
-            outcome = _try_resolve_mount_strategy(vol, mount_cfg, resolved_endpoints)
-            match outcome:
-                case StrategyResolutionError() as error:
-                    result = UmountResult(
-                        volume_slug=slug,
-                        success=False,
-                        detail=error.detail,
-                    )
-                    if on_umount_end is not None:
-                        on_umount_end(slug, result)
-                    return result
-                case _:
-                    strategy = outcome
-
         result = umount_volume(
             volume=vol,
             mount_config=mount_cfg,
             resolved_endpoints=resolved_endpoints,
-            mount_strategy=strategy,
         )
         if on_umount_end is not None:
             on_umount_end(slug, result)

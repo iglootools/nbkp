@@ -6,25 +6,37 @@ import subprocess
 from unittest.mock import patch
 
 from nbkp.config import (
-    Config,
     LocalVolume,
+    LuksEncryptionConfig,
     MountConfig,
-    SyncConfig,
-    SyncEndpoint,
 )
-from nbkp.disks import direct as direct_cmds
-from nbkp.disks import systemd as systemd_cmds
 from nbkp.disks.detection import (
     detect_device_present,
-    detect_luks_attached,
-    detect_systemd_cryptsetup_path,
-    resolve_mount_strategy,
-    resolve_mount_unit,
+    discover_cleartext_device,
+    find_mountpoint,
+    resolve_effective_path,
+    resolve_target_device,
 )
 
+_UUID = "5941f273-f73c-44c5-a3ef-fae7248db1b6"
 
-def _local_vol(path: str = "/mnt/disk") -> LocalVolume:
+
+def _local_vol(path: str | None = "/mnt/disk") -> LocalVolume:
+    if path is None:
+        return LocalVolume(
+            slug="disk",
+            mount=MountConfig(device_uuid=_UUID),
+        )
     return LocalVolume(slug="disk", path=path)
+
+
+def _mount_config(encrypted: bool) -> MountConfig:
+    if encrypted:
+        return MountConfig(
+            device_uuid=_UUID,
+            encryption=LuksEncryptionConfig(passphrase_id="disk"),
+        )
+    return MountConfig(device_uuid=_UUID)
 
 
 def _mock_run(returncode: int, stdout: str = "", stderr: str = ""):
@@ -36,15 +48,11 @@ def _mock_run(returncode: int, stdout: str = "", stderr: str = ""):
 class TestDetectDevicePresent:
     def test_present(self) -> None:
         with patch("nbkp.remote.dispatch.subprocess.run", return_value=_mock_run(0)):
-            assert detect_device_present(
-                _local_vol(), "5941f273-f73c-44c5-a3ef-fae7248db1b6", {}
-            )
+            assert detect_device_present(_local_vol(), _UUID, {})
 
     def test_not_present(self) -> None:
         with patch("nbkp.remote.dispatch.subprocess.run", return_value=_mock_run(1)):
-            assert not detect_device_present(
-                _local_vol(), "5941f273-f73c-44c5-a3ef-fae7248db1b6", {}
-            )
+            assert not detect_device_present(_local_vol(), _UUID, {})
 
     def test_passes_correct_command(self) -> None:
         with patch(
@@ -56,162 +64,135 @@ class TestDetectDevicePresent:
         assert cmd == ["test", "-e", "/dev/disk/by-uuid/aaaa-bbbb-cccc-dddd"]
 
 
-class TestDetectLuksAttached:
-    def test_attached(self) -> None:
-        with patch("nbkp.remote.dispatch.subprocess.run", return_value=_mock_run(0)):
-            assert detect_luks_attached(_local_vol(), "seagate8tb", {})
-
-    def test_not_attached(self) -> None:
-        with patch("nbkp.remote.dispatch.subprocess.run", return_value=_mock_run(1)):
-            assert not detect_luks_attached(_local_vol(), "seagate8tb", {})
-
-    def test_passes_correct_command(self) -> None:
+class TestDiscoverCleartextDevice:
+    def test_passes_lsblk_command(self) -> None:
         with patch(
-            "nbkp.remote.dispatch.subprocess.run", return_value=_mock_run(0)
+            "nbkp.remote.dispatch.subprocess.run",
+            return_value=_mock_run(0, stdout=f"luks-{_UUID} crypt\n"),
         ) as mock:
-            detect_luks_attached(_local_vol(), "mydisk", {})
+            discover_cleartext_device(_local_vol(), _UUID, {})
         cmd = mock.call_args[0][0]
-        assert cmd == ["test", "-b", "/dev/mapper/mydisk"]
+        assert cmd == ["lsblk", "-rno", "NAME,TYPE", f"/dev/disk/by-uuid/{_UUID}"]
 
+    def test_returns_mapper_for_crypt_child(self) -> None:
+        # lsblk lists the parent (the LUKS container) and its crypt child.
+        stdout = f"sda crypt\nluks-{_UUID} crypt\n"
+        # The first crypt row wins; build deterministic output instead.
+        stdout = f"sdb part\nluks-{_UUID} crypt\n"
+        with patch(
+            "nbkp.remote.dispatch.subprocess.run",
+            return_value=_mock_run(0, stdout=stdout),
+        ):
+            device = discover_cleartext_device(_local_vol(), _UUID, {})
+        assert device == f"/dev/mapper/luks-{_UUID}"
 
-class TestBuildDetectMountedCommand:
-    def test_systemd(self) -> None:
-        assert systemd_cmds.build_detect_mounted_command("mnt-disk.mount") == [
-            "systemctl",
-            "is-active",
-            "mnt-disk.mount",
-            "--quiet",
-        ]
+    def test_locked_returns_none(self) -> None:
+        # No crypt child: container is still locked.
+        with patch(
+            "nbkp.remote.dispatch.subprocess.run",
+            return_value=_mock_run(0, stdout="sdb disk\nsdb1 part\n"),
+        ):
+            assert discover_cleartext_device(_local_vol(), _UUID, {}) is None
 
-    def test_direct(self) -> None:
-        assert direct_cmds.build_detect_mounted_command("/mnt/disk") == [
-            "mountpoint",
-            "-q",
-            "/mnt/disk",
-        ]
-
-
-class TestDetectSystemdCryptsetupPath:
-    def test_found_usr_lib(self) -> None:
-        def mock_run(cmd, **kwargs):
-            if cmd[1] == "-x" and "/usr/lib/" in cmd[2]:
-                return _mock_run(0)
-            return _mock_run(1)
-
-        with patch("nbkp.remote.dispatch.subprocess.run", side_effect=mock_run):
-            path = detect_systemd_cryptsetup_path(_local_vol(), {})
-        assert path == "/usr/lib/systemd/systemd-cryptsetup"
-
-    def test_found_lib(self) -> None:
-        def mock_run(cmd, **kwargs):
-            if cmd[1] == "-x" and cmd[2] == "/lib/systemd/systemd-cryptsetup":
-                return _mock_run(0)
-            return _mock_run(1)
-
-        with patch("nbkp.remote.dispatch.subprocess.run", side_effect=mock_run):
-            path = detect_systemd_cryptsetup_path(_local_vol(), {})
-        assert path == "/lib/systemd/systemd-cryptsetup"
-
-    def test_not_found(self) -> None:
+    def test_lsblk_failure_returns_none(self) -> None:
         with patch("nbkp.remote.dispatch.subprocess.run", return_value=_mock_run(1)):
-            path = detect_systemd_cryptsetup_path(_local_vol(), {})
-        assert path is None
+            assert discover_cleartext_device(_local_vol(), _UUID, {}) is None
 
 
-class TestResolveMountUnit:
-    def test_success(self) -> None:
+class TestResolveTargetDevice:
+    def test_unencrypted_is_by_uuid(self) -> None:
+        device = resolve_target_device(_local_vol(), _mount_config(False), {})
+        assert device == f"/dev/disk/by-uuid/{_UUID}"
+
+    def test_encrypted_discovers_cleartext(self) -> None:
         with patch(
-            "nbkp.remote.dispatch.subprocess.run",
-            return_value=_mock_run(0, stdout="mnt-seagate8tb\n"),
+            "nbkp.disks.detection.discover_cleartext_device",
+            return_value=f"/dev/mapper/luks-{_UUID}",
         ):
-            unit = resolve_mount_unit(_local_vol("/mnt/seagate8tb"), {})
-        assert unit == "mnt-seagate8tb.mount"
+            device = resolve_target_device(_local_vol(), _mount_config(True), {})
+        assert device == f"/dev/mapper/luks-{_UUID}"
 
-    def test_failure(self) -> None:
+    def test_encrypted_locked_returns_none(self) -> None:
         with patch(
-            "nbkp.remote.dispatch.subprocess.run",
-            return_value=_mock_run(1),
+            "nbkp.disks.detection.discover_cleartext_device",
+            return_value=None,
         ):
-            unit = resolve_mount_unit(_local_vol("/mnt/seagate8tb"), {})
-        assert unit is None
+            assert resolve_target_device(_local_vol(), _mount_config(True), {}) is None
 
-    def test_passes_volume_path(self) -> None:
+
+class TestFindMountpoint:
+    def test_passes_findmnt_command(self) -> None:
         with patch(
             "nbkp.remote.dispatch.subprocess.run",
-            return_value=_mock_run(0, stdout="mnt-data\n"),
+            return_value=_mock_run(0, stdout="/mnt/disk\n"),
         ) as mock:
-            resolve_mount_unit(_local_vol("/mnt/data"), {})
+            find_mountpoint(_local_vol(), "/dev/mapper/x", {})
         cmd = mock.call_args[0][0]
-        assert cmd == ["systemd-escape", "--path", "/mnt/data"]
+        assert cmd == ["findmnt", "--source", "/dev/mapper/x", "-n", "-o", "TARGET"]
 
-
-class TestResolveMountStrategy:
-    def _config(self) -> Config:
-        return Config(
-            volumes={
-                "v1": LocalVolume(
-                    slug="v1",
-                    path="/mnt/v1",
-                    mount=MountConfig(
-                        device_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-                    ),
-                ),
-                "v2": LocalVolume(
-                    slug="v2",
-                    path="/mnt/v2",
-                    mount=MountConfig(
-                        device_uuid="cccccccc-dddd-eeee-ffff-000000000000",
-                    ),
-                ),
-            },
-            sync_endpoints={
-                "ep1": SyncEndpoint(slug="ep1", volume="v1"),
-                "ep2": SyncEndpoint(slug="ep2", volume="v2"),
-            },
-            syncs={
-                "s1": SyncConfig(slug="s1", source="ep1", destination="ep2"),
-            },
-        )
-
-    def test_ssh_timeout_skips_volume(self) -> None:
-        """Unreachable volume is omitted from strategies, not a crash."""
-        cfg = self._config()
-        call_count = 0
-
-        def mock_resolve(vol, mount_config, resolved):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                raise TimeoutError("timed out")
-            from nbkp.disks.strategy import DirectMountStrategy
-
-            return DirectMountStrategy(volume_path=vol.path)
-
+    def test_mounted_returns_target(self) -> None:
         with patch(
-            "nbkp.disks.detection._resolve_mount_strategy",
-            side_effect=mock_resolve,
+            "nbkp.remote.dispatch.subprocess.run",
+            return_value=_mock_run(0, stdout="/mnt/disk\n"),
         ):
-            strategies = resolve_mount_strategy(cfg, {}, names=None)
+            assert find_mountpoint(_local_vol(), "/dev/mapper/x", {}) == "/mnt/disk"
 
-        # One volume succeeded, one failed
-        assert len(strategies) == 1
+    def test_unmounted_returns_none(self) -> None:
+        with patch("nbkp.remote.dispatch.subprocess.run", return_value=_mock_run(1)):
+            assert find_mountpoint(_local_vol(), "/dev/mapper/x", {}) is None
 
-    def test_strategy_error_callback(self) -> None:
-        """on_strategy_error callback is called for failed volumes."""
-        cfg = self._config()
-        errors: list[tuple[str, str]] = []
-
+    def test_empty_output_returns_none(self) -> None:
         with patch(
-            "nbkp.disks.detection._resolve_mount_strategy",
-            side_effect=TimeoutError("timed out"),
+            "nbkp.remote.dispatch.subprocess.run",
+            return_value=_mock_run(0, stdout="\n"),
         ):
-            strategies = resolve_mount_strategy(
-                cfg,
-                {},
-                names=None,
-                on_strategy_error=lambda slug, err: errors.append((slug, err)),
+            assert find_mountpoint(_local_vol(), "/dev/mapper/x", {}) is None
+
+
+class TestResolveEffectivePath:
+    def test_declared_path_is_authoritative(self) -> None:
+        # Option A: volume.path declared — returned directly, no probing.
+        with patch("nbkp.disks.detection.resolve_target_device") as mock_resolve:
+            path = resolve_effective_path(
+                _local_vol("/mnt/disk"), _mount_config(False), {}
+            )
+        assert path == "/mnt/disk"
+        mock_resolve.assert_not_called()
+
+    def test_discovered_path_when_omitted(self) -> None:
+        # Option B: no volume.path — discover via findmnt.
+        with (
+            patch(
+                "nbkp.disks.detection.resolve_target_device",
+                return_value=f"/dev/disk/by-uuid/{_UUID}",
+            ),
+            patch(
+                "nbkp.disks.detection.find_mountpoint",
+                return_value="/run/media/backup/label",
+            ),
+        ):
+            path = resolve_effective_path(_local_vol(None), _mount_config(False), {})
+        assert path == "/run/media/backup/label"
+
+    def test_omitted_path_device_locked_returns_none(self) -> None:
+        with patch(
+            "nbkp.disks.detection.resolve_target_device",
+            return_value=None,
+        ):
+            assert (
+                resolve_effective_path(_local_vol(None), _mount_config(True), {})
+                is None
             )
 
-        assert len(strategies) == 0
-        assert len(errors) == 2
-        assert all("timed out" in err for _, err in errors)
+    def test_omitted_path_unmounted_returns_none(self) -> None:
+        with (
+            patch(
+                "nbkp.disks.detection.resolve_target_device",
+                return_value=f"/dev/disk/by-uuid/{_UUID}",
+            ),
+            patch("nbkp.disks.detection.find_mountpoint", return_value=None),
+        ):
+            assert (
+                resolve_effective_path(_local_vol(None), _mount_config(False), {})
+                is None
+            )

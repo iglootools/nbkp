@@ -4,7 +4,8 @@ Two levels of observation:
 
 1. **SSH endpoint** — host reachability, host-level tool availability
    (rsync, btrfs, stat, findmnt), mount management tool availability
-   (systemctl, sudo, cryptsetup, etc.).  Probed once per unique host.
+   (udisksctl + a running udisksd, lsblk, the udisks2-btrfs module).
+   Probed once per unique host.
 2. **Volume** — sentinel existence, filesystem properties, mount
    config validation, and runtime mount state.  Probed once per volume
    whose SSH endpoint is active.
@@ -186,7 +187,11 @@ def _observe_local(
     mount_observation: MountObservation | None = None,
 ) -> VolumeDiagnostics:
     """Observe a local volume's state."""
-    sentinel_exists = (Path(volume.path) / VOLUME_SENTINEL).exists()
+    # A mount-managed volume with no declared path that is not yet mounted
+    # has no knowable location — treat as sentinel-missing (inactive).
+    sentinel_exists = (
+        volume.path is not None and (Path(volume.path) / VOLUME_SENTINEL).exists()
+    )
     caps = (
         check_volume_capabilities(
             volume, host_tools, mount_tools, resolved_endpoints, mount_observation
@@ -211,11 +216,15 @@ def _observe_remote(
     SSH reachability has already been verified at the SSH endpoint level.
     """
     ep = resolved_endpoints[volume.slug]
-    sentinel_path = f"{volume.path}/{VOLUME_SENTINEL}"
-    result = run_remote_command(
-        ep.server, ["test", "-f", sentinel_path], ep.proxy_chain
-    )
-    sentinel_exists = result.returncode == 0
+    if volume.path is None:
+        # Unmounted discovery-model volume — no knowable location.
+        sentinel_exists = False
+    else:
+        sentinel_path = f"{volume.path}/{VOLUME_SENTINEL}"
+        result = run_remote_command(
+            ep.server, ["test", "-f", sentinel_path], ep.proxy_chain
+        )
+        sentinel_exists = result.returncode == 0
     caps = (
         check_volume_capabilities(
             volume, host_tools, mount_tools, resolved_endpoints, mount_observation

@@ -21,7 +21,6 @@ from ...context import managed_mount as _disks_managed_mount
 from ...lifecycle import MountFailureReason, MountResult, UmountResult, mount_count
 from ...observation import MountObservation
 from ...output import build_mount_status_table, display_name
-from ...strategy import MountStrategy
 from .progress import DisksProgressBar
 
 
@@ -84,7 +83,7 @@ def managed_mount(
     output_format: OutputFormat = OutputFormat.HUMAN,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Generator[
-    tuple[dict[str, MountStrategy], dict[str, MountObservation]],
+    tuple[Config, dict[str, MountObservation]],
     None,
     None,
 ]:
@@ -93,10 +92,10 @@ def managed_mount(
     Thin wrapper around :func:`disks.context.managed_mount` that adds
     Rich display callbacks and credential management.
 
-    Yields a tuple of ``(mount_strategy, mount_observations)``.  When
-    mounting is skipped both dicts are empty.  Observations capture
-    the runtime state discovered during mount so that preflight checks
-    can reuse it instead of re-probing.
+    Yields ``(resolved_config, mount_observations)``.  ``resolved_config``
+    is *cfg* with discovered mountpoints filled in for mount-managed volumes
+    that omitted ``path``.  Observations capture the runtime state discovered
+    during mount so that preflight checks can reuse it instead of re-probing.
 
     Parameters
     ----------
@@ -177,7 +176,7 @@ def managed_mount(
         ) as result:
             if mount_bar is not None:
                 mount_bar.stop()
-            _mount_strategy, mount_observations = result
+            _resolved_config, mount_observations = result
             if use_progress and mount_observations:
                 display_statuses = [
                     (display_names.get(slug, slug), obs)

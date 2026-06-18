@@ -202,7 +202,6 @@ def check_config() -> Config:
         mount=MountConfig(
             device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6",
             encryption=LuksEncryptionConfig(
-                mapper_name="encrypted",
                 passphrase_id="encrypted",
             ),
         ),
@@ -322,7 +321,7 @@ def check_data(
         diagnostics=VolumeDiagnostics(capabilities=_SENTINEL_MISSING_CAPS),
         errors=[VolumeError.SENTINEL_NOT_FOUND],
     )
-    # Encrypted volume: device present, luks not attached, not mounted
+    # Encrypted volume: device present, luks not unlocked, not mounted
     mount_encrypted_vs = VolumeStatus(
         slug="mount-encrypted",
         config=config.volumes["mount-encrypted"],
@@ -334,9 +333,8 @@ def check_data(
                 hardlink_supported=True,
                 btrfs_user_subvol_rm=False,
                 mount=MountCapabilities(
-                    resolved_backend="systemd",
                     device_present=True,
-                    luks_attached=False,
+                    luks_unlocked=False,
                     mounted=False,
                 ),
             ),
@@ -355,9 +353,8 @@ def check_data(
                 hardlink_supported=True,
                 btrfs_user_subvol_rm=False,
                 mount=MountCapabilities(
-                    resolved_backend="systemd",
-                    mount_unit="mnt-usb\\x2dbackup\\x2dmount.mount",
-                    has_mount_unit_config=True,
+                    has_fstab_entry=True,
+                    fstab_target="/mnt/usb-backup-mount",
                     device_present=True,
                     mounted=True,
                 ),
@@ -519,7 +516,6 @@ def _troubleshoot_volumes() -> dict[str, LocalVolume]:
             mount=MountConfig(
                 device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6",
                 encryption=LuksEncryptionConfig(
-                    mapper_name="encrypted",
                     passphrase_id="encrypted",
                 ),
             ),
@@ -531,26 +527,23 @@ def _troubleshoot_volumes() -> dict[str, LocalVolume]:
                 device_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
             ),
         ),
-        "mount-direct": LocalVolume(
-            slug="mount-direct",
-            path="/mnt/direct-encrypted",
+        "mount-device-missing": LocalVolume(
+            slug="mount-device-missing",
+            path="/mnt/device-missing",
             mount=MountConfig(
-                strategy="direct",
                 device_uuid="dddddddd-eeee-ffff-0000-111111111111",
                 encryption=LuksEncryptionConfig(
-                    mapper_name="direct-encrypted",
-                    passphrase_id="direct-encrypted",
+                    passphrase_id="device-missing",
                 ),
             ),
         ),
-        "mount-systemd-mismatch": LocalVolume(
-            slug="mount-systemd-mismatch",
-            path="/mnt/systemd-mismatch",
+        "mount-fstab-mismatch": LocalVolume(
+            slug="mount-fstab-mismatch",
+            path="/mnt/fstab-mismatch",
             mount=MountConfig(
                 device_uuid="11111111-2222-3333-4444-555555555555",
                 encryption=LuksEncryptionConfig(
-                    mapper_name="systemd-mismatch",
-                    passphrase_id="systemd-mismatch",
+                    passphrase_id="fstab-mismatch",
                 ),
             ),
         ),
@@ -558,23 +551,19 @@ def _troubleshoot_volumes() -> dict[str, LocalVolume]:
             slug="mount-luks-failed",
             path="/mnt/luks-failed",
             mount=MountConfig(
-                strategy="direct",
                 device_uuid="66666666-7777-8888-9999-aaaaaaaaaaaa",
                 encryption=LuksEncryptionConfig(
-                    mapper_name="luks-failed",
                     passphrase_id="luks-failed",
                 ),
             ),
         ),
-        "mount-sudo-refused": LocalVolume(
-            slug="mount-sudo-refused",
-            path="/mnt/sudo-refused",
+        "mount-mount-failed": LocalVolume(
+            slug="mount-mount-failed",
+            path="/mnt/mount-failed",
             mount=MountConfig(
-                strategy="systemd",
                 device_uuid="77777777-8888-9999-aaaa-bbbbbbbbbbbb",
                 encryption=LuksEncryptionConfig(
-                    mapper_name="sudo-refused",
-                    passphrase_id="sudo-refused",
+                    passphrase_id="mount-failed",
                 ),
             ),
         ),
@@ -582,10 +571,8 @@ def _troubleshoot_volumes() -> dict[str, LocalVolume]:
             slug="mount-polkit-refused",
             path="/mnt/polkit-refused",
             mount=MountConfig(
-                strategy="systemd",
                 device_uuid="88888888-9999-aaaa-bbbb-cccccccccccc",
                 encryption=LuksEncryptionConfig(
-                    mapper_name="polkit-refused",
                     passphrase_id="polkit-refused",
                 ),
             ),
@@ -599,7 +586,7 @@ def _troubleshoot_volumes() -> dict[str, LocalVolume]:
 
 # ── Troubleshoot SSH endpoint statuses ────────────────────────
 
-# localhost with all tools missing (for mount-encrypted scenario)
+# localhost with udisksctl missing (for mount-encrypted scenario)
 _TROUBLESHOOT_LOCALHOST_MOUNT_ENCRYPTED_SSH = SshEndpointStatus.from_diagnostics(
     slug="localhost",
     diagnostics=SshEndpointDiagnostics(
@@ -611,20 +598,17 @@ _TROUBLESHOOT_LOCALHOST_MOUNT_ENCRYPTED_SSH = SshEndpointStatus.from_diagnostics
             has_findmnt=True,
         ),
         mount_tools=MountToolCapabilities(
-            has_systemctl=False,
-            has_systemd_escape=False,
-            has_sudo=False,
-            has_cryptsetup=False,
-            has_systemd_cryptsetup=False,
+            has_udisksctl=False,
+            has_findmnt=True,
+            has_lsblk=True,
         ),
     ),
     needs=SshEndpointToolNeeds(
-        mount_systemd=True,
-        has_encryption=True,
+        has_mount_volumes=True,
     ),
 )
 
-# localhost for mount-unencrypted (systemctl + systemd-escape present)
+# localhost for mount-unencrypted (udisks tools present)
 _TROUBLESHOOT_LOCALHOST_MOUNT_UNENCRYPTED_SSH = SshEndpointStatus.from_diagnostics(
     slug="localhost",
     diagnostics=SshEndpointDiagnostics(
@@ -636,15 +620,17 @@ _TROUBLESHOOT_LOCALHOST_MOUNT_UNENCRYPTED_SSH = SshEndpointStatus.from_diagnosti
             has_findmnt=True,
         ),
         mount_tools=MountToolCapabilities(
-            has_systemctl=True,
-            has_systemd_escape=True,
+            has_udisksctl=True,
+            udisksd_running=True,
+            has_findmnt=True,
+            has_lsblk=True,
         ),
     ),
-    needs=SshEndpointToolNeeds(mount_systemd=True),
+    needs=SshEndpointToolNeeds(has_mount_volumes=True),
 )
 
-# localhost for mount-direct (all direct tools missing)
-_TROUBLESHOOT_LOCALHOST_MOUNT_DIRECT_SSH = SshEndpointStatus.from_diagnostics(
+# localhost for mount-device-missing (udisksd not running)
+_TROUBLESHOOT_LOCALHOST_MOUNT_DEVICE_MISSING_SSH = SshEndpointStatus.from_diagnostics(
     slug="localhost",
     diagnostics=SshEndpointDiagnostics(
         host_tools=HostToolCapabilities(
@@ -655,16 +641,14 @@ _TROUBLESHOOT_LOCALHOST_MOUNT_DIRECT_SSH = SshEndpointStatus.from_diagnostics(
             has_findmnt=True,
         ),
         mount_tools=MountToolCapabilities(
-            has_sudo=False,
-            has_mount_cmd=False,
-            has_umount_cmd=False,
-            has_mountpoint=False,
-            has_cryptsetup=False,
+            has_udisksctl=True,
+            udisksd_running=False,
+            has_findmnt=True,
+            has_lsblk=True,
         ),
     ),
     needs=SshEndpointToolNeeds(
-        mount_direct=True,
-        has_encryption=True,
+        has_mount_volumes=True,
     ),
 )
 
@@ -750,7 +734,8 @@ _TROUBLESHOOT_LOCALHOST_BTRFS_MISSING_SSH = SshEndpointStatus.from_diagnostics(
     needs=SshEndpointToolNeeds(has_btrfs_endpoints=True, has_snapshot_endpoints=True),
 )
 
-# localhost for mount-systemd-mismatch (systemctl + systemd-escape present)
+# localhost for mount-fstab-mismatch (udisks tools healthy; error is at
+# the volume level — no fstab entry maps the device to the configured path)
 _TROUBLESHOOT_LOCALHOST_MOUNT_MISMATCH_SSH = SshEndpointStatus.from_diagnostics(
     slug="localhost",
     diagnostics=SshEndpointDiagnostics(
@@ -762,17 +747,17 @@ _TROUBLESHOOT_LOCALHOST_MOUNT_MISMATCH_SSH = SshEndpointStatus.from_diagnostics(
             has_findmnt=True,
         ),
         mount_tools=MountToolCapabilities(
-            has_systemctl=True,
-            has_systemd_escape=True,
-            has_sudo=True,
-            has_cryptsetup=True,
-            has_systemd_cryptsetup=True,
+            has_udisksctl=True,
+            udisksd_running=True,
+            has_findmnt=True,
+            has_lsblk=True,
         ),
     ),
-    needs=SshEndpointToolNeeds(mount_systemd=True, has_encryption=True),
+    needs=SshEndpointToolNeeds(has_mount_volumes=True),
 )
 
-# localhost for mount-luks-failed (direct tools present)
+# localhost for mount lifecycle failures (udisks tools healthy; errors are
+# at the volume level via mount_failure_reason)
 _TROUBLESHOOT_LOCALHOST_LUKS_FAILED_SSH = SshEndpointStatus.from_diagnostics(
     slug="localhost",
     diagnostics=SshEndpointDiagnostics(
@@ -784,14 +769,36 @@ _TROUBLESHOOT_LOCALHOST_LUKS_FAILED_SSH = SshEndpointStatus.from_diagnostics(
             has_findmnt=True,
         ),
         mount_tools=MountToolCapabilities(
-            has_sudo=True,
-            has_mount_cmd=True,
-            has_umount_cmd=True,
-            has_mountpoint=True,
-            has_cryptsetup=True,
+            has_udisksctl=True,
+            udisksd_running=True,
+            has_findmnt=True,
+            has_lsblk=True,
         ),
     ),
-    needs=SshEndpointToolNeeds(mount_direct=True, has_encryption=True),
+    needs=SshEndpointToolNeeds(has_mount_volumes=True),
+)
+
+# localhost for a btrfs-backed mount volume missing the udisks btrfs module
+# (warning-level SshEndpointError.UDISKS_BTRFS_MODULE_MISSING)
+_TROUBLESHOOT_LOCALHOST_BTRFS_MODULE_MISSING_SSH = SshEndpointStatus.from_diagnostics(
+    slug="localhost",
+    diagnostics=SshEndpointDiagnostics(
+        host_tools=HostToolCapabilities(
+            has_rsync=True,
+            rsync_version_ok=True,
+            has_btrfs=True,
+            has_stat=True,
+            has_findmnt=True,
+        ),
+        mount_tools=MountToolCapabilities(
+            has_udisksctl=True,
+            udisksd_running=True,
+            has_btrfs_module=False,
+            has_findmnt=True,
+            has_lsblk=True,
+        ),
+    ),
+    needs=SshEndpointToolNeeds(has_mount_volumes=True, has_btrfs_mount=True),
 )
 
 # home-nas: location excluded
@@ -818,101 +825,86 @@ _TROUBLESHOOT_NAS_REACHABLE_SSH = SshEndpointStatus.from_diagnostics(
 
 # ── Troubleshoot volume capabilities ─────────────────────────
 
+# mount-encrypted: udisks tools missing at SSH level; volume probe shows the
+# device is present but not unlocked/mounted (VOLUME_NOT_MOUNTED).
 _MOUNT_ENCRYPTED_CAPS = VolumeCapabilities(
     sentinel_exists=True,
     is_btrfs_filesystem=False,
     hardlink_supported=True,
     btrfs_user_subvol_rm=False,
     mount=MountCapabilities(
-        resolved_backend="systemd",
-        has_mount_unit_config=None,
-        has_cryptsetup_service_config=None,
-        device_present=False,
-        luks_attached=None,
-        mounted=None,
+        has_fstab_entry=True,
+        fstab_target="/mnt/encrypted",
+        device_present=True,
+        luks_unlocked=False,
+        mounted=False,
     ),
 )
 
+# mount-unencrypted: device present but not mounted (VOLUME_NOT_MOUNTED).
 _MOUNT_UNENCRYPTED_CAPS = VolumeCapabilities(
     sentinel_exists=True,
     is_btrfs_filesystem=False,
     hardlink_supported=True,
     btrfs_user_subvol_rm=False,
     mount=MountCapabilities(
-        resolved_backend="systemd",
-        mount_unit="mnt-usb\\x2dbackup.mount",
-        has_mount_unit_config=False,
+        has_fstab_entry=True,
+        fstab_target="/mnt/usb-backup",
         device_present=True,
         mounted=False,
     ),
 )
 
-_MOUNT_DIRECT_ENCRYPTED_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-    mount=MountCapabilities(
-        resolved_backend="direct",
-        device_present=False,
-        luks_attached=None,
-        mounted=None,
-    ),
-)
-
-# mount-systemd-mismatch: device present, units configured but mismatched
-_MOUNT_SYSTEMD_MISMATCH_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-    mount=MountCapabilities(
-        resolved_backend="systemd",
-        mount_unit="mnt-systemd\\x2dmismatch.mount",
-        has_mount_unit_config=True,
-        mount_unit_what="/dev/mapper/wrong-device",
-        mount_unit_where="/mnt/wrong-path",
-        has_cryptsetup_service_config=True,
-        cryptsetup_service_exec_start="/usr/bin/cryptsetup attach wrong-mapper",
-        device_present=True,
-        luks_attached=False,
-        mounted=False,
-    ),
-)
-
-# mount-sudo-refused: device present, sudoers rule file exists on disk but
-# sudo refused to attach (e.g. NOPASSWD rule covers a different mapper).
-# Exercises the lifecycle→preflight upgrade path: VOLUME_NOT_MOUNTED is
-# upgraded to SUDOERS_RULES_MISSING via ``mount_failure_reason``.
-_MOUNT_SUDO_REFUSED_CAPS = VolumeCapabilities(
+# mount-device-missing: device not plugged in (DEVICE_NOT_PRESENT).
+_MOUNT_DEVICE_MISSING_CAPS = VolumeCapabilities(
     sentinel_exists=False,
     is_btrfs_filesystem=False,
     hardlink_supported=True,
     btrfs_user_subvol_rm=False,
     mount=MountCapabilities(
-        resolved_backend="systemd",
-        mount_unit="mnt-sudo\\x2drefused.mount",
-        has_mount_unit_config=True,
-        mount_unit_what="/dev/mapper/sudo-refused",
-        mount_unit_where="/mnt/sudo-refused",
-        has_cryptsetup_service_config=True,
-        cryptsetup_service_exec_start=(
-            "/usr/lib/systemd/systemd-cryptsetup attach sudo-refused"
-            " /dev/disk/by-uuid/77777777-8888-9999-aaaa-bbbbbbbbbbbb"
-            " /dev/stdin luks"
-        ),
-        device_present=True,
-        luks_attached=False,
-        # mounted=None reflects reality: LUKS attach failed before the
-        # mount step ran, so mount state was never probed.
+        device_present=False,
+        luks_unlocked=None,
         mounted=None,
-        mount_failure_reason="sudoers_refused",
+    ),
+)
+
+# mount-fstab-mismatch: device present, sentinel missing, but no fstab entry
+# maps the device to the configured path → udisks would mount at /run/media
+# instead.  Exercises FSTAB_MOUNTPOINT_MISMATCH.
+_MOUNT_FSTAB_MISMATCH_CAPS = VolumeCapabilities(
+    sentinel_exists=False,
+    is_btrfs_filesystem=False,
+    hardlink_supported=True,
+    btrfs_user_subvol_rm=False,
+    mount=MountCapabilities(
+        has_fstab_entry=False,
+        device_present=True,
+        luks_unlocked=True,
+        mounted=False,
+    ),
+)
+
+# mount-mount-failed: device present, LUKS unlocked, but the mount step
+# failed.  Exercises the lifecycle→preflight upgrade path: VOLUME_NOT_MOUNTED
+# is upgraded to MOUNT_FAILED via ``mount_failure_reason``.
+_MOUNT_MOUNT_FAILED_CAPS = VolumeCapabilities(
+    sentinel_exists=False,
+    is_btrfs_filesystem=False,
+    hardlink_supported=True,
+    btrfs_user_subvol_rm=False,
+    mount=MountCapabilities(
+        has_fstab_entry=True,
+        fstab_target="/mnt/mount-failed",
+        device_present=True,
+        luks_unlocked=True,
+        mounted=False,
+        mount_failure_reason="mount_failed",
     ),
 )
 
 
-# mount-polkit-refused: LUKS attach succeeded, but `systemctl start
-# <mount-unit>` failed because no polkit rule auto-allows the action.
+# mount-polkit-refused: udisks refused the action under
+# ``--no-user-interaction`` because no polkit rule auto-allows it.
 # Exercises the lifecycle→preflight upgrade path: VOLUME_NOT_MOUNTED is
 # upgraded to POLKIT_RULES_MISSING via ``mount_failure_reason``.
 _MOUNT_POLKIT_REFUSED_CAPS = VolumeCapabilities(
@@ -921,36 +913,31 @@ _MOUNT_POLKIT_REFUSED_CAPS = VolumeCapabilities(
     hardlink_supported=True,
     btrfs_user_subvol_rm=False,
     mount=MountCapabilities(
-        resolved_backend="systemd",
-        mount_unit="mnt-polkit\\x2drefused.mount",
-        has_mount_unit_config=True,
-        mount_unit_what="/dev/mapper/polkit-refused",
-        mount_unit_where="/mnt/polkit-refused",
-        has_cryptsetup_service_config=True,
-        cryptsetup_service_exec_start=(
-            "/usr/lib/systemd/systemd-cryptsetup attach polkit-refused"
-            " /dev/disk/by-uuid/88888888-9999-aaaa-bbbb-cccccccccccc"
-            " /dev/stdin luks"
-        ),
+        has_fstab_entry=True,
+        fstab_target="/mnt/polkit-refused",
         device_present=True,
-        luks_attached=True,
+        luks_unlocked=False,
         mounted=False,
-        mount_failure_reason="polkit_refused",
+        mount_failure_reason="not_authorized",
     ),
 )
 
 
-# mount-luks-failed: device present, LUKS attach failed, passphrase unavailable
+# mount-luks-failed: device present, LUKS unlock failed.
+# Exercises the lifecycle→preflight upgrade path: VOLUME_NOT_MOUNTED is
+# upgraded to UNLOCK_FAILED via ``mount_failure_reason``.
 _MOUNT_LUKS_FAILED_CAPS = VolumeCapabilities(
     sentinel_exists=False,
     is_btrfs_filesystem=False,
     hardlink_supported=True,
     btrfs_user_subvol_rm=False,
     mount=MountCapabilities(
-        resolved_backend="direct",
+        has_fstab_entry=True,
+        fstab_target="/mnt/luks-failed",
         device_present=True,
-        luks_attached=False,
+        luks_unlocked=False,
         mounted=False,
+        mount_failure_reason="unlock_failed",
     ),
 )
 
@@ -1085,21 +1072,21 @@ def troubleshoot_config() -> Config:
             slug="mount-unencrypted-dst",
             volume="mount-unencrypted",
         ),
-        "mount-direct-dst": SyncEndpoint(
-            slug="mount-direct-dst",
-            volume="mount-direct",
+        "mount-device-missing-dst": SyncEndpoint(
+            slug="mount-device-missing-dst",
+            volume="mount-device-missing",
         ),
-        "mount-systemd-mismatch-dst": SyncEndpoint(
-            slug="mount-systemd-mismatch-dst",
-            volume="mount-systemd-mismatch",
+        "mount-fstab-mismatch-dst": SyncEndpoint(
+            slug="mount-fstab-mismatch-dst",
+            volume="mount-fstab-mismatch",
         ),
         "mount-luks-failed-dst": SyncEndpoint(
             slug="mount-luks-failed-dst",
             volume="mount-luks-failed",
         ),
-        "mount-sudo-refused-dst": SyncEndpoint(
-            slug="mount-sudo-refused-dst",
-            volume="mount-sudo-refused",
+        "mount-mount-failed-dst": SyncEndpoint(
+            slug="mount-mount-failed-dst",
+            volume="mount-mount-failed",
         ),
         "mount-polkit-refused-dst": SyncEndpoint(
             slug="mount-polkit-refused-dst",
@@ -1238,25 +1225,25 @@ def troubleshoot_config() -> Config:
                 source="laptop-src",
                 destination="mount-unencrypted-dst",
             ),
-            "mount-direct-errors": SyncConfig(
-                slug="mount-direct-errors",
+            "mount-device-missing": SyncConfig(
+                slug="mount-device-missing",
                 source="laptop-src",
-                destination="mount-direct-dst",
+                destination="mount-device-missing-dst",
             ),
-            "mount-mismatch-errors": SyncConfig(
-                slug="mount-mismatch-errors",
+            "mount-fstab-mismatch": SyncConfig(
+                slug="mount-fstab-mismatch",
                 source="laptop-src",
-                destination="mount-systemd-mismatch-dst",
+                destination="mount-fstab-mismatch-dst",
             ),
             "mount-luks-failed": SyncConfig(
                 slug="mount-luks-failed",
                 source="laptop-src",
                 destination="mount-luks-failed-dst",
             ),
-            "mount-sudo-refused": SyncConfig(
-                slug="mount-sudo-refused",
+            "mount-mount-failed": SyncConfig(
+                slug="mount-mount-failed",
                 source="laptop-src",
-                destination="mount-sudo-refused-dst",
+                destination="mount-mount-failed-dst",
             ),
             "mount-polkit-refused": SyncConfig(
                 slug="mount-polkit-refused",
@@ -1399,8 +1386,7 @@ def troubleshoot_data(
         ssh_endpoint_status=_TROUBLESHOOT_LOCALHOST_MOUNT_ENCRYPTED_SSH,
         diagnostics=VolumeDiagnostics(capabilities=_MOUNT_ENCRYPTED_CAPS),
         errors=[
-            VolumeError.POLKIT_RULES_MISSING,
-            VolumeError.SUDOERS_RULES_MISSING,
+            VolumeError.VOLUME_NOT_MOUNTED,
         ],
     )
     mount_unencrypted_vs = VolumeStatus(
@@ -1409,66 +1395,62 @@ def troubleshoot_data(
         ssh_endpoint_status=_TROUBLESHOOT_LOCALHOST_MOUNT_UNENCRYPTED_SSH,
         diagnostics=VolumeDiagnostics(capabilities=_MOUNT_UNENCRYPTED_CAPS),
         errors=[
-            VolumeError.MOUNT_UNIT_NOT_CONFIGURED,
-            VolumeError.POLKIT_RULES_MISSING,
-        ],
-    )
-    # Note: SSH endpoint has direct tool errors (inactive) but volume errors
-    # are preserved for demo — see mount_encrypted_vs comment.
-    mount_direct_vs = VolumeStatus(
-        slug="mount-direct",
-        config=config.volumes["mount-direct"],
-        ssh_endpoint_status=_TROUBLESHOOT_LOCALHOST_MOUNT_DIRECT_SSH,
-        diagnostics=VolumeDiagnostics(capabilities=_MOUNT_DIRECT_ENCRYPTED_CAPS),
-        errors=[
-            VolumeError.SUDOERS_RULES_MISSING,
-        ],
-    )
-
-    # mount-systemd-mismatch: unit mismatch + cryptsetup service mismatch (Layer 2)
-    mount_mismatch_vs = VolumeStatus(
-        slug="mount-systemd-mismatch",
-        config=config.volumes["mount-systemd-mismatch"],
-        ssh_endpoint_status=_TROUBLESHOOT_LOCALHOST_MOUNT_MISMATCH_SSH,
-        diagnostics=VolumeDiagnostics(capabilities=_MOUNT_SYSTEMD_MISMATCH_CAPS),
-        errors=[
-            VolumeError.MOUNT_UNIT_MISMATCH,
-            VolumeError.CRYPTSETUP_SERVICE_NOT_CONFIGURED,
-            VolumeError.CRYPTSETUP_SERVICE_MISMATCH,
             VolumeError.VOLUME_NOT_MOUNTED,
         ],
     )
+    # mount-device-missing: device not plugged in (Layer 2)
+    # Note: SSH endpoint has udisksd-not-running (inactive) but volume errors
+    # are preserved for demo — see mount_encrypted_vs comment.
+    mount_device_missing_vs = VolumeStatus(
+        slug="mount-device-missing",
+        config=config.volumes["mount-device-missing"],
+        ssh_endpoint_status=_TROUBLESHOOT_LOCALHOST_MOUNT_DEVICE_MISSING_SSH,
+        diagnostics=VolumeDiagnostics(capabilities=_MOUNT_DEVICE_MISSING_CAPS),
+        errors=[
+            VolumeError.DEVICE_NOT_PRESENT,
+        ],
+    )
 
-    # mount-luks-failed: LUKS attach failed + passphrase unavailable (Layer 2)
+    # mount-fstab-mismatch: device present but no fstab entry maps it to the
+    # configured path → FSTAB_MOUNTPOINT_MISMATCH (Layer 2)
+    mount_mismatch_vs = VolumeStatus(
+        slug="mount-fstab-mismatch",
+        config=config.volumes["mount-fstab-mismatch"],
+        ssh_endpoint_status=_TROUBLESHOOT_LOCALHOST_MOUNT_MISMATCH_SSH,
+        diagnostics=VolumeDiagnostics(capabilities=_MOUNT_FSTAB_MISMATCH_CAPS),
+        errors=[
+            VolumeError.FSTAB_MOUNTPOINT_MISMATCH,
+        ],
+    )
+
+    # mount-luks-failed: lifecycle reported unlock_failed → preflight
+    # surfaces UNLOCK_FAILED instead of VOLUME_NOT_MOUNTED (Layer 2)
     mount_luks_failed_vs = VolumeStatus(
         slug="mount-luks-failed",
         config=config.volumes["mount-luks-failed"],
         ssh_endpoint_status=_TROUBLESHOOT_LOCALHOST_LUKS_FAILED_SSH,
         diagnostics=VolumeDiagnostics(capabilities=_MOUNT_LUKS_FAILED_CAPS),
         errors=[
-            VolumeError.DEVICE_NOT_PRESENT,
-            VolumeError.PASSPHRASE_NOT_AVAILABLE,
-            VolumeError.ATTACH_LUKS_FAILED,
-            VolumeError.MOUNT_FAILED,
+            VolumeError.UNLOCK_FAILED,
         ],
     )
 
-    # mount-sudo-refused: lifecycle reported SUDOERS_REFUSED → preflight
-    # surfaces SUDOERS_RULES_MISSING instead of VOLUME_NOT_MOUNTED.
-    mount_sudo_refused_vs = VolumeStatus(
-        slug="mount-sudo-refused",
-        config=config.volumes["mount-sudo-refused"],
+    # mount-mount-failed: lifecycle reported mount_failed → preflight
+    # surfaces MOUNT_FAILED instead of VOLUME_NOT_MOUNTED.
+    mount_mount_failed_vs = VolumeStatus(
+        slug="mount-mount-failed",
+        config=config.volumes["mount-mount-failed"],
         ssh_endpoint_status=_TROUBLESHOOT_LOCALHOST_LUKS_FAILED_SSH,
-        diagnostics=VolumeDiagnostics(capabilities=_MOUNT_SUDO_REFUSED_CAPS),
-        errors=[VolumeError.SUDOERS_RULES_MISSING],
+        diagnostics=VolumeDiagnostics(capabilities=_MOUNT_MOUNT_FAILED_CAPS),
+        errors=[VolumeError.MOUNT_FAILED],
     )
 
-    # mount-polkit-refused: lifecycle reported POLKIT_REFUSED → preflight
+    # mount-polkit-refused: lifecycle reported not_authorized → preflight
     # surfaces POLKIT_RULES_MISSING instead of VOLUME_NOT_MOUNTED.
     mount_polkit_refused_vs = VolumeStatus(
         slug="mount-polkit-refused",
         config=config.volumes["mount-polkit-refused"],
-        ssh_endpoint_status=_TROUBLESHOOT_LOCALHOST_LUKS_FAILED_SSH,
+        ssh_endpoint_status=_TROUBLESHOOT_LOCALHOST_BTRFS_MODULE_MISSING_SSH,
         diagnostics=VolumeDiagnostics(capabilities=_MOUNT_POLKIT_REFUSED_CAPS),
         errors=[VolumeError.POLKIT_RULES_MISSING],
     )
@@ -1678,10 +1660,10 @@ def troubleshoot_data(
         "usb-9": usb9_vs,
         "mount-encrypted": mount_encrypted_vs,
         "mount-unencrypted": mount_unencrypted_vs,
-        "mount-direct": mount_direct_vs,
-        "mount-systemd-mismatch": mount_mismatch_vs,
+        "mount-device-missing": mount_device_missing_vs,
+        "mount-fstab-mismatch": mount_mismatch_vs,
         "mount-luks-failed": mount_luks_failed_vs,
-        "mount-sudo-refused": mount_sudo_refused_vs,
+        "mount-mount-failed": mount_mount_failed_vs,
         "mount-polkit-refused": mount_polkit_refused_vs,
     }
 
@@ -2051,7 +2033,7 @@ def troubleshoot_data(
     )
 
     # mount-encrypted-errors: SSH endpoint has mount tool errors (Layer 1)
-    # + volume has polkit/sudoers missing (Layer 2)
+    # + volume has polkit rule missing (Layer 2)
     sync_statuses["mount-encrypted-errors"] = SyncStatus(
         slug="mount-encrypted-errors",
         config=config.syncs["mount-encrypted-errors"],
@@ -2079,14 +2061,13 @@ def troubleshoot_data(
         ],
     )
 
-    # mount-direct-errors: SSH endpoint has direct mount tool errors (Layer 1)
-    # + volume has sudoers missing (Layer 2)
-    sync_statuses["mount-direct-errors"] = SyncStatus(
-        slug="mount-direct-errors",
-        config=config.syncs["mount-direct-errors"],
+    # mount-device-missing: device not plugged in (Layer 2)
+    sync_statuses["mount-device-missing"] = SyncStatus(
+        slug="mount-device-missing",
+        config=config.syncs["mount-device-missing"],
         source_endpoint_status=laptop_src_inactive,
         destination_endpoint_status=_inactive_dst_ep_status(
-            "mount-direct-dst", mount_direct_vs
+            "mount-device-missing-dst", mount_device_missing_vs
         ),
         errors=[
             SyncError.SOURCE_ENDPOINT_INACTIVE,
@@ -2094,13 +2075,13 @@ def troubleshoot_data(
         ],
     )
 
-    # mount-mismatch-errors: unit mismatch + cryptsetup service mismatch (Layer 2)
-    sync_statuses["mount-mismatch-errors"] = SyncStatus(
-        slug="mount-mismatch-errors",
-        config=config.syncs["mount-mismatch-errors"],
+    # mount-fstab-mismatch: no fstab entry maps device to configured path (Layer 2)
+    sync_statuses["mount-fstab-mismatch"] = SyncStatus(
+        slug="mount-fstab-mismatch",
+        config=config.syncs["mount-fstab-mismatch"],
         source_endpoint_status=laptop_src_inactive,
         destination_endpoint_status=_inactive_dst_ep_status(
-            "mount-systemd-mismatch-dst", mount_mismatch_vs
+            "mount-fstab-mismatch-dst", mount_mismatch_vs
         ),
         errors=[
             SyncError.SOURCE_ENDPOINT_INACTIVE,
@@ -2108,7 +2089,7 @@ def troubleshoot_data(
         ],
     )
 
-    # mount-luks-failed: LUKS failures + passphrase unavailable (Layer 2)
+    # mount-luks-failed: LUKS unlock failed (Layer 2)
     sync_statuses["mount-luks-failed"] = SyncStatus(
         slug="mount-luks-failed",
         config=config.syncs["mount-luks-failed"],
@@ -2122,13 +2103,13 @@ def troubleshoot_data(
         ],
     )
 
-    # mount-sudo-refused: sudo refused without NOPASSWD rule (Layer 2)
-    sync_statuses["mount-sudo-refused"] = SyncStatus(
-        slug="mount-sudo-refused",
-        config=config.syncs["mount-sudo-refused"],
+    # mount-mount-failed: mount step failed after unlock (Layer 2)
+    sync_statuses["mount-mount-failed"] = SyncStatus(
+        slug="mount-mount-failed",
+        config=config.syncs["mount-mount-failed"],
         source_endpoint_status=laptop_src_inactive,
         destination_endpoint_status=_inactive_dst_ep_status(
-            "mount-sudo-refused-dst", mount_sudo_refused_vs
+            "mount-mount-failed-dst", mount_mount_failed_vs
         ),
         errors=[
             SyncError.SOURCE_ENDPOINT_INACTIVE,
@@ -2136,7 +2117,7 @@ def troubleshoot_data(
         ],
     )
 
-    # mount-polkit-refused: polkit refused systemctl start (Layer 2)
+    # mount-polkit-refused: udisks refused under no-user-interaction (Layer 2)
     sync_statuses["mount-polkit-refused"] = SyncStatus(
         slug="mount-polkit-refused",
         config=config.syncs["mount-polkit-refused"],

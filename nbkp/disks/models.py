@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict
 
 
@@ -17,52 +15,41 @@ class MountToolCapabilities(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    # Systemd tools
-    has_systemctl: bool | None = None
-    has_systemd_escape: bool | None = None
-    has_systemd_cryptsetup: bool | None = None
-    systemd_cryptsetup_path: str | None = None
+    # udisks
+    has_udisksctl: bool | None = None
+    udisksd_running: bool | None = None
+    has_btrfs_module: bool | None = None
 
-    # Shared (both backends)
-    has_sudo: bool | None = None
-    has_cryptsetup: bool | None = None
-
-    # Direct tools
-    has_mount_cmd: bool | None = None
-    has_umount_cmd: bool | None = None
-    has_mountpoint: bool | None = None
+    # Detection helpers
+    has_findmnt: bool | None = None
+    has_lsblk: bool | None = None
 
 
 class MountCapabilities(BaseModel):
     """Volume-specific mount diagnostics (config checks + runtime state).
 
-    Host-level tool availability (sudo, cryptsetup, systemctl, etc.)
-    lives on ``MountToolCapabilities`` at the SSH endpoint level.
-    This model captures only volume-specific config validation and
-    runtime mount state.
+    Host-level tool availability (udisksctl, udisksd, etc.) lives on
+    ``MountToolCapabilities`` at the SSH endpoint level.  This model captures
+    only volume-specific config validation and runtime mount state.
     """
 
     model_config = ConfigDict(frozen=True)
 
-    resolved_backend: Literal["systemd", "direct"] | None = None
-    """Which backend was resolved (``None`` when auto-detection was not
-    performed)."""
-
-    # Systemd config checks (None when direct backend)
-    mount_unit: str | None = None
-    has_mount_unit_config: bool | None = None
-    mount_unit_what: str | None = None
-    mount_unit_where: str | None = None
-    has_cryptsetup_service_config: bool | None = None
-    cryptsetup_service_exec_start: str | None = None
+    # fstab config check (only meaningful when ``volume.path`` is declared —
+    # udisks needs an fstab entry mapping the device to that fixed path)
+    has_fstab_entry: bool | None = None
+    fstab_target: str | None = None
+    """The mountpoint the fstab entry maps the device to, if any."""
 
     # Runtime mount state (probed during observation)
     device_present: bool | None = None
-    luks_attached: bool | None = None
+    luks_unlocked: bool | None = None
     mounted: bool | None = None
+    cleartext_device: str | None = None
+    effective_path: str | None = None
     mount_failure_reason: str | None = None
     """Raw ``MountFailureReason`` value (string) when the lifecycle step
     failed for a known cause. Used by preflight to upgrade the generic
-    VOLUME_NOT_MOUNTED to a more specific error like SUDOERS_RULES_MISSING.
+    VOLUME_NOT_MOUNTED to a more specific error like POLKIT_RULES_MISSING.
     Stored as a string here to keep ``models.py`` free of cross-module
     enum imports."""

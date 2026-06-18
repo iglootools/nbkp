@@ -16,6 +16,36 @@ from nbkp.config import (
     SyncEndpoint,
 )
 
+
+def _raise_fd_soft_limit(target: int = 8192) -> None:
+    """Lift this process's open-file soft limit toward ``target``.
+
+    The Docker test suites (testcontainers' docker-py client + containers +
+    SSH connections + the generated backup script's subprocess pipes) need far
+    more than macOS's default soft ``RLIMIT_NOFILE`` of 256.  When ``pytest``
+    is launched from a plain login shell (e.g. via ``mise run check-all``) it
+    inherits that 256 and the e2e session exhausts it mid-run — the test fails
+    and even pytest's tmp-dir ``cleanup_dead_symlinks`` can't ``scandir``,
+    raising ``OSError: [Errno 24] Too many open files``.  A process may always
+    raise its *soft* limit up to the *hard* limit, so do that here at import
+    time (before any container starts) rather than depending on the ambient
+    shell's ``ulimit``.
+    """
+    try:
+        import resource
+    except ImportError:  # non-Unix; not a supported test platform
+        return
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    new_soft = target if hard == resource.RLIM_INFINITY else min(target, hard)
+    if soft < new_soft:
+        try:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (new_soft, hard))
+        except (ValueError, OSError):
+            pass
+
+
+_raise_fd_soft_limit()
+
 pytest_plugins = ["tests._docker_fixtures"]
 
 

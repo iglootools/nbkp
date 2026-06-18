@@ -93,7 +93,7 @@ def check(
 
     with managed_mount(
         cfg, resolved, mount=mount, umount=umount, output_format=output_format
-    ) as (_mount_strategy, mount_observations):
+    ) as (cfg, mount_observations):
         preflight, has_errors = check_and_display(
             cfg,
             output_format,

@@ -4,10 +4,17 @@ These tests run against the Docker container with a real LUKS-encrypted
 file-backed volume. Tests that require dm-crypt (LUKS) are skipped
 automatically when the kernel module is not available.
 
-The Docker container runs sshd as PID 1 (not systemd), so tests use
-``DirectMountStrategy`` command builders and the production lifecycle
-functions (``mount_volume`` / ``umount_volume``) rather than the
-systemd-based operations.
+Docker-harness note (NEEDS REAL-DOCKER VALIDATION):
+The mount lifecycle migrated from direct ``cryptsetup``/``mount`` to udisks2
+(``udisksctl``).  These tests now drive ``udisksctl`` via the production
+``mount_volume`` / ``umount_volume`` / ``detection`` functions.  For them to
+pass against a real container, the image at
+``nbkp/remote/testkit/dockerbuild/`` (frozen in this change) must be updated
+to run ``udisksd`` + polkit and carry the ``50-nbkp.rules`` polkit grant plus
+an fstab entry mapping ``/dev/mapper/luks-<uuid>`` to the mount path.  See the
+``tests/_docker_fixtures`` module docstring for the full container checklist.
+These files are made import-clean / pyright-clean and internally consistent
+here; their actual execution requires that updated container.
 """
 
 from __future__ import annotations
@@ -24,9 +31,9 @@ from nbkp.config import (
 from nbkp.config.epresolution import ResolvedEndpoints
 from nbkp.disks.detection import (
     detect_device_present,
-    detect_luks_attached,
-    detect_systemd_cryptsetup_path,
-    resolve_mount_strategy,
+    discover_cleartext_device,
+    find_mountpoint,
+    resolve_target_device,
 )
 from nbkp.disks.lifecycle import (
     MountFailureReason,
@@ -36,60 +43,49 @@ from nbkp.disks.lifecycle import (
     umount_volumes,
 )
 from nbkp.disks.observation import build_mount_observations
-from nbkp.disks.strategy import DirectMountStrategy, SystemdMountStrategy
+from nbkp.disks.udisks import build_lock_command, build_unlock_command
 from nbkp.disks.context import managed_mount
 from nbkp.remote.dispatch import run_on_volume
 
 from tests._docker_fixtures import (
     LUKS_PASSPHRASE,
-    direct_strategy_for,
     resolved_endpoints_for,
     ssh_exec,
 )
 
 
-def _mapper_of(volume: RemoteVolume) -> str:
-    """Extract the (per-worker-unique) LUKS mapper name from a volume.
-
-    The mapper name is unique per worker container (see the
-    ``luks_mapper_name`` fixture) and carried on the encrypted volume's
-    mount config, so it is read from there rather than a shared constant.
-    """
-    assert volume.mount is not None and volume.mount.encryption is not None
-    return volume.mount.encryption.mapper_name
-
-
-def _attach_luks(
+def _unlock_luks(
     volume: RemoteVolume,
-    strategy: DirectMountStrategy,
     resolved: ResolvedEndpoints,
     luks_uuid: str,
 ) -> None:
-    """Attach LUKS via production command builder + run_on_volume."""
-    cmd = strategy.build_attach_luks_command(_mapper_of(volume), luks_uuid)
-    run_on_volume(cmd, volume, resolved, input=LUKS_PASSPHRASE)
+    """Unlock the LUKS container via the production udisksctl builder."""
+    run_on_volume(
+        build_unlock_command(luks_uuid), volume, resolved, input=LUKS_PASSPHRASE
+    )
 
 
-def _close_luks(
+def _lock_luks(
     volume: RemoteVolume,
-    strategy: DirectMountStrategy,
     resolved: ResolvedEndpoints,
+    luks_uuid: str,
 ) -> None:
-    """Close LUKS via production command builder + run_on_volume."""
-    cmd = strategy.build_close_luks_command(_mapper_of(volume))
-    run_on_volume(cmd, volume, resolved)
+    """Lock the LUKS container via the production udisksctl builder."""
+    run_on_volume(build_lock_command(luks_uuid), volume, resolved)
 
 
 def _cleanup(
     volume: RemoteVolume,
-    strategy: DirectMountStrategy,
     resolved: ResolvedEndpoints,
+    luks_uuid: str,
 ) -> None:
-    """Idempotent cleanup: umount + lock (ignore errors)."""
-    umount_cmd = strategy.build_umount_command()
-    run_on_volume(umount_cmd, volume, resolved)
-    lock_cmd = strategy.build_close_luks_command(_mapper_of(volume))
-    run_on_volume(lock_cmd, volume, resolved)
+    """Idempotent cleanup: umount + lock via udisksctl (ignore errors)."""
+    device = resolve_target_device(volume, volume.mount, resolved)  # type: ignore[arg-type]
+    if device is not None:
+        from nbkp.disks.udisks import build_unmount_command
+
+        run_on_volume(build_unmount_command(device), volume, resolved)
+    _lock_luks(volume, resolved, luks_uuid)
 
 
 # ── Device detection ─────────────────────────────────────────────
@@ -120,76 +116,59 @@ class TestDetectDevicePresent:
         )
 
 
-class TestDetectLuksAttached:
-    def test_not_attached_when_closed(
-        self,
-        docker_ssh_endpoint: SshEndpoint,
-        remote_encrypted_volume: RemoteVolume,
-    ) -> None:
-        """Mapper does not exist when LUKS is closed."""
-        resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
-        assert not detect_luks_attached(
-            remote_encrypted_volume, _mapper_of(remote_encrypted_volume), resolved
-        )
-
-    def test_attached_after_open(
+class TestDiscoverCleartextDevice:
+    def test_none_when_locked(
         self,
         docker_ssh_endpoint: SshEndpoint,
         remote_encrypted_volume: RemoteVolume,
         luks_uuid: str,
     ) -> None:
-        """Mapper exists after LUKS is opened."""
+        """No cleartext device while the LUKS container is locked."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
-        strategy = direct_strategy_for(remote_encrypted_volume)
-        _attach_luks(remote_encrypted_volume, strategy, resolved, luks_uuid)
+        assert (
+            discover_cleartext_device(remote_encrypted_volume, luks_uuid, resolved)
+            is None
+        )
+
+    def test_mapper_after_unlock(
+        self,
+        docker_ssh_endpoint: SshEndpoint,
+        remote_encrypted_volume: RemoteVolume,
+        luks_uuid: str,
+    ) -> None:
+        """A ``/dev/mapper`` device appears after unlock."""
+        resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
+        _unlock_luks(remote_encrypted_volume, resolved, luks_uuid)
         try:
-            assert detect_luks_attached(
-                remote_encrypted_volume, _mapper_of(remote_encrypted_volume), resolved
+            device = discover_cleartext_device(
+                remote_encrypted_volume, luks_uuid, resolved
             )
+            assert device is not None
+            assert device.startswith("/dev/mapper/")
         finally:
-            _close_luks(remote_encrypted_volume, strategy, resolved)
+            _lock_luks(remote_encrypted_volume, resolved, luks_uuid)
 
-    def test_not_attached_after_close(
+    def test_none_after_lock(
         self,
         docker_ssh_endpoint: SshEndpoint,
         remote_encrypted_volume: RemoteVolume,
         luks_uuid: str,
     ) -> None:
-        """Mapper disappears after LUKS is closed."""
+        """Cleartext device disappears after lock."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
-        strategy = direct_strategy_for(remote_encrypted_volume)
-        _attach_luks(remote_encrypted_volume, strategy, resolved, luks_uuid)
-        _close_luks(remote_encrypted_volume, strategy, resolved)
-        assert not detect_luks_attached(
-            remote_encrypted_volume, _mapper_of(remote_encrypted_volume), resolved
+        _unlock_luks(remote_encrypted_volume, resolved, luks_uuid)
+        _lock_luks(remote_encrypted_volume, resolved, luks_uuid)
+        assert (
+            discover_cleartext_device(remote_encrypted_volume, luks_uuid, resolved)
+            is None
         )
 
 
-# ── systemd-cryptsetup binary detection ─────────────────────────
-
-
-class TestDetectSystemdCryptsetupPath:
-    def test_finds_binary_or_returns_none(
-        self,
-        docker_ssh_endpoint: SshEndpoint,
-        remote_encrypted_volume: RemoteVolume,
-    ) -> None:
-        """systemd-cryptsetup detection returns a path or None.
-
-        Whether the binary exists depends on Docker image packages.
-        This test verifies the function runs without error.
-        """
-        resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
-        result = detect_systemd_cryptsetup_path(remote_encrypted_volume, resolved)
-        if result is not None:
-            assert result.endswith("systemd-cryptsetup")
-
-
-# ── LUKS open/close lifecycle ────────────────────────────────────
+# ── LUKS unlock / mount / umount / lock lifecycle ────────────────
 
 
 class TestLuksLifecycle:
-    def test_open_mount_umount_close(
+    def test_unlock_mount_umount_lock(
         self,
         docker_ssh_endpoint: SshEndpoint,
         remote_encrypted_volume: RemoteVolume,
@@ -197,50 +176,43 @@ class TestLuksLifecycle:
     ) -> None:
         """Full LUKS lifecycle via production mount_volume/umount_volume."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
-        strategy = direct_strategy_for(remote_encrypted_volume)
         mount_config = remote_encrypted_volume.mount
         assert mount_config is not None
 
-        # Mount (handles unlock + mount)
         result = mount_volume(
             remote_encrypted_volume,
             mount_config,
             resolved,
             lambda _: LUKS_PASSPHRASE,
-            strategy,
         )
         assert result.success, result.detail
+        assert result.luks_unlocked is True
+        assert result.mounted is True
 
         try:
-            # Write a file
             ssh_exec(
                 docker_ssh_endpoint,
                 f"echo 'luks-test-data' > {remote_encrypted_volume.path}/test-file.txt",
             )
-
-            # Read back
             read_result = ssh_exec(
                 docker_ssh_endpoint,
                 f"cat {remote_encrypted_volume.path}/test-file.txt",
             )
             assert read_result.stdout.strip() == "luks-test-data"
 
-            # Umount (handles umount + lock)
             umount_result = umount_volume(
-                remote_encrypted_volume, mount_config, resolved, strategy
+                remote_encrypted_volume, mount_config, resolved
             )
             assert umount_result.success, umount_result.detail
 
-            # Verify file is gone (mount point empty)
             ls_result = ssh_exec(
                 docker_ssh_endpoint,
                 f"ls {remote_encrypted_volume.path}/test-file.txt 2>/dev/null",
                 check=False,
             )
             assert ls_result.returncode != 0
-
         finally:
-            _cleanup(remote_encrypted_volume, strategy, resolved)
+            _cleanup(remote_encrypted_volume, resolved, luks_uuid)
 
     def test_data_persists_across_remount(
         self,
@@ -250,18 +222,15 @@ class TestLuksLifecycle:
     ) -> None:
         """Data written to encrypted volume survives umount/remount."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
-        strategy = direct_strategy_for(remote_encrypted_volume)
         mount_config = remote_encrypted_volume.mount
         assert mount_config is not None
 
         try:
-            # First mount: write data
             result = mount_volume(
                 remote_encrypted_volume,
                 mount_config,
                 resolved,
                 lambda _: LUKS_PASSPHRASE,
-                strategy,
             )
             assert result.success, result.detail
 
@@ -269,15 +238,13 @@ class TestLuksLifecycle:
                 docker_ssh_endpoint,
                 f"echo 'persist-test' > {remote_encrypted_volume.path}/persist.txt",
             )
-            umount_volume(remote_encrypted_volume, mount_config, resolved, strategy)
+            umount_volume(remote_encrypted_volume, mount_config, resolved)
 
-            # Second mount: verify data
             result = mount_volume(
                 remote_encrypted_volume,
                 mount_config,
                 resolved,
                 lambda _: LUKS_PASSPHRASE,
-                strategy,
             )
             assert result.success, result.detail
 
@@ -287,38 +254,7 @@ class TestLuksLifecycle:
             )
             assert read_result.stdout.strip() == "persist-test"
         finally:
-            _cleanup(remote_encrypted_volume, strategy, resolved)
-
-    def test_idempotent_open(
-        self,
-        docker_ssh_endpoint: SshEndpoint,
-        remote_encrypted_volume: RemoteVolume,
-        luks_uuid: str,
-    ) -> None:
-        """Opening an already-open LUKS device does not fail."""
-        resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
-        strategy = direct_strategy_for(remote_encrypted_volume)
-        mapper = _mapper_of(remote_encrypted_volume)
-        _attach_luks(remote_encrypted_volume, strategy, resolved, luks_uuid)
-        try:
-            # Second open should not raise (cryptsetup returns 0 or
-            # non-zero for "already active" — we accept either)
-            ssh_exec(
-                docker_ssh_endpoint,
-                f"echo -n '{LUKS_PASSPHRASE}' | sudo cryptsetup open"
-                f" --type luks /dev/disk/by-uuid/{luks_uuid}"
-                f" {mapper} - 2>&1 || true",
-                check=False,
-            )
-            # The device should still be unlocked regardless
-            check = ssh_exec(
-                docker_ssh_endpoint,
-                f"test -b /dev/mapper/{mapper}",
-                check=False,
-            )
-            assert check.returncode == 0
-        finally:
-            _cleanup(remote_encrypted_volume, strategy, resolved)
+            _cleanup(remote_encrypted_volume, resolved, luks_uuid)
 
 
 # ── Helpers for Config-level tests ──────────────────────────────
@@ -337,70 +273,37 @@ def _make_config(
     return config, resolved
 
 
-# ── Strategy resolution ─────────────────────────────────────────
+# ── Mount detection via findmnt ─────────────────────────────────
 
 
-class TestResolveMountStrategy:
-    def test_auto_resolves_to_systemd_when_systemctl_present(
+class TestFindMountpoint:
+    def test_none_when_umounted(
         self,
         docker_ssh_endpoint: SshEndpoint,
+        remote_encrypted_volume: RemoteVolume,
         luks_uuid: str,
-        luks_mapper_name: str,
     ) -> None:
-        """Docker container has systemctl, so auto should resolve to systemd."""
-        volume = RemoteVolume(
-            slug="test-auto",
-            ssh_endpoint="test-server",
-            path="/srv/btrfs-encrypted-backups",
-            mount=MountConfig(
-                strategy="auto",
-                device_uuid=luks_uuid,
-                encryption=LuksEncryptionConfig(
-                    mapper_name=luks_mapper_name,
-                    passphrase_id="test-luks",
-                ),
-            ),
+        """find_mountpoint returns None when device is not mounted."""
+        resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
+        # While locked there is no cleartext device, so target resolves to None.
+        device = resolve_target_device(
+            remote_encrypted_volume,
+            remote_encrypted_volume.mount,
+            resolved,  # type: ignore[arg-type]
         )
-        config, resolved = _make_config(docker_ssh_endpoint, volume)
-        strategies = resolve_mount_strategy(config, resolved, names=None)
-        assert volume.slug in strategies
-        assert isinstance(strategies[volume.slug], SystemdMountStrategy)
+        assert (
+            device is None
+            or find_mountpoint(remote_encrypted_volume, device, resolved) is None
+        )
 
-    def test_direct_resolves_to_direct(
-        self,
-        docker_ssh_endpoint: SshEndpoint,
-        remote_encrypted_volume: RemoteVolume,
-    ) -> None:
-        """Explicit strategy=direct produces DirectMountStrategy."""
-        config, resolved = _make_config(docker_ssh_endpoint, remote_encrypted_volume)
-        strategies = resolve_mount_strategy(config, resolved, names=None)
-        assert remote_encrypted_volume.slug in strategies
-        assert isinstance(strategies[remote_encrypted_volume.slug], DirectMountStrategy)
-
-
-# ── Mount detection via DirectMountStrategy ─────────────────────
-
-
-class TestDetectMounted:
-    def test_not_mounted_when_umounted(
-        self,
-        docker_ssh_endpoint: SshEndpoint,
-        remote_encrypted_volume: RemoteVolume,
-    ) -> None:
-        """detect_mounted returns False when volume is not mounted."""
-        resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
-        strategy = direct_strategy_for(remote_encrypted_volume)
-        assert not strategy.detect_mounted(remote_encrypted_volume, resolved)
-
-    def test_mounted_after_mount(
+    def test_target_after_mount(
         self,
         docker_ssh_endpoint: SshEndpoint,
         remote_encrypted_volume: RemoteVolume,
         luks_uuid: str,
     ) -> None:
-        """detect_mounted returns True after mount_volume succeeds."""
+        """find_mountpoint returns the target after a successful mount."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
-        strategy = direct_strategy_for(remote_encrypted_volume)
         mount_config = remote_encrypted_volume.mount
         assert mount_config is not None
 
@@ -409,39 +312,18 @@ class TestDetectMounted:
             mount_config,
             resolved,
             lambda _: LUKS_PASSPHRASE,
-            strategy,
         )
         assert result.success, result.detail
         try:
-            assert strategy.detect_mounted(remote_encrypted_volume, resolved)
+            device = resolve_target_device(
+                remote_encrypted_volume, mount_config, resolved
+            )
+            assert device is not None
+            assert (
+                find_mountpoint(remote_encrypted_volume, device, resolved) is not None
+            )
         finally:
-            _cleanup(remote_encrypted_volume, strategy, resolved)
-
-    def test_not_mounted_after_umount(
-        self,
-        docker_ssh_endpoint: SshEndpoint,
-        remote_encrypted_volume: RemoteVolume,
-        luks_uuid: str,
-    ) -> None:
-        """detect_mounted returns False after umount_volume."""
-        resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
-        strategy = direct_strategy_for(remote_encrypted_volume)
-        mount_config = remote_encrypted_volume.mount
-        assert mount_config is not None
-
-        result = mount_volume(
-            remote_encrypted_volume,
-            mount_config,
-            resolved,
-            lambda _: LUKS_PASSPHRASE,
-            strategy,
-        )
-        assert result.success, result.detail
-        try:
-            umount_volume(remote_encrypted_volume, mount_config, resolved, strategy)
-            assert not strategy.detect_mounted(remote_encrypted_volume, resolved)
-        finally:
-            _cleanup(remote_encrypted_volume, strategy, resolved)
+            _cleanup(remote_encrypted_volume, resolved, luks_uuid)
 
 
 # ── Mount idempotency ───────────────────────────────────────────
@@ -456,7 +338,6 @@ class TestMountVolumeIdempotency:
     ) -> None:
         """Mounting an already-mounted volume succeeds (skip logic)."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
-        strategy = direct_strategy_for(remote_encrypted_volume)
         mount_config = remote_encrypted_volume.mount
         assert mount_config is not None
 
@@ -465,7 +346,6 @@ class TestMountVolumeIdempotency:
             mount_config,
             resolved,
             lambda _: LUKS_PASSPHRASE,
-            strategy,
         )
         assert result1.success, result1.detail
         try:
@@ -474,11 +354,10 @@ class TestMountVolumeIdempotency:
                 mount_config,
                 resolved,
                 lambda _: LUKS_PASSPHRASE,
-                strategy,
             )
             assert result2.success, result2.detail
         finally:
-            _cleanup(remote_encrypted_volume, strategy, resolved)
+            _cleanup(remote_encrypted_volume, resolved, luks_uuid)
 
     def test_mount_device_not_present_returns_structured_failure(
         self,
@@ -491,16 +370,11 @@ class TestMountVolumeIdempotency:
             ssh_endpoint="test-server",
             path="/srv/btrfs-encrypted-backups",
             mount=MountConfig(
-                strategy="direct",
                 device_uuid="00000000-0000-0000-0000-000000000000",
-                encryption=LuksEncryptionConfig(
-                    mapper_name="nonexistent-mapper",
-                    passphrase_id="test-luks",
-                ),
+                encryption=LuksEncryptionConfig(passphrase_id="test-luks"),
             ),
         )
         resolved = resolved_endpoints_for(docker_ssh_endpoint, volume)
-        strategy = DirectMountStrategy(volume_path=volume.path)
         mount_config = volume.mount
         assert mount_config is not None
 
@@ -509,7 +383,6 @@ class TestMountVolumeIdempotency:
             mount_config,
             resolved,
             lambda _: LUKS_PASSPHRASE,
-            strategy,
         )
         assert not result.success
         assert result.failure_reason == MountFailureReason.DEVICE_NOT_PRESENT
@@ -523,13 +396,10 @@ class TestUmountVolumeIdempotency:
     ) -> None:
         """Umounting an already-umounted volume succeeds."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
-        strategy = direct_strategy_for(remote_encrypted_volume)
         mount_config = remote_encrypted_volume.mount
         assert mount_config is not None
 
-        result = umount_volume(
-            remote_encrypted_volume, mount_config, resolved, strategy
-        )
+        result = umount_volume(remote_encrypted_volume, mount_config, resolved)
         assert result.success
 
 
@@ -545,27 +415,24 @@ class TestMountObservations:
     ) -> None:
         """Observations from a successful mount reflect actual state."""
         config, resolved = _make_config(docker_ssh_endpoint, remote_encrypted_volume)
-        strategies = resolve_mount_strategy(config, resolved, names=None)
-        _, mount_results = mount_volumes(
+        mount_results = mount_volumes(
             config,
             resolved,
             lambda _: LUKS_PASSPHRASE,
-            mount_strategy=strategies,
         )
         try:
             assert len(mount_results) == 1
             assert mount_results[0].success
 
-            observations = build_mount_observations(mount_results, strategies, config)
+            observations = build_mount_observations(mount_results)
             slug = remote_encrypted_volume.slug
             assert slug in observations
             obs = observations[slug]
-            assert obs.resolved_backend == "direct"
             assert obs.device_present is True
-            assert obs.luks_attached is True
+            assert obs.luks_unlocked is True
             assert obs.mounted is True
         finally:
-            umount_volumes(config, resolved, mount_strategy=strategies)
+            umount_volumes(config, resolved)
 
     def test_observations_after_device_not_present(
         self,
@@ -578,26 +445,20 @@ class TestMountObservations:
             ssh_endpoint="test-server",
             path="/srv/btrfs-encrypted-backups",
             mount=MountConfig(
-                strategy="direct",
                 device_uuid="00000000-0000-0000-0000-000000000000",
-                encryption=LuksEncryptionConfig(
-                    mapper_name="nonexistent-mapper",
-                    passphrase_id="test-luks",
-                ),
+                encryption=LuksEncryptionConfig(passphrase_id="test-luks"),
             ),
         )
         config, resolved = _make_config(docker_ssh_endpoint, volume)
-        strategies = resolve_mount_strategy(config, resolved, names=None)
-        _, mount_results = mount_volumes(
+        mount_results = mount_volumes(
             config,
             resolved,
             lambda _: LUKS_PASSPHRASE,
-            mount_strategy=strategies,
         )
         assert len(mount_results) == 1
         assert not mount_results[0].success
 
-        observations = build_mount_observations(mount_results, strategies, config)
+        observations = build_mount_observations(mount_results)
         slug = volume.slug
         assert slug in observations
         obs = observations[slug]
@@ -617,10 +478,9 @@ class TestManagedMount:
         """managed_mount mounts on entry and umounts on exit."""
         config, resolved = _make_config(docker_ssh_endpoint, remote_encrypted_volume)
         with managed_mount(config, resolved, lambda _: LUKS_PASSPHRASE) as (
-            _strategy,
+            _resolved_config,
             _obs,
         ):
-            # Volume is mounted — write and read a file
             ssh_exec(
                 docker_ssh_endpoint,
                 f"echo 'managed-test' > {remote_encrypted_volume.path}/managed.txt",
@@ -631,7 +491,6 @@ class TestManagedMount:
             )
             assert read.stdout.strip() == "managed-test"
 
-        # After context exit, volume is umounted
         ls = ssh_exec(
             docker_ssh_endpoint,
             f"ls {remote_encrypted_volume.path}/managed.txt 2>/dev/null",
@@ -648,15 +507,14 @@ class TestManagedMount:
         """managed_mount yields observations with correct state."""
         config, resolved = _make_config(docker_ssh_endpoint, remote_encrypted_volume)
         with managed_mount(config, resolved, lambda _: LUKS_PASSPHRASE) as (
-            _strategy,
+            _resolved_config,
             observations,
         ):
             slug = remote_encrypted_volume.slug
             assert slug in observations
             obs = observations[slug]
-            assert obs.resolved_backend == "direct"
             assert obs.device_present is True
-            assert obs.luks_attached is True
+            assert obs.luks_unlocked is True
             assert obs.mounted is True
 
     def test_callbacks_invoked(
@@ -701,12 +559,13 @@ class TestManagedMount:
             with managed_mount(config, resolved, lambda _: LUKS_PASSPHRASE):
                 raise RuntimeError("deliberate")
 
-        # Volume should be umounted after exception
-        strategy = direct_strategy_for(remote_encrypted_volume)
-        vol_resolved = resolved_endpoints_for(
-            docker_ssh_endpoint, remote_encrypted_volume
+        mount_config = remote_encrypted_volume.mount
+        assert mount_config is not None
+        device = resolve_target_device(remote_encrypted_volume, mount_config, resolved)
+        assert (
+            device is None
+            or find_mountpoint(remote_encrypted_volume, device, resolved) is None
         )
-        assert not strategy.detect_mounted(remote_encrypted_volume, vol_resolved)
 
 
 # ── Unencrypted mount ───────────────────────────────────────────
@@ -716,41 +575,24 @@ class TestUnencryptedMount:
     def test_mount_umount_unencrypted(
         self,
         docker_ssh_endpoint: SshEndpoint,
-        remote_encrypted_volume_unencrypted: RemoteVolume,
-        luks_uuid: str,
-        luks_mapper_name: str,
+        remote_unencrypted_volume: RemoteVolume,
     ) -> None:
-        """Full mount/umount lifecycle without LUKS encryption.
+        """Full mount/umount lifecycle for a genuinely unencrypted device.
 
-        The volume references the same device (already a LUKS container
-        in Docker) but the MountConfig has no encryption block, so nbkp
-        skips the attach/close steps.  Since the underlying device is
-        LUKS and needs to be unlocked first, we pre-open LUKS manually
-        so that ``mount`` can succeed. The mapper name must match the
-        fstab entry written by setup-luks.sh (the per-worker-unique
-        name), since the unencrypted ``mount`` reads the device from fstab.
+        ``device_uuid`` is the filesystem UUID; nbkp mounts it directly via
+        ``udisksctl mount`` with no unlock step (the MountConfig has no
+        encryption block).
         """
-        volume = remote_encrypted_volume_unencrypted
+        volume = remote_unencrypted_volume
         resolved = resolved_endpoints_for(docker_ssh_endpoint, volume)
-        strategy = DirectMountStrategy(volume_path=volume.path)
         mount_config = volume.mount
         assert mount_config is not None
         assert mount_config.encryption is None
 
-        # Pre-open LUKS so `mount` can access the device
-        ssh_exec(
-            docker_ssh_endpoint,
-            f"echo -n '{LUKS_PASSPHRASE}' | sudo cryptsetup open"
-            f" --type luks /dev/disk/by-uuid/{luks_uuid}"
-            f" {luks_mapper_name} - 2>/dev/null || true",
-        )
         try:
-            result = mount_volume(
-                volume, mount_config, resolved, lambda _: "", strategy
-            )
+            result = mount_volume(volume, mount_config, resolved, lambda _: "")
             assert result.success, result.detail
 
-            # Write + read
             ssh_exec(
                 docker_ssh_endpoint,
                 f"echo 'unencrypted-test' > {volume.path}/unencrypted.txt",
@@ -761,24 +603,11 @@ class TestUnencryptedMount:
             )
             assert read.stdout.strip() == "unencrypted-test"
 
-            # Umount
-            umount_result = umount_volume(volume, mount_config, resolved, strategy)
+            umount_result = umount_volume(volume, mount_config, resolved)
             assert umount_result.success, umount_result.detail
-
-            # Verify inaccessible
-            ls = ssh_exec(
-                docker_ssh_endpoint,
-                f"ls {volume.path}/unencrypted.txt 2>/dev/null",
-                check=False,
-            )
-            assert ls.returncode != 0
         finally:
-            # Cleanup: umount + close LUKS
-            ssh_exec(
-                docker_ssh_endpoint,
-                f"sudo umount {volume.path} 2>/dev/null || true",
-            )
-            ssh_exec(
-                docker_ssh_endpoint,
-                f"sudo cryptsetup close {luks_mapper_name} 2>/dev/null || true",
-            )
+            device = resolve_target_device(volume, mount_config, resolved)
+            if device is not None:
+                from nbkp.disks.udisks import build_unmount_command
+
+                run_on_volume(build_unmount_command(device), volume, resolved)

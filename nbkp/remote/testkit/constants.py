@@ -10,6 +10,8 @@ heavy dependencies.
 REMOTE_BACKUP_PATH = "/srv/backups"
 REMOTE_BTRFS_PATH = "/srv/btrfs-backups"
 REMOTE_BTRFS_ENCRYPTED_PATH = "/srv/btrfs-encrypted-backups"
+# Plain (unencrypted) ext4 volume for the udisks unencrypted-mount test.
+REMOTE_UNENCRYPTED_PATH = "/srv/unencrypted-backups"
 
 # ── LUKS test constants ──────────────────────────────────────
 

@@ -1,4 +1,4 @@
-"""Tests for the `volumes status` CLI command."""
+"""Tests for the `disks status` CLI command."""
 
 from __future__ import annotations
 
@@ -29,10 +29,7 @@ def _mount_config_for_status() -> Config:
                 path="/mnt/encrypted",
                 mount=MountConfig(
                     device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6",
-                    encryption=LuksEncryptionConfig(
-                        mapper_name="encrypted",
-                        passphrase_id="encrypted",
-                    ),
+                    encryption=LuksEncryptionConfig(passphrase_id="encrypted"),
                 ),
             ),
             "plain-drive": LocalVolume(
@@ -57,13 +54,11 @@ class TestVolumesStatusCommand:
         mock_load.return_value = config
         mock_check.side_effect = [
             MountCapabilities(
-                resolved_backend="systemd",
                 device_present=True,
-                luks_attached=True,
+                luks_unlocked=True,
                 mounted=False,
             ),
             MountCapabilities(
-                resolved_backend="systemd",
                 device_present=True,
                 mounted=True,
             ),
@@ -77,12 +72,16 @@ class TestVolumesStatusCommand:
         assert len(data) == 3
         assert data[0]["volume"] == "encrypted-drive"
         assert data[0]["device_present"] is True
-        assert data[0]["luks_attached"] is True
+        assert data[0]["luks_unlocked"] is True
         assert data[0]["mounted"] is False
         assert data[1]["volume"] == "plain-drive"
         assert data[1]["mounted"] is True
-        assert data[2]["volume"] == "no-mount"
-        assert data[2]["strategy"] == "not managed"
+        # Unmanaged volumes are folded into the Name column with a
+        # "(not managed)" marker and carry all-None mount state.
+        assert "no-mount" in data[2]["volume"]
+        assert "not managed" in data[2]["volume"]
+        assert data[2]["device_present"] is None
+        assert data[2]["mounted"] is None
 
     @patch("nbkp.disks.cli.helpers.status.check_mount_status")
     @patch("nbkp.config.cli.helpers.load_config")
@@ -90,9 +89,8 @@ class TestVolumesStatusCommand:
         config = _mount_config_for_status()
         mock_load.return_value = config
         mock_check.return_value = MountCapabilities(
-            resolved_backend="systemd",
             device_present=True,
-            luks_attached=True,
+            luks_unlocked=True,
             mounted=True,
         )
 
@@ -106,7 +104,6 @@ class TestVolumesStatusCommand:
         config = _mount_config_for_status()
         mock_load.return_value = config
         mock_check.return_value = MountCapabilities(
-            resolved_backend="systemd",
             device_present=True,
             mounted=True,
         )
@@ -147,5 +144,5 @@ class TestVolumesStatusCommand:
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert len(data) == 1
-        assert data[0]["volume"] == "plain"
-        assert data[0]["strategy"] == "not managed"
+        assert "plain" in data[0]["volume"]
+        assert "not managed" in data[0]["volume"]

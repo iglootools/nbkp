@@ -131,7 +131,7 @@ def run(
         umount=umount,
         output_format=output_format,
         strictness=strictness,
-    ) as (_mount_strategy, mount_observations):
+    ) as (cfg, mount_observations):
         # -- Check progress bar ----------------------------------------
         total = _check_total(cfg, sync) if output_format is OutputFormat.HUMAN else 0
         check_bar = (

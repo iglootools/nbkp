@@ -57,13 +57,20 @@ When `latest` is used as a **source** (in chained syncs), `latest → /dev/null`
 
 ### Volume Mount Management
 
-Volumes can optionally declare a `mount` section to automate the mount/umount lifecycle. This is useful for removable drives (encrypted or not) that need to be mounted before syncing and umounted afterward.
+Volumes can optionally declare a `mount` section to automate the mount/umount lifecycle. This is useful for removable drives (encrypted or not) that need to be mounted before syncing and umounted afterward. nbkp drives the lifecycle entirely through [udisks2](https://www.freedesktop.org/wiki/Software/udisks/) (`udisksctl`), a single D-Bus daemon authorized by polkit — there is no `sudo`, no `systemd-cryptsetup`, and no `systemctl` in the mount path.
 
-**Mount config** — The `mount` section specifies a `device-uuid` for drive detection (via `/dev/disk/by-uuid/`) and an optional `encryption` block for LUKS-encrypted volumes. The `device-uuid` is the LUKS container UUID for encrypted volumes, or the filesystem UUID for unencrypted volumes.
+**Mount config** — The `mount` section specifies a `device-uuid` for drive detection (via `/dev/disk/by-uuid/`) and an optional `encryption` block for LUKS-encrypted volumes. The `device-uuid` is the LUKS container UUID for encrypted volumes, or the filesystem UUID for unencrypted volumes. There is no `strategy` field — udisks is the sole backend.
 
-**Encrypted volumes** — For LUKS-encrypted volumes, the `encryption` block specifies a `mapper-name` (device mapper name, e.g. `seagate8tb`) and a `passphrase-id` (credential lookup key). The attach command is `sudo systemd-cryptsetup attach <mapper> /dev/disk/by-uuid/<uuid> /dev/stdin luks`, with the passphrase piped via stdin.
+**Encrypted volumes** — For LUKS-encrypted volumes, the `encryption` block specifies only a `passphrase-id` (credential lookup key). nbkp does not assume a mapper name: it unlocks the container with `udisksctl unlock -b /dev/disk/by-uuid/<luks-uuid> --key-file /dev/stdin --no-user-interaction` (passphrase piped without a trailing newline) and then **discovers** the cleartext device with `lsblk -rno NAME,TYPE /dev/disk/by-uuid/<luks-uuid>` (the `crypt` child → `/dev/mapper/<name>`). udisks names the unlocked device `luks-<luks-uuid>` by default, but any crypttab custom name (e.g. `seagate8tb`) is supported transparently because the name is discovered rather than hardcoded. The discovered cleartext device is then mounted with `udisksctl mount -b <device>` and, after the run, unmounted with `udisksctl unmount -b <device>` and locked with `udisksctl lock -b /dev/disk/by-uuid/<luks-uuid>`.
 
-**Unencrypted volumes** — For unencrypted volumes, only `device-uuid` is needed. The mount command is `systemctl start <mount-unit>`, where the mount unit is derived from the volume path via `systemd-escape --path`.
+**Unencrypted volumes** — For unencrypted volumes, only `device-uuid` (the filesystem UUID) is needed. The volume is mounted with `udisksctl mount -b /dev/disk/by-uuid/<fs-uuid>` and unmounted with `udisksctl unmount -b /dev/disk/by-uuid/<fs-uuid>`.
+
+**Mount options (e.g. `user_subvol_rm_allowed`)** — nbkp invokes `udisksctl mount` **without `-o`**: it never injects mount options. udisks validates every `-o` option against an allowlist and rejects anything not on it (`OptionNotPermitted`), so injecting an option like btrfs's `user_subvol_rm_allowed` (needed for snapshot pruning, and not allowlisted by default) would fail the mount outright on an un-configured host. Mount options must therefore be supplied by operator configuration, through whichever of the two mount-point models applies:
+
+- **fstab route (declared `path`)** — include the option directly in the volume's `/etc/fstab` line (e.g. `/dev/mapper/luks-<uuid>  /mnt/x  btrfs  noauto,nofail,x-udisks-auth,user_subvol_rm_allowed  0 0`). udisks honors fstab options verbatim, bypassing the allowlist. This is the simplest and most robust route.
+- **discovered route (omitted `path`)** — extend udisks's own allowlist in `/etc/udisks2/mount_options.conf`. The option must appear in **both** `<fstype>_allow` (to *permit* it) **and** `<fstype>_defaults` (to *apply* it by default) — `_defaults` alone still yields `OptionNotPermitted` — and `udisksd` must be restarted to reload the file. udisks then applies it when mounting at `/run/media/<user>/<label>`. The section can be global (`[defaults]`) or per-device (`[/dev/disk/by-uuid/<uuid>]`, matching the *mounted* device — the unlocked cleartext mapper for encrypted volumes).
+
+Regardless of route, nbkp **verifies** the result rather than trusting the configuration: a preflight check runs `findmnt -T <path> -n -o OPTIONS` against the live mount and flags `VOL_NOT_MOUNTED_USER_SUBVOL_RM` if a btrfs volume is missing `user_subvol_rm_allowed`. This route-agnostic verification is the safety net — the option is guaranteed present at run time however it was configured.
 
 **Credential providers** — LUKS passphrases are retrieved using the configured `credential-provider`:
 - **keyring** (default): `keyring.get_password("nbkp", passphrase_id)` — uses macOS Keychain or Linux SecretService. Store via `keyring set nbkp <passphrase-id>`.
@@ -73,29 +80,54 @@ Volumes can optionally declare a `mount` section to automate the mount/umount li
 
 Passphrases are cached in memory during a single run, so the user is only prompted once per unique passphrase-id even if multiple volumes share it.
 
-**Lifecycle** — The `run`, `preflight check`, and `preflight troubleshoot` commands mount volumes before running and umount in a `finally` block (even on failure). Mount is idempotent: already-attached and already-mounted volumes are skipped. Umount always attempts to umount and close LUKS for all volumes with mount config, regardless of who mounted them — this avoids fragile action tracking across failed/restarted runs.
+**Lifecycle** — The `run`, `preflight check`, and `preflight troubleshoot` commands mount volumes before running and umount in a `finally` block (even on failure). Mount is idempotent: already-unlocked and already-mounted volumes are skipped. Umount always attempts to unmount and lock for all volumes with mount config, regardless of who mounted them — this avoids fragile action tracking across failed/restarted runs.
 
-**Authorization** — Mount management uses polkit for `systemctl start/stop` (D-Bus authorization) and sudoers NOPASSWD for `sudo systemd-cryptsetup attach`. The `disks setup-auth` command generates both rule files for review and manual installation.
+**Authorization** — Mount management is authorized by **polkit only** (no sudoers). The `disks setup-auth` command generates a single polkit rule at `/etc/polkit-1/rules.d/50-nbkp.rules` for review and manual installation. See [Why polkit-only](#why-polkit-only).
 
 **Shell script limitation** — Mount management is excluded from `sh` script generation because credential retrieval depends on Python-specific backends (keyring, prompt). Volumes with mount config must be manually mounted/umounted before/after running the generated script.
 
-#### Why `systemd-cryptsetup` instead of raw `cryptsetup`
+For a complete end-to-end setup guide, including the fstab × crypttab combinations and worked examples, see [Mount management with udisks2](./usage.md#mount-management-with-udisks2).
 
-LUKS attach uses `sudo systemd-cryptsetup attach` rather than `sudo cryptsetup open` for two reasons:
+#### Why udisks2
 
-1. **systemd integration** — `systemd-cryptsetup attach` registers the device mapper with systemd's unit tracking. This means `systemctl stop systemd-cryptsetup@<mapper>.service` cleanly tears down the device, and tools like `systemctl status` and `journalctl -u` work as expected. Raw `cryptsetup open` creates the mapper outside systemd's awareness, making close via `systemctl stop` unreliable.
+Earlier versions of nbkp shipped two hand-rolled mount backends — a systemd strategy (`systemctl start/stop` + `sudo systemd-cryptsetup attach`) and a direct strategy (raw `sudo mount/umount` + `sudo cryptsetup open/close`) — selected by a `strategy: auto|systemd|direct` config field. udisks2 already solves the entire problem through a single D-Bus daemon, so nbkp now delegates to it exclusively:
 
-2. **Consistent close path** — Closing via `systemctl stop systemd-cryptsetup@<mapper>.service` works regardless of whether the device was opened by nbkp or by the system (e.g. via crypttab at boot). If we used `cryptsetup open`, we'd need `cryptsetup close` to close, which would fight with systemd if it also manages the device.
+- **One backend** — udisks handles unlocking, mounting, unmounting, and locking uniformly across removable and system devices, on systemd and non-systemd hosts alike. The strategy split and its config field are gone.
+- **No `sudo` anywhere** — udisks operations are authorized purely by polkit (see below), eliminating the sudoers half of the old hybrid authorization model.
+- **No mapper-name in config** — udisks names the unlocked device `luks-<luks-uuid>` deterministically, and nbkp discovers the actual name at runtime, so the user-chosen `mapper-name` field is no longer needed.
+- **Smaller config and code** — one authorization artifact (a single polkit rule), no `systemd-escape` mount-unit derivation, no `systemd-cryptsetup` binary-path detection.
 
-#### Why polkit + sudoers (hybrid authorization)
+#### Why polkit-only
 
-Mount management uses two authorization mechanisms because `systemctl start/stop` and `systemd-cryptsetup attach` follow different privilege paths:
+udisks consults polkit (over D-Bus) for every privileged operation, so there is exactly one authorization mechanism. A polkit rule at `/etc/polkit-1/rules.d/50-nbkp.rules` grants the backup user — without a password — the following udisks actions (all prefixed `org.freedesktop.udisks2.`). The set is deliberately scoped to the unlock → mount → umount → lock lifecycle across removable, system (fstab-listed), and multi-seat devices; it includes no configuration-modifying or destructive actions.
 
-- **polkit** for `systemctl start/stop` — These commands go through D-Bus to systemd, which consults polkit for authorization. A polkit rule at `/etc/polkit-1/rules.d/50-nbkp.rules` grants the backup user permission to start/stop specific mount and cryptsetup units without a password.
+| Action | What it grants | Why nbkp needs it |
+|---|---|---|
+| `filesystem-mount` | Mount a filesystem on a *removable* device | mount step for removable drives |
+| `filesystem-mount-system` | Mount a filesystem on a device udisks classifies as *system* (internal/fixed) | mount step for fixed/internal drives |
+| `filesystem-mount-other-seat` | Mount a filesystem on a device attached to another login *seat* | nbkp runs headless / over SSH, not bound to the device's seat |
+| `filesystem-fstab` | Act on a device configured in `/etc/fstab` / `/etc/crypttab` (the action udisks checks for an `x-udisks-auth` entry) | the fixed-path (Option A) mount model |
+| `filesystem-unmount-others` | Unmount a filesystem mounted by a *different* user | umount drives left mounted by another session or a prior run |
+| `encrypted-unlock` | Unlock a LUKS container on a *removable* device | unlock step for encrypted removable drives |
+| `encrypted-unlock-system` | Unlock a LUKS container on a *system* device | unlock step for fixed/internal encrypted drives |
+| `encrypted-lock-others` | Lock a LUKS container unlocked by a *different* user | lock drives left unlocked by another session or a prior run |
 
-- **sudoers** for `systemd-cryptsetup attach` — This is a direct binary invocation that needs root privileges (it accesses `/dev/disk/by-uuid/` and sets up device mapper). Polkit cannot authorize direct command execution; only sudo can. A sudoers rule at `/etc/sudoers.d/nbkp` grants `NOPASSWD` access to the specific `systemd-cryptsetup attach` commands.
+The `-system` variants cover devices udisks treats as internal/fixed rather than removable; the `-others` / `-other-seat` variants cover acting on a device that another user or seat set up — which is exactly nbkp's situation when it runs in an inactive SSH/timer session. Each action's upstream description and prompt text live in the udisks2 polkit policy file, [`org.freedesktop.UDisks2.policy`](https://github.com/storaged-project/udisks/blob/master/data/org.freedesktop.UDisks2.policy.in) (see also the [udisks2 reference manual](https://storaged.org/doc/udisks2-api/latest/)).
 
-Both are generated by `nbkp disks setup-auth` from the config file, so the rules are always in sync with the configured volumes.
+udisks defines many **other** actions that nbkp deliberately does *not* grant — among them `manage-configuration` (edit `/etc/fstab` and `/etc/crypttab`), `encrypted-change-passphrase`, `filesystem-take-ownership`, `power-off-drive` / `eject-media`, `modify-device`, and the partition/format/SMART actions. Limiting the grant to the lifecycle subset above means the backup user can mount, unmount, unlock, and lock the configured drives, but cannot reconfigure, repartition, reformat, re-key, or power them off.
+
+This rule is **required** even though udisks normally allows an interactively-logged-in user to mount removable media without authentication: nbkp typically runs over SSH or from a cron/timer in an *inactive* login session, where udisks would otherwise demand administrator authentication. The polkit rule grants the backup user the actions unconditionally so the unattended path works.
+
+The rule is generated by `nbkp disks setup-auth` from the config file, so it is always in sync with the configured volumes.
+
+#### Mount-point resolution (fstab vs discovered)
+
+`path` is **optional** for mount-managed volumes, which gives two mount-point models:
+
+- **Declared `path` (fstab)** — When `volume.path` is set, the operator is expected to have an `/etc/fstab` entry mapping the device to that path (`noauto,nofail`). udisks honors the fstab entry and mounts the volume at the declared path. Preflight verifies the fstab entry maps the device to `path`; if it does not, the volume is flagged with `FSTAB_MOUNTPOINT_MISMATCH` (udisks would otherwise land it elsewhere).
+- **Omitted `path` (discovered)** — When `volume.path` is omitted, udisks mounts the volume at its default `/run/media/<user>/<label>` location. nbkp **discovers** the effective mountpoint after mounting (via `findmnt --source <device> -n -o TARGET`) and uses it as the volume's path for the rest of the run — sentinels, rsync source/destination, snapshot directories, and directory checks all use the discovered path. This requires zero system configuration beyond the polkit rule.
+
+**Safety model** — In both models, udisks mounts strictly by UUID, so the *correct physical device* is guaranteed regardless of where it lands in the mount tree. The `.nbkp-vol` sentinel then confirms the mounted content is the expected volume. Together, UUID matching plus the sentinel replace the old reliance on a fixed, pre-configured mount unit for the wrong-drive guarantee.
 
 #### Why keyring as the default credential provider
 
@@ -109,25 +141,21 @@ The `keyring` package is an optional dependency (`pip install nbkp[keyring]`) to
 
 #### Why no action tracking for umount
 
-`umount_volumes` always attempts to umount and close LUKS for every volume with mount config, rather than tracking which volumes were actually mounted by the current run. This avoids fragile state tracking across scenarios like:
+`umount_volumes` always attempts to unmount and lock for every volume with mount config, rather than tracking which volumes were actually mounted by the current run. This avoids fragile state tracking across scenarios like:
 
 - A `run` that fails partway through and is restarted
 - A `disks mount` followed by a `run --no-mount` followed by `disks umount`
 - A volume that was already mounted before nbkp started
 
-The cost is negligible — `systemctl stop` on an already-stopped unit is a no-op — and the benefit is that cleanup is always complete regardless of how the session progressed.
+The cost is negligible — `udisksctl unmount`/`lock` on an already-unmounted or already-locked device is effectively a no-op — and the benefit is that cleanup is always complete regardless of how the session progressed.
 
 #### Why no `dm-crypt` kernel module check
 
-Pre-flight checks verify that userspace tools (`cryptsetup`, `systemd-cryptsetup`) are available, but deliberately do not probe for the `dm-crypt` kernel module:
+Pre-flight checks verify that udisks (`udisksctl` + a running `udisksd`) is available, but deliberately do not probe for the `dm-crypt` kernel module:
 
-- On any system where `cryptsetup` is installed, `dm-crypt` is almost always available (built-in or auto-loaded on first use).
-- The kernel may auto-load the module when `cryptsetup` runs, so a pre-check could give false negatives.
-- When `dm-crypt` is genuinely missing (e.g. Docker without `--privileged`), `cryptsetup`/`systemd-cryptsetup attach` fails with a clear error — the failure is not silent.
-
-#### Why mount unit names are derived at runtime
-
-Mount unit names (e.g. `/mnt/seagate8tb` → `mnt-seagate8tb.mount`) are derived by running `systemd-escape --path <volume-path>` on the target host rather than being hardcoded or computed in Python. This is because systemd's escaping rules are non-trivial (hyphens in path components become `\x2d`, among other edge cases), and `systemd-escape` is the canonical implementation. The result is cached in `VolumeCapabilities.mount_unit` after the first preflight probe.
+- On any system where udisks/LUKS tooling is installed, `dm-crypt` is almost always available (built-in or auto-loaded on first use).
+- The kernel may auto-load the module when udisks unlocks a container, so a pre-check could give false negatives.
+- When `dm-crypt` is genuinely missing (e.g. Docker without `--privileged`), `udisksctl unlock` fails with a clear error — the failure is not silent.
 
 ### Pre-flight Checks
 
@@ -141,7 +169,7 @@ Checks include:
 - **Btrfs readiness** — Correct filesystem type, subvolume existence, mount options, required directories
 - **Hard-link readiness** — Filesystem hard-link support, required directory structure
 - **`latest` symlink validity** — Must exist and point to `/dev/null` or an existing snapshot (see [The `latest` Symlink](#the-latest-symlink))
-- **Mount infrastructure** — For volumes with mount config: systemctl/systemd-escape availability, mount unit configured in systemd (fstab/native .mount), mount unit What/Where match nbkp config, polkit rules. For encrypted volumes: cryptsetup/systemd-cryptsetup availability, cryptsetup service configured, sudoers rules.
+- **Mount infrastructure** — For volumes with mount config: `udisksctl` availability and a running `udisksd` daemon, the `50-nbkp.rules` polkit rule, and (for volumes with a declared `path`) an `/etc/fstab` entry that maps the device to that path. For btrfs volumes, a warning if the `udisks2-btrfs` module is missing.
 - **Strictness mode** — See below
 
 The `preflight troubleshoot` command runs the same checks and displays step-by-step remediation instructions for each failure.
@@ -151,7 +179,7 @@ The `preflight troubleshoot` command runs the same checks and displays step-by-s
 Pre-flight checks distinguish between two categories of errors:
 
 - **Inactive errors** — Missing sentinel files (`.nbkp-vol`, `.nbkp-src`, `.nbkp-dst`), unavailable volumes, and pending snapshots in dry-run mode. These represent expected situations where a sync is not ready to run (e.g. a removable drive is not plugged in, a remote host is unreachable, or a volume is not mounted at the expected path).
-- **Infrastructure errors** — Everything else: missing rsync, wrong filesystem type, broken symlinks, misconfigured systemd units, etc. These indicate real problems that need fixing.
+- **Infrastructure errors** — Everything else: missing rsync, wrong filesystem type, broken symlinks, a missing polkit rule or fstab entry, an unreachable udisks daemon, etc. These indicate real problems that need fixing.
 
 The `--strictness` flag controls how preflight errors affect the exit code:
 
@@ -167,6 +195,18 @@ The `--strictness` flag controls how preflight errors affect the exit code:
 
 **`ignore-all`** ignores all preflight errors — only sync execution failures cause a non-zero exit. This can be useful when you want to attempt syncs regardless of preflight check results.
 
+#### Probe real state, not proxies
+
+Checks observe the actual condition that matters rather than an indirect stand-in:
+
+- **Daemon reachability** via `udisksctl status` (can we actually talk to udisks?), not `systemctl is-active udisks2`.
+- **Live mount options** (e.g. `user_subvol_rm_allowed`) via `findmnt -o OPTIONS` on the mounted filesystem, not the `/etc/fstab` line or the config.
+- **Authorization** by attempting the operation (`udisksctl unlock`/`mount --no-user-interaction`) and classifying a `NotAuthorized` failure, not by stat-ing the `50-nbkp.rules` polkit file. This stays correct however the grant is configured (a differently-named rule, a group-scoped rule, …) and avoids guessing the file's name or location on a remote host.
+- **The unlocked cleartext device** by discovering it via `lsblk` (the `crypt` child of the LUKS container), not by assuming the `luks-<uuid>` mapper name.
+- **Filesystem type** via `stat -f` on the real filesystem, not a config hint.
+
+The deliberate exception is the **fstab-mapping** check (`findmnt --fstab --target <path>`), which reads `/etc/fstab` — the configuration that *determines* where udisks will mount — rather than performing a trial mount. So the principle is "observe the actual state or outcome; only fall back to reading the input config when attempting the real operation would be destructive or premature." The cost is that detection does real work (and real SSH round-trips) during preflight, in exchange for accuracy that doesn't depend on how the host happens to be configured.
+
 #### Preflight Conditional Probing
 
 The preflight check system uses two layers: an **observation layer** (`volume_checks.py`, `endpoint_checks.py`) that probes raw state, and an **error interpretation layer** (`status.py`) that decides what constitutes a problem based on config. Not all capabilities are checked for every volume or endpoint — probing is selective. This is an intentional design choice driven by three categories of conditional logic.
@@ -178,17 +218,15 @@ Probe B requires the result of probe A as input. These conditions live in the ob
 - `rsync_version_ok` requires `has_rsync` — can't run `rsync --version` if rsync isn't installed
 - `is_btrfs_filesystem` requires `has_stat` — needs `stat -f -c %T`
 - `btrfs_user_subvol_rm` requires `has_findmnt AND is_btrfs`
-- `mount_unit` derivation requires `has_systemd_escape` — needs the tool to compute the unit name
-- `has_mount_unit_config` requires `mount_unit` — can't query a systemd unit without its name
+- the cleartext device discovery (`lsblk` of the LUKS container) requires `has_udisksctl` and a present LUKS container — can't mount/unmount/lock without the discovered device
 - `staging_writable` requires `staging_exists`
 
 ##### Config-as-input probing
 
 The probe itself needs config values as parameters — without them, the probe cannot be formulated. These also live in the observation layer:
 
-- Encryption checks need `mapper_name` from `mount.encryption` — no mapper name means nothing to query
-- `systemd-cryptsetup@{mapper}.service` lookup needs the mapper name from config
-- `systemctl show {mount-unit}` needs the derived mount unit name
+- Device-present and unlock/discovery probes need `device_uuid` from `mount` — the LUKS container or filesystem UUID is the only thing to query
+- The fstab-mapping check needs `volume.path` — without a declared path there is no expected mountpoint to verify (the discovery model applies instead)
 
 ##### Config-as-filter probing
 
@@ -276,17 +314,15 @@ This section documents every external command nbkp invokes on local or remote ho
 | `test -w <path>` | Directory writability |
 | `test -L <path>` | Symlink existence (`latest`) |
 | `test -e /dev/disk/by-uuid/<UUID>` | Drive detection (mount management) |
-| `test -b /dev/mapper/<name>` | LUKS device unlocked check |
-| `which <command>` | Command availability (rsync, btrfs, stat, findmnt, systemctl, systemd-escape, cryptsetup) |
+| `which <command>` | Command availability (rsync, btrfs, stat, findmnt, udisksctl, lsblk) |
 | `rsync --version` | Rsync version check (>= 3.0, reject macOS openrsync) |
 | `stat -f -c %T <path>` | Detect btrfs filesystem type |
 | `stat -c %i <path>` | Check btrfs subvolume (inode == 256) |
 | `findmnt -T <path> -n -o OPTIONS` | Check btrfs mount options (e.g. `user_subvol_rm_allowed`) |
 | `readlink <path>` | Read `latest` symlink target |
-| `systemd-escape --path <path>` | Derive mount unit name from volume path |
-| `systemctl is-active <mount-unit> --quiet` | Check if volume is mounted |
-| `systemctl cat <unit>` | Check if systemd unit is known (mount unit, cryptsetup service) |
-| `systemctl show <unit> -p <props> --no-pager` | Read systemd unit properties (What, Where, ExecStart) |
+| `udisksctl status` | Check the udisks daemon is reachable |
+| `lsblk -rno NAME,TYPE <dev>` | Discover the unlocked cleartext device (LUKS unlocked check) |
+| `findmnt --source <dev> -n -o TARGET` | Check if a device is mounted and discover its mountpoint |
 
 ### Rsync synchronization
 
@@ -321,23 +357,18 @@ This section documents every external command nbkp invokes on local or remote ho
 | `readlink <latest>` | Read current latest snapshot |
 | `ln -sfn <target> <latest>` | Update latest symlink (remote only; local uses Python `pathlib`) |
 
-### Mount management (systemd strategy)
+### Mount management (udisks)
+
+All mount operations go through `udisksctl`, authorized by polkit (no `sudo`):
 
 | Command | Purpose |
 |---|---|
-| `sudo <systemd-cryptsetup-path> attach <mapper> /dev/disk/by-uuid/<uuid> /dev/stdin luks` | Attach LUKS volume (passphrase piped via stdin) |
-| `systemctl start <mount-unit>` | Mount volume |
-| `systemctl stop <mount-unit>` | Umount volume |
-| `systemctl stop systemd-cryptsetup@<mapper>.service` | Close LUKS volume |
-
-### Mount management (direct strategy)
-
-| Command | Purpose |
-|---|---|
-| `sudo cryptsetup open --type luks /dev/disk/by-uuid/<uuid> <mapper> -` | Attach LUKS volume (passphrase read from stdin via `-` key-file argument) |
-| `sudo mount <volume-path>` | Mount volume (device and options from fstab) |
-| `sudo umount <volume-path>` | Umount volume |
-| `sudo cryptsetup close <mapper>` | Close LUKS volume |
+| `udisksctl unlock -b /dev/disk/by-uuid/<luks-uuid> --key-file /dev/stdin --no-user-interaction` | Unlock LUKS container (passphrase piped via stdin, without a trailing newline) |
+| `lsblk -rno NAME,TYPE /dev/disk/by-uuid/<luks-uuid>` | Discover the unlocked cleartext device (`crypt` child → `/dev/mapper/<name>`) |
+| `udisksctl mount -b <device> --no-user-interaction` | Mount volume (`<device>` = discovered cleartext mapper for encrypted, or `/dev/disk/by-uuid/<fs-uuid>` for unencrypted) |
+| `findmnt --source <device> -n -o TARGET` | Discover the effective mountpoint (fstab path or `/run/media/<user>/<label>`) |
+| `udisksctl unmount -b <device> --no-user-interaction` | Umount volume |
+| `udisksctl lock -b /dev/disk/by-uuid/<luks-uuid> --no-user-interaction` | Lock LUKS container |
 
 ### SSH transport
 

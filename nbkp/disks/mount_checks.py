@@ -1,8 +1,7 @@
 """Mount state probing: tool availability, config validation, runtime state.
 
-Probes whether mount-related tools are installed and whether volumes
-are currently mounted/attached.  Used by both ``disks status`` and
-preflight checks.
+Probes whether udisks tools are installed and whether volumes are currently
+unlocked/mounted.  Used by both ``disks status`` and preflight checks.
 """
 
 from __future__ import annotations
@@ -12,22 +11,25 @@ from ..config import (
     Volume,
 )
 from ..config.epresolution import ResolvedEndpoints
-from . import direct as direct_cmds
-from . import systemd as systemd_cmds
 from .detection import (
     detect_device_present,
-    detect_luks_attached,
-    detect_systemd_cryptsetup_path,
-    resolve_mount_unit,
+    discover_cleartext_device,
+    find_mountpoint,
+    resolve_target_device,
 )
 from .models import MountCapabilities, MountToolCapabilities
 from .observation import MountObservation
-from ..remote.queries import (
-    _check_command_available,
-    _check_systemctl_cat,
-    _run_systemctl_show,
-)
+from ..remote.queries import _check_command_available
 from ..remote.dispatch import run_on_volume
+
+# udisks2 btrfs module locations (best-effort across distros).  The module
+# (from the ``udisks2-btrfs`` package) is ``libudisks2_btrfs.so`` under
+# ``udisks2/modules/`` — distinct from the libblockdev ``libbd_btrfs`` library.
+_BTRFS_MODULE_PROBE = (
+    "ls /usr/lib/*/udisks2/modules/libudisks2_btrfs.so "
+    "/usr/lib/udisks2/modules/libudisks2_btrfs.so "
+    "/usr/libexec/udisks2/modules/libudisks2_btrfs.so 2>/dev/null | grep -q ."
+)
 
 
 def probe_mount_tools(
@@ -40,28 +42,55 @@ def probe_mount_tools(
     Which tools are actually *required* is determined during error
     interpretation (``SshEndpointToolNeeds``).
     """
-    has_systemctl = _check_command_available(volume, "systemctl", resolved_endpoints)
-    has_systemd_escape = _check_command_available(
-        volume, "systemd-escape", resolved_endpoints
+    has_udisksctl = _check_command_available(volume, "udisksctl", resolved_endpoints)
+    has_findmnt = _check_command_available(volume, "findmnt", resolved_endpoints)
+    has_lsblk = _check_command_available(volume, "lsblk", resolved_endpoints)
+    udisksd_running = (
+        run_on_volume(["udisksctl", "status"], volume, resolved_endpoints).returncode
+        == 0
+        if has_udisksctl
+        else False
     )
-    has_sudo = _check_command_available(volume, "sudo", resolved_endpoints)
-    has_cryptsetup = _check_command_available(volume, "cryptsetup", resolved_endpoints)
-    cryptsetup_path = detect_systemd_cryptsetup_path(volume, resolved_endpoints)
-    has_systemd_cryptsetup = cryptsetup_path is not None
-    has_mount_cmd = _check_command_available(volume, "mount", resolved_endpoints)
-    has_umount_cmd = _check_command_available(volume, "umount", resolved_endpoints)
-    has_mountpoint = _check_command_available(volume, "mountpoint", resolved_endpoints)
+    has_btrfs_module = (
+        run_on_volume(
+            ["sh", "-c", _BTRFS_MODULE_PROBE], volume, resolved_endpoints
+        ).returncode
+        == 0
+    )
     return MountToolCapabilities(
-        has_systemctl=has_systemctl,
-        has_systemd_escape=has_systemd_escape,
-        has_systemd_cryptsetup=has_systemd_cryptsetup,
-        systemd_cryptsetup_path=cryptsetup_path,
-        has_sudo=has_sudo,
-        has_cryptsetup=has_cryptsetup,
-        has_mount_cmd=has_mount_cmd,
-        has_umount_cmd=has_umount_cmd,
-        has_mountpoint=has_mountpoint,
+        has_udisksctl=has_udisksctl,
+        udisksd_running=udisksd_running,
+        has_btrfs_module=has_btrfs_module,
+        has_findmnt=has_findmnt,
+        has_lsblk=has_lsblk,
     )
+
+
+def _check_fstab_entry(
+    volume: Volume,
+    path: str,
+    resolved_endpoints: ResolvedEndpoints,
+) -> str | None:
+    """Return the fstab TARGET for *path*, or None when no fstab entry exists.
+
+    Confirms udisks will mount the device at the declared *path* (rather than
+    at ``/run/media/...``).  Only meaningful when ``volume.path`` is declared.
+    """
+    # udisks2 could answer this via the Block.Configuration property (the
+    # device's tracked fstab/crypttab entries, ``udisksctl info -b <device>``),
+    # but we use findmnt --fstab for symmetry with the other mount queries (see
+    # detection.find_mountpoint). The query that rules out dropping findmnt
+    # entirely — the live mount option string — has no udisks equivalent; see
+    # preflight.snapshot_checks.check_btrfs_mount_option.
+    result = run_on_volume(
+        ["findmnt", "--fstab", "--target", path, "-n", "-o", "TARGET"],
+        volume,
+        resolved_endpoints,
+    )
+    if result.returncode != 0:
+        return None
+    target = result.stdout.strip().splitlines()
+    return target[0].strip() if target and target[0].strip() else None
 
 
 def check_mount_capabilities(
@@ -73,30 +102,59 @@ def check_mount_capabilities(
 ) -> MountCapabilities:
     """Probe volume-specific mount config and runtime state.
 
-    Tool availability (systemctl, sudo, etc.) comes from *mount_tools*
-    at the SSH endpoint level.  This function probes only volume-specific
-    config validation and runtime state.
-
-    Dispatches to systemd or direct probing based on the configured
-    strategy.  When *mount_observation* is available, it provides the
-    resolved backend so the strategy resolution is skipped.
+    Tool availability comes from *mount_tools* at the SSH endpoint level.
+    This function probes the fstab entry (when ``volume.path`` is declared)
+    and the runtime unlock/mount state.  When *mount_observation* is
+    available, runtime state is reused instead of re-probing over SSH.
     """
-    if mount_observation is not None:
-        use_systemd = mount_observation.resolved_backend == "systemd"
+    obs = mount_observation
+    encrypted = mount.encryption is not None
+
+    # fstab check only matters for the fixed-path (Option A) model.
+    fstab_target = (
+        _check_fstab_entry(volume, volume.path, resolved_endpoints)
+        if volume.path is not None
+        else None
+    )
+    has_fstab_entry = fstab_target is not None if volume.path is not None else None
+
+    # Runtime state — reuse observation when available, else probe.
+    if obs is not None:
+        device_present = obs.device_present
+        luks_unlocked = obs.luks_unlocked
+        mounted = obs.mounted
+        cleartext_device = obs.cleartext_device
+        effective_path = obs.effective_path
+        failure_reason = obs.mount_failure_reason
     else:
-        strategy = mount.strategy
-        has_systemctl = (
-            bool(mount_tools.has_systemctl) if mount_tools is not None else False
+        device_present = detect_device_present(
+            volume, mount.device_uuid, resolved_endpoints
         )
-        use_systemd = strategy == "systemd" or (strategy == "auto" and has_systemctl)
-    if use_systemd:
-        return _check_systemd_mount_capabilities(
-            volume, mount, mount_tools, resolved_endpoints, mount_observation
+        cleartext_device = (
+            discover_cleartext_device(volume, mount.device_uuid, resolved_endpoints)
+            if encrypted and device_present
+            else None
         )
-    else:
-        return _check_direct_mount_capabilities(
-            volume, mount, mount_tools, resolved_endpoints, mount_observation
+        luks_unlocked = (cleartext_device is not None) if encrypted else None
+        target_device = resolve_target_device(volume, mount, resolved_endpoints)
+        effective_path = (
+            find_mountpoint(volume, target_device, resolved_endpoints)
+            if target_device is not None
+            else None
         )
+        mounted = effective_path is not None
+        failure_reason = None
+
+    return MountCapabilities(
+        has_fstab_entry=has_fstab_entry,
+        fstab_target=fstab_target,
+        device_present=device_present,
+        luks_unlocked=luks_unlocked,
+        mounted=mounted,
+        cleartext_device=cleartext_device,
+        effective_path=effective_path,
+        mount_failure_reason=failure_reason,
+    )
 
 
 def check_mount_status(
@@ -107,202 +165,11 @@ def check_mount_status(
 ) -> MountCapabilities:
     """Probe mount capabilities and runtime state for a single volume.
 
-    Lightweight alternative to ``check_volume_capabilities`` — only
-    probes mount-related capabilities (config validation and runtime
-    device/luks/mounted state).
+    Lightweight alternative to ``check_volume_capabilities`` — only probes
+    mount-related capabilities (fstab + runtime device/luks/mounted state).
 
     When *mount_tools* is ``None``, probes mount tools on the fly.
-    This is the case for standalone callers (e.g. ``volumes status``)
-    that don't go through the full SSH endpoint observation path.
     """
     re = resolved_endpoints or {}
     tools = mount_tools or probe_mount_tools(volume, re)
     return check_mount_capabilities(volume, mount, tools, re)
-
-
-# ── Systemd backend ─────────────────────────────────────────
-
-
-def _check_systemd_mount_capabilities(
-    volume: Volume,
-    mount: MountConfig,
-    mount_tools: MountToolCapabilities | None,
-    resolved_endpoints: ResolvedEndpoints,
-    mount_observation: MountObservation | None = None,
-) -> MountCapabilities:
-    """Probe systemd-specific mount capabilities.
-
-    Tool availability comes from *mount_tools*.  This function probes
-    volume-specific config: mount unit configuration, cryptsetup service,
-    auth rules, and runtime state.
-
-    When *mount_observation* is provided, reuses ``mount_unit``,
-    ``systemd_cryptsetup_path``, ``device_present``, ``luks_attached``,
-    and ``mounted`` from the prior mount lifecycle — skipping the
-    corresponding SSH round-trips.
-    """
-    obs = mount_observation
-    has_systemctl = (
-        bool(mount_tools.has_systemctl) if mount_tools is not None else False
-    )
-    has_systemd_escape = (
-        bool(mount_tools.has_systemd_escape) if mount_tools is not None else False
-    )
-
-    # Derive mount unit via systemd-escape (or reuse from observation)
-    mount_unit = (
-        obs.mount_unit
-        if obs is not None and obs.mount_unit is not None
-        else resolve_mount_unit(volume, resolved_endpoints)
-        if has_systemd_escape
-        else None
-    )
-
-    # Check mount unit config in systemd
-    has_mount_unit_config = (
-        _check_systemctl_cat(volume, mount_unit, resolved_endpoints)
-        if has_systemctl and mount_unit is not None
-        else None
-    )
-    mount_unit_props = (
-        _run_systemctl_show(volume, mount_unit, ["What", "Where"], resolved_endpoints)
-        if has_mount_unit_config and mount_unit is not None
-        else {}
-    )
-
-    # Cryptsetup service config check
-    mapper_name = mount.encryption.mapper_name if mount.encryption else None
-    cryptsetup_service = (
-        f"systemd-cryptsetup@{mapper_name}.service" if mapper_name else None
-    )
-    has_cryptsetup_service_config = (
-        _check_systemctl_cat(volume, cryptsetup_service, resolved_endpoints)
-        if has_systemctl and cryptsetup_service is not None
-        else None
-    )
-    cryptsetup_service_props = (
-        _run_systemctl_show(
-            volume, cryptsetup_service, ["ExecStart"], resolved_endpoints
-        )
-        if has_cryptsetup_service_config and cryptsetup_service is not None
-        else {}
-    )
-
-    # Auth rules (polkit, sudoers) are no longer probed statically — the
-    # parent dirs (/etc/polkit-1/rules.d, /etc/sudoers.d) are typically
-    # 0750 so the probe couldn't distinguish "missing" from "hidden".
-    # Detection now happens at runtime via MountFailureReason classification
-    # in the mount lifecycle (see _classify_attach_luks_failure and
-    # _classify_mount_failure in lifecycle.py).
-
-    # Runtime mount state — reuse from observation when available
-    device_present = (
-        obs.device_present
-        if obs is not None
-        else detect_device_present(volume, mount.device_uuid, resolved_endpoints)
-    )
-    luks_attached = (
-        obs.luks_attached
-        if obs is not None
-        else detect_luks_attached(
-            volume, mount.encryption.mapper_name, resolved_endpoints
-        )
-        if mount.encryption is not None
-        else None
-    )
-    mounted = (
-        obs.mounted
-        if obs is not None
-        else run_on_volume(
-            systemd_cmds.build_detect_mounted_command(mount_unit),
-            volume,
-            resolved_endpoints,
-        ).returncode
-        == 0
-        if has_systemctl and mount_unit is not None
-        else None
-    )
-
-    return MountCapabilities(
-        resolved_backend="systemd",
-        mount_unit=mount_unit,
-        has_mount_unit_config=has_mount_unit_config,
-        mount_unit_what=mount_unit_props.get("What"),
-        mount_unit_where=mount_unit_props.get("Where"),
-        has_cryptsetup_service_config=has_cryptsetup_service_config,
-        cryptsetup_service_exec_start=cryptsetup_service_props.get("ExecStart"),
-        device_present=device_present,
-        luks_attached=luks_attached,
-        mounted=mounted,
-        mount_failure_reason=(
-            obs.failure_reason.value
-            if obs is not None and obs.failure_reason is not None
-            else None
-        ),
-    )
-
-
-# ── Direct backend ──────────────────────────────────────────
-
-
-def _check_direct_mount_capabilities(
-    volume: Volume,
-    mount: MountConfig,
-    mount_tools: MountToolCapabilities | None,
-    resolved_endpoints: ResolvedEndpoints,
-    mount_observation: MountObservation | None = None,
-) -> MountCapabilities:
-    """Probe direct-backend mount capabilities.
-
-    Tool availability comes from *mount_tools*.  This function probes
-    only volume-specific auth rules and runtime state.
-
-    When *mount_observation* is provided, reuses ``device_present``,
-    ``luks_attached``, and ``mounted`` from the prior mount lifecycle.
-    """
-    obs = mount_observation
-    has_mountpoint = (
-        bool(mount_tools.has_mountpoint) if mount_tools is not None else False
-    )
-
-    # Sudoers rules no longer probed statically — see _check_systemd_mount_capabilities.
-
-    # Runtime mount state — reuse from observation when available
-    device_present = (
-        obs.device_present
-        if obs is not None
-        else detect_device_present(volume, mount.device_uuid, resolved_endpoints)
-    )
-    luks_attached = (
-        obs.luks_attached
-        if obs is not None
-        else detect_luks_attached(
-            volume, mount.encryption.mapper_name, resolved_endpoints
-        )
-        if mount.encryption is not None
-        else None
-    )
-    mounted = (
-        obs.mounted
-        if obs is not None
-        else run_on_volume(
-            direct_cmds.build_detect_mounted_command(volume.path),
-            volume,
-            resolved_endpoints,
-        ).returncode
-        == 0
-        if has_mountpoint
-        else None
-    )
-
-    return MountCapabilities(
-        resolved_backend="direct",
-        device_present=device_present,
-        luks_attached=luks_attached,
-        mounted=mounted,
-        mount_failure_reason=(
-            obs.failure_reason.value
-            if obs is not None and obs.failure_reason is not None
-            else None
-        ),
-    )

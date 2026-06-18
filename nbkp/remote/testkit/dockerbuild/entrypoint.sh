@@ -91,6 +91,31 @@ if [ -z "$NBKP_BASTION_ONLY" ]; then
     fi
 fi
 
+# ── udisks2 stack ───────────────────────────────────────────
+# nbkp drives mount management through udisksctl, which talks to udisksd
+# over the system D-Bus and is authorized by polkitd.  This image has no
+# systemd, so start the three daemons directly.  Best-effort: guarded with
+# `|| true` so a container without /dev/disk access still boots for the
+# non-mount tests.  NOTE: needs real-Docker validation (privileged + loop
+# devices); see tests/_docker_fixtures and tests/integration_docker/test_disks.py.
+mkdir -p /run/dbus
+dbus-daemon --system --fork 2>/dev/null || true
+# udev must run *before* udisksd so udisks can enumerate block devices over
+# netlink (udisks's D-Bus object tree is otherwise empty and unlock/mount
+# fail with "object not found").
+for ud in /lib/systemd/systemd-udevd /usr/lib/systemd/systemd-udevd; do
+    [ -x "$ud" ] && { "$ud" --daemon 2>/dev/null && break; }
+done
+udevadm trigger 2>/dev/null || true
+udevadm settle 2>/dev/null || true
+# polkitd / udisksd live under /usr/lib or /usr/libexec depending on distro.
+for p in /usr/lib/polkit-1/polkitd /usr/libexec/polkit-1/polkitd; do
+    [ -x "$p" ] && { "$p" --no-debug & break; }
+done
+for u in /usr/libexec/udisks2/udisksd /usr/lib/udisks2/udisksd; do
+    [ -x "$u" ] && { "$u" & break; }
+done
+
 # Generate SSH host keys if not present
 ssh-keygen -A
 

@@ -1,4 +1,4 @@
-"""Tests for mount-related preflight checks."""
+"""Tests for mount-related preflight checks (udisks2 backend)."""
 
 from __future__ import annotations
 
@@ -22,35 +22,32 @@ from nbkp.preflight.status import (
     VolumeDiagnostics,
     VolumeError,
     VolumeStatus,
-    _mount_errors,
-    _mount_unit_mismatches,
-    _cryptsetup_service_mismatches,
+    _volume_errors,
 )
 
-_MOUNT_DEFAULTS = dict(
-    resolved_backend="systemd",
-    mount_unit="mnt-encrypted.mount",
-    has_mount_unit_config=True,
-    mount_unit_what="/dev/mapper/encrypted",
-    mount_unit_where="/mnt/encrypted",
-    has_cryptsetup_service_config=True,
-    cryptsetup_service_exec_start=(
-        "/usr/lib/systemd/systemd-cryptsetup attach encrypted"
-        " /dev/disk/by-uuid/5941f273-f73c-44c5-a3ef-fae7248db1b6"
-        " /dev/stdin luks"
-    ),
-)
+_ENC_UUID = "5941f273-f73c-44c5-a3ef-fae7248db1b6"
+_USB_UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
 
 def _base_mount_caps(**overrides: object) -> MountCapabilities:
     """Build MountCapabilities with sensible defaults, then apply overrides."""
-    return MountCapabilities(**{**_MOUNT_DEFAULTS, **overrides})
+    return MountCapabilities.model_validate(
+        {
+            "has_fstab_entry": True,
+            "fstab_target": "/mnt/encrypted",
+            "device_present": True,
+            "mounted": True,
+            **overrides,
+        }
+    )
 
 
-def _base_caps(**mount_overrides: object) -> VolumeCapabilities:
+def _base_caps(
+    sentinel_exists: bool = True, **mount_overrides: object
+) -> VolumeCapabilities:
     """Build VolumeCapabilities with mount defaults, then apply overrides."""
     return VolumeCapabilities(
-        sentinel_exists=True,
+        sentinel_exists=sentinel_exists,
         is_btrfs_filesystem=False,
         hardlink_supported=True,
         btrfs_user_subvol_rm=False,
@@ -60,34 +57,23 @@ def _base_caps(**mount_overrides: object) -> VolumeCapabilities:
 
 def _encrypted_mount() -> MountConfig:
     return MountConfig(
-        device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6",
-        encryption=LuksEncryptionConfig(
-            mapper_name="encrypted",
-            passphrase_id="encrypted",
-        ),
+        device_uuid=_ENC_UUID,
+        encryption=LuksEncryptionConfig(passphrase_id="encrypted"),
     )
 
 
 def _unencrypted_mount() -> MountConfig:
-    return MountConfig(
-        device_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-    )
+    return MountConfig(device_uuid=_USB_UUID)
 
 
 def _encrypted_vol() -> LocalVolume:
     return LocalVolume(
-        slug="encrypted",
-        path="/mnt/encrypted",
-        mount=_encrypted_mount(),
+        slug="encrypted", path="/mnt/encrypted", mount=_encrypted_mount()
     )
 
 
 def _unencrypted_vol() -> LocalVolume:
-    return LocalVolume(
-        slug="usb",
-        path="/mnt/usb",
-        mount=_unencrypted_mount(),
-    )
+    return LocalVolume(slug="usb", path="/mnt/usb", mount=_unencrypted_mount())
 
 
 def _active_ssh_endpoint_status() -> SshEndpointStatus:
@@ -98,376 +84,171 @@ def _active_ssh_endpoint_status() -> SshEndpointStatus:
     )
 
 
-class TestMountErrors:
-    def test_all_caps_present_no_errors(self) -> None:
-        errors = _mount_errors(_base_mount_caps(), _encrypted_mount())
-        assert errors == []
+# ── _volume_errors: lifecycle-failure upgrades ─────────────────
 
-    def test_mount_unit_not_configured(self) -> None:
-        errors = _mount_errors(
-            _base_mount_caps(has_mount_unit_config=False), _encrypted_mount()
+
+class TestVolumeErrorsMountUpgrades:
+    """When the sentinel is missing and a mount-managed volume recorded a
+    lifecycle failure, the generic SENTINEL_NOT_FOUND is upgraded to the
+    most actionable VolumeError."""
+
+    def _diag(self, **mount_overrides: object) -> VolumeDiagnostics:
+        return VolumeDiagnostics(
+            capabilities=_base_caps(sentinel_exists=False, **mount_overrides)
         )
-        assert VolumeError.MOUNT_UNIT_NOT_CONFIGURED in errors
 
-    def test_mount_unit_mismatch_encrypted(self) -> None:
-        errors = _mount_errors(
-            _base_mount_caps(mount_unit_what="/dev/mapper/wrong"),
-            _encrypted_mount(),
-        )
-        assert VolumeError.MOUNT_UNIT_MISMATCH in errors
-
-    def test_mount_unit_mismatch_unencrypted(self) -> None:
-        errors = _mount_errors(
-            _base_mount_caps(
-                mount_unit_what="/dev/disk/by-uuid/wrong-uuid",
-                has_cryptsetup_service_config=None,
-                has_sudoers_rules=None,
-            ),
-            _unencrypted_mount(),
-        )
-        assert VolumeError.MOUNT_UNIT_MISMATCH in errors
-
-    def test_cryptsetup_service_not_configured(self) -> None:
-        errors = _mount_errors(
-            _base_mount_caps(has_cryptsetup_service_config=False),
-            _encrypted_mount(),
-        )
-        assert VolumeError.CRYPTSETUP_SERVICE_NOT_CONFIGURED in errors
-
-    def test_cryptsetup_service_mismatch(self) -> None:
-        errors = _mount_errors(
-            _base_mount_caps(
-                cryptsetup_service_exec_start="attach wrong-mapper /dev/disk/by-uuid/wrong"
+    def test_not_authorized_upgrades_to_polkit_rules_missing(self) -> None:
+        errors = _volume_errors(
+            self._diag(
+                device_present=True,
+                luks_unlocked=False,
+                mounted=None,
+                mount_failure_reason="not_authorized",
             ),
             _encrypted_mount(),
         )
-        assert VolumeError.CRYPTSETUP_SERVICE_MISMATCH in errors
+        assert VolumeError.POLKIT_RULES_MISSING in errors
+        assert VolumeError.SENTINEL_NOT_FOUND not in errors
+        assert VolumeError.VOLUME_NOT_MOUNTED not in errors
 
-    def test_unencrypted_skips_encryption_checks(self) -> None:
-        """Unencrypted volumes should not trigger encryption-specific errors."""
-        mc = _base_mount_caps(
-            has_cryptsetup_service_config=None,
-            mount_unit_what="/dev/disk/by-uuid/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    def test_unlock_failed_upgrades(self) -> None:
+        errors = _volume_errors(
+            self._diag(
+                device_present=True,
+                luks_unlocked=False,
+                mounted=None,
+                mount_failure_reason="unlock_failed",
+            ),
+            _encrypted_mount(),
         )
-        errors = _mount_errors(mc, _unencrypted_mount())
-        assert errors == []
+        assert VolumeError.UNLOCK_FAILED in errors
+        assert VolumeError.SENTINEL_NOT_FOUND not in errors
 
-    def test_none_caps_not_probed(self) -> None:
-        """When capability is None (not probed), no error should be generated."""
-        mc = _base_mount_caps(
-            has_mount_unit_config=None,
+    def test_mount_failed_upgrades(self) -> None:
+        errors = _volume_errors(
+            self._diag(
+                device_present=True,
+                luks_unlocked=True,
+                mounted=False,
+                mount_failure_reason="mount_failed",
+            ),
+            _encrypted_mount(),
         )
-        errors = _mount_errors(mc, _encrypted_mount())
-        assert VolumeError.MOUNT_UNIT_NOT_CONFIGURED not in errors
+        assert VolumeError.MOUNT_FAILED in errors
+        assert VolumeError.VOLUME_NOT_MOUNTED not in errors
 
-    def test_none_mount_caps_no_errors(self) -> None:
-        """When mount capabilities are None, no mount errors should be generated."""
-        errors = _mount_errors(None, _encrypted_mount())
-        assert errors == []
-
-
-class TestMountUnitMismatches:
-    def test_encrypted_correct_what(self) -> None:
-        mc = _base_mount_caps(mount_unit_what="/dev/mapper/encrypted")
-        assert not _mount_unit_mismatches(mc, _encrypted_mount())
-
-    def test_encrypted_wrong_what(self) -> None:
-        mc = _base_mount_caps(mount_unit_what="/dev/mapper/wrong")
-        assert _mount_unit_mismatches(mc, _encrypted_mount())
-
-    def test_unencrypted_correct_what(self) -> None:
-        mc = _base_mount_caps(
-            mount_unit_what="/dev/disk/by-uuid/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    def test_device_not_present(self) -> None:
+        errors = _volume_errors(
+            self._diag(device_present=False, mounted=None),
+            _encrypted_mount(),
         )
-        assert not _mount_unit_mismatches(mc, _unencrypted_mount())
+        assert VolumeError.DEVICE_NOT_PRESENT in errors
+        assert VolumeError.SENTINEL_NOT_FOUND not in errors
 
-    def test_none_what_no_mismatch(self) -> None:
-        """When What is None (not probed), should not report mismatch."""
-        mc = _base_mount_caps(mount_unit_what=None)
-        assert not _mount_unit_mismatches(mc, _encrypted_mount())
-
-
-class TestCryptsetupServiceMismatches:
-    def test_correct_exec_start(self) -> None:
-        assert not _cryptsetup_service_mismatches(
-            _base_mount_caps(), _encrypted_mount()
+    def test_fstab_mismatch_when_path_declared_no_fstab(self) -> None:
+        errors = _volume_errors(
+            self._diag(
+                device_present=True,
+                has_fstab_entry=False,
+                mounted=False,
+            ),
+            _encrypted_mount(),
         )
+        assert VolumeError.FSTAB_MOUNTPOINT_MISMATCH in errors
 
-    def test_wrong_mapper(self) -> None:
-        mc = _base_mount_caps(
-            cryptsetup_service_exec_start=(
-                "attach wrong /dev/disk/by-uuid/5941f273-f73c-44c5-a3ef-fae7248db1b6"
-            )
+    def test_device_present_unmounted_emits_volume_not_mounted(self) -> None:
+        errors = _volume_errors(
+            self._diag(device_present=True, has_fstab_entry=True, mounted=False),
+            _encrypted_mount(),
         )
-        assert _cryptsetup_service_mismatches(mc, _encrypted_mount())
+        assert VolumeError.VOLUME_NOT_MOUNTED in errors
+        assert VolumeError.DEVICE_NOT_PRESENT not in errors
 
-    def test_wrong_uuid(self) -> None:
-        mc = _base_mount_caps(
-            cryptsetup_service_exec_start="attach encrypted /dev/disk/by-uuid/wrong"
+    def test_sentinel_missing_when_mounted_falls_back_to_sentinel(self) -> None:
+        errors = _volume_errors(
+            self._diag(device_present=True, has_fstab_entry=True, mounted=True),
+            _encrypted_mount(),
         )
-        assert _cryptsetup_service_mismatches(mc, _encrypted_mount())
+        assert VolumeError.SENTINEL_NOT_FOUND in errors
 
-    def test_no_encryption_no_mismatch(self) -> None:
-        assert not _cryptsetup_service_mismatches(
-            _base_mount_caps(), _unencrypted_mount()
-        )
+    def test_no_mount_config_falls_back_to_sentinel(self) -> None:
+        errors = _volume_errors(self._diag(), None)
+        assert VolumeError.SENTINEL_NOT_FOUND in errors
+
+    def test_sentinel_present_no_errors(self) -> None:
+        diag = VolumeDiagnostics(capabilities=_base_caps(sentinel_exists=True))
+        assert _volume_errors(diag, _encrypted_mount()) == []
+
+
+# ── VolumeStatus.from_diagnostics integration ──────────────────
 
 
 class TestVolumeStatusFromDiagnostics:
-    def test_mount_errors_propagated(self) -> None:
-        """VolumeStatus.from_diagnostics should detect mount errors."""
-        caps = _base_caps(has_mount_unit_config=False)
-        diag = VolumeDiagnostics(capabilities=caps)
-        ssh_ep = _active_ssh_endpoint_status()
-        status = VolumeStatus.from_diagnostics(
-            "encrypted", _encrypted_vol(), ssh_ep, diag
-        )
-        assert VolumeError.MOUNT_UNIT_NOT_CONFIGURED in status.errors
-        assert not status.active
-
-    def test_no_mount_config_no_mount_errors(self) -> None:
-        """Volumes without mount config should not have mount errors."""
-        caps = VolumeCapabilities(
-            sentinel_exists=True,
-            is_btrfs_filesystem=False,
-            hardlink_supported=True,
-            btrfs_user_subvol_rm=False,
-            mount=_base_mount_caps(has_mount_unit_config=False),
-        )
-        vol = LocalVolume(slug="plain", path="/mnt/plain")
-        diag = VolumeDiagnostics(capabilities=caps)
-        ssh_ep = _active_ssh_endpoint_status()
-        status = VolumeStatus.from_diagnostics("plain", vol, ssh_ep, diag)
-        # Volume has no mount config, so no mount errors despite mount caps
-        assert not status.errors
-
     def test_all_checks_pass_active(self) -> None:
-        """Volume with all mount checks passing should be active."""
-        caps = _base_caps()
-        diag = VolumeDiagnostics(capabilities=caps)
-        ssh_ep = _active_ssh_endpoint_status()
+        diag = VolumeDiagnostics(capabilities=_base_caps())
         status = VolumeStatus.from_diagnostics(
-            "encrypted", _encrypted_vol(), ssh_ep, diag
+            "encrypted", _encrypted_vol(), _active_ssh_endpoint_status(), diag
         )
         assert status.active
 
-    def test_sudoers_refused_upgrades_volume_not_mounted(self) -> None:
-        """When the mount step recorded a sudo-refused failure, preflight
-        should surface SUDOERS_RULES_MISSING instead of the generic
-        VOLUME_NOT_MOUNTED so troubleshoot points at the real fix."""
-        caps = VolumeCapabilities(
+    def test_not_authorized_upgrades_volume_not_mounted(self) -> None:
+        caps = _base_caps(
             sentinel_exists=False,
-            is_btrfs_filesystem=False,
-            hardlink_supported=True,
-            btrfs_user_subvol_rm=False,
-            mount=_base_mount_caps(
-                mounted=False,
-                mount_failure_reason="sudoers_refused",
-            ),
+            device_present=True,
+            luks_unlocked=False,
+            mounted=None,
+            mount_failure_reason="not_authorized",
         )
         diag = VolumeDiagnostics(capabilities=caps)
-        ssh_ep = _active_ssh_endpoint_status()
         status = VolumeStatus.from_diagnostics(
-            "encrypted", _encrypted_vol(), ssh_ep, diag
-        )
-        assert VolumeError.SUDOERS_RULES_MISSING in status.errors
-        assert VolumeError.VOLUME_NOT_MOUNTED not in status.errors
-        assert VolumeError.SENTINEL_NOT_FOUND not in status.errors
-
-    def test_sudoers_refused_with_mounted_none_upgrades_sentinel_not_found(
-        self,
-    ) -> None:
-        """Real-world LUKS-fails-before-mount: mounted=None because the
-        mount step never ran. The lifecycle failure reason must still
-        upgrade SENTINEL_NOT_FOUND to SUDOERS_RULES_MISSING."""
-        caps = VolumeCapabilities(
-            sentinel_exists=False,
-            is_btrfs_filesystem=False,
-            hardlink_supported=True,
-            btrfs_user_subvol_rm=False,
-            mount=_base_mount_caps(
-                device_present=True,
-                luks_attached=False,
-                mounted=None,
-                mount_failure_reason="sudoers_refused",
-            ),
-        )
-        diag = VolumeDiagnostics(capabilities=caps)
-        ssh_ep = _active_ssh_endpoint_status()
-        status = VolumeStatus.from_diagnostics(
-            "encrypted", _encrypted_vol(), ssh_ep, diag
-        )
-        assert VolumeError.SUDOERS_RULES_MISSING in status.errors
-        assert VolumeError.SENTINEL_NOT_FOUND not in status.errors
-        assert VolumeError.VOLUME_NOT_MOUNTED not in status.errors
-
-    def test_polkit_refused_upgrades_volume_not_mounted(self) -> None:
-        """When the mount step failed because polkit refused systemctl start,
-        preflight should surface POLKIT_RULES_MISSING via the runtime path."""
-        caps = VolumeCapabilities(
-            sentinel_exists=False,
-            is_btrfs_filesystem=False,
-            hardlink_supported=True,
-            btrfs_user_subvol_rm=False,
-            mount=_base_mount_caps(
-                device_present=True,
-                luks_attached=True,
-                mounted=False,
-                mount_failure_reason="polkit_refused",
-            ),
-        )
-        diag = VolumeDiagnostics(capabilities=caps)
-        ssh_ep = _active_ssh_endpoint_status()
-        status = VolumeStatus.from_diagnostics(
-            "encrypted", _encrypted_vol(), ssh_ep, diag
+            "encrypted", _encrypted_vol(), _active_ssh_endpoint_status(), diag
         )
         assert VolumeError.POLKIT_RULES_MISSING in status.errors
-        assert VolumeError.VOLUME_NOT_MOUNTED not in status.errors
         assert VolumeError.SENTINEL_NOT_FOUND not in status.errors
 
-    def test_volume_not_mounted_without_specific_reason(self) -> None:
-        """Without a lifecycle failure reason, fall back to VOLUME_NOT_MOUNTED."""
-        caps = VolumeCapabilities(
-            sentinel_exists=False,
-            is_btrfs_filesystem=False,
-            hardlink_supported=True,
-            btrfs_user_subvol_rm=False,
-            mount=_base_mount_caps(device_present=True, mounted=False),
-        )
+    def test_no_mount_config_no_mount_errors(self) -> None:
+        caps = _base_caps(sentinel_exists=True)
+        vol = LocalVolume(slug="plain", path="/mnt/plain")
         diag = VolumeDiagnostics(capabilities=caps)
-        ssh_ep = _active_ssh_endpoint_status()
         status = VolumeStatus.from_diagnostics(
-            "encrypted", _encrypted_vol(), ssh_ep, diag
+            "plain", vol, _active_ssh_endpoint_status(), diag
         )
-        assert VolumeError.VOLUME_NOT_MOUNTED in status.errors
-        assert VolumeError.SUDOERS_RULES_MISSING not in status.errors
+        assert not status.errors
 
     def test_device_not_present_emits_device_error(self) -> None:
-        """device_present=False should emit DEVICE_NOT_PRESENT (not SENTINEL_NOT_FOUND).
-
-        Mirrors the real preflight-check path where the lifecycle never
-        ran (mounted=None) but ``detect_device_present`` returned False.
-        """
-        caps = VolumeCapabilities(
-            sentinel_exists=False,
-            is_btrfs_filesystem=False,
-            hardlink_supported=True,
-            btrfs_user_subvol_rm=False,
-            mount=_base_mount_caps(device_present=False, mounted=None),
-        )
+        caps = _base_caps(sentinel_exists=False, device_present=False, mounted=None)
         diag = VolumeDiagnostics(capabilities=caps)
-        ssh_ep = _active_ssh_endpoint_status()
         status = VolumeStatus.from_diagnostics(
-            "encrypted", _encrypted_vol(), ssh_ep, diag
+            "encrypted", _encrypted_vol(), _active_ssh_endpoint_status(), diag
         )
         assert VolumeError.DEVICE_NOT_PRESENT in status.errors
-        assert VolumeError.SENTINEL_NOT_FOUND not in status.errors
-        assert VolumeError.VOLUME_NOT_MOUNTED not in status.errors
-
-    def test_device_present_but_unmounted_emits_volume_not_mounted(self) -> None:
-        """device_present=True + mounted=False → VOLUME_NOT_MOUNTED, not DEVICE_NOT_PRESENT."""
-        caps = VolumeCapabilities(
-            sentinel_exists=False,
-            is_btrfs_filesystem=False,
-            hardlink_supported=True,
-            btrfs_user_subvol_rm=False,
-            mount=_base_mount_caps(device_present=True, mounted=False),
-        )
-        diag = VolumeDiagnostics(capabilities=caps)
-        ssh_ep = _active_ssh_endpoint_status()
-        status = VolumeStatus.from_diagnostics(
-            "encrypted", _encrypted_vol(), ssh_ep, diag
-        )
-        assert VolumeError.VOLUME_NOT_MOUNTED in status.errors
-        assert VolumeError.DEVICE_NOT_PRESENT not in status.errors
-
-    def test_sentinel_missing_when_device_mounted_falls_back_to_sentinel(self) -> None:
-        """Drive mounted but sentinel file missing → SENTINEL_NOT_FOUND.
-
-        Only fires after the bug fix when the drive is actually up — i.e.
-        a genuine first-time setup state for a mount-config volume.
-        """
-        caps = VolumeCapabilities(
-            sentinel_exists=False,
-            is_btrfs_filesystem=False,
-            hardlink_supported=True,
-            btrfs_user_subvol_rm=False,
-            mount=_base_mount_caps(device_present=True, mounted=True),
-        )
-        diag = VolumeDiagnostics(capabilities=caps)
-        ssh_ep = _active_ssh_endpoint_status()
-        status = VolumeStatus.from_diagnostics(
-            "encrypted", _encrypted_vol(), ssh_ep, diag
-        )
-        assert VolumeError.SENTINEL_NOT_FOUND in status.errors
-        assert VolumeError.DEVICE_NOT_PRESENT not in status.errors
-        assert VolumeError.VOLUME_NOT_MOUNTED not in status.errors
 
 
-# ── Direct backend errors ───────────────────────────────────
-
-
-_DIRECT_DEFAULTS = dict(
-    resolved_backend="direct",
-)
-
-
-def _direct_mount_caps(**overrides: object) -> MountCapabilities:
-    return MountCapabilities(**{**_DIRECT_DEFAULTS, **overrides})
-
-
-class TestDirectMountErrors:
-    """Direct backend has no static-config mount errors — auth rules are
-    surfaced at runtime via mount_failure_reason."""
-
-    def test_all_caps_present_no_errors(self) -> None:
-        errors = _mount_errors(_direct_mount_caps(), _encrypted_mount())
-        assert errors == []
-
-    def test_unencrypted_no_errors(self) -> None:
-        mc = _direct_mount_caps()
-        errors = _mount_errors(mc, _unencrypted_mount())
-        assert errors == []
-
-    def test_no_systemd_errors_for_direct(self) -> None:
-        """Direct backend should never produce systemd-specific errors."""
-        mc = _direct_mount_caps()
-        errors = _mount_errors(mc, _encrypted_mount())
-        systemd_errors = {
-            VolumeError.MOUNT_UNIT_NOT_CONFIGURED,
-            VolumeError.MOUNT_UNIT_MISMATCH,
-            VolumeError.CRYPTSETUP_SERVICE_NOT_CONFIGURED,
-            VolumeError.CRYPTSETUP_SERVICE_MISMATCH,
-            VolumeError.POLKIT_RULES_MISSING,
-        }
-        assert not systemd_errors.intersection(errors)
-
-
-# ── Runtime mount state fields ─────────────────────────────
+# ── MountCapabilities runtime state fields ─────────────────────
 
 
 class TestMountCapabilitiesRuntimeState:
-    """New runtime state fields on MountCapabilities default to None."""
-
     def test_defaults_to_none(self) -> None:
-        mc = MountCapabilities(resolved_backend="systemd")
+        mc = MountCapabilities()
         assert mc.device_present is None
-        assert mc.luks_attached is None
+        assert mc.luks_unlocked is None
         assert mc.mounted is None
+        assert mc.cleartext_device is None
+        assert mc.effective_path is None
+        assert mc.mount_failure_reason is None
 
     def test_explicit_values(self) -> None:
         mc = MountCapabilities(
-            resolved_backend="systemd",
             device_present=True,
-            luks_attached=True,
+            luks_unlocked=True,
             mounted=False,
         )
         assert mc.device_present is True
-        assert mc.luks_attached is True
+        assert mc.luks_unlocked is True
         assert mc.mounted is False
 
 
-# ── format_mount_status ───────────────────────────────────
+# ── format_mount_status ────────────────────────────────────────
 
 
 class TestFormatMountStatus:
@@ -479,68 +260,55 @@ class TestFormatMountStatus:
         assert format_mount_status(mc, None) == Text("")
 
     def test_encrypted_all_true(self) -> None:
-        mc = _base_mount_caps(device_present=True, luks_attached=True, mounted=True)
+        mc = _base_mount_caps(device_present=True, luks_unlocked=True, mounted=True)
         result = format_mount_status(mc, _encrypted_mount())
-        assert "\u2713device" in result
-        assert "\u2713luks" in result
-        assert "\u2713mounted" in result
+        assert "✓device" in result
+        assert "✓luks" in result
+        assert "✓mounted" in result
 
     def test_encrypted_device_absent_cascades_luks_to_warning(self) -> None:
-        """When the device isn't plugged in, the luks/mounted failures are
-        downstream consequences and should all render as warnings \u2014 an
-        absent disk shouldn't look like an authentication failure.
-        """
-        mc = _base_mount_caps(device_present=False, luks_attached=False, mounted=False)
+        mc = _base_mount_caps(device_present=False, luks_unlocked=False, mounted=False)
         result = format_mount_status(mc, _encrypted_mount())
-        assert "\u26a0device" in result
-        assert "\u26a0luks" in result
-        assert "\u26a0mounted" in result
+        assert "⚠device" in result
+        assert "⚠luks" in result
+        assert "⚠mounted" in result
 
     def test_encrypted_device_present_luks_probe_only_is_warning(self) -> None:
-        """Device present, ``luks_attached=False`` with no recorded
-        ``mount_failure_reason`` \u2014 e.g. ``preflight check`` on a
-        plugged-in but locked drive.  Treated as observation (\u26a0), not
-        a failure (\u2717).
-        """
-        mc = _base_mount_caps(device_present=True, luks_attached=False, mounted=False)
+        mc = _base_mount_caps(device_present=True, luks_unlocked=False, mounted=False)
         result = format_mount_status(mc, _encrypted_mount())
-        assert "\u2713device" in result
-        assert "\u26a0luks" in result
-        assert "\u26a0mounted" in result
+        assert "✓device" in result
+        assert "⚠luks" in result
+        assert "⚠mounted" in result
 
-    def test_encrypted_device_present_luks_attach_failed_is_fatal(self) -> None:
-        """A real LUKS-stage failure (``ATTACH_LUKS_FAILED``) on a present
-        device renders \u2717 on the LUKS column.
-        """
+    def test_encrypted_device_present_unlock_failed_is_fatal(self) -> None:
         mc = _base_mount_caps(
             device_present=True,
-            luks_attached=False,
+            luks_unlocked=False,
             mounted=None,
-            mount_failure_reason="attach_luks_failed",
+            mount_failure_reason="unlock_failed",
         )
         result = format_mount_status(mc, _encrypted_mount())
-        assert "\u2713device" in result
-        assert "\u2717luks" in result
+        assert "✓device" in result
+        assert "✗luks" in result
 
     def test_mount_failed_renders_mounted_as_fatal(self) -> None:
-        """A real mount-stage failure (``MOUNT_FAILED``) renders \u2717 on Mounted."""
         mc = _base_mount_caps(
             device_present=True,
-            luks_attached=True,
+            luks_unlocked=True,
             mounted=False,
             mount_failure_reason="mount_failed",
         )
         result = format_mount_status(mc, _encrypted_mount())
-        assert "\u2713device" in result
-        assert "\u2713luks" in result
-        assert "\u2717mounted" in result
+        assert "✓device" in result
+        assert "✓luks" in result
+        assert "✗mounted" in result
 
     def test_unencrypted_no_luks_column(self) -> None:
         mc = _base_mount_caps(device_present=True, mounted=True)
         result = format_mount_status(mc, _unencrypted_mount())
         assert "luks" not in result
-        assert "\u2713device" in result
-        assert "\u2713mounted" in result
+        assert "✓device" in result
+        assert "✓mounted" in result
 
     def test_not_probed_items_omitted(self) -> None:
         mc = _base_mount_caps(device_present=None, mounted=None)
@@ -549,139 +317,91 @@ class TestFormatMountStatus:
         assert "mounted" not in result
 
 
-# ── Observation reuse ─────────────────────────────────────
+# ── Observation reuse ──────────────────────────────────────────
 
 
 class TestObservationReuse:
     """Verify that mount observation values bypass runtime detection probes."""
 
     @patch("nbkp.disks.mount_checks.detect_device_present")
-    @patch("nbkp.disks.mount_checks.detect_luks_attached")
-    @patch("nbkp.disks.mount_checks.resolve_mount_unit")
-    @patch("nbkp.disks.mount_checks.detect_systemd_cryptsetup_path")
-    @patch("nbkp.disks.mount_checks._check_command_available", return_value=True)
-    @patch("nbkp.disks.mount_checks._check_systemctl_cat", return_value=True)
-    @patch("nbkp.disks.mount_checks._run_systemctl_show", return_value={})
-    def test_systemd_observation_skips_runtime_probes(
+    @patch("nbkp.disks.mount_checks.discover_cleartext_device")
+    @patch("nbkp.disks.mount_checks.resolve_target_device")
+    @patch("nbkp.disks.mount_checks.find_mountpoint")
+    @patch("nbkp.disks.mount_checks._check_fstab_entry", return_value="/mnt/encrypted")
+    def test_observation_skips_runtime_probes(
         self,
-        _mock_show: object,
-        _mock_cat: object,
-        _mock_cmd: object,
-        mock_cryptsetup_path: object,
-        mock_mount_unit: object,
-        mock_luks: object,
+        _mock_fstab: object,
+        mock_findmnt: object,
+        mock_resolve: object,
+        mock_discover: object,
         mock_device: object,
     ) -> None:
         """When observation is provided, runtime detection functions are not called."""
-        from nbkp.disks.mount_checks import _check_systemd_mount_capabilities
+        from nbkp.disks.mount_checks import check_mount_capabilities
 
         obs = MountObservation(
-            resolved_backend="systemd",
-            mount_unit="mnt-encrypted.mount",
-            systemd_cryptsetup_path="/usr/lib/systemd/systemd-cryptsetup",
             device_present=True,
-            luks_attached=True,
+            luks_unlocked=True,
             mounted=True,
+            cleartext_device="/dev/mapper/luks-x",
+            effective_path="/mnt/encrypted",
         )
-
         mount_tools = MountToolCapabilities(
-            has_systemctl=True,
-            has_systemd_escape=True,
-            has_systemd_cryptsetup=True,
-            systemd_cryptsetup_path="/usr/lib/systemd/systemd-cryptsetup",
-            has_sudo=True,
-            has_cryptsetup=True,
+            has_udisksctl=True,
+            udisksd_running=True,
+            has_findmnt=True,
+            has_lsblk=True,
         )
 
-        result = _check_systemd_mount_capabilities(
+        result = check_mount_capabilities(
             _encrypted_vol(), _encrypted_mount(), mount_tools, {}, obs
         )
 
-        # Runtime probes should not have been called
+        # Runtime probes should not have been called.
         mock_device.assert_not_called()  # type: ignore[union-attr]
-        mock_luks.assert_not_called()  # type: ignore[union-attr]
-        mock_mount_unit.assert_not_called()  # type: ignore[union-attr]
-        mock_cryptsetup_path.assert_not_called()  # type: ignore[union-attr]
+        mock_discover.assert_not_called()  # type: ignore[union-attr]
+        mock_resolve.assert_not_called()  # type: ignore[union-attr]
+        mock_findmnt.assert_not_called()  # type: ignore[union-attr]
 
-        # Values come from observation
+        # Values come from observation.
         assert result.device_present is True
-        assert result.luks_attached is True
+        assert result.luks_unlocked is True
         assert result.mounted is True
-        assert result.mount_unit == "mnt-encrypted.mount"
+        assert result.cleartext_device == "/dev/mapper/luks-x"
+        assert result.effective_path == "/mnt/encrypted"
 
-    @patch("nbkp.disks.mount_checks.detect_device_present")
-    @patch("nbkp.disks.mount_checks.detect_luks_attached")
-    @patch("nbkp.disks.mount_checks.run_on_volume")
-    @patch("nbkp.disks.mount_checks._check_command_available", return_value=True)
-    def test_direct_observation_skips_runtime_probes(
+    @patch("nbkp.disks.mount_checks._check_fstab_entry", return_value="/mnt/encrypted")
+    @patch("nbkp.disks.mount_checks.find_mountpoint", return_value="/mnt/encrypted")
+    @patch(
+        "nbkp.disks.mount_checks.resolve_target_device",
+        return_value="/dev/mapper/luks-x",
+    )
+    @patch(
+        "nbkp.disks.mount_checks.discover_cleartext_device",
+        return_value="/dev/mapper/luks-x",
+    )
+    @patch("nbkp.disks.mount_checks.detect_device_present", return_value=True)
+    def test_probes_when_no_observation(
         self,
-        _mock_cmd: object,
-        mock_run: object,
-        mock_luks: object,
         mock_device: object,
+        mock_discover: object,
+        mock_resolve: object,
+        mock_findmnt: object,
+        _mock_fstab: object,
     ) -> None:
-        """When observation is provided for direct backend, runtime probes are skipped."""
-        from nbkp.disks.mount_checks import _check_direct_mount_capabilities
-
-        obs = MountObservation(
-            resolved_backend="direct",
-            device_present=False,
-            luks_attached=None,
-            mounted=None,
-        )
+        """Without an observation, runtime detection functions are called."""
+        from nbkp.disks.mount_checks import check_mount_capabilities
 
         mount_tools = MountToolCapabilities(
-            has_mount_cmd=True,
-            has_umount_cmd=True,
-            has_mountpoint=True,
-            has_sudo=True,
-            has_cryptsetup=True,
+            has_udisksctl=True,
+            udisksd_running=True,
+            has_findmnt=True,
+            has_lsblk=True,
         )
-
-        result = _check_direct_mount_capabilities(
-            _unencrypted_vol(), _unencrypted_mount(), mount_tools, {}, obs
+        result = check_mount_capabilities(
+            _encrypted_vol(), _encrypted_mount(), mount_tools, {}, None
         )
-
-        mock_device.assert_not_called()  # type: ignore[union-attr]
-        mock_luks.assert_not_called()  # type: ignore[union-attr]
-        mock_run.assert_not_called()  # type: ignore[union-attr]
-
-        assert result.device_present is False
-        assert result.mounted is None
-
-    @patch("nbkp.disks.mount_checks._check_command_available", return_value=True)
-    @patch("nbkp.disks.mount_checks._check_systemctl_cat", return_value=True)
-    @patch("nbkp.disks.mount_checks._run_systemctl_show", return_value={})
-    def test_observation_decides_backend(
-        self,
-        _mock_show: object,
-        _mock_cat: object,
-        mock_cmd: object,
-    ) -> None:
-        """Observation's resolved_backend is used instead of probing systemctl."""
-        from nbkp.disks.mount_checks import (
-            check_mount_capabilities as _check_mount_capabilities,
-        )
-
-        obs = MountObservation(
-            resolved_backend="systemd",
-            mount_unit="mnt-encrypted.mount",
-            device_present=True,
-            mounted=True,
-        )
-
-        mount_tools = MountToolCapabilities(
-            has_systemctl=True,
-            has_systemd_escape=True,
-            has_sudo=True,
-            has_cryptsetup=True,
-            has_systemd_cryptsetup=True,
-            systemd_cryptsetup_path="/usr/lib/systemd/systemd-cryptsetup",
-        )
-
-        result = _check_mount_capabilities(
-            _encrypted_vol(), _encrypted_mount(), mount_tools, {}, obs
-        )
-
-        # Should have resolved to systemd backend from observation
-        assert result.resolved_backend == "systemd"
+        mock_device.assert_called_once()  # type: ignore[union-attr]
+        assert result.device_present is True
+        assert result.luks_unlocked is True
+        assert result.mounted is True

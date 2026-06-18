@@ -26,11 +26,8 @@ def _check_endpoint_sentinel(
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
     """Check if an endpoint sentinel file exists."""
-    rel_path = (
-        f"{volume.path}/{subdir}/{sentinel_name}"
-        if subdir
-        else f"{volume.path}/{sentinel_name}"
-    )
+    base = resolve_endpoint(volume, subdir)
+    rel_path = f"{base}/{sentinel_name}"
     match volume:
         case LocalVolume():
             return Path(rel_path).exists()
@@ -60,7 +57,15 @@ def _check_command_available(
 
 
 def resolve_endpoint(volume: Volume, subdir: str | None) -> str:
-    """Resolve the full endpoint path for a volume."""
+    """Resolve the full endpoint path for a volume.
+
+    The volume's ``path`` must be resolved by this point — either declared in
+    config, or filled in from the discovered mountpoint after mounting (see
+    ``disks.observation.apply_effective_paths``).
+    """
+    if volume.path is None:
+        msg = f"volume '{volume.slug}': mount path not resolved"
+        raise ValueError(msg)
     return f"{volume.path}/{subdir}" if subdir else volume.path
 
 
@@ -124,43 +129,6 @@ def read_symlink_target(
         case RemoteVolume():
             result = run_on_volume(["readlink", path], volume, resolved_endpoints)
             return result.stdout.strip() if result.returncode == 0 else None
-
-
-def _run_systemctl_show(
-    volume: Volume,
-    unit: str,
-    properties: list[str],
-    resolved_endpoints: ResolvedEndpoints,
-) -> dict[str, str]:
-    """Run ``systemctl show`` for a unit and parse property=value pairs."""
-    cmd = [
-        "systemctl",
-        "show",
-        unit,
-        "--no-pager",
-        *[f"-p{p}" for p in properties],
-    ]
-    result = run_on_volume(cmd, volume, resolved_endpoints)
-    if result.returncode != 0:
-        return {}
-    else:
-        return dict(
-            line.split("=", 1)
-            for line in result.stdout.strip().splitlines()
-            if "=" in line
-        )
-
-
-def _check_systemctl_cat(
-    volume: Volume,
-    unit: str,
-    resolved_endpoints: ResolvedEndpoints,
-) -> bool:
-    """Check if a systemd unit is known (``systemctl cat`` succeeds)."""
-    return (
-        run_on_volume(["systemctl", "cat", unit], volume, resolved_endpoints).returncode
-        == 0
-    )
 
 
 _MIN_RSYNC_VERSION = (3, 0, 0)

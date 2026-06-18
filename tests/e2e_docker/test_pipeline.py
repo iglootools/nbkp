@@ -58,7 +58,6 @@ class TestChainSync:
         bastion_container: SshEndpoint,
         proxied_ssh_endpoint: SshEndpoint,
         luks_uuid: str,
-        luks_mapper_name: str,
     ) -> None:
         """Data seeded in src-local-bare arrives at
         dst-local-bare after traversing the full chain,
@@ -69,17 +68,16 @@ class TestChainSync:
             bastion_container,
             proxied_ssh_endpoint,
             luks_uuid=luks_uuid,
-            luks_mapper_name=luks_mapper_name,
         )
         resolved = resolve_all_endpoints(config)
 
         # 2. Mount encrypted volume via production lifecycle
         with managed_mount(config, resolved, lambda _: LUKS_PASSPHRASE) as (
-            _mount_strategy,
+            _resolved_config,
             mount_observations,
         ):
             # 3. Setup: sentinels, seed data
-            src = setup_chain(config, tmp_path, docker_ssh_endpoint)
+            src = setup_chain(config, tmp_path, docker_ssh_endpoint, resolved)
 
             # 4–5. Preflight checks + run all syncs (production pipeline)
             pipeline = check_and_run(
@@ -111,7 +109,6 @@ class TestChainSync:
         bastion_container: SshEndpoint,
         proxied_ssh_endpoint: SshEndpoint,
         luks_uuid: str,
-        luks_mapper_name: str,
     ) -> None:
         """When an upstream sync is skipped (inactive), all transitive
         downstream syncs are cancelled via failure propagation."""
@@ -121,17 +118,16 @@ class TestChainSync:
             bastion_container,
             proxied_ssh_endpoint,
             luks_uuid=luks_uuid,
-            luks_mapper_name=luks_mapper_name,
         )
         resolved = resolve_all_endpoints(config)
 
         # 2. Mount encrypted volume via production lifecycle
         with managed_mount(config, resolved, lambda _: LUKS_PASSPHRASE) as (
-            _mount_strategy,
+            _resolved_config,
             mount_observations,
         ):
             # 3. Setup: sentinels, seed data
-            setup_chain(config, tmp_path, docker_ssh_endpoint)
+            setup_chain(config, tmp_path, docker_ssh_endpoint, resolved)
 
             # 4. Deliberately remove the .nbkp-dst sentinel on step-2's
             #    destination (ep-stage-remote-bare) to make step-2 inactive

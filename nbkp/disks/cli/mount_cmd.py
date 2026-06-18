@@ -17,7 +17,8 @@ from ..observation import build_mount_observations
 from ..output import display_name
 from . import app
 from .helpers import (
-    _error_status,
+    _ErrorStatus,
+    _error_label,
     _format_mount_result,
     _show_status_table,
     _unmanaged_statuses,
@@ -67,7 +68,7 @@ def mount(
         ),
     ] = None,
 ) -> None:
-    """Attach LUKS and mount volumes. Mounts all volumes with mount config, or specific ones via --name."""
+    """Unlock LUKS and mount volumes. Mounts all volumes with mount config, or specific ones via --name."""
     cfg = load_config_or_exit(config)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
 
@@ -103,7 +104,7 @@ def mount(
     # try/finally instead of `with` because mount_bar is conditionally
     # created (None when output is JSON), and cache.clear() must also run.
     try:
-        strategies, results = mount_volumes(
+        results = mount_volumes(
             cfg,
             resolved,
             passphrase_fn,
@@ -116,11 +117,14 @@ def mount(
             mount_bar.stop()
         cache.clear()
 
-    observations = build_mount_observations(results, strategies, cfg)
+    observations = build_mount_observations(results)
     statuses = [
         *((display_names.get(slug, slug), obs) for slug, obs in observations.items()),
         *(
-            (display_names.get(r.volume_slug, r.volume_slug), _error_status(r.detail))
+            (
+                _error_label(display_names.get(r.volume_slug, r.volume_slug), r.detail),
+                _ErrorStatus(),
+            )
             for r in results
             if not r.success and r.volume_slug not in observations
         ),

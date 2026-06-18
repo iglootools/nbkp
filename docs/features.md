@@ -58,16 +58,17 @@ nbkp uses lightweight sentinel files to guard against syncing to the wrong place
 
 ## Mount Management (Linux only)
 
-nbkp can automatically mount and umount volumes before and after backups, including LUKS-encrypted drives. This is especially useful for removable drives that need to be attached (LUKS) and mounted before syncing, and umounted and closed (LUKS) afterward.
+nbkp can automatically mount and umount volumes before and after backups, including LUKS-encrypted drives, via [udisks2](https://www.freedesktop.org/wiki/Software/udisks/). This is especially useful for removable drives that need to be unlocked (LUKS) and mounted before syncing, and umounted and locked (LUKS) afterward. See [Mount management with udisks2](./usage.md#mount-management-with-udisks2) for the full setup guide.
 
-- **LUKS encryption support**: automatic attach via `systemd-cryptsetup attach` with passphrase piped via stdin, close via `systemctl stop systemd-cryptsetup@<mapper>.service`
-- **Unencrypted volume mount**: `systemctl start/stop` for volumes with fstab or native .mount unit entries
+- **udisks-based, single backend**: all unlock/mount/unmount/lock operations go through `udisksctl`. There is no `strategy` field and no `sudo` in the mount path
+- **LUKS encryption support**: automatic unlock via `udisksctl unlock`, lock via `udisksctl lock`. Passphrases come from the operator's own machine (e.g. the laptop's keyring) and are sent to the server only transiently at unlock time — **no passwords are stored on the server**, which holds only the encrypted drives. The unlocked device is discovered at runtime — no `mapper-name` to configure
+- **Hybrid mount-point model**: declare `path` (backed by an `/etc/fstab` entry) to mount at a fixed path, or omit it to let udisks mount at `/run/media/<user>/<label>`, which nbkp discovers at runtime
 - **Credential providers**: retrieve LUKS passphrases from keyring, interactive prompt, environment variable, or external command (e.g. `pass`, 1Password CLI). The keyring provider delegates to the [keyring](https://github.com/jaraco/keyring) library, which supports macOS Keychain, GNOME Keyring / libsecret, KDE Wallet, and Windows Credential Locker. The `keyring` package is an optional dependency (`pip install nbkp[keyring]`)
-- **Idempotent**: skips already-attached and already-mounted volumes
+- **Idempotent**: skips already-unlocked and already-mounted volumes
 - **Integrated into `run`, `preflight check`, and `preflight troubleshoot`**: mount before running, umount in `finally` block (even on failure). Controllable via `--mount/--no-mount` and `--umount/--no-umount`
 - **Standalone commands**: `disks mount` and `disks umount` for manual lifecycle management
-- **Authorization setup**: `disks setup-auth` generates polkit and sudoers rules for passwordless mount/umount
-- **Pre-flight validation**: checks systemd tools, mount unit config, cryptsetup service config, polkit/sudoers rules, with actionable troubleshoot output
+- **Polkit-only authorization**: `disks setup-auth` generates a single polkit rule (`/etc/polkit-1/rules.d/50-nbkp.rules`) granting the backup user the udisks actions for passwordless mount/umount — required because nbkp runs over SSH / in inactive sessions
+- **Pre-flight validation**: checks `udisksctl` availability and a running `udisksd`, the polkit rule, fstab mapping for declared paths, and (for btrfs volumes) the `udisks2-btrfs` module, with actionable troubleshoot output
 
 ## Pre-flight Checks
 

@@ -122,8 +122,13 @@ class TestLoadConfig:
         cause = excinfo.value.__cause__
         assert cause is not None
         errors = cause.errors()
+        # ``path`` is now Optional with a model validator enforcing
+        # "path required iff no mount", so a missing path surfaces as a
+        # model-level value_error rather than a field "missing" error.
         assert any(
-            err["loc"] == ("volumes", "v", "local", "path") and err["type"] == "missing"
+            err["loc"] == ("volumes", "v", "local")
+            and err["type"] == "value_error"
+            and "'path' is required" in err["msg"]
             for err in errors
         )
 

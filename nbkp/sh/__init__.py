@@ -141,7 +141,18 @@ def _resolve_vol_path(
     dst_slugs: set[str],
     options: ScriptOptions,
 ) -> str:
-    """Resolve effective path for a single volume."""
+    """Resolve effective path for a single volume.
+
+    The generated script is static, so a volume must have a declared ``path``
+    (mount management — including discovery-model volumes with no ``path`` —
+    is excluded from ``sh``).
+    """
+    if vol.path is None:
+        msg = (
+            f"volume '{slug}': 'path' is required for shell script generation"
+            " (mount management is not supported in generated scripts)"
+        )
+        raise ValueError(msg)
     match vol:
         case RemoteVolume():
             return vol.path
@@ -177,6 +188,8 @@ def _substitute_vol_path(
         case RemoteVolume():
             return arg
         case LocalVolume():
+            if vol.path is None:
+                return arg
             return arg.replace(vol.path, vol_paths[slug], 1)
 
 

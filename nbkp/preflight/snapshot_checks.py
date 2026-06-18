@@ -22,7 +22,9 @@ def check_btrfs_filesystem(
 ) -> bool:
     """Check if the volume path is on a btrfs filesystem."""
     result = run_on_volume(
-        ["stat", "-f", "-c", "%T", volume.path], volume, resolved_endpoints
+        ["stat", "-f", "-c", "%T", resolve_endpoint(volume, None)],
+        volume,
+        resolved_endpoints,
     )
     return result.returncode == 0 and result.stdout.strip() == "btrfs"
 
@@ -39,7 +41,9 @@ def check_hardlink_support(
     Rejects known non-hardlink filesystems (FAT, exFAT).
     """
     result = run_on_volume(
-        ["stat", "-f", "-c", "%T", volume.path], volume, resolved_endpoints
+        ["stat", "-f", "-c", "%T", resolve_endpoint(volume, None)],
+        volume,
+        resolved_endpoints,
     )
     return (
         result.returncode != 0  # Cannot determine; assume supported
@@ -82,8 +86,19 @@ def check_btrfs_mount_option(
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
     """Check if the volume is mounted with a specific mount option."""
+    # This is the one mount query udisks2 cannot answer, which is why findmnt
+    # stays the tool for all of them. udisks exposes mountpoints
+    # (Filesystem.MountPoints) and *configured* fstab/crypttab options
+    # (Block.Configuration), but NOT the live mount-option string of a mounted
+    # filesystem. Worse, Block.Configuration only reflects fstab-supplied options,
+    # so an option granted via /etc/udisks2/mount_options.conf would be invisible
+    # there — breaking this check's route-agnostic guarantee (it must detect
+    # user_subvol_rm_allowed however it was supplied: fstab OR mount_options.conf).
+    # findmnt reads /proc/self/mountinfo (the kernel's live truth), so it sees the
+    # option regardless of how it got applied. (See find_mountpoint and
+    # _check_fstab_entry, which udisks *could* answer but use findmnt for symmetry.)
     result = run_on_volume(
-        ["findmnt", "-T", volume.path, "-n", "-o", "OPTIONS"],
+        ["findmnt", "-T", resolve_endpoint(volume, None), "-n", "-o", "OPTIONS"],
         volume,
         resolved_endpoints,
     )

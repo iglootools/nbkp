@@ -251,11 +251,10 @@ def _compute_tool_needs(
     """
     has_btrfs_endpoints = False
     has_snapshot_endpoints = False
-    mount_systemd = False
-    mount_direct = False
-    has_encryption = False
+    has_btrfs_mount = False
 
     vol_set = set(vol_slugs)
+    btrfs_volumes: set[str] = set()
 
     for sync in syncs.values():
         for ep_getter in (config.source_endpoint, config.destination_endpoint):
@@ -264,31 +263,25 @@ def _compute_tool_needs(
                 if ep.btrfs_snapshots.enabled:
                     has_btrfs_endpoints = True
                     has_snapshot_endpoints = True
+                    btrfs_volumes.add(ep.volume)
                 elif ep.hard_link_snapshots.enabled:
                     has_snapshot_endpoints = True
 
+    has_mount_volumes = False
     for vs in vol_slugs:
         vol = config.volumes[vs]
-        mount_config = getattr(vol, "mount", None)
-        if mount_config is not None:
-            if mount_config.encryption is not None:
-                has_encryption = True
-            match mount_config.strategy:
-                case "systemd":
-                    mount_systemd = True
-                case "direct":
-                    mount_direct = True
-                case "auto":
-                    # Auto could resolve to either — both tools may be needed
-                    mount_systemd = True
-                    mount_direct = True
+        if getattr(vol, "mount", None) is not None:
+            has_mount_volumes = True
+            # A mount-managed volume backing a btrfs-snapshot endpoint is on
+            # btrfs and needs the udisks btrfs module to mount cleanly.
+            if vs in btrfs_volumes:
+                has_btrfs_mount = True
 
     return SshEndpointToolNeeds(
         has_btrfs_endpoints=has_btrfs_endpoints,
         has_snapshot_endpoints=has_snapshot_endpoints,
-        mount_systemd=mount_systemd,
-        mount_direct=mount_direct,
-        has_encryption=has_encryption,
+        has_mount_volumes=has_mount_volumes,
+        has_btrfs_mount=has_btrfs_mount,
     )
 
 
