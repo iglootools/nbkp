@@ -331,7 +331,7 @@ class TestSyncConfig:
         assert sc.enabled is True
         assert sc.rsync_options.default_options_override is None
         assert sc.rsync_options.extra_options == []
-        assert sc.rsync_options.checksum is True
+        assert sc.rsync_options.checksum is False
         assert sc.rsync_options.compress is False
         assert sc.filters == []
         assert sc.filter_file is None
@@ -357,7 +357,7 @@ class TestSyncConfig:
         ]
         assert sc.rsync_options.extra_options == ["--bwlimit=1000"]
         assert sc.rsync_options.compress is True
-        assert sc.rsync_options.checksum is True
+        assert sc.rsync_options.checksum is False
         assert sc.filters == ["+ *.jpg", "- *.tmp"]
         assert sc.filter_file == "/etc/nbkp/filters.rules"
 

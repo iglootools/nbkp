@@ -52,7 +52,6 @@ class TestBuildRsyncCommandLocalToLocal:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--checksum",
             "/mnt/src/photos/",
             "/mnt/dst/backup/",
         ]
@@ -143,7 +142,6 @@ class TestBuildRsyncCommandLocalToRemote:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--checksum",
             "-e",
             f"ssh -o ConnectTimeout=10 -o BatchMode=yes -p 5022 -i {_SSH_KEY}",
             "/mnt/src/photos/",
@@ -190,7 +188,6 @@ class TestBuildRsyncCommandRemoteToLocal:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes",
             "admin@server.local:/data/",
@@ -388,7 +385,6 @@ class TestBuildRsyncCommandFilters:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--checksum",
             "--filter=+ *.jpg",
             "--filter=- *.tmp",
             "/mnt/src/",
@@ -423,7 +419,6 @@ class TestBuildRsyncCommandFilters:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--checksum",
             "--filter=merge /etc/nbkp/filters.rules",
             "/mnt/src/",
             "/mnt/dst/",
@@ -458,7 +453,6 @@ class TestBuildRsyncCommandFilters:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--checksum",
             "--filter=+ *.jpg",
             "--filter=merge /etc/nbkp/filters.rules",
             "/mnt/src/",
@@ -497,7 +491,6 @@ class TestBuildRsyncCommandFilters:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--checksum",
             "--filter=dir-merge .rsync-filter",
             "--filter=- .rsync-filter",
             "--filter=merge /etc/nbkp/rules.txt",
@@ -650,7 +643,28 @@ class TestBuildRsyncCommandOptions:
         ]
 
     def test_checksum_default(self) -> None:
+        # --checksum is opt-in: not emitted unless explicitly enabled.
         sync, config = self._simple_config()
+        cmd = build_rsync_command(sync, config)
+        assert "--checksum" not in cmd
+
+    def test_checksum_enabled(self) -> None:
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        sync = SyncConfig(
+            slug="s1",
+            source="ep-src",
+            destination="ep-dst",
+            rsync_options=RsyncOptions(checksum=True),
+        )
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+            },
+            syncs={"s1": sync},
+        )
         cmd = build_rsync_command(sync, config)
         assert "--checksum" in cmd
 
@@ -693,7 +707,6 @@ class TestBuildRsyncCommandOptions:
         )
         cmd = build_rsync_command(sync, config)
         assert "--compress" in cmd
-        assert "--checksum" in cmd
 
     def test_compress_default(self) -> None:
         sync, config = self._simple_config()
@@ -760,7 +773,6 @@ class TestBuildRsyncCommandProxyJump:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
             f" -p 5022 -i {_SSH_KEY}"
@@ -823,7 +835,6 @@ class TestBuildRsyncCommandProxyJump:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--checksum",
             "-e",
             f"ssh -o ConnectTimeout=10 -o BatchMode=yes -o {quoted}",
             "backup@server.internal:/data/",
@@ -900,7 +911,6 @@ class TestBuildRsyncCommandMultiHopProxy:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--checksum",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
             f" -p 5022 -i {_SSH_KEY}"
@@ -938,7 +948,6 @@ class TestBuildRsyncCommandSpacesInPaths:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
-            "--checksum",
             "/mnt/my src/my photos/",
             "/mnt/my dst/my backup/",
         ]
