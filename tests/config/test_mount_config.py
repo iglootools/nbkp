@@ -26,13 +26,11 @@ class TestMountConfig:
         mount = MountConfig(
             device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6",
             encryption=LuksEncryptionConfig(
-                mapper_name="seagate8tb",
                 passphrase_id="seagate8tb",
             ),
         )
         assert mount.encryption is not None
         assert mount.encryption.type == "luks"
-        assert mount.encryption.mapper_name == "seagate8tb"
         assert mount.encryption.passphrase_id == "seagate8tb"
 
     def test_invalid_uuid_rejected(self) -> None:
@@ -50,37 +48,16 @@ class TestMountConfig:
 
 class TestLuksEncryptionConfig:
     def test_type_defaults_to_luks(self) -> None:
-        cfg = LuksEncryptionConfig(mapper_name="disk1", passphrase_id="disk1")
+        cfg = LuksEncryptionConfig(passphrase_id="disk1")
         assert cfg.type == "luks"
 
-    def test_invalid_mapper_name_rejected(self) -> None:
-        with pytest.raises(ValueError, match="String should match pattern"):
-            LuksEncryptionConfig(
-                mapper_name="bad name!",
-                passphrase_id="disk1",
-            )
-
-    def test_mapper_name_with_hyphens(self) -> None:
-        cfg = LuksEncryptionConfig(
-            mapper_name="my-disk-1",
-            passphrase_id="my-disk",
-        )
-        assert cfg.mapper_name == "my-disk-1"
-
-    def test_mapper_name_with_underscores(self) -> None:
-        cfg = LuksEncryptionConfig(
-            mapper_name="my_disk_1",
-            passphrase_id="my-disk",
-        )
-        assert cfg.mapper_name == "my_disk_1"
-
-    def test_empty_mapper_name_rejected(self) -> None:
-        with pytest.raises(ValueError):
-            LuksEncryptionConfig(mapper_name="", passphrase_id="disk1")
+    def test_passphrase_id(self) -> None:
+        cfg = LuksEncryptionConfig(passphrase_id="my-disk")
+        assert cfg.passphrase_id == "my-disk"
 
     def test_empty_passphrase_id_rejected(self) -> None:
         with pytest.raises(ValueError):
-            LuksEncryptionConfig(mapper_name="disk1", passphrase_id="")
+            LuksEncryptionConfig(passphrase_id="")
 
 
 class TestVolumeWithMount:
@@ -90,10 +67,7 @@ class TestVolumeWithMount:
             path="/mnt/seagate8tb",
             mount=MountConfig(
                 device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6",
-                encryption=LuksEncryptionConfig(
-                    mapper_name="seagate8tb",
-                    passphrase_id="seagate8tb",
-                ),
+                encryption=LuksEncryptionConfig(passphrase_id="seagate8tb"),
             ),
         )
         assert vol.mount is not None
@@ -110,10 +84,7 @@ class TestVolumeWithMount:
             path="/mnt/seagate8tb",
             mount=MountConfig(
                 device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6",
-                encryption=LuksEncryptionConfig(
-                    mapper_name="seagate8tb",
-                    passphrase_id="nas-seagate8tb",
-                ),
+                encryption=LuksEncryptionConfig(passphrase_id="nas-seagate8tb"),
             ),
         )
         assert vol.mount is not None
@@ -125,6 +96,35 @@ class TestVolumeWithMount:
             path="/volume1/backups",
         )
         assert vol.mount is None
+
+
+class TestVolumePathRequirement:
+    """``path`` is optional when mount-managed, required otherwise."""
+
+    def test_local_path_optional_with_mount(self) -> None:
+        vol = LocalVolume(
+            slug="usb",
+            mount=MountConfig(device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6"),
+        )
+        assert vol.path is None
+        assert vol.mount is not None
+
+    def test_local_path_required_without_mount(self) -> None:
+        with pytest.raises(ValueError, match="'path' is required"):
+            LocalVolume(slug="data")
+
+    def test_remote_path_optional_with_mount(self) -> None:
+        vol = RemoteVolume(
+            slug="nas-usb",
+            ssh_endpoint="nas",
+            mount=MountConfig(device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6"),
+        )
+        assert vol.path is None
+        assert vol.mount is not None
+
+    def test_remote_path_required_without_mount(self) -> None:
+        with pytest.raises(ValueError, match="'path' is required"):
+            RemoteVolume(slug="nas", ssh_endpoint="nas")
 
 
 class TestCredentialProviderConfig:

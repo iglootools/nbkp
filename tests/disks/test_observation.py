@@ -9,8 +9,32 @@ from nbkp.config import (
     MountConfig,
 )
 from nbkp.disks.lifecycle import MountFailureReason, MountResult
-from nbkp.disks.observation import MountObservation, build_mount_observations
-from nbkp.disks.strategy import DirectMountStrategy, SystemdMountStrategy
+from nbkp.disks.observation import (
+    MountObservation,
+    apply_effective_paths,
+    build_mount_observations,
+)
+
+_ENCRYPTED_VOLUME = LocalVolume(
+    slug="enc",
+    path="/mnt/encrypted",
+    mount=MountConfig(
+        device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6",
+        encryption=LuksEncryptionConfig(passphrase_id="enc-pass"),
+    ),
+)
+
+_PLAIN_VOLUME = LocalVolume(
+    slug="plain",
+    path="/mnt/plain",
+    mount=MountConfig(device_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
+)
+
+# A mount-managed volume that omits path (Option B: discovered mountpoint).
+_DISCOVERED_VOLUME = LocalVolume(
+    slug="usb",
+    mount=MountConfig(device_uuid="cccccccc-dddd-eeee-ffff-000000000000"),
+)
 
 
 def _config_with_volumes(*volumes: LocalVolume) -> Config:
@@ -22,208 +46,166 @@ def _config_with_volumes(*volumes: LocalVolume) -> Config:
     )
 
 
-_ENCRYPTED_VOLUME = LocalVolume(
-    slug="enc",
-    path="/mnt/encrypted",
-    mount=MountConfig(
-        device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6",
-        encryption=LuksEncryptionConfig(
-            mapper_name="enc",
-            passphrase_id="enc-pass",
-        ),
-    ),
-)
-
-_PLAIN_VOLUME = LocalVolume(
-    slug="plain",
-    path="/mnt/plain",
-    mount=MountConfig(device_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
-)
-
-
 class TestBuildMountObservations:
-    def test_success_encrypted_systemd(self) -> None:
-        cfg = _config_with_volumes(_ENCRYPTED_VOLUME)
-        strategy = {
-            "enc": SystemdMountStrategy(
-                mount_unit="mnt-encrypted.mount",
-                cryptsetup_path="/usr/lib/systemd/systemd-cryptsetup",
+    def test_success_encrypted(self) -> None:
+        results = [
+            MountResult(
+                volume_slug="enc",
+                success=True,
+                device_present=True,
+                luks_unlocked=True,
+                mounted=True,
+                cleartext_device="/dev/mapper/luks-x",
+                effective_path="/mnt/encrypted",
             )
-        }
-        results = [MountResult(volume_slug="enc", success=True)]
-
-        obs = build_mount_observations(results, strategy, cfg)
-
+        ]
+        obs = build_mount_observations(results)
         assert obs["enc"] == MountObservation(
-            resolved_backend="systemd",
-            mount_unit="mnt-encrypted.mount",
-            systemd_cryptsetup_path="/usr/lib/systemd/systemd-cryptsetup",
             device_present=True,
-            luks_attached=True,
+            luks_unlocked=True,
             mounted=True,
+            cleartext_device="/dev/mapper/luks-x",
+            effective_path="/mnt/encrypted",
         )
 
-    def test_success_plain_direct(self) -> None:
-        cfg = _config_with_volumes(_PLAIN_VOLUME)
-        strategy = {"plain": DirectMountStrategy(volume_path="/mnt/plain")}
-        results = [MountResult(volume_slug="plain", success=True)]
-
-        obs = build_mount_observations(results, strategy, cfg)
-
-        assert obs["plain"] == MountObservation(
-            resolved_backend="direct",
-            device_present=True,
-            luks_attached=None,
-            mounted=True,
-        )
+    def test_success_plain(self) -> None:
+        results = [
+            MountResult(
+                volume_slug="plain",
+                success=True,
+                device_present=True,
+                luks_unlocked=None,
+                mounted=True,
+                effective_path="/mnt/plain",
+            )
+        ]
+        obs = build_mount_observations(results)
+        assert obs["plain"].device_present is True
+        assert obs["plain"].luks_unlocked is None
+        assert obs["plain"].mounted is True
 
     def test_device_not_present(self) -> None:
-        cfg = _config_with_volumes(_ENCRYPTED_VOLUME)
-        strategy = {"enc": SystemdMountStrategy(mount_unit="mnt-encrypted.mount")}
         results = [
             MountResult(
                 volume_slug="enc",
                 success=False,
                 failure_reason=MountFailureReason.DEVICE_NOT_PRESENT,
+                device_present=False,
             )
         ]
-
-        obs = build_mount_observations(results, strategy, cfg)
-
+        obs = build_mount_observations(results)
         assert obs["enc"].device_present is False
-        assert obs["enc"].luks_attached is None
+        assert obs["enc"].luks_unlocked is None
         assert obs["enc"].mounted is None
+        assert obs["enc"].failure_reason == MountFailureReason.DEVICE_NOT_PRESENT
 
-    def test_attach_luks_failed(self) -> None:
-        cfg = _config_with_volumes(_ENCRYPTED_VOLUME)
-        strategy = {"enc": SystemdMountStrategy(mount_unit="mnt-encrypted.mount")}
+    def test_unlock_failed_propagates_failure_reason(self) -> None:
         results = [
             MountResult(
                 volume_slug="enc",
                 success=False,
-                failure_reason=MountFailureReason.ATTACH_LUKS_FAILED,
+                failure_reason=MountFailureReason.UNLOCK_FAILED,
+                device_present=True,
+                luks_unlocked=False,
             )
         ]
-
-        obs = build_mount_observations(results, strategy, cfg)
-
+        obs = build_mount_observations(results)
         assert obs["enc"].device_present is True
-        assert obs["enc"].luks_attached is False
-        assert obs["enc"].mounted is None
-        assert obs["enc"].failure_reason == MountFailureReason.ATTACH_LUKS_FAILED
+        assert obs["enc"].luks_unlocked is False
+        assert obs["enc"].failure_reason == MountFailureReason.UNLOCK_FAILED
 
-    def test_sudoers_refused_propagated(self) -> None:
-        cfg = _config_with_volumes(_ENCRYPTED_VOLUME)
-        strategy = {"enc": SystemdMountStrategy(mount_unit="mnt-encrypted.mount")}
+    def test_not_authorized_propagated(self) -> None:
         results = [
             MountResult(
                 volume_slug="enc",
                 success=False,
-                failure_reason=MountFailureReason.SUDOERS_REFUSED,
+                failure_reason=MountFailureReason.NOT_AUTHORIZED,
+                device_present=True,
+                luks_unlocked=False,
             )
         ]
+        obs = build_mount_observations(results)
+        assert obs["enc"].failure_reason == MountFailureReason.NOT_AUTHORIZED
+        assert obs["enc"].mount_failure_reason == "not_authorized"
 
-        obs = build_mount_observations(results, strategy, cfg)
-
-        assert obs["enc"].device_present is True
-        assert obs["enc"].luks_attached is False
-        assert obs["enc"].mounted is None
-        assert obs["enc"].failure_reason == MountFailureReason.SUDOERS_REFUSED
-
-    def test_polkit_refused_propagated(self) -> None:
-        cfg = _config_with_volumes(_ENCRYPTED_VOLUME)
-        strategy = {"enc": SystemdMountStrategy(mount_unit="mnt-encrypted.mount")}
-        results = [
-            MountResult(
-                volume_slug="enc",
-                success=False,
-                failure_reason=MountFailureReason.POLKIT_REFUSED,
-            )
-        ]
-
-        obs = build_mount_observations(results, strategy, cfg)
-
-        # POLKIT_REFUSED means systemctl start was refused, so LUKS was
-        # attached but mount didn't happen.
-        assert obs["enc"].device_present is True
-        assert obs["enc"].luks_attached is True
-        assert obs["enc"].mounted is False
-        assert obs["enc"].failure_reason == MountFailureReason.POLKIT_REFUSED
-
-    def test_mount_failed_encrypted(self) -> None:
-        cfg = _config_with_volumes(_ENCRYPTED_VOLUME)
-        strategy = {"enc": SystemdMountStrategy(mount_unit="mnt-encrypted.mount")}
-        results = [
-            MountResult(
-                volume_slug="enc",
-                success=False,
-                failure_reason=MountFailureReason.MOUNT_FAILED,
-            )
-        ]
-
-        obs = build_mount_observations(results, strategy, cfg)
-
-        assert obs["enc"].device_present is True
-        assert obs["enc"].luks_attached is True
-        assert obs["enc"].mounted is False
-
-    def test_mount_failed_plain(self) -> None:
-        cfg = _config_with_volumes(_PLAIN_VOLUME)
-        strategy = {"plain": DirectMountStrategy(volume_path="/mnt/plain")}
+    def test_mount_failed(self) -> None:
         results = [
             MountResult(
                 volume_slug="plain",
                 success=False,
                 failure_reason=MountFailureReason.MOUNT_FAILED,
+                device_present=True,
+                mounted=False,
             )
         ]
-
-        obs = build_mount_observations(results, strategy, cfg)
-
+        obs = build_mount_observations(results)
         assert obs["plain"].device_present is True
-        assert obs["plain"].luks_attached is None
         assert obs["plain"].mounted is False
+        assert obs["plain"].failure_reason == MountFailureReason.MOUNT_FAILED
 
-    def test_strategy_not_resolved_skipped(self) -> None:
-        cfg = _config_with_volumes(_PLAIN_VOLUME)
-        strategy = {"plain": DirectMountStrategy(volume_path="/mnt/plain")}
+    def test_unreachable_skipped(self) -> None:
         results = [
             MountResult(
-                volume_slug="plain",
+                volume_slug="enc",
                 success=False,
-                failure_reason=MountFailureReason.STRATEGY_NOT_RESOLVED,
+                failure_reason=MountFailureReason.UNREACHABLE,
             )
         ]
+        obs = build_mount_observations(results)
+        assert "enc" not in obs
 
-        obs = build_mount_observations(results, strategy, cfg)
-
-        assert "plain" not in obs
-
-    def test_no_result_for_volume_skipped(self) -> None:
-        cfg = _config_with_volumes(_PLAIN_VOLUME)
-        strategy = {"plain": DirectMountStrategy(volume_path="/mnt/plain")}
-        results: list[MountResult] = []
-
-        obs = build_mount_observations(results, strategy, cfg)
-
-        assert obs == {}
+    def test_no_results(self) -> None:
+        assert build_mount_observations([]) == {}
 
     def test_multiple_volumes(self) -> None:
-        cfg = _config_with_volumes(_ENCRYPTED_VOLUME, _PLAIN_VOLUME)
-        strategy = {
-            "enc": SystemdMountStrategy(mount_unit="mnt-encrypted.mount"),
-            "plain": DirectMountStrategy(volume_path="/mnt/plain"),
-        }
         results = [
-            MountResult(volume_slug="enc", success=True),
+            MountResult(volume_slug="enc", success=True, mounted=True),
             MountResult(
                 volume_slug="plain",
                 success=False,
                 failure_reason=MountFailureReason.DEVICE_NOT_PRESENT,
+                device_present=False,
             ),
         ]
-
-        obs = build_mount_observations(results, strategy, cfg)
-
+        obs = build_mount_observations(results)
         assert obs["enc"].mounted is True
         assert obs["plain"].device_present is False
+
+
+class TestApplyEffectivePaths:
+    def test_fills_discovered_path_when_omitted(self) -> None:
+        cfg = _config_with_volumes(_DISCOVERED_VOLUME)
+        observations = {
+            "usb": MountObservation(
+                device_present=True,
+                mounted=True,
+                effective_path="/run/media/backup/label",
+            )
+        }
+        updated = apply_effective_paths(cfg, observations)
+        assert updated.volumes["usb"].path == "/run/media/backup/label"
+
+    def test_declared_path_left_untouched(self) -> None:
+        cfg = _config_with_volumes(_PLAIN_VOLUME)
+        observations = {
+            "plain": MountObservation(
+                device_present=True,
+                mounted=True,
+                effective_path="/somewhere/else",
+            )
+        }
+        updated = apply_effective_paths(cfg, observations)
+        # Declared path wins; not overwritten by the observation.
+        assert updated.volumes["plain"].path == "/mnt/plain"
+
+    def test_no_effective_path_returns_same_config(self) -> None:
+        cfg = _config_with_volumes(_DISCOVERED_VOLUME)
+        observations = {
+            "usb": MountObservation(device_present=False, effective_path=None)
+        }
+        updated = apply_effective_paths(cfg, observations)
+        assert updated is cfg
+
+    def test_no_observations_returns_same_config(self) -> None:
+        cfg = _config_with_volumes(_DISCOVERED_VOLUME)
+        assert apply_effective_paths(cfg, {}) is cfg

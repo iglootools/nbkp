@@ -35,9 +35,9 @@ class TestMountResultSeverityDefaultStrictness:
             is Severity.WARNING
         )
 
-    def test_luks_failure_is_error(self) -> None:
+    def test_unlock_failure_is_error(self) -> None:
         assert (
-            mount_result_severity(_result(False, MountFailureReason.ATTACH_LUKS_FAILED))
+            mount_result_severity(_result(False, MountFailureReason.UNLOCK_FAILED))
             is Severity.ERROR
         )
 
@@ -47,15 +47,17 @@ class TestMountResultSeverityDefaultStrictness:
             is Severity.ERROR
         )
 
-    def test_sudoers_refused_is_error(self) -> None:
+    def test_not_authorized_is_error(self) -> None:
         assert (
-            mount_result_severity(_result(False, MountFailureReason.SUDOERS_REFUSED))
+            mount_result_severity(_result(False, MountFailureReason.NOT_AUTHORIZED))
             is Severity.ERROR
         )
 
-    def test_polkit_refused_is_error(self) -> None:
+    def test_udisks_not_available_is_error(self) -> None:
         assert (
-            mount_result_severity(_result(False, MountFailureReason.POLKIT_REFUSED))
+            mount_result_severity(
+                _result(False, MountFailureReason.UDISKS_NOT_AVAILABLE)
+            )
             is Severity.ERROR
         )
 
@@ -99,10 +101,10 @@ class TestMountResultSeverityIgnoreAll:
             is Severity.WARNING
         )
 
-    def test_luks_failure_is_warning(self) -> None:
+    def test_unlock_failure_is_warning(self) -> None:
         assert (
             mount_result_severity(
-                _result(False, MountFailureReason.ATTACH_LUKS_FAILED),
+                _result(False, MountFailureReason.UNLOCK_FAILED),
                 Strictness.IGNORE_ALL,
             )
             is Severity.WARNING

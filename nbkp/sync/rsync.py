@@ -45,7 +45,14 @@ _DEFAULT_RSYNC_OPTIONS: list[str] = [
 
 
 def resolve_path(volume: LocalVolume | RemoteVolume, subdir: str | None) -> str:
-    """Resolve the full path for a volume with optional subdir."""
+    """Resolve the full path for a volume with optional subdir.
+
+    The volume's ``path`` must be resolved by this point (declared in config,
+    or filled from the discovered mountpoint after mounting).
+    """
+    if volume.path is None:
+        msg = f"volume '{volume.slug}': mount path not resolved"
+        raise ValueError(msg)
     if subdir:
         return f"{volume.path}/{subdir}"
     else:

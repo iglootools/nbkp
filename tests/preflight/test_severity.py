@@ -39,9 +39,7 @@ class TestSeverityForError:
             is Severity.ERROR
         )
         assert (
-            severity_for_error(
-                VolumeError.ATTACH_LUKS_FAILED, Strictness.IGNORE_INACTIVE
-            )
+            severity_for_error(VolumeError.UNLOCK_FAILED, Strictness.IGNORE_INACTIVE)
             is Severity.ERROR
         )
 
@@ -114,7 +112,7 @@ class TestSeverityForErrors:
             severity_for_errors(
                 [
                     VolumeError.SENTINEL_NOT_FOUND,  # warning
-                    VolumeError.ATTACH_LUKS_FAILED,  # error
+                    VolumeError.UNLOCK_FAILED,  # error
                 ],
                 Strictness.IGNORE_INACTIVE,
             )
