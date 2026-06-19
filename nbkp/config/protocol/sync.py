@@ -15,7 +15,7 @@ class RsyncOptions(_BaseModel):
 
     model_config = ConfigDict(frozen=True)
     compress: bool = Field(default=False, description="Enable rsync `--compress`")
-    checksum: bool = Field(default=True, description="Enable rsync `--checksum`")
+    checksum: bool = Field(default=False, description="Enable rsync `--checksum`")
     default_options_override: Optional[List[str]] = Field(
         default=None, description="Replace default rsync flags entirely"
     )

@@ -200,7 +200,7 @@ A sync describes a one-way data transfer from a source sync endpoint to a destin
 
 **Enabling and disabling** — Each sync has an `enabled` flag (default: `true`). Syncs can also be selectively run via CLI options.
 
-**Rsync options** — Each sync uses a set of default rsync flags (`-a --delete --delete-excluded --partial-dir=.rsync-partial --safe-links --checksum`). These can be customized per sync: `compress` and `checksum` toggle specific flags, `default-options-override` replaces the defaults entirely, and `extra-options` appends additional flags.
+**Rsync options** — Each sync uses a set of default rsync flags (`-a --delete --delete-excluded --partial-dir=.rsync-partial --safe-links`). These can be customized per sync: `compress` and `checksum` are opt-in flags (both off by default), `default-options-override` replaces the defaults entirely, and `extra-options` appends additional flags.
 
 **Filters** — Each sync can define rsync filter rules to control which files are included or excluded. Structured `include`/`exclude` rules, `merge` (global filter file) and `dir-merge` (per-directory filter file discovery, like rsync's `-F`), raw rsync filter strings, and external filter files are all supported. They can be combined and are applied in order.
 
@@ -225,7 +225,7 @@ Each destination endpoint can only be used by one sync (no two syncs may share t
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `compress` | boolean | `false` | Enable rsync `--compress` |
-| `checksum` | boolean | `true` | Enable rsync `--checksum` |
+| `checksum` | boolean | `false` | Enable rsync `--checksum` |
 | `default-options-override` | list of strings | `null` | Replace default rsync flags entirely |
 | `extra-options` | list of strings | `[]` | Additional flags appended after defaults |
 

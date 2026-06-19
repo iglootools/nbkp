@@ -292,7 +292,7 @@ This section documents every external command nbkp invokes on local or remote ho
 
 | Command | Purpose |
 |---|---|
-| `rsync -a --delete --delete-excluded --partial-dir=.rsync-partial --safe-links --checksum ...` | Data sync with default flags |
+| `rsync -a --delete --delete-excluded --partial-dir=.rsync-partial --safe-links ...` | Data sync with default flags |
 | `--filter=H .nbkp-*` / `--filter=P .nbkp-*` | Hide/protect sentinel files during transfer |
 | `--compress`, `--checksum` | Optional per-sync flags |
 | `--link-dest=<prev-snapshot>` | Hard-link snapshots: reference previous snapshot for deduplication |
