@@ -222,6 +222,11 @@ def check_config() -> Config:
     sync_endpoints["orphan-sync-endpoint"] = SyncEndpoint(
         slug="orphan-sync-endpoint",
         volume="usb-drive",
+        # Distinct subdir so it doesn't overlap usb-photos/usb-music (a root
+        # endpoint would be nested over every subdir endpoint on usb-drive).
+        # Its demo role is being orphaned (unreferenced by any sync), which a
+        # subdir does not change.
+        subdir="orphan-data",
     )
     sync_endpoints["mount-encrypted-dst"] = SyncEndpoint(
         slug="mount-encrypted-dst",
@@ -285,6 +290,13 @@ def check_data(
     laptop_vs = VolumeStatus(
         slug="laptop",
         config=config.volumes["laptop"],
+        ssh_endpoint_status=localhost_ssh,
+        diagnostics=VolumeDiagnostics(capabilities=_local_caps),
+        errors=[],
+    )
+    laptop_system_vs = VolumeStatus(
+        slug="laptop-system",
+        config=config.volumes["laptop-system"],
         ssh_endpoint_status=localhost_ssh,
         diagnostics=VolumeDiagnostics(capabilities=_local_caps),
         errors=[],
@@ -356,6 +368,7 @@ def check_data(
 
     vol_statuses = {
         "laptop": laptop_vs,
+        "laptop-system": laptop_system_vs,
         "usb-drive": usb_vs,
         "nas-backup": nas_vs,
         "external-drive": external_vs,
@@ -403,7 +416,7 @@ def check_data(
         ),
     )
 
-    laptop_root_src_ep = _active_src_ep_status("laptop-root", laptop_vs)
+    laptop_root_src_ep = _active_src_ep_status("laptop-root", laptop_system_vs)
 
     sync_statuses = {
         "photos-to-usb": SyncStatus(
@@ -431,7 +444,9 @@ def check_data(
         "disabled-backup": SyncStatus(
             slug="disabled-backup",
             config=config.syncs["disabled-backup"],
-            source_endpoint_status=_inactive_src_ep_status("laptop-root", laptop_vs),
+            source_endpoint_status=_inactive_src_ep_status(
+                "laptop-root", laptop_system_vs
+            ),
             destination_endpoint_status=_inactive_dst_ep_status(
                 "external-root", external_vs
             ),
@@ -440,7 +455,9 @@ def check_data(
         "backup-to-encrypted": SyncStatus(
             slug="backup-to-encrypted",
             config=config.syncs["backup-to-encrypted"],
-            source_endpoint_status=_inactive_src_ep_status("laptop-root", laptop_vs),
+            source_endpoint_status=_inactive_src_ep_status(
+                "laptop-root", laptop_system_vs
+            ),
             destination_endpoint_status=_inactive_dst_ep_status(
                 "mount-encrypted-dst", mount_encrypted_vs
             ),
@@ -973,6 +990,9 @@ def troubleshoot_config() -> Config:
         "usb-btrfs-src": SyncEndpoint(
             slug="usb-btrfs-src",
             volume="usb-drive",
+            # Subdir (not volume root) so it doesn't overlap the other usb-drive
+            # source endpoints (hl-stage, src-latest-invalid, …).
+            subdir="btrfs-src",
             btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
         ),
         # Each sync gets its own unique destination endpoint
@@ -983,6 +1003,9 @@ def troubleshoot_config() -> Config:
         "dst-unavail": SyncEndpoint(
             slug="dst-unavail",
             volume="nas-backup",
+            # Subdir (not volume root) so it doesn't overlap the other
+            # nas-backup destination endpoints (dst-rsync-missing, …).
+            subdir="unavail",
         ),
         "dst-sentinels": SyncEndpoint(
             slug="dst-sentinels",

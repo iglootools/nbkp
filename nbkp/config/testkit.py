@@ -56,6 +56,11 @@ def nas_public_server() -> SshEndpoint:
 def base_volumes() -> dict[str, LocalVolume | RemoteVolume]:
     return {
         "laptop": LocalVolume(slug="laptop", path="/mnt/data"),
+        # Dedicated volume for the whole-volume (no-subdir) `laptop-root`
+        # endpoint.  It can't share the `laptop` volume with the photos/docs/
+        # music subdir endpoints: a root endpoint overlaps every subdir
+        # endpoint on the same volume, which config validation rejects.
+        "laptop-system": LocalVolume(slug="laptop-system", path="/mnt/system"),
         "usb-drive": LocalVolume(slug="usb-drive", path="/mnt/usb-backup"),
         "nas-backup": RemoteVolume(
             slug="nas-backup",
@@ -112,7 +117,7 @@ def base_sync_endpoints() -> dict[str, SyncEndpoint]:
         ),
         "laptop-root": SyncEndpoint(
             slug="laptop-root",
-            volume="laptop",
+            volume="laptop-system",
         ),
     }
 
