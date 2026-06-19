@@ -577,6 +577,19 @@ def _troubleshoot_volumes() -> dict[str, LocalVolume]:
                 ),
             ),
         ),
+        # Mount-managed encrypted btrfs volume that mounts successfully but is
+        # missing user_subvol_rm_allowed — exercises the udisks-managed branch
+        # of the VOL_NOT_MOUNTED_USER_SUBVOL_RM troubleshoot fix.
+        "mount-btrfs-subvolrm": LocalVolume(
+            slug="mount-btrfs-subvolrm",
+            path="/mnt/btrfs-subvolrm",
+            mount=MountConfig(
+                device_uuid="99999999-aaaa-bbbb-cccc-dddddddddddd",
+                encryption=LuksEncryptionConfig(
+                    passphrase_id="btrfs-subvolrm",
+                ),
+            ),
+        ),
         "usb-10": LocalVolume(slug="usb-10", path="/mnt/usb-10"),
         "usb-11": LocalVolume(slug="usb-11", path="/mnt/usb-11"),
         "usb-12": LocalVolume(slug="usb-12", path="/mnt/usb-12"),
@@ -649,6 +662,34 @@ _TROUBLESHOOT_LOCALHOST_MOUNT_DEVICE_MISSING_SSH = SshEndpointStatus.from_diagno
     ),
     needs=SshEndpointToolNeeds(
         has_mount_volumes=True,
+    ),
+)
+
+# localhost: btrfs + udisks all present (mount-managed btrfs volume that mounts
+# but is missing user_subvol_rm_allowed)
+_TROUBLESHOOT_LOCALHOST_BTRFS_SUBVOLRM_SSH = SshEndpointStatus.from_diagnostics(
+    slug="localhost",
+    diagnostics=SshEndpointDiagnostics(
+        host_tools=HostToolCapabilities(
+            has_rsync=True,
+            rsync_version_ok=True,
+            has_btrfs=True,
+            has_stat=True,
+            has_findmnt=True,
+        ),
+        mount_tools=MountToolCapabilities(
+            has_udisksctl=True,
+            udisksd_running=True,
+            has_findmnt=True,
+            has_lsblk=True,
+            has_btrfs_module=True,
+        ),
+    ),
+    needs=SshEndpointToolNeeds(
+        has_mount_volumes=True,
+        has_btrfs_mount=True,
+        has_btrfs_endpoints=True,
+        has_snapshot_endpoints=True,
     ),
 )
 
@@ -1072,6 +1113,11 @@ def troubleshoot_config() -> Config:
             slug="mount-unencrypted-dst",
             volume="mount-unencrypted",
         ),
+        "mount-btrfs-subvolrm-dst": SyncEndpoint(
+            slug="mount-btrfs-subvolrm-dst",
+            volume="mount-btrfs-subvolrm",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+        ),
         "mount-device-missing-dst": SyncEndpoint(
             slug="mount-device-missing-dst",
             volume="mount-device-missing",
@@ -1224,6 +1270,11 @@ def troubleshoot_config() -> Config:
                 slug="mount-unencrypted-errors",
                 source="laptop-src",
                 destination="mount-unencrypted-dst",
+            ),
+            "mount-btrfs-subvolrm-missing": SyncConfig(
+                slug="mount-btrfs-subvolrm-missing",
+                source="laptop-src",
+                destination="mount-btrfs-subvolrm-dst",
             ),
             "mount-device-missing": SyncConfig(
                 slug="mount-device-missing",
@@ -1397,6 +1448,31 @@ def troubleshoot_data(
         errors=[
             VolumeError.VOLUME_NOT_MOUNTED,
         ],
+    )
+    # mount-btrfs-subvolrm: udisks-managed encrypted btrfs volume that unlocks
+    # and mounts fine, but the live mount lacks user_subvol_rm_allowed (needed
+    # for snapshot pruning).  The volume itself is healthy (no VolumeError); the
+    # missing option surfaces as a destination-endpoint error below.
+    mount_btrfs_subvolrm_vs = VolumeStatus(
+        slug="mount-btrfs-subvolrm",
+        config=config.volumes["mount-btrfs-subvolrm"],
+        ssh_endpoint_status=_TROUBLESHOOT_LOCALHOST_BTRFS_SUBVOLRM_SSH,
+        diagnostics=VolumeDiagnostics(
+            capabilities=VolumeCapabilities(
+                sentinel_exists=True,
+                is_btrfs_filesystem=True,
+                hardlink_supported=True,
+                btrfs_user_subvol_rm=False,
+                mount=MountCapabilities(
+                    has_fstab_entry=True,
+                    fstab_target="/mnt/btrfs-subvolrm",
+                    device_present=True,
+                    luks_unlocked=True,
+                    mounted=True,
+                ),
+            ),
+        ),
+        errors=[],
     )
     # mount-device-missing: device not plugged in (Layer 2)
     # Note: SSH endpoint has udisksd-not-running (inactive) but volume errors
@@ -1660,6 +1736,7 @@ def troubleshoot_data(
         "usb-9": usb9_vs,
         "mount-encrypted": mount_encrypted_vs,
         "mount-unencrypted": mount_unencrypted_vs,
+        "mount-btrfs-subvolrm": mount_btrfs_subvolrm_vs,
         "mount-device-missing": mount_device_missing_vs,
         "mount-fstab-mismatch": mount_mismatch_vs,
         "mount-luks-failed": mount_luks_failed_vs,
@@ -2054,6 +2131,39 @@ def troubleshoot_data(
         source_endpoint_status=laptop_src_inactive,
         destination_endpoint_status=_inactive_dst_ep_status(
             "mount-unencrypted-dst", mount_unencrypted_vs
+        ),
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
+    )
+
+    # mount-btrfs-subvolrm-missing: udisks-managed encrypted btrfs volume mounts
+    # fine but is missing user_subvol_rm_allowed (Layer 3 destination error).
+    # Exercises the udisks-managed branch of the troubleshoot fix (fstab +
+    # mount_options.conf options).
+    sync_statuses["mount-btrfs-subvolrm-missing"] = SyncStatus(
+        slug="mount-btrfs-subvolrm-missing",
+        config=config.syncs["mount-btrfs-subvolrm-missing"],
+        source_endpoint_status=laptop_src_inactive,
+        destination_endpoint_status=DestinationEndpointStatus(
+            endpoint_slug="mount-btrfs-subvolrm-dst",
+            volume_status=mount_btrfs_subvolrm_vs,
+            diagnostics=DestinationEndpointDiagnostics(
+                endpoint_slug="mount-btrfs-subvolrm-dst",
+                sentinel_exists=True,
+                endpoint_writable=True,
+                btrfs=BtrfsStagingSubvolumeDiagnostics(
+                    staging_exists=True,
+                    staging_is_subvolume=True,
+                    staging_writable=True,
+                ),
+                snapshot_dirs=SnapshotDirsDiagnostics(exists=True, writable=True),
+                latest=LatestSymlinkState(exists=True, raw_target="/dev/null"),
+            ),
+            errors=[
+                DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM,
+            ],
         ),
         errors=[
             SyncError.SOURCE_ENDPOINT_INACTIVE,
