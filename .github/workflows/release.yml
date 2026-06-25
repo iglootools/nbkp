@@ -13,7 +13,7 @@ jobs:
   bump-version:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Full history + tags required for mathieudutour/github-tag-action
           # to find the previous tag and generate the changelog from commits
