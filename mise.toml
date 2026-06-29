@@ -90,7 +90,9 @@ run = [
 # Test Tasks
 [tasks.test-unit]
 description = "Run unit tests (no Docker, no external dependencies)"
-run = "poetry run pytest tests/ --ignore=tests/e2e_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -v"
+# -n auto: distribute across worker processes (pytest-xdist). Unit tests are fully
+# isolated (tmp_path, monkeypatch), so they parallelize cleanly.
+run = "poetry run pytest tests/ --ignore=tests/e2e_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -n auto -v"
 
 [tasks.test-e2e]
 description = "Run end-to-end sync tests (Docker)"
@@ -115,7 +117,14 @@ run = [
 
 [tasks.test-integration-docker]
 description = "Run all Docker-based tests (e2e + integration)"
-run = "poetry run pytest tests/integration_docker/ -v"
+# -n 2 (capped, NOT auto): session-scoped container fixtures are instantiated once per
+# xdist worker, so each worker spins up its own privileged container. Those containers
+# set up loopback-backed btrfs+LUKS filesystems, and the mount/LUKS tests use a fixed
+# device-mapper name — both are HOST-KERNEL resources shared across containers on the
+# Docker VM. Beyond ~2 concurrent privileged containers they contend (loop-device
+# exhaustion, device-mapper name conflicts) and the disks tests fail intermittently.
+# -n 2 is the reliable ceiling and still roughly halves wall time vs serial.
+run = "poetry run pytest tests/integration_docker/ -n 2 -v"
 
 [tasks.test-integration-docker-btrfs]
 description = "Run local btrfs tests inside Docker (privileged)"
@@ -133,7 +142,9 @@ docker run --rm --privileged \
 
 [tasks.test-integration-fs]
 description = "Run filesystem integration tests"
-run = "poetry run pytest tests/integration_fs/ -v"
+# -n auto: each test isolates its real-rsync work under a unique tmp_path, so workers
+# don't contend for shared filesystem state.
+run = "poetry run pytest tests/integration_fs/ -n auto -v"
 
 [tasks.test-all]
 description = "Run all tests"

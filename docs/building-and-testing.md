@@ -37,9 +37,10 @@ mise run depgraph           # regenerate Module Overview in docs/architecture.md
 mise run depgraph-check     # check Module Overview is up to date
 
 # Using Poetry syntax directly
-poetry run pytest tests/ --ignore=tests/e2e_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -v  # Unit tests only
+poetry run pytest tests/ --ignore=tests/e2e_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -n auto -v  # Unit tests only
 poetry run pytest tests/e2e_docker/ -v                                   # End-to-end sync tests
-poetry run pytest tests/integration_docker/ tests/integration_fs/ -v    # Integration tests
+poetry run pytest tests/integration_fs/ -n auto -v                       # Filesystem integration tests
+poetry run pytest tests/integration_docker/ -n 2 -v                      # Docker integration tests (capped at 2 workers)
 poetry run pytest tests/ -v                                             # All tests
 poetry run ruff format .                                                # formatting
 poetry run ruff check nbkp/ tests/                                      # linting
@@ -47,6 +48,22 @@ poetry run pyright nbkp/                                                # type-c
 poetry run vermin --target=3.12- --no-tips --no-parse-comments nbkp/ tests/  # compat check
 poetry run pytest tests/test_ssh.py::TestBuildSshBaseArgs::test_full -v # run a single test
 ```
+
+### Parallel test execution
+
+Tests run under [pytest-xdist](https://pytest-xdist.readthedocs.io/), with per-suite worker counts chosen for what each suite can safely parallelize:
+
+| Suite | mise task | Workers | Why |
+|---|---|---|---|
+| Unit | `test-unit` | `-n auto` | Fully isolated (`tmp_path`, `monkeypatch`); no external state. |
+| Filesystem integration | `test-integration-fs` | `-n auto` | Each test isolates real-rsync work under a unique `tmp_path`. |
+| Docker integration | `test-integration-docker` | `-n 2` | Capped — see below. |
+| Local btrfs (privileged) | `test-integration-docker-btrfs` | serial | Single privileged container; real btrfs ops share one loopback mount. |
+| End-to-end | `test-e2e` | serial | A few heavy multi-container chain-pipeline tests; value is in the single ordered pipeline, so parallelism only multiplies container overhead. |
+
+**Why Docker integration is capped at `-n 2` (not `auto`):** session-scoped container fixtures are instantiated **once per xdist worker**, so each worker spins up its own privileged container. Those containers set up loopback-backed btrfs+LUKS filesystems, and the mount/LUKS tests use a fixed device-mapper name — both are **host-kernel resources shared across containers** on the Docker VM. Beyond ~2 concurrent privileged containers they contend (loop-device exhaustion, device-mapper name conflicts) and the disks tests fail intermittently. `-n 2` is the reliable ceiling and still roughly halves wall time vs serial. Within a worker, the autouse `_cleanup_remote` fixture scrubs shared remote paths between tests, keeping them independent.
+
+To debug a flaky test in isolation, run a single process by passing `-n0` (or omitting `-n`).
 
 The `check-links` workflow runs a link checker against the documentation to catch broken links.
 It is scheduled to run weekly, but can also be triggered manually using `gh workflow run check-links.yml`.
