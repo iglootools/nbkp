@@ -22,7 +22,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # Install the mise binary only. We must NOT let mise-action run its default
       # `mise install`: when a mise.lock is present it auto-adds `--locked`, which
