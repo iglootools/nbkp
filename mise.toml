@@ -102,6 +102,15 @@ run = [
 
 [tasks.test-e2e-docker]
 description = "Run end-to-end sync tests (Docker only)"
+# Serial on purpose (no -n auto). Unlike test-integration-docker — one light
+# container per worker across many tests, so -n auto is a big win — each e2e
+# test needs a multi-container topology (backup-server + bastion + proxy-jump)
+# running the heaviest workload (btrfs + LUKS + multi-hop SSH). With only a
+# handful of such tests, xdist would multiply that container and shared-kernel
+# (loop-device / device-mapper) contention for negligible wall-clock gain.
+# Nothing hard-blocks it (the Docker network is UUID-named, so per-worker
+# isolation would just work) — it is purely a cost/benefit choice.
+# See docs/building-and-testing.md "Parallel test execution".
 run = "poetry run pytest tests/e2e_docker/ -v"
 
 [tasks.test-integration]
