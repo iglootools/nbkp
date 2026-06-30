@@ -34,6 +34,7 @@ class TestChainSyncSh:
         bastion_container: SshEndpoint,
         proxied_ssh_endpoint: SshEndpoint,
         luks_uuid: str,
+        luks_mapper_name: str,
     ) -> None:
         """Generated script propagates data through the
         full 6-hop chain, same as the Python runner.
@@ -48,6 +49,7 @@ class TestChainSyncSh:
             bastion_container,
             proxied_ssh_endpoint,
             luks_uuid=luks_uuid,
+            luks_mapper_name=luks_mapper_name,
         )
         resolved = resolve_all_endpoints(config)
 

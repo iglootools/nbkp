@@ -16,7 +16,11 @@ fi
 
 BTRFS_ENCRYPTED_PATH="${NBKP_BTRFS_ENCRYPTED_PATH:-/srv/btrfs-encrypted-backups}"
 LUKS_PASSPHRASE="${NBKP_LUKS_PASSPHRASE:-test-passphrase}"
-LUKS_MAPPER="${NBKP_LUKS_MAPPER_NAME:-test-encrypted}"
+# The mapper name is per-worker unique. This script is usually invoked
+# via `sudo` over SSH, where NBKP_LUKS_MAPPER_NAME is NOT in the
+# environment (sudo strips it; SSH sessions don't inherit PID 1's env),
+# so fall back to the file persisted by entrypoint.sh at startup.
+LUKS_MAPPER="${NBKP_LUKS_MAPPER_NAME:-$(cat /srv/luks-mapper-name 2>/dev/null || echo test-encrypted)}"
 
 # Close any stale device mapper from a previous container —
 # Docker Desktop shares the kernel across containers, so

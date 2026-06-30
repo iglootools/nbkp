@@ -319,6 +319,7 @@ def build_chain_config(
     proxied_endpoint: SshEndpoint,
     *,
     luks_uuid: str | None = None,
+    luks_mapper_name: str = LUKS_MAPPER_NAME,
     rsync_options: RsyncOptions | None = None,
     max_snapshots: int | None = None,
     credential_provider: CredentialProvider = CredentialProvider.KEYRING,
@@ -372,7 +373,7 @@ def build_chain_config(
                     strategy="direct",
                     device_uuid=luks_uuid,
                     encryption=LuksEncryptionConfig(
-                        mapper_name=LUKS_MAPPER_NAME,
+                        mapper_name=luks_mapper_name,
                         passphrase_id="test-luks",
                     ),
                 )
