@@ -117,14 +117,14 @@ run = [
 
 [tasks.test-integration-docker]
 description = "Run all Docker-based tests (e2e + integration)"
-# -n 2 (capped, NOT auto): session-scoped container fixtures are instantiated once per
-# xdist worker, so each worker spins up its own privileged container. Those containers
-# set up loopback-backed btrfs+LUKS filesystems, and the mount/LUKS tests use a fixed
-# device-mapper name — both are HOST-KERNEL resources shared across containers on the
-# Docker VM. Beyond ~2 concurrent privileged containers they contend (loop-device
-# exhaustion, device-mapper name conflicts) and the disks tests fail intermittently.
-# -n 2 is the reliable ceiling and still roughly halves wall time vs serial.
-run = "poetry run pytest tests/integration_docker/ -n 2 -v"
+# -n auto: session-scoped container fixtures are instantiated once per xdist worker,
+# so each worker spins up its own privileged container. Those containers share the
+# host VM kernel's loop-device pool and device-mapper namespace, so the testkit is
+# built to keep them independent under concurrency: per-worker-unique LUKS mapper
+# names, a pre-created loop-node pool with autoclear mounts, and startup cleanup of
+# only stale (deleted-backing) loops. See entrypoint.sh / setup-luks.sh and the
+# luks_mapper_name fixture.
+run = "poetry run pytest tests/integration_docker/ -n auto -v"
 
 [tasks.test-integration-docker-btrfs]
 description = "Run local btrfs tests inside Docker (privileged)"

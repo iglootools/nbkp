@@ -58,6 +58,7 @@ class TestChainSync:
         bastion_container: SshEndpoint,
         proxied_ssh_endpoint: SshEndpoint,
         luks_uuid: str,
+        luks_mapper_name: str,
     ) -> None:
         """Data seeded in src-local-bare arrives at
         dst-local-bare after traversing the full chain,
@@ -68,6 +69,7 @@ class TestChainSync:
             bastion_container,
             proxied_ssh_endpoint,
             luks_uuid=luks_uuid,
+            luks_mapper_name=luks_mapper_name,
         )
         resolved = resolve_all_endpoints(config)
 
@@ -109,6 +111,7 @@ class TestChainSync:
         bastion_container: SshEndpoint,
         proxied_ssh_endpoint: SshEndpoint,
         luks_uuid: str,
+        luks_mapper_name: str,
     ) -> None:
         """When an upstream sync is skipped (inactive), all transitive
         downstream syncs are cancelled via failure propagation."""
@@ -118,6 +121,7 @@ class TestChainSync:
             bastion_container,
             proxied_ssh_endpoint,
             luks_uuid=luks_uuid,
+            luks_mapper_name=luks_mapper_name,
         )
         resolved = resolve_all_endpoints(config)
 

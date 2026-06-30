@@ -40,7 +40,7 @@ mise run depgraph-check     # check Module Overview is up to date
 poetry run pytest tests/ --ignore=tests/e2e_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -n auto -v  # Unit tests only
 poetry run pytest tests/e2e_docker/ -v                                   # End-to-end sync tests
 poetry run pytest tests/integration_fs/ -n auto -v                       # Filesystem integration tests
-poetry run pytest tests/integration_docker/ -n 2 -v                      # Docker integration tests (capped at 2 workers)
+poetry run pytest tests/integration_docker/ -n auto -v                   # Docker integration tests
 poetry run pytest tests/ -v                                             # All tests
 poetry run ruff format .                                                # formatting
 poetry run ruff check nbkp/ tests/                                      # linting
@@ -57,11 +57,18 @@ Tests run under [pytest-xdist](https://pytest-xdist.readthedocs.io/), with per-s
 |---|---|---|---|
 | Unit | `test-unit` | `-n auto` | Fully isolated (`tmp_path`, `monkeypatch`); no external state. |
 | Filesystem integration | `test-integration-fs` | `-n auto` | Each test isolates real-rsync work under a unique `tmp_path`. |
-| Docker integration | `test-integration-docker` | `-n 2` | Capped — see below. |
+| Docker integration | `test-integration-docker` | `-n auto` | One privileged container per worker; testkit isolates shared kernel resources — see below. |
 | Local btrfs (privileged) | `test-integration-docker-btrfs` | serial | Single privileged container; real btrfs ops share one loopback mount. |
 | End-to-end | `test-e2e` | serial | A few heavy multi-container chain-pipeline tests; value is in the single ordered pipeline, so parallelism only multiplies container overhead. |
 
-**Why Docker integration is capped at `-n 2` (not `auto`):** session-scoped container fixtures are instantiated **once per xdist worker**, so each worker spins up its own privileged container. Those containers set up loopback-backed btrfs+LUKS filesystems, and the mount/LUKS tests use a fixed device-mapper name — both are **host-kernel resources shared across containers** on the Docker VM. Beyond ~2 concurrent privileged containers they contend (loop-device exhaustion, device-mapper name conflicts) and the disks tests fail intermittently. `-n 2` is the reliable ceiling and still roughly halves wall time vs serial. Within a worker, the autouse `_cleanup_remote` fixture scrubs shared remote paths between tests, keeping them independent.
+**How Docker integration parallelizes safely:** session-scoped container fixtures are instantiated **once per xdist worker**, so each worker spins up its own privileged container. All those containers share the host VM kernel's **loop-device pool** and **device-mapper namespace** — naively concurrent containers contend on them (loop-device exhaustion, device-mapper name collisions, and a global `losetup -D` that would detach siblings' devices). The testkit ([`entrypoint.sh`](../nbkp/remote/testkit/dockerbuild/entrypoint.sh), [`setup-luks.sh`](../nbkp/remote/testkit/dockerbuild/setup-luks.sh), and the `luks_mapper_name` fixture) keeps them independent:
+
+- **Per-worker-unique LUKS mapper names.** Each worker's container gets a unique `/dev/mapper/<name>` (passed via env, persisted to a file because `sudo`/SSH strip the environment, and read by `setup-luks.sh`). Avoids "device already exists" collisions on the shared dm namespace.
+- **Pre-created loop-node pool.** The VM pre-populates only `/dev/loop0..14` and there is no udev in the container to create more, so a pool of nodes is `mknod`-ed at startup. Without it, once the shared pool is busy `losetup` allocates a higher number whose `/dev` node does not exist (`device node is lost`).
+- **No loop-device leaks.** File-backed btrfs is mounted with `mount -o loop` (autoclear → frees on container stop). The encrypted-volume LUKS image needs an explicit `losetup` (for a stable `/dev/disk/by-uuid` entry), which is *not* autoclear; the `docker_container` fixture detaches it on teardown — matched by backing-file inode so concurrent siblings are untouched — so loops do not accumulate across runs.
+- **No destructive global cleanup.** Startup never runs a blanket `losetup -D` (it would yank live siblings' devices); it only detaches loops whose backing file is `(deleted)`, as a best-effort reap of orphans from killed runs.
+
+Within a worker, the autouse `_cleanup_remote` fixture scrubs shared remote paths between tests, keeping them independent.
 
 To debug a flaky test in isolation, run a single process by passing `-n0` (or omitting `-n`).
 

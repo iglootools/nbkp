@@ -24,7 +24,6 @@ from nbkp.config import LuksEncryptionConfig, MountConfig
 from nbkp.disks.strategy import DirectMountStrategy
 from nbkp.remote.testkit.docker import (  # noqa: F401
     DOCKER_DIR,
-    LUKS_MAPPER_NAME,
     LUKS_PASSPHRASE,
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_PATH,
@@ -177,10 +176,28 @@ def _docker_network() -> Generator[Any, None, None]:
 
 
 @pytest.fixture(scope="session")
+def luks_mapper_name() -> str:
+    """Per-worker-unique LUKS device-mapper name.
+
+    Privileged containers share the host VM kernel's device-mapper
+    namespace, so a fixed ``/dev/mapper/<name>`` collides across the
+    concurrent containers that pytest-xdist spins up (one per worker):
+    a ``cryptsetup open`` in one worker's container fails with "Device
+    <name> already exists", and a stale-cleanup ``cryptsetup close``
+    in another would tear down a live mapper. A unique name per worker
+    keeps each container's LUKS device independent. This is the single
+    source of truth: it is passed to the container via env and used in
+    every config and cleanup command that references the mapper.
+    """
+    return f"test-enc-{uuid.uuid4().hex[:12]}"
+
+
+@pytest.fixture(scope="session")
 def docker_container(
     ssh_key_pair: tuple[Path, Path],
     _docker_image: str,
     _docker_network: Any,
+    luks_mapper_name: str,
 ) -> Generator[SshEndpoint, None, None]:
     """Start Docker container and yield SshEndpoint."""
     from testcontainers.core.container import DockerContainer
@@ -206,7 +223,7 @@ def docker_container(
         .with_env("NBKP_BTRFS_PATH", REMOTE_BTRFS_PATH)
         .with_env("NBKP_BTRFS_ENCRYPTED_PATH", REMOTE_BTRFS_ENCRYPTED_PATH)
         .with_env("NBKP_LUKS_PASSPHRASE", LUKS_PASSPHRASE)
-        .with_env("NBKP_LUKS_MAPPER_NAME", LUKS_MAPPER_NAME)
+        .with_env("NBKP_LUKS_MAPPER_NAME", luks_mapper_name)
         .with_kwargs(privileged=True)
         .waiting_for(wait_strategy)
     )
@@ -227,7 +244,42 @@ def docker_container(
 
     yield server
 
+    _detach_container_loop_devices(wrapped)
     container.stop()
+
+
+def _detach_container_loop_devices(wrapped: Any) -> None:
+    """Detach this container's loop devices before it is destroyed.
+
+    The encrypted-volume LUKS image is attached with an explicit
+    ``losetup`` (it needs a stable ``/dev/disk/by-uuid`` entry for the
+    production mount path), which — unlike a ``mount -o loop`` — does not
+    carry the autoclear flag and therefore would leak a loop device on
+    the shared host VM kernel every time this container stops. Across
+    repeated local runs those leaked loops accumulate and eventually
+    exhaust the pool.
+
+    We match loops by backing file: ``losetup -j`` associates by the
+    file's device+inode, so from inside this container it resolves to
+    *this* container's images only — sibling containers running
+    concurrently (under pytest-xdist) back different inodes and are left
+    untouched. Run as root via ``docker exec`` (the SSH user is
+    unprivileged and ``losetup`` is not in the test sudoers allowlist).
+    """
+    script = r"""
+mapper=$(cat /srv/luks-mapper-name 2>/dev/null || true)
+[ -n "$mapper" ] && cryptsetup close "$mapper" 2>/dev/null || true
+for img in /srv/btrfs-encrypted-backups.img /srv/btrfs-backups.img; do
+    for dev in $(losetup -j "$img" -O NAME -n 2>/dev/null); do
+        losetup -d "$dev" 2>/dev/null || true
+    done
+done
+"""
+    try:
+        wrapped.exec_run(["bash", "-c", script])
+    except Exception:
+        # Best-effort cleanup — never fail teardown over a leaked loop.
+        pass
 
 
 @pytest.fixture(scope="session")
@@ -356,7 +408,7 @@ def luks_uuid(luks_metadata: LuksMetadata) -> str:
 
 
 @pytest.fixture(scope="session")
-def remote_encrypted_volume(luks_uuid: str) -> RemoteVolume:
+def remote_encrypted_volume(luks_uuid: str, luks_mapper_name: str) -> RemoteVolume:
     """RemoteVolume with MountConfig pointing at /mnt/encrypted-backup.
 
     Uses ``strategy="direct"`` because Docker containers run sshd as
@@ -370,7 +422,7 @@ def remote_encrypted_volume(luks_uuid: str) -> RemoteVolume:
             strategy="direct",
             device_uuid=luks_uuid,
             encryption=LuksEncryptionConfig(
-                mapper_name=LUKS_MAPPER_NAME,
+                mapper_name=luks_mapper_name,
                 passphrase_id="test-luks",
             ),
         ),
@@ -391,11 +443,13 @@ def remote_encrypted_volume_unencrypted(luks_uuid: str) -> RemoteVolume:
 # ── Cleanup ─────────────────────────────────────────────────────
 
 
-def _build_cleanup_script() -> str:
+def _build_cleanup_script(luks_mapper_name: str) -> str:
     """Build a single bash script that cleans all test artifacts.
 
     Batched into one SSH round-trip instead of N individual commands,
-    which significantly reduces cleanup time per test.
+    which significantly reduces cleanup time per test. The LUKS mapper
+    name is per-worker-unique (see the ``luks_mapper_name`` fixture), so
+    it is threaded in rather than read from a shared constant.
     """
     return f"""\
 #!/bin/bash
@@ -432,9 +486,9 @@ if [ -f /srv/luks-uuid ]; then
     if [ -n "$LUKS_UUID" ]; then
         echo -n '{LUKS_PASSPHRASE}' | sudo cryptsetup open \
             --type luks "/dev/disk/by-uuid/$LUKS_UUID" \
-            {LUKS_MAPPER_NAME} - 2>/dev/null || true
+            {luks_mapper_name} - 2>/dev/null || true
         sudo mount -o user_subvol_rm_allowed \
-            /dev/mapper/{LUKS_MAPPER_NAME} {REMOTE_BTRFS_ENCRYPTED_PATH} \
+            /dev/mapper/{luks_mapper_name} {REMOTE_BTRFS_ENCRYPTED_PATH} \
             2>/dev/null || true
 
         clean_btrfs_base {REMOTE_BTRFS_ENCRYPTED_PATH}/snapshots
@@ -443,13 +497,10 @@ if [ -f /srv/luks-uuid ]; then
         find {REMOTE_BTRFS_ENCRYPTED_PATH} -name '.nbkp-*' -delete 2>/dev/null || true
 
         sudo umount {REMOTE_BTRFS_ENCRYPTED_PATH} 2>/dev/null || true
-        sudo cryptsetup close {LUKS_MAPPER_NAME} 2>/dev/null || true
+        sudo cryptsetup close {luks_mapper_name} 2>/dev/null || true
     fi
 fi
 """
-
-
-_CLEANUP_SCRIPT = _build_cleanup_script()
 
 
 @pytest.fixture(autouse=True)
@@ -467,4 +518,7 @@ def _cleanup_remote(
         return
 
     server: SshEndpoint = request.getfixturevalue("docker_ssh_endpoint")
-    ssh_exec(server, _CLEANUP_SCRIPT, check=False)
+    # luks_mapper_name is a cheap session-scoped string; requesting it
+    # never triggers container/LUKS setup, so it is safe to resolve here.
+    mapper: str = request.getfixturevalue("luks_mapper_name")
+    ssh_exec(server, _build_cleanup_script(mapper), check=False)

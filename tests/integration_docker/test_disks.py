@@ -41,12 +41,22 @@ from nbkp.disks.context import managed_mount
 from nbkp.remote.dispatch import run_on_volume
 
 from tests._docker_fixtures import (
-    LUKS_MAPPER_NAME,
     LUKS_PASSPHRASE,
     direct_strategy_for,
     resolved_endpoints_for,
     ssh_exec,
 )
+
+
+def _mapper_of(volume: RemoteVolume) -> str:
+    """Extract the (per-worker-unique) LUKS mapper name from a volume.
+
+    The mapper name is unique per worker container (see the
+    ``luks_mapper_name`` fixture) and carried on the encrypted volume's
+    mount config, so it is read from there rather than a shared constant.
+    """
+    assert volume.mount is not None and volume.mount.encryption is not None
+    return volume.mount.encryption.mapper_name
 
 
 def _attach_luks(
@@ -56,7 +66,7 @@ def _attach_luks(
     luks_uuid: str,
 ) -> None:
     """Attach LUKS via production command builder + run_on_volume."""
-    cmd = strategy.build_attach_luks_command(LUKS_MAPPER_NAME, luks_uuid)
+    cmd = strategy.build_attach_luks_command(_mapper_of(volume), luks_uuid)
     run_on_volume(cmd, volume, resolved, input=LUKS_PASSPHRASE)
 
 
@@ -66,7 +76,7 @@ def _close_luks(
     resolved: ResolvedEndpoints,
 ) -> None:
     """Close LUKS via production command builder + run_on_volume."""
-    cmd = strategy.build_close_luks_command(LUKS_MAPPER_NAME)
+    cmd = strategy.build_close_luks_command(_mapper_of(volume))
     run_on_volume(cmd, volume, resolved)
 
 
@@ -78,7 +88,7 @@ def _cleanup(
     """Idempotent cleanup: umount + lock (ignore errors)."""
     umount_cmd = strategy.build_umount_command()
     run_on_volume(umount_cmd, volume, resolved)
-    lock_cmd = strategy.build_close_luks_command(LUKS_MAPPER_NAME)
+    lock_cmd = strategy.build_close_luks_command(_mapper_of(volume))
     run_on_volume(lock_cmd, volume, resolved)
 
 
@@ -119,7 +129,7 @@ class TestDetectLuksAttached:
         """Mapper does not exist when LUKS is closed."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
         assert not detect_luks_attached(
-            remote_encrypted_volume, LUKS_MAPPER_NAME, resolved
+            remote_encrypted_volume, _mapper_of(remote_encrypted_volume), resolved
         )
 
     def test_attached_after_open(
@@ -134,7 +144,7 @@ class TestDetectLuksAttached:
         _attach_luks(remote_encrypted_volume, strategy, resolved, luks_uuid)
         try:
             assert detect_luks_attached(
-                remote_encrypted_volume, LUKS_MAPPER_NAME, resolved
+                remote_encrypted_volume, _mapper_of(remote_encrypted_volume), resolved
             )
         finally:
             _close_luks(remote_encrypted_volume, strategy, resolved)
@@ -151,7 +161,7 @@ class TestDetectLuksAttached:
         _attach_luks(remote_encrypted_volume, strategy, resolved, luks_uuid)
         _close_luks(remote_encrypted_volume, strategy, resolved)
         assert not detect_luks_attached(
-            remote_encrypted_volume, LUKS_MAPPER_NAME, resolved
+            remote_encrypted_volume, _mapper_of(remote_encrypted_volume), resolved
         )
 
 
@@ -288,6 +298,7 @@ class TestLuksLifecycle:
         """Opening an already-open LUKS device does not fail."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
         strategy = direct_strategy_for(remote_encrypted_volume)
+        mapper = _mapper_of(remote_encrypted_volume)
         _attach_luks(remote_encrypted_volume, strategy, resolved, luks_uuid)
         try:
             # Second open should not raise (cryptsetup returns 0 or
@@ -296,13 +307,13 @@ class TestLuksLifecycle:
                 docker_ssh_endpoint,
                 f"echo -n '{LUKS_PASSPHRASE}' | sudo cryptsetup open"
                 f" --type luks /dev/disk/by-uuid/{luks_uuid}"
-                f" {LUKS_MAPPER_NAME} - 2>&1 || true",
+                f" {mapper} - 2>&1 || true",
                 check=False,
             )
             # The device should still be unlocked regardless
             check = ssh_exec(
                 docker_ssh_endpoint,
-                f"test -b /dev/mapper/{LUKS_MAPPER_NAME}",
+                f"test -b /dev/mapper/{mapper}",
                 check=False,
             )
             assert check.returncode == 0
@@ -334,6 +345,7 @@ class TestResolveMountStrategy:
         self,
         docker_ssh_endpoint: SshEndpoint,
         luks_uuid: str,
+        luks_mapper_name: str,
     ) -> None:
         """Docker container has systemctl, so auto should resolve to systemd."""
         volume = RemoteVolume(
@@ -344,7 +356,7 @@ class TestResolveMountStrategy:
                 strategy="auto",
                 device_uuid=luks_uuid,
                 encryption=LuksEncryptionConfig(
-                    mapper_name=LUKS_MAPPER_NAME,
+                    mapper_name=luks_mapper_name,
                     passphrase_id="test-luks",
                 ),
             ),
@@ -706,6 +718,7 @@ class TestUnencryptedMount:
         docker_ssh_endpoint: SshEndpoint,
         remote_encrypted_volume_unencrypted: RemoteVolume,
         luks_uuid: str,
+        luks_mapper_name: str,
     ) -> None:
         """Full mount/umount lifecycle without LUKS encryption.
 
@@ -713,7 +726,9 @@ class TestUnencryptedMount:
         in Docker) but the MountConfig has no encryption block, so nbkp
         skips the attach/close steps.  Since the underlying device is
         LUKS and needs to be unlocked first, we pre-open LUKS manually
-        so that ``mount`` can succeed.
+        so that ``mount`` can succeed. The mapper name must match the
+        fstab entry written by setup-luks.sh (the per-worker-unique
+        name), since the unencrypted ``mount`` reads the device from fstab.
         """
         volume = remote_encrypted_volume_unencrypted
         resolved = resolved_endpoints_for(docker_ssh_endpoint, volume)
@@ -727,7 +742,7 @@ class TestUnencryptedMount:
             docker_ssh_endpoint,
             f"echo -n '{LUKS_PASSPHRASE}' | sudo cryptsetup open"
             f" --type luks /dev/disk/by-uuid/{luks_uuid}"
-            f" {LUKS_MAPPER_NAME} - 2>/dev/null || true",
+            f" {luks_mapper_name} - 2>/dev/null || true",
         )
         try:
             result = mount_volume(
@@ -765,5 +780,5 @@ class TestUnencryptedMount:
             )
             ssh_exec(
                 docker_ssh_endpoint,
-                f"sudo cryptsetup close {LUKS_MAPPER_NAME} 2>/dev/null || true",
+                f"sudo cryptsetup close {luks_mapper_name} 2>/dev/null || true",
             )
