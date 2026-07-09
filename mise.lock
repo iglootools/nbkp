@@ -7,26 +7,32 @@ backend = "aqua:asciinema/agg"
 [tools."aqua:asciinema/agg"."platforms.linux-arm64"]
 checksum = "sha256:2b4be407b97e00e1c313a41d154ced8fa3d02c560c8f47a0db4950a2576444c9"
 url = "https://github.com/asciinema/agg/releases/download/v1.9.0/agg-aarch64-unknown-linux-gnu"
+url_api = "https://api.github.com/repos/asciinema/agg/releases/assets/433215396"
 
 [tools."aqua:asciinema/agg"."platforms.linux-x64"]
 checksum = "sha256:ddcbf6ca044c8ac3a434dcb9ee89fb9e3be87209982b7c2adb55f782e8f0f390"
 url = "https://github.com/asciinema/agg/releases/download/v1.9.0/agg-x86_64-unknown-linux-musl"
+url_api = "https://api.github.com/repos/asciinema/agg/releases/assets/433215075"
 
 [tools."aqua:asciinema/agg"."platforms.linux-x64-musl"]
 checksum = "sha256:ddcbf6ca044c8ac3a434dcb9ee89fb9e3be87209982b7c2adb55f782e8f0f390"
 url = "https://github.com/asciinema/agg/releases/download/v1.9.0/agg-x86_64-unknown-linux-musl"
+url_api = "https://api.github.com/repos/asciinema/agg/releases/assets/433215075"
 
 [tools."aqua:asciinema/agg"."platforms.macos-arm64"]
 checksum = "sha256:742b2b6230529b72f310acb835e9479496000f2eabc97b0993cabe1d7fe70171"
 url = "https://github.com/asciinema/agg/releases/download/v1.9.0/agg-aarch64-apple-darwin"
+url_api = "https://api.github.com/repos/asciinema/agg/releases/assets/433215107"
 
 [tools."aqua:asciinema/agg"."platforms.macos-x64"]
 checksum = "sha256:1462150b611d231d2950d10a676303eaeb1019ff330735882aaae09b52e2e1c1"
 url = "https://github.com/asciinema/agg/releases/download/v1.9.0/agg-x86_64-apple-darwin"
+url_api = "https://api.github.com/repos/asciinema/agg/releases/assets/433215207"
 
 [tools."aqua:asciinema/agg"."platforms.windows-x64"]
 checksum = "sha256:810baf5506e74ca65d8ed85be3db58791086c8b7b0a17c9018d7fede473f0055"
 url = "https://github.com/asciinema/agg/releases/download/v1.9.0/agg-x86_64-pc-windows-msvc.exe"
+url_api = "https://api.github.com/repos/asciinema/agg/releases/assets/433216272"
 
 [[tools."aqua:asciinema/asciinema"]]
 version = "3.2.1"
