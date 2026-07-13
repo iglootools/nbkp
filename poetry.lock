@@ -1541,14 +1541,14 @@ weaviate = ["weaviate-client (>=4)"]
 
 [[package]]
 name = "typer"
-version = "0.26.7"
+version = "0.26.8"
 description = "Typer, build great CLIs. Easy to code. Based on Python type hints."
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "typer-0.26.7-py3-none-any.whl", hash = "sha256:5c87cfbc5d34491c5346ebf49c23e18d56ccb863268d3a8d592b26087c2f5e58"},
-    {file = "typer-0.26.7.tar.gz", hash = "sha256:e314a34c617e419c091b2830dda3ea1f257134ff593061a8f5b9717ab8dddb3a"},
+    {file = "typer-0.26.8-py3-none-any.whl", hash = "sha256:3512ca79ac5c11113414b36e80281b872884477722440691c89d1112e321a49c"},
+    {file = "typer-0.26.8.tar.gz", hash = "sha256:c244a6bd558886fe3f8780efb6bdd28bb9aff005a94eedebaa5cb32926fe2f7e"},
 ]
 
 [package.dependencies]
@@ -1725,4 +1725,4 @@ keyring = ["keyring"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12"
-content-hash = "d941034ef736def0145a68e6799abab94149d0d23f1dfe17b898276a8fadd753"
+content-hash = "985f29efd72b1da6d9e13c5698ae3a1d76afa31d9d8a1b026a1ed3c50f35c137"
