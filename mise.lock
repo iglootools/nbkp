@@ -7,92 +7,106 @@ backend = "aqua:asciinema/agg"
 [tools."aqua:asciinema/agg"."platforms.linux-arm64"]
 checksum = "sha256:2b4be407b97e00e1c313a41d154ced8fa3d02c560c8f47a0db4950a2576444c9"
 url = "https://github.com/asciinema/agg/releases/download/v1.9.0/agg-aarch64-unknown-linux-gnu"
+url_api = "https://api.github.com/repos/asciinema/agg/releases/assets/433215396"
 
 [tools."aqua:asciinema/agg"."platforms.linux-x64"]
 checksum = "sha256:ddcbf6ca044c8ac3a434dcb9ee89fb9e3be87209982b7c2adb55f782e8f0f390"
 url = "https://github.com/asciinema/agg/releases/download/v1.9.0/agg-x86_64-unknown-linux-musl"
+url_api = "https://api.github.com/repos/asciinema/agg/releases/assets/433215075"
 
 [tools."aqua:asciinema/agg"."platforms.linux-x64-musl"]
 checksum = "sha256:ddcbf6ca044c8ac3a434dcb9ee89fb9e3be87209982b7c2adb55f782e8f0f390"
 url = "https://github.com/asciinema/agg/releases/download/v1.9.0/agg-x86_64-unknown-linux-musl"
+url_api = "https://api.github.com/repos/asciinema/agg/releases/assets/433215075"
 
 [tools."aqua:asciinema/agg"."platforms.macos-arm64"]
 checksum = "sha256:742b2b6230529b72f310acb835e9479496000f2eabc97b0993cabe1d7fe70171"
 url = "https://github.com/asciinema/agg/releases/download/v1.9.0/agg-aarch64-apple-darwin"
+url_api = "https://api.github.com/repos/asciinema/agg/releases/assets/433215107"
 
 [tools."aqua:asciinema/agg"."platforms.macos-x64"]
 checksum = "sha256:1462150b611d231d2950d10a676303eaeb1019ff330735882aaae09b52e2e1c1"
 url = "https://github.com/asciinema/agg/releases/download/v1.9.0/agg-x86_64-apple-darwin"
+url_api = "https://api.github.com/repos/asciinema/agg/releases/assets/433215207"
 
 [tools."aqua:asciinema/agg"."platforms.windows-x64"]
 checksum = "sha256:810baf5506e74ca65d8ed85be3db58791086c8b7b0a17c9018d7fede473f0055"
 url = "https://github.com/asciinema/agg/releases/download/v1.9.0/agg-x86_64-pc-windows-msvc.exe"
+url_api = "https://api.github.com/repos/asciinema/agg/releases/assets/433216272"
 
 [[tools."aqua:asciinema/asciinema"]]
-version = "3.2.0"
+version = "3.2.1"
 backend = "aqua:asciinema/asciinema"
 
 [tools."aqua:asciinema/asciinema"."platforms.linux-arm64"]
-checksum = "sha256:f7f92769f7b4150df2835ddd4eda067b0786d0d734284a0f9c2aaa2514e8beb6"
-url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-aarch64-unknown-linux-gnu"
-
-[tools."aqua:asciinema/asciinema"."platforms.linux-arm64-musl"]
-checksum = "sha256:f7f92769f7b4150df2835ddd4eda067b0786d0d734284a0f9c2aaa2514e8beb6"
-url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-aarch64-unknown-linux-gnu"
+checksum = "sha256:b516a6d896844c0ffbc96e0a55afe4cbcc79216abde0fc64fdda4e39bee421ea"
+url = "https://github.com/asciinema/asciinema/releases/download/v3.2.1/asciinema-aarch64-unknown-linux-gnu"
+url_api = "https://api.github.com/repos/asciinema/asciinema/releases/assets/449290064"
 
 [tools."aqua:asciinema/asciinema"."platforms.linux-x64"]
-checksum = "sha256:34cf9ddb54df166878a213d5173af4d5f9df9564ab8b1054a080408bce0b720e"
-url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-x86_64-unknown-linux-musl"
+checksum = "sha256:bec9781bc8f297a9d3d74ff60205599507f2abba1183578b8b2f22be4c999214"
+url = "https://github.com/asciinema/asciinema/releases/download/v3.2.1/asciinema-x86_64-unknown-linux-musl"
+url_api = "https://api.github.com/repos/asciinema/asciinema/releases/assets/449289811"
 
 [tools."aqua:asciinema/asciinema"."platforms.linux-x64-musl"]
-checksum = "sha256:34cf9ddb54df166878a213d5173af4d5f9df9564ab8b1054a080408bce0b720e"
-url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-x86_64-unknown-linux-musl"
+checksum = "sha256:bec9781bc8f297a9d3d74ff60205599507f2abba1183578b8b2f22be4c999214"
+url = "https://github.com/asciinema/asciinema/releases/download/v3.2.1/asciinema-x86_64-unknown-linux-musl"
+url_api = "https://api.github.com/repos/asciinema/asciinema/releases/assets/449289811"
 
 [tools."aqua:asciinema/asciinema"."platforms.macos-arm64"]
-checksum = "sha256:bdde8367f343ed61fdc7fd942657bcd050b15cce67005f72e1a54b7fda20e5ea"
-url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-aarch64-apple-darwin"
+checksum = "sha256:1f0c76da7855601df93e5dccdf69b7c683b81beff1411e38b3802de1f5fc7a1c"
+url = "https://github.com/asciinema/asciinema/releases/download/v3.2.1/asciinema-aarch64-apple-darwin"
+url_api = "https://api.github.com/repos/asciinema/asciinema/releases/assets/449290357"
 
 [tools."aqua:asciinema/asciinema"."platforms.macos-x64"]
-checksum = "sha256:a76ef31773c7f0f0e2fa18c0517dca571968b509156e6771df02c35f4279791f"
-url = "https://github.com/asciinema/asciinema/releases/download/v3.2.0/asciinema-x86_64-apple-darwin"
+checksum = "sha256:1b388af0e1566ab19deea663b0ce64730ad46ade2825fadd43cc88f0bd28140a"
+url = "https://github.com/asciinema/asciinema/releases/download/v3.2.1/asciinema-x86_64-apple-darwin"
+url_api = "https://api.github.com/repos/asciinema/asciinema/releases/assets/449290107"
 
 [[tools.github-cli]]
-version = "2.94.0"
+version = "2.95.0"
 backend = "aqua:cli/cli"
 
 [tools.github-cli."platforms.linux-arm64"]
-checksum = "sha256:705a23b70b0f1b7ba4c302fdcef392ce3edaacfa7ce8e85e4d93d72ea800a538"
-url = "https://github.com/cli/cli/releases/download/v2.94.0/gh_2.94.0_linux_arm64.tar.gz"
+checksum = "sha256:d41e0b3b6218e5741c8bb4db39b16e53a59e0e06299a8489bd38f623ef7ebaae"
+url = "https://github.com/cli/cli/releases/download/v2.95.0/gh_2.95.0_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/450525946"
 provenance = "github-attestations"
 
 [tools.github-cli."platforms.linux-arm64-musl"]
-checksum = "sha256:705a23b70b0f1b7ba4c302fdcef392ce3edaacfa7ce8e85e4d93d72ea800a538"
-url = "https://github.com/cli/cli/releases/download/v2.94.0/gh_2.94.0_linux_arm64.tar.gz"
+checksum = "sha256:d41e0b3b6218e5741c8bb4db39b16e53a59e0e06299a8489bd38f623ef7ebaae"
+url = "https://github.com/cli/cli/releases/download/v2.95.0/gh_2.95.0_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/450525946"
 provenance = "github-attestations"
 
 [tools.github-cli."platforms.linux-x64"]
-checksum = "sha256:a757f1ba6db18f4de8cbadb244843a5f89bc75b5e7c6fc127d2bd77fbd12ed62"
-url = "https://github.com/cli/cli/releases/download/v2.94.0/gh_2.94.0_linux_amd64.tar.gz"
+checksum = "sha256:25d1e4729e8808c9ed3d613e96ebd3f3e44446f2d368c89d878a71a36ddb3d8c"
+url = "https://github.com/cli/cli/releases/download/v2.95.0/gh_2.95.0_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/450525940"
 provenance = "github-attestations"
 
 [tools.github-cli."platforms.linux-x64-musl"]
-checksum = "sha256:a757f1ba6db18f4de8cbadb244843a5f89bc75b5e7c6fc127d2bd77fbd12ed62"
-url = "https://github.com/cli/cli/releases/download/v2.94.0/gh_2.94.0_linux_amd64.tar.gz"
+checksum = "sha256:25d1e4729e8808c9ed3d613e96ebd3f3e44446f2d368c89d878a71a36ddb3d8c"
+url = "https://github.com/cli/cli/releases/download/v2.95.0/gh_2.95.0_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/450525940"
 provenance = "github-attestations"
 
 [tools.github-cli."platforms.macos-arm64"]
-checksum = "sha256:4f9bc1a5e77500737290a307b40b4c396a4d23729f55340f2a83f414410165a1"
-url = "https://github.com/cli/cli/releases/download/v2.94.0/gh_2.94.0_macOS_arm64.zip"
+checksum = "sha256:3677f9c27965825f9c7d50395473c134edaea4b484373ef6b25de653570a0489"
+url = "https://github.com/cli/cli/releases/download/v2.95.0/gh_2.95.0_macOS_arm64.zip"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/450525983"
 provenance = "github-attestations"
 
 [tools.github-cli."platforms.macos-x64"]
-checksum = "sha256:733ee8fa49247d27cd94a6c7384455bdecaa82172a3bcfad63ac1ecc2867251d"
-url = "https://github.com/cli/cli/releases/download/v2.94.0/gh_2.94.0_macOS_amd64.zip"
+checksum = "sha256:985707e9ac60c95ed51cddd808c338b481abe69fffa77e9d6547c3750045f77e"
+url = "https://github.com/cli/cli/releases/download/v2.95.0/gh_2.95.0_macOS_amd64.zip"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/450525980"
 provenance = "github-attestations"
 
 [tools.github-cli."platforms.windows-x64"]
-checksum = "sha256:c0766af54195dfa0bcd9a0cb63a45c313fbaffdebb9f736f666e9ba4be8c91e8"
-url = "https://github.com/cli/cli/releases/download/v2.94.0/gh_2.94.0_windows_amd64.zip"
+checksum = "sha256:19a7154161ada9cfaa9e57edb752ecc679b75c391a62e4f7b586eea1df30b5bb"
+url = "https://github.com/cli/cli/releases/download/v2.95.0/gh_2.95.0_windows_amd64.zip"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/450526025"
 provenance = "github-attestations"
 
 [[tools.poetry]]
