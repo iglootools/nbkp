@@ -28,7 +28,7 @@ poetry-dynamic-versioning = { version = ">=1.0.0,<2.0.0", extras = ["plugin"] }
 enable = true
 
 [project.optional-dependencies]
-docker = ["docker (>=7.0,<8.0)"]
+docker = ["docker (>=7.2.0,<8.0)"]
 keyring = ["keyring (>=25.0,<26.0)"]
 
 [project.scripts]
