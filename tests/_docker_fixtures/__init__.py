@@ -1,4 +1,25 @@
-"""Shared Docker test fixtures for e2e and integration tests."""
+"""Shared Docker test fixtures for e2e and integration tests.
+
+Docker-harness note (needs real-Docker validation):
+The mount lifecycle migrated from direct ``cryptsetup``/``mount`` to udisks2
+(``udisksctl``).  For the encrypted-volume mount tests to pass against a real
+container, the image at ``nbkp/remote/testkit/dockerbuild/`` (frozen in this
+change) must be updated to:
+
+* install ``udisks2`` + ``udisks2-btrfs`` + ``polkit``;
+* start ``dbus-daemon --system``, ``polkitd`` and ``/usr/lib/udisks2/udisksd``
+  at container init;
+* create the backup user and install the generated ``50-nbkp.rules`` polkit
+  file (see ``nbkp.disks.auth.generate_polkit_rules``);
+* provide a loopback LUKS device with an ``/etc/fstab`` entry mapping
+  ``/dev/mapper/luks-<uuid>`` to the mount path (no crypttab needed).
+
+Tests share a single session-scoped container and unlock/mount/lock the same
+encrypted volume repeatedly.  This is reliable without any between-test reset
+because the container shares the host ``/dev`` and ``/run/udev`` (see the
+``docker_container`` fixture) — udev keeps the dm-crypt device state in sync,
+so a fresh unlock always succeeds after a prior test's lock.
+"""
 
 from __future__ import annotations
 
@@ -21,13 +42,13 @@ from nbkp.config import (
 from nbkp.config.epresolution import ResolvedEndpoints
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.config import LuksEncryptionConfig, MountConfig
-from nbkp.disks.strategy import DirectMountStrategy
 from nbkp.remote.testkit.docker import (  # noqa: F401
     DOCKER_DIR,
     LUKS_PASSPHRASE,
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_PATH,
     REMOTE_BTRFS_ENCRYPTED_PATH,
+    REMOTE_UNENCRYPTED_PATH,
     LuksMetadata,
     create_sentinels,
     create_test_ssh_endpoint,
@@ -104,11 +125,6 @@ def assert_sentinels_after_sync(
     assert _check_exists(f"{sentinel_dir}/.nbkp-dst"), (
         f".nbkp-dst missing from {sentinel_dir}"
     )
-
-
-def direct_strategy_for(volume: RemoteVolume) -> DirectMountStrategy:
-    """Build a ``DirectMountStrategy`` from a volume's mount config."""
-    return DirectMountStrategy(volume_path=volume.path)
 
 
 def resolved_endpoints_for(
@@ -207,9 +223,13 @@ def docker_container(
 
     private_key, public_key = ssh_key_pair
 
+    # Generous startup timeout: the entrypoint formats a btrfs loop image and
+    # brings up dbus/udevd/udisksd before sshd logs "Server listening".  On a
+    # loaded machine (or when several test containers boot back-to-back) the
+    # default 30s is too tight and trips a spurious startup TimeoutError.
     wait_strategy = LogMessageWaitStrategy(
         "Server listening",
-    ).with_startup_timeout(30)
+    ).with_startup_timeout(90)
 
     container = (
         DockerContainer(_docker_image)
@@ -219,6 +239,20 @@ def docker_container(
             "/mnt/ssh-authorized-keys",
             "ro",
         )
+        # Share the host's /dev and udev runtime.  udisks mounts a device only
+        # once udev has probed its filesystem (it reads the ID_FS_TYPE udev
+        # property).  With a *private* container /dev, the container's udevd
+        # sees a different devtmpfs than the kernel creates dm-crypt devices on,
+        # so after btrfs/loop activity (which shares the kernel across all
+        # containers on Docker Desktop's LinuxKit VM) it intermittently never
+        # probes a freshly-unlocked cleartext device — udisks then refuses to
+        # mount it ("is not a mountable filesystem") and the encrypted-volume
+        # tests fail.  Sharing /dev lets udevd operate on the same devtmpfs the
+        # kernel uses, and sharing /run/udev gives udisks the resulting db.
+        # This is the minimal set: --network host and a shared /run/dbus also
+        # work but break the multi-container bastion e2e (port + bus conflicts).
+        .with_volume_mapping("/dev", "/dev", "rw")
+        .with_volume_mapping("/run/udev", "/run/udev", "rw")
         .with_env("NBKP_BACKUP_PATH", REMOTE_BACKUP_PATH)
         .with_env("NBKP_BTRFS_PATH", REMOTE_BTRFS_PATH)
         .with_env("NBKP_BTRFS_ENCRYPTED_PATH", REMOTE_BTRFS_ENCRYPTED_PATH)
@@ -296,9 +330,13 @@ def bastion_container(
 
     private_key, public_key = ssh_key_pair
 
+    # Generous startup timeout: the entrypoint formats a btrfs loop image and
+    # brings up dbus/udevd/udisksd before sshd logs "Server listening".  On a
+    # loaded machine (or when several test containers boot back-to-back) the
+    # default 30s is too tight and trips a spurious startup TimeoutError.
     wait_strategy = LogMessageWaitStrategy(
         "Server listening",
-    ).with_startup_timeout(30)
+    ).with_startup_timeout(90)
 
     container = (
         DockerContainer(_docker_image)
@@ -408,21 +446,22 @@ def luks_uuid(luks_metadata: LuksMetadata) -> str:
 
 
 @pytest.fixture(scope="session")
-def remote_encrypted_volume(luks_uuid: str, luks_mapper_name: str) -> RemoteVolume:
-    """RemoteVolume with MountConfig pointing at /mnt/encrypted-backup.
+def remote_encrypted_volume(luks_uuid: str) -> RemoteVolume:
+    """RemoteVolume with MountConfig pointing at /srv/btrfs-encrypted-backups.
 
-    Uses ``strategy="direct"`` because Docker containers run sshd as
-    PID 1 (no systemd).
+    The mount lifecycle is now driven by udisks2 (``udisksctl``); the
+    container must run ``udisksd`` + polkit and carry an fstab entry that
+    maps the cleartext device (``/dev/mapper/luks-<uuid>``) to this path.
+    See the module docstring for the Docker-harness requirements that need
+    real-Docker validation.
     """
     return RemoteVolume(
         slug="test-encrypted",
         ssh_endpoint="test-server",
         path=REMOTE_BTRFS_ENCRYPTED_PATH,
         mount=MountConfig(
-            strategy="direct",
             device_uuid=luks_uuid,
             encryption=LuksEncryptionConfig(
-                mapper_name=luks_mapper_name,
                 passphrase_id="test-luks",
             ),
         ),
@@ -430,13 +469,40 @@ def remote_encrypted_volume(luks_uuid: str, luks_mapper_name: str) -> RemoteVolu
 
 
 @pytest.fixture(scope="session")
-def remote_encrypted_volume_unencrypted(luks_uuid: str) -> RemoteVolume:
-    """RemoteVolume with MountConfig but no encryption (unencrypted mount)."""
+def unencrypted_uuid(
+    luks_metadata: LuksMetadata, docker_ssh_endpoint: SshEndpoint
+) -> str:
+    """Filesystem UUID of the container's plain (unencrypted) ext4 volume.
+
+    Created by ``setup-luks.sh`` alongside the LUKS volume (same
+    loop-device-available gate), so it shares the LUKS availability skip.
+    """
+    if not luks_metadata.available:
+        pytest.skip("loop devices unavailable (cannot create test volumes)")
+    result = ssh_exec(
+        docker_ssh_endpoint,
+        "cat /srv/unencrypted-uuid 2>/dev/null || true",
+        check=False,
+    )
+    uuid = result.stdout.strip()
+    if not uuid:
+        pytest.skip("unencrypted test device unavailable (loop allocation failed)")
+    return uuid
+
+
+@pytest.fixture(scope="session")
+def remote_unencrypted_volume(unencrypted_uuid: str) -> RemoteVolume:
+    """RemoteVolume with a mount-managed, genuinely unencrypted ext4 device.
+
+    ``device_uuid`` is the filesystem UUID; nbkp mounts it directly via
+    ``udisksctl mount`` (no LUKS unlock), and the container's fstab maps that
+    UUID to the fixed path.
+    """
     return RemoteVolume(
         slug="test-unencrypted-mount",
         ssh_endpoint="test-server",
-        path=REMOTE_BTRFS_ENCRYPTED_PATH,
-        mount=MountConfig(device_uuid=luks_uuid),
+        path=REMOTE_UNENCRYPTED_PATH,
+        mount=MountConfig(device_uuid=unencrypted_uuid),
     )
 
 

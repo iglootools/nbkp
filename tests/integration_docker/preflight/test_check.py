@@ -43,7 +43,6 @@ from tests._docker_fixtures import (
     create_sentinels,
     ssh_exec,
     resolved_endpoints_for,
-    direct_strategy_for,
     LUKS_PASSPHRASE,
 )
 
@@ -124,7 +123,7 @@ class TestSyncCheck:
         )
         sync = config.syncs["test-sync"]
 
-        def _run_remote(cmd: str) -> None:
+        def _run_remote(_vol: object, cmd: str) -> None:
             ssh_exec(docker_ssh_endpoint, cmd)
 
         create_seed_sentinels(config, remote_exec=_run_remote)
@@ -417,7 +416,7 @@ class TestObserveEndpoints:
             },
         )
 
-        def _run_remote(cmd: str) -> None:
+        def _run_remote(_vol: object, cmd: str) -> None:
             ssh_exec(docker_ssh_endpoint, cmd)
 
         create_seed_sentinels(config, remote_exec=_run_remote)
@@ -479,7 +478,7 @@ class TestObserveEndpoints:
             },
         )
 
-        def _run_remote(cmd: str) -> None:
+        def _run_remote(_vol: object, cmd: str) -> None:
             ssh_exec(docker_ssh_endpoint, cmd)
 
         create_seed_sentinels(config, remote_exec=_run_remote)
@@ -516,7 +515,7 @@ class TestObserveEndpoints:
 
 
 class TestMountCapabilities:
-    def test_direct_mount_capabilities_encrypted(
+    def test_udisks_mount_capabilities_encrypted(
         self,
         docker_ssh_endpoint: SshEndpoint,
         remote_encrypted_volume: RemoteVolume,
@@ -524,7 +523,6 @@ class TestMountCapabilities:
     ) -> None:
         """Mount capabilities are probed for an encrypted volume after mounting."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
-        strategy = direct_strategy_for(remote_encrypted_volume)
         mount_config = remote_encrypted_volume.mount
         assert mount_config is not None
 
@@ -534,7 +532,6 @@ class TestMountCapabilities:
             mount_config,
             resolved,
             lambda _: LUKS_PASSPHRASE,
-            strategy,
         )
         assert result.success, result.detail
 
@@ -557,11 +554,10 @@ class TestMountCapabilities:
             )
             assert ssh_diag.host_tools is not None
             assert ssh_diag.mount_tools is not None
-            assert ssh_diag.mount_tools.has_sudo is True
-            assert ssh_diag.mount_tools.has_mount_cmd is True
-            assert ssh_diag.mount_tools.has_umount_cmd is True
-            assert ssh_diag.mount_tools.has_mountpoint is True
-            assert ssh_diag.mount_tools.has_cryptsetup is True
+            assert ssh_diag.mount_tools.has_udisksctl is True
+            assert ssh_diag.mount_tools.udisksd_running is True
+            assert ssh_diag.mount_tools.has_findmnt is True
+            assert ssh_diag.mount_tools.has_lsblk is True
 
             diag = observe_volume(
                 remote_encrypted_volume,
@@ -573,14 +569,13 @@ class TestMountCapabilities:
             assert diag.capabilities is not None
             caps = diag.capabilities
             assert caps.mount is not None
-            assert caps.mount.resolved_backend == "direct"
             assert caps.mount.device_present is True
-            assert caps.mount.luks_attached is True
+            assert caps.mount.luks_unlocked is True
             assert caps.mount.mounted is True
         finally:
-            umount_volume(remote_encrypted_volume, mount_config, resolved, strategy)
+            umount_volume(remote_encrypted_volume, mount_config, resolved)
 
-    def test_direct_mount_capabilities_device_not_present(
+    def test_udisks_mount_capabilities_device_not_present(
         self,
         docker_ssh_endpoint: SshEndpoint,
         luks_uuid: str,
@@ -591,12 +586,8 @@ class TestMountCapabilities:
             ssh_endpoint="test-server",
             path=REMOTE_BTRFS_ENCRYPTED_PATH,
             mount=MountConfig(
-                strategy="direct",
                 device_uuid="00000000-0000-0000-0000-000000000000",
-                encryption=LuksEncryptionConfig(
-                    mapper_name="nonexistent-mapper",
-                    passphrase_id="test-luks",
-                ),
+                encryption=LuksEncryptionConfig(passphrase_id="test-luks"),
             ),
         )
         config = Config(

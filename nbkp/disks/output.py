@@ -21,13 +21,10 @@ class MountStatusData(Protocol):
     """
 
     @property
-    def resolved_backend(self) -> str | None: ...
-
-    @property
     def device_present(self) -> bool | None: ...
 
     @property
-    def luks_attached(self) -> bool | None: ...
+    def luks_unlocked(self) -> bool | None: ...
 
     @property
     def mounted(self) -> bool | None: ...
@@ -67,12 +64,12 @@ def luks_fail_severity(
     mount_failure_reason: str | None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Severity:
-    """Severity for ``luks_attached=False``.
+    """Severity for ``luks_unlocked=False``.
 
-    Real LUKS-stage failures (``ATTACH_LUKS_FAILED`` / ``SUDOERS_REFUSED``)
+    Real LUKS-stage failures (``UNLOCK_FAILED`` / ``NOT_AUTHORIZED``)
     are non-inactive — they're real errors and surface as ✗ under any
     strictness that doesn't ignore everything.  Other states (probe
-    found ``/dev/mapper/<name>`` missing but no attach was attempted,
+    found the cleartext device missing but no unlock was attempted,
     or a cascading failure like ``DEVICE_NOT_PRESENT``) are inactive.
     """
     is_real_failure = mount_failure_reason in LUKS_STAGE_FAILURES
@@ -137,21 +134,19 @@ def build_mount_status_table(
     """
     table = Table(title=title)
     table.add_column("Name", style="bold")
-    table.add_column("Strategy")
     table.add_column("Device")
-    table.add_column("LUKS")
+    table.add_column("Unlocked")
     table.add_column("Mounted")
     for slug, status in statuses:
         reason = status.mount_failure_reason
         table.add_row(
             slug,
-            status.resolved_backend or "?",
             mount_state_icon(
                 status.device_present,
                 fail_severity=device_fail_severity(strictness),
             ),
             mount_state_icon(
-                status.luks_attached,
+                status.luks_unlocked,
                 fail_severity=luks_fail_severity(reason, strictness),
             ),
             mount_state_icon(
@@ -169,9 +164,8 @@ def build_mount_status_json(
     return [
         {
             "volume": slug,
-            "strategy": status.resolved_backend,
             "device_present": status.device_present,
-            "luks_attached": status.luks_attached,
+            "luks_unlocked": status.luks_unlocked,
             "mounted": status.mounted,
         }
         for slug, status in statuses

@@ -20,7 +20,6 @@ from ....config import (
 )
 from ....remote.resolution import resolve_all_endpoints
 from ....disks.lifecycle import mount_volumes, umount_volumes
-from ....disks.strategy import MountStrategy
 
 try:
     from ....remote.testkit.docker import (
@@ -132,7 +131,10 @@ def seed_demo(
             "storage", "127.0.0.1", storage_port, private_key
         )
         _start("Waiting for storage SSH...")
-        wait_for_ssh(storage_endpoint)
+        # Generous timeout: the storage container formats a btrfs loop image
+        # and brings up dbus/udevd/udisksd (probing the shared host /dev) before
+        # sshd is ready, which can exceed the 30s default on a loaded machine.
+        wait_for_ssh(storage_endpoint, timeout=90)
         _end("storage SSH", True)
 
     # ── Config — chain layout matching integration test ──────
@@ -188,19 +190,18 @@ def seed_demo(
         assert storage_endpoint is not None
         _ep = storage_endpoint
 
-        def _run_remote(cmd: str) -> None:
+        def _run_remote(_vol: object, cmd: str) -> None:
             ssh_exec(_ep, cmd)
 
-        remote_exec: Callable[[str], None] | None = _run_remote
+        remote_exec: Callable[[object, str], None] | None = _run_remote
     else:
         remote_exec = None
 
     resolved = resolve_all_endpoints(config)
 
-    mount_strategy: dict[str, MountStrategy] = {}
     if luks_uuid is not None:
         _start("Mounting encrypted volume...")
-        mount_strategy, mount_results = mount_volumes(
+        mount_results = mount_volumes(
             config,
             resolved,
             lambda _: LUKS_PASSPHRASE,
@@ -225,7 +226,6 @@ def seed_demo(
             umount_volumes(
                 config,
                 resolved,
-                mount_strategy=mount_strategy,
             )
             _end("umount encrypted volume", True)
 

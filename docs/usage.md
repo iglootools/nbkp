@@ -136,36 +136,39 @@ nbkp sh -o backup.sh
 
 ### Example 3: Encrypted removable drives with mount management
 
-A laptop backing up to two LUKS-encrypted external drives and one unencrypted USB drive. nbkp automatically unlocks, mounts, syncs, umounts, and locks the drives.
+A laptop backing up to two LUKS-encrypted external drives and one unencrypted USB drive. nbkp automatically unlocks, mounts, syncs, umounts, and locks the drives via udisks2.
 
 See [config-examples/encrypted-removable-drives.yaml](config-examples/encrypted-removable-drives.yaml).
 
 System setup (one-time, on the target host):
 
 ```bash
-# 1. Store passphrases in keyring
+# 1. Install udisks2 (+ udisks2-btrfs for btrfs volumes) and ensure udisksd runs
+sudo apt install udisks2 udisks2-btrfs   # Debian/Ubuntu
+
+# 2. Store passphrases in keyring
 keyring set nbkp seagate8tb
 keyring set nbkp backup-drives
 
-# 2. Configure fstab and crypttab
-# /etc/crypttab:
-#   seagate8tb UUID=5941f273-f73c-44c5-a3ef-fae7248db1b6 none luks,noauto
-#   iomega1tb  UUID=ad5542e5-5365-4951-a1f2-fe81c4d6fe43 none luks,noauto
+# 3. (Optional) Configure fstab for volumes with a fixed declared path.
+#    No crypttab is required — udisks names the unlocked device luks-<uuid>.
 # /etc/fstab:
-#   /dev/mapper/seagate8tb /mnt/seagate8tb btrfs defaults,noauto 0 0
-#   /dev/mapper/iomega1tb  /mnt/iomega1tb  ext4  defaults,noauto 0 0
-#   UUID=8a3b2c1d-...      /mnt/usb-plain  ext4  defaults,noauto 0 0
-sudo systemctl daemon-reload
+#   /dev/mapper/luks-5941f273-f73c-44c5-a3ef-fae7248db1b6 /mnt/seagate8tb btrfs noauto,nofail,x-udisks-auth 0 0
+#   /dev/mapper/luks-ad5542e5-5365-4951-a1f2-fe81c4d6fe43 /mnt/iomega1tb  ext4  noauto,nofail,x-udisks-auth 0 0
+#   UUID=8a3b2c1d-...                                     /mnt/usb-plain  ext4  noauto,nofail              0 0
+# Volumes whose config omits `path` need no fstab entry — udisks mounts them
+# at /run/media/<user>/<label> and nbkp discovers the path at runtime.
 
-# 3. Generate and install authorization rules
+# 4. Generate and install the polkit authorization rule
 nbkp disks setup-auth -c config.yaml
-# Review output, then install each block to the listed path:
+# Review output, then install the single block to:
 #   /etc/polkit-1/rules.d/50-nbkp.rules
-#   /etc/sudoers.d/nbkp
 
-# 4. Create sentinel files
+# 5. Create sentinel files
 touch /mnt/seagate8tb/.nbkp-vol /mnt/iomega1tb/.nbkp-vol /mnt/usb-plain/.nbkp-vol
 ```
+
+See [Mount management with udisks2](#mount-management-with-udisks2) below for the full reference on fstab/crypttab combinations and mount-point resolution.
 
 Usage:
 
@@ -189,3 +192,137 @@ nbkp preflight troubleshoot
 A real-world example of a complex multi-volume, multi-snapshot backup setup.
 
 See [config-examples/personal-setup.yaml](config-examples/personal-setup.yaml).
+
+## Mount management with udisks2
+
+nbkp can manage the mount/umount lifecycle of removable drives (encrypted or not) so that a backup automatically unlocks, mounts, syncs, umounts, and locks each drive. All of this is driven by [udisks2](https://www.freedesktop.org/wiki/Software/udisks/) (`udisksctl`), authorized purely by polkit — there is no `sudo`, no `systemd-cryptsetup`, and no `systemctl` involved.
+
+This is a Linux-only feature. The target host (local or remote) must have udisks2 installed and running.
+
+### Prerequisites
+
+1. **Install udisks2** (and `udisks2-btrfs` if any mount-managed volume holds a btrfs filesystem):
+
+   ```bash
+   sudo apt install udisks2 udisks2-btrfs        # Debian/Ubuntu
+   # or: sudo dnf install udisks2 udisks2-btrfs  # Fedora
+   ```
+
+2. **Ensure the udisks daemon is running:**
+
+   ```bash
+   systemctl enable --now udisks2.service
+   udisksctl status   # should list block devices
+   ```
+
+3. **Install the polkit rule.** nbkp runs over SSH or from a cron/timer in an *inactive* login session, where udisks would normally demand administrator authentication. A polkit rule grants the backup user the udisks actions unconditionally so the unattended path works. Generate and install it with:
+
+   ```bash
+   nbkp disks setup-auth -c config.yaml
+   # Review the output, then install the single block to:
+   #   /etc/polkit-1/rules.d/50-nbkp.rules
+   ```
+
+   The rule is the **only** authorization artifact — no sudoers file is generated. It grants the backup user the udisks actions (`filesystem-mount[-system]`, `filesystem-fstab`, `encrypted-unlock[-system]`, `encrypted-lock-others`, etc.) and is regenerated from the config so it always matches the configured volumes.
+
+### Mount-point models: fstab × crypttab
+
+For an encrypted volume, two independent and optional system files influence where and how it is mounted:
+
+- **crypttab** controls the *name* of the unlocked device mapper. Without it, udisks names the unlocked device `/dev/mapper/luks-<luks-uuid>`. With a crypttab entry (`name UUID=<luks-uuid> none luks,noauto`), udisks honors the custom name. nbkp **discovers** the actual name at runtime (via `lsblk`), so both work transparently — a crypttab entry is never required.
+- **fstab** controls the *mount point*. With an fstab entry mapping the device to a fixed path, udisks mounts the volume there. Without one, udisks mounts at `/run/media/<user>/<label>`.
+
+This gives four valid combinations:
+
+| crypttab | fstab | unlocked device | mount point | nbkp `path` |
+|---|---|---|---|---|
+| none | none | `/dev/mapper/luks-<uuid>` | `/run/media/<user>/<label>` (discovered) | omit |
+| none | yes | `/dev/mapper/luks-<uuid>` | declared path | set |
+| `name=X` | none | `/dev/mapper/X` | `/run/media/<user>/<label>` (discovered) | omit |
+| `name=X` | yes | `/dev/mapper/X` | declared path | set |
+
+Set `volume.path` **when and only when** there is an fstab entry mapping the device to a fixed path; otherwise omit it and let nbkp discover the `/run/media` mountpoint. **Consistency rule:** when both files exist, the fstab device must reference the mapper's actual name (e.g. the crypttab `name`, or `luks-<uuid>` if there is no crypttab). For unencrypted volumes crypttab is N/A — only the fstab dimension applies.
+
+### Worked examples
+
+**Encrypted, Option A — fixed path via fstab.** Set `path` in the config and add an fstab entry. No crypttab needed (the unlocked device defaults to `luks-<uuid>`):
+
+```yaml
+# config.yaml
+volumes:
+  seagate8tb:
+    type: remote
+    ssh-endpoint: raspberry-pi4-lan
+    path: /mnt/seagate8tb
+    mount:
+      device-uuid: 5941f273-f73c-44c5-a3ef-fae7248db1b6
+      encryption:
+        type: luks
+        passphrase-id: seagate8tb
+```
+
+```
+# /etc/fstab on the Pi
+/dev/mapper/luks-5941f273-f73c-44c5-a3ef-fae7248db1b6  /mnt/seagate8tb  ext4  noauto,nofail,x-udisks-auth  0 0
+```
+
+udisks unlocks the container, mounts it at `/mnt/seagate8tb`, and preflight verifies the fstab entry maps the device to that path (a mismatch yields `FSTAB_MOUNTPOINT_MISMATCH`).
+
+> To keep a friendly device name like `/dev/mapper/seagate8tb`, add an optional crypttab entry `seagate8tb UUID=5941f273-... none luks,noauto` and point the fstab device at `/dev/mapper/seagate8tb` instead.
+
+**Encrypted, Option B — discovered path via `/run/media`.** Omit `path` (and add no fstab entry). udisks mounts at `/run/media/<ssh-user>/<label>`, which nbkp discovers at runtime:
+
+```yaml
+# config.yaml
+volumes:
+  seagate8tb:
+    type: remote
+    ssh-endpoint: raspberry-pi4-lan
+    mount:
+      device-uuid: 5941f273-f73c-44c5-a3ef-fae7248db1b6
+      encryption:
+        type: luks
+        passphrase-id: seagate8tb
+```
+
+This requires zero system configuration beyond the polkit rule. Sentinels, rsync paths, and snapshot directories all use the discovered mountpoint for the run.
+
+**Unencrypted volume.** Provide only the filesystem UUID. With an fstab entry, set `path`; without one, omit it for the discovered mountpoint:
+
+```yaml
+volumes:
+  usb-plain:
+    type: local
+    path: /mnt/usb-plain          # backed by an fstab entry; omit for /run/media
+    mount:
+      device-uuid: 8a3b2c1d-1111-2222-3333-444455556666
+```
+
+```
+# /etc/fstab (only needed when `path` is set)
+UUID=8a3b2c1d-1111-2222-3333-444455556666  /mnt/usb-plain  ext4  noauto,nofail  0 0
+```
+
+### Running
+
+```bash
+# Run with automatic mount/umount (default)
+nbkp run
+
+# Run without mount management (volumes must be pre-mounted)
+nbkp run --no-mount --no-umount
+
+# Manually mount/umount specific volumes
+nbkp disks mount --name seagate8tb
+nbkp disks umount --name seagate8tb
+
+# Diagnose mount issues (udisksd down, missing polkit rule, fstab mismatch, …)
+nbkp preflight troubleshoot
+```
+
+### Consequences and gotchas
+
+- **`/run/media` is per-user.** udisks mounts unconfigured volumes under `/run/media/<user>/<label>`, where `<user>` is the account running the operation — for remote volumes, the **SSH user** on the target host. The same drive plugged into a different account lands at a different path.
+- **`/run/media` is tmpfs-backed and label-derived.** The mount point is created on demand and named after the filesystem **label**; an unlabeled filesystem falls back to its UUID. If you need a stable, predictable path, use the fstab (Option A) model instead.
+- **Wrong-drive safety comes from UUID + sentinel.** udisks mounts strictly by UUID, so the correct physical device is always selected regardless of where it lands. The `.nbkp-vol` sentinel then confirms the mounted content is the expected volume. There is no longer any reliance on a pre-configured systemd mount unit for this guarantee.
+- **The passphrase is piped without a trailing newline.** udisks `--key-file /dev/stdin` reads the raw bytes as the key, so nbkp delivers the passphrase exactly (no newline). This is transparent to the credential provider configuration.

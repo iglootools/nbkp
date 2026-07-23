@@ -22,7 +22,6 @@ from ...config import (
     SyncEndpoint,
 )
 from ...remote.testkit.constants import (
-    LUKS_MAPPER_NAME,
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_PATH,
     REMOTE_BTRFS_ENCRYPTED_PATH,
@@ -66,25 +65,28 @@ def _write_zeroed_file(path: Path, size_bytes: int) -> None:
 
 def create_seed_sentinels(
     config: Config,
-    remote_exec: Callable[[str], None] | None = None,
+    remote_exec: Callable[[RemoteVolume, str], None] | None = None,
 ) -> None:
     """Create volume, source, and destination sentinels.
 
-    For local volumes, creates directories and sentinel files
-    directly.  For remote volumes, uses *remote_exec(command)*
-    to run shell commands on the remote host.
+    For local volumes, creates directories and sentinel files directly.  For
+    remote volumes, uses *remote_exec(volume, command)* to run shell commands
+    on the remote host — the volume is passed so callers can route each
+    command over that volume's own SSH endpoint (e.g. through a bastion), which
+    matters when the volume is mounted by udisks over that same connection.
     """
     # Volume sentinels (.nbkp-vol)
     for vol in config.volumes.values():
         match vol:
             case LocalVolume():
+                assert vol.path is not None
                 vol_path = Path(vol.path)
                 vol_path.mkdir(parents=True, exist_ok=True)
                 (vol_path / VOLUME_SENTINEL).touch()
             case RemoteVolume():
                 if remote_exec is not None:
-                    remote_exec(f"mkdir -p {vol.path}")
-                    remote_exec(f"touch {vol.path}/{VOLUME_SENTINEL}")
+                    remote_exec(vol, f"mkdir -p {vol.path}")
+                    remote_exec(vol, f"touch {vol.path}/{VOLUME_SENTINEL}")
 
     # Sync endpoint sentinels — iterate unique endpoints
     seen_src: set[str] = set()
@@ -108,7 +110,7 @@ def _create_endpoint_sentinels(
     vol: LocalVolume | RemoteVolume,
     ep: SyncEndpoint,
     sentinel_name: str,
-    remote_exec: Callable[[str], None] | None,
+    remote_exec: Callable[[RemoteVolume, str], None] | None,
 ) -> None:
     """Create sentinels and snapshot infrastructure for an endpoint."""
     btrfs = ep.btrfs_snapshots
@@ -116,6 +118,7 @@ def _create_endpoint_sentinels(
 
     match vol:
         case LocalVolume():
+            assert vol.path is not None
             path = Path(vol.path)
             if ep.subdir:
                 path = path / ep.subdir
@@ -146,26 +149,29 @@ def _create_endpoint_sentinels(
                 rp = vol.path
                 if ep.subdir:
                     rp = f"{rp}/{ep.subdir}"
-                remote_exec(f"mkdir -p {rp}")
-                remote_exec(f"touch {rp}/{sentinel_name}")
+                remote_exec(vol, f"mkdir -p {rp}")
+                remote_exec(vol, f"touch {rp}/{sentinel_name}")
                 if hard_link.enabled:
-                    remote_exec(f"mkdir -p {rp}/{SNAPSHOTS_DIR}")
+                    remote_exec(vol, f"mkdir -p {rp}/{SNAPSHOTS_DIR}")
                     remote_exec(
+                        vol,
                         f"test -e {rp}/{LATEST_LINK}"
                         f" || ln -sfn {DEVNULL_TARGET}"
-                        f" {rp}/{LATEST_LINK}"
+                        f" {rp}/{LATEST_LINK}",
                     )
                 elif btrfs.enabled:
                     remote_exec(
+                        vol,
                         f"test -e {rp}/{STAGING_DIR}"
                         " || btrfs subvolume create"
-                        f" {rp}/{STAGING_DIR}"
+                        f" {rp}/{STAGING_DIR}",
                     )
-                    remote_exec(f"mkdir -p {rp}/{SNAPSHOTS_DIR}")
+                    remote_exec(vol, f"mkdir -p {rp}/{SNAPSHOTS_DIR}")
                     remote_exec(
+                        vol,
                         f"test -e {rp}/{LATEST_LINK}"
                         f" || ln -sfn {DEVNULL_TARGET}"
-                        f" {rp}/{LATEST_LINK}"
+                        f" {rp}/{LATEST_LINK}",
                     )
 
 
@@ -213,6 +219,7 @@ def seed_volume(
     """Write sample files into a single source volume."""
     match vol:
         case LocalVolume():
+            assert vol.path is not None
             base = Path(vol.path)
             path = base / subdir if subdir else base
             path.mkdir(parents=True, exist_ok=True)
@@ -319,7 +326,6 @@ def build_chain_config(
     proxied_endpoint: SshEndpoint,
     *,
     luks_uuid: str | None = None,
-    luks_mapper_name: str = LUKS_MAPPER_NAME,
     rsync_options: RsyncOptions | None = None,
     max_snapshots: int | None = None,
     credential_provider: CredentialProvider = CredentialProvider.KEYRING,
@@ -370,10 +376,8 @@ def build_chain_config(
             ),
             mount=(
                 MountConfig(
-                    strategy="direct",
                     device_uuid=luks_uuid,
                     encryption=LuksEncryptionConfig(
-                        mapper_name=luks_mapper_name,
                         passphrase_id="test-luks",
                     ),
                 )

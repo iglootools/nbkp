@@ -3,7 +3,8 @@
 from .managed_mount import managed_mount as managed_mount
 from .progress import DisksProgressBar as DisksProgressBar
 from .status import (
-    _error_status as _error_status,
+    _ErrorStatus as _ErrorStatus,
+    _error_label as _error_label,
     _format_mount_result as _format_mount_result,
     _format_umount_result as _format_umount_result,
     _probe_and_show_status as _probe_and_show_status,

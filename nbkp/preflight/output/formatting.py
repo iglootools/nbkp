@@ -74,23 +74,22 @@ def status_text(
 def mount_capability_items(
     mount: MountCapabilities,
 ) -> list[tuple[bool | None, str | None]]:
-    """Build capability display items based on resolved backend."""
-    match mount.resolved_backend:
-        case "direct":
-            return [
-                (True, "mnt-strategy:direct"),
-            ]
-        case _:
-            return [
-                (
-                    True,
-                    f"mnt-strategy:{mount.resolved_backend or 'systemd'}",
-                ),
-                (
-                    mount.mount_unit is not None,
-                    f"mount:{mount.mount_unit}" if mount.mount_unit else None,
-                ),
-            ]
+    """Build capability display items for a mount-managed volume.
+
+    udisks has no backend/strategy distinction, so we surface the
+    effective mountpoint (the path udisks mounted at, or the discovered
+    cleartext device) instead of a systemd mount-unit name.
+    """
+    return [
+        (
+            mount.effective_path is not None,
+            f"mount:{mount.effective_path}" if mount.effective_path else None,
+        ),
+        (
+            mount.cleartext_device is not None,
+            f"cleartext:{mount.cleartext_device}" if mount.cleartext_device else None,
+        ),
+    ]
 
 
 def format_capabilities(caps: VolumeCapabilities | None) -> Text:
@@ -159,7 +158,7 @@ def format_mount_status(
     :mod:`nbkp.disks.output`, which inspect ``mount_failure_reason`` to
     distinguish real failures (\u2717) from observation/cascade states (\u26a0).
     The "drive not plugged in \u2192 \u26a0 luks" cascade emerges naturally:
-    when no LUKS-attach attempt was made the failure_reason isn't in
+    when no LUKS-unlock attempt was made the failure_reason isn't in
     ``LUKS_STAGE_FAILURES``, so the helper returns the inactive-class
     severity for the active strictness.
     """
@@ -169,7 +168,7 @@ def format_mount_status(
     items: list[tuple[bool | None, str, Severity]] = [
         (mount_caps.device_present, "device", device_fail_severity(strictness)),
         *(
-            [(mount_caps.luks_attached, "luks", luks_fail_severity(reason, strictness))]
+            [(mount_caps.luks_unlocked, "luks", luks_fail_severity(reason, strictness))]
             if mount_config.encryption is not None
             else []
         ),

@@ -72,22 +72,17 @@ class SshEndpointError(str, enum.Enum):
     # Needed when any endpoint on this host has btrfs or hardlink snapshots
     STAT_NOT_FOUND = "stat not found"
 
-    # Needed when any endpoint on this host has btrfs snapshots
+    # Needed when any endpoint on this host has btrfs snapshots,
+    # or any mount-managed volume needs mountpoint discovery
     FINDMNT_NOT_FOUND = "findmnt not found"
 
-    # Needed when any volume on this host has mount config (systemd backend)
-    SYSTEMCTL_NOT_FOUND = "systemctl not found"
-    SYSTEMD_ESCAPE_NOT_FOUND = "systemd-escape not found"
+    # Needed when any volume on this host has mount config (udisks backend)
+    UDISKSCTL_NOT_FOUND = "udisksctl not found"
+    UDISKSD_NOT_RUNNING = "udisksd (udisks2 daemon) not running"
+    LSBLK_NOT_FOUND = "lsblk not found"
 
-    # Needed when any volume on this host has mount config (direct backend)
-    MOUNT_CMD_NOT_FOUND = "mount command not found"
-    UMOUNT_CMD_NOT_FOUND = "umount command not found"
-    MOUNTPOINT_CMD_NOT_FOUND = "mountpoint command not found"
-
-    # Needed when any volume on this host has encryption
-    SUDO_NOT_FOUND = "sudo not found"
-    CRYPTSETUP_NOT_FOUND = "cryptsetup not found"
-    SYSTEMD_CRYPTSETUP_NOT_FOUND = "systemd-cryptsetup not found"
+    # Warning: needed to mount btrfs volumes via udisks
+    UDISKS_BTRFS_MODULE_MISSING = "udisks2 btrfs module not installed"
 
 
 @dataclass(frozen=True)
@@ -102,12 +97,11 @@ class SshEndpointToolNeeds:
     has_snapshot_endpoints: bool = False
     """Any sync endpoint on a volume using this host has btrfs or hardlink
     snapshots (stat is needed for both)."""
-    mount_systemd: bool = False
-    """Any volume on this host uses the systemd mount backend."""
-    mount_direct: bool = False
-    """Any volume on this host uses the direct mount backend."""
-    has_encryption: bool = False
-    """Any volume on this host has encryption config."""
+    has_mount_volumes: bool = False
+    """Any volume on this host has mount config (needs udisks tools)."""
+    has_btrfs_mount: bool = False
+    """Any mount-managed volume on this host is on btrfs (needs the udisks
+    btrfs module)."""
 
 
 class HostToolCapabilities(BaseModel):
@@ -239,66 +233,45 @@ def _ssh_mount_tool_errors(
     mount_tools: MountToolCapabilities,
     needs: SshEndpointToolNeeds,
 ) -> list[SshEndpointError]:
-    """Mount management tool errors."""
+    """udisks mount management tool errors.
+
+    A mount-managed host needs ``udisksctl`` + a running ``udisksd`` (for
+    unlock/mount/lock), ``findmnt`` (mountpoint discovery), and ``lsblk``
+    (cleartext-device discovery).  Btrfs-backed mount volumes additionally
+    want the udisks btrfs module (surfaced as a warning, not a hard error).
+    """
+    if not needs.has_mount_volumes:
+        return []
     return [
-        # Systemd tools (systemctl, systemd-escape)
         *(
-            [
-                *(
-                    [SshEndpointError.SYSTEMCTL_NOT_FOUND]
-                    if mount_tools.has_systemctl is False
-                    else []
-                ),
-                *(
-                    [SshEndpointError.SYSTEMD_ESCAPE_NOT_FOUND]
-                    if mount_tools.has_systemd_escape is False
-                    else []
-                ),
-            ]
-            if needs.mount_systemd
+            [SshEndpointError.UDISKSCTL_NOT_FOUND]
+            if mount_tools.has_udisksctl is False
             else []
         ),
-        # Direct tools (mount, umount, mountpoint)
         *(
-            [
-                *(
-                    [SshEndpointError.MOUNT_CMD_NOT_FOUND]
-                    if mount_tools.has_mount_cmd is False
-                    else []
-                ),
-                *(
-                    [SshEndpointError.UMOUNT_CMD_NOT_FOUND]
-                    if mount_tools.has_umount_cmd is False
-                    else []
-                ),
-                *(
-                    [SshEndpointError.MOUNTPOINT_CMD_NOT_FOUND]
-                    if mount_tools.has_mountpoint is False
-                    else []
-                ),
-            ]
-            if needs.mount_direct
+            [SshEndpointError.UDISKSD_NOT_RUNNING]
+            if mount_tools.has_udisksctl is True
+            and mount_tools.udisksd_running is False
             else []
         ),
-        # sudo: direct backend always needs it; systemd only for encryption
         *(
-            [SshEndpointError.SUDO_NOT_FOUND]
-            if mount_tools.has_sudo is False
-            and (needs.mount_direct or (needs.has_encryption and needs.mount_systemd))
+            [SshEndpointError.FINDMNT_NOT_FOUND]
+            if mount_tools.has_findmnt is False
             else []
         ),
-        # cryptsetup: any encryption
+        # lsblk is only *used* for encrypted volumes today — discovering the
+        # unlocked cleartext mapper (see disks.detection.discover_cleartext_device).
+        # We deliberately gate it on has_mount_volumes (any mount-managed volume)
+        # rather than encrypted-only: lsblk is core util-linux and present
+        # wherever udisks is, so the broader check never false-alarms, and it
+        # leaves room for plausible future uses across all mount-managed volumes —
+        # pre-mount introspection (lsblk -o FSTYPE/SIZE/MODEL), label/partition
+        # resolution, multi-device btrfs enumeration, or a richer `disks status`
+        # block-device tree.
+        *([SshEndpointError.LSBLK_NOT_FOUND] if mount_tools.has_lsblk is False else []),
         *(
-            [SshEndpointError.CRYPTSETUP_NOT_FOUND]
-            if mount_tools.has_cryptsetup is False and needs.has_encryption
-            else []
-        ),
-        # systemd-cryptsetup: systemd backend + encryption
-        *(
-            [SshEndpointError.SYSTEMD_CRYPTSETUP_NOT_FOUND]
-            if mount_tools.has_systemd_cryptsetup is False
-            and needs.has_encryption
-            and needs.mount_systemd
+            [SshEndpointError.UDISKS_BTRFS_MODULE_MISSING]
+            if needs.has_btrfs_mount and mount_tools.has_btrfs_module is False
             else []
         ),
     ]
@@ -322,19 +295,15 @@ class VolumeError(str, enum.Enum):
 
     # Mount management — lifecycle errors
     DEVICE_NOT_PRESENT = "device not plugged in"
-    ATTACH_LUKS_FAILED = "failed to attach luks encrypted device"
+    UNLOCK_FAILED = "failed to unlock luks encrypted device"
     MOUNT_FAILED = "failed to mount volume"
     PASSPHRASE_NOT_AVAILABLE = "passphrase not available"
 
-    # Mount management — systemd config validation
-    MOUNT_UNIT_NOT_CONFIGURED = "mount unit not configured in systemd"
-    MOUNT_UNIT_MISMATCH = "mount unit config does not match nbkp config"
-    CRYPTSETUP_SERVICE_NOT_CONFIGURED = "cryptsetup service not configured in systemd"
-    CRYPTSETUP_SERVICE_MISMATCH = "cryptsetup service config does not match nbkp config"
+    # Mount management — fstab config (fixed-path / Option A only)
+    FSTAB_MOUNTPOINT_MISMATCH = "no fstab entry maps the device to the configured path"
 
-    # Auth rules
+    # Auth rules (polkit only — udisks has no sudoers path)
     POLKIT_RULES_MISSING = "polkit rules not configured"
-    SUDOERS_RULES_MISSING = "sudoers rules not configured"
 
     # Cascade — lower layer inactive
     SSH_ENDPOINT_INACTIVE = "ssh endpoint inactive"
@@ -436,14 +405,14 @@ def _volume_errors(
     if diag.capabilities is not None and not diag.capabilities.sentinel_exists:
         # When a volume has mount config and the mount step didn't
         # succeed, prefer the most specific signal we have. Order:
-        # 1. Lifecycle recorded a known cause (e.g. SUDOERS_REFUSED) —
-        #    surface that so troubleshoot points at the real fix. This
-        #    fires whether ``mounted`` is False (mount step reached and
-        #    failed) or None (mount step never ran because an earlier
-        #    step like LUKS attach failed first).
+        # 1. Lifecycle recorded a known cause (e.g. NOT_AUTHORIZED →
+        #    POLKIT_RULES_MISSING) — surface that so troubleshoot points
+        #    at the real fix.
         # 2. device not plugged in — DEVICE_NOT_PRESENT.
-        # 3. device present but mount step ran and ended unmounted — VOLUME_NOT_MOUNTED.
-        # 4. Otherwise, fall back to SENTINEL_NOT_FOUND.
+        # 3. path declared but no fstab entry maps the device there —
+        #    FSTAB_MOUNTPOINT_MISMATCH (udisks would mount at /run/media).
+        # 4. device present but unmounted — VOLUME_NOT_MOUNTED.
+        # 5. Otherwise, fall back to SENTINEL_NOT_FOUND.
         mount_caps = diag.capabilities.mount
         if mount is not None and mount_caps is not None:
             specific = _mount_lifecycle_failure_error(mount_caps)
@@ -451,11 +420,11 @@ def _volume_errors(
                 return [specific]
             if mount_caps.device_present is False:
                 return [VolumeError.DEVICE_NOT_PRESENT]
+            if mount_caps.has_fstab_entry is False:
+                return [VolumeError.FSTAB_MOUNTPOINT_MISMATCH]
             if mount_caps.mounted is False:
                 return [VolumeError.VOLUME_NOT_MOUNTED]
         return [VolumeError.SENTINEL_NOT_FOUND]
-    elif diag.capabilities is not None and mount is not None:
-        return _mount_errors(diag.capabilities.mount, mount)
     else:
         return []
 
@@ -465,108 +434,18 @@ def _mount_lifecycle_failure_error(
 ) -> VolumeError | None:
     """Map a lifecycle ``MountFailureReason`` to a more specific VolumeError.
 
-    Returns ``None`` when no upgrade is available — caller should fall
-    back to the generic VOLUME_NOT_MOUNTED.
+    Returns ``None`` when no upgrade is available — caller falls back to
+    DEVICE_NOT_PRESENT / VOLUME_NOT_MOUNTED / SENTINEL_NOT_FOUND.
     """
     match mount_caps.mount_failure_reason:
-        case "sudoers_refused":
-            return VolumeError.SUDOERS_RULES_MISSING
-        case "polkit_refused":
+        case "not_authorized":
             return VolumeError.POLKIT_RULES_MISSING
+        case "unlock_failed":
+            return VolumeError.UNLOCK_FAILED
+        case "mount_failed":
+            return VolumeError.MOUNT_FAILED
         case _:
             return None
-
-
-def _mount_errors(
-    mount_caps: MountCapabilities | None,
-    mount: MountConfig,
-) -> list[VolumeError]:
-    """Translate mount-related capabilities into VolumeError values.
-
-    Direct-backend has no static-config errors to report — auth-rule
-    errors are surfaced via the runtime path. Only the systemd backend
-    has volume-specific static config (mount unit, cryptsetup service)
-    that can fail validation.
-    """
-    if mount_caps is None:
-        return []
-    match mount_caps.resolved_backend:
-        case "direct":
-            return []
-        case _:
-            # "systemd" or None (legacy/unresolved) — use systemd checks
-            return _systemd_mount_errors(mount_caps, mount)
-
-
-def _systemd_mount_errors(
-    mount_caps: MountCapabilities,
-    mount: MountConfig,
-) -> list[VolumeError]:
-    """Translate systemd-specific mount config into VolumeError values.
-
-    Tool availability errors (systemctl, systemd-escape, sudo, etc.)
-    are now at the SSH endpoint level.  Only volume-specific config
-    validation (mount unit, cryptsetup service, auth rules) remains.
-    """
-    has_encryption = mount.encryption is not None
-    return [
-        *(
-            [VolumeError.MOUNT_UNIT_NOT_CONFIGURED]
-            if mount_caps.has_mount_unit_config is False
-            else []
-        ),
-        *(
-            [VolumeError.MOUNT_UNIT_MISMATCH]
-            if mount_caps.has_mount_unit_config is True
-            and _mount_unit_mismatches(mount_caps, mount)
-            else []
-        ),
-        *(
-            [VolumeError.CRYPTSETUP_SERVICE_NOT_CONFIGURED]
-            if has_encryption and mount_caps.has_cryptsetup_service_config is False
-            else []
-        ),
-        *(
-            [VolumeError.CRYPTSETUP_SERVICE_MISMATCH]
-            if has_encryption
-            and mount_caps.has_cryptsetup_service_config is True
-            and _cryptsetup_service_mismatches(mount_caps, mount)
-            else []
-        ),
-        # POLKIT_RULES_MISSING and SUDOERS_RULES_MISSING are no longer
-        # emitted from the static-config layer because the parent dirs
-        # (0750) defeat the file-exists probe. Both are now surfaced
-        # via the runtime path in _mount_lifecycle_failure_error.
-    ]
-
-
-def _mount_unit_mismatches(
-    mount_caps: MountCapabilities,
-    mount: MountConfig,
-) -> bool:
-    """Check if the systemd mount unit config doesn't match expectations."""
-    if mount.encryption is not None:
-        expected_what = f"/dev/mapper/{mount.encryption.mapper_name}"
-    else:
-        expected_what = f"/dev/disk/by-uuid/{mount.device_uuid}"
-    return (
-        mount_caps.mount_unit_what is not None
-        and mount_caps.mount_unit_what != expected_what
-    )
-
-
-def _cryptsetup_service_mismatches(
-    mount_caps: MountCapabilities,
-    mount: MountConfig,
-) -> bool:
-    """Check if the systemd cryptsetup service config doesn't match."""
-    if mount.encryption is None or mount_caps.cryptsetup_service_exec_start is None:
-        return False
-    exec_start = mount_caps.cryptsetup_service_exec_start
-    return (
-        mount.encryption.mapper_name not in exec_start
-        or mount.device_uuid not in exec_start
-    )
 
 
 # ── Layer 3: Sync Endpoint ─────────────────────────────────

@@ -91,7 +91,7 @@ def prune(
 
     with managed_mount(
         cfg, resolved, mount=mount, umount=umount, output_format=output_format
-    ) as (_mount_strategy, mount_observations):
+    ) as (cfg, mount_observations):
         preflight = check_all_with_progress(
             cfg,
             use_progress=output_format is OutputFormat.HUMAN,

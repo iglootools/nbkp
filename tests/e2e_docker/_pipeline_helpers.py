@@ -6,9 +6,12 @@ from pathlib import Path
 
 from nbkp.config import (
     Config,
+    RemoteVolume,
     SshEndpoint,
 )
 from nbkp.config.epresolution import ResolvedEndpoints
+from nbkp.remote.dispatch import run_on_volume
+from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.queries import check_directory_exists, read_symlink_target
 from nbkp.preflight.snapshot_checks import check_btrfs_readonly, check_btrfs_subvolume
 from nbkp.remote.testkit.docker import (
@@ -20,8 +23,6 @@ from nbkp.sync.testkit.seed import (
     seed_volume,
 )
 
-from tests._docker_fixtures import ssh_exec
-
 # Re-export so test modules can import from here
 __all__ = ["build_chain_config"]
 
@@ -30,6 +31,7 @@ def setup_chain(
     config: Config,
     tmp_path: Path,
     docker_ssh_endpoint: SshEndpoint,
+    resolved: ResolvedEndpoints | None = None,
 ) -> Path:
     """Common setup: sentinels, seed data.
 
@@ -37,11 +39,19 @@ def setup_chain(
     ``snapshots/`` directory, ``latest`` symlink) is created
     by ``create_seed_sentinels``.
 
+    Remote sentinels are created over each volume's *own* resolved endpoint
+    (via ``run_on_volume``, which follows any bastion proxy) rather than a
+    single direct connection.  This matters for mount-managed volumes: udisks
+    mounts them over their endpoint, and that mount is only visible to
+    sessions on the same connection — creating the ``.nbkp-vol`` sentinel over
+    a different (direct) connection would land on the bare, unmounted dir.
+
     Returns the source directory path.
     """
+    re = resolved if resolved is not None else resolve_all_endpoints(config)
 
-    def _run_remote(cmd: str) -> None:
-        ssh_exec(docker_ssh_endpoint, cmd)
+    def _run_remote(vol: RemoteVolume, cmd: str) -> None:
+        run_on_volume(["sh", "-c", cmd], vol, re)
 
     create_seed_sentinels(config, remote_exec=_run_remote)
 

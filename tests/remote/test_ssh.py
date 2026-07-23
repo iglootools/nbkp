@@ -459,9 +459,10 @@ class TestRunRemoteCommand:
     ) -> None:
         """ThreadException from stdin writer must not leak as a traceback.
 
-        Reproduces the case where sudo without NOPASSWD exits before
-        consuming the passphrase, Paramiko raises OSError on the closed
-        channel, and Fabric wraps it in invoke.exceptions.ThreadException.
+        Reproduces the case where a remote command exits before consuming
+        the piped passphrase (e.g. `udisksctl unlock` failing fast), Paramiko
+        raises OSError on the closed channel, and Fabric wraps it in
+        invoke.exceptions.ThreadException.
         """
         import invoke.exceptions
 
@@ -473,7 +474,16 @@ class TestRunRemoteCommand:
         )
 
         result = run_remote_command(
-            ssh_endpoint, ["sudo", "systemd-cryptsetup", "attach"], input="pw"
+            ssh_endpoint,
+            [
+                "udisksctl",
+                "unlock",
+                "-b",
+                "/dev/disk/by-uuid/test",
+                "--key-file",
+                "/dev/stdin",
+            ],
+            input="pw",
         )
 
         assert result.returncode == 1

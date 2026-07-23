@@ -30,7 +30,7 @@ def setup_auth(
         typer.Option("--user", "-u", help="System user for auth rules"),
     ] = "ubuntu",
 ) -> None:
-    """Generate polkit and sudoers configuration for mount management."""
+    """Generate the polkit rule for udisks-based mount management."""
     cfg = load_config_or_exit(config)
     rules = generate_auth_rules(cfg, user)
 

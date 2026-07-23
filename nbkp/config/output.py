@@ -40,7 +40,12 @@ def format_volume_display(
                 port_suffix = f":{ep.server.port}" if ep.server.port != 22 else ""
                 return f"{host_part}{port_suffix}:{vol.path}"
         case LocalVolume():
-            return vol.path
+            return _display_path(vol)
+
+
+def _display_path(vol: LocalVolume | RemoteVolume) -> str:
+    """Path for display: the declared path, or a marker for discovered ones."""
+    return vol.path if vol.path is not None else "(discovered at runtime)"
 
 
 def host_label(
@@ -61,10 +66,11 @@ def endpoint_path(
     subdir: str | None,
 ) -> str:
     """Resolve the full endpoint path."""
+    path = _display_path(vol)
     if subdir:
-        return f"{vol.path}/{subdir}"
+        return f"{path}/{subdir}"
     else:
-        return vol.path
+        return path
 
 
 def format_mount_summary(mount: MountConfig | None) -> str:
@@ -74,12 +80,7 @@ def format_mount_summary(mount: MountConfig | None) -> str:
     return " ".join(
         [
             f"uuid:{mount.device_uuid[:8]}\u2026",
-            f"strategy:{mount.strategy}",
-            *(
-                [f"luks:{mount.encryption.mapper_name}"]
-                if mount.encryption is not None
-                else []
-            ),
+            *(["luks"] if mount.encryption is not None else []),
         ]
     )
 

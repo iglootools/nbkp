@@ -6,11 +6,6 @@ from dataclasses import dataclass
 
 from ..config import Config
 from .lifecycle import MountFailureReason, MountResult
-from .strategy import (
-    DirectMountStrategy,
-    MountStrategy,
-    SystemdMountStrategy,
-)
 
 
 @dataclass(frozen=True)
@@ -19,17 +14,16 @@ class MountObservation:
 
     Fields mirror the runtime-state subset of ``MountCapabilities``.
     Preflight checks can use these values instead of re-probing device
-    presence, LUKS attachment, and mount state via SSH.
+    presence, LUKS unlock, and mount state via SSH.
     """
 
-    resolved_backend: str
-    mount_unit: str | None = None
-    systemd_cryptsetup_path: str | None = None
-    device_present: bool = False
-    luks_attached: bool | None = None
+    device_present: bool | None = None
+    luks_unlocked: bool | None = None
     mounted: bool | None = None
+    cleartext_device: str | None = None
+    effective_path: str | None = None
     failure_reason: MountFailureReason | None = None
-    """Specific cause when the mount step failed, for preflight to
+    """Specific cause when the lifecycle step failed, for preflight to
     upgrade the generic VOLUME_NOT_MOUNTED to a more actionable error."""
 
     @property
@@ -45,92 +39,51 @@ class MountObservation:
 
 def build_mount_observations(
     mount_results: list[MountResult],
-    mount_strategy: dict[str, MountStrategy],
-    config: Config,
 ) -> dict[str, MountObservation]:
     """Build mount observations from lifecycle results for preflight reuse.
 
-    Maps each volume slug to a ``MountObservation`` by combining
-    the resolved strategy (backend, mount unit, cryptsetup path) with
-    the mount result (success/failure reason → runtime state).
+    The lifecycle already records the runtime state it observed on each
+    ``MountResult`` (device present, LUKS unlocked, mounted, effective path),
+    so this is a direct projection — no re-derivation from failure reasons.
+    ``UNREACHABLE`` results yield no observation (nothing was learned).
     """
-    results_by_slug = {r.volume_slug: r for r in mount_results}
     observations: dict[str, MountObservation] = {}
-
-    for slug, strategy in mount_strategy.items():
-        result = results_by_slug.get(slug)
-        if result is None:
+    for result in mount_results:
+        if result.failure_reason is MountFailureReason.UNREACHABLE:
             continue
-
-        # Extract backend info from strategy type
-        match strategy:
-            case SystemdMountStrategy():
-                backend = "systemd"
-                mount_unit = strategy.mount_unit
-                cryptsetup_path = strategy.cryptsetup_path
-            case DirectMountStrategy():
-                backend = "direct"
-                mount_unit = None
-                cryptsetup_path = None
-            case _:
-                continue
-
-        vol = config.volumes.get(slug)
-        has_encryption = (
-            vol is not None
-            and vol.mount is not None
-            and vol.mount.encryption is not None
+        observations[result.volume_slug] = MountObservation(
+            device_present=result.device_present,
+            luks_unlocked=result.luks_unlocked,
+            mounted=result.mounted,
+            cleartext_device=result.cleartext_device,
+            effective_path=result.effective_path,
+            failure_reason=result.failure_reason,
         )
-
-        # Infer runtime state from mount result
-        match result.failure_reason:
-            case None:
-                # Success: everything is up
-                observations[slug] = MountObservation(
-                    resolved_backend=backend,
-                    mount_unit=mount_unit,
-                    systemd_cryptsetup_path=cryptsetup_path,
-                    device_present=True,
-                    luks_attached=True if has_encryption else None,
-                    mounted=True,
-                )
-            case MountFailureReason.DEVICE_NOT_PRESENT:
-                observations[slug] = MountObservation(
-                    resolved_backend=backend,
-                    mount_unit=mount_unit,
-                    systemd_cryptsetup_path=cryptsetup_path,
-                    device_present=False,
-                    luks_attached=None,
-                    mounted=None,
-                )
-            case (
-                MountFailureReason.ATTACH_LUKS_FAILED
-                | MountFailureReason.SUDOERS_REFUSED
-            ):
-                observations[slug] = MountObservation(
-                    resolved_backend=backend,
-                    mount_unit=mount_unit,
-                    systemd_cryptsetup_path=cryptsetup_path,
-                    device_present=True,
-                    luks_attached=False,
-                    mounted=None,
-                    failure_reason=result.failure_reason,
-                )
-            case MountFailureReason.MOUNT_FAILED | MountFailureReason.POLKIT_REFUSED:
-                observations[slug] = MountObservation(
-                    resolved_backend=backend,
-                    mount_unit=mount_unit,
-                    systemd_cryptsetup_path=cryptsetup_path,
-                    device_present=True,
-                    luks_attached=True if has_encryption else None,
-                    mounted=False,
-                    failure_reason=result.failure_reason,
-                )
-            case MountFailureReason.STRATEGY_NOT_RESOLVED:
-                # No useful observation — skip
-                pass
-            case MountFailureReason.UNREACHABLE:
-                # Host unreachable — no useful observation
-                pass
-
     return observations
+
+
+def apply_effective_paths(
+    config: Config,
+    observations: dict[str, MountObservation],
+) -> Config:
+    """Return a copy of *config* with discovered mount paths filled in.
+
+    For each mount-managed volume whose ``path`` was omitted (Option B,
+    discovered mountpoint), substitute the effective path observed during the
+    mount lifecycle so that downstream consumers (sentinels, rsync, snapshots,
+    preflight) operate on a concrete location.  Volumes with a declared path,
+    or whose device was not mounted, are left untouched.
+    """
+    updated = {}
+    for slug, vol in config.volumes.items():
+        obs = observations.get(slug)
+        if (
+            vol.mount is not None
+            and vol.path is None
+            and obs is not None
+            and obs.effective_path is not None
+        ):
+            updated[slug] = vol.model_copy(update={"path": obs.effective_path})
+    if not updated:
+        return config
+    return config.model_copy(update={"volumes": {**config.volumes, **updated}})

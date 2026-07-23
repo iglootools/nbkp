@@ -29,9 +29,7 @@ In addition to the automated tests, the `nbkp demo seed --docker` command can be
 
 `mise run demo-record` is a great way to iterate quickly on test scenarios: it runs the `demo seed` command as well as a few test scenarios exercising different features of the tool.
 
-The docker setup does not include a fully-functional systemd setup for managing mounts, so the demo command uses a simplified setup with direct
-`cryptsetup` and `mount` calls instead of the production systemd-based workflow.
-This allows testing the encrypted backup workflows end-to-end but nbkp's mount/umount logic needs to be tested manually on a real setup.
+The demo uses the same real udisks path as production: the Docker harness runs `dbus-daemon`, `polkitd`, and `udisksd`, installs the generated `50-nbkp.rules` polkit rule, and connects as the non-root backup user, so the demo exercises the actual `udisksctl unlock/mount/unmount/lock` lifecycle and the polkit grant — not a bypassed simplified setup.
 
 ### Automated tests
 

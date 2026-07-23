@@ -21,6 +21,7 @@ from .constants import (  # noqa: F401
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_PATH,
     REMOTE_BTRFS_ENCRYPTED_PATH,
+    REMOTE_UNENCRYPTED_PATH,
 )
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"
@@ -203,7 +204,20 @@ def start_storage_container(
             str(pub_key): {
                 "bind": SSH_AUTHORIZED_KEYS_PATH,
                 "mode": "ro",
-            }
+            },
+            # Share the host's /dev and udev runtime.  udisks mounts a device
+            # only once udev has probed its filesystem (it reads the ID_FS_TYPE
+            # udev property).  With a *private* container /dev, the container's
+            # udevd sees a different devtmpfs than the kernel creates dm-crypt
+            # devices on, so it intermittently never probes a freshly-unlocked
+            # cleartext device — udisks then refuses to mount it ("… is not a
+            # mountable filesystem") and the encrypted-volume mount fails.
+            # Sharing /dev lets udevd operate on the same devtmpfs the kernel
+            # uses, and sharing /run/udev gives udisks the resulting db.  This
+            # mirrors the e2e/integration test container (see
+            # tests/_docker_fixtures).
+            "/dev": {"bind": "/dev", "mode": "rw"},
+            "/run/udev": {"bind": "/run/udev", "mode": "rw"},
         },
     )
 
@@ -334,11 +348,10 @@ def prepare_hardlinks_snapshot_based_backup_dst(
 
 # ── LUKS helpers ─────────────────────────────────────────────
 #
-# The Docker test container runs sshd as PID 1 (not systemd).
-# Tests use ``DirectMountStrategy`` and the production lifecycle
-# functions (``mount_volume`` / ``umount_volume``) for LUKS
-# operations.  Only ``read_luks_metadata`` remains here as
-# infrastructure for fixture setup.
+# Tests drive LUKS through the production lifecycle functions
+# (``mount_volume`` / ``umount_volume``), which delegate to udisks
+# (``udisksctl``) authorized by the installed polkit rule.  Only
+# ``read_luks_metadata`` remains here as infrastructure for fixture setup.
 
 
 def read_luks_metadata(server: SshEndpoint) -> LuksMetadata:
