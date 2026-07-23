@@ -26,6 +26,7 @@ jobs:
   pypi-publish:
     name: Upload release to Test PyPI
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: testpypi
       # cosmetic URL displayed in the GitHub UI for the environment,

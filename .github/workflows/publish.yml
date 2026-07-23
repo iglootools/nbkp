@@ -28,6 +28,7 @@ jobs:
   pypi-publish:
     name: Upload release to PyPI
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # workflow_run fires on both success and failure; skip if the release workflow failed.
     # For all other triggers (push, workflow_dispatch, repository_dispatch), always run.
     if: >-
