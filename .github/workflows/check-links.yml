@@ -12,6 +12,7 @@ on:
 jobs:
   linkChecker:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       issues: write # required for peter-evans/create-issue-from-file
     steps:
