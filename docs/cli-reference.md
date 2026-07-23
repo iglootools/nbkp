@@ -39,16 +39,16 @@ $ nbkp run [OPTIONS]
 
 **Options**:
 
-* `-c, --config FILE`: Path to config file
+* `-c, --config <file>`: Path to config file
 * `-n, --dry-run`: Perform a dry run
-* `-s, --sync TEXT`: Sync name(s) to run
-* `-o, --output [human|json]`: Output format  [default: human]
-* `-p, --progress [none|overall|per-file|full]`: Progress mode: none, overall, per-file, or full
+* `-s, --sync <str>`: Sync name(s) to run
+* `-o, --output <human|json>`: Output format  [default: human]
+* `-p, --progress <none|overall|per-file|full>`: Progress mode: none, overall, per-file, or full
 * `--prune / --no-prune`: Prune old snapshots after sync  [default: prune]
-* `-S, --strictness [ignore-none|ignore-inactive|ignore-all]`: How to handle preflight errors: ignore-none (all errors fatal), ignore-inactive (skip expected-inactive, default), ignore-all (ignore all errors)  [default: ignore-inactive]
-* `-l, --location TEXT`: Prefer endpoints at these locations
-* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
-* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `-S, --strictness <ignore-none|ignore-inactive|ignore-all>`: How to handle preflight errors: ignore-none (all errors fatal), ignore-inactive (skip expected-inactive, default), ignore-all (ignore all errors)  [default: ignore-inactive]
+* `-l, --location <str>`: Prefer endpoints at these locations
+* `-L, --exclude-location <str>`: Exclude endpoints at these locations
+* `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
 * `--mount / --no-mount`: Mount/umount volumes with mount config  [default: mount]
 * `--umount / --no-umount`: Umount after sync (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
@@ -67,15 +67,15 @@ $ nbkp sh [OPTIONS]
 
 **Options**:
 
-* `-c, --config FILE`: Path to config file
-* `-o, --output-file FILE`: Write script to file (made executable)
+* `-c, --config <file>`: Path to config file
+* `-o, --output-file <file>`: Write script to file (made executable)
 * `--relative-src`: Make source paths relative to script location (requires --output-file)
 * `--relative-dst`: Make destination paths relative to script location (requires --output-file)
-* `-l, --location TEXT`: Prefer endpoints at these locations
-* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
-* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `-l, --location <str>`: Prefer endpoints at these locations
+* `-L, --exclude-location <str>`: Exclude endpoints at these locations
+* `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
 * `--portable / --no-portable`: Generate bash 3.2-compatible script (default: enabled)  [default: portable]
-* `--platform TEXT`: Target platform for snapshot timestamp format (e.g. &#x27;darwin&#x27;, &#x27;linux&#x27;). Defaults to the current OS.
+* `--platform <str>`: Target platform for snapshot timestamp format (e.g. &#x27;darwin&#x27;, &#x27;linux&#x27;). Defaults to the current OS.
 * `--help`: Show this message and exit.
 
 ## `nbkp config`
@@ -108,8 +108,8 @@ $ nbkp config show [OPTIONS]
 
 **Options**:
 
-* `-c, --config FILE`: Path to config file
-* `-o, --output [human|json]`: Output format  [default: human]
+* `-c, --config <file>`: Path to config file
+* `-o, --output <human|json>`: Output format  [default: human]
 * `--help`: Show this message and exit.
 
 ## `nbkp credentials`
@@ -142,8 +142,8 @@ $ nbkp credentials keyring-status [OPTIONS]
 
 **Options**:
 
-* `-c, --config FILE`: Path to config file
-* `-o, --output [human|json]`: Output format  [default: human]
+* `-c, --config <file>`: Path to config file
+* `-o, --output <human|json>`: Output format  [default: human]
 * `--help`: Show this message and exit.
 
 ## `nbkp disks`
@@ -179,12 +179,12 @@ $ nbkp disks mount [OPTIONS]
 
 **Options**:
 
-* `-c, --config FILE`: Path to config file
-* `-o, --output [human|json]`: Output format  [default: human]
-* `-n, --name TEXT`: Volume name(s) to mount
-* `-l, --location TEXT`: Prefer endpoints at these locations
-* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
-* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `-c, --config <file>`: Path to config file
+* `-o, --output <human|json>`: Output format  [default: human]
+* `-n, --name <str>`: Volume name(s) to mount
+* `-l, --location <str>`: Prefer endpoints at these locations
+* `-L, --exclude-location <str>`: Exclude endpoints at these locations
+* `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
 * `--help`: Show this message and exit.
 
 ### `nbkp disks umount`
@@ -199,12 +199,12 @@ $ nbkp disks umount [OPTIONS]
 
 **Options**:
 
-* `-c, --config FILE`: Path to config file
-* `-o, --output [human|json]`: Output format  [default: human]
-* `-n, --name TEXT`: Volume name(s) to umount
-* `-l, --location TEXT`: Prefer endpoints at these locations
-* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
-* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `-c, --config <file>`: Path to config file
+* `-o, --output <human|json>`: Output format  [default: human]
+* `-n, --name <str>`: Volume name(s) to umount
+* `-l, --location <str>`: Prefer endpoints at these locations
+* `-L, --exclude-location <str>`: Exclude endpoints at these locations
+* `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
 * `--help`: Show this message and exit.
 
 ### `nbkp disks status`
@@ -219,12 +219,12 @@ $ nbkp disks status [OPTIONS]
 
 **Options**:
 
-* `-c, --config FILE`: Path to config file
-* `-o, --output [human|json]`: Output format  [default: human]
-* `-n, --name TEXT`: Volume name(s) to check
-* `-l, --location TEXT`: Prefer endpoints at these locations
-* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
-* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `-c, --config <file>`: Path to config file
+* `-o, --output <human|json>`: Output format  [default: human]
+* `-n, --name <str>`: Volume name(s) to check
+* `-l, --location <str>`: Prefer endpoints at these locations
+* `-L, --exclude-location <str>`: Exclude endpoints at these locations
+* `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
 * `--help`: Show this message and exit.
 
 ### `nbkp disks setup-auth`
@@ -239,8 +239,8 @@ $ nbkp disks setup-auth [OPTIONS]
 
 **Options**:
 
-* `-c, --config FILE`: Path to config file
-* `-u, --user TEXT`: System user for auth rules  [default: ubuntu]
+* `-c, --config <file>`: Path to config file
+* `-u, --user <str>`: System user for auth rules  [default: ubuntu]
 * `--help`: Show this message and exit.
 
 ## `nbkp ordering`
@@ -273,9 +273,9 @@ $ nbkp ordering graph [OPTIONS]
 
 **Options**:
 
-* `-c, --config FILE`: Path to config file
-* `-o, --output [human|json]`: Output format  [default: human]
-* `-f, --format [rich-tree|mermaid-ascii|mermaid]`: Graph format (human output only)  [default: rich-tree]
+* `-c, --config <file>`: Path to config file
+* `-o, --output <human|json>`: Output format  [default: human]
+* `-f, --format <rich-tree|mermaid-ascii|mermaid>`: Graph format (human output only)  [default: rich-tree]
 * `--help`: Show this message and exit.
 
 ## `nbkp preflight`
@@ -309,12 +309,12 @@ $ nbkp preflight check [OPTIONS]
 
 **Options**:
 
-* `-c, --config FILE`: Path to config file
-* `-o, --output [human|json]`: Output format  [default: human]
-* `-S, --strictness [ignore-none|ignore-inactive|ignore-all]`: How to handle preflight errors: ignore-none (all errors fatal), ignore-inactive (skip expected-inactive, default), ignore-all (ignore all errors)  [default: ignore-inactive]
-* `-l, --location TEXT`: Prefer endpoints at these locations
-* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
-* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `-c, --config <file>`: Path to config file
+* `-o, --output <human|json>`: Output format  [default: human]
+* `-S, --strictness <ignore-none|ignore-inactive|ignore-all>`: How to handle preflight errors: ignore-none (all errors fatal), ignore-inactive (skip expected-inactive, default), ignore-all (ignore all errors)  [default: ignore-inactive]
+* `-l, --location <str>`: Prefer endpoints at these locations
+* `-L, --exclude-location <str>`: Exclude endpoints at these locations
+* `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
 * `--mount / --no-mount`: Mount/umount volumes with mount config before checking  [default: mount]
 * `--umount / --no-umount`: Umount after check (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
@@ -331,10 +331,10 @@ $ nbkp preflight troubleshoot [OPTIONS]
 
 **Options**:
 
-* `-c, --config FILE`: Path to config file
-* `-l, --location TEXT`: Prefer endpoints at these locations
-* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
-* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `-c, --config <file>`: Path to config file
+* `-l, --location <str>`: Prefer endpoints at these locations
+* `-L, --exclude-location <str>`: Exclude endpoints at these locations
+* `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
 * `--mount / --no-mount`: Mount/umount volumes with mount config before checking  [default: mount]
 * `--umount / --no-umount`: Umount after check (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
@@ -370,13 +370,13 @@ $ nbkp snapshots prune [OPTIONS]
 
 **Options**:
 
-* `-c, --config FILE`: Path to config file
-* `-s, --sync TEXT`: Sync name(s) to prune
+* `-c, --config <file>`: Path to config file
+* `-s, --sync <str>`: Sync name(s) to prune
 * `-n, --dry-run`: Perform a dry run
-* `-o, --output [human|json]`: Output format  [default: human]
-* `-l, --location TEXT`: Prefer endpoints at these locations
-* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
-* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `-o, --output <human|json>`: Output format  [default: human]
+* `-l, --location <str>`: Prefer endpoints at these locations
+* `-L, --exclude-location <str>`: Exclude endpoints at these locations
+* `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
 * `--mount / --no-mount`: Mount/umount volumes with mount config  [default: mount]
 * `--umount / --no-umount`: Umount after prune (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
@@ -393,12 +393,12 @@ $ nbkp snapshots show [OPTIONS]
 
 **Options**:
 
-* `-c, --config FILE`: Path to config file
-* `-s, --sync TEXT`: Sync name(s) to show
-* `-o, --output [human|json]`: Output format  [default: human]
-* `-l, --location TEXT`: Prefer endpoints at these locations
-* `-L, --exclude-location TEXT`: Exclude endpoints at these locations
-* `-N, --network [private|public]`: Prefer private (LAN) or public (WAN) endpoints
+* `-c, --config <file>`: Path to config file
+* `-s, --sync <str>`: Sync name(s) to show
+* `-o, --output <human|json>`: Output format  [default: human]
+* `-l, --location <str>`: Prefer endpoints at these locations
+* `-L, --exclude-location <str>`: Exclude endpoints at these locations
+* `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
 * `--mount / --no-mount`: Mount/umount volumes with mount config  [default: mount]
 * `--umount / --no-umount`: Umount after show (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
@@ -448,10 +448,10 @@ $ nbkp demo seed [OPTIONS]
 
 **Options**:
 
-* `--big-file-size INTEGER`: Size in MB for large files (e.g. 100, 1024). When set, large files are written at this size to slow down syncs. Set to 0 to disable.  [default: 1]
+* `--big-file-size <int>`: Size in MB for large files (e.g. 100, 1024). When set, large files are written at this size to slow down syncs. Set to 0 to disable.  [default: 1]
 * `--docker / --no-docker`: Start a Docker container for remote syncs.  [default: docker]
 * `--luks / --no-luks`: Use LUKS-encrypted btrfs volume (requires --docker and dm-crypt kernel module).  [default: luks]
-* `--bandwidth-limit INTEGER`: Rsync bandwidth limit in KiB/s (e.g. 100 for ~100 KiB/s). Set to 0 to disable.  [default: 250]
-* `--credential-provider [keyring|prompt|env|command]`: How LUKS passphrases are retrieved at runtime. Only relevant when --luks is enabled.  [default: keyring]
-* `--base-dir DIRECTORY`: Use a fixed directory instead of a random temp folder. Created if it does not exist.
+* `--bandwidth-limit <int>`: Rsync bandwidth limit in KiB/s (e.g. 100 for ~100 KiB/s). Set to 0 to disable.  [default: 250]
+* `--credential-provider <keyring|prompt|env|command>`: How LUKS passphrases are retrieved at runtime. Only relevant when --luks is enabled.  [default: keyring]
+* `--base-dir <directory>`: Use a fixed directory instead of a random temp folder. Created if it does not exist.
 * `--help`: Show this message and exit.
