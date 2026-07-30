@@ -36,7 +36,7 @@ nbkp = "nbkp.cli:main"
 nbkp-demo = "nbkp.demo:main"
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.15"
+ruff = "^0.16"
 pyright = "^1.1"
 pytest = "^9.1.1"
 pytest-xdist = "^3.5.0"
