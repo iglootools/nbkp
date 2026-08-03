@@ -47,8 +47,8 @@
 Install the following extensions:
 
 - [Ruff](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff) — formatting and linting (format-on-save is enabled in `.vscode/settings.json`)
-- [Pylance](https://marketplace.visualstudio.com/items?itemName=ms-python.pylance) — type checking (uses pyright, configured via `[tool.pyright]` in `pyproject.toml`)
-- [Tombi](https://marketplace.visualstudio.com/items?itemName=nicfit.tombi) — TOML formatting and validation
+- [Pylance](https://marketplace.visualstudio.com/items?itemName=ms-python.vscode-pylance) — type checking (uses pyright, configured via `[tool.pyright]` in `pyproject.toml`)
+- [Tombi](https://marketplace.visualstudio.com/items?itemName=tombi-toml.tombi) — TOML formatting and validation
 
 Select the Python interpreter from the `.venv` created by Poetry:
 

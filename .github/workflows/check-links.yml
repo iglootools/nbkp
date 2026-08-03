@@ -22,21 +22,49 @@ jobs:
         id: lychee
         uses: lycheeverse/lychee-action@v2
         with:
-          # treat redirects (3xx) as successful instead of flagging them
-          args: --accept 2xx,3xx --insecure
+          # Accept 3xx so redirects are not flagged (lychee accepts 100..=103,200..=299 by
+          # default). --accept only understands `[start]..[[=]end]|code` ranges: the
+          # shorthand `2xx,3xx` used here previously is not valid syntax, so lychee aborted
+          # during argument parsing and never checked a single link.
+          #
+          # The input glob has to be repeated: setting `args` replaces the action's default
+          # value, which is where the paths would otherwise come from.
+          args: --accept '200..=299,300..=399' --insecure --no-progress './**/*.md'
           fail: false
 
-      - name: Check for broken links in output
-        id: broken
+      # Decide from the report body, not the exit code. lychee exits 2 both for genuine link
+      # failures and for a usage error (clap's convention), so exit code alone cannot tell
+      # "links are broken" from "lychee never ran" — which is how an argument error ended up
+      # being filed as an empty issue every week.
+      #
+      # lychee writes "# Summary" whenever it completes a run, and a "## Errors per input"
+      # section only when at least one link actually failed.
+      - name: Classify link checker result
+        id: report
         run: |
-          if [ -s ./lychee/out.md ]; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
+          if [ -f ./lychee/out.md ] && grep -q '^# Summary' ./lychee/out.md; then
+            echo "ran=true" >> "$GITHUB_OUTPUT"
           else
-            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "ran=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -f ./lychee/out.md ] && grep -q '^## Errors per input' ./lychee/out.md; then
+            echo "broken_links=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "broken_links=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Surface a malfunctioning link checker as a red workflow instead of a silent stream of
+      # empty issues. Without this, a broken invocation looks the same as "nothing to report".
+      - name: Fail if the link checker never ran
+        if: steps.report.outputs.ran != 'true'
+        run: |
+          echo "::error::lychee exited ${{ steps.lychee.outputs.exit_code }} without producing a report — check its arguments in this workflow."
+          echo "--- ./lychee/out.md ---"
+          cat ./lychee/out.md 2>/dev/null || echo "(no output file)"
+          exit 1
+
       - name: Create Issue From File
-        if: steps.lychee.outputs.exit_code != 0 && steps.broken.outputs.found == 'true'
+        if: steps.report.outputs.broken_links == 'true'
         uses: peter-evans/create-issue-from-file@v6
         with:
           title: Link Checker Report
