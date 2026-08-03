@@ -1,0 +1,7 @@
+# Hosts that reject GitHub-hosted runners rather than being genuinely broken.
+# Verified by hand: each returns 200 from a normal client but fails from CI, so
+# checking them produces a weekly false-positive report instead of signal.
+# Re-test before removing an entry — these are environment quirks, not permanent truths.
+
+# Reddit serves 403 to datacenter IP ranges (200 from a residential connection).
+https://www\.reddit\.com/.*
