@@ -2,9 +2,15 @@
 
 ## System Requirements
 
-- Python 3.12+
+- Python 3.12–3.14
 - rsync 3.0+ (macOS ships with openrsync which is not supported — install GNU rsync via `brew install rsync`)
 - `btrfs-progs` (only if using btrfs snapshots)
+
+The 3.12 floor tracks Ubuntu 24.04 LTS, whose system `python3` is 3.12 — so nbkp
+installs on the current LTS without a PPA or a source build. Ubuntu 26.04 LTS ships
+3.14, which is also supported. See the
+[Python Version Policy](https://github.com/iglootools/common-guidelines/blob/main/python.md#python-version-policy)
+for how both versions are maintained.
 
 ## Install with pipx
 
