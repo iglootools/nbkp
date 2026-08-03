@@ -29,7 +29,13 @@ jobs:
           #
           # The input glob has to be repeated: setting `args` replaces the action's default
           # value, which is where the paths would otherwise come from.
-          args: --accept '200..=299,300..=399' --insecure --no-progress './**/*.md'
+          #
+          # --timeout/--max-retries: asciinema.org answers in well under a second from a
+          # normal connection but timed out repeatedly from GitHub-hosted runners at the
+          # 20s default. Hosts that reject runners outright are listed in .lycheeignore.
+          args: >-
+            --accept '200..=299,300..=399' --insecure --no-progress
+            --timeout 30 --max-retries 3 './**/*.md'
           fail: false
 
       # Decide from the report body, not the exit code. lychee exits 2 both for genuine link
@@ -38,7 +44,9 @@ jobs:
       # being filed as an empty issue every week.
       #
       # lychee writes "# Summary" whenever it completes a run, and a "## Errors per input"
-      # section only when at least one link actually failed.
+      # section only when at least one link actually failed. Timeouts get their own section
+      # and deliberately do not raise an issue on their own — they are usually transient, and
+      # a weekly issue for a slow host is the noise this workflow is meant to avoid.
       - name: Classify link checker result
         id: report
         run: |
