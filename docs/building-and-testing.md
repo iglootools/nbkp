@@ -26,7 +26,7 @@ mise run test-integration-fs     # Filesystem integration tests
 mise run format             # ruff format
 mise run lint               # ruff check
 mise run type-check         # pyright
-mise run compat-check       # vermin (enforce Python >=3.12 compatibility)
+mise run compat-check       # vermin (enforce Python >=3.12 compatibility — see Python version policy below)
 mise run lock-check         # check mise.lock is up to date
 
 mise run clidocs            # regenerate CLI reference in docs/cli-reference.md
@@ -48,6 +48,21 @@ poetry run pyright nbkp/                                                # type-c
 poetry run vermin --target=3.12- --no-tips --no-parse-comments nbkp/ tests/  # compat check
 poetry run pytest tests/test_ssh.py::TestBuildSshBaseArgs::test_full -v # run a single test
 ```
+
+### Python versions
+
+Local development runs Python 3.14 (pinned in `mise.toml`), while the supported floor
+is 3.12 — the system `python3` on Ubuntu 24.04 LTS. Code must therefore not use any
+feature newer than 3.12, even though you are running 3.14. `mise run compat-check`
+(vermin) is what catches violations; ruff's and pyright's 3.12 targets catch some but
+not all of them.
+
+CI currently tests only the 3.12 floor — the 3.14 matrix entry in
+`.github/workflows/test.yml` is commented out to save CI minutes.
+
+Raising the floor to 3.14 (Ubuntu 26.04 LTS) is under consideration; see the
+[Python Version Policy](https://github.com/iglootools/common-guidelines/blob/main/python.md#python-version-policy)
+for the full rationale and the list of knobs that must move together.
 
 ### Parallel test execution
 
