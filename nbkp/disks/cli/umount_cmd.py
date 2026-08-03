@@ -3,24 +3,23 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
 from ...clihelpers import OutputFormat, Severity
-from .helpers import DisksProgressBar
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
 from ..lifecycle import UmountResult, mount_count, umount_volumes
 from ..output import display_name
 from . import app
-from .helpers import _format_umount_result, _probe_and_show_status
+from .helpers import DisksProgressBar, _format_umount_result, _probe_and_show_status
 
 
 @app.command("umount")
 def umount(
     config: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--config",
             "-c",
@@ -35,15 +34,15 @@ def umount(
         typer.Option("--output", "-o", help="Output format"),
     ] = OutputFormat.HUMAN,
     name: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option("--name", "-n", help="Volume name(s) to umount"),
     ] = None,
     location: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option("--location", "-l", help="Prefer endpoints at these locations"),
     ] = None,
     exclude_location: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             "--exclude-location",
             "-L",
@@ -51,7 +50,7 @@ def umount(
         ),
     ] = None,
     network: Annotated[
-        Optional[NetworkType],
+        NetworkType | None,
         typer.Option(
             "--network",
             "-N",

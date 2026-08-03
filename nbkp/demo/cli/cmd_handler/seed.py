@@ -6,8 +6,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 import yaml
 from pydantic import BaseModel
@@ -18,9 +18,9 @@ from ....config import (
     CredentialProvider,
     RsyncOptions,
 )
-from ....remote.resolution import resolve_all_endpoints
 from ....disks.lifecycle import mount_volumes, umount_volumes
 from ....disks.strategy import MountStrategy
+from ....remote.resolution import resolve_all_endpoints
 
 try:
     from ....remote.testkit.docker import (
@@ -51,8 +51,8 @@ class SeedResult(BaseModel):
     base_dir: Path
     config_path: Path
     config: Config
-    bastion_port: Optional[int] = None
-    storage_port: Optional[int] = None
+    bastion_port: int | None = None
+    storage_port: int | None = None
 
 
 def seed_demo(

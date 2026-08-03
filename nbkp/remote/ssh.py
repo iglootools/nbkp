@@ -183,7 +183,10 @@ def wrap_cmd(
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
     """Wrap a shell command for remote execution."""
-    from ..config import LocalVolume, RemoteVolume  # noqa: PLC0415 — deferred to avoid circular import
+    from ..config import (
+        LocalVolume,
+        RemoteVolume,
+    )
 
     match vol:
         case LocalVolume():

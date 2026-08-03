@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from nbkp.config import SshEndpoint, SshConnectionOptions
+from nbkp.config import SshConnectionOptions, SshEndpoint
 from nbkp.remote import (
     build_ssh_base_args,
     build_ssh_e_option,

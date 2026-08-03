@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import enum
-from dataclasses import dataclass
-from typing import Callable
-
 import subprocess
+from collections.abc import Callable
+from dataclasses import dataclass
 
 from ..config import (
     Config,
@@ -16,13 +15,13 @@ from ..config import (
 from ..config.epresolution import ResolvedEndpoints
 from ..remote.dispatch import run_on_volume
 from ..remote.fabricssh import STDIN_CLOSED_MARKER
-from .strategy import MountStrategy
 from .detection import (
     StrategyResolutionError,
     _try_resolve_mount_strategy,
     detect_device_present,
     detect_luks_attached,
 )
+from .strategy import MountStrategy
 
 # stderr fragments that indicate sudo refused to run without prompting.
 # These match the messages sudo emits with BatchMode=yes / sudo -n.
@@ -184,7 +183,7 @@ def mount_volume(
         return _mount_volume_inner(
             volume, mount_config, resolved_endpoints, passphrase_fn, mount_strategy
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         # Last-resort safety net. Most expected failures (sudo refused,
         # remote process exits, channel closed mid-stdin-write) are now
         # converted to clean CompletedProcess results inside fabricssh.
@@ -273,7 +272,7 @@ def umount_volume(
         return _umount_volume_inner(
             volume, mount_config, resolved_endpoints, mount_strategy
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         first_line = next(
             (line for line in str(e).splitlines() if line.strip()),
             type(e).__name__,

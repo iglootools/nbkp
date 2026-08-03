@@ -27,6 +27,7 @@ def _generate_cli_docs() -> str:
         [sys.executable, "-m", "typer", "nbkp.cli", "utils", "docs", "--name", "nbkp"],
         capture_output=True,
         text=True,
+        check=False,
     )
     if result.returncode != 0:
         print(f"typer utils docs failed:\n{result.stderr}", file=sys.stderr)

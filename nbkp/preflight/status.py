@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass
+
 from pydantic import BaseModel, ConfigDict, computed_field
 
 from ..config import (
@@ -33,8 +34,8 @@ from ..config import (
     Volume,
 )
 from ..disks.models import (
-    MountCapabilities as MountCapabilities,
-    MountToolCapabilities as MountToolCapabilities,
+    MountCapabilities,
+    MountToolCapabilities,
 )
 from ..fsprotocol import (
     DESTINATION_SENTINEL,
@@ -46,7 +47,6 @@ from ..fsprotocol import (
     VOLUME_SENTINEL,
     Snapshot,
 )
-
 
 # ── Layer 1: SSH Endpoint ──────────────────────────────────
 
@@ -147,6 +147,11 @@ class SshEndpointDiagnostics(BaseModel):
     or when the host is unreachable."""
 
 
+_NO_TOOL_NEEDS = SshEndpointToolNeeds()
+"""Shared default for endpoints with no tool requirements.
+Safe to share because ``SshEndpointToolNeeds`` is frozen."""
+
+
 class SshEndpointStatus(BaseModel):
     """Runtime status of an SSH endpoint (or implicit localhost)."""
 
@@ -164,7 +169,7 @@ class SshEndpointStatus(BaseModel):
     def from_diagnostics(
         slug: str,
         diagnostics: SshEndpointDiagnostics,
-        needs: SshEndpointToolNeeds = SshEndpointToolNeeds(),
+        needs: SshEndpointToolNeeds = _NO_TOOL_NEEDS,
     ) -> SshEndpointStatus:
         """Create status by interpreting diagnostics into errors."""
         return SshEndpointStatus(

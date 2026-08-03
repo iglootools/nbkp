@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 from collections import deque
 from itertools import combinations
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import Field, ValidationInfo, field_validator, model_validator
 
@@ -45,7 +45,7 @@ class Config(_BaseModel):
             " Options: keyring, prompt, env, command."
         ),
     )
-    credential_command: Optional[List[str]] = Field(
+    credential_command: list[str] | None = Field(
         default=None,
         description=(
             "Command template for the ``command`` credential provider."
@@ -54,7 +54,7 @@ class Config(_BaseModel):
         ),
     )
 
-    ssh_endpoints: Dict[str, SshEndpoint] = Field(default_factory=dict)
+    ssh_endpoints: dict[str, SshEndpoint] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
@@ -123,7 +123,7 @@ class Config(_BaseModel):
             for slug, data in v.items()
         }
 
-    volumes: Dict[str, Volume] = Field(default_factory=dict)
+    volumes: dict[str, Volume] = Field(default_factory=dict)
 
     @field_validator("volumes", mode="before")
     @classmethod
@@ -137,7 +137,7 @@ class Config(_BaseModel):
             for slug, data in v.items()
         }
 
-    sync_endpoints: Dict[str, SyncEndpoint] = Field(default_factory=dict)
+    sync_endpoints: dict[str, SyncEndpoint] = Field(default_factory=dict)
 
     @field_validator("sync_endpoints", mode="before")
     @classmethod
@@ -151,7 +151,7 @@ class Config(_BaseModel):
             for slug, data in v.items()
         }
 
-    syncs: Dict[str, SyncConfig] = Field(default_factory=dict)
+    syncs: dict[str, SyncConfig] = Field(default_factory=dict)
 
     @field_validator("syncs", mode="before")
     @classmethod

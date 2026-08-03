@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import enum
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from ..config import (
     Config,
@@ -162,7 +162,7 @@ def _try_resolve_mount_strategy(
     """Attempt to resolve a mount strategy, returning structured error on failure."""
     try:
         return _resolve_mount_strategy(vol, mount_config, resolved_endpoints)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return StrategyResolutionError(
             reason=StrategyErrorReason.UNREACHABLE,
             detail=f"unreachable: {e}",

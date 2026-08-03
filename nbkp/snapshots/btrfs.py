@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from ..config import (
     Config,
@@ -31,7 +31,7 @@ def create_snapshot(
     Returns the snapshot path.
     """
     re = resolved_endpoints or {}
-    ts = now or datetime.now(timezone.utc)
+    ts = now or datetime.now(UTC)
     dst = config.destination_endpoint(sync)
     dst_vol = config.volumes[dst.volume]
     dest_path = resolve_dest_path(sync, config)

@@ -12,7 +12,6 @@ from ..remote.queries import (
     resolve_endpoint,
 )
 
-
 # ── Filesystem detection ────────────────────────────────────
 
 

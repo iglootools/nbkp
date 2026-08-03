@@ -9,8 +9,8 @@ from nbkp.config import (
     SshEndpoint,
 )
 from nbkp.config.epresolution import ResolvedEndpoints
-from nbkp.remote.queries import check_directory_exists, read_symlink_target
 from nbkp.preflight.snapshot_checks import check_btrfs_readonly, check_btrfs_subvolume
+from nbkp.remote.queries import check_directory_exists, read_symlink_target
 from nbkp.remote.testkit.docker import (
     REMOTE_BACKUP_PATH,
 )
@@ -19,7 +19,6 @@ from nbkp.sync.testkit.seed import (
     create_seed_sentinels,
     seed_volume,
 )
-
 from tests._docker_fixtures import ssh_exec
 
 # Re-export so test modules can import from here
@@ -162,6 +161,6 @@ def assert_chain_results(
 
 
 # Re-export for convenience
-from tests._docker_fixtures import (  # noqa: E402, F401
+from tests._docker_fixtures import (
     assert_sentinels_after_sync,
 )

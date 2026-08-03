@@ -7,7 +7,6 @@ not worth creating another top-level module at this point.
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Optional
 
 from pydantic import ConfigDict, Field
 
@@ -25,9 +24,9 @@ class EndpointFilter(_BaseModel):
     """Endpoint selection filter (not serialized)."""
 
     model_config = ConfigDict(frozen=True)
-    locations: List[str] = Field(default_factory=list)
-    exclude_locations: List[str] = Field(default_factory=list)
-    network: Optional[NetworkType] = None
+    locations: list[str] = Field(default_factory=list)
+    exclude_locations: list[str] = Field(default_factory=list)
+    network: NetworkType | None = None
 
 
 class ResolvedEndpoint(_BaseModel):

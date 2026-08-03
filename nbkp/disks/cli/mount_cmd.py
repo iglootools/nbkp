@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
 from ...clihelpers import OutputFormat
-from .helpers import DisksProgressBar
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
 from ...credentials import build_passphrase_fn
@@ -17,6 +16,7 @@ from ..observation import build_mount_observations
 from ..output import display_name
 from . import app
 from .helpers import (
+    DisksProgressBar,
     _error_status,
     _format_mount_result,
     _show_status_table,
@@ -28,7 +28,7 @@ from .helpers.managed_mount import mount_result_severity
 @app.command("mount")
 def mount(
     config: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--config",
             "-c",
@@ -43,15 +43,15 @@ def mount(
         typer.Option("--output", "-o", help="Output format"),
     ] = OutputFormat.HUMAN,
     name: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option("--name", "-n", help="Volume name(s) to mount"),
     ] = None,
     location: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option("--location", "-l", help="Prefer endpoints at these locations"),
     ] = None,
     exclude_location: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             "--exclude-location",
             "-L",
@@ -59,7 +59,7 @@ def mount(
         ),
     ] = None,
     network: Annotated[
-        Optional[NetworkType],
+        NetworkType | None,
         typer.Option(
             "--network",
             "-N",

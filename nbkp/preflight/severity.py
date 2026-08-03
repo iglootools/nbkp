@@ -10,12 +10,12 @@ from __future__ import annotations
 
 from ..clihelpers import Severity, classify_severity
 from .status import (
-    DestinationEndpointError,
     INACTIVE_DST_ENDPOINT_ERRORS,
     INACTIVE_SRC_ENDPOINT_ERRORS,
     INACTIVE_SSH_ERRORS,
     INACTIVE_SYNC_ERRORS,
     INACTIVE_VOLUME_ERRORS,
+    DestinationEndpointError,
     SourceEndpointError,
     SshEndpointError,
     SyncError,

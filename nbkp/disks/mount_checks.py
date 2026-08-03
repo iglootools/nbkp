@@ -12,8 +12,13 @@ from ..config import (
     Volume,
 )
 from ..config.epresolution import ResolvedEndpoints
-from . import direct as direct_cmds
-from . import systemd as systemd_cmds
+from ..remote.dispatch import run_on_volume
+from ..remote.queries import (
+    _check_command_available,
+    _check_systemctl_cat,
+    _run_systemctl_show,
+)
+from . import direct as direct_cmds, systemd as systemd_cmds
 from .detection import (
     detect_device_present,
     detect_luks_attached,
@@ -22,12 +27,6 @@ from .detection import (
 )
 from .models import MountCapabilities, MountToolCapabilities
 from .observation import MountObservation
-from ..remote.queries import (
-    _check_command_available,
-    _check_systemctl_cat,
-    _run_systemctl_show,
-)
-from ..remote.dispatch import run_on_volume
 
 
 def probe_mount_tools(

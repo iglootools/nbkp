@@ -7,17 +7,16 @@ Composes mount lifecycle with the check-and-run sync pipeline:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Callable
+from collections.abc import Callable, Sequence
 
 from ..config import Config
 from ..config.epresolution import ResolvedEndpoints
 from ..disks.context import managed_mount
 from ..disks.lifecycle import MountResult, UmountResult
 from ..preflight import PreflightResult
-from .pipeline import Strictness, PipelineResult, check_and_run
 from ..sync.rsync import ProgressMode
 from ..sync.runner import SyncResult
+from .pipeline import PipelineResult, Strictness, check_and_run
 
 
 def mount_and_run(

@@ -6,8 +6,8 @@ that both the CLI and tests can share.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
-from typing import Callable, Generator
 
 from ..config import Config
 from ..config.epresolution import ResolvedEndpoints

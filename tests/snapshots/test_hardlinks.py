@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -27,7 +27,7 @@ from nbkp.snapshots.hardlinks import (
     prune_snapshots,
 )
 
-_NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=timezone.utc)
+_NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
 _LOCAL_VOL = LocalVolume(slug="dummy", path="/dummy")
 _REMOTE_VOL = RemoteVolume(slug="dummy", ssh_endpoint="dummy", path="/dummy")
 _TS_LOCAL = create_snapshot_timestamp(_NOW, _LOCAL_VOL)

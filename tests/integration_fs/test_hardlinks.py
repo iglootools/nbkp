@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from nbkp.config import (
@@ -126,12 +126,12 @@ class TestCleanupOrphanedSnapshots:
         dst.mkdir()
         (src / "data.txt").write_text("orphan test")
 
-        sync, config, snap_name = _do_sync(src, dst)
+        sync, config, _snap_name = _do_sync(src, dst)
 
         # Create an orphaned snapshot (newer than latest)
         dst_vol = config.volumes["dst"]
         orphan_snapshot = create_snapshot_timestamp(
-            datetime(9999, 1, 1, tzinfo=timezone.utc), dst_vol
+            datetime(9999, 1, 1, tzinfo=UTC), dst_vol
         )
         orphan = Path(str(dst)) / "snapshots" / orphan_snapshot.name
         orphan.mkdir(parents=True)
@@ -175,9 +175,7 @@ class TestDeleteSnapshot:
         dst.mkdir()
 
         dst_vol = LocalVolume(slug="dst", path=str(dst))
-        snap = create_snapshot_timestamp(
-            datetime(2024, 1, 1, tzinfo=timezone.utc), dst_vol
-        )
+        snap = create_snapshot_timestamp(datetime(2024, 1, 1, tzinfo=UTC), dst_vol)
         snap_dir = dst / "snapshots" / snap.name
         snap_dir.mkdir(parents=True)
         (snap_dir / "file.txt").write_text("delete me")
@@ -200,7 +198,7 @@ class TestPruneSnapshots:
         config: Config | None = None
 
         for i in range(count):
-            now = datetime(2024, 1, 1 + i, tzinfo=timezone.utc)
+            now = datetime(2024, 1, 1 + i, tzinfo=UTC)
             sync, config, snap_name = _do_sync(
                 src, dst, max_snapshots=max_snapshots, now=now
             )
@@ -252,7 +250,7 @@ class TestPruneSnapshots:
         dst.mkdir()
         (src / "data.txt").write_text("dry run prune")
 
-        sync, config, names = self._create_snapshots(src, dst, 4)
+        sync, config, _names = self._create_snapshots(src, dst, 4)
 
         deleted = prune_snapshots(sync, config, 2, dry_run=True)
         assert len(deleted) == 2
@@ -268,7 +266,7 @@ class TestPruneSnapshots:
         dst.mkdir()
         (src / "data.txt").write_text("noop")
 
-        sync, config, names = self._create_snapshots(src, dst, 2)
+        sync, config, _names = self._create_snapshots(src, dst, 2)
 
         deleted = prune_snapshots(sync, config, 10)
         assert deleted == []
@@ -294,7 +292,7 @@ class TestHardLinkIncremental:
         sync, config = _make_config(str(src), str(dst))
 
         # First sync
-        now1 = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        now1 = datetime(2024, 1, 1, tzinfo=UTC)
         snap1_path = create_snapshot_dir(sync, config, now=now1)
         snap1 = Snapshot.from_path(snap1_path)
         result = run_rsync(
@@ -309,7 +307,7 @@ class TestHardLinkIncremental:
         (src / "changed.txt").write_text("v2 is different")
 
         # Second sync with --link-dest
-        now2 = datetime(2024, 1, 2, tzinfo=timezone.utc)
+        now2 = datetime(2024, 1, 2, tzinfo=UTC)
         snap2_path = create_snapshot_dir(sync, config, now=now2)
         snap2 = Snapshot.from_path(snap2_path)
         result = run_rsync(

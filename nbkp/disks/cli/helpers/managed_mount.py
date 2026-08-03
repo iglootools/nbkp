@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 
 from rich.console import Console
 
@@ -23,7 +23,6 @@ from ...observation import MountObservation
 from ...output import build_mount_status_table, display_name
 from ...strategy import MountStrategy
 from .progress import DisksProgressBar
-
 
 # Mount failure reasons that correspond to "expected inactive" preflight
 # states (e.g. drive not plugged in maps to VolumeError.DEVICE_NOT_PRESENT

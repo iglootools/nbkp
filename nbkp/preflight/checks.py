@@ -22,8 +22,7 @@ Four-phase check hierarchy (each level gates the next):
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Callable
+from collections.abc import Callable, Sequence
 
 from ..config import (
     Config,

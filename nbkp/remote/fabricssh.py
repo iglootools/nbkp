@@ -12,9 +12,6 @@ import paramiko
 from fabric import Connection  # type: ignore[import-untyped]
 
 from ..config import SshEndpoint
-from .ssh import build_ssh_base_args as build_ssh_base_args  # noqa: F401
-from .ssh import build_ssh_e_option as build_ssh_e_option  # noqa: F401
-from .ssh import format_remote_path as format_remote_path  # noqa: F401
 
 # Marker used in stderr when the remote process exits before the stdin
 # writer thread finishes (e.g. sudo refuses without NOPASSWD under

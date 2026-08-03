@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+from datetime import UTC
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -18,8 +19,8 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.remote.resolution import resolve_all_endpoints
-from nbkp.sync.rsync import ProgressMode, build_rsync_command, run_rsync
 from nbkp.snapshots.common import create_snapshot_timestamp
+from nbkp.sync.rsync import ProgressMode, build_rsync_command, run_rsync
 
 _SSH_KEY = str(Path("~/.ssh/key").expanduser())
 
@@ -774,9 +775,11 @@ class TestBuildRsyncCommandProxyJump:
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
             "-e",
-            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
-            f" -p 5022 -i {_SSH_KEY}"
-            f" -o {quoted}",
+            (
+                "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+                f" -p 5022 -i {_SSH_KEY}"
+                f" -o {quoted}"
+            ),
             "/mnt/src/",
             "backup@nas.local:/backup/",
         ]
@@ -912,9 +915,11 @@ class TestBuildRsyncCommandMultiHopProxy:
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
             "-e",
-            "ssh -o ConnectTimeout=10 -o BatchMode=yes"
-            f" -p 5022 -i {_SSH_KEY}"
-            f" -o {quoted}",
+            (
+                "ssh -o ConnectTimeout=10 -o BatchMode=yes"
+                f" -p 5022 -i {_SSH_KEY}"
+                f" -o {quoted}"
+            ),
             "/mnt/src/",
             "backup@nas.local:/backup/",
         ]
@@ -1241,9 +1246,9 @@ class TestDestSuffix:
             syncs={"s1": sync},
         )
 
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        _now = datetime(2026, 2, 21, 12, 0, 0, tzinfo=timezone.utc)
+        _now = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
         _ts = create_snapshot_timestamp(_now, dst)
         cmd = build_rsync_command(sync, config, dest_suffix=f"snapshots/{_ts.name}")
         assert cmd[-1] == f"/mnt/dst/snapshots/{_ts.name}/"

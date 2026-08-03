@@ -8,4 +8,4 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-from . import keyring_status_cmd as _keyring_status_cmd  # noqa: E402, F401
+from . import keyring_status_cmd as _keyring_status_cmd  # noqa: F401

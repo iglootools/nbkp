@@ -7,9 +7,11 @@ from typing import TYPE_CHECKING
 from .rsync import ProgressMode as ProgressMode
 
 if TYPE_CHECKING:
-    from .runner import SyncOutcome as SyncOutcome
-    from .runner import SyncResult as SyncResult
-    from .runner import run_all_syncs as run_all_syncs
+    from .runner import (
+        SyncOutcome as SyncOutcome,
+        SyncResult as SyncResult,
+        run_all_syncs as run_all_syncs,
+    )
 
 __all__ = [
     "ProgressMode",

@@ -25,11 +25,12 @@ from ..config import (
     Volume,
 )
 from ..config.epresolution import ResolvedEndpoints
-from ..fsprotocol import VOLUME_SENTINEL
 from ..disks.mount_checks import (
     check_mount_capabilities as _check_mount_capabilities,
     probe_mount_tools as _probe_mount_tools,
 )
+from ..disks.observation import MountObservation
+from ..fsprotocol import VOLUME_SENTINEL
 from ..remote import run_remote_command
 from ..remote.queries import (
     _check_command_available,
@@ -40,7 +41,6 @@ from .snapshot_checks import (
     check_btrfs_mount_option,
     check_hardlink_support,
 )
-from ..disks.observation import MountObservation
 from .status import (
     HostToolCapabilities,
     MountToolCapabilities,
@@ -48,7 +48,6 @@ from .status import (
     VolumeCapabilities,
     VolumeDiagnostics,
 )
-
 
 # ── SSH Endpoint Observation ──────────────────────────────
 
@@ -107,7 +106,7 @@ def _observe_ssh_endpoint_remote(
     try:
         host_tools = _probe_host_tools(volume, resolved_endpoints)
         ssh_reachable = True
-    except Exception:
+    except Exception:  # noqa: BLE001
         return SshEndpointDiagnostics(ssh_reachable=False)
 
     mount_tools = (

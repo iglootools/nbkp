@@ -21,7 +21,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
@@ -65,6 +65,7 @@ def _run_pydeps(package: str = PACKAGE) -> str:
         ],
         capture_output=True,
         text=True,
+        check=False,
     )
     if result.returncode != 0:
         print(f"pydeps failed:\n{result.stderr}", file=sys.stderr)
@@ -162,7 +163,7 @@ app = typer.Typer(add_completion=False)
 @app.command()
 def main(
     fmt: Annotated[
-        Optional[GraphFormat],
+        GraphFormat | None,
         typer.Option("--format", "-f", help="Print to stdout in this format"),
     ] = None,
     check: Annotated[

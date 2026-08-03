@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
-from ...disks.cli.helpers import managed_mount
 from ...clihelpers import OutputFormat
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
+from ...disks.cli.helpers import managed_mount
 from ..strictness import Strictness
 from . import app
 from .helpers import check_and_display
@@ -20,7 +20,7 @@ from .helpers import check_and_display
 @app.command()
 def check(
     config: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--config",
             "-c",
@@ -48,7 +48,7 @@ def check(
         ),
     ] = Strictness.IGNORE_INACTIVE,
     location: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             "--location",
             "-l",
@@ -56,7 +56,7 @@ def check(
         ),
     ] = None,
     exclude_location: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             "--exclude-location",
             "-L",
@@ -64,7 +64,7 @@ def check(
         ),
     ] = None,
     network: Annotated[
-        Optional[NetworkType],
+        NetworkType | None,
         typer.Option(
             "--network",
             "-N",

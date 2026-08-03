@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 import json
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
@@ -31,7 +31,7 @@ class GraphFormat(str, enum.Enum):
 @app.command()
 def graph(
     config: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--config",
             "-c",

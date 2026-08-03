@@ -2,9 +2,25 @@
 
 from __future__ import annotations
 
+from ..config import (
+    BtrfsSnapshotConfig,
+    Config,
+    HardLinkSnapshotConfig,
+    LocalVolume,
+    LuksEncryptionConfig,
+    MountConfig,
+    RemoteVolume,
+    SshEndpoint,
+    SyncConfig,
+    SyncEndpoint,
+)
+from ..config.testkit import (
+    base_ssh_endpoints,
+    base_sync_endpoints,
+    base_syncs,
+    base_volumes,
+)
 from ..fsprotocol import Snapshot
-from .output.formatting import collect_ssh_endpoint_statuses
-from .status import PreflightResult
 from . import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
@@ -28,24 +44,8 @@ from . import (
     VolumeError,
     VolumeStatus,
 )
-from ..config import (
-    BtrfsSnapshotConfig,
-    Config,
-    HardLinkSnapshotConfig,
-    LocalVolume,
-    LuksEncryptionConfig,
-    MountConfig,
-    RemoteVolume,
-    SshEndpoint,
-    SyncConfig,
-    SyncEndpoint,
-)
-from ..config.testkit import (
-    base_ssh_endpoints,
-    base_sync_endpoints,
-    base_syncs,
-    base_volumes,
-)
+from .output.formatting import collect_ssh_endpoint_statuses
+from .status import PreflightResult
 
 # ── Shared helpers ────────────────────────────────────────────
 

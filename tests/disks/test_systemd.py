@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from nbkp.disks.systemd import (
+    build_attach_luks_command,
     build_close_luks_command,
     build_mount_command,
-    build_attach_luks_command,
     build_umount_command,
 )
 

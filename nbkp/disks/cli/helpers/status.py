@@ -72,7 +72,7 @@ def _probe_volume_status(
         if bar is not None:
             bar.on_end(line, Severity.OK)
         return label, status
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         if bar is not None:
             bar.on_end(line, Severity.ERROR, str(e))
         return label, _error_status(f"unreachable: {e}")

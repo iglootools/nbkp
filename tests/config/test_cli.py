@@ -105,9 +105,7 @@ class TestConfigError:
         assert result.exit_code == 2
 
     def test_plain_error_message(self) -> None:
-        from nbkp.config import ConfigError
-
-        from nbkp.config import ConfigErrorReason
+        from nbkp.config import ConfigError, ConfigErrorReason
 
         err = ConfigError(
             "Config file not found: /bad.yaml",
@@ -120,8 +118,9 @@ class TestConfigError:
         assert "Config file not found: /bad.yaml" in out
 
     def test_validation_error_message(self) -> None:
-        from nbkp.config import ConfigError, ConfigErrorReason
         from pydantic import ValidationError
+
+        from nbkp.config import ConfigError, ConfigErrorReason
         from nbkp.config.protocol import Config
 
         try:
@@ -139,6 +138,7 @@ class TestConfigError:
 
     def test_yaml_error_message(self) -> None:
         import yaml
+
         from nbkp.config import ConfigError, ConfigErrorReason
 
         try:
@@ -157,8 +157,9 @@ class TestConfigError:
         assert "Invalid YAML" in out
 
     def test_cross_reference_error_message(self) -> None:
-        from nbkp.config import ConfigError, ConfigErrorReason
         from pydantic import ValidationError
+
+        from nbkp.config import ConfigError, ConfigErrorReason
         from nbkp.config.protocol import Config
 
         try:

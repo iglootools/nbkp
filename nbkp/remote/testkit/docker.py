@@ -15,12 +15,12 @@ import typer
 from ...config import SshConnectionOptions, SshEndpoint
 from ...fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
 from ...remote.fabricssh import run_remote_command
-from .constants import (  # noqa: F401
+from .constants import (
     LUKS_MAPPER_NAME,
     LUKS_PASSPHRASE,
     REMOTE_BACKUP_PATH,
-    REMOTE_BTRFS_PATH,
     REMOTE_BTRFS_ENCRYPTED_PATH,
+    REMOTE_BTRFS_PATH,
 )
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"

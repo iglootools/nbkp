@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from types import TracebackType
-from typing import Callable
+from typing import Self
 
 from rich.progress import (
     BarColumn,
@@ -84,7 +85,7 @@ class DisksProgressBar:
         if self._progress is not None:
             self._progress.stop()
 
-    def __enter__(self) -> DisksProgressBar:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(

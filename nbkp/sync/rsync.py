@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import shlex
 import subprocess
+from collections.abc import Callable
 from enum import Enum
-from typing import Callable
 
 from ..config import (
     Config,
@@ -16,12 +16,12 @@ from ..config import (
     SyncEndpoint,
 )
 from ..config.epresolution import ResolvedEndpoints
+from ..fsprotocol import LATEST_LINK
 from ..remote import (
     build_ssh_base_args,
     build_ssh_e_option,
     format_remote_path,
 )
-from ..fsprotocol import LATEST_LINK
 
 
 class ProgressMode(str, Enum):
@@ -243,6 +243,7 @@ def run_rsync(
             cmd,
             capture_output=True,
             text=True,
+            check=False,
         )
     else:
         proc = subprocess.Popen(

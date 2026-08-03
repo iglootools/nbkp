@@ -13,12 +13,10 @@ from pathlib import Path
 from nbkp.config import (
     SshEndpoint,
 )
-from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.disks.context import managed_mount
+from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.sh import ScriptOptions, generate_script
-
 from nbkp.sync.testkit.seed import build_chain_config
-
 from tests._docker_fixtures import LUKS_PASSPHRASE
 from tests.e2e_docker._pipeline_helpers import (
     assert_chain_results,
@@ -76,6 +74,7 @@ class TestChainSyncSh:
                 ["bash", "-n", str(script_path)],
                 capture_output=True,
                 text=True,
+                check=False,
             )
             assert syntax.returncode == 0, f"bash -n failed:\n{syntax.stderr}"
 
@@ -84,6 +83,7 @@ class TestChainSyncSh:
                 [str(script_path)],
                 capture_output=True,
                 text=True,
+                check=False,
             )
             assert result.returncode == 0, f"script failed:\n{result.stderr}"
             assert "All syncs completed" in result.stderr

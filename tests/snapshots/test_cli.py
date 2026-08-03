@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 from nbkp.cli import app
@@ -31,7 +31,6 @@ from tests.clihelpers import (
     src_ep_status,
     vol_status,
 )
-
 
 # ── Snapshot-specific config helpers ─────────────────────────
 
@@ -204,11 +203,11 @@ class TestPruneCommand:
 
 _SNAP_1 = Snapshot(
     name="2026-03-01T10:00:00.000Z",
-    timestamp=datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc),
+    timestamp=datetime(2026, 3, 1, 10, 0, 0, tzinfo=UTC),
 )
 _SNAP_2 = Snapshot(
     name="2026-03-06T14:30:00.000Z",
-    timestamp=datetime(2026, 3, 6, 14, 30, 0, tzinfo=timezone.utc),
+    timestamp=datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC),
 )
 
 

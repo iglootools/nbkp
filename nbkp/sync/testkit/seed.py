@@ -21,12 +21,6 @@ from ...config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ...remote.testkit.constants import (
-    LUKS_MAPPER_NAME,
-    REMOTE_BACKUP_PATH,
-    REMOTE_BTRFS_PATH,
-    REMOTE_BTRFS_ENCRYPTED_PATH,
-)
 from ...fsprotocol import (
     DESTINATION_SENTINEL,
     DEVNULL_TARGET,
@@ -35,6 +29,12 @@ from ...fsprotocol import (
     SOURCE_SENTINEL,
     STAGING_DIR,
     VOLUME_SENTINEL,
+)
+from ...remote.testkit.constants import (
+    LUKS_MAPPER_NAME,
+    REMOTE_BACKUP_PATH,
+    REMOTE_BTRFS_ENCRYPTED_PATH,
+    REMOTE_BTRFS_PATH,
 )
 from ..rsync import resolve_path
 

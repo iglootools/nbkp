@@ -5,7 +5,6 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from nbkp.fsprotocol import Snapshot
 from nbkp.config import (
     Config,
     HardLinkSnapshotConfig,
@@ -16,7 +15,9 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.config.epresolution import ResolvedEndpoints
+from nbkp.fsprotocol import Snapshot
 from nbkp.remote.resolution import resolve_all_endpoints
+from nbkp.remote.testkit.docker import REMOTE_BACKUP_PATH
 from nbkp.snapshots.common import (
     list_snapshots,
     read_latest_symlink,
@@ -28,9 +29,7 @@ from nbkp.snapshots.hardlinks import (
     prune_snapshots,
 )
 from nbkp.sync.rsync import run_rsync
-from nbkp.remote.testkit.docker import REMOTE_BACKUP_PATH
 from nbkp.sync.testkit.seed import create_seed_sentinels
-
 from tests._docker_fixtures import assert_sentinels_after_sync, ssh_exec
 
 
@@ -482,7 +481,7 @@ class TestHardLinkPrune:
         src.mkdir()
         (src / "data.txt").write_text("dry run prune")
 
-        sync, config, resolved, names = self._create_snapshots(
+        sync, config, resolved, _names = self._create_snapshots(
             src, docker_ssh_endpoint, remote_hardlink_volume, 3
         )
 

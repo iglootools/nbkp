@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 
 from pydantic import ConfigDict, Field, field_validator
 
@@ -16,10 +16,10 @@ class RsyncOptions(_BaseModel):
     model_config = ConfigDict(frozen=True)
     compress: bool = Field(default=False, description="Enable rsync `--compress`")
     checksum: bool = Field(default=False, description="Enable rsync `--checksum`")
-    default_options_override: Optional[List[str]] = Field(
+    default_options_override: list[str] | None = Field(
         default=None, description="Replace default rsync flags entirely"
     )
-    extra_options: List[str] = Field(
+    extra_options: list[str] = Field(
         default_factory=list,
         description="Additional flags appended after defaults",
     )
@@ -51,10 +51,10 @@ class SyncConfig(_BaseModel):
         default_factory=lambda: RsyncOptions(),
         description="Rsync flag configuration",
     )
-    filters: List[str] = Field(
+    filters: list[str] = Field(
         default_factory=list, description="Rsync filter rules (see below)"
     )
-    filter_file: Optional[str] = Field(
+    filter_file: str | None = Field(
         default=None, description="Path to external rsync filter file"
     )
 
@@ -69,7 +69,10 @@ class SyncConfig(_BaseModel):
     @classmethod
     def normalize_filters(cls, v: Any) -> list[str]:
         if isinstance(v, dict):
-            raise ValueError(
+            # ValueError, not TypeError: pydantic only wraps ValueError and
+            # AssertionError from validators into a ValidationError. A TypeError
+            # would escape as-is and bypass the config error reporting.
+            raise ValueError(  # noqa: TRY004
                 "filters must be a list, not a mapping. Add '- ' before each"
                 f" filter rule. Got: {v!r}"
             )

@@ -13,8 +13,8 @@ import os
 import shlex
 import sys
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path
-from datetime import datetime, timezone
 from textwrap import dedent
 
 from jinja2 import Environment, Template
@@ -62,7 +62,7 @@ def generate_script(
 ) -> str:
     """Generate a standalone bash script from config."""
     re = resolved_endpoints or {}
-    ts = now or datetime.now(timezone.utc)
+    ts = now or datetime.now(UTC)
     vol_paths = _build_vol_paths(config, options)
     ctx = _build_script_context(config, options, vol_paths, ts, re)
     template = _load_template()

@@ -52,6 +52,11 @@ build-backend = "poetry_dynamic_versioning.backend"
 [tool.ruff]
 target-version = "py312"
 
+[tool.ruff.lint.isort]
+# Keep aliased re-imports in the same `from x import (a, b as c)` block instead of
+# emitting a duplicate import statement per alias.
+combine-as-imports = true
+
 [tool.pytest.ini_options]
 markers = [
   "e2e_docker: End-to-end tests requiring Docker",

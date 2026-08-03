@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import StringIO
 
 from rich.console import Console
@@ -27,8 +27,8 @@ from nbkp.preflight import (
     VolumeError,
     VolumeStatus,
 )
-from nbkp.sync.output import build_run_preview_sections
 from nbkp.snapshots.common import create_snapshot_timestamp
+from nbkp.sync.output import build_run_preview_sections
 
 
 def _localhost_ssh_status() -> SshEndpointStatus:
@@ -205,7 +205,7 @@ class TestRunPreviewRsyncCommandDisplay:
                 config,
                 vol_s,
                 destination_latest_snapshot=create_snapshot_timestamp(
-                    datetime(2026, 3, 6, 14, 30, 0, tzinfo=timezone.utc),
+                    datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC),
                     dst,
                 ),
             )
@@ -215,7 +215,7 @@ class TestRunPreviewRsyncCommandDisplay:
         assert "/mnt/dst/snapshots/<timestamp>/" in output
         assert "--link-dest" in output
         expected_ts = create_snapshot_timestamp(
-            datetime(2026, 3, 6, 14, 30, 0, tzinfo=timezone.utc), dst
+            datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC), dst
         )
         assert f"../{expected_ts.name}" in output
 

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import UTC
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from nbkp.clihelpers import OutputFormat
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
@@ -18,16 +20,7 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.config.epresolution import ResolvedEndpoint, ResolvedEndpoints
-from nbkp.remote.resolution import resolve_proxy_chain
-from nbkp.clihelpers import OutputFormat
-from nbkp.sync import SyncResult
-from nbkp.snapshots.common import create_snapshot_timestamp
-from nbkp.preflight.checks import check_all_syncs, check_sync
-from nbkp.remote.queries import (
-    _check_command_available,
-    _check_rsync_version,
-    parse_rsync_version,
-)
+from nbkp.preflight.checks import check_all_syncs, check_sync, check_volume
 from nbkp.preflight.snapshot_checks import (
     check_btrfs_filesystem,
     check_btrfs_mount_option,
@@ -51,7 +44,14 @@ from nbkp.preflight.status import (
     VolumeError,
     VolumeStatus,
 )
-from nbkp.preflight.checks import check_volume
+from nbkp.remote.queries import (
+    _check_command_available,
+    _check_rsync_version,
+    parse_rsync_version,
+)
+from nbkp.remote.resolution import resolve_proxy_chain
+from nbkp.snapshots.common import create_snapshot_timestamp
+from nbkp.sync import SyncResult
 
 _STUB_HOST_TOOLS = HostToolCapabilities(
     has_rsync=True,
@@ -132,6 +132,9 @@ _HL_NO_HARDLINK_HOST_TOOLS = HostToolCapabilities(
     has_stat=True,
     has_findmnt=False,
 )
+
+_REACHABLE_SSH_DIAG = SshEndpointDiagnostics(ssh_reachable=True)
+"""Shared default bastion diagnostics; safe to share because the model is frozen."""
 
 
 def _make_localhost_ssh(
@@ -600,45 +603,52 @@ class TestSlugValidation:
         assert vol.slug == "nas2"
 
     def test_invalid_uppercase(self) -> None:
+        import pydantic
         import pytest
 
-        with pytest.raises(Exception):
+        with pytest.raises(pydantic.ValidationError):
             LocalVolume(slug="MyDrive", path="/mnt")
 
     def test_invalid_underscore(self) -> None:
+        import pydantic
         import pytest
 
-        with pytest.raises(Exception):
+        with pytest.raises(pydantic.ValidationError):
             LocalVolume(slug="my_drive", path="/mnt")
 
     def test_invalid_spaces(self) -> None:
+        import pydantic
         import pytest
 
-        with pytest.raises(Exception):
+        with pytest.raises(pydantic.ValidationError):
             LocalVolume(slug="my drive", path="/mnt")
 
     def test_invalid_trailing_hyphen(self) -> None:
+        import pydantic
         import pytest
 
-        with pytest.raises(Exception):
+        with pytest.raises(pydantic.ValidationError):
             LocalVolume(slug="drive-", path="/mnt")
 
     def test_invalid_leading_hyphen(self) -> None:
+        import pydantic
         import pytest
 
-        with pytest.raises(Exception):
+        with pytest.raises(pydantic.ValidationError):
             LocalVolume(slug="-drive", path="/mnt")
 
     def test_invalid_empty(self) -> None:
+        import pydantic
         import pytest
 
-        with pytest.raises(Exception):
+        with pytest.raises(pydantic.ValidationError):
             LocalVolume(slug="", path="/mnt")
 
     def test_invalid_too_long(self) -> None:
+        import pydantic
         import pytest
 
-        with pytest.raises(Exception):
+        with pytest.raises(pydantic.ValidationError):
             LocalVolume(slug="a" * 51, path="/mnt")
 
     def test_valid_max_length(self) -> None:
@@ -821,6 +831,7 @@ class TestCheckBtrfsFilesystemLocal:
             ["stat", "-f", "-c", "%T", "/mnt/data"],
             capture_output=True,
             text=True,
+            check=False,
         )
 
     @patch("nbkp.remote.dispatch.subprocess.run")
@@ -868,6 +879,7 @@ class TestCheckBtrfsSubvolumeLocal:
             ["stat", "-c", "%i", "/mnt/data"],
             capture_output=True,
             text=True,
+            check=False,
         )
 
     @patch("nbkp.remote.dispatch.subprocess.run")
@@ -879,6 +891,7 @@ class TestCheckBtrfsSubvolumeLocal:
             ["stat", "-c", "%i", "/mnt/data/backup"],
             capture_output=True,
             text=True,
+            check=False,
         )
 
     @patch("nbkp.remote.dispatch.subprocess.run")
@@ -942,6 +955,7 @@ class TestCheckBtrfsMountOptionLocal:
             ["findmnt", "-T", "/mnt/data", "-n", "-o", "OPTIONS"],
             capture_output=True,
             text=True,
+            check=False,
         )
 
     @patch("nbkp.remote.dispatch.subprocess.run")
@@ -2931,9 +2945,7 @@ class TestStandaloneEndpointProbing:
 
     def _bastion_patches(
         self,
-        bastion_diag: SshEndpointDiagnostics = SshEndpointDiagnostics(
-            ssh_reachable=True
-        ),
+        bastion_diag: SshEndpointDiagnostics = _REACHABLE_SSH_DIAG,
     ):  # type: ignore[no-untyped-def]
         """Stack of patches common to all bastion tests.
 
@@ -3586,10 +3598,10 @@ class TestCheckSourceLatest:
         src.mkdir()
         dst.mkdir()
         self._setup_sentinels(src, dst)
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         _ts = create_snapshot_timestamp(
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, tzinfo=UTC),
             LocalVolume(slug="x", path="/x"),
         )
         (src / "data" / "snapshots").mkdir(exist_ok=True)
@@ -3621,10 +3633,10 @@ class TestCheckSourceLatest:
         src.mkdir()
         dst.mkdir()
         self._setup_sentinels(src, dst)
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         _ts = create_snapshot_timestamp(
-            datetime(2024, 1, 1, tzinfo=timezone.utc),
+            datetime(2024, 1, 1, tzinfo=UTC),
             LocalVolume(slug="x", path="/x"),
         )
         snap = src / "data" / "snapshots" / _ts.name
@@ -4098,10 +4110,10 @@ class TestCheckDevnullLatest:
         src.mkdir()
         dst.mkdir()
         self._setup_sentinels(src, dst)
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         _ts = create_snapshot_timestamp(
-            datetime(2099, 1, 1, tzinfo=timezone.utc),
+            datetime(2099, 1, 1, tzinfo=UTC),
             LocalVolume(slug="x", path="/x"),
         )
         (src / "data" / "snapshots").mkdir()
@@ -4196,10 +4208,10 @@ class TestCheckDevnullLatest:
         src.mkdir()
         dst.mkdir()
         self._setup_sentinels(src, dst)
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         _ts = create_snapshot_timestamp(
-            datetime(2099, 1, 1, tzinfo=timezone.utc),
+            datetime(2099, 1, 1, tzinfo=UTC),
             LocalVolume(slug="x", path="/x"),
         )
         (dst / "backup" / "snapshots").mkdir()
