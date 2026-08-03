@@ -22,6 +22,7 @@ from nbkp.config import (
     SshEndpoint,
 )
 from nbkp.config.epresolution import ResolvedEndpoints
+from nbkp.disks.context import managed_mount
 from nbkp.disks.detection import (
     detect_device_present,
     detect_luks_attached,
@@ -37,9 +38,7 @@ from nbkp.disks.lifecycle import (
 )
 from nbkp.disks.observation import build_mount_observations
 from nbkp.disks.strategy import DirectMountStrategy, SystemdMountStrategy
-from nbkp.disks.context import managed_mount
 from nbkp.remote.dispatch import run_on_volume
-
 from tests._docker_fixtures import (
     LUKS_PASSPHRASE,
     direct_strategy_for,
@@ -697,9 +696,11 @@ class TestManagedMount:
     ) -> None:
         """Volume is umounted even when an exception occurs inside the context."""
         config, resolved = _make_config(docker_ssh_endpoint, remote_encrypted_volume)
-        with pytest.raises(RuntimeError, match="deliberate"):
-            with managed_mount(config, resolved, lambda _: LUKS_PASSPHRASE):
-                raise RuntimeError("deliberate")
+        with (
+            pytest.raises(RuntimeError, match="deliberate"),
+            managed_mount(config, resolved, lambda _: LUKS_PASSPHRASE),
+        ):
+            raise RuntimeError("deliberate")
 
         # Volume should be umounted after exception
         strategy = direct_strategy_for(remote_encrypted_volume)

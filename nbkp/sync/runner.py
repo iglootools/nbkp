@@ -4,25 +4,25 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from collections.abc import Callable
 from enum import Enum
-from typing import Callable, Optional
 
 from pydantic import BaseModel, model_validator
 
+from ..config import Config
+from ..config.epresolution import ResolvedEndpoints
+from ..fsprotocol import SNAPSHOTS_DIR, STAGING_DIR, Snapshot
+from ..preflight import SyncError, SyncStatus
 from ..snapshots.btrfs import (
     create_snapshot,
     prune_snapshots as btrfs_prune_snapshots,
 )
+from ..snapshots.common import update_latest_symlink
 from ..snapshots.hardlinks import (
     cleanup_orphaned_snapshots,
     create_snapshot_dir,
     prune_snapshots as hl_prune_snapshots,
 )
-from ..snapshots.common import update_latest_symlink
-from ..config import Config
-from ..config.epresolution import ResolvedEndpoints
-from ..fsprotocol import SNAPSHOTS_DIR, STAGING_DIR, Snapshot
-from ..preflight import SyncError, SyncStatus
 from .rsync import ProgressMode, run_rsync
 
 
@@ -44,9 +44,9 @@ class SyncResult(BaseModel):
     rsync_exit_code: int
     output: str
     outcome: SyncOutcome = SyncOutcome.SUCCESS
-    snapshot_path: Optional[str] = None
-    pruned_paths: Optional[list[str]] = None
-    detail: Optional[str] = None
+    snapshot_path: str | None = None
+    pruned_paths: list[str] | None = None
+    detail: str | None = None
 
     @model_validator(mode="after")
     def _derive_outcome(self) -> SyncResult:
@@ -106,7 +106,7 @@ def run_all_syncs(
         # Check if any upstream sync failed
         failed_deps = predecessors.get(slug, set()) & failed
         if failed_deps:
-            dep = sorted(failed_deps)[0]
+            dep = min(failed_deps)
             result = SyncResult(
                 sync_slug=slug,
                 success=False,
@@ -227,7 +227,9 @@ def _run_plain_sync(
             resolved_endpoints=resolved_endpoints,
             dest_suffix=None,
         )
-    except Exception as e:
+    # Any transport-level failure (SSH, spawn, DNS) becomes a failed SyncResult so
+    # the caller reports per-sync status instead of aborting the whole run.
+    except Exception as e:  # noqa: BLE001
         return SyncResult(
             sync_slug=slug,
             success=False,
@@ -280,7 +282,8 @@ def _run_btrfs_sync(
             resolved_endpoints=resolved_endpoints,
             dest_suffix=STAGING_DIR,
         )
-    except Exception as e:
+    # See _run_plain_sync: transport failures become a failed SyncResult.
+    except Exception as e:  # noqa: BLE001
         return SyncResult(
             sync_slug=slug,
             success=False,
@@ -407,7 +410,7 @@ def _run_hard_link_sync(
     # 1. Clean up orphaned snapshots from failed syncs
     try:
         cleanup_orphaned_snapshots(sync, config, resolved_endpoints=resolved_endpoints)
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass  # Best-effort cleanup
 
     # 2. Determine link-dest from latest complete snapshot
@@ -445,7 +448,8 @@ def _run_hard_link_sync(
             resolved_endpoints=resolved_endpoints,
             dest_suffix=f"{SNAPSHOTS_DIR}/{snapshot.name}",
         )
-    except Exception as e:
+    # See _run_plain_sync: transport failures become a failed SyncResult.
+    except Exception as e:  # noqa: BLE001
         return SyncResult(
             sync_slug=slug,
             success=False,
@@ -575,5 +579,5 @@ def _cleanup_snapshot_dir(
                     ["rm", "-rf", snapshot_path],
                     ep.proxy_chain,
                 )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass  # Best-effort cleanup

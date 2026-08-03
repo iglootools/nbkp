@@ -8,4 +8,4 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-from . import graph_cmd as _graph_cmd  # noqa: E402, F401
+from . import graph_cmd as _graph_cmd  # noqa: F401

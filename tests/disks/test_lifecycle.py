@@ -13,7 +13,6 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.disks.strategy import DirectMountStrategy, SystemdMountStrategy
 from nbkp.disks.lifecycle import (
     MountFailureReason,
     mount_volume,
@@ -21,6 +20,7 @@ from nbkp.disks.lifecycle import (
     umount_volume,
     umount_volumes,
 )
+from nbkp.disks.strategy import DirectMountStrategy, SystemdMountStrategy
 
 
 def _mock_run(returncode: int, stdout: str = "", stderr: str = ""):

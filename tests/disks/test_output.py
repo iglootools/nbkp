@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
+from io import StringIO
 
 from rich.console import Console
-from io import StringIO
 
 from nbkp.clihelpers import Severity
 from nbkp.disks.observation import MountObservation

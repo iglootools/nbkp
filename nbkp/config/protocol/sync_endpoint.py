@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from .base import Slug, _BaseModel
-
 
 SnapshotMode = Literal["none", "btrfs", "hard-link"]
 
@@ -17,7 +16,7 @@ class BtrfsSnapshotConfig(_BaseModel):
 
     model_config = ConfigDict(frozen=True)
     enabled: bool = Field(default=False, description="Enable snapshot management")
-    max_snapshots: Optional[int] = Field(
+    max_snapshots: int | None = Field(
         default=None,
         ge=1,
         description="Maximum snapshots to keep (`null` = unlimited)",
@@ -29,7 +28,7 @@ class HardLinkSnapshotConfig(_BaseModel):
 
     model_config = ConfigDict(frozen=True)
     enabled: bool = Field(default=False, description="Enable snapshot management")
-    max_snapshots: Optional[int] = Field(
+    max_snapshots: int | None = Field(
         default=None,
         ge=1,
         description="Maximum snapshots to keep (`null` = unlimited)",
@@ -48,7 +47,7 @@ class SyncEndpoint(_BaseModel):
 
     slug: Slug
     volume: str = Field(..., min_length=1, description="Volume slug")
-    subdir: Optional[str] = Field(
+    subdir: str | None = Field(
         default=None,
         description=(
             "Subdirectory within the volume. Leading and trailing slashes are stripped."

@@ -12,6 +12,7 @@ from ...clihelpers import (
     severity_style,
     severity_symbol,
 )
+from ...config import MountConfig
 from ...disks.output import (
     device_fail_severity,
     luks_fail_severity,
@@ -31,7 +32,6 @@ from ..status import (
     VolumeStatus,
 )
 from ..strictness import Strictness
-from ...config import MountConfig
 
 
 def join_text(items: Iterable[Text], separator: str = ", ") -> Text:
@@ -201,4 +201,4 @@ def collect_ssh_endpoint_statuses(
         ],
     ]
     # dict.fromkeys-style: first occurrence wins
-    return dict({s.slug: s for s in reversed(all_ssh)})
+    return {s.slug: s for s in reversed(all_ssh)}

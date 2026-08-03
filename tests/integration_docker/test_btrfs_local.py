@@ -25,7 +25,6 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-
 from tests.integration_docker._btrfs_helpers import (
     BtrfsEnv,
     run_test_creates_readonly_snapshot,
@@ -102,6 +101,7 @@ def btrfs_dst(tmp_path: Path) -> Path:
                         "false",
                     ],
                     capture_output=True,
+                    check=False,
                 )
                 subprocess.run(
                     [
@@ -111,6 +111,7 @@ def btrfs_dst(tmp_path: Path) -> Path:
                         str(snap),
                     ],
                     capture_output=True,
+                    check=False,
                 )
         staging_sub = dst / "staging"
         if staging_sub.is_dir():
@@ -122,6 +123,7 @@ def btrfs_dst(tmp_path: Path) -> Path:
                     str(staging_sub),
                 ],
                 capture_output=True,
+                check=False,
             )
         shutil.rmtree(dst, ignore_errors=True)
     else:
@@ -155,6 +157,7 @@ def btrfs_env_local(tmp_path: Path, btrfs_dst: Path) -> BtrfsEnv:
             ["btrfs", "property", "get", path, "ro"],
             capture_output=True,
             text=True,
+            check=False,
         )
         return "ro=true" in result.stdout
 
@@ -218,7 +221,7 @@ def _docker_available() -> bool:
         client = dockerlib.from_env()
         client.ping()
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001
         return False
 
 
@@ -250,9 +253,8 @@ class TestBtrfsLocalViaDocker:
     Docker container when btrfs is not available locally."""
 
     def test_all_pass_in_docker(self) -> None:
-        from testcontainers.core.image import DockerImage
-
         import docker as dockerlib
+        from testcontainers.core.image import DockerImage
 
         image = DockerImage(
             path=str(_PROJECT_ROOT),

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Any, List, Literal, Optional, Union
+from typing import Annotated, Any, Literal
 
 from pydantic import ConfigDict, Field, field_validator
 
@@ -35,7 +35,7 @@ class LuksEncryptionConfig(_BaseModel):
 
 
 # Future: VeraCryptEncryptionConfig, etc.
-EncryptionConfig = Annotated[Union[LuksEncryptionConfig], Field(discriminator="type")]
+EncryptionConfig = Annotated[LuksEncryptionConfig, Field(discriminator="type")]
 
 _UUID_PATTERN = (
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
@@ -69,7 +69,7 @@ class MountConfig(_BaseModel):
             " For unencrypted volumes: the filesystem UUID (from fstab/blkid)."
         ),
     )
-    encryption: Optional[EncryptionConfig] = Field(
+    encryption: EncryptionConfig | None = Field(
         default=None,
         description="Encryption config. Omit for unencrypted volumes.",
     )
@@ -90,7 +90,7 @@ class LocalVolume(_BaseModel):
             " Trailing slashes are stripped."
         ),
     )
-    mount: Optional[MountConfig] = Field(
+    mount: MountConfig | None = Field(
         default=None,
         description=(
             "Mount management config."
@@ -115,7 +115,7 @@ class RemoteVolume(_BaseModel):
     ssh_endpoint: str = Field(
         ..., min_length=1, description="Primary SSH endpoint slug"
     )
-    ssh_endpoints: Optional[List[str]] = Field(
+    ssh_endpoints: list[str] | None = Field(
         default=None, description="Candidate endpoints for auto-selection"
     )
     path: str = Field(
@@ -129,7 +129,7 @@ class RemoteVolume(_BaseModel):
             " and is resolved by SSH/rsync)."
         ),
     )
-    mount: Optional[MountConfig] = Field(
+    mount: MountConfig | None = Field(
         default=None,
         description=(
             "Mount management config."
@@ -146,4 +146,4 @@ class RemoteVolume(_BaseModel):
         return stripped if stripped else "/"
 
 
-Volume = Annotated[Union[LocalVolume, RemoteVolume], Field(discriminator="type")]
+Volume = Annotated[LocalVolume | RemoteVolume, Field(discriminator="type")]

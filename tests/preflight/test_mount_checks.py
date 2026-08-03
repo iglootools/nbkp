@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from rich.text import Text
+
 from nbkp.config import (
     LocalVolume,
     LuksEncryptionConfig,
     MountConfig,
 )
 from nbkp.disks.observation import MountObservation
-from rich.text import Text
-
 from nbkp.preflight.output.formatting import format_mount_status
 from nbkp.preflight.status import (
     MountCapabilities,
@@ -22,24 +22,24 @@ from nbkp.preflight.status import (
     VolumeDiagnostics,
     VolumeError,
     VolumeStatus,
+    _cryptsetup_service_mismatches,
     _mount_errors,
     _mount_unit_mismatches,
-    _cryptsetup_service_mismatches,
 )
 
-_MOUNT_DEFAULTS = dict(
-    resolved_backend="systemd",
-    mount_unit="mnt-encrypted.mount",
-    has_mount_unit_config=True,
-    mount_unit_what="/dev/mapper/encrypted",
-    mount_unit_where="/mnt/encrypted",
-    has_cryptsetup_service_config=True,
-    cryptsetup_service_exec_start=(
+_MOUNT_DEFAULTS = {
+    "resolved_backend": "systemd",
+    "mount_unit": "mnt-encrypted.mount",
+    "has_mount_unit_config": True,
+    "mount_unit_what": "/dev/mapper/encrypted",
+    "mount_unit_where": "/mnt/encrypted",
+    "has_cryptsetup_service_config": True,
+    "cryptsetup_service_exec_start": (
         "/usr/lib/systemd/systemd-cryptsetup attach encrypted"
         " /dev/disk/by-uuid/5941f273-f73c-44c5-a3ef-fae7248db1b6"
         " /dev/stdin luks"
     ),
-)
+}
 
 
 def _base_mount_caps(**overrides: object) -> MountCapabilities:
@@ -407,9 +407,9 @@ class TestVolumeStatusFromDiagnostics:
 # ── Direct backend errors ───────────────────────────────────
 
 
-_DIRECT_DEFAULTS = dict(
-    resolved_backend="direct",
-)
+_DIRECT_DEFAULTS = {
+    "resolved_backend": "direct",
+}
 
 
 def _direct_mount_caps(**overrides: object) -> MountCapabilities:

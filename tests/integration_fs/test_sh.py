@@ -32,6 +32,7 @@ def _has_bash4() -> bool:
     r = subprocess.run(
         [bash, "-c", "declare -A x=()"],
         capture_output=True,
+        check=False,
     )
     return r.returncode == 0
 
@@ -118,6 +119,7 @@ class TestGeneratedScriptSyntax:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
@@ -141,5 +143,6 @@ class TestGeneratedScriptSyntax:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"/bin/bash -n failed:\n{result.stderr}"

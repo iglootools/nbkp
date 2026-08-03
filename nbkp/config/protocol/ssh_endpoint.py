@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
@@ -31,7 +31,7 @@ class SshConnectionOptions(_BaseModel):
     # SSH: Compression | Paramiko: compress
     compress: bool = Field(default=False, description="Enable SSH compression")
     # SSH: ServerAliveInterval | Paramiko: transport.set_keepalive()
-    server_alive_interval: Optional[int] = Field(
+    server_alive_interval: int | None = Field(
         default=None, ge=1, description="Keepalive interval in seconds"
     )
 
@@ -45,15 +45,15 @@ class SshConnectionOptions(_BaseModel):
 
     # Timeouts
     # Paramiko: banner_timeout — wait for SSH banner
-    banner_timeout: Optional[float] = Field(
+    banner_timeout: float | None = Field(
         default=None, ge=0, description="Wait time for SSH banner"
     )
     # Paramiko: auth_timeout — wait for auth response
-    auth_timeout: Optional[float] = Field(
+    auth_timeout: float | None = Field(
         default=None, ge=0, description="Wait time for auth response"
     )
     # Paramiko: channel_timeout — wait for channel open
-    channel_timeout: Optional[float] = Field(
+    channel_timeout: float | None = Field(
         default=None,
         ge=0,
         description="Wait time for channel open (Paramiko/Fabric only)",
@@ -67,7 +67,7 @@ class SshConnectionOptions(_BaseModel):
     )
     # SSH: UserKnownHostsFile
     # Paramiko: SSHClient.load_host_keys()
-    known_hosts_file: Optional[str] = Field(
+    known_hosts_file: str | None = Field(
         default=None, description="Custom known hosts file path"
     )
 
@@ -80,7 +80,7 @@ class SshConnectionOptions(_BaseModel):
     # Algorithm restrictions
     # Paramiko: disabled_algorithms — disable specific algorithms
     # (Paramiko/Fabric only — no SSH CLI equivalent)
-    disabled_algorithms: Optional[Dict[str, List[str]]] = Field(
+    disabled_algorithms: dict[str, list[str]] | None = Field(
         default=None,
         description="Disable specific SSH algorithms (Paramiko/Fabric only)",
     )
@@ -91,8 +91,8 @@ class SshEndpoint(_BaseModel):
     slug: Slug
     host: str = Field(..., min_length=1, description="Hostname or SSH config alias")
     port: int = Field(default=22, ge=1, le=65535, description="SSH port")
-    user: Optional[str] = Field(default=None, description="SSH username")
-    key: Optional[str] = Field(default=None, description="Path to private key file")
+    user: str | None = Field(default=None, description="SSH username")
+    key: str | None = Field(default=None, description="Path to private key file")
 
     @field_validator("key", mode="before")
     @classmethod
@@ -105,25 +105,25 @@ class SshEndpoint(_BaseModel):
         default_factory=lambda: SshConnectionOptions(),
         description="SSH connection options",
     )
-    proxy_jump: Optional[str] = Field(
+    proxy_jump: str | None = Field(
         default=None,
         description="Slug of another endpoint to use as bastion",
     )
-    proxy_jumps: Optional[List[str]] = Field(
+    proxy_jumps: list[str] | None = Field(
         default=None,
         description=(
             "Slugs for multi-hop proxy chain (mutually exclusive with `proxy-jump`)"
         ),
     )
-    location: Optional[str] = Field(
+    location: str | None = Field(
         default=None,
         description="Network location tag (e.g. `home`, `travel`)",
     )
-    locations: Optional[List[str]] = Field(
+    locations: list[str] | None = Field(
         default=None,
         description=("Multiple location tags (mutually exclusive with `location`)"),
     )
-    extends: Optional[str] = Field(
+    extends: str | None = Field(
         default=None,
         description="Slug of parent endpoint to inherit from",
     )

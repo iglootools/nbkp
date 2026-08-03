@@ -8,5 +8,10 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-from . import check_cmd as _check_cmd  # noqa: E402, F401
-from . import troubleshoot_cmd as _troubleshoot_cmd  # noqa: E402, F401
+# Import order determines the order commands are listed in `--help` and in the
+# generated CLI reference. Keep isort out of it.
+# isort: off
+from . import check_cmd as _check_cmd  # noqa: F401
+from . import troubleshoot_cmd as _troubleshoot_cmd  # noqa: F401
+
+# isort: on

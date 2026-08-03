@@ -224,8 +224,7 @@ def _format_validation_error(err: ErrorDetails) -> str:
     """Format a single Pydantic validation error for display."""
     loc = " → ".join(str(p) for p in err["loc"])
     msg = str(err["msg"])
-    if msg.startswith("Value error, "):
-        msg = msg[len("Value error, ") :]
+    msg = msg.removeprefix("Value error, ")
     return f"{loc}: {msg}" if loc else msg
 
 

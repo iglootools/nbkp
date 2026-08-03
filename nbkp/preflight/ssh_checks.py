@@ -34,5 +34,5 @@ def observe_standalone_endpoint(
     try:
         run_remote_command(server, ["true"], proxy_chain)
         return SshEndpointDiagnostics(ssh_reachable=True)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return SshEndpointDiagnostics(ssh_reachable=False)

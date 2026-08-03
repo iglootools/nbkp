@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
-from ...disks.cli.helpers import managed_mount
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
+from ...disks.cli.helpers import managed_mount
 from ...preflight.output import print_human_troubleshoot
 from . import app
 from .helpers import check_all_with_progress
@@ -18,7 +18,7 @@ from .helpers import check_all_with_progress
 @app.command()
 def troubleshoot(
     config: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--config",
             "-c",
@@ -29,7 +29,7 @@ def troubleshoot(
         ),
     ] = None,
     location: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             "--location",
             "-l",
@@ -37,7 +37,7 @@ def troubleshoot(
         ),
     ] = None,
     exclude_location: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             "--exclude-location",
             "-L",
@@ -45,7 +45,7 @@ def troubleshoot(
         ),
     ] = None,
     network: Annotated[
-        Optional[NetworkType],
+        NetworkType | None,
         typer.Option(
             "--network",
             "-N",

@@ -15,25 +15,25 @@ from ...config import (
     ConfigError,
     ConfigErrorReason,
 )
+from ...config.output import print_config_error, print_human_config
+from ...config.testkit import config_show_config
 from ...ordering.output import (
     build_mermaid_graph,
     print_mermaid_ascii_graph,
     print_rich_tree_graph,
 )
-from ...config.output import print_config_error, print_human_config
 from ...preflight.output import print_human_check, print_human_troubleshoot
-from ...remote.resolution import resolve_all_endpoints
-from ...snapshots.output import print_human_prune_results
-from ...sync.output import (
-    print_human_results,
-    print_run_preview,
-)
-from ...config.testkit import config_show_config
 from ...preflight.testkit import (
     check_config,
     check_data,
     troubleshoot_config,
     troubleshoot_data,
+)
+from ...remote.resolution import resolve_all_endpoints
+from ...snapshots.output import print_human_prune_results
+from ...sync.output import (
+    print_human_results,
+    print_run_preview,
 )
 from ...sync.testkit.runner import (
     dry_run_results,

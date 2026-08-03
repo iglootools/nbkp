@@ -23,11 +23,6 @@ from ...config.output import (
     host_label,
 )
 from ...disks.auth import generate_auth_rules
-from ...remote.ssh import (
-    format_proxy_jump_chain,
-    ssh_prefix,
-    wrap_cmd,
-)
 from ...fsprotocol import (
     DESTINATION_SENTINEL,
     LATEST_LINK,
@@ -35,6 +30,11 @@ from ...fsprotocol import (
     SOURCE_SENTINEL,
     STAGING_DIR,
     VOLUME_SENTINEL,
+)
+from ...remote.ssh import (
+    format_proxy_jump_chain,
+    ssh_prefix,
+    wrap_cmd,
 )
 from ..status import (
     DestinationEndpointError,
@@ -47,7 +47,6 @@ from ..status import (
     VolumeError,
     VolumeStatus,
 )
-
 
 # Cascade errors are pointers to inactive lower layers — they have no
 # actionable fix at their own layer, so troubleshoot skips them.
@@ -461,9 +460,11 @@ def _print_destination_endpoint_error_fix(
             cmds = [
                 f"sudo btrfs subvolume create {path}/{STAGING_DIR}",
                 f"sudo mkdir {path}/{SNAPSHOTS_DIR}",
-                "sudo chown <user>:<group>"
-                f" {path}/{STAGING_DIR}"
-                f" {path}/{SNAPSHOTS_DIR}",
+                (
+                    "sudo chown <user>:<group>"
+                    f" {path}/{STAGING_DIR}"
+                    f" {path}/{SNAPSHOTS_DIR}"
+                ),
             ]
             for cmd in cmds:
                 _print_cmd(
@@ -629,7 +630,7 @@ def _print_mount_error(
 
 def _print_device_not_present_fix(
     console: Console,
-    mount: "MountConfig | None",
+    mount: MountConfig | None,
 ) -> None:
     """Print fix for device not plugged in."""
     p2 = _INDENT * 2
@@ -772,7 +773,7 @@ def _print_cryptsetup_service_mismatch_fix(
 
 def _print_passphrase_not_available_fix(
     console: Console,
-    mount: "MountConfig | None",
+    mount: MountConfig | None,
 ) -> None:
     """Print fix for passphrase not available."""
 
@@ -793,7 +794,7 @@ def _print_passphrase_not_available_fix(
 def _print_mount_failed_fix(
     console: Console,
     vol: LocalVolume | RemoteVolume,
-    mount: "MountConfig | None",
+    mount: MountConfig | None,
     resolved_endpoints: ResolvedEndpoints,
 ) -> None:
     """Print fix for attach-luks/mount failure."""

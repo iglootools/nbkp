@@ -22,4 +22,5 @@ def run_remote_command(
         capture_output=True,
         text=True,
         input=input,
+        check=False,
     )

@@ -5,7 +5,7 @@ from __future__ import annotations
 import stat
 import sys
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
@@ -16,7 +16,7 @@ from .. import ScriptOptions, generate_script
 
 def sh(
     config: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--config",
             "-c",
@@ -27,7 +27,7 @@ def sh(
         ),
     ] = None,
     output_file: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--output-file",
             "-o",
@@ -58,7 +58,7 @@ def sh(
         ),
     ] = False,
     location: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             "--location",
             "-l",
@@ -66,7 +66,7 @@ def sh(
         ),
     ] = None,
     exclude_location: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             "--exclude-location",
             "-L",
@@ -74,7 +74,7 @@ def sh(
         ),
     ] = None,
     network: Annotated[
-        Optional[NetworkType],
+        NetworkType | None,
         typer.Option(
             "--network",
             "-N",

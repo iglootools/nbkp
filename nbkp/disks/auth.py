@@ -156,8 +156,10 @@ def _direct_sudoers_commands(
         f"/usr/bin/umount {vol.path}",
         *(
             [
-                f"/usr/sbin/cryptsetup open --type luks"
-                f" /dev/disk/by-uuid/{mount.device_uuid} {mapper} -",
+                (
+                    f"/usr/sbin/cryptsetup open --type luks"
+                    f" /dev/disk/by-uuid/{mount.device_uuid} {mapper} -"
+                ),
                 f"/usr/sbin/cryptsetup close {mapper}",
             ]
             if mapper

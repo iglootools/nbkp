@@ -8,7 +8,7 @@ preflight-status-aware :func:`has_fatal_errors` helper.
 
 from __future__ import annotations
 
-from ..clihelpers.strictness import Strictness as Strictness
+from ..clihelpers.strictness import Strictness
 from .status import SyncStatus
 
 

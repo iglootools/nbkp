@@ -335,12 +335,7 @@ def _generate_sections() -> dict[str, str]:
     sections: dict[str, str] = {}
 
     # TOP_LEVEL
-    sections["CONFIGREF:TOP_LEVEL"] = "\n".join(
-        [
-            _TOP_LEVEL_STRUCTURE,
-            "",
-        ]
-    )
+    sections["CONFIGREF:TOP_LEVEL"] = f"{_TOP_LEVEL_STRUCTURE}\n"
 
     # SSH_ENDPOINTS
     sections["CONFIGREF:SSH_ENDPOINTS"] = "\n".join(

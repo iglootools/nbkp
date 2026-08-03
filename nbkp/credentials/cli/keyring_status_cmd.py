@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -12,8 +12,8 @@ from rich.table import Table
 from rich.text import Text
 
 from ...clihelpers import OutputFormat
-from ...config.cli.helpers import load_config_or_exit
 from ...config import Config
+from ...config.cli.helpers import load_config_or_exit
 from .. import CredentialError, retrieve_passphrase
 from . import app
 
@@ -31,7 +31,7 @@ def _collect_passphrase_ids(cfg: Config) -> dict[str, list[str]]:
 @app.command("keyring-status")
 def keyring_status(
     config: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--config",
             "-c",

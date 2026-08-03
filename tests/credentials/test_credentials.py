@@ -27,14 +27,18 @@ class TestRetrievePassphraseKeyring:
     def test_raises_when_password_not_found(self) -> None:
         mock_keyring = MagicMock()
         mock_keyring.get_password.return_value = None
-        with patch.dict("sys.modules", {"keyring": mock_keyring}):
-            with pytest.raises(CredentialError, match="No passphrase found"):
-                retrieve_passphrase("disk1", CredentialProvider.KEYRING)
+        with (
+            patch.dict("sys.modules", {"keyring": mock_keyring}),
+            pytest.raises(CredentialError, match="No passphrase found"),
+        ):
+            retrieve_passphrase("disk1", CredentialProvider.KEYRING)
 
     def test_raises_when_keyring_not_installed(self) -> None:
-        with patch.dict("sys.modules", {"keyring": None}):
-            with pytest.raises(CredentialError, match="keyring package not installed"):
-                retrieve_passphrase("disk1", CredentialProvider.KEYRING)
+        with (
+            patch.dict("sys.modules", {"keyring": None}),
+            pytest.raises(CredentialError, match="keyring package not installed"),
+        ):
+            retrieve_passphrase("disk1", CredentialProvider.KEYRING)
 
 
 class TestRetrievePassphrasePrompt:
@@ -83,6 +87,7 @@ class TestRetrievePassphraseCommand:
             ["pass", "show", "nbkp/disk1"],
             capture_output=True,
             text=True,
+            check=False,
         )
 
     def test_replaces_id_in_template(self) -> None:
@@ -99,6 +104,7 @@ class TestRetrievePassphraseCommand:
             ["op", "read", "op://vault/my-drive/password"],
             capture_output=True,
             text=True,
+            check=False,
         )
 
     def test_raises_on_command_failure(self) -> None:

@@ -7,9 +7,9 @@ exercise the btrfs snapshot module against either execution backend.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Callable
+from datetime import UTC, datetime
 
 from nbkp.config import Config, SyncConfig
 from nbkp.config.epresolution import ResolvedEndpoints
@@ -58,8 +58,8 @@ def run_test_lists_sorted_oldest_first(env: BtrfsEnv) -> None:
     env.create_staging()
     env.seed_staging("test data")
 
-    now1 = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    now2 = datetime(2024, 1, 2, tzinfo=timezone.utc)
+    now1 = datetime(2024, 1, 1, tzinfo=UTC)
+    now2 = datetime(2024, 1, 2, tzinfo=UTC)
 
     create_snapshot(env.sync, env.config, now=now1, resolved_endpoints=env.resolved)
     create_snapshot(env.sync, env.config, now=now2, resolved_endpoints=env.resolved)
@@ -74,8 +74,8 @@ def run_test_returns_most_recent(env: BtrfsEnv) -> None:
     env.create_staging()
     env.seed_staging("test data")
 
-    now1 = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    now2 = datetime(2024, 1, 2, tzinfo=timezone.utc)
+    now1 = datetime(2024, 1, 1, tzinfo=UTC)
+    now2 = datetime(2024, 1, 2, tzinfo=UTC)
 
     create_snapshot(env.sync, env.config, now=now1, resolved_endpoints=env.resolved)
     create_snapshot(env.sync, env.config, now=now2, resolved_endpoints=env.resolved)
@@ -111,7 +111,7 @@ def run_test_prunes_oldest_beyond_limit(env: BtrfsEnv) -> None:
 
     names = []
     for i in range(3):
-        now = datetime(2024, 1, 1 + i, tzinfo=timezone.utc)
+        now = datetime(2024, 1, 1 + i, tzinfo=UTC)
         path = create_snapshot(
             env.sync, env.config, now=now, resolved_endpoints=env.resolved
         )
@@ -137,7 +137,7 @@ def run_test_dry_run_preserves_all(env: BtrfsEnv) -> None:
     env.seed_staging("test data")
 
     for i in range(3):
-        now = datetime(2024, 1, 1 + i, tzinfo=timezone.utc)
+        now = datetime(2024, 1, 1 + i, tzinfo=UTC)
         path = create_snapshot(
             env.sync, env.config, now=now, resolved_endpoints=env.resolved
         )

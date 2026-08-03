@@ -5,32 +5,30 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console, Group
 from rich.panel import Panel
 from rich.text import Text
 
-from ...clihelpers import OutputFormat, severity_icon
-from ...clihelpers import StepProgressBar
+from ...clihelpers import OutputFormat, StepProgressBar, severity_icon
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
+from ...disks.cli.helpers import managed_mount
 from ...ordering.output import build_rich_tree_sections
 from ...preflight import PreflightResult
+from ...preflight.cli.helpers import _check_total
 from ...preflight.output import print_human_check
 from ...preflight.severity import PreflightError, severity_for_errors
 from ...sync import ProgressMode, SyncResult
 from ...sync.output import build_human_results_sections, outcome_severity
 from ..pipeline import Strictness, check_and_run
 
-from ...disks.cli.helpers import managed_mount
-from ...preflight.cli.helpers import _check_total
-
 
 def run(
     config: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--config",
             "-c",
@@ -45,7 +43,7 @@ def run(
         typer.Option("--dry-run", "-n", help="Perform a dry run"),
     ] = False,
     sync: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option("--sync", "-s", help="Sync name(s) to run"),
     ] = None,
     output: Annotated[
@@ -53,7 +51,7 @@ def run(
         typer.Option("--output", "-o", help="Output format"),
     ] = OutputFormat.HUMAN,
     progress: Annotated[
-        Optional[ProgressMode],
+        ProgressMode | None,
         typer.Option(
             "--progress",
             "-p",
@@ -81,7 +79,7 @@ def run(
         ),
     ] = Strictness.IGNORE_INACTIVE,
     location: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             "--location",
             "-l",
@@ -89,7 +87,7 @@ def run(
         ),
     ] = None,
     exclude_location: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             "--exclude-location",
             "-L",
@@ -97,7 +95,7 @@ def run(
         ),
     ] = None,
     network: Annotated[
-        Optional[NetworkType],
+        NetworkType | None,
         typer.Option(
             "--network",
             "-N",

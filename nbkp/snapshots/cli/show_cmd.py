@@ -4,26 +4,24 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
 from ...clihelpers import OutputFormat
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
-from .cmd_handler import show_all_syncs
-from ..output import print_human_show_results
-
 from ...disks.cli.helpers import managed_mount
 from ...preflight.cli.helpers import check_all_with_progress
-
+from ..output import print_human_show_results
 from . import app
+from .cmd_handler import show_all_syncs
 
 
 @app.command()
 def show(
     config: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--config",
             "-c",
@@ -34,7 +32,7 @@ def show(
         ),
     ] = None,
     sync: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option("--sync", "-s", help="Sync name(s) to show"),
     ] = None,
     output: Annotated[
@@ -42,7 +40,7 @@ def show(
         typer.Option("--output", "-o", help="Output format"),
     ] = OutputFormat.HUMAN,
     location: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             "--location",
             "-l",
@@ -50,7 +48,7 @@ def show(
         ),
     ] = None,
     exclude_location: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             "--exclude-location",
             "-L",
@@ -58,7 +56,7 @@ def show(
         ),
     ] = None,
     network: Annotated[
-        Optional[NetworkType],
+        NetworkType | None,
         typer.Option(
             "--network",
             "-N",

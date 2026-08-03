@@ -35,14 +35,12 @@ from pathlib import Path
 from nbkp.config import (
     SshEndpoint,
 )
+from nbkp.disks.context import managed_mount
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.testkit.docker import REMOTE_BACKUP_PATH
-from nbkp.disks.context import managed_mount
 from nbkp.run.pipeline import Strictness, check_and_run
 from nbkp.sync.runner import SyncOutcome
-
 from nbkp.sync.testkit.seed import build_chain_config
-
 from tests._docker_fixtures import LUKS_PASSPHRASE, ssh_exec
 from tests.e2e_docker._pipeline_helpers import (
     assert_chain_results,

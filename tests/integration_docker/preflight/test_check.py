@@ -4,20 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nbkp.preflight import (
-    DestinationEndpointError,
-    check_sync,
-    check_volume,
-)
-from nbkp.preflight.snapshot_checks import (
-    check_btrfs_filesystem,
-    check_btrfs_subvolume,
-)
-from nbkp.preflight.volume_checks import observe_ssh_endpoint, observe_volume
-from nbkp.preflight.endpoint_checks import (
-    observe_source_endpoint,
-    observe_destination_endpoint,
-)
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
@@ -30,21 +16,34 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.disks.lifecycle import mount_volume, umount_volume
+from nbkp.preflight import (
+    DestinationEndpointError,
+    check_sync,
+    check_volume,
+)
+from nbkp.preflight.endpoint_checks import (
+    observe_destination_endpoint,
+    observe_source_endpoint,
+)
+from nbkp.preflight.snapshot_checks import (
+    check_btrfs_filesystem,
+    check_btrfs_subvolume,
+)
+from nbkp.preflight.volume_checks import observe_ssh_endpoint, observe_volume
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.testkit.docker import (
     REMOTE_BACKUP_PATH,
-    REMOTE_BTRFS_PATH,
     REMOTE_BTRFS_ENCRYPTED_PATH,
+    REMOTE_BTRFS_PATH,
 )
 from nbkp.sync.testkit.seed import create_seed_sentinels
-from nbkp.disks.lifecycle import mount_volume, umount_volume
-
 from tests._docker_fixtures import (
-    create_sentinels,
-    ssh_exec,
-    resolved_endpoints_for,
-    direct_strategy_for,
     LUKS_PASSPHRASE,
+    create_sentinels,
+    direct_strategy_for,
+    resolved_endpoints_for,
+    ssh_exec,
 )
 
 

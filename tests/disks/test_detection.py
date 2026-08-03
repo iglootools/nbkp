@@ -12,8 +12,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.disks import direct as direct_cmds
-from nbkp.disks import systemd as systemd_cmds
+from nbkp.disks import direct as direct_cmds, systemd as systemd_cmds
 from nbkp.disks.detection import (
     detect_device_present,
     detect_luks_attached,

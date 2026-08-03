@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
-from ...clihelpers import OutputFormat
-from ...clihelpers import StepProgressBar
+from ...clihelpers import OutputFormat, StepProgressBar
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
 from . import app
@@ -18,7 +17,7 @@ from .helpers import _probe_volume_status, _show_status_table, _unmanaged_status
 @app.command("status")
 def status(
     config: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--config",
             "-c",
@@ -33,15 +32,15 @@ def status(
         typer.Option("--output", "-o", help="Output format"),
     ] = OutputFormat.HUMAN,
     name: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option("--name", "-n", help="Volume name(s) to check"),
     ] = None,
     location: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option("--location", "-l", help="Prefer endpoints at these locations"),
     ] = None,
     exclude_location: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             "--exclude-location",
             "-L",
@@ -49,7 +48,7 @@ def status(
         ),
     ] = None,
     network: Annotated[
-        Optional[NetworkType],
+        NetworkType | None,
         typer.Option(
             "--network",
             "-N",

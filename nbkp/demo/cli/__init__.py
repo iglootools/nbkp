@@ -11,5 +11,10 @@ app = typer.Typer(
 
 console = Console()
 
-from . import output_cmd as _output_cmd  # noqa: E402, F401
-from . import seed_cmd as _seed_cmd  # noqa: E402, F401
+# Import order determines the order commands are listed in `--help`.
+# Keep isort out of it.
+# isort: off
+from . import output_cmd as _output_cmd  # noqa: F401
+from . import seed_cmd as _seed_cmd  # noqa: F401
+
+# isort: on

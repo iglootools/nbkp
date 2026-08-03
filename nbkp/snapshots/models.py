@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import BaseModel
 
 from ..fsprotocol import Snapshot
@@ -16,7 +14,7 @@ class PruneResult(BaseModel):
     deleted: list[str]
     kept: int
     dry_run: bool
-    detail: Optional[str] = None
+    detail: str | None = None
     skipped: bool = False
 
 
@@ -28,5 +26,5 @@ class ShowResult(BaseModel):
     snapshots: list[Snapshot]
     latest: Snapshot | None
     max_snapshots: int | None
-    detail: Optional[str] = None
+    detail: str | None = None
     skipped: bool = False

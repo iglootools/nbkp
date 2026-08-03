@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import UTC
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from nbkp.snapshots.btrfs import (
-    create_snapshot,
-    delete_snapshot,
-    prune_snapshots,
-)
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
@@ -21,6 +17,11 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.remote.resolution import resolve_all_endpoints
+from nbkp.snapshots.btrfs import (
+    create_snapshot,
+    delete_snapshot,
+    prune_snapshots,
+)
 from nbkp.snapshots.common import create_snapshot_timestamp
 
 
@@ -87,9 +88,9 @@ class TestCreateSnapshotLocal:
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _local_config()
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
+        fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=UTC)
         dst_vol = config.volumes["dst"]
         expected_ts = create_snapshot_timestamp(fixed_now, dst_vol)
         path = create_snapshot(sync, config, now=fixed_now)
@@ -109,9 +110,9 @@ class TestCreateSnapshotLocal:
     def test_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stderr="permission denied")
         config, sync = _local_config()
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
+        fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=UTC)
         with pytest.raises(RuntimeError, match="btrfs snapshot"):
             create_snapshot(sync, config, now=fixed_now)
 
@@ -122,9 +123,9 @@ class TestCreateSnapshotRemote:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _remote_config()
         resolved = resolve_all_endpoints(config)
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
+        fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=UTC)
         path = create_snapshot(sync, config, now=fixed_now, resolved_endpoints=resolved)
         assert path == "/backup/data/snapshots/2024-01-15T12:00:00.000Z"
         mock_run.assert_called_once()
@@ -203,9 +204,9 @@ class TestCreateSnapshotLocalSpaces:
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _local_config_spaces()
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
+        fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=UTC)
         dst_vol = config.volumes["dst"]
         expected_ts = create_snapshot_timestamp(fixed_now, dst_vol)
         path = create_snapshot(sync, config, now=fixed_now)
@@ -227,9 +228,9 @@ class TestCreateSnapshotRemoteSpaces:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _remote_config_spaces()
         resolved = resolve_all_endpoints(config)
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=timezone.utc)
+        fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=UTC)
         path = create_snapshot(sync, config, now=fixed_now, resolved_endpoints=resolved)
         assert path == "/my backup/my data/snapshots/2024-01-15T12:00:00.000Z"
         call_args = mock_run.call_args
@@ -259,11 +260,13 @@ class TestDeleteSnapshotLocal:
                     ["btrfs", "property", "set", path, "ro", "false"],
                     capture_output=True,
                     text=True,
+                    check=False,
                 ),
                 call(
                     ["btrfs", "subvolume", "delete", path],
                     capture_output=True,
                     text=True,
+                    check=False,
                 ),
             ]
         )

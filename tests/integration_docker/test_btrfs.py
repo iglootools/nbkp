@@ -11,7 +11,6 @@ from pathlib import Path
 
 import pytest
 
-from nbkp.fsprotocol import Snapshot
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
@@ -22,8 +21,9 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.config.epresolution import ResolvedEndpoints
+from nbkp.fsprotocol import Snapshot
 from nbkp.remote.resolution import resolve_all_endpoints
-from nbkp.sync.rsync import run_rsync
+from nbkp.remote.testkit.docker import REMOTE_BTRFS_PATH
 from nbkp.snapshots.btrfs import (
     create_snapshot,
     prune_snapshots,
@@ -33,9 +33,8 @@ from nbkp.snapshots.common import (
     list_snapshots,
     update_latest_symlink,
 )
-from nbkp.remote.testkit.docker import REMOTE_BTRFS_PATH
+from nbkp.sync.rsync import run_rsync
 from nbkp.sync.testkit.seed import create_seed_sentinels
-
 from tests._docker_fixtures import assert_sentinels_after_sync, ssh_exec
 from tests.integration_docker._btrfs_helpers import (
     BtrfsEnv,
@@ -47,7 +46,6 @@ from tests.integration_docker._btrfs_helpers import (
     run_test_returns_most_recent,
     run_test_returns_none_when_empty,
 )
-
 
 # ── Remote BtrfsEnv fixture ─────────────────────────────────────────
 

@@ -5,8 +5,9 @@ from __future__ import annotations
 import shutil
 import tempfile
 import uuid
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 
 import docker as dockerlib
 import pytest
@@ -14,20 +15,21 @@ import pytest
 from nbkp.config import (
     Config,
     LocalVolume,
+    LuksEncryptionConfig,
+    MountConfig,
     RemoteVolume,
     SshEndpoint,
     SyncConfig,
 )
 from nbkp.config.epresolution import ResolvedEndpoints
-from nbkp.remote.resolution import resolve_all_endpoints
-from nbkp.config import LuksEncryptionConfig, MountConfig
 from nbkp.disks.strategy import DirectMountStrategy
+from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.testkit.docker import (  # noqa: F401
     DOCKER_DIR,
     LUKS_PASSPHRASE,
     REMOTE_BACKUP_PATH,
-    REMOTE_BTRFS_PATH,
     REMOTE_BTRFS_ENCRYPTED_PATH,
+    REMOTE_BTRFS_PATH,
     LuksMetadata,
     create_sentinels,
     create_test_ssh_endpoint,
@@ -277,7 +279,7 @@ done
 """
     try:
         wrapped.exec_run(["bash", "-c", script])
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         # Best-effort cleanup — never fail teardown over a leaked loop.
         pass
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
-from typing import Callable
+from collections.abc import Callable
 
 import typer
 from pydantic import SecretStr
@@ -59,7 +59,7 @@ def _from_command(passphrase_id: str, command_template: list[str] | None) -> str
             "credential-command is required when credential-provider is 'command'"
         )
     command = [arg.replace("{id}", passphrase_id) for arg in command_template]
-    result = subprocess.run(command, capture_output=True, text=True)
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         cmd_str = " ".join(command)
         raise CredentialError(

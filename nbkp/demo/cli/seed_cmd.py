@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import os
 import tempfile
-from textwrap import dedent
 from pathlib import Path
+from textwrap import dedent
 from typing import Annotated
 
 import typer
@@ -18,7 +18,6 @@ from rich.syntax import Syntax
 from rich.text import Text
 
 from ...clihelpers import StepProgressBar
-
 from ...config import (
     CredentialProvider,
 )
@@ -28,17 +27,17 @@ from ...config import (
 try:
     from ...remote.testkit.docker import (
         BASTION_CONTAINER_NAME,
+        DOCKER_DIR,
         LUKS_PASSPHRASE,
         STORAGE_CONTAINER_NAME,
-        DOCKER_DIR,
         check_docker,
     )
 
     _HAS_DOCKER = True
 except ImportError:
     _HAS_DOCKER = False
-from .cmd_handler.seed import SeedError, SeedResult, seed_demo
 from . import app, console as _console
+from .cmd_handler.seed import SeedError, SeedResult, seed_demo
 
 
 def _is_dev_environment() -> bool:

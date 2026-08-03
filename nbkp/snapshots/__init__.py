@@ -15,6 +15,11 @@ from ..fsprotocol import (
     STAGING_DIR as STAGING_DIR,
 )
 
+# ── btrfs ────────────────────────────────────────────────────
+from .btrfs import (
+    create_snapshot as create_snapshot,
+)
+
 # ── common ───────────────────────────────────────────────────
 from .common import (
     get_latest_snapshot as get_latest_snapshot,
@@ -22,11 +27,6 @@ from .common import (
     read_latest_symlink as read_latest_symlink,
     resolve_dest_path as resolve_dest_path,
     update_latest_symlink as update_latest_symlink,
-)
-
-# ── btrfs ────────────────────────────────────────────────────
-from .btrfs import (
-    create_snapshot as create_snapshot,
 )
 
 # ── hard-link ────────────────────────────────────────────────

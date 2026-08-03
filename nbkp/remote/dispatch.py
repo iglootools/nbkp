@@ -26,6 +26,8 @@ def run_on_volume(
                 return run_remote_command(ep.server, cmd, ep.proxy_chain)
         case LocalVolume():
             if input is not None:
-                return subprocess.run(cmd, capture_output=True, text=True, input=input)
+                return subprocess.run(
+                    cmd, capture_output=True, text=True, input=input, check=False
+                )
             else:
-                return subprocess.run(cmd, capture_output=True, text=True)
+                return subprocess.run(cmd, capture_output=True, text=True, check=False)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import TracebackType
+from typing import Self
 
 from rich.progress import (
     BarColumn,
@@ -77,7 +78,7 @@ class StepProgressBar:
         if self._progress is not None:
             self._progress.stop()
 
-    def __enter__(self) -> StepProgressBar:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(

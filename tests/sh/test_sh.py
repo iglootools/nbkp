@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from nbkp.config import (
@@ -21,7 +21,7 @@ from nbkp.config import (
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.sh import ScriptOptions, generate_script
 
-_NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=timezone.utc)
+_NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
 _OPTIONS = ScriptOptions(config_path="/etc/nbkp/config.yaml")
 
 
@@ -602,6 +602,7 @@ class TestProxyJump:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
@@ -659,6 +660,7 @@ class TestShellValidity:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
@@ -673,6 +675,7 @@ class TestShellValidity:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
@@ -687,6 +690,7 @@ class TestShellValidity:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
@@ -698,6 +702,7 @@ class TestShellValidity:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
@@ -709,6 +714,7 @@ class TestShellValidity:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
@@ -720,6 +726,7 @@ class TestShellValidity:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
@@ -734,6 +741,7 @@ class TestShellValidity:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
@@ -749,6 +757,7 @@ class TestEdgeCases:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0
 
@@ -786,6 +795,7 @@ class TestEdgeCases:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0
 
@@ -815,6 +825,7 @@ class TestEdgeCases:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0
 
@@ -885,6 +896,7 @@ class TestEdgeCases:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0
 
@@ -944,6 +956,7 @@ class TestRemoteBtrfs:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
@@ -1106,6 +1119,7 @@ class TestHardLink:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
@@ -1123,6 +1137,7 @@ class TestHardLink:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
@@ -1240,6 +1255,7 @@ class TestRelativePaths:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
@@ -1257,6 +1273,7 @@ class TestRelativePaths:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
@@ -1279,6 +1296,7 @@ class TestRelativePaths:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
@@ -1379,6 +1397,7 @@ class TestDependencyGuard:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
@@ -1434,6 +1453,7 @@ class TestNoPortable:
             input=script,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 

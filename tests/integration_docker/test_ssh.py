@@ -10,16 +10,15 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
 )
 
-from nbkp.preflight import SshEndpointError, check_volume
 from nbkp.config import (
     Config,
     LocalVolume,
@@ -29,20 +28,20 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.remote.resolution import resolve_all_endpoints
+from nbkp.preflight import SshEndpointError, check_volume
 from nbkp.remote.fabricssh import (
     run_remote_command as fabric_run_remote,
 )
+from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.sshexec import (
     run_remote_command as ssh_run_remote,
 )
-from nbkp.sync.rsync import run_rsync
 from nbkp.remote.testkit.docker import (
     REMOTE_BACKUP_PATH,
     generate_ssh_keypair,
 )
+from nbkp.sync.rsync import run_rsync
 from nbkp.sync.testkit.seed import create_seed_sentinels
-
 from tests._docker_fixtures import ssh_exec
 
 # ── Helpers ──────────────────────────────────────────────────

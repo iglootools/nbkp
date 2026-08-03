@@ -4,21 +4,21 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
 from ...clihelpers import OutputFormat
-from .helpers import load_config_or_exit
 from ...remote.resolution import resolve_all_endpoints
 from ..output import print_human_config
 from . import app
+from .helpers import load_config_or_exit
 
 
 @app.command()
 def show(
     config: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--config",
             "-c",
