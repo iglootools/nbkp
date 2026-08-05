@@ -285,7 +285,7 @@ class TestHostKeyVerification:
         )
         sync = config.syncs["test-sync"]
 
-        def _run_remote(cmd: str) -> None:
+        def _run_remote(_vol: object, cmd: str) -> None:
             ssh_exec(docker_ssh_endpoint, cmd)
 
         create_seed_sentinels(config, remote_exec=_run_remote)
@@ -380,7 +380,7 @@ class TestExplicitKeyOnly:
         )
         sync = config.syncs["test-sync"]
 
-        def _run_remote(cmd: str) -> None:
+        def _run_remote(_vol: object, cmd: str) -> None:
             ssh_exec(docker_ssh_endpoint, cmd)
 
         create_seed_sentinels(config, remote_exec=_run_remote)

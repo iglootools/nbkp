@@ -25,6 +25,10 @@ See [docs/installation.md](https://github.com/iglootools/nbkp/blob/main/docs/ins
 
 See [docs/usage.md](https://github.com/iglootools/nbkp/blob/main/docs/usage.md).
 
+## Tutorial
+
+For a complete end-to-end walkthrough — backing up a laptop to a Raspberry Pi *backup hub* with LUKS-encrypted btrfs drives, a *relay* drive that fans data out to the rest of them, snapshots, automatic mount management, and keyring-stored passphrases — see [docs/tutorial.md](https://github.com/iglootools/nbkp/blob/main/docs/tutorial.md).
+
 
 ## Main Use Cases
 

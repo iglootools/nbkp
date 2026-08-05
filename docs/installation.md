@@ -47,6 +47,18 @@ Add an extra to an existing install without reinstalling:
 pipx inject nbkp keyring
 ```
 
+Note that the `keyring` extra gives *nbkp* access to the Keychain / SecretService, but
+does not put the `keyring` **command** on your PATH — pipx exposes only the entry
+points of the package you installed. Storing a passphrase with `keyring set nbkp <id>`
+needs the CLI as well, as its own app:
+
+```bash
+pipx install keyring
+```
+
+Both share the same OS credential store, so it does not matter that they live in
+separate pipx venvs.
+
 To upgrade to the latest version (extras are preserved):
 
 ```bash

@@ -162,14 +162,14 @@ $ nbkp disks [OPTIONS] COMMAND [ARGS]...
 
 **Commands**:
 
-* `mount`: Attach LUKS and mount volumes.
-* `umount`: Umount volumes and close LUKS.
+* `mount`: Unlock LUKS and mount volumes.
+* `umount`: Umount volumes and lock LUKS.
 * `status`: Show mount status for volumes with mount...
-* `setup-auth`: Generate polkit and sudoers configuration...
+* `setup-auth`: Generate the polkit rule for udisks-based...
 
 ### `nbkp disks mount`
 
-Attach LUKS and mount volumes. Mounts all volumes with mount config, or specific ones via --name.
+Unlock LUKS and mount volumes. Mounts all volumes with mount config, or specific ones via --name.
 
 **Usage**:
 
@@ -189,7 +189,7 @@ $ nbkp disks mount [OPTIONS]
 
 ### `nbkp disks umount`
 
-Umount volumes and close LUKS. Umounts all volumes with mount config, or specific ones via --name.
+Umount volumes and lock LUKS. Umounts all volumes with mount config, or specific ones via --name.
 
 **Usage**:
 
@@ -229,7 +229,7 @@ $ nbkp disks status [OPTIONS]
 
 ### `nbkp disks setup-auth`
 
-Generate polkit and sudoers configuration for mount management.
+Generate the polkit rule for udisks-based mount management.
 
 **Usage**:
 

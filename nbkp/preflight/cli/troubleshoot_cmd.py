@@ -72,7 +72,7 @@ def troubleshoot(
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
 
     with managed_mount(cfg, resolved, mount=mount, umount=umount) as (
-        _mount_strategy,
+        cfg,
         mount_observations,
     ):
         preflight = check_all_with_progress(

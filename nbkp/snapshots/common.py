@@ -40,6 +40,9 @@ def resolve_dest_path(sync: SyncConfig, config: Config) -> str:
     """Resolve the destination path for a sync."""
     dst = config.destination_endpoint(sync)
     vol = config.volumes[dst.volume]
+    if vol.path is None:
+        msg = f"volume '{vol.slug}': mount path not resolved"
+        raise ValueError(msg)
     if dst.subdir:
         return f"{vol.path}/{dst.subdir}"
     else:
