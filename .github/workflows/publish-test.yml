@@ -40,7 +40,15 @@ jobs:
       with:
         fetch-depth: 0
         fetch-tags: true
+    # Install the mise binary only, then install tools explicitly. mise-action's
+    # default `mise install` auto-adds `--locked` when a mise.lock is present, and
+    # that fails for tools the lockfile cannot carry URLs for — poetry uses the
+    # vfox backend, which `mise lock` always skips. Same reason as in
+    # renovate-mise-lock.yml.
     - uses: jdx/mise-action@v4
+      with:
+        install: false
+    - run: mise install
     - name: Resolve PyPI-compatible version
       run: |
         raw=$(poetry version --short)
