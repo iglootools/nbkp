@@ -146,7 +146,8 @@ System setup (one-time, on the target host):
 # 1. Install udisks2 (+ udisks2-btrfs for btrfs volumes) and ensure udisksd runs
 sudo apt install udisks2 udisks2-btrfs   # Debian/Ubuntu
 
-# 2. Store passphrases in keyring
+# 2. Store passphrases in keyring (pipx install keyring — the `nbkp[keyring]`
+#    extra does not put the keyring CLI on PATH; see installation.md)
 keyring set nbkp seagate8tb
 keyring set nbkp backup-drives
 
