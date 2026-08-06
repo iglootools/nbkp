@@ -17,7 +17,16 @@ on:
   # gh run list --workflow demo.yml # --branch <branch>
   workflow_dispatch:
   repository_dispatch:
-  # pull_request:
+  # Exercise record + upload on PRs that touch the demo plumbing, so a broken
+  # upload is caught in review instead of after a release. Scoped by path so
+  # ordinary PRs do not publish a recording on every push.
+  pull_request:
+    paths:
+      - '.github/workflows/demo.yml'
+      - 'mise.toml'
+      - 'demo/**'
+      - 'build-scripts/**'
+
 
 concurrency:
   # On main/release, we don't want any jobs cancelled so the sha is used to name the group
@@ -59,13 +68,56 @@ jobs:
         run: |
           mkdir -p "$HOME/.local/state/asciinema"
           echo "$ASCIINEMA_INSTALL_ID" > "$HOME/.local/state/asciinema/install-id"
+      # Keep the recording retrievable even when the upload cannot happen: CI
+      # currently has no route to asciinema.org (see the reachability step below).
+      - name: Upload demo artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-recording
+          path: |
+            demo/demo.cast
+            demo/demo.gif
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Check asciinema.org reachability
+        # Diagnostic, never fatal. asciinema.org is dual-stack, and a GitHub-hosted
+        # runner can reach neither family: IPv6 has no route at all, and the single
+        # A record (109.107.37.0) times out at the TCP level even when pinned in
+        # /etc/hosts to take DNS out of the picture. The same address answers
+        # HTTP 200 from outside CI, so the block is between the runner and the host
+        # rather than an outage. Pinning the A record is kept because it drops the
+        # pointless IPv6 leg, which otherwise burns ~127 s of SYN retries first.
+        run: |
+          set -uo pipefail
+          echo "== resolving asciinema.org"
+          getent ahostsv4 asciinema.org | awk '{print "  A     " $1; exit}' || true
+          dig +short AAAA asciinema.org 2>/dev/null | sed 's/^/  AAAA  /' || true
+          ipv4=$(getent ahostsv4 asciinema.org | awk '{print $1; exit}' || true)
+          if [ -n "${ipv4:-}" ]; then
+            echo "$ipv4 asciinema.org" | sudo tee -a /etc/hosts >/dev/null
+            echo "== pinned $ipv4, probing"
+          fi
+          if out=$(curl -s --max-time 20 -o /dev/null \
+                     -w '%{remote_ip} HTTP %{http_code}' https://asciinema.org/ 2>/dev/null); then
+            echo "  reachable: $out"
+          else
+            echo "  NOT reachable from this runner — the upload below is expected to fail."
+            echo "  The recording is still available as the demo-recording artifact."
+          fi
+
       - name: Upload demo
+        # Cosmetic and best-effort: this workflow runs *after* a successful release,
+        # so an unreachable asciinema.org must not turn a completed release red. The
+        # .cast is preserved as an artifact above for uploading by hand.
+        continue-on-error: true
         # Trigger on release workflow runs or on tag pushes
         if: >-
           startsWith(github.ref, 'refs/tags/')
           || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
           || github.event_name == 'workflow_dispatch'
           || github.event_name == 'repository_dispatch'
+          || github.event_name == 'pull_request'
         
         env:
           ASCIINEMA_SERVER_URL: https://asciinema.org
