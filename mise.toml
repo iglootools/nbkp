@@ -216,8 +216,20 @@ description = "Record the demo and convert to GIF"
 run = "./demo/record-demo.sh \"$(poetry version -s)\""
 
 [tasks.demo-upload]
-description = "Upload the recorded demo to asciinema.org"
+description = "Upload the locally recorded demo to asciinema.org"
 run = "asciinema upload demo/demo.cast"
+
+# Publishing from CI is disabled — GitHub-hosted runners have no route to
+# asciinema.org (see .github/workflows/demo.yml). CI records the demo and keeps it as
+# an artifact; this task is the manual half: fetch that artifact and publish it from a
+# machine that can reach the host. On success it repoints the README's asciicast
+# embed at the new recording and commits that one file. Forward flags with `--`:
+#   mise run demo-upload-latest -- --dry-run     # fetch and report only
+#   mise run demo-upload-latest -- --no-commit   # update README, leave it uncommitted
+#   mise run demo-upload-latest -- --no-readme   # upload only
+[tasks.demo-upload-latest]
+description = "Download the demo recorded by CI and upload it to asciinema.org"
+run = "poetry run python build-scripts/demoupload.py"
 
 # Reference Documentation Generation Tasks
 [tasks.reference-doc]
