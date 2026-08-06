@@ -6,7 +6,9 @@ on:
   # gh run list --workflow test.yml # --branch <branch>
   workflow_dispatch:
   repository_dispatch:
-  pull_request:
+  # TMP — REVERT BEFORE MERGE. Disabled while iterating on demo.yml in this PR:
+  # each push costs a full matrix run and none of the changes touch the suite.
+  # pull_request:
   push:
     tags:
       - "*"
