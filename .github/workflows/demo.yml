@@ -57,9 +57,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: demo-recording
-          path: |
-            demo/demo.cast
-            demo/demo.gif
+          # Only the cast: the agg/GIF conversion in record-demo.sh is commented out,
+          # so demo/demo.gif is not produced. Add it back here when that is re-enabled.
+          path: demo/demo.cast
           if-no-files-found: error
           retention-days: 90
 
