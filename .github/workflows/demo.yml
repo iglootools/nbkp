@@ -28,7 +28,6 @@ concurrency:
 
 env:
   MISE_EXPERIMENTAL: true
-  HAS_ASCIINEMA_INSTALL_ID: ${{ secrets.ASCIINEMA_INSTALL_ID != '' }}
 
 jobs:
   demo:
@@ -52,21 +51,23 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y pv
       - name: Record demo
         run: mise run ci-demo-record
-      - name: Set up asciinema install ID
-        if: env.HAS_ASCIINEMA_INSTALL_ID == 'true'
-        env:
-          ASCIINEMA_INSTALL_ID: ${{ secrets.ASCIINEMA_INSTALL_ID }}
-        run: |
-          mkdir -p "$HOME/.local/state/asciinema"
-          echo "$ASCIINEMA_INSTALL_ID" > "$HOME/.local/state/asciinema/install-id"
-      - name: Upload demo
-        # Trigger on release workflow runs or on tag pushes
-        if: >-
-          startsWith(github.ref, 'refs/tags/')
-          || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
-          || github.event_name == 'workflow_dispatch'
-          || github.event_name == 'repository_dispatch'
-        
-        env:
-          ASCIINEMA_SERVER_URL: https://asciinema.org
-        run: mise run demo-upload
+      # CI records the demo but does not publish it: GitHub-hosted runners cannot
+      # reach asciinema.org over either address family. IPv6 has no route, and the
+      # single A record (109.107.37.0) times out at the TCP level even when pinned
+      # in /etc/hosts, while the same address answers HTTP 200 from outside CI — so
+      # the block sits between the runners and that host, and nothing here can route
+      # around it. Attempting the upload anyway cost ~136 s of SYN retries and then
+      # failed the workflow after an otherwise successful release.
+      #
+      # Recording still runs: it exercises demo.sh and record-demo.sh on every
+      # release. To publish, download the artifact and run `mise run demo-upload`
+      # from a machine that has a route to asciinema.org.
+      - name: Upload demo artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-recording
+          path: |
+            demo/demo.cast
+            demo/demo.gif
+          if-no-files-found: error
+          retention-days: 90
