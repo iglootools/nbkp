@@ -36,6 +36,25 @@ run = "poetry shell"
 description = "Install dependencies"
 run = "poetry install --all-extras"
 
+# `install` only reconciles the venv with poetry.lock; it never removes distributions that
+# got there by other means, so a venv can accumulate packages that are in neither
+# pyproject.toml nor poetry.lock. Those let an undeclared import type-check and run locally
+# while failing in CI, and `poetry check --lock` does not catch them — it compares the lock
+# to the manifest, not to the venv. Deleting the directory is the only way back to exactly
+# what the lock describes.
+#
+# Delegating to `mise run install` instead of calling poetry directly is deliberate: the
+# child mise process re-resolves [env]._.python.venv and recreates .venv with the python
+# pinned in [tools], so a venv built on an older pin gets rebuilt on the current one.
+# VIRTUAL_ENV must be unset first — mise activated the now-deleted venv for this task, and
+# poetry would otherwise install into that stale path.
+[tasks.reinstall]
+description = "Delete .venv and reinstall dependencies from scratch"
+run = """
+rm -rf "$MISE_PROJECT_ROOT/.venv"
+env -u VIRTUAL_ENV mise run install
+"""
+
 [tasks.check]
 description = "Run all checks (format, lint, type-check, compat-check, lock-check, clidocs-check, configdocs-check, depgraph-check)"
 run = [
