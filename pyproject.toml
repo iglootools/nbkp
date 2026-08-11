@@ -68,6 +68,10 @@ markers = [
 
 [tool.pyright]
 pythonVersion = "3.12"
+# works jointly with [virtualenvs].in-project so editors and language servers
+# resolve imports against the project venv, not the system interpreter
+venvPath = "."
+venv = ".venv"
 
 [virtualenvs]
 # works jointly with mise to ensure the correct Python version is used in the virtualenv
