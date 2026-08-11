@@ -55,3 +55,10 @@ Select the Python interpreter from the `.venv` created by Poetry:
 1. Open the Command Palette (`Cmd+Shift+P`)
 2. Run **Python: Select Interpreter**
 3. Choose the `.venv` entry (e.g., `./.venv/bin/python`)
+
+## Claude Code Setup
+
+Install the Pyright LSP plugin so Claude resolves symbols instead of grepping for them. Follow
+[Claude Code setup in the shared guidelines](https://github.com/iglootools/common-guidelines/blob/main/tooling.md#claude-code)
+once the virtualenv step above is done — it covers the install command, why `pyright-langserver` has
+to come from this project's `.venv`, and how to verify that it does.
