@@ -21,16 +21,24 @@
 
 6. Activate the virtual environment:
    ```bash
-   # - Install all the tools defined in mise.toml
-   # - Set up the .venv with the correct Python version
+   # - Install all the tools defined in mise.toml (python, uv, ...)
+   # - Create .venv on the pinned Python and activate it
    mise install
 
-   # vscode and poetry should automatically detect and use the .venv created by mise
-   poetry install
+   # Usually unnecessary: [deps.uv] in mise.toml runs `uv sync --all-extras` automatically
+   # before any `mise run` when uv.lock or pyproject.toml changed, or .venv is missing.
+   mise run install
 
-   # To recreate the virtualenv from scratch:
-   poetry env remove --all
+   # To recreate the virtualenv from scratch
+   mise run reinstall
    ```
+
+   Add and remove dependencies with `uv add` / `uv remove`, which update `pyproject.toml`
+   and `uv.lock` together. (`mise deps add` does not support uv.)
+
+   Run tools with `uv run <tool>` rather than bare — see
+   [Building and Testing](building-and-testing.md) for why that matters when more than one
+   project's virtualenv is in play.
 
 7. Upgrade rsync if you're on macOS, as the default version is too old and lacks some features nbkp relies on:
    ```bash
@@ -51,7 +59,7 @@ shared guidelines for what each one is for, and which committed settings silentl
 without it.
 
 No interpreter selection is needed: `.vscode/settings.json` and `[tool.pyright]` in `pyproject.toml`
-already point the editor at the `.venv` created by Poetry. See
+already point the editor at `.venv`. See
 [Pyright environment resolution](https://github.com/iglootools/common-guidelines/blob/main/tooling.md#pyright-environment-resolution)
 in the shared guidelines for what those settings do, how to verify them, and why a window reload is
 required after changing them.

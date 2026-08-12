@@ -2,12 +2,12 @@
 
 The unit tests cover the core logic of the tool. Integration and end-to-end tests exercise the real rsync/SSH/btrfs pipeline against Docker containers and local filesystems. See [Testing Strategy](guidelines.md#testing-strategy) for details on each test category.
 
-Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/QA. The `seed --docker` command requires the `docker` extra: `pipx install nbkp[docker]`. In dev: `poetry run nbkp demo`.
+Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/QA. The `seed --docker` command requires the `docker` extra: `uv tool install 'nbkp[docker]'`. In dev: `mise run demo`.
 
 Run automated tests and checks (no external dependencies):
 ```bash
 # mise tasks
-mise run check              # Run all checks: format + lint + type-check + lock-check + clidocs-check + configdocs-check + depgraph-check
+mise run check              # Run all checks: format + lint + type-check + compat-check + lock-check + lock-check-uv + clidocs-check + configdocs-check + depgraph-check
 mise run check-all          # Run all checks: regular checks + all tests
 
 mise run test-all           # All tests
@@ -28,6 +28,10 @@ mise run lint               # ruff check
 mise run type-check         # pyright
 mise run compat-check       # vermin (enforce Python >=3.12 compatibility — see Python version policy below)
 mise run lock-check         # check mise.lock is up to date
+mise run lock-check-uv      # check uv.lock is consistent with pyproject.toml
+
+mise run install            # sync .venv with uv.lock (rarely needed by hand — see below)
+mise run reinstall          # delete .venv and sync from scratch
 
 mise run clidocs            # regenerate CLI reference in docs/cli-reference.md
 mise run clidocs-check      # check CLI reference is up to date
@@ -36,18 +40,29 @@ mise run configdocs-check   # check config reference tables in docs/concepts.md 
 mise run depgraph           # regenerate Module Overview in docs/architecture.md
 mise run depgraph-check     # check Module Overview is up to date
 
-# Using Poetry syntax directly
-poetry run pytest tests/ --ignore=tests/e2e_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -n auto -v  # Unit tests only
-poetry run pytest tests/e2e_docker/ -v                                   # End-to-end sync tests
-poetry run pytest tests/integration_fs/ -n auto -v                       # Filesystem integration tests
-poetry run pytest tests/integration_docker/ -n auto -v                   # Docker integration tests
-poetry run pytest tests/ -v                                             # All tests
-poetry run ruff format .                                                # formatting
-poetry run ruff check nbkp/ tests/                                      # linting
-poetry run pyright nbkp/                                                # type-checking
-poetry run vermin --target=3.12- --no-tips --no-parse-comments nbkp/ tests/  # compat check
-poetry run pytest tests/test_ssh.py::TestBuildSshBaseArgs::test_full -v # run a single test
+# Running tools directly
+uv run pytest tests/ --ignore=tests/e2e_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -n auto -v  # Unit tests only
+uv run pytest tests/e2e_docker/ -v                                   # End-to-end sync tests
+uv run pytest tests/integration_fs/ -n auto -v                       # Filesystem integration tests
+uv run pytest tests/integration_docker/ -n auto -v                   # Docker integration tests
+uv run pytest tests/ -v                                              # All tests
+uv run ruff format .                                                 # formatting
+uv run ruff check nbkp/ tests/                                       # linting
+uv run pyright nbkp/                                                 # type-checking
+uv run vermin --target=3.12- --no-tips --no-parse-comments nbkp/ tests/  # compat check
+uv run pytest tests/test_ssh.py::TestBuildSshBaseArgs::test_full -v  # run a single test
 ```
+
+`uv run` is the prefix to use rather than a bare `pytest`/`ruff`. It resolves the
+environment from the project root, so it is correct regardless of what is on `PATH` — a bare
+command in a shell that has *another* project's `.venv` active silently runs that project's
+copy of the tool. The mise tasks above use `uv run --no-sync` for the same reason.
+
+Dependencies install themselves: `[deps.uv]` in `mise.toml` runs `uv sync --all-extras` before
+any `mise run` whenever `uv.lock` or `pyproject.toml` has changed, or `.venv` has gone missing.
+So `mise run install` is seldom needed explicitly, and `mise run reinstall` is for the case that
+automatic check cannot see — a `.venv` that is *dirty* rather than *stale*, e.g. after a manual
+`uv pip install`. Add or remove dependencies with `uv add` / `uv remove`.
 
 ### Python versions
 

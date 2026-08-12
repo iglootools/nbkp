@@ -405,8 +405,8 @@ The backup hub is now ready: each drive is formatted, seeded, and locked, and nb
 The `keyring` extra pulls in the macOS Keychain backend for passphrases:
 
 ```bash
-brew install pipx && pipx ensurepath
-pipx install 'nbkp[keyring]'
+brew install uv
+uv tool install 'nbkp[keyring]'
 nbkp --version
 ```
 
@@ -425,10 +425,10 @@ The config declares two endpoints for the same Pi — one tagged `home` (LAN IP)
 
 ### B3. Store the LUKS passphrases in the Keychain
 
-nbkp's default credential provider is `keyring`. The `nbkp[keyring]` extra from B1 gives *nbkp* access to the Keychain, but it does not put the **`keyring` command** on your PATH — pipx exposes only the entry points of the package you installed, not its dependencies'. Install the CLI as its own app:
+nbkp's default credential provider is `keyring`. The `nbkp[keyring]` extra from B1 gives *nbkp* access to the Keychain, but it does not put the **`keyring` command** on your PATH — only the entry points of the package you installed are exposed, not its dependencies'. Install the CLI as its own app:
 
 ```bash
-pipx install keyring
+uv tool install keyring
 keyring --version
 ```
 
@@ -442,7 +442,7 @@ keyring set nbkp wd6tb
 keyring set nbkp iomega1tb
 ```
 
-Both apps read the same macOS Keychain, so it doesn't matter that they live in separate pipx venvs. Once the config exists (B4), check that nbkp can retrieve every one of them:
+Both apps read the same macOS Keychain, so it doesn't matter that they live in separate tool environments. Once the config exists (B4), check that nbkp can retrieve every one of them:
 
 ```bash
 nbkp credentials keyring-status     # one row per passphrase-id, found or missing

@@ -266,9 +266,13 @@ class TestBtrfsLocalViaDocker:
         client = dockerlib.from_env()
         container = client.containers.run(
             _IMAGE_TAG,
+            # `uv run` rather than a bare `pytest`, and --frozen so the container cannot
+            # rewrite the host's bind-mounted uv.lock. There is no mise in the image, so
+            # the host-side [deps.uv]/uv_venv_auto machinery does not apply here.
             command=[
-                "poetry",
+                "uv",
                 "run",
+                "--frozen",
                 "pytest",
                 "tests/integration_docker/test_btrfs_local.py",
                 "-v",
@@ -280,24 +284,19 @@ class TestBtrfsLocalViaDocker:
                     "bind": "/app",
                     "mode": "rw",
                 },
-                # The bind mount above exposes the host's
-                # .venv inside the container.  When the
-                # container's poetry sees a macOS venv it
-                # considers it broken and recreates it with
-                # Linux binaries — overwriting the host's
-                # .venv via the shared mount.  Mounting a
-                # separate volume on /app/.venv shadows the
-                # host directory so the container can't
-                # touch it.
+                # The bind mount above exposes the host's macOS .venv inside the
+                # container.  UV_PROJECT_ENVIRONMENT=/tmp/venv in the image is what
+                # actually keeps the container's sync off it; this volume is defence in
+                # depth — it hides the macOS venv and its __pycache__ from the
+                # container's import machinery entirely, and bounds the blast radius to
+                # an ephemeral container venv if that variable is ever dropped.
                 "nbkp-btrfs-test-venv": {
                     "bind": "/app/.venv",
                     "mode": "rw",
                 },
             },
-            environment={
-                "POETRY_VIRTUALENVS_IN_PROJECT": "false",
-                "POETRY_VIRTUALENVS_PATH": "/tmp/venvs",
-            },
+            # The POETRY_VIRTUALENVS_* escape hatch that used to live here is now the UV_*
+            # block in Dockerfile.btrfs-local-test, so it travels with the image.
             working_dir="/app",
             privileged=True,
             detach=True,

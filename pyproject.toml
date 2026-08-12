@@ -9,47 +9,104 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Sami Dalouche", email = "sami.dalouche@gmail.com" }]
 dependencies = [
-  "fabric (>=3.0,<4.0)",
-  "jinja2 (>=3.0,<4.0)",
-  "pydantic (>=2.13.4,<3.0.0)",
-  "pyyaml (>=6.0,<7.0)",
-  "typer (>=0.27.0,<1.0.0)",
-  "platformdirs (>=4.11.0,<5.0)",
-  "mermaid-ascii-diagrams (>=0.1.1)",
+  "fabric>=3.0,<4.0",
+  "jinja2>=3.0,<4.0",
+  "pydantic>=2.13.4,<3.0.0",
+  "pyyaml>=6.0,<7.0",
+  "typer>=0.27.0,<1.0.0",
+  "platformdirs>=4.11.0,<5.0",
+  "mermaid-ascii-diagrams>=0.1.1",
 ]
 dynamic = ["version"]
 
-[tool.poetry]
-packages = [{ include = "nbkp" }]
-version = "0.0.0"
-
-[tool.poetry.requires-plugins]
-poetry-dynamic-versioning = { version = ">=1.0.0,<2.0.0", extras = ["plugin"] }
-
-[tool.poetry-dynamic-versioning]
-enable = true
-
 [project.optional-dependencies]
-docker = ["docker (>=7.2.0,<8.0)"]
-keyring = ["keyring (>=25.0,<26.0)"]
+docker = ["docker>=7.2.0,<8.0"]
+keyring = ["keyring>=25.0,<26.0"]
 
 [project.scripts]
 nbkp = "nbkp.cli:main"
 nbkp-demo = "nbkp.demo:main"
 
-[tool.poetry.group.dev.dependencies]
-ruff = "^0.16"
-pyright = "^1.1"
-pytest = "^9.1.1"
-pytest-xdist = "^3.5.0"
-testcontainers = "^4.15.0"
-vermin = "^1.8.0"
-pydeps = {version = ">=3.0.7", python = ">=3.12,<4.0"}
-keyring = ">=25.0,<26.0"
+[dependency-groups]
+dev = [
+  "ruff>=0.16,<0.17",
+  "pyright>=1.1,<2.0",
+  "pytest>=9.1.1,<10.0",
+  "pytest-xdist>=3.5.0,<4.0",
+  "testcontainers>=4.15.0,<5.0",
+  "vermin>=1.8.0,<2.0",
+  # The `python = ">=3.12,<4.0"` marker this carried under poetry is subsumed by
+  # [project] requires-python, so it is dropped rather than translated.
+  "pydeps>=3.0.7",
+  # Also declared as the `keyring` extra above. The extra is the shipped contract
+  # (`uv tool install 'nbkp[keyring]'`); this entry guarantees the test suite has it
+  # regardless of which extras are synced. Identical constraints, so uv resolves both to
+  # one entry in uv.lock.
+  "keyring>=25.0,<26.0",
+]
 
 [build-system]
-requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
-build-backend = "poetry_dynamic_versioning.backend"
+requires = ["hatchling", "uv-dynamic-versioning"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv-dynamic-versioning]
+# Required, not optional: Renovate runs `uv lock --upgrade-package`, which triggers a
+# build with no git context, and without a fallback every such PR fails outright.
+#
+# The cost is that "no git history" becomes a *successful* build producing 0.0.0 rather
+# than an error — nothing else in the publish path would catch that, and a version number
+# cannot be reused once PyPI has it. `mise run build-verify` is what closes the gap.
+fallback-version = "0.0.0"
+
+# Explicit rather than relying on hatchling's <NAME>/__init__.py heuristic: when the
+# heuristic misses, the failure mode is a silently empty wheel rather than an error.
+# This also carries the non-Python payload that ships inside the package — the jinja2
+# templates under nbkp/sh/templates/ and the Dockerfiles and shell scripts under
+# nbkp/remote/testkit/dockerbuild/, which are read at runtime via importlib.resources and
+# Path(__file__).parent respectively, so they must be real files in the installed tree.
+[tool.hatch.build.targets.wheel]
+packages = ["nbkp"]
+
+# Hatchling's sdist default is "every file not ignored by the VCS", which would ship
+# tests/, docs/, demo/, marketing/, build-scripts/, .github/ and the lockfiles. Poetry
+# shipped the package plus README/LICENSE/pyproject.toml; this keeps that shape.
+[tool.hatch.build.targets.sdist]
+only-include = ["nbkp"]
+
+[tool.hatch.build]
+# .gitignore is the only ignore file hatchling reads — not .git/info/exclude, not
+# core.excludesfile. .gitignore now covers .DS_Store, so this is a guard that keeps the
+# published artifact independent of ignore-file hygiene rather than the primary fix.
+exclude = [".DS_Store"]
+
+[tool.uv]
+# Replaces the default [{ file = "pyproject.toml" }] rather than extending it, hence the
+# explicit file entry. The git entry is what keeps `nbkp --version` honest: nbkp reads its
+# version through importlib.metadata, which an editable install freezes into .dist-info at
+# install time, so without this a new commit or tag leaves a stale version in place.
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
+
+# uv.lock does not cover PEP 517 build dependencies — `uv build` resolves them fresh from
+# PyPI on a cold cache — so these constraints are the only pin on the build backend, and
+# on dunamai in particular, which is what computes the version. Regenerate with:
+#   printf '%s\n' hatchling uv-dynamic-versioning \
+#     | uv pip compile - --no-annotate --no-header --quiet
+# [build-system].requires is left unpinned so the two can never contradict each other.
+build-constraint-dependencies = [
+  "dunamai==1.26.2",
+  "hatchling==1.32.0",
+  "jinja2==3.1.6",
+  "markupsafe==3.0.3",
+  "packaging==26.3",
+  "pathspec==1.1.1",
+  "pluggy==1.6.0",
+  "tomlkit==0.15.1",
+  "trove-classifiers==2026.6.1.19",
+  "uv-dynamic-versioning==0.14.0",
+]
 
 [tool.ruff]
 target-version = "py312"
@@ -68,11 +125,7 @@ markers = [
 
 [tool.pyright]
 pythonVersion = "3.12"
-# works jointly with [virtualenvs].in-project so editors and language servers
-# resolve imports against the project venv, not the system interpreter
+# uv creates the project venv at .venv; restating it here is what lets editors and
+# language servers resolve imports against it, since they inherit no shell activation.
 venvPath = "."
 venv = ".venv"
-
-[virtualenvs]
-# works jointly with mise to ensure the correct Python version is used in the virtualenv
-in-project = true

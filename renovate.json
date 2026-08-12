@@ -17,5 +17,19 @@
             "automerge": false
         }
     ],
+    "customManagers": [
+        {
+            "customType": "regex",
+            "description": "[tool.uv] build-constraint-dependencies pins the PEP 517 build backend closure. uv.lock does not cover build dependencies, so these are the only pin on hatchling/uv-dynamic-versioning/dunamai — and no built-in manager reads this field, so without this they rot silently.",
+            "managerFilePatterns": [
+                "/pyproject.toml/"
+            ],
+            "matchStrings": [
+                "build-constraint-dependencies = \\[(?:[^\\]]*?)\"(?<depName>[a-zA-Z0-9._-]+)==(?<currentValue>[^\"]+)\""
+            ],
+            "matchStringsStrategy": "recursive",
+            "datasourceTemplate": "pypi"
+        }
+    ],
     "dependencyDashboard": true
 }

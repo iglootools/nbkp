@@ -1,11 +1,17 @@
 {
     "mise.enable": true,
     "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    // "packageManager" is deliberately omitted: ms-python.vscode-python-envs registers
+    // only conda, pip, pipenv, poetry, pyenv, system and venv — there is no
+    // "ms-python.python:uv". Naming ":poetry" would point at a tool this project no longer
+    // uses, so the key is left to default to python-envs.defaultPackageManager (":pip"),
+    // which is inaccurate but inert: it affects only the extension's own install/uninstall
+    // UI, not interpreter resolution or type checking ([tool.pyright] covers those).
+    // Re-add it once the extension registers a uv package manager.
     "python-envs.pythonProjects": [
         {
             "path": ".",
-            "envManager": "ms-python.python:venv",
-            "packageManager": "ms-python.python:poetry"
+            "envManager": "ms-python.python:venv"
         }
     ],
     "[python]": {
