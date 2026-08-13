@@ -133,7 +133,33 @@ The Docker-based test suites use [testcontainers](https://testcontainers-python.
         1. Execute `asciinema auth` in your terminal
         2. Click the suggested link
         3. store the content of `~/.local/state/asciinema/install-id` in the `ASCIINEMA_INSTALL_ID` secret
-- Settings > Advanced Security > Enable Dependency graph
+- **Enable Dependabot security updates.** These are *repository settings*, and
+  [.github/dependabot.yml](../.github/dependabot.yml) cannot switch them on — that file only
+  shapes the resulting PRs and restricts Dependabot to the security half
+  (`open-pull-requests-limit: 0`, because Renovate owns routine version updates and delays them
+  14 days). A repo with the file committed and these settings off looks configured while
+  watching nothing:
+
+    ```bash
+    gh api -X PUT repos/iglootools/nbkp/vulnerability-alerts
+    gh api -X PUT repos/iglootools/nbkp/automated-security-fixes
+    ```
+
+    Both are required, and they are separate switches: `vulnerability-alerts` is what notices a
+    vulnerable dependency, `automated-security-fixes` is what opens the fix PR. Alerts alone
+    give a Security tab entry and no PR — the easy state to land in by accident, since alerts
+    are the more discoverable of the two.
+
+    Each `PUT` returns `204 No Content` and prints nothing, so verify rather than assume:
+
+    ```bash
+    gh api repos/iglootools/nbkp/vulnerability-alerts -i | head -1   # expect HTTP/2.0 204
+    gh api repos/iglootools/nbkp/automated-security-fixes            # expect "enabled": true
+    ```
+
+    A `404` from the first is the disabled state, not a missing endpoint. Undo with the same two
+    URLs and `-X DELETE`. Needs admin on the repository; the dependency graph is a prerequisite
+    and is on by default for public repositories.
 
 ## Renovate
 - Added the [iglootools](https://github.com/iglootools) org to [developer.mend.io](https://developer.mend.io/)
