@@ -9,7 +9,7 @@
 #   agg demo/demo.cast demo/demo.gif
 #
 # Requirements:
-#   pip install nbkp  # or: poetry install (dev)
+#   uv tool install nbkp  # or: mise run install (dev)
 #   brew install pv   # for simulated typing
 
 set -euo pipefail

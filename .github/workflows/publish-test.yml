@@ -7,7 +7,7 @@ name: publish-test
 # - It publishes to https://test.pypi.org/ instead of https://pypi.org/,
 #   which is a separate instance of the Python Package Index that allows trying distribution tools and processes without affecting the real index
 # - It enables verbose: true in the pypa/gh-action-pypi-publish action to get more detailed logs for debugging
-# - It derives the version from poetry-dynamic-versioning and adds a .devYYYYMMDDHHMMSS suffix to avoid version clashes on repeated publishes to Test PyPI, whereas the publish workflow relies on the tag name for the version and thus does not need a timestamp suffix
+# - It derives the version from the latest tag and adds a .devYYYYMMDDHHMMSS suffix to avoid version clashes on repeated publishes to Test PyPI, whereas the publish workflow relies on the tag name for the version and thus does not need a timestamp suffix
 #
 # Also keep in mind that OIDC authentication does not work with shared workflows,
 # so the code essentially needs to be duplicated in the `publish.yml` and `publish-test.yml` workflows.
@@ -21,6 +21,8 @@ on:
 
 env:
   MISE_EXPERIMENTAL: true
+  # Fail on a stale uv.lock instead of silently re-resolving on the runner.
+  UV_LOCKED: 1
 
 jobs:
   pypi-publish:
@@ -40,21 +42,22 @@ jobs:
       with:
         fetch-depth: 0
         fetch-tags: true
-    # Install the mise binary only, then install tools explicitly. mise-action's
-    # default `mise install` auto-adds `--locked` when a mise.lock is present, and
-    # that fails for tools the lockfile cannot carry URLs for — poetry uses the
-    # vfox backend, which `mise lock` always skips. Same reason as in
-    # renovate-mise-lock.yml.
     - uses: jdx/mise-action@v4
-      with:
-        install: false
-    - run: mise install
     - name: Resolve PyPI-compatible version
+      # Derive the dev version from the base *release* version in the tag, not from the full
+      # VCS-derived version. The previous implementation did
+      #   raw=$(poetry version --short); clean=${raw%%+*}
+      # and appended `.dev<ts>`, which on any non-tag ref produced something like
+      # 0.2.1.post5.dev0.dev20260812103000 — two dev segments, which is invalid PEP 440.
+      # It only worked because the workflow is normally dispatched from a tag.
+      #
+      # Reading the tag directly also avoids needing the build backend just to ask it a
+      # question. UV_DYNAMIC_VERSIONING_BYPASS is consulted before any VCS lookup, so it
+      # wins unconditionally.
       run: |
-        raw=$(poetry version --short)
-        clean=${raw%%+*}
+        base=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null | sed 's/^v//' || echo 0.0.0)
         ts=$(date -u +%Y%m%d%H%M%S)
-        echo "POETRY_DYNAMIC_VERSIONING_BYPASS=${clean}.dev${ts}" >> "$GITHUB_ENV"
+        echo "UV_DYNAMIC_VERSIONING_BYPASS=${base}.dev${ts}" >> "$GITHUB_ENV"
     - run: mise run ci-build
     - name: Publish package distributions to Test PyPI
       uses: pypa/gh-action-pypi-publish@release/v1

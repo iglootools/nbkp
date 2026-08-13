@@ -16,13 +16,16 @@ set -euo pipefail
 IFS=$'\n\t'
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSION="${1:-$(poetry version -s 2>/dev/null || echo "")}"
+# The version is normally passed in by `mise run demo-record`. The fallback reads it from
+# the installed distribution rather than asking the build tool, since the version is
+# VCS-derived and only materializes in .dist-info at install time.
+VERSION="${1:-$(uv run --no-sync python -c 'import nbkp; print(nbkp.__version__)' 2>/dev/null || echo "")}"
 TITLE="nbkp ${VERSION:+ v$VERSION} demo"
 CAST="$SCRIPT_DIR/demo.cast"
 GIF="$SCRIPT_DIR/demo.gif"
 
-echo "Running poetry install..."
-poetry install
+echo "Syncing dependencies..."
+uv sync --all-extras
 
 echo "Recording demo..."
 asciinema rec \

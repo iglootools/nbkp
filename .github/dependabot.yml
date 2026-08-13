@@ -1,11 +1,27 @@
 version: 2
+
+# Division of labour with renovate.json, which handles routine version updates: it groups
+# them into a single PR and holds each release for 14 days (minimumReleaseAge) as a
+# supply-chain measure. That delay is deliberately wrong for a published advisory, and
+# Renovate has no manager for mise.toml's [tool.uv] build-constraint-dependencies either,
+# so the two tools are complementary rather than duplicative.
+#
+# open-pull-requests-limit: 0 is the documented way to disable *version* updates for an
+# ecosystem. Security update PRs are exempt from both that limit and `cooldown`, so they
+# keep flowing — which is the only thing Dependabot is here for.
+#
+# The ecosystem value must track the build tool: "pip" reads poetry.lock and understands
+# neither uv.lock nor [dependency-groups], and a stale value fails *silently* — Dependabot
+# keeps running, finds nothing, and reports green.
 updates:
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 0
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 0

@@ -7,7 +7,26 @@ RUN apt-get update && \
     rsync \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --quiet poetry poetry-dynamic-versioning
+# Pinned uv binary rather than pip-installing the build tool: no PyPI resolution at image
+# build time, and Renovate tracks this tag through its dockerfile manager. `git` above stays
+# needed — uv-dynamic-versioning shells out to it to resolve the editable install's version.
+COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /uvx /usr/local/bin/
+
+# /app is a rw bind mount of the host checkout, so every uv write has to be kept off it:
+#  - UV_PROJECT_ENVIRONMENT: the venv lands in /tmp instead of clobbering the host's macOS
+#    .venv. This replaces the POETRY_VIRTUALENVS_IN_PROJECT/PATH pair that used to be set
+#    on the test side; keeping it in the image means the escape hatch travels with it.
+#  - UV_FROZEN: `uv sync` re-locks by default and would rewrite the host's uv.lock from
+#    inside a Linux container. This exposure is new relative to poetry.
+#  - UV_CACHE_DIR / UV_LINK_MODE: keep the cache and hardlink target on the container fs.
+#  - UV_PYTHON / UV_PYTHON_DOWNLOADS: use this image's interpreter, never a downloaded one.
+ENV UV_PROJECT_ENVIRONMENT=/tmp/venv \
+    UV_FROZEN=1 \
+    UV_CACHE_DIR=/tmp/uv-cache \
+    UV_LINK_MODE=copy \
+    UV_PYTHON=/usr/local/bin/python3 \
+    UV_PYTHON_DOWNLOADS=never \
+    PATH=/tmp/venv/bin:$PATH
 
 # Create btrfs loopback filesystem at container startup
 COPY nbkp/remote/testkit/dockerbuild/btrfs-local-entrypoint.sh /entrypoint.sh

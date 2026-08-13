@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import os
 import tempfile
 from pathlib import Path
 from textwrap import dedent
@@ -23,7 +22,7 @@ from ...config import (
 )
 
 # Docker-dependent imports are deferred to seed --docker.
-# They require the 'docker' extra: pipx install nbkp[docker]
+# They require the 'docker' extra: uv tool install 'nbkp[docker]'
 try:
     from ...remote.testkit.docker import (
         BASTION_CONTAINER_NAME,
@@ -38,17 +37,6 @@ except ImportError:
     _HAS_DOCKER = False
 from . import app, console as _console
 from .cmd_handler.seed import SeedError, SeedResult, seed_demo
-
-
-def _is_dev_environment() -> bool:
-    """Detect whether we're running inside a Poetry/dev venv."""
-    venv = os.environ.get("VIRTUAL_ENV", "")
-    return venv.endswith(".venv") or "/.venv" in venv
-
-
-def _cmd_prefix() -> str:
-    """Return 'poetry run ' when in dev, empty string otherwise."""
-    return "poetry run " if _is_dev_environment() else ""
 
 
 def _luks_setup_instructions(provider: CredentialProvider) -> list[str]:
@@ -81,7 +69,7 @@ def _require_docker_extra() -> None:
     if not _HAS_DOCKER:
         typer.echo(
             "Docker support requires the 'docker' extra.\n"
-            "Install it with: pipx install nbkp[docker]",
+            "Install it with: uv tool install 'nbkp[docker]'",
             err=True,
         )
         raise typer.Exit(1)
@@ -234,7 +222,6 @@ def _print_commands(
     credential_provider: CredentialProvider,
 ) -> None:
     """Print the suggested commands panel."""
-    pfx = _cmd_prefix()
     backup_sh = result.base_dir / "backup.sh"
 
     docker_teardown = (
@@ -259,43 +246,43 @@ def _print_commands(
         SH="{backup_sh}"
         {luks_setup_line}
         # Show parsed configuration
-        {pfx}nbkp config show --config $CFG
+        nbkp config show --config $CFG
 
         # Show configuration as JSON
-        {pfx}nbkp config show --config $CFG --output json
+        nbkp config show --config $CFG --output json
 
         # Disk and sync health checks
-        {pfx}nbkp preflight check --config $CFG
+        nbkp preflight check --config $CFG
 
         # Preview what rsync would do without changes
-        {pfx}nbkp run --config $CFG --dry-run
+        nbkp run --config $CFG --dry-run
 
         # Execute backup syncs
-        {pfx}nbkp run --config $CFG
+        nbkp run --config $CFG
 
         # Show snapshot details
-        {pfx}nbkp snapshots show --config $CFG
+        nbkp snapshots show --config $CFG
 
         # Prune old btrfs snapshots
-        {pfx}nbkp snapshots prune --config $CFG
+        nbkp snapshots prune --config $CFG
 
         # Mount the disks (the standalone bash script does not handle disk management)
-        {pfx}nbkp disks mount --config $CFG
+        nbkp disks mount --config $CFG
 
         # Show the status of the disks
-        {pfx}nbkp disks status --config $CFG
+        nbkp disks status --config $CFG
 
         # Generate standalone bash script to stdout
-        {pfx}nbkp sh --config $CFG
+        nbkp sh --config $CFG
 
         # Write script to file, validate, and run
-        {pfx}nbkp sh --config $CFG -o $SH \\
+        nbkp sh --config $CFG -o $SH \\
           && bash -n $SH \\
           && $SH --dry-run \\
           && $SH
 
         # With relative paths (src and dst)
-        {pfx}nbkp sh --config $CFG -o $SH --relative-src --relative-dst \\
+        nbkp sh --config $CFG -o $SH --relative-src --relative-dst \\
           && bash -n $SH \\
           && $SH --dry-run \\
           && $SH
