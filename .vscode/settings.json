@@ -1,5 +1,22 @@
 {
     "mise.enable": true,
+    // Let mise-vscode derive tool paths from mise.toml rather than hand-maintaining a key
+    // per extension. UseSymLinks writes ${workspaceFolder}/.vscode/mise-tools/<tool>, the
+    // only shareable form — an absolute ~/.local/share/mise path is version- and
+    // home-specific. IncludeGlobalTools is off (the extension's own recommendation) so
+    // tools from ~/.config/mise/config.toml cannot add keys this project has no use for.
+    //
+    // All mise.* keys are window-scoped, so these apply when nbkp is opened as the single
+    // root and are ignored when it is one folder of a multi-root .code-workspace. That is
+    // deliberate: mise-vscode configures only one folder there and writes the result to
+    // the workspace file for all of them, so it must not be allowed to generate.
+    "mise.configureExtensionsAutomatically": true,
+    "mise.configureExtensionsUseSymLinks": true,
+    "mise.configureExtensionsIncludeGlobalTools": false,
+    // Written out by hand rather than left to mise-vscode. The extension prefers mise's
+    // VIRTUAL_ENV and produces this same value, but falls back to the mise toolchain
+    // interpreter when .venv does not exist yet — the state of a fresh clone, since the
+    // first `mise install` deliberately does not create it.
     "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
     // "packageManager" is deliberately omitted: ms-python.vscode-python-envs registers
     // only conda, pip, pipenv, poetry, pyenv, system and venv — there is no
