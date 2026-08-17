@@ -29,10 +29,18 @@ jobs:
       # `mise install`: when a mise.lock is present it auto-adds `--locked`, which
       # *fails* on a tool version that's in mise.toml but not yet in the lock —
       # exactly the case this workflow exists to fix. So we regenerate explicitly.
+      #
+      # `env: false` follows from that. mise-action exports mise's [env] into the job
+      # after setup, and `mise.toml` resolves UV_PYTHON from `{{ tools.python.path }}` —
+      # a template that errors with "Field `python` is not defined" when no python is
+      # installed, which is precisely the state `install: false` leaves behind. The
+      # export is pointless here anyway: the only step after this one is `mise lock`,
+      # which needs the binary and the config, not a tool environment.
       - name: Setup mise
         uses: jdx/mise-action@v4
         with:
           install: false
+          env: false
 
       # `mise lock` regenerates checksums/URLs for all platforms in the lockfile,
       # picking up any tool versions Renovate bumped in mise.toml.
