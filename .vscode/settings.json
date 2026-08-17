@@ -13,10 +13,33 @@
     "mise.configureExtensionsAutomatically": true,
     "mise.configureExtensionsUseSymLinks": true,
     "mise.configureExtensionsIncludeGlobalTools": false,
-    // Written out by hand rather than left to mise-vscode. The extension prefers mise's
-    // VIRTUAL_ENV and produces this same value, but falls back to the mise toolchain
-    // interpreter when .venv does not exist yet — the state of a fresh clone, since the
-    // first `mise install` deliberately does not create it.
+    // Three entries, excluded for two different reasons.
+    //
+    // ms-python.python: its generated value is simply wrong. The extension writes
+    // mise's VIRTUAL_ENV verbatim, which is the venv *directory*
+    // (${workspaceFolder}/.venv), while this key wants the interpreter. Left in, it
+    // silently overwrites the pin below.
+    //
+    // biomejs.biome and oxc.oxc-vscode are the extension's own defaults, repeated
+    // because supplying this setting *replaces* the default array rather than
+    // extending it — drop them and generation silently turns back on for both. They
+    // are worth keeping on the merits anyway: both write absolute
+    // ~/.local/share/mise paths regardless of configureExtensionsUseSymLinks above,
+    // which is the un-shareable form this file must not carry. oxc is the worse of
+    // the two, having a registry entry keyed on `node`, so it fires for any project
+    // with node in mise.toml whether or not oxc is used at all. Upstream ships both
+    // as opt-in for that reason ("biome extension support (disabled by default)",
+    // 0.57.0; "optional oxc-vscode support", 1.8.0).
+    "mise.configureExtensionsAutomaticallyIgnoreList": [
+        "biomejs.biome",
+        "oxc.oxc-vscode",
+        "ms-python.python"
+    ],
+    // Written out by hand, and mise-vscode is excluded from generating it (see the
+    // ignore list above). Its generated value is the venv *directory* rather than the
+    // interpreter, and when .venv does not exist yet — the state of a fresh clone, since
+    // the first `mise install` deliberately does not create it — it writes the mise
+    // toolchain interpreter, which has none of this project's dependencies.
     "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
     // "packageManager" is deliberately omitted: ms-python.vscode-python-envs registers
     // only conda, pip, pipenv, poetry, pyenv, system and venv — there is no
