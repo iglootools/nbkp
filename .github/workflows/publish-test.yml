@@ -19,6 +19,19 @@ on:
   workflow_dispatch:
   repository_dispatch:
 
+concurrency:
+  # Deliberately unlike test.yml: this workflow mutates state outside the repository and is
+  # neither idempotent nor reversible, so it must never be cancelled part-way through. A
+  # second run queues behind the one in flight instead of killing it.
+  #
+  # The key is the workflow name alone, with no ref or sha, so that two runs can never
+  # overlap even when they carry different refs — a manual `gh workflow run` and an automatic
+  # trigger can both aim at the same version, and a half-finished or doubled release costs far
+  # more than a short wait. GitHub keeps at most one run pending per group, so a third arrival
+  # supersedes the *pending* run, never the running one.
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 env:
   MISE_EXPERIMENTAL: true
   # Fail on a stale uv.lock instead of silently re-resolving on the runner.

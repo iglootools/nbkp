@@ -20,10 +20,19 @@ on:
   # pull_request:
 
 concurrency:
-  # On main/release, we don't want any jobs cancelled so the sha is used to name the group
-  # On PR branches, we cancel the job if new commits are pushed
+  # On main the group carries the commit sha, so every push gets a group of its own and
+  # nothing is cancelled. Everywhere else — pull requests, tags, dispatches — the group is
+  # the ref, so pushing again cancels the run still in flight for that ref.
   # More info: https://stackoverflow.com/a/68422069/253468
-  group: ${{ github.workflow }}-${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/release' ) && format('{0}-main-{1}', github.workflow, github.sha) || format('{0}-main-{1}', github.workflow, github.ref) }}
+  #
+  # head_sha is tried before github.sha for the sake of `workflow_run`: for that event GitHub
+  # sets GITHUB_REF to the default branch and GITHUB_SHA to the *last commit on the default
+  # branch*, not to the commit that triggered the run. Grouping on github.sha would therefore
+  # drop every workflow_run-triggered run into one group for as long as the default branch
+  # head does not move, and cancel-in-progress would kill the run already going. The term is
+  # inert in workflows without a workflow_run trigger, which is why the expression is kept
+  # identical across all of them.
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('main-{0}', github.event.workflow_run.head_sha || github.sha) || github.ref }}
   cancel-in-progress: true
 
 env:
