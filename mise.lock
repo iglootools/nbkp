@@ -10,9 +10,9 @@ url = "https://github.com/asciinema/agg/releases/download/v1.9.0/agg-aarch64-unk
 url_api = "https://api.github.com/repos/asciinema/agg/releases/assets/433215396"
 
 [tools."aqua:asciinema/agg"."platforms.linux-x64"]
-checksum = "sha256:ddcbf6ca044c8ac3a434dcb9ee89fb9e3be87209982b7c2adb55f782e8f0f390"
-url = "https://github.com/asciinema/agg/releases/download/v1.9.0/agg-x86_64-unknown-linux-musl"
-url_api = "https://api.github.com/repos/asciinema/agg/releases/assets/433215075"
+checksum = "sha256:f111e315cd71056b116302342553dd765b7297579ed511f111d0cedb442aeda6"
+url = "https://github.com/asciinema/agg/releases/download/v1.9.0/agg-x86_64-unknown-linux-gnu"
+url_api = "https://api.github.com/repos/asciinema/agg/releases/assets/433215010"
 
 [tools."aqua:asciinema/agg"."platforms.linux-x64-musl"]
 checksum = "sha256:ddcbf6ca044c8ac3a434dcb9ee89fb9e3be87209982b7c2adb55f782e8f0f390"
@@ -44,9 +44,9 @@ url = "https://github.com/asciinema/asciinema/releases/download/v3.2.1/asciinema
 url_api = "https://api.github.com/repos/asciinema/asciinema/releases/assets/449290064"
 
 [tools."aqua:asciinema/asciinema"."platforms.linux-x64"]
-checksum = "sha256:bec9781bc8f297a9d3d74ff60205599507f2abba1183578b8b2f22be4c999214"
-url = "https://github.com/asciinema/asciinema/releases/download/v3.2.1/asciinema-x86_64-unknown-linux-musl"
-url_api = "https://api.github.com/repos/asciinema/asciinema/releases/assets/449289811"
+checksum = "sha256:1b405bbda565b33c3c4718de67fedc3535580603c0694b1ff3fb04f363430a20"
+url = "https://github.com/asciinema/asciinema/releases/download/v3.2.1/asciinema-x86_64-unknown-linux-gnu"
+url_api = "https://api.github.com/repos/asciinema/asciinema/releases/assets/449289226"
 
 [tools."aqua:asciinema/asciinema"."platforms.linux-x64-musl"]
 checksum = "sha256:bec9781bc8f297a9d3d74ff60205599507f2abba1183578b8b2f22be4c999214"
@@ -153,9 +153,9 @@ version = "0.12.3"
 backend = "aqua:astral-sh/uv"
 
 [tools.uv."platforms.linux-arm64"]
-checksum = "sha256:fa513fca1eb2913334c944fe9adbdd410274a1cbe8dd05d03699a9eb85311d4e"
-url = "https://github.com/astral-sh/uv/releases/download/0.12.3/uv-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/505387718"
+checksum = "sha256:bb66cb52e7b1823aed1183630d8d8e5c958840d584a4c55ec10a4cfc168dcca2"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.3/uv-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/505387716"
 provenance = "github-attestations"
 
 [tools.uv."platforms.linux-arm64-musl"]
@@ -165,9 +165,9 @@ url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/505387718"
 provenance = "github-attestations"
 
 [tools.uv."platforms.linux-x64"]
-checksum = "sha256:0643b9fb8c9fb27458e709ce6ff939695013c41975ff7b02d3f3b138d8d4bdb3"
-url = "https://github.com/astral-sh/uv/releases/download/0.12.3/uv-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/505387821"
+checksum = "sha256:600cf9a742aca00d292673b16b5acffaa7b8c269a364ad0c2e79498dcb1fe101"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.3/uv-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/505387817"
 provenance = "github-attestations"
 
 [tools.uv."platforms.linux-x64-musl"]
