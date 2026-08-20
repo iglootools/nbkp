@@ -158,12 +158,12 @@ declare -A DISK=(
   [seagate8tb]="/dev/disk/by-id/usb-Seagate_Backup+_Hub_BK_NA8TTE7F-0:0"
   [seagate2tb]="/dev/disk/by-id/usb-Seagate_BUP_Slim_BK_NA7S6FSH-0:0"
   [iomega1tb]="/dev/disk/by-id/usb-SAMSUNG_HM100UI_29DB20169FFF-0:0"
+  [wd6tb]="/dev/disk/by-id/usb-WD_Elements_2620_575833324432354141565A55-0:0"
 
-  # Not attached as of 2026-08-03. To fill in: plug the drive in, run the
-  # by-id lookup below, and copy the usb-<model>_<serial>-0:0 symlink whose
-  # target matches the drive's new /dev/sdX.
+  # Not attached yet. To fill in: plug the drive in, run the by-id lookup
+  # above, and copy the usb-<model>_<serial>-0:0 symlink whose target matches
+  # the drive's new /dev/sdX.
   # [seagate1tb]="/dev/disk/by-id/usb-..."
-  # [wd6tb]="/dev/disk/by-id/usb-..."
 )
 
 # LUKS container UUIDs. Empty until A3's first loop creates the containers and
