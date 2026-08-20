@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import enum
-import json
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from ...clihelpers import OutputFormat
+from ...clihelpers import OutputFormat, echo_json
 from ...config.cli.helpers import load_config_or_exit
 from ..output import (
     build_graph_json,
@@ -54,7 +53,7 @@ def graph(
     cfg = load_config_or_exit(config)
     match output:
         case OutputFormat.JSON:
-            typer.echo(json.dumps(build_graph_json(cfg), indent=2))
+            echo_json(build_graph_json(cfg))
         case OutputFormat.HUMAN:
             match format:
                 case GraphFormat.RICH_TREE:

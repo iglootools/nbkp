@@ -1,6 +1,6 @@
 """Shared CLI helpers used across multiple domain CLI subpackages."""
 
-from .output import OutputFormat as OutputFormat
+from .output import OutputFormat as OutputFormat, echo_json as echo_json
 from .progress import StepProgressBar as StepProgressBar
 from .severity import (
     OK_STYLE as OK_STYLE,

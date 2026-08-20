@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Annotated
 
@@ -11,7 +10,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from ...clihelpers import OutputFormat
+from ...clihelpers import OutputFormat, echo_json
 from ...config import Config
 from ...config.cli.helpers import load_config_or_exit
 from .. import CredentialError, retrieve_passphrase
@@ -64,21 +63,18 @@ def keyring_status(
 
     match output:
         case OutputFormat.JSON:
-            typer.echo(
-                json.dumps(
-                    {
-                        "provider": cfg.credential_provider.value,
-                        "passphrases": {
-                            pid: {
-                                "available": available,
-                                "volumes": sorted(passphrase_ids[pid]),
-                                **({"error": error} if error else {}),
-                            }
-                            for pid, (available, error) in statuses.items()
-                        },
+            echo_json(
+                {
+                    "provider": cfg.credential_provider.value,
+                    "passphrases": {
+                        pid: {
+                            "available": available,
+                            "volumes": sorted(passphrase_ids[pid]),
+                            **({"error": error} if error else {}),
+                        }
+                        for pid, (available, error) in statuses.items()
                     },
-                    indent=2,
-                )
+                }
             )
         case OutputFormat.HUMAN:
             console = Console()

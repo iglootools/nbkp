@@ -15,6 +15,7 @@ from tests.clihelpers import (
     sample_config,
     sample_error_sync_statuses,
     sample_sentinel_only_sync_statuses,
+    sample_sync_statuses_with_snapshots,
     sample_vol_statuses,
 )
 
@@ -183,6 +184,48 @@ class TestRunCommand:
         assert data["results"][0]["sync_slug"] == "photos-to-nas"
         call_kwargs = mock_run.call_args
         assert call_kwargs.kwargs.get("on_rsync_output") is None
+
+    @patch("nbkp.run.pipeline.run_all_syncs")
+    @patch("nbkp.run.pipeline.check_all_syncs")
+    @patch("nbkp.config.cli.helpers.load_config")
+    def test_json_output_with_snapshot_timestamps(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+        mock_run: MagicMock,
+    ) -> None:
+        """Regression: statuses carrying a snapshot broke JSON serialization.
+
+        `run` is the command where this matters most, since scripting it is
+        the reason to ask for JSON at all — and any destination that has ever
+        completed a sync has a populated ``latest``.
+        """
+        config = sample_config()
+        mock_load.return_value = config
+        vol_s = sample_all_active_vol_statuses(config)
+        sync_s = sample_sync_statuses_with_snapshots(config, vol_s)
+        mock_checks.return_value = preflight(vol_s, sync_s)
+        mock_run.return_value = [
+            SyncResult(
+                sync_slug="photos-to-nas",
+                success=True,
+                dry_run=False,
+                rsync_exit_code=0,
+                output="done",
+            )
+        ]
+
+        result = runner.invoke(
+            app,
+            ["run", "--config", "/fake.yaml", "--output", "json"],
+        )
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["results"][0]["sync_slug"] == "photos-to-nas"
+        assert data["syncs"][0]["destination_latest_snapshot"]["timestamp"].startswith(
+            "2026-03-06T14:30:00"
+        )
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")

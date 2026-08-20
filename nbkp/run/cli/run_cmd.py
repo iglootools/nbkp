@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated
@@ -12,7 +11,7 @@ from rich.console import Console, Group
 from rich.panel import Panel
 from rich.text import Text
 
-from ...clihelpers import OutputFormat, StepProgressBar, severity_icon
+from ...clihelpers import OutputFormat, StepProgressBar, echo_json, severity_icon
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
 from ...disks.cli.helpers import managed_mount
@@ -217,12 +216,13 @@ def run(
         # -- Output ----------------------------------------------------
         if pipeline.has_preflight_errors:
             if output_format is OutputFormat.JSON:
-                data = {
-                    "volumes": [v.model_dump() for v in pipeline.vol_statuses.values()],
-                    "syncs": [s.model_dump() for s in pipeline.sync_statuses.values()],
-                    "results": [],
-                }
-                typer.echo(json.dumps(data, indent=2))
+                echo_json(
+                    {
+                        "volumes": list(pipeline.vol_statuses.values()),
+                        "syncs": list(pipeline.sync_statuses.values()),
+                        "results": [],
+                    }
+                )
             else:
                 errored = (
                     {
@@ -248,16 +248,13 @@ def run(
         else:
             match output_format:
                 case OutputFormat.JSON:
-                    data = {
-                        "volumes": [
-                            v.model_dump() for v in pipeline.vol_statuses.values()
-                        ],
-                        "syncs": [
-                            s.model_dump() for s in pipeline.sync_statuses.values()
-                        ],
-                        "results": [r.model_dump() for r in pipeline.results],
-                    }
-                    typer.echo(json.dumps(data, indent=2))
+                    echo_json(
+                        {
+                            "volumes": list(pipeline.vol_statuses.values()),
+                            "syncs": list(pipeline.sync_statuses.values()),
+                            "results": list(pipeline.results),
+                        }
+                    )
                 case OutputFormat.HUMAN:
                     sync_severities = {
                         r.sync_slug: outcome_severity(r.outcome, strictness)

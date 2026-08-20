@@ -19,6 +19,7 @@ from tests.clihelpers import (
     sample_config,
     sample_sentinel_only_sync_statuses,
     sample_sync_statuses,
+    sample_sync_statuses_with_snapshots,
     sample_vol_statuses,
     src_ep_status,
     vol_status,
@@ -171,6 +172,38 @@ class TestCheckCommand:
         data = json.loads(result.output)
         assert "volumes" in data
         assert "syncs" in data
+
+    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
+    @patch("nbkp.config.cli.helpers.load_config")
+    def test_json_output_with_snapshot_timestamps(
+        self, mock_load: MagicMock, mock_checks: MagicMock
+    ) -> None:
+        """A populated ``latest`` snapshot puts a datetime in the status tree.
+
+        Regression: the statuses were dumped with a bare ``model_dump()``,
+        which leaves ``Snapshot.timestamp`` as a ``datetime`` for
+        ``json.dumps`` to reject.  The other JSON tests pass because their
+        fixtures leave every snapshot field unset.
+        """
+        config = sample_config()
+        mock_load.return_value = config
+        vol_s = sample_all_active_vol_statuses(config)
+        sync_s = sample_sync_statuses_with_snapshots(config, vol_s)
+        mock_checks.return_value = preflight(vol_s, sync_s)
+
+        result = runner.invoke(
+            app,
+            ["preflight", "check", "--config", "/fake.yaml", "--output", "json"],
+        )
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        sync = data["syncs"][0]
+        assert sync["destination_latest_snapshot"]["timestamp"].startswith(
+            "2026-03-06T14:30:00"
+        )
+        nested = sync["destination_endpoint_status"]["diagnostics"]["latest"]
+        assert nested["snapshot"]["name"] == "2026-03-06T14:30:00.000Z"
 
     @patch("nbkp.preflight.cli.helpers.check_all_syncs")
     @patch("nbkp.config.cli.helpers.load_config")
