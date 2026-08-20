@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from ...clihelpers import OutputFormat
+from ...clihelpers import OutputFormat, echo_json
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
 from ...disks.cli.helpers import managed_mount
@@ -103,11 +102,12 @@ def check(
         )
 
         if output_format is OutputFormat.JSON:
-            data = {
-                "volumes": [v.model_dump() for v in preflight.volume_statuses.values()],
-                "syncs": [s.model_dump() for s in preflight.sync_statuses.values()],
-            }
-            typer.echo(json.dumps(data, indent=2))
+            echo_json(
+                {
+                    "volumes": list(preflight.volume_statuses.values()),
+                    "syncs": list(preflight.sync_statuses.values()),
+                }
+            )
 
         if has_errors:
             raise typer.Exit(1)

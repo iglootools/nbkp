@@ -14,11 +14,13 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.fsprotocol import Snapshot
 from nbkp.preflight import (
     DestinationEndpointDiagnostics,
     DestinationEndpointError,
     DestinationEndpointStatus,
     HostToolCapabilities,
+    LatestSymlinkState,
     PreflightResult,
     SourceEndpointDiagnostics,
     SourceEndpointError,
@@ -183,8 +185,16 @@ def dst_ep_status(
     vol_s: VolumeStatus,
     *,
     sentinel_exists: bool = True,
+    latest_snapshot: str | None = None,
 ) -> DestinationEndpointStatus:
-    """Build a DestinationEndpointStatus."""
+    """Build a DestinationEndpointStatus.
+
+    *latest_snapshot* is a snapshot directory name (e.g.
+    ``2026-03-06T14:30:00.000Z``); passing one populates the ``latest``
+    symlink state with a parsed :class:`Snapshot`, whose ``timestamp`` is a
+    ``datetime``.  That field is the one non-JSON-native type reachable from
+    a status tree, so it is what exercises JSON serialization.
+    """
     if not vol_s.active:
         return DestinationEndpointStatus(
             endpoint_slug=endpoint_slug,
@@ -196,6 +206,16 @@ def dst_ep_status(
         endpoint_slug=endpoint_slug,
         sentinel_exists=sentinel_exists,
         endpoint_writable=True,
+        latest=(
+            None
+            if latest_snapshot is None
+            else LatestSymlinkState(
+                exists=True,
+                raw_target=f"snapshots/{latest_snapshot}",
+                target_valid=True,
+                snapshot=Snapshot.from_name(latest_snapshot),
+            )
+        ),
     )
     errors = (
         [DestinationEndpointError.SENTINEL_NOT_FOUND] if not sentinel_exists else []
@@ -361,6 +381,34 @@ def sample_all_active_sync_statuses(
             source_endpoint_status=src_ep,
             destination_endpoint_status=dst_ep,
             errors=[],
+        ),
+    }
+
+
+def sample_sync_statuses_with_snapshots(
+    config: Config,
+    vol_statuses: dict[str, VolumeStatus],
+) -> dict[str, SyncStatus]:
+    """All-active sync statuses whose destination has a populated ``latest``.
+
+    The only difference from :func:`sample_all_active_sync_statuses` is that
+    the destination's ``latest`` symlink resolves to a real snapshot, putting
+    a ``datetime`` into the status tree.  Fixtures that leave it unset make
+    JSON output look serializable when it is not.
+    """
+    name = "2026-03-06T14:30:00.000Z"
+    src_ep = src_ep_status("ep-src", vol_statuses["local-data"])
+    dst_ep = dst_ep_status("ep-dst", vol_statuses["nas"], latest_snapshot=name)
+    return {
+        "photos-to-nas": SyncStatus(
+            slug="photos-to-nas",
+            config=config.syncs["photos-to-nas"],
+            source_endpoint_status=src_ep,
+            destination_endpoint_status=dst_ep,
+            errors=[],
+            # Both routes a Snapshot reaches JSON by: nested under the
+            # destination's diagnostics, and directly on the sync status.
+            destination_latest_snapshot=Snapshot.from_name(name),
         ),
     }
 

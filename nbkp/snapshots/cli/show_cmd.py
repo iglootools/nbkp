@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from ...clihelpers import OutputFormat
+from ...clihelpers import OutputFormat, echo_json
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
 from ...disks.cli.helpers import managed_mount
@@ -102,12 +101,7 @@ def show(
 
         match output_format:
             case OutputFormat.JSON:
-                typer.echo(
-                    json.dumps(
-                        [r.model_dump(mode="json") for r in results],
-                        indent=2,
-                    )
-                )
+                echo_json(list(results))
             case OutputFormat.HUMAN:
                 print_human_show_results(results)
 

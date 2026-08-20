@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from ...clihelpers import OutputFormat
+from ...clihelpers import OutputFormat, echo_json
 from ...remote.resolution import resolve_all_endpoints
 from ..output import print_human_config
 from . import app
@@ -38,7 +37,7 @@ def show(
     output_format = output
     match output_format:
         case OutputFormat.JSON:
-            typer.echo(json.dumps(cfg.model_dump(by_alias=True, mode="json"), indent=2))
+            echo_json(cfg.model_dump(by_alias=True, mode="json"))
         case OutputFormat.HUMAN:
             resolved = resolve_all_endpoints(cfg)
             print_human_config(cfg, resolved_endpoints=resolved)

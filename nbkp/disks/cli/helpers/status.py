@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
 import typer
 from rich.console import Console
 
-from ....clihelpers import OutputFormat, Severity, StepProgressBar, severity_icon
+from ....clihelpers import (
+    OutputFormat,
+    Severity,
+    StepProgressBar,
+    echo_json,
+    severity_icon,
+)
 from ....config import Config, LocalVolume, RemoteVolume
 from ....config.epresolution import ResolvedEndpoints
 from ...mount_checks import check_mount_status
@@ -86,7 +91,7 @@ def _show_status_table(
     """Display the mount status table or JSON."""
     match output_format:
         case OutputFormat.JSON:
-            typer.echo(json.dumps(build_mount_status_json(statuses), indent=2))
+            echo_json(build_mount_status_json(statuses))
         case OutputFormat.HUMAN:
             if statuses:
                 Console().print(build_mount_status_table(statuses))
