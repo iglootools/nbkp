@@ -30,18 +30,21 @@ experimental = true
 # walking up for uv.lock, which means this no-ops until that file exists — if uv.lock is
 # ever deleted or gitignored, activation silently stops rather than erroring.
 #
-# The cookbook pairs [deps.uv] with "source"; "create|source" is used here so that a venv is
-# created rather than merely activated. Creation is idempotent and [deps.uv] populates it, so
-# the two do not fight.
+# "source", not "create|source": with [deps.uv] enabled, creating the venv is the deps
+# provider's job. The cookbook says so outright ("if you prefer mise deps to create the venv,
+# keep it at source"), and the two do fight in practice. Measured on a fresh clone with
+# "create|source", `mise install` announced the creation and then failed on its own result:
+#   mise creating venv with uv at: <path>/.venv
+#   error: Failed to create virtual environment
+#     Caused by: A virtual environment already exists at: .venv
+#   mise WARN  uv venv creation failed at: <path>/.venv
+# With "source" the same clone installs silently, and the first `mise run` lets [deps.uv]'s
+# `uv sync` create and populate .venv.
 #
-# On a genuinely fresh clone the first `mise install` prints
-#   WARN uv is required to create the venv at <path>/.venv but is not installed
-# and does not create it: env directives are resolved before the toolset is available. This
-# is harmless — the first `mise run` invokes [deps.uv], whose `uv sync` creates .venv itself,
-# and every run after that activates normally. It is also the second reason the tasks below
-# use `uv run` rather than bare commands: on that first run there is no .venv/bin to be on
-# PATH at all.
-python.uv_venv_auto = "create|source"
+# The consequence is that .venv does not exist until that first `mise run` — so there is no
+# .venv/bin to be on PATH for it. That is the second reason the tasks below use `uv run`
+# rather than bare commands.
+python.uv_venv_auto = "source"
 
 # Runs `uv sync` before every `mise run`/`mise x`, but only when uv.lock or pyproject.toml
 # changed or .venv went missing (blake3 source hashing) — so freshness costs one check per
