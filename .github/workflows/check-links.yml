@@ -9,6 +9,14 @@ on:
   schedule:
     - cron: "00 18 * * 1"
 
+concurrency:
+  # Same grouping as test.yml: on main the group carries the commit sha, so every push gets a
+  # group of its own and nothing is cancelled; everywhere else the group is the ref, so a new
+  # push supersedes the run still in flight. See project-setup.md in common-guidelines for why
+  # head_sha is tried before github.sha.
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('main-{0}', github.event.workflow_run.head_sha || github.sha) || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   linkChecker:
     runs-on: ubuntu-latest
