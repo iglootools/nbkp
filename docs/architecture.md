@@ -90,6 +90,7 @@ graph TD
     remote --> fsprotocol
     run --> clihelpers
     run --> config
+    run --> credentials
     run --> disks
     run --> ordering
     run --> preflight

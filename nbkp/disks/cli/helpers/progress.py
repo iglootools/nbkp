@@ -18,11 +18,11 @@ from rich.text import Text
 
 from ....clihelpers import Severity, severity_style, severity_symbol
 
-# Result-line formatters for the mount/umount bars.  They live here, next to
-# the bar that calls them, rather than in each caller: ``disks mount`` /
-# ``disks umount`` and the ``managed_mount`` context manager render identical
-# lines, and the second copy they used to keep is how a fix to one of them
-# silently misses the other.
+# Result-line formatters for the credential/mount/umount bars.  They live
+# here, next to the bar that calls them, rather than in each caller: ``disks
+# mount`` / ``disks umount`` and the ``managed_mount`` context manager render
+# identical lines, and the second copy they used to keep is how a fix to one of
+# them silently misses the other.
 #
 # Each returns a ``Text`` rather than a markup string: *detail* and *warning*
 # are external text (an exception message, udisksctl's stderr), and Rich would
@@ -36,6 +36,17 @@ def format_mount_result(
     return Text.assemble(
         (severity_symbol(severity), severity_style(severity)),
         f" mount {slug}",
+        *([f" ({detail})"] if detail else []),
+    )
+
+
+def format_credential_result(
+    passphrase_id: str, severity: Severity, detail: str | None, _warning: str | None
+) -> Text:
+    """Format a passphrase prefetch result as a styled result line."""
+    return Text.assemble(
+        (severity_symbol(severity), severity_style(severity)),
+        f" credential {passphrase_id}",
         *([f" ({detail})"] if detail else []),
     )
 

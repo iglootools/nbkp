@@ -11,20 +11,9 @@ from rich.table import Table
 from rich.text import Text
 
 from ...clihelpers import OutputFormat, echo_json
-from ...config import Config
 from ...config.cli.helpers import load_config_or_exit
-from .. import CredentialError, retrieve_passphrase
+from .. import CredentialError, collect_passphrase_ids, retrieve_passphrase
 from . import app
-
-
-def _collect_passphrase_ids(cfg: Config) -> dict[str, list[str]]:
-    """Map passphrase-id to list of volume slugs that use it."""
-    result: dict[str, list[str]] = {}
-    for vol in cfg.volumes.values():
-        mount = getattr(vol, "mount", None)
-        if mount is not None and mount.encryption is not None:
-            result.setdefault(mount.encryption.passphrase_id, []).append(vol.slug)
-    return result
 
 
 @app.command("keyring-status")
@@ -47,7 +36,7 @@ def keyring_status(
 ) -> None:
     """Check whether LUKS passphrases are available in the credential store."""
     cfg = load_config_or_exit(config)
-    passphrase_ids = _collect_passphrase_ids(cfg)
+    passphrase_ids = collect_passphrase_ids(cfg)
 
     if not passphrase_ids:
         typer.echo("No encrypted volumes found.", err=True)

@@ -7,10 +7,15 @@ from typing import Annotated
 
 import typer
 
-from ...clihelpers import OutputFormat
+from ...clihelpers import OutputFormat, Severity
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
-from ...credentials import build_passphrase_fn
+from ...credentials import (
+    PassphrasePrefetch,
+    build_passphrase_fn,
+    prefetch_count,
+    prefetch_passphrases,
+)
 from ..lifecycle import MountResult, mount_count, mount_volumes
 from ..observation import build_mount_observations
 from ..output import display_name
@@ -21,6 +26,7 @@ from .helpers import (
     _ErrorStatus,
     _show_status_table,
     _unmanaged_statuses,
+    format_credential_result,
     format_mount_result,
 )
 from .helpers.managed_mount import mount_result_severity
@@ -83,11 +89,34 @@ def mount(
         if vol.mount is not None
     }
     total = mount_count(cfg, name)
+    credentials_total = prefetch_count(cfg)
+    credential_bar = (
+        DisksProgressBar(
+            credentials_total, "Loading credential", format_credential_result
+        )
+        if use_progress and credentials_total > 0
+        else None
+    )
     mount_bar = (
         DisksProgressBar(total, "Mounting", format_mount_result)
         if use_progress
         else None
     )
+
+    def on_prefetch_start(passphrase_id: str) -> None:
+        if credential_bar is not None:
+            credential_bar.on_start(passphrase_id)
+
+    def on_prefetch_end(passphrase_id: str, result: PassphrasePrefetch) -> None:
+        if credential_bar is not None:
+            credential_bar.on_end(
+                passphrase_id,
+                # A passphrase that cannot be retrieved only matters for a
+                # drive that is plugged in, and the mount step below reports
+                # that — so a prefetch failure is a warning, not an error.
+                Severity.OK if result.success else Severity.WARNING,
+                result.detail,
+            )
 
     def on_mount_start(slug: str) -> None:
         if mount_bar is not None:
@@ -101,9 +130,21 @@ def mount(
                 result.detail,
             )
 
-    # try/finally instead of `with` because mount_bar is conditionally
+    # try/finally instead of `with` because the bars are conditionally
     # created (None when output is JSON), and cache.clear() must also run.
     try:
+        # Retrieve every configured passphrase before touching a device —
+        # deliberately including the ones --name excludes and the ones whose
+        # drive is absent, so one approval pass covers every drive.
+        prefetch_passphrases(
+            cfg,
+            passphrase_fn,
+            on_prefetch_start=on_prefetch_start,
+            on_prefetch_end=on_prefetch_end,
+        )
+        # Rich permits only one live display at a time.
+        if credential_bar is not None:
+            credential_bar.stop()
         results = mount_volumes(
             cfg,
             resolved,
@@ -113,6 +154,8 @@ def mount(
             on_mount_end=on_mount_end,
         )
     finally:
+        if credential_bar is not None:
+            credential_bar.stop()
         if mount_bar is not None:
             mount_bar.stop()
         cache.clear()
