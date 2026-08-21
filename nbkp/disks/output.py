@@ -6,12 +6,20 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Protocol
 
 from rich.table import Table
+from rich.text import Text
 
 from ..clihelpers import Severity, Strictness, classify_severity, severity_icon
 from .lifecycle import LUKS_STAGE_FAILURES, MOUNT_STAGE_FAILURES
 
 if TYPE_CHECKING:
     from ..config.protocol.volume import LocalVolume, RemoteVolume
+
+# A row's display label.  ``Text`` when the label carries styling *and*
+# caller-supplied text (an error detail, a "not managed" marker): Rich parses
+# markup in a plain ``str``, so a detail containing ``[...]`` — udisksctl
+# stderr, an exception message — would lose it.  ``str(label)`` recovers the
+# plain text for JSON either way.
+MountStatusLabel = str | Text
 
 
 class MountStatusData(Protocol):
@@ -121,7 +129,7 @@ def mount_state_icon(
 
 
 def build_mount_status_table(
-    statuses: Sequence[tuple[str, MountStatusData]],
+    statuses: Sequence[tuple[MountStatusLabel, MountStatusData]],
     *,
     title: str = "Volume Mount Status:",
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
@@ -159,12 +167,17 @@ def build_mount_status_table(
 
 
 def build_mount_status_json(
-    statuses: Sequence[tuple[str, MountStatusData]],
+    statuses: Sequence[tuple[MountStatusLabel, MountStatusData]],
 ) -> list[dict[str, object]]:
-    """Build a JSON-serializable list of mount status entries."""
+    """Build a JSON-serializable list of mount status entries.
+
+    ``str(slug)`` rather than ``slug``: a ``Text`` label renders to its plain
+    content, so annotated labels reach JSON as readable text instead of the
+    Rich markup they used to leak (``vol [dim](not managed)[/dim]``).
+    """
     return [
         {
-            "volume": slug,
+            "volume": str(slug),
             "device_present": status.device_present,
             "luks_unlocked": status.luks_unlocked,
             "mounted": status.mounted,

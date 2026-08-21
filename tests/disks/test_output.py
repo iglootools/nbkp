@@ -6,6 +6,7 @@ import json
 from io import StringIO
 
 from rich.console import Console
+from rich.text import Text
 
 from nbkp.clihelpers import Severity
 from nbkp.disks.lifecycle import MountFailureReason
@@ -220,3 +221,14 @@ class TestBuildMountStatusJson:
 
     def test_empty(self) -> None:
         assert build_mount_status_json([]) == []
+
+    def test_text_label_reaches_json_as_plain_text(self) -> None:
+        """A styled label must not leak Rich markup into JSON output."""
+        obs = MountObservation(
+            device_present=None,
+            luks_unlocked=None,
+            mounted=None,
+        )
+        label = Text.assemble("my-vol", " ", ("(not managed)", "dim"))
+        result = build_mount_status_json([(label, obs)])
+        assert result[0]["volume"] == "my-vol (not managed)"

@@ -102,7 +102,7 @@ def _show_config_graph() -> None:
 
     console, buf = _capture_console()
     mermaid_src = build_mermaid_graph(config)
-    console.print(mermaid_src, highlight=False)
+    console.print(mermaid_src, highlight=False, markup=False)
     _print_panel("build_mermaid_graph (mermaid syntax)", buf)
 
 

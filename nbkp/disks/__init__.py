@@ -30,6 +30,7 @@ from .observation import (
 )
 from .output import (
     MountStatusData,
+    MountStatusLabel,
     build_mount_status_json,
     build_mount_status_table,
     display_name,
@@ -50,6 +51,7 @@ __all__ = [
     "MountObservation",
     "MountResult",
     "MountStatusData",
+    "MountStatusLabel",
     "UmountResult",
     "apply_effective_paths",
     "build_lock_command",

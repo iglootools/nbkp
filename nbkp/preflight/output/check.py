@@ -206,12 +206,14 @@ def _build_ssh_endpoints_section(
             status = status_text(ssh_status.active, ssh_status.errors, strictness)
         else:
             status = Text("")
+        # Host / user / key / paths are free-form config values; Text keeps a
+        # bracket in one of them from being read as a style tag.
         table.add_row(
             server.slug,
-            server.host,
+            Text(server.host),
             str(server.port),
-            server.user or "",
-            server.key or "",
+            Text(server.user or ""),
+            Text(server.key or ""),
             ", ".join(server.proxy_jump_chain) or "",
             ", ".join(server.location_list),
             status,
@@ -252,7 +254,7 @@ def _build_volumes_section(
             vs.slug,
             vol_type,
             ssh_ep,
-            format_volume_display(vol, resolved_endpoints),
+            Text(format_volume_display(vol, resolved_endpoints)),
             format_mount_summary(vol.mount),
             format_mount_status(mount_caps, vol.mount, strictness),
             format_capabilities(caps),
@@ -280,8 +282,8 @@ def _build_syncs_section(
     for ss in sync_statuses.values():
         table.add_row(
             ss.slug,
-            _sync_endpoint_display(config.source_endpoint(ss.config)),
-            _sync_endpoint_display(config.destination_endpoint(ss.config)),
+            Text(_sync_endpoint_display(config.source_endpoint(ss.config))),
+            Text(_sync_endpoint_display(config.destination_endpoint(ss.config))),
             _sync_options(ss.config, config),
             _format_source_diagnostics(ss, strictness),
             _format_destination_diagnostics(ss, strictness),

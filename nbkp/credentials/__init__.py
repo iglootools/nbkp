@@ -22,8 +22,9 @@ def _from_keyring(passphrase_id: str) -> str:
     except ImportError:
         raise CredentialError(
             "keyring package not installed."
-            " Install with: pip install nbkp[keyring]"
-            " Or switch to another credential-provider."
+            " Install with: uv tool install 'nbkp[keyring]'"
+            " (quotes required — the shell would glob the extra otherwise),"
+            " or switch to another credential-provider."
         ) from None
 
     password = keyring.get_password("nbkp", passphrase_id)

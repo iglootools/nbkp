@@ -14,8 +14,42 @@ from rich.progress import (
     TaskID,
     TextColumn,
 )
+from rich.text import Text
 
-from ....clihelpers import Severity
+from ....clihelpers import Severity, severity_style, severity_symbol
+
+# Result-line formatters for the mount/umount bars.  They live here, next to
+# the bar that calls them, rather than in each caller: ``disks mount`` /
+# ``disks umount`` and the ``managed_mount`` context manager render identical
+# lines, and the second copy they used to keep is how a fix to one of them
+# silently misses the other.
+#
+# Each returns a ``Text`` rather than a markup string: *detail* and *warning*
+# are external text (an exception message, udisksctl's stderr), and Rich would
+# swallow any ``[...]`` in them as a style tag.
+
+
+def format_mount_result(
+    slug: str, severity: Severity, detail: str | None, _warning: str | None
+) -> Text:
+    """Format a mount result as a styled result line."""
+    return Text.assemble(
+        (severity_symbol(severity), severity_style(severity)),
+        f" mount {slug}",
+        *([f" ({detail})"] if detail else []),
+    )
+
+
+def format_umount_result(
+    slug: str, severity: Severity, detail: str | None, warning: str | None
+) -> Text:
+    """Format an umount result as a styled result line."""
+    return Text.assemble(
+        (severity_symbol(severity), severity_style(severity)),
+        f" umount {slug}",
+        *([f" ({detail})"] if detail else []),
+        *([(f" warning: {warning}", "yellow")] if warning else []),
+    )
 
 
 class DisksProgressBar:
@@ -40,7 +74,7 @@ class DisksProgressBar:
         self,
         total: int,
         label: str,
-        format_result: Callable[[str, Severity, str | None, str | None], str],
+        format_result: Callable[[str, Severity, str | None, str | None], Text],
     ) -> None:
         self._total = total
         self._label = label
