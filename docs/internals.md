@@ -80,7 +80,9 @@ Regardless of route, nbkp **verifies** the result rather than trusting the confi
 
 Passphrases are cached in memory during a single run, so the user is only prompted once per unique passphrase-id even if multiple volumes share it.
 
-**Lifecycle** — The `run`, `preflight check`, and `preflight troubleshoot` commands mount volumes before running and umount in a `finally` block (even on failure). Mount is idempotent: already-unlocked and already-mounted volumes are skipped. Umount always attempts to unmount and lock for all volumes with mount config, regardless of who mounted them — this avoids fragile action tracking across failed/restarted runs.
+**Passphrase prefetching** — Before the first device is touched, nbkp retrieves *every* passphrase-id the config declares — including the ones this run has no use for, because their drive is not plugged in or `--name` excluded them. All credential-store access therefore happens up front, in one burst. See [Why prefetch every passphrase](#why-prefetch-every-passphrase).
+
+**Lifecycle** — The `run`, `preflight check`, and `preflight troubleshoot` commands prefetch passphrases and mount volumes before running, and umount in a `finally` block (even on failure). Mount is idempotent: already-unlocked and already-mounted volumes are skipped. Umount always attempts to unmount and lock for all volumes with mount config, regardless of who mounted them — this avoids fragile action tracking across failed/restarted runs.
 
 **Authorization** — Mount management is authorized by **polkit only** (no sudoers). The `disks setup-auth` command generates a single polkit rule at `/etc/polkit-1/rules.d/50-nbkp.rules` for review and manual installation. See [Why polkit-only](#why-polkit-only).
 
@@ -140,6 +142,22 @@ The `keyring` library provides a cross-platform abstraction over OS-native secre
 - **Session integration** — On desktop Linux, the keyring is typically unlocked at login and stays available for the session.
 
 The `keyring` package is an optional dependency (`pip install nbkp[keyring]`) to avoid pulling in D-Bus/SecretStorage libraries on headless servers where `env` or `command` providers are more appropriate.
+
+#### Why prefetch every passphrase
+
+OS secret stores gate access **per item and per accessing binary**. macOS Keychain, for instance, records an ACL entry for the exact `python` binary that read an item, and re-prompts for approval when that binary changes — which it does on every Python or nbkp upgrade, or a `uv tool` reinstall. Linux SecretService behaves similarly when the collection needs unlocking.
+
+Retrieving passphrases lazily — only for the drives that happen to be plugged in — spreads that approval across runs: the drive attached in January gets approved, and the one attached in February blocks on a dialog nobody is there to answer. An unattended `nbkp run` from a timer then hangs or fails on a drive whose passphrase was never approved for the current binary.
+
+So nbkp reads **all** configured passphrases before touching any device, deliberately including the ones it does not need:
+
+- **One approval pass covers every drive.** After a single interactive run following an upgrade, drives can be plugged and unplugged freely and subsequent runs are unattended.
+- **It happens before device probing and mounting**, so the approval prompts arrive together at the start rather than interleaved with mount output.
+- **It is not filtered by `--name`.** Narrowing the mount set would defeat the purpose.
+- **It is best-effort.** A passphrase that cannot be retrieved is reported as a warning and skipped, not fatal. Missing credentials only matter for a drive that is actually present, and that case surfaces at unlock time with the same error. Retrieval failures are not cached, so the unlock path retries.
+- **The `prompt` provider is excluded.** Prefetching an interactive prompt would ask the operator to type the passphrase of every encrypted volume, absent drives included — the opposite of the unattended goal. `keyring`, `env`, and `command` are prefetched.
+
+`nbkp credentials keyring-status` performs the same sweep on demand, without mounting anything, and is the way to trigger the approval pass deliberately after an upgrade.
 
 #### Why no action tracking for umount
 

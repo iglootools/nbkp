@@ -5,11 +5,12 @@ from __future__ import annotations
 import os
 import subprocess
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import typer
 from pydantic import SecretStr
 
-from ..config import CredentialProvider
+from ..config import Config, CredentialProvider
 
 
 class CredentialError(Exception):
@@ -125,3 +126,95 @@ def build_passphrase_fn(
         )
 
     return passphrase_fn, cache
+
+
+def collect_passphrase_ids(config: Config) -> dict[str, list[str]]:
+    """Map each configured passphrase-id to the volume slugs that use it.
+
+    Covers *every* encrypted mount-managed volume in the config, whether or
+    not its drive is currently plugged in.
+    """
+    result: dict[str, list[str]] = {}
+    for vol in config.volumes.values():
+        mount = vol.mount
+        if mount is not None and mount.encryption is not None:
+            result.setdefault(mount.encryption.passphrase_id, []).append(vol.slug)
+    return result
+
+
+# Providers worth retrieving eagerly.  ``prompt`` is deliberately excluded:
+# prefetching it would ask the operator to type the passphrase of every
+# encrypted volume, including drives that are not plugged in — the opposite
+# of the unattended-run goal that prefetching serves.
+_PREFETCHABLE_PROVIDERS: frozenset[CredentialProvider] = frozenset(
+    {
+        CredentialProvider.KEYRING,
+        CredentialProvider.ENV,
+        CredentialProvider.COMMAND,
+    }
+)
+
+
+@dataclass(frozen=True)
+class PassphrasePrefetch:
+    """Outcome of eagerly retrieving one configured passphrase."""
+
+    passphrase_id: str
+    volumes: tuple[str, ...]
+    success: bool
+    detail: str | None = None
+
+
+def prefetch_passphrases(
+    config: Config,
+    passphrase_fn: Callable[[str], str],
+    *,
+    on_prefetch_start: Callable[[str], None] | None = None,
+    on_prefetch_end: Callable[[str, PassphrasePrefetch], None] | None = None,
+) -> list[PassphrasePrefetch]:
+    """Warm the passphrase cache with *every* configured passphrase-id.
+
+    Called once before the mount phase so that all credential-store access
+    happens up front, in a single burst.  OS secret stores (macOS Keychain,
+    Linux SecretService) gate access per *item* and per *binary*, so a run
+    that only reads the passphrases of the drives currently plugged in leaves
+    the remaining items un-approved — and the next run with a different drive
+    attached blocks on an interactive approval dialog.  Reading them all,
+    including the ones this run has no use for, means one approval pass covers
+    every drive and subsequent runs are unattended.
+
+    Retrieval is **best-effort**: a passphrase that cannot be retrieved is
+    reported and skipped rather than aborting.  A missing passphrase only
+    matters for a drive that is actually present, and that case surfaces at
+    unlock time with the same error.  Failures are not cached, so the unlock
+    path retries retrieval.
+
+    Returns one :class:`PassphrasePrefetch` per configured passphrase-id, in
+    id order.  Returns an empty list when the provider is not prefetchable
+    (see ``_PREFETCHABLE_PROVIDERS``) or no encrypted volume is configured.
+    """
+    if config.credential_provider not in _PREFETCHABLE_PROVIDERS:
+        return []
+
+    passphrase_ids = collect_passphrase_ids(config)
+    results: list[PassphrasePrefetch] = []
+    for pid in sorted(passphrase_ids):
+        if on_prefetch_start is not None:
+            on_prefetch_start(pid)
+        volumes = tuple(sorted(passphrase_ids[pid]))
+        try:
+            passphrase_fn(pid)
+            result = PassphrasePrefetch(pid, volumes, success=True)
+        except CredentialError as e:
+            result = PassphrasePrefetch(pid, volumes, success=False, detail=str(e))
+        results.append(result)
+        if on_prefetch_end is not None:
+            on_prefetch_end(pid, result)
+    return results
+
+
+def prefetch_count(config: Config) -> int:
+    """Number of passphrase-ids :func:`prefetch_passphrases` would retrieve."""
+    if config.credential_provider not in _PREFETCHABLE_PROVIDERS:
+        return 0
+    return len(collect_passphrase_ids(config))

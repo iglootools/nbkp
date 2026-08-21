@@ -3,6 +3,7 @@
 from .managed_mount import managed_mount as managed_mount
 from .progress import (
     DisksProgressBar as DisksProgressBar,
+    format_credential_result as format_credential_result,
     format_mount_result as format_mount_result,
     format_umount_result as format_umount_result,
 )

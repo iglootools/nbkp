@@ -15,13 +15,18 @@ from ....clihelpers import (
 )
 from ....config import Config
 from ....config.epresolution import ResolvedEndpoints
-from ....credentials import build_passphrase_fn
+from ....credentials import (
+    PassphrasePrefetch,
+    build_passphrase_fn,
+    prefetch_count,
+)
 from ...context import managed_mount as _disks_managed_mount
 from ...lifecycle import MountFailureReason, MountResult, UmountResult, mount_count
 from ...observation import MountObservation
 from ...output import build_mount_status_table, display_name
 from .progress import (
     DisksProgressBar,
+    format_credential_result,
     format_mount_result,
     format_umount_result,
 )
@@ -93,7 +98,9 @@ def managed_mount(
         When ``False``, the umount phase is skipped even if volumes
         were mounted.  Useful for debugging (``run --no-umount``).
     output_format:
-        Controls whether Rich spinner / result lines are printed.
+        Controls whether Rich spinner / result lines are printed.  The
+        credential-prefetch phase gets its own progress bar, shown only when
+        the provider is prefetchable and encrypted volumes are configured.
     strictness:
         Picks the per-mount severity icon when the operation fails.
         See :func:`mount_result_severity`.
@@ -104,12 +111,20 @@ def managed_mount(
 
     use_progress = output_format is OutputFormat.HUMAN
     total = mount_count(cfg)
+    credentials_total = prefetch_count(cfg)
     display_names = {
         slug: display_name(vol)
         for slug, vol in cfg.volumes.items()
         if vol.mount is not None
     }
 
+    credential_bar = (
+        DisksProgressBar(
+            credentials_total, "Loading credential", format_credential_result
+        )
+        if use_progress and credentials_total > 0
+        else None
+    )
     mount_bar = (
         DisksProgressBar(total, "Mounting", format_mount_result)
         if use_progress
@@ -121,7 +136,28 @@ def managed_mount(
         else None
     )
 
+    def on_prefetch_start(passphrase_id: str) -> None:
+        if credential_bar is not None:
+            credential_bar.on_start(passphrase_id)
+
+    def on_prefetch_end(passphrase_id: str, result: PassphrasePrefetch) -> None:
+        if credential_bar is not None:
+            credential_bar.on_end(
+                passphrase_id,
+                # A passphrase that cannot be retrieved is only a problem for
+                # a drive that is actually plugged in, and the mount step
+                # reports that.  Prefetch failures are therefore warnings
+                # regardless of strictness.
+                Severity.OK if result.success else Severity.WARNING,
+                result.detail,
+            )
+
     def on_mount_start(slug: str) -> None:
+        # Rich permits only one live display at a time, and the prefetch
+        # phase has no completion callback of its own — the first mount is
+        # the signal that it is over.  ``stop`` is idempotent.
+        if credential_bar is not None:
+            credential_bar.stop()
         if mount_bar is not None:
             mount_bar.on_start(display_names.get(slug, slug))
 
@@ -146,9 +182,8 @@ def managed_mount(
                 result.warning,
             )
 
-    # try/finally instead of `with` because mount_bar/umount_bar are
-    # conditionally created (None when output is JSON), and cache.clear()
-    # must also run.
+    # try/finally instead of `with` because the bars are conditionally
+    # created (None when output is JSON), and cache.clear() must also run.
     try:
         with _disks_managed_mount(
             cfg,
@@ -156,11 +191,15 @@ def managed_mount(
             passphrase_fn,
             mount=mount,
             umount=umount,
+            on_prefetch_start=on_prefetch_start,
+            on_prefetch_end=on_prefetch_end,
             on_mount_start=on_mount_start,
             on_mount_end=on_mount_end,
             on_umount_start=on_umount_start,
             on_umount_end=on_umount_end,
         ) as result:
+            if credential_bar is not None:
+                credential_bar.stop()
             if mount_bar is not None:
                 mount_bar.stop()
             _resolved_config, mount_observations = result
@@ -172,6 +211,10 @@ def managed_mount(
                 Console().print(build_mount_status_table(display_statuses))
             yield result
     finally:
+        if credential_bar is not None:
+            credential_bar.stop()
+        if mount_bar is not None:
+            mount_bar.stop()
         if umount_bar is not None:
             umount_bar.stop()
         cache.clear()

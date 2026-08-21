@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 
 from ..config import Config
 from ..config.epresolution import ResolvedEndpoints
+from ..credentials import PassphrasePrefetch
 from ..disks.context import managed_mount
 from ..disks.lifecycle import MountResult, UmountResult
 from ..preflight import PreflightResult
@@ -28,6 +29,8 @@ def mount_and_run(
     mount: bool = True,
     umount: bool = True,
     names: list[str] | None = None,
+    on_prefetch_start: Callable[[str], None] | None = None,
+    on_prefetch_end: Callable[[str, PassphrasePrefetch], None] | None = None,
     on_mount_start: Callable[[str], None] | None = None,
     on_mount_end: Callable[[str, MountResult], None] | None = None,
     on_umount_start: Callable[[str], None] | None = None,
@@ -51,6 +54,9 @@ def mount_and_run(
     :func:`~nbkp.run.pipeline.check_and_run` into a single call.
     Mount observations are automatically forwarded to preflight checks
     so they don't re-probe device/mount state.
+
+    Every configured LUKS passphrase is retrieved before the first device is
+    touched — see :func:`~nbkp.credentials.prefetch_passphrases`.
     """
     with managed_mount(
         config,
@@ -59,6 +65,8 @@ def mount_and_run(
         mount=mount,
         umount=umount,
         names=names,
+        on_prefetch_start=on_prefetch_start,
+        on_prefetch_end=on_prefetch_end,
         on_mount_start=on_mount_start,
         on_mount_end=on_mount_end,
         on_umount_start=on_umount_start,
