@@ -12,7 +12,6 @@ from ....clihelpers import (
     Severity,
     Strictness,
     classify_severity,
-    severity_icon,
 )
 from ....config import Config
 from ....config.epresolution import ResolvedEndpoints
@@ -21,7 +20,11 @@ from ...context import managed_mount as _disks_managed_mount
 from ...lifecycle import MountFailureReason, MountResult, UmountResult, mount_count
 from ...observation import MountObservation
 from ...output import build_mount_status_table, display_name
-from .progress import DisksProgressBar
+from .progress import (
+    DisksProgressBar,
+    format_mount_result,
+    format_umount_result,
+)
 
 # Mount failure reasons that correspond to "expected inactive" preflight
 # states (e.g. drive not plugged in maps to VolumeError.DEVICE_NOT_PRESENT
@@ -55,21 +58,6 @@ def mount_result_severity(
         result.failure_reason in _INACTIVE_MOUNT_REASONS,
         strictness,
     )
-
-
-def _managed_format_mount_result(
-    slug: str, severity: Severity, detail: str | None, _warning: str | None
-) -> str:
-    detail_str = f" ({detail})" if detail else ""
-    return f"{severity_icon(severity)} mount {slug}{detail_str}"
-
-
-def _managed_format_umount_result(
-    slug: str, severity: Severity, detail: str | None, warning: str | None
-) -> str:
-    detail_str = f" ({detail})" if detail else ""
-    warning_str = f" [yellow]warning: {warning}[/yellow]" if warning else ""
-    return f"{severity_icon(severity)} umount {slug}{detail_str}{warning_str}"
 
 
 @contextmanager
@@ -123,12 +111,12 @@ def managed_mount(
     }
 
     mount_bar = (
-        DisksProgressBar(total, "Mounting", _managed_format_mount_result)
+        DisksProgressBar(total, "Mounting", format_mount_result)
         if use_progress
         else None
     )
     umount_bar = (
-        DisksProgressBar(total, "Umounting", _managed_format_umount_result)
+        DisksProgressBar(total, "Umounting", format_umount_result)
         if use_progress
         else None
     )

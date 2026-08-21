@@ -6,19 +6,22 @@ from dataclasses import dataclass
 
 import typer
 from rich.console import Console
+from rich.text import Text
 
 from ....clihelpers import (
     OutputFormat,
     Severity,
     StepProgressBar,
     echo_json,
-    severity_icon,
+    severity_style,
+    severity_symbol,
 )
 from ....config import Config, LocalVolume, RemoteVolume
 from ....config.epresolution import ResolvedEndpoints
 from ...mount_checks import check_mount_status
 from ...output import (
     MountStatusData,
+    MountStatusLabel,
     build_mount_status_json,
     build_mount_status_table,
     display_name,
@@ -42,25 +45,44 @@ class _ErrorStatus:
 def _unmanaged_statuses(
     cfg: Config,
     names: list[str] | None = None,
-) -> list[tuple[str, MountStatusData]]:
+) -> list[tuple[Text, MountStatusData]]:
     """Build status entries for volumes without mount config."""
     return [
-        (f"{display_name(vol)} [dim](not managed)[/dim]", _ErrorStatus())
+        (
+            Text.assemble(display_name(vol), " ", ("(not managed)", "dim")),
+            _ErrorStatus(),
+        )
         for slug, vol in cfg.volumes.items()
         if vol.mount is None and (names is None or slug in names)
     ]
 
 
-def _error_label(name: str, detail: str | None) -> str:
-    """Fold an error detail into the volume's display name (red)."""
-    return f"{name} [red]\u2717 {detail}[/red]" if detail else name
+def _error_label(name: str, detail: str | None) -> Text:
+    """Fold an error detail into the volume's display name (red).
+
+    Assembled as ``Text`` rather than a markup string: *detail* is external
+    text (an exception message, udisksctl's stderr) that Rich would otherwise
+    parse for ``[...]`` style tags, and the same value is reused as the JSON
+    ``volume`` field — where markup has no business appearing at all.
+    """
+    if detail is None:
+        return Text(name)
+    else:
+        return Text.assemble(
+            name,
+            " ",
+            (
+                f"{severity_symbol(Severity.ERROR)} {detail}",
+                severity_style(Severity.ERROR),
+            ),
+        )
 
 
 def _probe_volume_status(
     vol: LocalVolume | RemoteVolume,
     resolved: ResolvedEndpoints,
     bar: StepProgressBar | None,
-) -> tuple[str, MountStatusData]:
+) -> tuple[MountStatusLabel, MountStatusData]:
     """Probe a single volume's mount status with progress bar updates.
 
     Per-volume result lines are prefixed with ``status`` so they're
@@ -85,7 +107,7 @@ def _probe_volume_status(
 
 
 def _show_status_table(
-    statuses: list[tuple[str, MountStatusData]],
+    statuses: list[tuple[MountStatusLabel, MountStatusData]],
     output_format: OutputFormat,
 ) -> None:
     """Display the mount status table or JSON."""
@@ -117,7 +139,7 @@ def _probe_and_show_status(
         if output_format is OutputFormat.HUMAN and managed
         else None
     )
-    statuses: list[tuple[str, MountStatusData]] = [
+    statuses: list[tuple[MountStatusLabel, MountStatusData]] = [
         *[_probe_volume_status(vol, resolved, bar) for _slug, vol in managed],
         *_unmanaged_statuses(cfg, names),
     ]
@@ -125,18 +147,3 @@ def _probe_and_show_status(
         bar.stop()
 
     _show_status_table(statuses, output_format)
-
-
-def _format_mount_result(
-    slug: str, severity: Severity, detail: str | None, _warning: str | None
-) -> str:
-    detail_str = f" ({detail})" if detail else ""
-    return f"{severity_icon(severity)} mount {slug}{detail_str}"
-
-
-def _format_umount_result(
-    slug: str, severity: Severity, detail: str | None, warning: str | None
-) -> str:
-    detail_str = f" ({detail})" if detail else ""
-    warning_str = f" [yellow]warning: {warning}[/yellow]" if warning else ""
-    return f"{severity_icon(severity)} umount {slug}{detail_str}{warning_str}"

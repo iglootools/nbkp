@@ -159,12 +159,14 @@ def print_human_config(
         server_table.add_column("Locations")
 
         for server in config.ssh_endpoints.values():
+            # Host / user / key / paths are free-form config values; Text
+            # keeps a bracket in one of them from being read as a style tag.
             server_table.add_row(
                 server.slug,
-                server.host,
+                Text(server.host),
                 str(server.port),
-                server.user or "",
-                server.key or "",
+                Text(server.user or ""),
+                Text(server.key or ""),
                 ", ".join(server.proxy_jump_chain) or "",
                 ", ".join(server.location_list),
             )
@@ -192,7 +194,7 @@ def print_human_config(
             vol.slug,
             vol_type,
             ssh_ep,
-            format_volume_display(vol, re),
+            Text(format_volume_display(vol, re)),
             format_mount_summary(vol.mount),
         )
 
@@ -212,8 +214,8 @@ def print_human_config(
         )
         sync_table.add_row(
             sync.slug,
-            _sync_endpoint_display(config.source_endpoint(sync)),
-            _sync_endpoint_display(config.destination_endpoint(sync)),
+            Text(_sync_endpoint_display(config.source_endpoint(sync))),
+            Text(_sync_endpoint_display(config.destination_endpoint(sync))),
             _sync_options(sync, config),
             enabled,
         )
@@ -243,5 +245,8 @@ def print_config_error(
             body = "\n".join(_format_validation_error(err) for err in cause.errors())
         case _:
             body = str(e)
-    title = f"Config error [{e.reason}]"
-    console.print(Panel(body, title=title, style="red"))
+    # Both wrapped in Text: the title's own brackets would be read as a style
+    # tag (rendering a bare "Config error"), and the body carries YAML parser
+    # and pydantic messages, which embed "[type=..., input_value=...]".
+    title = Text(f"Config error [{e.reason}]")
+    console.print(Panel(Text(body), title=title, style="red"))

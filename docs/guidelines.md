@@ -12,6 +12,16 @@ For general coding, Python, and tooling guidelines, see the [common guidelines](
   - Provide both human-readable and JSON output formats for all commands, with human-readable as the default.
   - Provide ability to pass a config file to all commands
   - Provide a dry-run parameter for all data-mutating or long-running operations
+- **Rich output**
+  - Rich parses `[...]` in a plain `str` as a style tag and drops it. Never interpolate
+    text nbkp did not author — an exception message, a command's stderr, a generated
+    command line, a config path — into a markup string. Wrap it in `rich.text.Text`
+    (or `Text.assemble` when part of the line *is* styled), which never parses its
+    content. Rendering an `str` is only for markup nbkp wrote itself.
+    Silent truncation is the failure mode: `pip install nbkp[keyring]` renders as
+    `pip install nbkp`, and rsync's `... (code 23) [sender=3.4.1]` loses its tail.
+  - A value that feeds both the Rich table and the JSON output must be markup-free.
+    `Text` satisfies both: `str(text)` yields the plain content for JSON.
 - **Config**
   - Perform `~` expansion for all file paths in the config
 - **Testing**

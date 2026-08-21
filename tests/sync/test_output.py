@@ -28,7 +28,11 @@ from nbkp.preflight import (
     VolumeStatus,
 )
 from nbkp.snapshots.common import create_snapshot_timestamp
-from nbkp.sync.output import build_run_preview_sections
+from nbkp.sync.output import (
+    build_human_results_sections,
+    build_run_preview_sections,
+)
+from nbkp.sync.runner import SyncResult
 
 
 def _localhost_ssh_status() -> SshEndpointStatus:
@@ -241,3 +245,48 @@ class TestRunPreviewRsyncCommandDisplay:
         assert "/mnt/dst/" in output
         assert "staging" not in output
         assert "snapshots" not in output
+
+
+class TestRunResultsMarkupSafety:
+    """rsync's own output uses square brackets; Rich must not eat them."""
+
+    # Verbatim shape of a real rsync failure: the trailing "[sender=3.4.1]"
+    # is the piece a markup-formatted table cell silently dropped.
+    RSYNC_ERROR = (
+        'rsync: [sender] change_dir "/mnt/missing" failed: No such file (2)\n'
+        "rsync error: some files could not be transferred (code 23) "
+        "at main.c(1338) [sender=3.4.1]"
+    )
+
+    def _render_with_markup(self, results: list[SyncResult]) -> str:
+        """Render results through a console with markup on, as the CLI does."""
+        buf = StringIO()
+        console = Console(file=buf, width=300)
+        for section in build_human_results_sections(
+            results, dry_run=False, config=Config(), resolved_endpoints={}
+        ):
+            console.print(section)
+        return buf.getvalue()
+
+    def test_rsync_output_brackets_survive(self) -> None:
+        result = SyncResult(
+            sync_slug="s",
+            success=False,
+            dry_run=False,
+            rsync_exit_code=23,
+            output=self.RSYNC_ERROR,
+        )
+        output = self._render_with_markup([result])
+        assert "[sender]" in output
+        assert "[sender=3.4.1]" in output
+
+    def test_detail_brackets_survive(self) -> None:
+        result = SyncResult(
+            sync_slug="s",
+            success=False,
+            dry_run=False,
+            rsync_exit_code=1,
+            output="",
+            detail="Snapshot failed: mkdir '/mnt/x[1]' failed",
+        )
+        assert "/mnt/x[1]" in self._render_with_markup([result])

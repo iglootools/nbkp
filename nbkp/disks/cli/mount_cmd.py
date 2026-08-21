@@ -19,9 +19,9 @@ from .helpers import (
     DisksProgressBar,
     _error_label,
     _ErrorStatus,
-    _format_mount_result,
     _show_status_table,
     _unmanaged_statuses,
+    format_mount_result,
 )
 from .helpers.managed_mount import mount_result_severity
 
@@ -84,7 +84,7 @@ def mount(
     }
     total = mount_count(cfg, name)
     mount_bar = (
-        DisksProgressBar(total, "Mounting", _format_mount_result)
+        DisksProgressBar(total, "Mounting", format_mount_result)
         if use_progress
         else None
     )

@@ -175,7 +175,7 @@ def seed(
                 on_step_end=bar.on_end,
             )
         except SeedError as e:
-            _console.print(f"[red]{e}[/red]", highlight=False)
+            _console.print(Text(str(e), style="red"), highlight=False)
             raise typer.Exit(1)
 
     _print_summary(result, docker, credential_provider)

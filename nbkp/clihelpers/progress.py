@@ -13,8 +13,9 @@ from rich.progress import (
     TaskID,
     TextColumn,
 )
+from rich.text import Text
 
-from .severity import Severity, severity_icon
+from .severity import Severity, severity_style, severity_symbol
 
 
 class StepProgressBar:
@@ -65,12 +66,22 @@ class StepProgressBar:
 
         *label* is the result line printed above the bar
         (e.g. ``"check nas-server"``).
+
+        The line is assembled as a :class:`~rich.text.Text` rather than a
+        markup string because *detail* carries external text — an exception
+        message or a command's stderr.  Rich would eat any ``[...]`` in it
+        as a style tag (``pip install nbkp[keyring]`` renders as
+        ``pip install nbkp``); ``Text`` never parses its content as markup.
         """
         if self._progress is not None:
             assert self._task_id is not None
-            icon = severity_icon(severity)
-            detail_str = f" ({detail})" if detail else ""
-            self._progress.console.print(f"{icon} {label}{detail_str}")
+            self._progress.console.print(
+                Text.assemble(
+                    (severity_symbol(severity), severity_style(severity)),
+                    f" {label}",
+                    *([f" ({detail})"] if detail else []),
+                )
+            )
             self._progress.advance(self._task_id)
 
     def stop(self) -> None:

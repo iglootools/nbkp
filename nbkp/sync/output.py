@@ -105,7 +105,9 @@ def _build_rsync_commands_section(
             dest_suffix=dest_suffix,
             link_dest=link_dest,
         )
-        table.add_row(ss.slug, shlex.join(cmd))
+        # Text, not str: rsync filter rules and paths may contain "[...]",
+        # which Rich would parse as a style tag and drop from the preview.
+        table.add_row(ss.slug, Text(shlex.join(cmd)))
 
     return [Text(""), table]
 
@@ -131,7 +133,7 @@ def _build_snapshot_commands_section(
     table.add_column("Retention")
 
     for slug, (mode, cmds, retention) in rows:
-        table.add_row(slug, mode, "\n".join(cmds), retention)
+        table.add_row(slug, mode, Text("\n".join(cmds)), retention)
 
     return [Text(""), table]
 
@@ -275,10 +277,13 @@ def build_human_results_sections(
             *(r.output.strip().split("\n")[:5] if r.output and not r.success else []),
         ]
 
+        # Text, not str: details carry rsync's own output, which uses square
+        # brackets liberally ("rsync error: ... [sender=3.4.1]") and would be
+        # silently eaten by Rich's markup parser.
         table.add_row(
             r.sync_slug,
             status,
-            "\n".join(details_parts),
+            Text("\n".join(details_parts)),
         )
 
     return [table]

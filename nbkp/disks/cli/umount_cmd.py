@@ -13,7 +13,7 @@ from ...config.epresolution import NetworkType
 from ..lifecycle import UmountResult, mount_count, umount_volumes
 from ..output import display_name
 from . import app
-from .helpers import DisksProgressBar, _format_umount_result, _probe_and_show_status
+from .helpers import DisksProgressBar, _probe_and_show_status, format_umount_result
 
 
 @app.command("umount")
@@ -70,7 +70,7 @@ def umount(
     }
     total = mount_count(cfg, name)
     umount_bar = (
-        DisksProgressBar(total, "Umounting", _format_umount_result)
+        DisksProgressBar(total, "Umounting", format_umount_result)
         if use_progress
         else None
     )

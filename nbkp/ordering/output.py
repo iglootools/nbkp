@@ -61,7 +61,9 @@ def print_mermaid_ascii_graph(
         console = Console()
     mermaid_src = build_mermaid_graph(config)
     diagram = parse_mermaid(mermaid_src)
-    console.print(render_ascii(diagram), highlight=False)
+    # markup=False: the ASCII art is drawing, not markup — any bracket in it
+    # is a box character, not a style tag.
+    console.print(render_ascii(diagram), highlight=False, markup=False)
 
 
 def build_rich_tree_sections(
