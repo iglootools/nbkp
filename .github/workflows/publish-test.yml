@@ -56,6 +56,9 @@ jobs:
         fetch-depth: 0
         fetch-tags: true
     - uses: jdx/mise-action@v4
+      with:
+        # renovate: datasource=github-releases depName=jdx/mise
+        version: 2026.8.10
     - name: Resolve PyPI-compatible version
       # Derive the dev version from the base *release* version in the tag, not from the full
       # VCS-derived version. The previous implementation did
