@@ -29,6 +29,17 @@
             ],
             "matchStringsStrategy": "recursive",
             "datasourceTemplate": "pypi"
+        },
+        {
+            "customType": "regex",
+            "description": "jdx/mise-action's `version:` input pins the mise CLI that CI runs, so a workflow resolves tools with the same mise as local development instead of whatever released last night. Renovate's github-actions manager only updates `uses:` refs and reads no action inputs, so without this manager the pin would rot silently. The marker comment is what makes the match robust: keying off the `version:` line alone would also catch every other action's `version:` input. mise tags releases as `vYYYY.M.PATCH`; extractVersionTemplate drops the leading `v` to match the bare version the input expects.",
+            "managerFilePatterns": [
+                "/^\\.github/workflows/.+\\.ya?ml$/"
+            ],
+            "matchStrings": [
+                "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>\\S+)\\s+version: (?<currentValue>\\S+)"
+            ],
+            "extractVersionTemplate": "^v?(?<version>.+)$"
         }
     ],
     "dependencyDashboard": true

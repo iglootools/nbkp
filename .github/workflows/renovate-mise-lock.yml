@@ -39,6 +39,8 @@ jobs:
       - name: Setup mise
         uses: jdx/mise-action@v4
         with:
+          # renovate: datasource=github-releases depName=jdx/mise
+          version: 2026.8.10
           install: false
           env: false
 
