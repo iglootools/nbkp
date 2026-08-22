@@ -1,9 +1,15 @@
 {
     "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "description": [
+        "helpers:pinGitHubActionDigests keeps the digest pinning in .github/workflows self-enforcing. Every `uses:` there is pinned to a commit SHA with the tag kept in a trailing comment; without this preset a newly added action written as `@v1` would silently stay unpinned and the sweep would decay one workflow at a time. It ships in config:best-practices rather than config:recommended, so it has to be listed here.",
+        "minimumReleaseAgeBehaviour: timestamp-optional is what stops those digest pins from freezing. minimumReleaseAge applies to digest updates too, and when Renovate cannot date one it treats it as pending forever under the default timestamp-required — which is exactly the case for a ref that is not a version, such as pypa/gh-action-pypi-publish@release/v1. timestamp-optional keeps the 14-day delay wherever a release timestamp exists and lets the undatable updates through instead of stalling them indefinitely."
+    ],
     "extends": [
-        "config:recommended"
+        "config:recommended",
+        "helpers:pinGitHubActionDigests"
     ],
     "minimumReleaseAge": "14 days",
+    "minimumReleaseAgeBehaviour": "timestamp-optional",
     "separateMajorMinor": false,
     "packageRules": [
         {
