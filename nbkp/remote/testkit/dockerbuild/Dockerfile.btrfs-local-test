@@ -10,7 +10,7 @@ RUN apt-get update && \
 # Pinned uv binary rather than pip-installing the build tool: no PyPI resolution at image
 # build time, and Renovate tracks this tag through its dockerfile manager. `git` above stays
 # needed — uv-dynamic-versioning shells out to it to resolve the editable install's version.
-COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.12.5 /uv /uvx /usr/local/bin/
 
 # /app is a rw bind mount of the host checkout, so every uv write has to be kept off it:
 #  - UV_PROJECT_ENVIRONMENT: the venv lands in /tmp instead of clobbering the host's macOS
