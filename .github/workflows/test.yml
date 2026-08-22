@@ -51,7 +51,7 @@ jobs:
         ]
     name: test (python ${{ matrix.python-version }})
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # graphviz not available on mise
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y graphviz
@@ -59,7 +59,7 @@ jobs:
       # `mise lock` can record per-platform URLs and checksums for, so the action's default
       # `mise install --locked` works. It must come BEFORE the matrix override below, since
       # `mise use` writes a python version that is deliberately not in mise.lock.
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4
         with:
           # renovate: datasource=github-releases depName=jdx/mise
           version: 2026.8.10
