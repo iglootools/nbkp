@@ -1,7 +1,7 @@
 [tools]
 python = "3.14.7"
-uv = "0.12.3"
-github-cli = "2.97.0"
+uv = "0.12.5"
+github-cli = "2.98.0"
 "aqua:asciinema/asciinema" = "3.2.1"
 "aqua:asciinema/agg" = "1.9.0"
 
