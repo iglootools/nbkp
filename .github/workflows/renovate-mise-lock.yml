@@ -25,4 +25,4 @@ jobs:
       # in this repository's renovate.json. The input is named `version` because that is what
       # that manager matches — see the shared workflow's input description.
       # renovate: datasource=github-releases depName=jdx/mise
-      version: 2026.9.3
+      version: 2026.9.5
