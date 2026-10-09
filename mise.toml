@@ -344,11 +344,11 @@ description = "Check that CLI reference in docs/cli-reference.md is up to date"
 run = "uv run --no-sync python build-scripts/clidocs.py --check"
 
 [tasks.configdocs]
-description = "Regenerate config reference tables in docs/concepts.md"
+description = "Regenerate config reference tables in docs/config-reference.md"
 run = "uv run --no-sync python build-scripts/configdocs.py"
 
 [tasks.configdocs-check]
-description = "Check that config reference tables in docs/concepts.md are up to date"
+description = "Check that config reference tables in docs/config-reference.md are up to date"
 run = "uv run --no-sync python build-scripts/configdocs.py --check"
 
 [tasks.depgraph]

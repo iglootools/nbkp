@@ -8,7 +8,9 @@ Module dependency graph: @docs/architecture.md
 
 ## Concepts
 
-Domain model (volumes, endpoints, syncs, snapshots) and configuration reference: @docs/concepts.md
+Domain model (volumes, endpoints, syncs, snapshots, the backup graph, availability): @docs/domain.md
+
+Configuration reference (every config field and validation rule): @docs/config-reference.md
 
 Runtime behavior, design decisions, and external commands reference: @docs/internals.md
 

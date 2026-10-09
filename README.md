@@ -118,7 +118,8 @@ Practical information:
 - [common](https://github.com/iglootools/common) — shared coding guidelines
 
 Conceptual information:
-- [docs/concepts.md](https://github.com/iglootools/nbkp/blob/main/docs/concepts.md) — domain model and configuration reference
+- [docs/domain.md](https://github.com/iglootools/nbkp/blob/main/docs/domain.md) — domain model: volumes, endpoints, syncs, snapshots, and how they relate
+- [docs/config-reference.md](https://github.com/iglootools/nbkp/blob/main/docs/config-reference.md) — every config field and validation rule
 - [docs/internals.md](https://github.com/iglootools/nbkp/blob/main/docs/internals.md) — runtime behavior, design decisions, and external commands
 - [docs/architecture.md](https://github.com/iglootools/nbkp/blob/main/docs/architecture.md) — module dependency graph
 

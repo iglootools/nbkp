@@ -8,7 +8,7 @@ This walks through building a real, multi-drive backup setup from scratch:
 - **btrfs snapshots** on the hub's drives and **hard-link snapshots** on the local SSDs for point-in-time recovery,
 - **chained backups**, where a drive that *receives* a backup then serves as the *source* for further backups to other drives — the hub's `seagate8tb` **relay** drive fans data out to the hub's remaining drives, all on the hub itself (no laptop round-trip).
 
-It mirrors [config-examples/personal-setup.yaml](config-examples/personal-setup.yaml), a real-world config that follows the same no-fstab model used here. The full reference material lives in [concepts.md](./concepts.md) (the data model), [internals.md](./internals.md) (runtime behavior), and [usage.md](./usage.md) (commands and the udisks mount-management reference) — this tutorial links to the relevant sections rather than repeating them.
+It mirrors [config-examples/personal-setup.yaml](config-examples/personal-setup.yaml), a real-world config that follows the same no-fstab model used here. The full reference material lives in [domain.md](./domain.md) (the domain model), [config-reference.md](./config-reference.md) (every config field), [internals.md](./internals.md) (runtime behavior), and [usage.md](./usage.md) (commands and the udisks mount-management reference) — this tutorial links to the relevant sections rather than repeating them.
 
 > **Assumptions.** A Raspberry Pi running **Ubuntu 26.04** with networking up and SSH reachable from the laptop, the drives physically attached, and `sudo` on the Pi. On the laptop: macOS with [Homebrew](https://brew.sh/). Everything destructive (LUKS format, mkfs) is clearly marked.
 
@@ -16,7 +16,7 @@ It mirrors [config-examples/personal-setup.yaml](config-examples/personal-setup.
 
 ## How nbkp thinks (60-second primer)
 
-Four building blocks, defined once each in one YAML file. Full detail in [concepts.md](./concepts.md).
+Four building blocks, defined once each in one YAML file. Full detail in [domain.md](./domain.md).
 
 - **SSH endpoint** — how the laptop reaches a remote host (the backup hub). You can give one host several endpoints with `location` tags (e.g. `home` LAN vs `travel` WAN); nbkp picks the reachable one at runtime.
 - **Volume** — a named filesystem location: a `local` path on the laptop, or a `remote` path on the hub reached via an SSH endpoint. A volume may declare a `mount` block so nbkp manages its unlock/mount lifecycle.
@@ -25,8 +25,8 @@ Four building blocks, defined once each in one YAML file. Full detail in [concep
 
 Two more concepts you'll meet below:
 
-- **Sentinels** — tiny marker files (`.nbkp-vol`, `.nbkp-src`, `.nbkp-dst`) that prove a volume is really mounted and a path is really the one you meant. A sync only runs when all of its sentinels are present, so an unmounted drive is *skipped*, never silently created. See [Sentinel Files](./internals.md#sentinel-files).
-- **Snapshots** — point-in-time copies. **btrfs** snapshots (on the hub's btrfs drives) are copy-on-write and cheap; **hard-link** snapshots (on the local SSDs) work on any filesystem. See [Snapshots](./concepts.md#snapshots).
+- **Sentinels** — tiny marker files (`.nbkp-vol`, `.nbkp-src`, `.nbkp-dst`) that prove a volume is really mounted and a path is really the one you meant. A sync only runs when all of its sentinels are present, so an unmounted drive is *skipped*, never silently created. See [Sentinels](./domain.md#sentinels-presence-is-proven).
+- **Snapshots** — point-in-time copies. **btrfs** snapshots (on the hub's btrfs drives) are copy-on-write and cheap; **hard-link** snapshots (on the local SSDs) work on any filesystem. See [Snapshots](./domain.md#snapshots).
 
 ---
 
@@ -448,7 +448,7 @@ Both apps read the same macOS Keychain, so it doesn't matter that they live in s
 nbkp credentials keyring-status     # one row per passphrase-id, found or missing
 ```
 
-Passphrases never live in the config. Other providers (`prompt`, `env`, `command`) are described in [concepts.md](./concepts.md#encryption--luks-encryption-config).
+Passphrases never live in the config. Other providers (`prompt`, `env`, `command`) are described in [config-reference.md](./config-reference.md#encryption--luks-encryption-config).
 
 ### B4. Write the config
 
@@ -485,8 +485,8 @@ A few things worth knowing, each with a reference for the full story:
 - **The cleartext device is discovered, not declared.** udisks names it after the LUKS2 header label, or `luks-<container-uuid>` for an unlabelled header, or a crypttab name if you added one — and nbkp finds whichever at runtime, so the config needs only the LUKS container UUID and the passphrase id. See [Volume Mount Management](./internals.md#volume-mount-management).
 - **No `path`.** Omitting it selects the discovered `/run/media/<user>/<label>` model used throughout this tutorial. Set `path` only if you went the fixed-path (fstab) route in A4's advanced note on crypttab + fstab — see the [fstab × crypttab matrix](./usage.md#mount-point-models-fstab--crypttab).
 - **Snapshots are per-endpoint.** btrfs on the hub's drives, hard-link on the local SSDs. Add `max-snapshots` to prune automatically.
-- **Filters** trim what each sync copies — `dir-merge: .rsync-filter` reads per-directory rule files; you can also inline `+`/`-` rules. See [Filters](./concepts.md#filters).
-- **Chained syncs sort themselves.** When one sync's destination is another's source (the `seagate8tb` relay), nbkp orders them automatically and cancels downstream syncs if an upstream one fails. See [Sync Dependencies](./internals.md#sync-dependencies-and-execution-order).
+- **Filters** trim what each sync copies — `dir-merge: .rsync-filter` reads per-directory rule files; you can also inline `+`/`-` rules. See [Filters](./config-reference.md#filters).
+- **Chained syncs sort themselves.** When one sync's destination is another's source (the `seagate8tb` relay), nbkp orders them automatically and cancels downstream syncs if an upstream one fails. See [The Backup Graph](./domain.md#the-backup-graph).
 
 ### B5. Sentinels on the local volumes
 
@@ -530,6 +530,7 @@ Inactive syncs (a drive that isn't plugged in, a hub that's unreachable) are **s
 ## Where to go next
 
 - [usage.md](./usage.md) — every command, more examples, and the full udisks mount-management reference
-- [concepts.md](./concepts.md) — the complete configuration reference (every field)
+- [domain.md](./domain.md) — the domain model behind the config
+- [config-reference.md](./config-reference.md) — the complete configuration reference (every field)
 - [internals.md](./internals.md) — what nbkp does at runtime and why; the external commands it invokes
 - [features.md](./features.md) — the full feature list

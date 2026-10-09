@@ -2,7 +2,7 @@
 
 How nbkp is composed: the external tools it orchestrates (**Building Blocks**, below) and the module-level dependency graph (further down) for contributors navigating the codebase.
 
-For the domain model and configuration reference, see [Concepts](./concepts.md). For runtime behavior and design decisions, see [Internals](./internals.md).
+For the domain model, see [Domain](./domain.md); for every config field, see the [Configuration Reference](./config-reference.md). For runtime behavior and design decisions, see [Internals](./internals.md).
 
 ## Building Blocks
 
@@ -26,7 +26,7 @@ nbkp is a thin orchestrator over proven, standard tools — no custom storage fo
 
 ### Discovery & safety
 
-- **Sentinel files** (`.nbkp-vol` / `.nbkp-src` / `.nbkp-dst`) — nbkp's own guard, not an external tool: a sync runs only when all its sentinels are present, so an unmounted or wrong drive is skipped rather than written to: [Sentinel Files](./internals.md#sentinel-files).
+- **Sentinel files** (`.nbkp-vol` / `.nbkp-src` / `.nbkp-dst`) — nbkp's own guard, not an external tool: a sync runs only when all its sentinels are present, so an unmounted or wrong drive is skipped rather than written to: [Sentinels](./domain.md#sentinels-presence-is-proven).
 - **util-linux / coreutils** (`findmnt`, `lsblk`, `stat`, `which`, `test`, …) — the small probes behind preflight and mount discovery: `findmnt` (where a device is mounted + live mount options), `lsblk` (the unlocked cleartext device), `stat` (btrfs detection). Their availability is itself checked: [Pre-flight Checks](./internals.md#pre-flight-checks); the full command list is in the [External Commands Reference](./internals.md#external-commands-reference).
 
 ### Credentials

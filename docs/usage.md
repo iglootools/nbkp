@@ -65,16 +65,11 @@ See the [CLI Reference](./cli-reference.md) for the full list of commands and op
 
 ### Config File Location
 
-nbkp searches for config in this order:
-
-1. Explicit `--config` path
-2. `$XDG_CONFIG_HOME/nbkp/config.yaml` (typically `~/.config/nbkp/config.yaml`)
-3. Platform user config dir (Linux: same as above; macOS: `~/Library/Application Support/nbkp/config.yaml`)
-4. Platform site config dir (Linux: `/etc/xdg/nbkp/config.yaml`; macOS: `/Library/Application Support/nbkp/config.yaml`)
+nbkp looks for `config.yaml` in `--config`, then the XDG and platform config directories. See [Config File Location](./config-reference.md#config-file-location) for the exact search order.
 
 ### Configuration Reference
 
-See the [Concepts](./concepts.md) documentation for the full configuration reference.
+See the [Configuration Reference](./config-reference.md) for every field, and [Domain](./domain.md) for what the entities mean and how they relate.
 
 
 ### Example 1: Home NAS backup
