@@ -27,8 +27,17 @@ GIF="$SCRIPT_DIR/demo.gif"
 echo "Syncing dependencies..."
 uv sync --all-extras
 
+# Put the project's nbkp on PATH explicitly. mise's uv_venv_auto adds .venv/bin when it
+# resolves the environment, which on a fresh clone (CI) happens before [deps.uv] has
+# created .venv — so the demo would otherwise run with no nbkp at all.
+PATH="$(uv run --no-sync python -c 'import sys, pathlib; print(pathlib.Path(sys.executable).parent)'):$PATH"
+export PATH
+
 echo "Recording demo..."
+# --return: asciinema exits 0 by default whatever the recorded command does, which let a
+# demo that died on its first command record and "succeed" on CI.
 asciinema rec \
+    --return \
     --overwrite \
     --title "$TITLE" \
     --window-size 160x45 \
