@@ -1,11 +1,11 @@
-"""Auto-generate configuration reference tables into docs/concepts.md.
+"""Auto-generate configuration reference tables into docs/config-reference.md.
 
 Introspects the config protocol models and splices field tables into
-docs/concepts.md between marker comments. Use --check to verify the
+docs/config-reference.md between marker comments. Use --check to verify the
 docs are up to date.
 
 Usage:
-    python build-scripts/configdocs.py          # regenerate config tables in docs/concepts.md
+    python build-scripts/configdocs.py          # regenerate config tables in docs/config-reference.md
     python build-scripts/configdocs.py --check  # exit non-zero if out of date
 
 Why hand-rolled instead of a library?
@@ -29,7 +29,7 @@ import typer
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
-CONCEPTS_MD = Path("docs/concepts.md")
+CONFIG_REFERENCE_MD = Path("docs/config-reference.md")
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +53,7 @@ def _splice_section(file_content: str, name: str, body: str) -> str:
     end_idx = file_content.find(end)
     if begin_idx == -1 or end_idx == -1:
         print(
-            f"Error: markers for {name} not found in {CONCEPTS_MD}.\n"
+            f"Error: markers for {name} not found in {CONFIG_REFERENCE_MD}.\n"
             f"Expected:\n  {begin}\n  {end}",
             file=sys.stderr,
         )
@@ -313,7 +313,7 @@ def _generate_table(model: type[BaseModel]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Section generators (one per marker region in concepts.md)
+# Section generators (one per marker region in config-reference.md)
 # ---------------------------------------------------------------------------
 
 
@@ -451,26 +451,26 @@ def main(
         ),
     ] = False,
 ) -> None:
-    """Generate or check config reference tables in concepts.md."""
+    """Generate or check config reference tables in config-reference.md."""
     sections = _generate_sections()
-    current = CONCEPTS_MD.read_text() if CONCEPTS_MD.exists() else ""
+    current = CONFIG_REFERENCE_MD.read_text() if CONFIG_REFERENCE_MD.exists() else ""
     expected = current
     for name, body in sections.items():
         expected = _splice_section(expected, name, body)
 
     if check:
         if current == expected:
-            print("Config reference in concepts.md is up to date.")
+            print("Config reference in config-reference.md is up to date.")
         else:
             print(
-                f"Config reference in {CONCEPTS_MD} is out of date.\n"
+                f"Config reference in {CONFIG_REFERENCE_MD} is out of date.\n"
                 "Run `mise run configdocs` to regenerate.",
                 file=sys.stderr,
             )
             sys.exit(1)
     else:
-        CONCEPTS_MD.write_text(expected)
-        print(f"Updated config reference in {CONCEPTS_MD}")
+        CONFIG_REFERENCE_MD.write_text(expected)
+        print(f"Updated config reference in {CONFIG_REFERENCE_MD}")
 
 
 if __name__ == "__main__":

@@ -36,8 +36,8 @@ mise run reinstall          # delete .venv and sync from scratch
 
 mise run clidocs            # regenerate CLI reference in docs/cli-reference.md
 mise run clidocs-check      # check CLI reference is up to date
-mise run configdocs         # regenerate config reference tables in docs/concepts.md
-mise run configdocs-check   # check config reference tables in docs/concepts.md are up to date
+mise run configdocs         # regenerate config reference tables in docs/config-reference.md
+mise run configdocs-check   # check config reference tables in docs/config-reference.md are up to date
 mise run depgraph           # regenerate Module Overview in docs/architecture.md
 mise run depgraph-check     # check Module Overview is up to date
 

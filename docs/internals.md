@@ -2,25 +2,11 @@
 
 How nbkp works at runtime: execution flow, mount lifecycle, pre-flight validation, snapshot management, and the design decisions behind them. For users and contributors who want to understand what happens when nbkp runs, or audit the external commands it invokes.
 
-For the domain model (volumes, endpoints, syncs, snapshots) and configuration reference, see [Concepts](./concepts.md). For the module dependency graph, see [Architecture](./architecture.md).
+For the domain model (volumes, endpoints, syncs, snapshots), see [Domain](./domain.md); for every config field, see the [Configuration Reference](./config-reference.md). For the module dependency graph, see [Architecture](./architecture.md).
 
 ## Runtime Behavior
 
-### Sentinel Files
-
-nbkp uses lightweight sentinel files to guard against syncing to the wrong location. This is especially important for removable drives that may not always be mounted at the expected path.
-
-Three types of sentinel files are used:
-
-| Sentinel | Location | Purpose |
-|---|---|---|
-| `.nbkp-vol` | Volume root | Confirms the volume is present and mounted |
-| `.nbkp-src` | Source endpoint path | Confirms the source directory is ready |
-| `.nbkp-dst` | Destination endpoint path | Confirms the destination directory is ready |
-
-A sync is only considered **active** when all of its sentinel files are present: `.nbkp-vol` on both source and destination volumes, `.nbkp-src` on the source path, and `.nbkp-dst` on the destination path. For remote volumes, the SSH endpoint must also be reachable.
-
-If any sentinel is missing, the sync is marked **inactive** and skipped. This prevents data loss from syncing to an unmounted drive or an incorrect path.
+Domain rules — sentinels and the active/inactive distinction, the backup graph (execution order and failure propagation), and the meaning of snapshots — are described in [Domain](./domain.md). This document covers how they are carried out.
 
 ### Snapshot Lifecycle
 
@@ -264,20 +250,6 @@ Consolidating all conditional logic in the error interpretation layer was consid
 - **Categories 1 and 2 cannot move** — they encode physical prerequisites, not policy. Moving them downstream would just replace cascade conditionals with null-checks in the error layer.
 - **Category 3 saves real SSH round-trips** with minimal code complexity (2–3 lines of guards per check site).
 - **The `| None` type convention** (meaning "not probed / not applicable") is consistently applied across all diagnostics models and well-understood by the error interpretation layer.
-
-### Sync Dependencies and Execution Order
-
-When one sync's destination endpoint is the same as another sync's source endpoint (same endpoint slug), a dependency exists between them. The sync whose destination feeds the other is called the **upstream** sync; the one that reads from it is the **downstream** sync.
-
-Syncs are automatically sorted in topological order so that upstream syncs always complete before their downstream dependents begin.
-
-### Failure Propagation
-
-If a sync fails, all downstream syncs (directly or transitively) are automatically **cancelled** to prevent propagating partial or stale data through the chain. Cancelled syncs appear with a `CANCELLED` status and the name of the failed upstream sync. Independent syncs (those with no dependency relationship to the failed sync) continue to run normally.
-
-For example, in a chain `A → B → C` where A's destination is B's source and B's destination is C's source: if A fails, both B and C are cancelled. A sync D that reads from an unrelated volume still executes.
-
-Inactive (skipped) syncs also trigger cancellation of their downstream dependents.
 
 ### Endpoint Filtering
 
