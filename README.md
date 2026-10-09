@@ -110,18 +110,8 @@ Which maps to:
 
 ## Contribute
 
-Practical information:
-- [docs/project-setup.md](https://github.com/iglootools/nbkp/blob/main/docs/project-setup.md) — development setup
-- [docs/build-test.md](https://github.com/iglootools/nbkp/blob/main/docs/build-test.md) — running tests and checks
-- [docs/release-publish.md](https://github.com/iglootools/nbkp/blob/main/docs/release-publish.md) — releases and PyPI publishing
-- [docs/guidelines.md](https://github.com/iglootools/nbkp/blob/main/docs/guidelines.md) — project-specific guidelines
-- [common](https://github.com/iglootools/common) — shared coding guidelines
-
-Conceptual information:
-- [docs/domain.md](https://github.com/iglootools/nbkp/blob/main/docs/domain.md) — domain model: volumes, endpoints, syncs, snapshots, and how they relate
-- [docs/config-reference.md](https://github.com/iglootools/nbkp/blob/main/docs/config-reference.md) — every config field and validation rule
-- [docs/internals.md](https://github.com/iglootools/nbkp/blob/main/docs/internals.md) — runtime behavior, design decisions, and external commands
-- [docs/architecture.md](https://github.com/iglootools/nbkp/blob/main/docs/architecture.md) — module dependency graph
+See [CONTRIBUTING.md](https://github.com/iglootools/nbkp/blob/main/CONTRIBUTING.md) for development setup, guidelines, and the
+documentation of the code.
 
 ## Resources
 - [Releases](https://pypi.org/project/nbkp/#history)
