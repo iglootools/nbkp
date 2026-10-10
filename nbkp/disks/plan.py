@@ -12,7 +12,7 @@ import enum
 from dataclasses import dataclass
 
 from ..config import Config, MountConfig, Volume
-from ..config.epresolution import ResolvedEndpoints
+from ..remote.endpoints import ResolvedEndpoints
 from ..remote.errors import SSH_CONNECTION_ERRORS, describe_error
 from .models import MountCapabilities
 from .mount_checks import check_mount_status

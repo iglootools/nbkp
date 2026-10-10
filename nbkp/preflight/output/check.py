@@ -7,37 +7,31 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from ...clihelpers import (
-    OK_SYMBOL,
-    Severity,
-    severity_style,
-    severity_symbol,
-)
+from ...clihelpers import OK_SYMBOL, severity_style, severity_symbol
 from ...clihelpers.invocation import Invocation
 from ...config import (
     Config,
     LocalVolume,
     RemoteVolume,
 )
-from ...config.epresolution import ResolvedEndpoints
 from ...config.output import (
     _sync_endpoint_display,
     _sync_options,
     format_mount_summary,
     format_volume_display,
 )
+from ...policy import Severity, Strictness
+from ...remote.endpoints import ResolvedEndpoints
 from ..severity import severity_for_errors
-from ..status import (
-    INACTIVE_SSH_ERRORS,
+from ..status.endpoint import (
     DestinationEndpointDiagnostics,
     DestinationEndpointError,
     LatestSymlinkState,
     SourceEndpointError,
-    SshEndpointStatus,
-    SyncStatus,
-    VolumeStatus,
 )
-from ..strictness import Strictness
+from ..status.ssh import INACTIVE_SSH_ERRORS, SshEndpointStatus
+from ..status.sync import SyncStatus
+from ..status.volume import VolumeStatus
 from .formatting import (
     check,
     format_capabilities,

@@ -14,13 +14,13 @@ from ..config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ..config.epresolution import ResolvedEndpoints
 from ..fsprotocol import LATEST_LINK
 from ..remote import (
     build_ssh_base_args,
     build_ssh_e_option,
     format_remote_path,
 )
+from ..remote.endpoints import ResolvedEndpoints
 
 
 class ProgressMode(str, Enum):

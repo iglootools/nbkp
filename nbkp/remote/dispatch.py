@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 
 from ..config import LocalVolume, RemoteVolume, Volume
-from ..config.epresolution import ResolvedEndpoints
+from .endpoints import ResolvedEndpoints
 from .fabricssh import run_remote_command
 
 
@@ -25,4 +26,20 @@ def run_on_volume(
             # input=None leaves stdin inherited, as when it is omitted.
             return subprocess.run(
                 cmd, capture_output=True, text=True, input=input, check=False
+            )
+
+
+def check_command_available(
+    volume: Volume,
+    command: str,
+    resolved_endpoints: ResolvedEndpoints,
+) -> bool:
+    """Whether *command* is on the ``PATH`` of the volume's host."""
+    match volume:
+        case LocalVolume():
+            return shutil.which(command) is not None
+        case RemoteVolume():
+            return (
+                run_on_volume(["which", command], volume, resolved_endpoints).returncode
+                == 0
             )

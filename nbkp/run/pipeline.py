@@ -12,10 +12,9 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from ..clihelpers import Severity
 from ..config import Config
-from ..config.epresolution import ResolvedEndpoints
-from ..disks.observation import MountObservation
+from ..disks import MountObservation
+from ..policy import Severity, Strictness
 from ..preflight import (
     PreflightResult,
     SyncStatus,
@@ -23,9 +22,11 @@ from ..preflight import (
     check_all_syncs,
 )
 from ..preflight.severity import PreflightError
-from ..preflight.strictness import Strictness, has_fatal_errors
+from ..preflight.strictness import has_fatal_errors
+from ..remote.endpoints import ResolvedEndpoints
+from ..sync.orchestration import run_all_syncs
+from ..sync.results import SyncResult, result_severity
 from ..sync.rsync import ProgressMode
-from ..sync.runner import SyncResult, result_severity, run_all_syncs
 
 __all__ = [
     "PipelineResult",

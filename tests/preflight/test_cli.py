@@ -27,8 +27,8 @@ from tests.clihelpers import (
 
 
 class TestLocationValidation:
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_unknown_location_rejected(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -41,8 +41,8 @@ class TestLocationValidation:
         assert "home" in result.output
         assert "travel" in result.output
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_unknown_exclude_location_rejected(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -62,8 +62,8 @@ class TestLocationValidation:
         assert "unknown location 'office'" in result.output
         assert "--exclude-location" in result.output
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_known_location_accepted(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -93,7 +93,7 @@ class TestLocationValidation:
         )
         assert result.exit_code == 0
 
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.config.load_config")
     def test_location_on_config_without_locations(self, mock_load: MagicMock) -> None:
         mock_load.return_value = sample_config()
         result = runner.invoke(
@@ -104,8 +104,8 @@ class TestLocationValidation:
 
 
 class TestCheckCommand:
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_human_output_inactive(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -119,8 +119,8 @@ class TestCheckCommand:
         assert result.exit_code == 0
         assert "Preflight" in result.output
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_human_output_all_active(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -133,8 +133,8 @@ class TestCheckCommand:
         result = runner.invoke(app, ["preflight", "check", "--config", "/fake.yaml"])
         assert result.exit_code == 0
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_json_output_inactive(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -153,8 +153,8 @@ class TestCheckCommand:
         assert "volumes" in data
         assert "syncs" in data
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_json_output_all_active(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -173,8 +173,8 @@ class TestCheckCommand:
         assert "volumes" in data
         assert "syncs" in data
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_json_output_with_snapshot_timestamps(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -205,8 +205,8 @@ class TestCheckCommand:
         nested = sync["destination_endpoint_status"]["diagnostics"]["latest"]
         assert nested["snapshot"]["name"] == "2026-03-06T14:30:00.000Z"
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_sentinel_only_exit_0_by_default(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -219,8 +219,8 @@ class TestCheckCommand:
         result = runner.invoke(app, ["preflight", "check", "--config", "/fake.yaml"])
         assert result.exit_code == 0
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_sentinel_only_exit_1_when_strict(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:

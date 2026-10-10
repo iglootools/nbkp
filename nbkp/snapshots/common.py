@@ -15,8 +15,8 @@ from ..config import (
     SyncConfig,
     Volume,
 )
-from ..config.epresolution import ResolvedEndpoints
 from ..fsprotocol import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR, Snapshot
+from ..remote.endpoints import ResolvedEndpoints
 from .errors import (
     SnapshotOp,
     SnapshotOperationError,

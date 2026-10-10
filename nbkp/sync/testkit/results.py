@@ -5,7 +5,7 @@ from __future__ import annotations
 from ...config import Config
 from ...fsprotocol import SNAPSHOTS_DIR
 from ...snapshots.models import PruneResult
-from ..runner import (
+from ..results import (
     SyncFailureKind,
     SyncOutcome,
     SyncResult,

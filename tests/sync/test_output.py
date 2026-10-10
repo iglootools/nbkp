@@ -32,7 +32,7 @@ from nbkp.sync.output import (
     build_human_results_sections,
     build_run_preview_sections,
 )
-from nbkp.sync.runner import (
+from nbkp.sync.results import (
     SyncFailureKind,
     SyncResult,
     SyncWarning,

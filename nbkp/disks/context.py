@@ -10,8 +10,8 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 
 from ..config import Config
-from ..config.epresolution import ResolvedEndpoints
 from ..credentials import PassphrasePrefetch, prefetch_passphrases
+from ..remote.endpoints import ResolvedEndpoints
 from .lifecycle import (
     MountResult,
     UmountResult,

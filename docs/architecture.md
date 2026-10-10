@@ -41,12 +41,14 @@ Dependencies between top-level modules (auto-generated via `mise run depgraph`):
 graph TD
     cli["cli/"]
     clihelpers["clihelpers/"]
+    commands["commands/"]
     config["config/"]
     credentials["credentials/"]
     demo["demo/"]
     disks["disks/"]
     fsprotocol["fsprotocol"]
     ordering["ordering/"]
+    policy["policy"]
     preflight["preflight/"]
     remote["remote/"]
     run["run/"]
@@ -63,55 +65,86 @@ graph TD
     cli --> run
     cli --> sh
     cli --> snapshots
+    clihelpers --> policy
+    commands --> clihelpers
+    commands --> config
+    commands --> credentials
+    commands --> disks
+    commands --> policy
+    commands --> preflight
+    commands --> remote
     config --> clihelpers
-    config --> remote
+    config --> commands
     credentials --> clihelpers
+    credentials --> commands
     credentials --> config
     demo --> clihelpers
     demo --> config
     demo --> disks
     demo --> ordering
+    demo --> policy
     demo --> preflight
     demo --> remote
     demo --> snapshots
     demo --> sync
     disks --> clihelpers
+    disks --> commands
     disks --> config
     disks --> credentials
+    disks --> policy
     disks --> remote
     ordering --> clihelpers
+    ordering --> commands
     ordering --> config
+    ordering --> policy
     preflight --> clihelpers
+    preflight --> commands
     preflight --> config
     preflight --> credentials
     preflight --> disks
     preflight --> fsprotocol
+    preflight --> policy
     preflight --> remote
     remote --> config
     remote --> fsprotocol
     run --> clihelpers
+    run --> commands
     run --> config
     run --> disks
     run --> ordering
+    run --> policy
     run --> preflight
+    run --> remote
     run --> sync
+    sh --> commands
     sh --> config
     sh --> fsprotocol
     sh --> ordering
     sh --> remote
     sh --> sync
     snapshots --> clihelpers
+    snapshots --> commands
     snapshots --> config
-    snapshots --> disks
     snapshots --> fsprotocol
+    snapshots --> policy
     snapshots --> preflight
     snapshots --> remote
-    sync --> clihelpers
     sync --> config
     sync --> fsprotocol
     sync --> ordering
+    sync --> policy
     sync --> preflight
     sync --> remote
     sync --> snapshots
 ```
 <!-- END MODULE OVERVIEW -->
+
+### Layering
+
+Each domain module (`disks/`, `preflight/`, `snapshots/`, …) keeps its core logic, its presentation (`output.py` / `output/`), and its Typer sub-app (`cli/`) side by side. These rules keep them decoupled, and `mise run lint-imports` (part of `mise run check`) enforces them through the [import-linter](https://import-linter.readthedocs.io/) contracts in `pyproject.toml` (`[tool.importlinter]`). The generated graph above only *shows* dependencies; the contracts are what reject a new import that breaks a rule:
+
+- **No module imports another module's `cli/` package.** Wiring that several sub-apps need — loading the config (`load_config_or_exit`), resolving endpoints, the managed mount lifecycle and its progress bars, and preflight checks with progress — lives in `commands/`, which only `cli/` sub-apps import. Only the root `cli/` app imports the sub-apps.
+- **Decisions live in core, display in `clihelpers/`.** `policy` holds `Strictness`, `Severity` and `classify_severity` — whether a finding is fatal — and is what core modules (`sync/`, `run/`, `preflight/`, `disks/`) import. `clihelpers/` is presentation only (output format, JSON, severity symbols and styles, progress bars, and the `Invocation` that echoes the current flags in suggested follow-up commands); core modules import neither it nor `rich` / `typer`. The `prompt` credential provider gets its terminal prompt injected from `commands/credentials.py`. The two-way edges between `commands/` and the modules in the graph above are between a module's `cli/` subpackage and `commands/`, never with the module's core: the sub-apps sit above `commands/`, the module cores below it. Importing a core package (`nbkp.disks`, `nbkp.preflight`, `nbkp.sync`, …) loads neither Rich nor Typer: presentation is imported explicitly from `output` modules.
+- **`config/` is the base layer.** Its core (models, loader) imports nothing else from nbkp. Endpoint selection — the `EndpointFilter` / `ResolvedEndpoint` models (`remote/endpoints.py`) and the algorithm (`remote/resolution.py`) — lives in `remote/`; config's display code takes the selected endpoints through a structural protocol rather than importing them. Transport primitives (`run_on_volume`, `check_command_available`) are in `remote/dispatch.py`; preflight-only host probes (sentinels, directories, symlinks, rsync version) are in `preflight/probes.py`.
+- **`clihelpers/` is a presentation leaf.** It imports nothing from nbkp but `policy`.
+- **Test and demo fixtures (`testkit`) are exempt.** They build scenarios across modules for the tests and `nbkp demo`, and are not runtime code.

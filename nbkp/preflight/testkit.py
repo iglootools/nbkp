@@ -20,7 +20,7 @@ from ..config.testkit import (
     base_syncs,
     base_volumes,
 )
-from ..disks.models import MountFailureReason
+from ..disks import MountFailureReason
 from ..fsprotocol import Snapshot
 from . import (
     BtrfsStagingSubvolumeDiagnostics,
@@ -46,7 +46,7 @@ from . import (
     VolumeStatus,
 )
 from .output.formatting import collect_ssh_endpoint_statuses
-from .status import PreflightResult
+from .status.result import PreflightResult
 
 
 def _demo_ssh_statuses(

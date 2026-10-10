@@ -56,14 +56,19 @@ class TestRetrievePassphraseKeyring:
 
 class TestRetrievePassphrasePrompt:
     def test_returns_prompted_value(self) -> None:
-        with patch("nbkp.credentials.typer") as mock_typer:
-            mock_typer.prompt.return_value = "typed-secret"
-            result = retrieve_passphrase("disk1", CredentialProvider.PROMPT)
+        asked: list[str] = []
+
+        def prompt(passphrase_id: str) -> str:
+            asked.append(passphrase_id)
+            return "typed-secret"
+
+        result = retrieve_passphrase("disk1", CredentialProvider.PROMPT, prompt=prompt)
         assert result == "typed-secret"
-        mock_typer.prompt.assert_called_once_with(
-            "LUKS passphrase for disk1",
-            hide_input=True,
-        )
+        assert asked == ["disk1"]
+
+    def test_missing_prompt_function_raises(self) -> None:
+        with pytest.raises(ValueError):
+            retrieve_passphrase("disk1", CredentialProvider.PROMPT)
 
 
 class TestRetrievePassphraseEnv:

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ....clihelpers import Strictness
 from ....config.protocol.sync_endpoint import SyncEndpoint
+from ....policy import Strictness
 from ....preflight import SyncStatus
 from ...models import SnapshotSkipReason
 

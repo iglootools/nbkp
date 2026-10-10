@@ -10,19 +10,20 @@ import typer
 
 from ...clihelpers import OutputFormat, echo_json
 from ...clihelpers.invocation import Invocation
-from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
-from ...config.epresolution import NetworkType
-from ...disks.cli.helpers import managed_mount
+from ...commands.config import load_config_or_exit, resolve_endpoints
+from ...commands.mount import managed_mount
+from ...commands.preflight import check_all_with_progress
+from ...policy import Strictness
+from ...remote.endpoints import NetworkType
 from ..output import (
     TroubleshootContext,
     collect_issues,
     print_human_troubleshoot,
     troubleshoot_json,
 )
-from ..status import PreflightResult
-from ..strictness import Strictness, has_fatal_errors
+from ..status.result import PreflightResult
+from ..strictness import has_fatal_errors
 from . import app
-from .helpers import check_all_with_progress
 
 
 @app.command()

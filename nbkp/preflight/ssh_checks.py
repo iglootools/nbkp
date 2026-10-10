@@ -13,7 +13,7 @@ from __future__ import annotations
 from ..config import SshEndpoint
 from ..remote import run_remote_command
 from ..remote.errors import SSH_CONNECTION_ERRORS
-from .status import SshEndpointDiagnostics
+from .status.ssh import SshEndpointDiagnostics
 from .volume_checks import unreachable_diagnostics
 
 

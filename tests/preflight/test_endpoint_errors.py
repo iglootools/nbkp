@@ -1,6 +1,6 @@
 """Tests for sync-endpoint error interpretation.
 
-Covers the policy logic in ``status.py`` that translates raw
+Covers the policy logic in ``preflight.status`` that translates raw
 diagnostics into error enums, separately from full ``check_all_syncs``
 orchestration tests.
 """
@@ -12,14 +12,18 @@ from nbkp.config import (
     LocalVolume,
     SyncEndpoint,
 )
-from nbkp.preflight.status import (
+from nbkp.preflight.status.endpoint import (
     DestinationEndpointDiagnostics,
     DestinationEndpointError,
     DestinationEndpointStatus,
-    HostToolCapabilities,
     SnapshotDirsDiagnostics,
+)
+from nbkp.preflight.status.ssh import (
+    HostToolCapabilities,
     SshEndpointDiagnostics,
     SshEndpointStatus,
+)
+from nbkp.preflight.status.volume import (
     VolumeCapabilities,
     VolumeDiagnostics,
     VolumeStatus,

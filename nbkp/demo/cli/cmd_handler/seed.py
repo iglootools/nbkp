@@ -14,15 +14,15 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict
 
-from ....clihelpers import Severity
 from ....config import (
     Config,
     CredentialProvider,
     RsyncOptions,
     SshEndpoint,
 )
-from ....config.epresolution import ResolvedEndpoints
-from ....disks.lifecycle import mount_volumes, umount_volumes
+from ....disks import mount_volumes, umount_volumes
+from ....policy import Severity
+from ....remote.endpoints import ResolvedEndpoints
 from ....remote.resolution import resolve_all_endpoints
 
 try:

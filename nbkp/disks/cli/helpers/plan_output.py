@@ -5,13 +5,8 @@ from __future__ import annotations
 from rich.console import Console
 from rich.text import Text
 
-from ....clihelpers import (
-    OutputFormat,
-    Severity,
-    echo_json,
-    severity_style,
-    severity_symbol,
-)
+from ....clihelpers import OutputFormat, echo_json, severity_style, severity_symbol
+from ....policy import Severity
 from ...plan import VolumePlan, plan_json
 
 

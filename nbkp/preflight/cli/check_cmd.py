@@ -9,11 +9,11 @@ import typer
 
 from ...clihelpers import OutputFormat, echo_json
 from ...clihelpers.invocation import Invocation
-from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
-from ...config.epresolution import NetworkType
-from ...disks.cli.helpers import managed_mount
-from ..status import PreflightResult
-from ..strictness import Strictness
+from ...commands.config import load_config_or_exit, resolve_endpoints
+from ...commands.mount import managed_mount
+from ...policy import Strictness
+from ...remote.endpoints import NetworkType
+from ..status.result import PreflightResult
 from . import app
 from .helpers import check_and_display
 

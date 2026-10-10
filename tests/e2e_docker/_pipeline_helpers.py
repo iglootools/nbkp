@@ -9,10 +9,10 @@ from nbkp.config import (
     RemoteVolume,
     SshEndpoint,
 )
-from nbkp.config.epresolution import ResolvedEndpoints
+from nbkp.preflight.probes import check_directory_exists, read_symlink_target
 from nbkp.preflight.snapshot_checks import check_btrfs_readonly, check_btrfs_subvolume
 from nbkp.remote.dispatch import run_on_volume
-from nbkp.remote.queries import check_directory_exists, read_symlink_target
+from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.testkit.docker import (
     REMOTE_BACKUP_PATH,

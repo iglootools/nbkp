@@ -8,12 +8,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from nbkp.config import Config, LocalVolume, SyncConfig, SyncEndpoint, Volume
+from nbkp.policy import Strictness
 from nbkp.preflight import (
     DestinationEndpointError,
     SyncError,
     SyncStatus,
 )
-from nbkp.run.pipeline import PipelineResult, Strictness, check_and_run
+from nbkp.run.pipeline import PipelineResult, check_and_run
 from nbkp.sync import SyncFailureKind, SyncOutcome
 from tests.clihelpers import (
     dst_ep_status,
@@ -90,7 +91,7 @@ def _run(
     )
 
 
-@patch("nbkp.sync.runner.run_rsync")
+@patch("nbkp.sync.modes.common.run_rsync")
 @patch("nbkp.run.pipeline.check_all_syncs")
 class TestIgnoreInactiveCancellations:
     def test_cancelled_by_inactive_upstream_is_expected(
@@ -131,7 +132,7 @@ class TestIgnoreInactiveCancellations:
         assert pipeline.has_sync_failures
 
 
-@patch("nbkp.sync.runner.run_rsync")
+@patch("nbkp.sync.modes.common.run_rsync")
 @patch("nbkp.run.pipeline.check_all_syncs")
 class TestIgnoreAll:
     def test_attempts_infra_broken_sync(

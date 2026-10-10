@@ -28,7 +28,6 @@ from nbkp.config import (
     RemoteVolume,
     SshEndpoint,
 )
-from nbkp.config.epresolution import ResolvedEndpoints
 from nbkp.disks.context import managed_mount
 from nbkp.disks.detection import (
     detect_device_present,
@@ -46,6 +45,7 @@ from nbkp.disks.lifecycle import (
 from nbkp.disks.observation import build_mount_observations
 from nbkp.disks.udisks import build_lock_command, build_unlock_command
 from nbkp.remote.dispatch import run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
 from tests._docker_fixtures import (
     LUKS_PASSPHRASE,
     resolved_endpoints_for,

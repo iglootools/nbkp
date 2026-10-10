@@ -1,4 +1,4 @@
-"""Sync execution: rsync command building and sync runner."""
+"""Sync execution: rsync command building, orchestration, and per-mode runs."""
 
 from __future__ import annotations
 
@@ -7,14 +7,14 @@ from typing import TYPE_CHECKING
 from .rsync import ProgressMode as ProgressMode
 
 if TYPE_CHECKING:
-    from .runner import (
+    from .orchestration import run_all_syncs as run_all_syncs
+    from .results import (
         SyncFailureKind as SyncFailureKind,
         SyncOutcome as SyncOutcome,
         SyncResult as SyncResult,
         SyncWarning as SyncWarning,
         SyncWarningKind as SyncWarningKind,
         result_severity as result_severity,
-        run_all_syncs as run_all_syncs,
     )
 
 __all__ = [
@@ -29,13 +29,13 @@ __all__ = [
 ]
 
 _LAZY_MODULES = {
-    "SyncFailureKind": "runner",
-    "SyncOutcome": "runner",
-    "SyncResult": "runner",
-    "SyncWarning": "runner",
-    "SyncWarningKind": "runner",
-    "result_severity": "runner",
-    "run_all_syncs": "runner",
+    "SyncFailureKind": "results",
+    "SyncOutcome": "results",
+    "SyncResult": "results",
+    "SyncWarning": "results",
+    "SyncWarningKind": "results",
+    "result_severity": "results",
+    "run_all_syncs": "orchestration",
 }
 
 

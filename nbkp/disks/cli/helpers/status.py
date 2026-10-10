@@ -10,24 +10,23 @@ from rich.text import Text
 
 from ....clihelpers import (
     OutputFormat,
-    Severity,
     StepProgressBar,
     echo_json,
     severity_style,
     severity_symbol,
 )
 from ....config import Config, LocalVolume, RemoteVolume
-from ....config.epresolution import ResolvedEndpoints
+from ....policy import Severity
+from ....remote.endpoints import ResolvedEndpoints
 from ....remote.errors import SSH_CONNECTION_ERRORS, describe_error
 from ...lifecycle import unknown_volume_names
-from ...models import MountFailureReason
+from ...models import MountFailureReason, display_name
 from ...mount_checks import check_mount_status
 from ...output import (
     MountStatusData,
     MountStatusLabel,
     build_mount_status_json,
     build_mount_status_table,
-    display_name,
 )
 
 

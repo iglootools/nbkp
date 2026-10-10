@@ -10,8 +10,8 @@ from typing import Annotated
 
 import typer
 
-from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
-from ...config.epresolution import NetworkType
+from ...commands.config import load_config_or_exit, resolve_endpoints
+from ...remote.endpoints import NetworkType
 from .. import ScriptOptions, generate_script
 
 

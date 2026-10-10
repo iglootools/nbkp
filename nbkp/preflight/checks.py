@@ -35,23 +35,17 @@ from ..config import (
     SyncEndpoint,
     Volume,
 )
-from ..config.epresolution import ResolvedEndpoints
-from ..disks.observation import MountObservation
+from ..disks import MountObservation
+from ..remote.endpoints import ResolvedEndpoints
 from ..remote.resolution import enrich_from_ssh_config, resolve_proxy_chain
 from .endpoint_checks import observe_destination_endpoint, observe_source_endpoint
 from .severity import PreflightError
 from .ssh_checks import observe_standalone_endpoint
-from .status import (
-    DestinationEndpointStatus,
-    HostToolCapabilities,
-    PreflightResult,
-    SourceEndpointStatus,
-    SshEndpointStatus,
-    SshEndpointToolNeeds,
-    SyncStatus,
-    VolumeCapabilities,
-    VolumeStatus,
-)
+from .status.endpoint import DestinationEndpointStatus, SourceEndpointStatus
+from .status.result import PreflightResult
+from .status.ssh import HostToolCapabilities, SshEndpointStatus, SshEndpointToolNeeds
+from .status.sync import SyncStatus
+from .status.volume import VolumeCapabilities, VolumeStatus
 from .volume_checks import observe_ssh_endpoint, observe_volume
 
 _S = TypeVar(

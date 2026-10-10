@@ -13,9 +13,8 @@ from ..config import (
     MountConfig,
     Volume,
 )
-from ..config.epresolution import ResolvedEndpoints
-from ..remote.dispatch import run_on_volume
-from ..remote.queries import _check_command_available
+from ..remote.dispatch import check_command_available, run_on_volume
+from ..remote.endpoints import ResolvedEndpoints
 from .detection import (
     DeviceProbeError,
     detect_device_present,
@@ -46,9 +45,9 @@ def probe_mount_tools(
     Which tools are actually *required* is determined during error
     interpretation (``SshEndpointToolNeeds``).
     """
-    has_udisksctl = _check_command_available(volume, "udisksctl", resolved_endpoints)
-    has_findmnt = _check_command_available(volume, "findmnt", resolved_endpoints)
-    has_lsblk = _check_command_available(volume, "lsblk", resolved_endpoints)
+    has_udisksctl = check_command_available(volume, "udisksctl", resolved_endpoints)
+    has_findmnt = check_command_available(volume, "findmnt", resolved_endpoints)
+    has_lsblk = check_command_available(volume, "lsblk", resolved_endpoints)
     udisksd_running = (
         run_on_volume(["udisksctl", "status"], volume, resolved_endpoints).returncode
         == 0

@@ -11,8 +11,8 @@ from rich.table import Table
 from rich.text import Text
 
 from ...clihelpers import OutputFormat, echo_json
+from ...commands.config import load_config_or_exit
 from ...config import Config
-from ...config.cli.helpers import load_config_or_exit
 from .. import (
     PassphrasePrefetch,
     collect_passphrase_ids,

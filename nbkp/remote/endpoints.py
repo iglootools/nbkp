@@ -1,7 +1,8 @@
 """Endpoint resolution types: filter, resolved endpoint, and network classification.
 
-These data structs do not truly belong to config, but since config is a universal dependency,
-not worth creating another top-level module at this point.
+The data side of the endpoint selection performed in :mod:`.resolution`:
+the operator's hints (:class:`EndpointFilter`) go in, the SSH endpoint
+chosen for each remote volume (:class:`ResolvedEndpoint`) comes out.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ from enum import Enum
 
 from pydantic import ConfigDict, Field
 
-from .protocol import SshEndpoint, _BaseModel
+from ..config.protocol import SshEndpoint, _BaseModel
 
 
 class NetworkType(str, Enum):

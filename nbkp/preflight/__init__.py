@@ -1,6 +1,5 @@
 """Pre-flight checks for volumes and syncs."""
 
-from ..disks.mount_checks import check_mount_status as check_mount_status
 from .checks import (
     check_all_syncs,
     check_sync,
@@ -76,7 +75,6 @@ __all__ = [
     "VolumeError",
     "VolumeStatus",
     "check_all_syncs",
-    "check_mount_status",
     "check_sync",
     "check_volume",
     "check_volume_capabilities",

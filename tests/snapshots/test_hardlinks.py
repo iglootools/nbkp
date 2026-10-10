@@ -17,8 +17,8 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.config.epresolution import ResolvedEndpoint
 from nbkp.fsprotocol import Snapshot
+from nbkp.remote.endpoints import ResolvedEndpoint
 from nbkp.snapshots.common import create_snapshot_timestamp
 from nbkp.snapshots.errors import SnapshotOp, SnapshotOperationError
 from nbkp.snapshots.hardlinks import (

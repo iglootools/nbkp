@@ -43,6 +43,7 @@ dev = [
   # regardless of which extras are synced. Identical constraints, so uv resolves both to
   # one entry in uv.lock.
   "keyring>=25.0,<26.0",
+  "import-linter>=2.15,<3.0",
 ]
 
 [build-system]
@@ -129,3 +130,108 @@ pythonVersion = "3.12"
 # language servers resolve imports against it, since they inherit no shell activation.
 venvPath = "."
 venv = ".venv"
+
+# Module layering rules, enforced by `mise run lint-imports` (part of `check`).
+# The rationale for each rule is in docs/architecture.md#layering.
+[tool.importlinter]
+root_package = "nbkp"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Core modules do not depend on presentation, CLI frameworks or command wiring"
+type = "forbidden"
+source_modules = [
+  "nbkp.config",
+  "nbkp.credentials",
+  "nbkp.disks",
+  "nbkp.fsprotocol",
+  "nbkp.ordering",
+  "nbkp.policy",
+  "nbkp.preflight",
+  "nbkp.remote",
+  "nbkp.run",
+  "nbkp.sh",
+  "nbkp.snapshots",
+  "nbkp.sync",
+]
+forbidden_modules = [
+  "rich",
+  "typer",
+  "nbkp.clihelpers",
+  "nbkp.commands",
+  "nbkp.cli",
+  "nbkp.*.cli",
+]
+ignore_imports = [
+  # Each module's cli/ sub-app and output (rendering) code sit above the core.
+  "nbkp.*.cli.** -> **",
+  "nbkp.*.cli -> **",
+  "nbkp.**.output.** -> **",
+  "nbkp.**.output -> **",
+  # Test and demo fixtures, not runtime code.
+  "nbkp.**.testkit.** -> **",
+  "nbkp.**.testkit -> **",
+]
+
+[[tool.importlinter.contracts]]
+name = "CLI sub-apps do not import each other (shared wiring lives in nbkp.commands)"
+type = "independence"
+modules = [
+  "nbkp.config.cli",
+  "nbkp.credentials.cli",
+  "nbkp.demo.cli",
+  "nbkp.disks.cli",
+  "nbkp.ordering.cli",
+  "nbkp.preflight.cli",
+  "nbkp.run.cli",
+  "nbkp.sh.cli",
+  "nbkp.snapshots.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "Command wiring sits below the CLI sub-apps"
+type = "forbidden"
+source_modules = ["nbkp.commands"]
+forbidden_modules = ["nbkp.cli", "nbkp.*.cli"]
+
+[[tool.importlinter.contracts]]
+name = "The config schema is the base layer"
+type = "forbidden"
+source_modules = ["nbkp.config"]
+forbidden_modules = [
+  "nbkp.credentials",
+  "nbkp.demo",
+  "nbkp.disks",
+  "nbkp.ordering",
+  "nbkp.preflight",
+  "nbkp.remote",
+  "nbkp.run",
+  "nbkp.sh",
+  "nbkp.snapshots",
+  "nbkp.sync",
+]
+ignore_imports = [
+  # config show resolves endpoints for display through the shared wiring.
+  "nbkp.config.cli.** -> **",
+  "nbkp.config.testkit -> **",
+]
+
+[[tool.importlinter.contracts]]
+name = "clihelpers is a presentation leaf"
+type = "forbidden"
+source_modules = ["nbkp.clihelpers"]
+forbidden_modules = [
+  "nbkp.cli",
+  "nbkp.commands",
+  "nbkp.config",
+  "nbkp.credentials",
+  "nbkp.demo",
+  "nbkp.disks",
+  "nbkp.ordering",
+  "nbkp.preflight",
+  "nbkp.remote",
+  "nbkp.run",
+  "nbkp.sh",
+  "nbkp.snapshots",
+  "nbkp.sync",
+]

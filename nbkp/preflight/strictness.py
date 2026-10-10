@@ -1,15 +1,14 @@
-"""Preflight error strictness policy.
+"""Apply the strictness policy to preflight sync statuses.
 
-The :class:`Strictness` enum itself lives in :mod:`nbkp.clihelpers.strictness`
-so CLI code in sibling packages can read it without creating a cycle
-through ``preflight``.  This module re-exports it and owns the
-preflight-status-aware :func:`has_fatal_errors` helper.
+The :class:`~nbkp.policy.Strictness` enum is generic run policy and lives in
+:mod:`nbkp.policy`; this module owns the preflight-status-aware
+:func:`has_fatal_errors` helper.
 """
 
 from __future__ import annotations
 
-from ..clihelpers.strictness import Strictness
-from .status import SyncError, SyncStatus
+from ..policy import Strictness
+from .status.sync import SyncError, SyncStatus
 
 
 def _is_disabled(status: SyncStatus) -> bool:

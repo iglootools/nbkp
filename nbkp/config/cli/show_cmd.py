@@ -8,10 +8,9 @@ from typing import Annotated
 import typer
 
 from ...clihelpers import OutputFormat, echo_json
-from ...remote.resolution import resolve_all_endpoints
+from ...commands.config import load_config_or_exit, resolve_endpoints
 from ..output import print_human_config
 from . import app
-from .helpers import load_config_or_exit
 
 
 @app.command()
@@ -38,5 +37,5 @@ def show(
         case OutputFormat.JSON:
             echo_json(cfg.model_dump(by_alias=True, mode="json"))
         case OutputFormat.HUMAN:
-            resolved = resolve_all_endpoints(cfg)
+            resolved = resolve_endpoints(cfg, None, None, None)
             print_human_config(cfg, resolved_endpoints=resolved)

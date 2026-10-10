@@ -8,20 +8,16 @@ without re-implementing the policy at every call site.
 
 from __future__ import annotations
 
-from ..clihelpers import Severity, classify_severity
-from .status import (
+from ..policy import Severity, Strictness, classify_severity
+from .status.endpoint import (
     INACTIVE_DST_ENDPOINT_ERRORS,
     INACTIVE_SRC_ENDPOINT_ERRORS,
-    INACTIVE_SSH_ERRORS,
-    INACTIVE_SYNC_ERRORS,
-    INACTIVE_VOLUME_ERRORS,
     DestinationEndpointError,
     SourceEndpointError,
-    SshEndpointError,
-    SyncError,
-    VolumeError,
 )
-from .strictness import Strictness
+from .status.ssh import INACTIVE_SSH_ERRORS, SshEndpointError
+from .status.sync import INACTIVE_SYNC_ERRORS, SyncError
+from .status.volume import INACTIVE_VOLUME_ERRORS, VolumeError
 
 PreflightError = (
     SshEndpointError

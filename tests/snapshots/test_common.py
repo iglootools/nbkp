@@ -19,7 +19,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.config.epresolution import ResolvedEndpoint
+from nbkp.remote.endpoints import ResolvedEndpoint
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.snapshots.common import (
     create_snapshot_timestamp,

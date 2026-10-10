@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, Protocol
 
 from pydantic import ValidationError
 from pydantic_core import ErrorDetails
@@ -16,16 +17,31 @@ from . import (
     ConfigError,
     LocalVolume,
     RemoteVolume,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
 )
-from .epresolution import ResolvedEndpoints
 from .protocol.volume import MountConfig
+
+
+class SelectedEndpoint(Protocol):
+    """The SSH endpoint chosen for a remote volume at runtime.
+
+    Structural so that config display does not depend on ``remote``, where
+    endpoint selection (and its ``ResolvedEndpoint`` model) lives.
+    """
+
+    @property
+    def server(self) -> SshEndpoint: ...
+
+
+SelectedEndpoints = Mapping[str, SelectedEndpoint]
+"""Selected endpoint per remote volume slug (``remote.endpoints.SelectedEndpoints``)."""
 
 
 def format_volume_display(
     vol: LocalVolume | RemoteVolume,
-    resolved_endpoints: ResolvedEndpoints,
+    resolved_endpoints: SelectedEndpoints,
 ) -> str:
     """Format a volume for human display."""
     match vol:
@@ -52,7 +68,7 @@ def _display_path(vol: LocalVolume | RemoteVolume) -> str:
 
 def host_label(
     vol: LocalVolume | RemoteVolume,
-    resolved_endpoints: ResolvedEndpoints,
+    resolved_endpoints: SelectedEndpoints,
 ) -> str:
     """Human-readable host label for a volume."""
     match vol:
@@ -143,7 +159,7 @@ def print_human_config(
     config: Config,
     *,
     console: Console | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: SelectedEndpoints | None = None,
 ) -> None:
     """Print human-readable configuration."""
     re = resolved_endpoints or {}
@@ -184,7 +200,7 @@ def _ssh_endpoints_table(config: Config) -> Table:
 
 
 def _volume_type_and_endpoint(
-    vol: LocalVolume | RemoteVolume, re: ResolvedEndpoints
+    vol: LocalVolume | RemoteVolume, re: SelectedEndpoints
 ) -> tuple[str, str]:
     match vol:
         case RemoteVolume():
@@ -194,7 +210,7 @@ def _volume_type_and_endpoint(
             return "local", ""
 
 
-def _volumes_table(config: Config, re: ResolvedEndpoints) -> Table:
+def _volumes_table(config: Config, re: SelectedEndpoints) -> Table:
     table = Table(title="Volumes:")
     table.add_column("Name", style="bold")
     table.add_column("Type")

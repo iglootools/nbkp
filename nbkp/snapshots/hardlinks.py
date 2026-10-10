@@ -12,7 +12,7 @@ from ..config import (
     SyncConfig,
     Volume,
 )
-from ..config.epresolution import ResolvedEndpoints
+from ..remote.endpoints import ResolvedEndpoints
 from .common import (
     create_snapshot_timestamp,
     destination_volume,

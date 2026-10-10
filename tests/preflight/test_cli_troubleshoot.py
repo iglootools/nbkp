@@ -20,8 +20,8 @@ from tests.clihelpers import (
 
 
 class TestCheckJsonIncludesSshEndpoints:
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_ssh_endpoints_in_json(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -48,8 +48,8 @@ def _with_host_errors(statuses: dict[str, SyncStatus]) -> dict[str, SyncStatus]:
 
 
 class TestTroubleshootCommand:
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_json_lists_issues_and_exits_1_on_fatal(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -69,8 +69,8 @@ class TestTroubleshootCommand:
         assert "ENDPOINT_HOST_ERRORS" in codes
         assert all(issue["remediation"] for issue in data["issues"])
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_inactive_only_exits_0_unless_strict(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
@@ -86,8 +86,8 @@ class TestTroubleshootCommand:
 
 
 class TestSuggestedCommands:
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_check_hint_carries_config_and_endpoint_flags(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:

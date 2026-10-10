@@ -10,16 +10,16 @@ from pathlib import Path
 
 import paramiko
 
-from ..config.epresolution import (
-    EndpointFilter,
-    NetworkType,
-    ResolvedEndpoint,
-    ResolvedEndpoints,
-)
 from ..config.protocol import (
     Config,
     RemoteVolume,
     SshEndpoint,
+)
+from .endpoints import (
+    EndpointFilter,
+    NetworkType,
+    ResolvedEndpoint,
+    ResolvedEndpoints,
 )
 
 #: Resolves a hostname to its IP addresses, or ``None`` when it does not resolve.

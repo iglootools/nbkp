@@ -13,7 +13,7 @@ from nbkp.config import (
     SshConnectionOptions,
     SshEndpoint,
 )
-from nbkp.config.epresolution import EndpointFilter, NetworkType
+from nbkp.remote.endpoints import EndpointFilter, NetworkType
 from nbkp.remote.resolution import (
     AddressLookup,
     dns_lookup,

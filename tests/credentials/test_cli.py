@@ -45,7 +45,7 @@ def _invoke(*args: str) -> Result:
 
 class TestKeyringStatus:
     @patch("nbkp.credentials.cli.keyring_status_cmd.retrieve_passphrase")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.config.load_config")
     def test_human_keeps_brackets_in_passphrase_id(
         self, mock_load: MagicMock, mock_retrieve: MagicMock
     ) -> None:
@@ -56,7 +56,7 @@ class TestKeyringStatus:
         assert "disk[1]" in result.output
 
     @patch("nbkp.credentials.cli.keyring_status_cmd.retrieve_passphrase")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.config.load_config")
     def test_json_reports_reason(
         self, mock_load: MagicMock, mock_retrieve: MagicMock
     ) -> None:
@@ -79,7 +79,7 @@ class TestKeyringStatus:
         }
 
     @patch("nbkp.credentials.cli.keyring_status_cmd.retrieve_passphrase")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.config.load_config")
     def test_prompt_provider_never_prompts(
         self, mock_load: MagicMock, mock_retrieve: MagicMock
     ) -> None:
@@ -90,7 +90,7 @@ class TestKeyringStatus:
         assert data["checked"] is False
         assert data["passphrases"] == {"disk[1]": {"volumes": ["usb"]}}
 
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.config.load_config")
     def test_no_encrypted_volumes_json_is_valid(self, mock_load: MagicMock) -> None:
         mock_load.return_value = _config(passphrase_id=None)
         result = _invoke("-o", "json")

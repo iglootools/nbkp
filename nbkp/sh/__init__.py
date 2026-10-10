@@ -17,8 +17,8 @@ from pathlib import Path
 from jinja2 import Environment, Template
 
 from ..config import Config, LocalVolume, RemoteVolume
-from ..config.epresolution import ResolvedEndpoints
 from ..ordering.graph import sort_syncs, sync_predecessors
+from ..remote.endpoints import ResolvedEndpoints
 from .preflight import build_preflight_block
 from .quoting import SCRIPT_DIR, comment_out, has_shell_var
 from .spec import build_sync_spec

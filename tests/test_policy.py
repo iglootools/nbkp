@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nbkp.clihelpers import Severity, Strictness, classify_severity
+from nbkp.policy import Severity, Strictness, classify_severity
 
 
 class TestClassifySeverity:

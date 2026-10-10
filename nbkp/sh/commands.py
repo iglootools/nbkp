@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..config import LocalVolume, RemoteVolume
-from ..config.epresolution import ResolvedEndpoints
+from ..remote.endpoints import ResolvedEndpoints
 from ..remote.ssh import build_ssh_base_args
 from .quoting import quote, quote_args, remote_command
 

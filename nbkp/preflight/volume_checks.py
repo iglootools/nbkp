@@ -10,7 +10,7 @@ Two levels of observation:
    config validation, and runtime mount state.  Probed once per volume
    whose SSH endpoint is active.
 
-No error interpretation happens here — ``status.py`` translates
+No error interpretation happens here — the ``status`` package translates
 diagnostics into errors using ``SshEndpointToolNeeds`` and
 ``SyncEndpointStatus.from_diagnostics``.
 """
@@ -24,31 +24,25 @@ from ..config import (
     RemoteVolume,
     Volume,
 )
-from ..config.epresolution import ResolvedEndpoints
-from ..disks.mount_checks import (
+from ..disks import (
+    MountObservation,
+    MountToolCapabilities,
     check_mount_capabilities as _check_mount_capabilities,
     probe_mount_tools as _probe_mount_tools,
 )
-from ..disks.observation import MountObservation
 from ..fsprotocol import VOLUME_SENTINEL
 from ..remote import run_remote_command
+from ..remote.dispatch import check_command_available
+from ..remote.endpoints import ResolvedEndpoints
 from ..remote.errors import SSH_CONNECTION_ERRORS, describe_error, is_auth_error
-from ..remote.queries import (
-    _check_command_available,
-    _check_rsync_version,
-)
+from .probes import _check_rsync_version
 from .snapshot_checks import (
     check_btrfs_filesystem,
     check_btrfs_mount_option,
     check_hardlink_support,
 )
-from .status import (
-    HostToolCapabilities,
-    MountToolCapabilities,
-    SshEndpointDiagnostics,
-    VolumeCapabilities,
-    VolumeDiagnostics,
-)
+from .status.ssh import HostToolCapabilities, SshEndpointDiagnostics
+from .status.volume import VolumeCapabilities, VolumeDiagnostics
 
 # ── SSH Endpoint Observation ──────────────────────────────
 
@@ -139,13 +133,13 @@ def _probe_host_tools(
     SSH reachability — if the connection fails, the caller catches the
     exception.
     """
-    has_rsync = _check_command_available(volume, "rsync", resolved_endpoints)
+    has_rsync = check_command_available(volume, "rsync", resolved_endpoints)
     rsync_version_ok = (
         _check_rsync_version(volume, resolved_endpoints) if has_rsync else False
     )
-    has_btrfs = _check_command_available(volume, "btrfs", resolved_endpoints)
-    has_stat = _check_command_available(volume, "stat", resolved_endpoints)
-    has_findmnt = _check_command_available(volume, "findmnt", resolved_endpoints)
+    has_btrfs = check_command_available(volume, "btrfs", resolved_endpoints)
+    has_stat = check_command_available(volume, "stat", resolved_endpoints)
+    has_findmnt = check_command_available(volume, "findmnt", resolved_endpoints)
     return HostToolCapabilities(
         has_rsync=has_rsync,
         rsync_version_ok=rsync_version_ok,

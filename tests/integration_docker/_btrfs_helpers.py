@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from nbkp.config import Config, SyncConfig
-from nbkp.config.epresolution import ResolvedEndpoints
 from nbkp.fsprotocol import Snapshot
+from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.snapshots.btrfs import (
     create_snapshot,
     delete_snapshot,
