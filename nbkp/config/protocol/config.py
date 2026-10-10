@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import enum
-from collections import deque
+from collections.abc import Iterable, Iterator, Mapping
 from itertools import combinations
 from typing import Any
 
-from pydantic import Field, ValidationInfo, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from .base import _BaseModel
+from .errors import ConfigValidationCode, config_error
 from .ssh_endpoint import SshEndpoint
 from .sync import SyncConfig
 from .sync_endpoint import SyncEndpoint
@@ -25,14 +26,124 @@ class CredentialProvider(str, enum.Enum):
     COMMAND = "command"
 
 
-def _remove_stale_exclusive_keys(
-    merged: dict[str, Any], child: dict[str, Any], key_group: set[str]
-) -> None:
-    """Remove parent-only keys from an exclusive key group when child overrides one."""
-    child_keys = key_group & set(child.keys())
-    if child_keys:
-        for k in key_group - child_keys:
-            merged.pop(k, None)
+# Key pairs where setting one half in a child endpoint must drop the other
+# half inherited from its parent, so the merge does not trip the exclusivity
+# validators.
+_EXCLUSIVE_KEY_GROUPS: tuple[frozenset[str], ...] = (
+    frozenset({"proxy-jump", "proxy-jumps"}),
+    frozenset({"location", "locations"}),
+)
+
+
+def _stale_exclusive_keys(child: Mapping[str, Any]) -> set[str]:
+    """Inherited keys to drop because the child set the other half of a group."""
+    return {
+        key
+        for group in _EXCLUSIVE_KEY_GROUPS
+        if group & child.keys()
+        for key in group - child.keys()
+    }
+
+
+def _merge_endpoint(
+    parent: Mapping[str, Any], child: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Overlay a child endpoint's raw fields on its resolved parent's."""
+    stale = _stale_exclusive_keys(child)
+    merged = {**parent, **{k: v for k, v in child.items() if k != "extends"}}
+    return {k: v for k, v in merged.items() if k not in stale}
+
+
+def _resolve_endpoint(
+    endpoints: Mapping[str, Any], slug: str, chain: tuple[str, ...]
+) -> Any:
+    """Resolve one raw endpoint's ``extends`` chain into a flat mapping.
+
+    ``chain`` holds the slugs visited so far, ending with ``slug``, for cycle
+    detection. Non-mapping entries are returned as-is for pydantic to reject.
+    """
+    ep = endpoints[slug]
+    parent_slug = ep.get("extends") if isinstance(ep, dict) else None
+    if parent_slug is None:
+        return ep
+    elif parent_slug in chain:
+        raise config_error(
+            ConfigValidationCode.CIRCULAR_EXTENDS,
+            f"Circular extends chain: {' -> '.join([*chain, parent_slug])}",
+        )
+    elif parent_slug not in endpoints:
+        raise config_error(
+            ConfigValidationCode.UNKNOWN_REFERENCE,
+            f"Endpoint '{slug}' extends unknown endpoint '{parent_slug}'",
+        )
+    else:
+        parent = _resolve_endpoint(endpoints, parent_slug, (*chain, parent_slug))
+        return _merge_endpoint(parent, ep) if isinstance(parent, dict) else ep
+
+
+def _inject_slugs(entries: Any) -> Any:
+    """Copy each mapping key into its entry's ``slug`` field, unless set."""
+    match entries:
+        case dict():
+            return {
+                slug: (
+                    {**data, "slug": slug}
+                    if isinstance(data, dict) and "slug" not in data
+                    else data
+                )
+                for slug, data in entries.items()
+            }
+        case _:
+            return entries
+
+
+def _unknown_reference(message: str) -> ValueError:
+    return config_error(ConfigValidationCode.UNKNOWN_REFERENCE, message)
+
+
+def _raise_first(errors: Iterable[ValueError]) -> None:
+    """Raise the first error a lazy check yields, if any.
+
+    Checks are generators consumed in order, so a later check (e.g. one that
+    indexes ``volumes`` by a sync endpoint's volume) only runs once the
+    earlier reference checks it relies on have passed.
+    """
+    error = next(iter(errors), None)
+    if error is not None:
+        raise error
+
+
+def _is_nested(path_a: str, path_b: str) -> bool:
+    """Whether one subdir (``""`` = volume root) contains the other."""
+    norm_a = f"{path_a}/" if path_a else ""
+    norm_b = f"{path_b}/" if path_b else ""
+    return norm_a.startswith(norm_b) or norm_b.startswith(norm_a)
+
+
+def _location_error(
+    slug_a: str, ep_a: SyncEndpoint, slug_b: str, ep_b: SyncEndpoint
+) -> ValueError | None:
+    """Error for two sync endpoints on one volume sharing or nesting a path."""
+    path_a, path_b = ep_a.subdir or "", ep_b.subdir or ""
+    if path_a == path_b:
+        subdir_msg = f" subdir '{ep_b.subdir}'" if ep_b.subdir else ""
+        return config_error(
+            ConfigValidationCode.DUPLICATE_ENDPOINT_LOCATION,
+            f"Sync endpoints '{slug_a}' and '{slug_b}' both target volume"
+            f" '{ep_b.volume}'{subdir_msg}",
+        )
+    elif _is_nested(path_a, path_b):
+        parent, child = (
+            (slug_a, slug_b) if len(path_a) < len(path_b) else (slug_b, slug_a)
+        )
+        return config_error(
+            ConfigValidationCode.NESTED_ENDPOINT,
+            f"Sync endpoint '{child}' is nested inside '{parent}' on volume"
+            f" '{ep_a.volume}': overlapping endpoint paths are not supported"
+            " because sync dependencies cannot be detected between them",
+        )
+    else:
+        return None
 
 
 class Config(_BaseModel):
@@ -55,6 +166,9 @@ class Config(_BaseModel):
     )
 
     ssh_endpoints: dict[str, SshEndpoint] = Field(default_factory=dict)
+    volumes: dict[str, Volume] = Field(default_factory=dict)
+    sync_endpoints: dict[str, SyncEndpoint] = Field(default_factory=dict)
+    syncs: dict[str, SyncConfig] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
@@ -62,108 +176,22 @@ class Config(_BaseModel):
         """Resolve `extends` inheritance on ssh-endpoints."""
         if not isinstance(data, dict):
             return data
-        endpoints = data.get("ssh-endpoints") or data.get("ssh_endpoints") or {}
+        key = "ssh-endpoints" if "ssh-endpoints" in data else "ssh_endpoints"
+        endpoints = data.get(key) or {}
         if not isinstance(endpoints, dict):
             return data
-
-        resolved: dict[str, Any] = {}
-
-        def _resolve(slug: str, chain: list[str]) -> Any:
-            if slug in resolved:
-                return resolved[slug]
-            ep = endpoints[slug]
-            if not isinstance(ep, dict):
-                resolved[slug] = ep
-                return ep
-            parent_slug = ep.get("extends")
-            if parent_slug is None:
-                resolved[slug] = ep
-                return ep
-            if parent_slug in chain:
-                chain_str = " -> ".join(chain + [parent_slug])
-                raise ValueError(f"Circular extends chain: {chain_str}")
-            if parent_slug not in endpoints:
-                raise ValueError(
-                    f"Endpoint '{slug}' extends unknown endpoint '{parent_slug}'"
-                )
-            parent = _resolve(parent_slug, chain + [slug])
-            if not isinstance(parent, dict):
-                resolved[slug] = ep
-                return ep
-            merged = {
-                **parent,
-                **{k: v for k, v in ep.items() if k != "extends"},
-            }
-            # If child sets one of an exclusive key pair, remove
-            # the other to avoid exclusivity clash with parent
-            _remove_stale_exclusive_keys(merged, ep, {"proxy-jump", "proxy-jumps"})
-            _remove_stale_exclusive_keys(merged, ep, {"location", "locations"})
-            resolved[slug] = merged
-            return merged
-
-        for slug in endpoints:
-            _resolve(slug, [])
-
-        data = {**data}
-        if "ssh-endpoints" in data:
-            data["ssh-endpoints"] = resolved
-        else:
-            data["ssh_endpoints"] = resolved
-        return data
-
-    @field_validator("ssh_endpoints", mode="before")
-    @classmethod
-    def inject_ssh_endpoint_slugs(cls, v: Any, info: ValidationInfo) -> Any:
-        return {
-            slug: (
-                {**data, "slug": slug}
-                if isinstance(data, dict) and "slug" not in data
-                else data
-            )
-            for slug, data in v.items()
+        resolved = {
+            slug: _resolve_endpoint(endpoints, slug, (slug,)) for slug in endpoints
         }
+        return {**data, key: resolved}
 
-    volumes: dict[str, Volume] = Field(default_factory=dict)
-
-    @field_validator("volumes", mode="before")
+    @field_validator(
+        "ssh_endpoints", "volumes", "sync_endpoints", "syncs", mode="before"
+    )
     @classmethod
-    def inject_volume_slugs(cls, v: Any, info: ValidationInfo) -> Any:
-        return {
-            slug: (
-                {**data, "slug": slug}
-                if isinstance(data, dict) and "slug" not in data
-                else data
-            )
-            for slug, data in v.items()
-        }
-
-    sync_endpoints: dict[str, SyncEndpoint] = Field(default_factory=dict)
-
-    @field_validator("sync_endpoints", mode="before")
-    @classmethod
-    def inject_sync_endpoint_slugs(cls, v: Any, info: ValidationInfo) -> Any:
-        return {
-            slug: (
-                {**data, "slug": slug}
-                if isinstance(data, dict) and "slug" not in data
-                else data
-            )
-            for slug, data in v.items()
-        }
-
-    syncs: dict[str, SyncConfig] = Field(default_factory=dict)
-
-    @field_validator("syncs", mode="before")
-    @classmethod
-    def inject_sync_slugs(cls, v: Any, info: ValidationInfo) -> Any:
-        return {
-            slug: (
-                {**data, "slug": slug}
-                if isinstance(data, dict) and "slug" not in data
-                else data
-            )
-            for slug, data in v.items()
-        }
+    def inject_slugs(cls, v: Any) -> Any:
+        """Let entries omit ``slug``: it is the key they are declared under."""
+        return _inject_slugs(v)
 
     def source_endpoint(self, sync: SyncConfig) -> SyncEndpoint:
         """Resolve the source sync endpoint for a sync."""
@@ -205,156 +233,164 @@ class Config(_BaseModel):
 
     @model_validator(mode="after")
     def validate_cross_references(self) -> Config:
-        for slug, server in self.ssh_endpoints.items():
-            chain = server.proxy_jump_chain
-            for hop in chain:
-                if hop not in self.ssh_endpoints:
-                    raise ValueError(
-                        f"Server '{slug}' references unknown proxy-jump server '{hop}'"
-                    )
-            # Circular detection via BFS through transitive
-            # proxy chains
-            visited: set[str] = {slug}
-            queue: deque[str] = deque(chain)
-            while queue:
-                current = queue.popleft()
-                if current in visited:
-                    raise ValueError(
-                        f"Circular proxy-jump chain "
-                        f"detected starting from "
-                        f"server '{slug}'"
-                    )
-                visited.add(current)
-                queue.extend(self.ssh_endpoints[current].proxy_jump_chain)
+        _raise_first(
+            error
+            for check in (
+                self._unknown_proxy_jump_errors,
+                self._circular_proxy_jump_errors,
+                self._volume_reference_errors,
+                self._sync_endpoint_location_errors,
+                self._sync_reference_errors,
+                self._shared_destination_errors,
+                self._cross_server_errors,
+                self._credential_errors,
+            )
+            for error in check()
+        )
+        return self
 
-        for vol_slug, vol in self.volumes.items():
-            match vol:
-                case RemoteVolume():
-                    if vol.ssh_endpoint not in self.ssh_endpoints:
-                        ref = vol.ssh_endpoint
-                        raise ValueError(
-                            f"Volume '{vol_slug}' references "
-                            f"unknown ssh-endpoint '{ref}'"
-                        )
-                    if vol.ssh_endpoints is not None:
-                        for ep_ref in vol.ssh_endpoints:
-                            if ep_ref not in self.ssh_endpoints:
-                                raise ValueError(
-                                    f"Volume '{vol_slug}'"
-                                    f" references unknown"
-                                    f" ssh-endpoint"
-                                    f" '{ep_ref}'"
-                                )
-        # Sync endpoint volume references
-        for ep_slug, ep in self.sync_endpoints.items():
-            if ep.volume not in self.volumes:
-                raise ValueError(
-                    f"Sync endpoint '{ep_slug}' references unknown volume '{ep.volume}'"
-                )
+    def _unknown_proxy_jump_errors(self) -> Iterator[ValueError]:
+        """Proxy-jump hops naming an undeclared ssh-endpoint."""
+        return (
+            _unknown_reference(
+                f"Server '{slug}' references unknown proxy-jump server '{hop}'"
+            )
+            for slug, server in self.ssh_endpoints.items()
+            for hop in server.proxy_jump_chain
+            if hop not in self.ssh_endpoints
+        )
 
-        # Unique (volume, subdir) per sync endpoint
-        seen_locations: dict[tuple[str, str | None], str] = {}
-        for ep_slug, ep in self.sync_endpoints.items():
-            loc = (ep.volume, ep.subdir)
-            if loc in seen_locations:
-                other = seen_locations[loc]
-                subdir_msg = f" subdir '{ep.subdir}'" if ep.subdir else ""
-                raise ValueError(
-                    f"Sync endpoints '{other}' and"
-                    f" '{ep_slug}' both target volume"
-                    f" '{ep.volume}'{subdir_msg}"
-                )
-            seen_locations[loc] = ep_slug
+    def _circular_proxy_jump_errors(self) -> Iterator[ValueError]:
+        """Servers whose transitive proxy-jump chain leads back to a server."""
+        return (
+            config_error(
+                ConfigValidationCode.CIRCULAR_PROXY_JUMP,
+                f"Circular proxy-jump chain detected starting from server '{slug}'",
+            )
+            for slug in self.ssh_endpoints
+            if self._has_proxy_cycle(slug, frozenset())
+        )
 
-        # Nested (volume, subdir) paths across sync endpoints
-        endpoints_by_volume: dict[str, list[tuple[str, str]]] = {}
-        for ep_slug, ep in self.sync_endpoints.items():
-            path = ep.subdir or ""
-            endpoints_by_volume.setdefault(ep.volume, []).append((ep_slug, path))
-        for vol_slug, eps in endpoints_by_volume.items():
-            for (slug_a, path_a), (slug_b, path_b) in combinations(eps, 2):
-                if path_a == path_b:
-                    continue  # already caught by the duplicate check above
-                norm_a = f"{path_a}/" if path_a else ""
-                norm_b = f"{path_b}/" if path_b else ""
-                if norm_a.startswith(norm_b) or norm_b.startswith(norm_a):
-                    parent, child = (
-                        (slug_a, slug_b)
-                        if len(path_a) < len(path_b)
-                        else (slug_b, slug_a)
-                    )
-                    raise ValueError(
-                        f"Sync endpoint '{child}' is nested inside"
-                        f" '{parent}' on volume '{vol_slug}':"
-                        f" overlapping endpoint paths are not supported"
-                        f" because sync dependencies cannot be"
-                        f" detected between them"
-                    )
+    def _has_proxy_cycle(self, slug: str, visited: frozenset[str]) -> bool:
+        """Whether following proxy-jumps from ``slug`` revisits a server."""
+        return slug in visited or any(
+            self._has_proxy_cycle(hop, visited | {slug})
+            for hop in self.ssh_endpoints[slug].proxy_jump_chain
+        )
 
-        # Sync source/destination endpoint references
-        for sync_slug, sync in self.syncs.items():
-            if sync.source not in self.sync_endpoints:
-                raise ValueError(
-                    f"Sync '{sync_slug}' references"
-                    f" unknown source endpoint"
-                    f" '{sync.source}'"
-                )
-            if sync.destination not in self.sync_endpoints:
-                raise ValueError(
-                    f"Sync '{sync_slug}' references"
-                    f" unknown destination endpoint"
-                    f" '{sync.destination}'"
-                )
+    def _volume_reference_errors(self) -> Iterator[ValueError]:
+        """Volumes naming unknown ssh-endpoints, sync endpoints unknown volumes."""
+        yield from (
+            _unknown_reference(
+                f"Volume '{vol_slug}' references unknown ssh-endpoint '{ref}'"
+            )
+            for vol_slug, vol in self.volumes.items()
+            if isinstance(vol, RemoteVolume)
+            for ref in [vol.ssh_endpoint, *(vol.ssh_endpoints or [])]
+            if ref not in self.ssh_endpoints
+        )
+        yield from (
+            _unknown_reference(
+                f"Sync endpoint '{ep_slug}' references unknown volume '{ep.volume}'"
+            )
+            for ep_slug, ep in self.sync_endpoints.items()
+            if ep.volume not in self.volumes
+        )
 
-        # Unique destination per sync
-        dest_owners: dict[str, str] = {}
-        for sync_slug, sync in self.syncs.items():
-            if sync.destination in dest_owners:
-                other = dest_owners[sync.destination]
-                raise ValueError(
-                    f"Syncs '{other}' and"
-                    f" '{sync_slug}' share"
-                    f" destination endpoint"
-                    f" '{sync.destination}'"
-                )
-            dest_owners[sync.destination] = sync_slug
+    def _sync_endpoint_location_errors(self) -> Iterator[ValueError]:
+        """Sync endpoints on one volume that share or nest a path."""
+        candidates = (
+            _location_error(slug_a, ep_a, slug_b, ep_b)
+            for (slug_a, ep_a), (slug_b, ep_b) in combinations(
+                self.sync_endpoints.items(), 2
+            )
+            if ep_a.volume == ep_b.volume
+        )
+        return (error for error in candidates if error is not None)
 
-        # Cross-server remote-to-remote check
-        for sync_slug, sync in self.syncs.items():
-            src_ep = self.sync_endpoints[sync.source]
-            dst_ep = self.sync_endpoints[sync.destination]
-            src_vol = self.volumes[src_ep.volume]
-            dst_vol = self.volumes[dst_ep.volume]
-            if (
-                isinstance(src_vol, RemoteVolume)
-                and isinstance(dst_vol, RemoteVolume)
-                and src_vol.ssh_endpoint != dst_vol.ssh_endpoint
-            ):
-                raise ValueError(
-                    f"Sync '{sync_slug}' has source on"
-                    f" '{src_vol.ssh_endpoint}' and"
-                    f" destination on"
-                    f" '{dst_vol.ssh_endpoint}'."
-                    f" Cross-server remote-to-remote"
-                    f" syncs are not supported."
-                    f" Use two separate syncs through"
-                    f" the local machine instead."
-                )
+    def _sync_reference_errors(self) -> Iterator[ValueError]:
+        """Syncs naming unknown source or destination endpoints."""
+        return (
+            _unknown_reference(
+                f"Sync '{sync_slug}' references unknown {role} endpoint '{ref}'"
+            )
+            for sync_slug, sync in self.syncs.items()
+            for role, ref in (
+                ("source", sync.source),
+                ("destination", sync.destination),
+            )
+            if ref not in self.sync_endpoints
+        )
 
-        # Credential provider validation
-        if (
+    def _shared_destination_errors(self) -> Iterator[ValueError]:
+        """Pairs of syncs writing to the same destination endpoint."""
+        return (
+            config_error(
+                ConfigValidationCode.SHARED_DESTINATION,
+                f"Syncs '{slug_a}' and '{slug_b}' share destination endpoint"
+                f" '{sync_a.destination}'",
+            )
+            for (slug_a, sync_a), (slug_b, sync_b) in combinations(
+                self.syncs.items(), 2
+            )
+            if sync_a.destination == sync_b.destination
+        )
+
+    def _cross_server_errors(self) -> Iterator[ValueError]:
+        """Remote-to-remote syncs whose volumes live on different servers."""
+        volume_pairs = (
+            (
+                sync_slug,
+                self.volumes[self.source_endpoint(sync).volume],
+                self.volumes[self.destination_endpoint(sync).volume],
+            )
+            for sync_slug, sync in self.syncs.items()
+        )
+        return (
+            config_error(
+                ConfigValidationCode.CROSS_SERVER_SYNC,
+                f"Sync '{sync_slug}' has source on '{src_vol.ssh_endpoint}'"
+                f" and destination on '{dst_vol.ssh_endpoint}'."
+                " Cross-server remote-to-remote syncs are not supported."
+                " Use two separate syncs through the local machine instead.",
+            )
+            for sync_slug, src_vol, dst_vol in volume_pairs
+            if isinstance(src_vol, RemoteVolume)
+            and isinstance(dst_vol, RemoteVolume)
+            and src_vol.ssh_endpoint != dst_vol.ssh_endpoint
+        )
+
+    def _credential_errors(self) -> Iterator[ValueError]:
+        """A ``command`` provider without a command, or one lacking ``{id}``."""
+        missing_command = (
             self.credential_provider == CredentialProvider.COMMAND
             and self.credential_command is None
-        ):
-            raise ValueError(
-                "credential-command is required when credential-provider is 'command'"
-            )
-
-        if self.credential_command is not None:
-            joined = " ".join(self.credential_command)
-            if "{id}" not in joined:
-                raise ValueError(
-                    "credential-command must contain the '{id}' placeholder"
-                )
-
-        return self
+        )
+        missing_placeholder = self.credential_command is not None and not any(
+            "{id}" in part for part in self.credential_command
+        )
+        return iter(
+            [
+                *(
+                    [
+                        config_error(
+                            ConfigValidationCode.CREDENTIAL_COMMAND_REQUIRED,
+                            "credential-command is required when"
+                            " credential-provider is 'command'",
+                        )
+                    ]
+                    if missing_command
+                    else []
+                ),
+                *(
+                    [
+                        config_error(
+                            ConfigValidationCode.CREDENTIAL_COMMAND_PLACEHOLDER,
+                            "credential-command must contain the '{id}' placeholder",
+                        )
+                    ]
+                    if missing_placeholder
+                    else []
+                ),
+            ]
+        )

@@ -185,3 +185,53 @@ class TestConfigError:
         assert result.exit_code == 2
         out = strip_panel(result.output)
         assert "unknown ssh-endpoint 'missing'" in out
+
+
+class TestConfigErrorJson:
+    def test_validation_error_as_json(self) -> None:
+        from pydantic import ValidationError
+
+        from nbkp.config import ConfigError, ConfigErrorReason, ConfigValidationCode
+        from nbkp.config.protocol import Config
+
+        try:
+            Config.model_validate(
+                {
+                    "volumes": {
+                        "v": {"type": "remote", "ssh-endpoint": "missing", "path": "/x"}
+                    }
+                }
+            )
+        except ValidationError as ve:
+            err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
+            err.__cause__ = ve
+
+        with patch("nbkp.config.cli.helpers.load_config", side_effect=err):
+            result = runner.invoke(
+                app, ["config", "show", "--config", "/bad.yaml", "-o", "json"]
+            )
+        assert result.exit_code == 2
+        data = json.loads(result.stdout)
+        assert data["error"]["reason"] == ConfigErrorReason.VALIDATION
+        assert [e["type"] for e in data["error"]["errors"]] == [
+            ConfigValidationCode.UNKNOWN_REFERENCE
+        ]
+
+    def test_plain_error_as_json(self) -> None:
+        from nbkp.config import ConfigError, ConfigErrorReason
+
+        err = ConfigError(
+            "Config file not found: /bad.yaml",
+            reason=ConfigErrorReason.FILE_NOT_FOUND,
+        )
+        with patch("nbkp.config.cli.helpers.load_config", side_effect=err):
+            result = runner.invoke(
+                app, ["preflight", "check", "--config", "/bad.yaml", "-o", "json"]
+            )
+        assert result.exit_code == 2
+        assert json.loads(result.stdout) == {
+            "error": {
+                "reason": "file-not-found",
+                "message": "Config file not found: /bad.yaml",
+            }
+        }

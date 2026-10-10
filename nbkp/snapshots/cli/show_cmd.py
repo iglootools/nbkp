@@ -78,7 +78,7 @@ def show(
     ] = True,
 ) -> None:
     """Display snapshot information for each sync endpoint."""
-    cfg = load_config_or_exit(config)
+    cfg = load_config_or_exit(config, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
 

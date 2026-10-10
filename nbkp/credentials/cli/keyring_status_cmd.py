@@ -35,7 +35,7 @@ def keyring_status(
     ] = OutputFormat.HUMAN,
 ) -> None:
     """Check whether LUKS passphrases are available in the credential store."""
-    cfg = load_config_or_exit(config)
+    cfg = load_config_or_exit(config, output)
     passphrase_ids = collect_passphrase_ids(cfg)
 
     if not passphrase_ids:

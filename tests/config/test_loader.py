@@ -7,12 +7,15 @@ from textwrap import dedent
 
 import pytest
 import yaml
+from pydantic import ValidationError
+from pydantic_core import ErrorDetails
 
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     ConfigError,
     ConfigErrorReason,
+    ConfigValidationCode,
     HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
@@ -25,14 +28,27 @@ from nbkp.config import (
     load_config,
 )
 from nbkp.remote.resolution import resolve_proxy_chain
+from tests.conftest import config_to_yaml
 
 
-def _config_to_yaml(config: Config) -> str:
-    return yaml.safe_dump(
-        config.model_dump(by_alias=True, mode="json"),
-        default_flow_style=False,
-        sort_keys=False,
-    )
+def _validation_errors(path: Path) -> list[ErrorDetails]:
+    """Load ``path``, expecting a validation failure, and return its errors."""
+    with pytest.raises(ConfigError) as excinfo:
+        load_config(str(path))
+    assert excinfo.value.reason == ConfigErrorReason.VALIDATION
+    cause = excinfo.value.__cause__
+    assert isinstance(cause, ValidationError)
+    return cause.errors()
+
+
+def _error_types(error: ValidationError) -> set[str]:
+    """The pydantic error ``type`` codes carried by a ValidationError."""
+    return {err["type"] for err in error.errors()}
+
+
+def _validation_error_types(path: Path) -> set[str]:
+    """The pydantic error ``type`` codes raised when loading ``path``."""
+    return {err["type"] for err in _validation_errors(path)}
 
 
 class TestFindConfigFile:
@@ -45,21 +61,17 @@ class TestFindConfigFile:
             find_config_file("/nonexistent/config.yaml")
         assert excinfo.value.reason == ConfigErrorReason.FILE_NOT_FOUND
 
-    def test_xdg_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_xdg_config(self, tmp_path: Path) -> None:
         xdg = tmp_path / "xdg"
         cfg = xdg / "nbkp" / "config.yaml"
         cfg.parent.mkdir(parents=True)
-        cfg.write_text("volumes: {}\nsyncs: {}\n")
-        monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
-        result = find_config_file()
+        cfg.write_text(config_to_yaml(Config()))
+        result = find_config_file(environ={"XDG_CONFIG_HOME": str(xdg)})
         assert result == cfg
 
-    def test_no_config_found(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "empty"))
+    def test_no_config_found(self, tmp_path: Path) -> None:
         with pytest.raises(ConfigError) as excinfo:
-            find_config_file()
+            find_config_file(environ={"XDG_CONFIG_HOME": str(tmp_path / "empty")})
         assert excinfo.value.reason == ConfigErrorReason.NO_CONFIG_FOUND
 
 
@@ -99,12 +111,7 @@ class TestLoadConfig:
             syncs: {}
         """)
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "does not match any of the expected tags" in str(cause)
+        assert "union_tag_invalid" in _validation_error_types(p)
 
     def test_missing_local_path(self, tmp_path: Path) -> None:
         p = tmp_path / "no_path.yaml"
@@ -116,20 +123,13 @@ class TestLoadConfig:
             syncs: {}
         """)
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        errors = cause.errors()
-        # ``path`` is now Optional with a model validator enforcing
-        # "path required iff no mount", so a missing path surfaces as a
-        # model-level value_error rather than a field "missing" error.
+        # ``path`` is Optional with a model validator enforcing "path
+        # required iff no mount", so a missing path surfaces as a model-level
+        # error rather than a field "missing" error.
         assert any(
             err["loc"] == ("volumes", "v", "local")
-            and err["type"] == "value_error"
-            and "'path' is required" in err["msg"]
-            for err in errors
+            and err["type"] == ConfigValidationCode.PATH_REQUIRED
+            for err in _validation_errors(p)
         )
 
     def test_missing_remote_host(self, tmp_path: Path) -> None:
@@ -147,14 +147,9 @@ class TestLoadConfig:
             syncs: {}
         """)
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        errors = cause.errors()
         assert any(
-            "host" in str(err["loc"]) and err["type"] == "missing" for err in errors
+            "host" in err["loc"] and err["type"] == "missing"
+            for err in _validation_errors(p)
         )
 
     def test_unknown_ssh_endpoint_reference(self, tmp_path: Path) -> None:
@@ -170,12 +165,7 @@ class TestLoadConfig:
             syncs: {}
         """)
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "unknown ssh-endpoint 'missing'" in str(cause)
+        assert ConfigValidationCode.UNKNOWN_REFERENCE in _validation_error_types(p)
 
     def test_unknown_volume_reference(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_ref.yaml"
@@ -196,12 +186,7 @@ class TestLoadConfig:
                 destination: ep-dst
         """)
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "unknown volume" in str(cause)
+        assert ConfigValidationCode.UNKNOWN_REFERENCE in _validation_error_types(p)
 
     def test_missing_source_volume(self, tmp_path: Path) -> None:
         p = tmp_path / "no_src_vol.yaml"
@@ -222,12 +207,7 @@ class TestLoadConfig:
                 destination: ep-dst
         """)
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "unknown volume" in str(cause)
+        assert ConfigValidationCode.UNKNOWN_REFERENCE in _validation_error_types(p)
 
     def test_sync_missing_source(self, tmp_path: Path) -> None:
         p = tmp_path / "no_src.yaml"
@@ -245,15 +225,9 @@ class TestLoadConfig:
                 destination: ep-dst
         """)
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        errors = cause.errors()
         assert any(
             err["loc"] == ("syncs", "s", "source") and err["type"] == "missing"
-            for err in errors
+            for err in _validation_errors(p)
         )
 
     def test_filter_normalization(self, tmp_path: Path) -> None:
@@ -372,7 +346,7 @@ class TestLoadConfig:
             },
         )
         p = tmp_path / "opts.yaml"
-        p.write_text(_config_to_yaml(config))
+        p.write_text(config_to_yaml(config))
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
         assert sync.rsync_options.default_options_override == [
@@ -405,7 +379,7 @@ class TestLoadConfig:
             },
         )
         p = tmp_path / "extra.yaml"
-        p.write_text(_config_to_yaml(config))
+        p.write_text(config_to_yaml(config))
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
         assert sync.rsync_options.default_options_override is None
@@ -429,7 +403,7 @@ class TestLoadConfig:
             },
         )
         p = tmp_path / "ssh_opts.yaml"
-        p.write_text(_config_to_yaml(config))
+        p.write_text(config_to_yaml(config))
         cfg = load_config(str(p))
         opts = cfg.ssh_endpoints["slow"].connection_options
         assert opts.connect_timeout == 30
@@ -449,7 +423,7 @@ class TestLoadConfig:
             },
         )
         p = tmp_path / "keepalive.yaml"
-        p.write_text(_config_to_yaml(config))
+        p.write_text(config_to_yaml(config))
         cfg = load_config(str(p))
         opts = cfg.ssh_endpoints["keepalive"].connection_options
         assert opts.server_alive_interval == 60
@@ -467,7 +441,7 @@ class TestLoadConfig:
             },
         )
         p = tmp_path / "ch_timeout.yaml"
-        p.write_text(_config_to_yaml(config))
+        p.write_text(config_to_yaml(config))
         cfg = load_config(str(p))
         opts = cfg.ssh_endpoints["ch-timeout"].connection_options
         assert opts.channel_timeout == 30.0
@@ -487,7 +461,7 @@ class TestLoadConfig:
             },
         )
         p = tmp_path / "disabled_algs.yaml"
-        p.write_text(_config_to_yaml(config))
+        p.write_text(config_to_yaml(config))
         cfg = load_config(str(p))
         opts = cfg.ssh_endpoints["restricted"].connection_options
         assert opts.disabled_algorithms == {
@@ -509,7 +483,7 @@ class TestLoadConfig:
             },
         )
         p = tmp_path / "proxy.yaml"
-        p.write_text(_config_to_yaml(config))
+        p.write_text(config_to_yaml(config))
         cfg = load_config(str(p))
         assert cfg.ssh_endpoints["target"].proxy_jump == "bastion"
         chain = resolve_proxy_chain(cfg, cfg.ssh_endpoints["target"])
@@ -530,12 +504,7 @@ class TestLoadConfig:
                 }
             )
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "unknown proxy-jump server" in str(cause)
+        assert ConfigValidationCode.UNKNOWN_REFERENCE in _validation_error_types(p)
 
     def test_proxy_jump_circular(self, tmp_path: Path) -> None:
         p = tmp_path / "circular.yaml"
@@ -555,12 +524,7 @@ class TestLoadConfig:
                 }
             )
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "Circular proxy-jump chain" in str(cause)
+        assert ConfigValidationCode.CIRCULAR_PROXY_JUMP in _validation_error_types(p)
 
     def test_proxy_jumps_valid(self, tmp_path: Path) -> None:
         config = Config(
@@ -581,7 +545,7 @@ class TestLoadConfig:
             },
         )
         p = tmp_path / "proxy_jumps.yaml"
-        p.write_text(_config_to_yaml(config))
+        p.write_text(config_to_yaml(config))
         cfg = load_config(str(p))
         chain = resolve_proxy_chain(cfg, cfg.ssh_endpoints["target"])
         assert len(chain) == 2
@@ -603,7 +567,7 @@ class TestLoadConfig:
             },
         )
         p = tmp_path / "proxy_jumps_single.yaml"
-        p.write_text(_config_to_yaml(config))
+        p.write_text(config_to_yaml(config))
         cfg = load_config(str(p))
         chain = resolve_proxy_chain(cfg, cfg.ssh_endpoints["target"])
         assert len(chain) == 1
@@ -629,12 +593,7 @@ class TestLoadConfig:
                 }
             )
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "mutually exclusive" in str(cause)
+        assert ConfigValidationCode.MUTUALLY_EXCLUSIVE in _validation_error_types(p)
 
     def test_proxy_jumps_unknown_server(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_proxy_jumps.yaml"
@@ -650,12 +609,7 @@ class TestLoadConfig:
                 }
             )
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "unknown proxy-jump server" in str(cause)
+        assert ConfigValidationCode.UNKNOWN_REFERENCE in _validation_error_types(p)
 
     def test_proxy_jumps_circular(self, tmp_path: Path) -> None:
         p = tmp_path / "circular_jumps.yaml"
@@ -675,12 +629,7 @@ class TestLoadConfig:
                 }
             )
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "Circular proxy-jump chain" in str(cause)
+        assert ConfigValidationCode.CIRCULAR_PROXY_JUMP in _validation_error_types(p)
 
     def test_extends_proxy_jumps_overrides_parent_proxy_jump(
         self, tmp_path: Path
@@ -808,12 +757,7 @@ class TestLoadConfig:
                   - badkey: value
         """)
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "include" in str(cause) or "exclude" in str(cause)
+        assert ConfigValidationCode.INVALID_FILTER in _validation_error_types(p)
 
     def test_hard_link_snapshots(self, tmp_path: Path) -> None:
         config = Config(
@@ -840,7 +784,7 @@ class TestLoadConfig:
             },
         )
         p = tmp_path / "hl.yaml"
-        p.write_text(_config_to_yaml(config))
+        p.write_text(config_to_yaml(config))
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
         dst_ep = cfg.destination_endpoint(sync)
@@ -872,7 +816,7 @@ class TestLoadConfig:
             },
         )
         p = tmp_path / "hl_no_max.yaml"
-        p.write_text(_config_to_yaml(config))
+        p.write_text(config_to_yaml(config))
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
         dst_ep = cfg.destination_endpoint(sync)
@@ -880,13 +824,14 @@ class TestLoadConfig:
         assert dst_ep.hard_link_snapshots.max_snapshots is None
 
     def test_mutual_exclusivity_btrfs_and_hardlink(self, tmp_path: Path) -> None:
-        with pytest.raises(Exception, match="mutually exclusive"):
+        with pytest.raises(ValidationError) as excinfo:
             SyncEndpoint(
                 slug="ep",
                 volume="v",
                 btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
                 hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
             )
+        assert _error_types(excinfo.value) == {ConfigValidationCode.MUTUALLY_EXCLUSIVE}
 
     def test_snapshot_mode_none(self) -> None:
         ep = SyncEndpoint(slug="ep", volume="v")
@@ -923,12 +868,7 @@ class TestLoadConfig:
                 }
             )
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "mutually exclusive" in str(cause)
+        assert ConfigValidationCode.MUTUALLY_EXCLUSIVE in _validation_error_types(p)
 
     def test_location_list_property(self) -> None:
         # Single location
@@ -1029,7 +969,7 @@ class TestLoadConfig:
             },
         )
         p = tmp_path / "src_btrfs.yaml"
-        p.write_text(_config_to_yaml(config))
+        p.write_text(config_to_yaml(config))
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
         src_ep = cfg.source_endpoint(sync)
@@ -1061,7 +1001,7 @@ class TestLoadConfig:
             },
         )
         p = tmp_path / "src_hl.yaml"
-        p.write_text(_config_to_yaml(config))
+        p.write_text(config_to_yaml(config))
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
         src_ep = cfg.source_endpoint(sync)
@@ -1086,12 +1026,7 @@ class TestLoadConfig:
                 destination: ep-dst
         """)
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "unknown source endpoint" in str(cause)
+        assert ConfigValidationCode.UNKNOWN_REFERENCE in _validation_error_types(p)
 
     def test_unknown_destination_endpoint_reference(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_dst_ep.yaml"
@@ -1110,12 +1045,7 @@ class TestLoadConfig:
                 destination: missing
         """)
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "unknown destination endpoint" in str(cause)
+        assert ConfigValidationCode.UNKNOWN_REFERENCE in _validation_error_types(p)
 
     def test_duplicate_destination_endpoint(self, tmp_path: Path) -> None:
         p = tmp_path / "dup_dst.yaml"
@@ -1144,12 +1074,7 @@ class TestLoadConfig:
                 destination: ep-dst
         """)
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "share destination endpoint" in str(cause)
+        assert ConfigValidationCode.SHARED_DESTINATION in _validation_error_types(p)
 
     def test_duplicate_volume_subdir_in_endpoints(self, tmp_path: Path) -> None:
         p = tmp_path / "dup_loc.yaml"
@@ -1169,12 +1094,10 @@ class TestLoadConfig:
             syncs: {}
         """)
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "both target volume" in str(cause)
+        assert (
+            ConfigValidationCode.DUPLICATE_ENDPOINT_LOCATION
+            in _validation_error_types(p)
+        )
 
     def test_nested_endpoint_subdir(self, tmp_path: Path) -> None:
         p = tmp_path / "nested.yaml"
@@ -1194,14 +1117,12 @@ class TestLoadConfig:
             syncs: {}
         """)
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "nested inside" in str(cause)
-        assert "ep-child" in str(cause)
-        assert "ep-parent" in str(cause)
+        [error] = _validation_errors(p)
+        assert error["type"] == ConfigValidationCode.NESTED_ENDPOINT
+        # The message names the child first: it is the one to move or drop.
+        assert error["msg"].startswith(
+            "Sync endpoint 'ep-child' is nested inside 'ep-parent'"
+        )
 
     def test_nested_endpoint_root_contains_subdir(self, tmp_path: Path) -> None:
         p = tmp_path / "root_nested.yaml"
@@ -1220,12 +1141,7 @@ class TestLoadConfig:
             syncs: {}
         """)
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "nested inside" in str(cause)
+        assert ConfigValidationCode.NESTED_ENDPOINT in _validation_error_types(p)
 
     def test_nested_endpoint_deeply_nested(self, tmp_path: Path) -> None:
         p = tmp_path / "deep_nested.yaml"
@@ -1245,57 +1161,84 @@ class TestLoadConfig:
             syncs: {}
         """)
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "nested inside" in str(cause)
+        assert ConfigValidationCode.NESTED_ENDPOINT in _validation_error_types(p)
 
     def test_non_overlapping_prefix_endpoints_allowed(self, tmp_path: Path) -> None:
-        p = tmp_path / "prefix_ok.yaml"
-        p.write_text(
-            dedent("""\
-            volumes:
-              v:
-                type: local
-                path: /x
-            sync-endpoints:
-              ep1:
-                volume: v
-                subdir: backup
-              ep2:
-                volume: v
-                subdir: backup2
-            syncs: {}
-        """)
+        config = Config(
+            volumes={"v": LocalVolume(slug="v", path="/x")},
+            sync_endpoints={
+                "ep1": SyncEndpoint(slug="ep1", volume="v", subdir="backup"),
+                "ep2": SyncEndpoint(slug="ep2", volume="v", subdir="backup2"),
+            },
         )
+        p = tmp_path / "prefix_ok.yaml"
+        p.write_text(config_to_yaml(config))
         cfg = load_config(str(p))
         assert len(cfg.sync_endpoints) == 2
 
     def test_nested_paths_on_different_volumes_allowed(self, tmp_path: Path) -> None:
-        p = tmp_path / "diff_vol.yaml"
-        p.write_text(
-            dedent("""\
-            volumes:
-              v1:
-                type: local
-                path: /x
-              v2:
-                type: local
-                path: /y
-            sync-endpoints:
-              ep1:
-                volume: v1
-                subdir: data
-              ep2:
-                volume: v2
-                subdir: data/sub
-            syncs: {}
-        """)
+        config = Config(
+            volumes={
+                "v1": LocalVolume(slug="v1", path="/x"),
+                "v2": LocalVolume(slug="v2", path="/y"),
+            },
+            sync_endpoints={
+                "ep1": SyncEndpoint(slug="ep1", volume="v1", subdir="data"),
+                "ep2": SyncEndpoint(slug="ep2", volume="v2", subdir="data/sub"),
+            },
         )
+        p = tmp_path / "diff_vol.yaml"
+        p.write_text(config_to_yaml(config))
         cfg = load_config(str(p))
         assert len(cfg.sync_endpoints) == 2
+
+    def test_shared_proxy_hop_is_not_circular(self, tmp_path: Path) -> None:
+        # A diamond (target -> [b1, b2], b1 -> b2) reaches b2 twice without
+        # a cycle, so it must not be reported as a circular chain.
+        config = Config(
+            ssh_endpoints={
+                "b2": SshEndpoint(slug="b2", host="b2.example.com"),
+                "b1": SshEndpoint(slug="b1", host="b1.example.com", proxy_jump="b2"),
+                "target": SshEndpoint(
+                    slug="target", host="target.internal", proxy_jumps=["b1", "b2"]
+                ),
+            },
+        )
+        p = tmp_path / "diamond.yaml"
+        p.write_text(config_to_yaml(config))
+        assert load_config(str(p)).ssh_endpoints["target"].proxy_jump_chain == [
+            "b1",
+            "b2",
+        ]
+
+    def test_extends_circular(self, tmp_path: Path) -> None:
+        p = tmp_path / "circular_extends.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "ssh-endpoints": {
+                        "a": {"host": "a.example.com", "extends": "b"},
+                        "b": {"host": "b.example.com", "extends": "a"},
+                    },
+                }
+            )
+        )
+        [error] = _validation_errors(p)
+        assert error["type"] == ConfigValidationCode.CIRCULAR_EXTENDS
+        assert error["msg"] == "Circular extends chain: a -> b -> a"
+
+    def test_extends_unknown_endpoint(self, tmp_path: Path) -> None:
+        p = tmp_path / "unknown_extends.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "ssh-endpoints": {
+                        "a": {"host": "a.example.com", "extends": "missing"},
+                    },
+                }
+            )
+        )
+        assert ConfigValidationCode.UNKNOWN_REFERENCE in _validation_error_types(p)
 
     def test_sync_endpoint_unknown_volume(self, tmp_path: Path) -> None:
         p = tmp_path / "ep_bad_vol.yaml"
@@ -1311,12 +1254,7 @@ class TestLoadConfig:
             syncs: {}
         """)
         )
-        with pytest.raises(ConfigError) as excinfo:
-            load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorReason.VALIDATION
-        cause = excinfo.value.__cause__
-        assert cause is not None
-        assert "unknown volume" in str(cause)
+        assert ConfigValidationCode.UNKNOWN_REFERENCE in _validation_error_types(p)
 
 
 class TestPathNormalization:
@@ -1438,13 +1376,16 @@ class TestPathNormalization:
         assert sync.filters == ["dir-merge .rsync-filter"]
 
     def test_dir_merge_unknown_option_raises(self) -> None:
-        with pytest.raises(ValueError, match="Unknown dir-merge option"):
+        with pytest.raises(ValidationError) as excinfo:
             SyncConfig(
                 slug="s",
                 source="src",
                 destination="dst",
                 filters=[{"dir-merge": {"path": ".rsync-filter", "bad": True}}],  # type: ignore[list-item]
             )
+        assert _error_types(excinfo.value) == {
+            ConfigValidationCode.UNKNOWN_DIR_MERGE_OPTION
+        }
 
     def test_ssh_key_tilde_expansion(self) -> None:
         ep = SshEndpoint(slug="s", host="example.com", key="~/.ssh/id_rsa")
@@ -1457,3 +1398,66 @@ class TestPathNormalization:
     def test_ssh_key_none(self) -> None:
         ep = SshEndpoint(slug="s", host="example.com")
         assert ep.key is None
+
+
+class TestNoSilentCoercion:
+    """Wrongly-typed values are rejected, not silently replaced by a default."""
+
+    def test_non_string_subdir_rejected(self) -> None:
+        # An unquoted ``subdir: 2024`` used to collapse to the volume root.
+        with pytest.raises(ValidationError) as excinfo:
+            SyncEndpoint(slug="ep", volume="v", subdir=2024)  # type: ignore[arg-type]
+        assert _error_types(excinfo.value) == {"string_type"}
+
+    def test_non_string_filter_file_rejected(self) -> None:
+        with pytest.raises(ValidationError) as excinfo:
+            SyncConfig(slug="s", source="a", destination="b", filter_file=42)  # type: ignore[arg-type]
+        assert _error_types(excinfo.value) == {"string_type"}
+
+    def test_non_string_ssh_key_rejected(self) -> None:
+        with pytest.raises(ValidationError) as excinfo:
+            SshEndpoint(slug="s", host="example.com", key=["~/.ssh/id"])  # type: ignore[arg-type]
+        assert _error_types(excinfo.value) == {"string_type"}
+
+    def test_filters_as_single_string_rejected(self) -> None:
+        # A bare string used to be iterated into one rule per character.
+        with pytest.raises(ValidationError) as excinfo:
+            SyncConfig(slug="s", source="a", destination="b", filters="- *.tmp")  # type: ignore[arg-type]
+        assert _error_types(excinfo.value) == {ConfigValidationCode.FILTERS_NOT_A_LIST}
+
+    def test_filters_as_mapping_rejected(self) -> None:
+        with pytest.raises(ValidationError) as excinfo:
+            SyncConfig(
+                slug="s",
+                source="a",
+                destination="b",
+                filters={"exclude": "*.tmp"},  # type: ignore[arg-type]
+            )
+        assert _error_types(excinfo.value) == {ConfigValidationCode.FILTERS_NOT_A_LIST}
+
+    def test_filters_null_rejected(self) -> None:
+        with pytest.raises(ValidationError) as excinfo:
+            SyncConfig(slug="s", source="a", destination="b", filters=None)  # type: ignore[arg-type]
+        assert _error_types(excinfo.value) == {"list_type"}
+
+    def test_invalid_filter_entry_code(self) -> None:
+        with pytest.raises(ValidationError) as excinfo:
+            SyncConfig(
+                slug="s",
+                source="a",
+                destination="b",
+                filters=[{"badkey": "value"}],  # type: ignore[list-item]
+            )
+        assert _error_types(excinfo.value) == {ConfigValidationCode.INVALID_FILTER}
+
+
+class TestFrozenModels:
+    def test_config_is_immutable(self, sample_config: Config) -> None:
+        with pytest.raises(ValidationError) as excinfo:
+            sample_config.credential_command = ["x"]  # type: ignore[misc]
+        assert _error_types(excinfo.value) == {"frozen_instance"}
+
+    def test_sync_endpoint_is_immutable(self) -> None:
+        ep = SyncEndpoint(slug="ep", volume="v")
+        with pytest.raises(ValidationError):
+            ep.subdir = "x"  # type: ignore[misc]

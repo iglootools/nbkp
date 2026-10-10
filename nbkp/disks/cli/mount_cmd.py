@@ -75,7 +75,7 @@ def mount(
     ] = None,
 ) -> None:
     """Unlock LUKS and mount volumes. Mounts all volumes with mount config, or specific ones via --name."""
-    cfg = load_config_or_exit(config)
+    cfg = load_config_or_exit(config, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
 
     passphrase_fn, cache = build_passphrase_fn(

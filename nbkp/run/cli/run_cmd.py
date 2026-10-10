@@ -117,7 +117,7 @@ def run(
     ] = True,
 ) -> None:
     """Execute all active syncs in dependency order. Supports dry-run, progress display, snapshot creation, and automatic pruning."""
-    cfg = load_config_or_exit(config)
+    cfg = load_config_or_exit(config, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
 

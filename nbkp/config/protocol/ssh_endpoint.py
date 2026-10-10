@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from .base import Slug, _BaseModel
+from .errors import ConfigValidationCode, config_error
 
 
 class SshConnectionOptions(_BaseModel):
@@ -96,10 +97,14 @@ class SshEndpoint(_BaseModel):
 
     @field_validator("key", mode="before")
     @classmethod
-    def normalize_key(cls, v: Any) -> str | None:
-        if not isinstance(v, str):
-            return None
-        return str(Path(v).expanduser())
+    def normalize_key(cls, v: Any) -> Any:
+        # Non-strings pass through so pydantic rejects them rather than
+        # silently dropping the key.
+        match v:
+            case str():
+                return str(Path(v).expanduser())
+            case _:
+                return v
 
     connection_options: SshConnectionOptions = Field(
         default_factory=lambda: SshConnectionOptions(),
@@ -131,13 +136,19 @@ class SshEndpoint(_BaseModel):
     @model_validator(mode="after")
     def validate_proxy_exclusivity(self) -> SshEndpoint:
         if self.proxy_jump is not None and self.proxy_jumps is not None:
-            raise ValueError("proxy-jump and proxy-jumps are mutually exclusive")
+            raise config_error(
+                ConfigValidationCode.MUTUALLY_EXCLUSIVE,
+                "proxy-jump and proxy-jumps are mutually exclusive",
+            )
         return self
 
     @model_validator(mode="after")
     def validate_location_exclusivity(self) -> SshEndpoint:
         if self.location is not None and self.locations is not None:
-            raise ValueError("location and locations are mutually exclusive")
+            raise config_error(
+                ConfigValidationCode.MUTUALLY_EXCLUSIVE,
+                "location and locations are mutually exclusive",
+            )
         return self
 
     @property

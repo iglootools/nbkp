@@ -82,7 +82,7 @@ def prune(
     ] = True,
 ) -> None:
     """Remove snapshots beyond the `max-snapshots` limit. Normally handled automatically by `run`, but can be invoked manually."""
-    cfg = load_config_or_exit(config)
+    cfg = load_config_or_exit(config, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
     output_format = output
 

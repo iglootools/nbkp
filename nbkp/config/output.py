@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import ValidationError
 from pydantic_core import ErrorDetails
 from rich.console import Console
@@ -168,7 +170,7 @@ def print_human_config(
                 Text(server.user or ""),
                 Text(server.key or ""),
                 ", ".join(server.proxy_jump_chain) or "",
-                ", ".join(server.location_list),
+                Text(", ".join(server.location_list)),
             )
 
         console.print(server_table)
@@ -223,12 +225,55 @@ def print_human_config(
     console.print(sync_table)
 
 
+def _validation_message(err: ErrorDetails) -> str:
+    return str(err["msg"]).removeprefix("Value error, ")
+
+
 def _format_validation_error(err: ErrorDetails) -> str:
     """Format a single Pydantic validation error for display."""
     loc = " → ".join(str(p) for p in err["loc"])
-    msg = str(err["msg"])
-    msg = msg.removeprefix("Value error, ")
+    msg = _validation_message(err)
     return f"{loc}: {msg}" if loc else msg
+
+
+def _config_error_body(e: ConfigError) -> str:
+    """The human-readable detail of a ConfigError, one problem per line."""
+    match e.__cause__:
+        case ValidationError() as cause:
+            return "\n".join(_format_validation_error(err) for err in cause.errors())
+        case _:
+            return str(e)
+
+
+def _validation_errors_json(cause: ValidationError) -> list[dict[str, Any]]:
+    return [
+        {
+            "loc": [str(p) for p in err["loc"]],
+            "type": err["type"],
+            "message": _validation_message(err),
+        }
+        for err in cause.errors()
+    ]
+
+
+def config_error_json(e: ConfigError) -> dict[str, Any]:
+    """A ConfigError as JSON-ready data for ``--output json``.
+
+    Validation failures also list each problem with its location and its
+    stable ``type`` code (see ``ConfigValidationCode``).
+    """
+    cause = e.__cause__
+    return {
+        "error": {
+            "reason": e.reason.value,
+            "message": _config_error_body(e),
+            **(
+                {"errors": _validation_errors_json(cause)}
+                if isinstance(cause, ValidationError)
+                else {}
+            ),
+        }
+    }
 
 
 def print_config_error(
@@ -239,12 +284,7 @@ def print_config_error(
     """Print a ConfigError as a Rich panel to stderr."""
     if console is None:
         console = Console(stderr=True)
-    cause = e.__cause__
-    match cause:
-        case ValidationError():
-            body = "\n".join(_format_validation_error(err) for err in cause.errors())
-        case _:
-            body = str(e)
+    body = _config_error_body(e)
     # Both wrapped in Text: the title's own brackets would be read as a style
     # tag (rendering a bare "Config error"), and the body carries YAML parser
     # and pydantic messages, which embed "[type=..., input_value=...]".
