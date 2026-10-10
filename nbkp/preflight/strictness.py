@@ -8,7 +8,7 @@ The :class:`~nbkp.policy.Strictness` enum is generic run policy and lives in
 from __future__ import annotations
 
 from ..policy import Strictness
-from .status import SyncError, SyncStatus
+from .status.sync import SyncError, SyncStatus
 
 
 def _is_disabled(status: SyncStatus) -> bool:

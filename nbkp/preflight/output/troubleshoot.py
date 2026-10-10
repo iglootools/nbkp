@@ -23,19 +23,15 @@ from ...disks import DeviceProbeError, discover_cleartext_device, generate_auth_
 from ...policy import Severity, Strictness
 from ...remote.endpoints import ResolvedEndpoints
 from ..severity import PreflightError, severity_for_error
-from ..status import (
+from ..status.endpoint import (
     DestinationEndpointError,
     DestinationEndpointStatus,
     SourceEndpointError,
     SourceEndpointStatus,
-    SshEndpointError,
-    SshEndpointStatus,
-    SshEndpointWarning,
-    SyncError,
-    SyncStatus,
-    VolumeError,
-    VolumeStatus,
 )
+from ..status.ssh import SshEndpointError, SshEndpointStatus, SshEndpointWarning
+from ..status.sync import SyncError, SyncStatus
+from ..status.volume import VolumeError, VolumeStatus
 from .remediation import (
     ERROR,
     HEADER,

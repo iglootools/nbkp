@@ -35,15 +35,15 @@ from .probes import (
     resolve_endpoint,
 )
 from .snapshot_checks import check_btrfs_subvolume
-from .status import (
+from .status.endpoint import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
-    HostToolCapabilities,
     LatestSymlinkState,
     SnapshotDirsDiagnostics,
     SourceEndpointDiagnostics,
-    VolumeCapabilities,
 )
+from .status.ssh import HostToolCapabilities
+from .status.volume import VolumeCapabilities
 
 
 def observe_source_endpoint(

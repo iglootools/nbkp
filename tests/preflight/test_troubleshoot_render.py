@@ -15,22 +15,20 @@ from nbkp.config import (
     LuksEncryptionConfig,
     MountConfig,
 )
+from nbkp.disks import MountToolCapabilities
 from nbkp.preflight.output import (
     TroubleshootContext,
     collect_issues,
     print_human_troubleshoot,
     troubleshoot_json,
 )
-from nbkp.preflight.status import (
+from nbkp.preflight.status.ssh import (
     HostToolCapabilities,
-    MountToolCapabilities,
     SshEndpointDiagnostics,
     SshEndpointStatus,
     SshEndpointToolNeeds,
-    VolumeDiagnostics,
-    VolumeError,
-    VolumeStatus,
 )
+from nbkp.preflight.status.volume import VolumeDiagnostics, VolumeError, VolumeStatus
 
 
 def _render(

@@ -21,7 +21,7 @@ from ..output import (
     print_human_troubleshoot,
     troubleshoot_json,
 )
-from ..status import PreflightResult
+from ..status.result import PreflightResult
 from ..strictness import has_fatal_errors
 from . import app
 

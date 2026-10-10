@@ -13,6 +13,7 @@ from nbkp.config import (
     LuksEncryptionConfig,
     MountConfig,
 )
+from nbkp.disks import MountCapabilities, MountToolCapabilities
 from nbkp.disks.detection import DeviceProbeError
 from nbkp.disks.models import MountFailureReason
 from nbkp.disks.mount_checks import (
@@ -24,11 +25,8 @@ from nbkp.disks.mount_checks import (
 )
 from nbkp.disks.observation import MountObservation
 from nbkp.preflight.output.formatting import format_mount_status
-from nbkp.preflight.status import (
-    MountCapabilities,
-    MountToolCapabilities,
-    SshEndpointDiagnostics,
-    SshEndpointStatus,
+from nbkp.preflight.status.ssh import SshEndpointDiagnostics, SshEndpointStatus
+from nbkp.preflight.status.volume import (
     VolumeCapabilities,
     VolumeDiagnostics,
     VolumeError,

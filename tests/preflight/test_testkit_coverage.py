@@ -20,7 +20,7 @@ from nbkp.preflight import (
     VolumeError,
 )
 from nbkp.preflight.output import collect_issues
-from nbkp.preflight.status import SshEndpointWarning
+from nbkp.preflight.status.ssh import SshEndpointWarning
 from nbkp.preflight.testkit import troubleshoot_config, troubleshoot_data
 
 # Cascade pointers have no fix of their own; troubleshoot skips them.

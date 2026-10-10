@@ -46,7 +46,7 @@ from . import (
     VolumeStatus,
 )
 from .output.formatting import collect_ssh_endpoint_statuses
-from .status import PreflightResult
+from .status.result import PreflightResult
 
 
 def _demo_ssh_statuses(

@@ -22,25 +22,28 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.disks import MountToolCapabilities
 from nbkp.policy import Strictness
 from nbkp.preflight.endpoint_checks import _read_latest_state
 from nbkp.preflight.ssh_checks import observe_standalone_endpoint
-from nbkp.preflight.status import (
-    INACTIVE_SSH_ERRORS,
+from nbkp.preflight.status.endpoint import (
     DestinationEndpointDiagnostics,
     DestinationEndpointError,
     DestinationEndpointStatus,
-    HostToolCapabilities,
-    MountToolCapabilities,
     SourceEndpointDiagnostics,
     SourceEndpointStatus,
+)
+from nbkp.preflight.status.ssh import (
+    INACTIVE_SSH_ERRORS,
+    HostToolCapabilities,
     SshEndpointDiagnostics,
     SshEndpointError,
     SshEndpointStatus,
     SshEndpointToolNeeds,
     SshEndpointWarning,
-    SyncError,
-    SyncStatus,
+)
+from nbkp.preflight.status.sync import SyncError, SyncStatus
+from nbkp.preflight.status.volume import (
     VolumeCapabilities,
     VolumeDiagnostics,
     VolumeStatus,

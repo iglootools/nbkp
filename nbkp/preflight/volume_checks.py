@@ -10,7 +10,7 @@ Two levels of observation:
    config validation, and runtime mount state.  Probed once per volume
    whose SSH endpoint is active.
 
-No error interpretation happens here — ``status.py`` translates
+No error interpretation happens here — the ``status`` package translates
 diagnostics into errors using ``SshEndpointToolNeeds`` and
 ``SyncEndpointStatus.from_diagnostics``.
 """
@@ -26,6 +26,7 @@ from ..config import (
 )
 from ..disks import (
     MountObservation,
+    MountToolCapabilities,
     check_mount_capabilities as _check_mount_capabilities,
     probe_mount_tools as _probe_mount_tools,
 )
@@ -40,13 +41,8 @@ from .snapshot_checks import (
     check_btrfs_mount_option,
     check_hardlink_support,
 )
-from .status import (
-    HostToolCapabilities,
-    MountToolCapabilities,
-    SshEndpointDiagnostics,
-    VolumeCapabilities,
-    VolumeDiagnostics,
-)
+from .status.ssh import HostToolCapabilities, SshEndpointDiagnostics
+from .status.volume import VolumeCapabilities, VolumeDiagnostics
 
 # ── SSH Endpoint Observation ──────────────────────────────
 

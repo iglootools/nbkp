@@ -23,16 +23,15 @@ from ...config.output import (
 from ...policy import Severity, Strictness
 from ...remote.endpoints import ResolvedEndpoints
 from ..severity import severity_for_errors
-from ..status import (
-    INACTIVE_SSH_ERRORS,
+from ..status.endpoint import (
     DestinationEndpointDiagnostics,
     DestinationEndpointError,
     LatestSymlinkState,
     SourceEndpointError,
-    SshEndpointStatus,
-    SyncStatus,
-    VolumeStatus,
 )
+from ..status.ssh import INACTIVE_SSH_ERRORS, SshEndpointStatus
+from ..status.sync import SyncStatus
+from ..status.volume import VolumeStatus
 from .formatting import (
     check,
     format_capabilities,

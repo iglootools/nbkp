@@ -46,16 +46,10 @@ from ...fsprotocol import (
 )
 from ...remote.endpoints import ResolvedEndpoints
 from ...remote.ssh import format_proxy_jump_chain, ssh_prefix, wrap_cmd
-from ..status import (
-    DestinationEndpointError,
-    SourceEndpointError,
-    SshEndpointError,
-    SshEndpointStatus,
-    SshEndpointWarning,
-    SyncError,
-    VolumeError,
-    VolumeStatus,
-)
+from ..status.endpoint import DestinationEndpointError, SourceEndpointError
+from ..status.ssh import SshEndpointError, SshEndpointStatus, SshEndpointWarning
+from ..status.sync import SyncError
+from ..status.volume import VolumeError, VolumeStatus
 
 Part = str | tuple[str, str] | Text
 """A line fragment: plain text, ``(text, style)``, or a ``Text``."""

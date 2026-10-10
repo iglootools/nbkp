@@ -13,7 +13,7 @@ from ...commands.config import load_config_or_exit, resolve_endpoints
 from ...commands.mount import managed_mount
 from ...policy import Strictness
 from ...remote.endpoints import NetworkType
-from ..status import PreflightResult
+from ..status.result import PreflightResult
 from . import app
 from .helpers import check_and_display
 

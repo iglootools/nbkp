@@ -20,13 +20,8 @@ from rich.console import Console
 from nbkp.config import Config, LocalVolume, LuksEncryptionConfig, MountConfig
 from nbkp.disks import DeviceProbeError
 from nbkp.preflight.output import remediation as rem, troubleshoot as ts
-from nbkp.preflight.status import (
-    SshEndpointDiagnostics,
-    SshEndpointStatus,
-    VolumeDiagnostics,
-    VolumeError,
-    VolumeStatus,
-)
+from nbkp.preflight.status.ssh import SshEndpointDiagnostics, SshEndpointStatus
+from nbkp.preflight.status.volume import VolumeDiagnostics, VolumeError, VolumeStatus
 
 _UUID = "5941f273-f73c-44c5-a3ef-fae7248db1b6"
 _LABELLED = "/dev/mapper/seagate8tb-luks"

@@ -29,19 +29,22 @@ from nbkp.preflight.snapshot_checks import (
     check_btrfs_mount_option,
     check_btrfs_subvolume,
 )
-from nbkp.preflight.status import (
+from nbkp.preflight.status.endpoint import (
     DestinationEndpointDiagnostics,
     DestinationEndpointError,
     DestinationEndpointStatus,
-    HostToolCapabilities,
     SourceEndpointDiagnostics,
     SourceEndpointError,
     SourceEndpointStatus,
+)
+from nbkp.preflight.status.ssh import (
+    HostToolCapabilities,
     SshEndpointDiagnostics,
     SshEndpointError,
     SshEndpointStatus,
-    SyncError,
-    SyncStatus,
+)
+from nbkp.preflight.status.sync import SyncError, SyncStatus
+from nbkp.preflight.status.volume import (
     VolumeCapabilities,
     VolumeDiagnostics,
     VolumeError,
