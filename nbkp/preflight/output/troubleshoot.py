@@ -1,21 +1,25 @@
 """Troubleshoot output: per-error remediation instructions for all 4 layers.
 
 Issues are first *collected* into structured :class:`TroubleshootIssue`
-records (pure, order-preserving, deduplicated), then either rendered for
-humans — grouped under a header per subject — or emitted as JSON with the
-same remediation text in plain form.
+records (pure, order-preserving, deduplicated).  The facts their fixes need
+that take live work to establish — the cleartext device of an unlocked LUKS
+container (an ``lsblk`` probe, possibly over SSH) and the polkit rule text —
+are then *gathered* into :class:`RemediationFacts`.  Only then are the issues
+rendered, either for humans — grouped under a header per subject — or as JSON
+with the same remediation text in plain form; rendering itself does no I/O.
 """
 
 from __future__ import annotations
 
 import enum
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from io import StringIO
 
 from rich.console import Console
 
-from ...config import Config, SyncConfig
+from ...config import Config, LocalVolume, MountConfig, RemoteVolume, SyncConfig
+from ...disks import DeviceProbeError, discover_cleartext_device, generate_auth_rules
 from ...policy import Severity, Strictness
 from ...remote.endpoints import ResolvedEndpoints
 from ..severity import PreflightError, severity_for_error
@@ -35,7 +39,9 @@ from ..status import (
 from .remediation import (
     ERROR,
     HEADER,
+    RemediationFacts,
     TroubleshootContext,
+    polkit_user,
     print_destination_endpoint_error_fix,
     print_source_endpoint_error_fix,
     print_ssh_endpoint_error_fix,
@@ -213,6 +219,102 @@ def collect_issues(
     ]
 
 
+# ── Fact gathering ────────────────────────────────────────────
+
+# Errors whose fix names the cleartext device of an encrypted volume (an
+# fstab line or a manual ``udisksctl mount``).
+_NEEDS_CLEARTEXT_DEVICE: frozenset[PreflightError] = frozenset(
+    {
+        VolumeError.FSTAB_MOUNTPOINT_MISMATCH,
+        VolumeError.MOUNT_FAILED,
+        DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM,
+    }
+)
+
+
+def _issue_volume(
+    issue: TroubleshootIssue, config: Config
+) -> LocalVolume | RemoteVolume | None:
+    """The volume an issue's fix is about, when it is about one."""
+    match issue:
+        case TroubleshootIssue(vol_status=VolumeStatus() as vs):
+            return vs.config
+        case TroubleshootIssue(
+            error=DestinationEndpointError(), sync=SyncConfig() as sync
+        ):
+            return config.volumes[config.destination_endpoint(sync).volume]
+        case _:
+            return None
+
+
+def _discover_cleartext_device(
+    vol: LocalVolume | RemoteVolume,
+    mount: MountConfig,
+    resolved_endpoints: ResolvedEndpoints,
+) -> str | None:
+    """The cleartext device udisks created for *vol*, or ``None``.
+
+    Discovery runs ``lsblk``, which this code path cannot assume exists — it
+    is the *error reporting* path, reached precisely when the host is not in
+    the expected state, and it also runs on machines with no udisks at all
+    (e.g. ``nbkp demo output`` on macOS).  Any failure therefore degrades to
+    "not discovered" rather than propagating.
+    """
+    try:
+        return discover_cleartext_device(vol, mount.device_uuid, resolved_endpoints)
+    except (OSError, DeviceProbeError):
+        return None
+
+
+def gather_remediation_facts(
+    issues: list[TroubleshootIssue], ctx: TroubleshootContext
+) -> RemediationFacts:
+    """Probe and generate what the fixes of *issues* will show.
+
+    Only issues that print a cleartext device trigger a discovery, once per
+    encrypted volume; only a missing polkit rule triggers rule generation.
+    """
+    encrypted = {
+        vol.slug: (vol, vol.mount)
+        for issue in issues
+        if issue.error in _NEEDS_CLEARTEXT_DEVICE
+        for vol in [_issue_volume(issue, ctx.config)]
+        if vol is not None
+        and vol.mount is not None
+        and vol.mount.encryption is not None
+    }
+    discovered = {
+        slug: _discover_cleartext_device(vol, mount, ctx.resolved_endpoints)
+        for slug, (vol, mount) in encrypted.items()
+    }
+    users = {
+        polkit_user(issue.vol_status.config, ctx)
+        for issue in issues
+        if issue.error is VolumeError.POLKIT_RULES_MISSING
+        and issue.vol_status is not None
+    }
+    rules = {
+        user: generate_auth_rules(ctx.config, user).polkit_block() for user in users
+    }
+    return RemediationFacts(
+        cleartext_devices={
+            slug: device for slug, device in discovered.items() if device is not None
+        },
+        polkit_rules={user: block for user, block in rules.items() if block},
+    )
+
+
+def with_remediation_facts(
+    issues: list[TroubleshootIssue], ctx: TroubleshootContext
+) -> TroubleshootContext:
+    """*ctx* with its facts gathered for *issues*, unless already supplied."""
+    return (
+        ctx
+        if ctx.facts is not None
+        else replace(ctx, facts=gather_remediation_facts(issues, ctx))
+    )
+
+
 # ── Rendering ─────────────────────────────────────────────────
 
 
@@ -281,7 +383,11 @@ def print_issues(
     issues: list[TroubleshootIssue],
     ctx: TroubleshootContext,
 ) -> None:
-    """Print issues grouped under one header per (layer, subject)."""
+    """Print issues grouped under one header per (layer, subject).
+
+    Pure rendering: facts missing from ``ctx.facts`` are rendered as unknown
+    (default mapper name, no polkit rule body).
+    """
     groups = list(dict.fromkeys((i.layer, i.subject) for i in issues))
     for layer, subject in groups:
         _print_group(
@@ -317,7 +423,7 @@ def print_human_troubleshoot(
     )
     issues = collect_issues(ssh_statuses, vol_statuses, sync_statuses, strictness)
     if issues:
-        print_issues(con, issues, ctx)
+        print_issues(con, issues, with_remediation_facts(issues, ctx))
     else:
         con.print("No issues found. All volumes and syncs are active.")
 
@@ -343,6 +449,7 @@ def troubleshoot_json(
     ``code`` is the stable enum member name (``RSYNC_NOT_FOUND``) and the
     identifier to branch on; ``remediation`` is the human fix as plain text.
     """
+    ctx = with_remediation_facts(issues, ctx)
     return {
         "has_fatal_errors": has_fatal_errors,
         "issues": [

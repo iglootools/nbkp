@@ -8,6 +8,7 @@ implementation details.
 
 from .auth import (
     POLKIT_RULES_PATH,
+    AuthRuleBlock,
     AuthRules,
     generate_auth_rules,
     generate_polkit_rules,
@@ -63,6 +64,7 @@ from .udisks import (
 
 __all__ = [
     "POLKIT_RULES_PATH",
+    "AuthRuleBlock",
     "AuthRules",
     "DeviceProbeError",
     "MountCapabilities",

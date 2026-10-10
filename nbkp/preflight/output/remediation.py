@@ -5,11 +5,17 @@ commands): config values — paths, hosts, passphrase ids — are not authored b
 nbkp, so they are assembled into a ``Text`` (never parsed as Rich markup), and
 indentation is computed from a nesting *level* at the call site rather than
 hardcoded into the strings.
+
+Rendering is pure: facts that take live work to establish — the cleartext
+device udisks created for an unlocked LUKS container, the polkit rule to
+install — are gathered beforehand by :mod:`.troubleshoot` and handed over as
+:class:`RemediationFacts`.
 """
 
 from __future__ import annotations
 
 import shlex
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from textwrap import dedent
 
@@ -29,12 +35,7 @@ from ...config import (
 )
 from ...config.output import endpoint_path, host_label
 from ...credentials import passphrase_env_var
-from ...disks import (
-    DeviceProbeError,
-    cleartext_mapper_name,
-    discover_cleartext_device,
-    generate_auth_rules,
-)
+from ...disks import AuthRuleBlock, cleartext_mapper_name
 from ...fsprotocol import (
     DESTINATION_SENTINEL,
     LATEST_LINK,
@@ -67,6 +68,20 @@ HEADER, ERROR, FIX, STEP, STEP_CMD = range(5)
 
 
 @dataclass(frozen=True)
+class RemediationFacts:
+    """Facts the fix printers show that had to be probed or generated first."""
+
+    cleartext_devices: Mapping[str, str] = field(default_factory=dict)
+    """Volume slug → cleartext device udisks actually created (e.g.
+    ``/dev/mapper/<label>``).  A volume is absent when its container is locked
+    or discovery failed; the fix then prints udisks's default name with a
+    caveat."""
+    polkit_rules: Mapping[str, AuthRuleBlock] = field(default_factory=dict)
+    """System user → the polkit rule block authorizing that user.  A user is
+    absent when no volume declares a ``mount`` section."""
+
+
+@dataclass(frozen=True)
 class TroubleshootContext:
     """Everything the fix printers need besides the error itself."""
 
@@ -77,6 +92,13 @@ class TroubleshootContext:
     local_user: str = "<user>"
     """User the polkit rule authorizes for local volumes (and remote ones
     whose SSH endpoint sets no user).  Supplied by the CLI."""
+    facts: RemediationFacts | None = None
+    """Probed facts; ``None`` until :mod:`.troubleshoot` gathers them."""
+
+    @property
+    def known_facts(self) -> RemediationFacts:
+        """The gathered facts, or none at all when gathering was skipped."""
+        return self.facts if self.facts is not None else RemediationFacts()
 
 
 def say(console: Console, level: int, *parts: Part) -> None:
@@ -438,29 +460,18 @@ def _print_device_not_present_fix(console: Console, mount: MountConfig | None) -
 def _cleartext_device(
     vol: LocalVolume | RemoteVolume,
     mount: MountConfig,
-    resolved_endpoints: ResolvedEndpoints,
+    facts: RemediationFacts,
 ) -> tuple[str, bool]:
     """Cleartext device path to print in a fix, and whether it was discovered.
 
     ``luks-<uuid>`` is only udisks's default: a LUKS2 header label or an
     ``/etc/crypttab`` entry renames the mapper, so deriving the name from the
     container UUID produces an fstab line that never matches on such a host.
-    Prefer the device udisks actually created, which requires the container to
-    be unlocked; fall back to the derived default when it is locked, and let
-    the caller say so.
-
-    Discovery runs ``lsblk``, which this code path cannot assume exists — it is
-    the *error reporting* path, reached precisely when the host is not in the
-    expected state, and it also renders on machines with no udisks at all (e.g.
-    ``nbkp demo output`` on macOS).  Any failure therefore degrades to the
-    derived name rather than propagating.
+    Prefer the device udisks actually created (gathered into *facts* when the
+    container is unlocked); fall back to the derived default otherwise, and
+    let the caller say so.
     """
-    try:
-        discovered = discover_cleartext_device(
-            vol, mount.device_uuid, resolved_endpoints
-        )
-    except (OSError, DeviceProbeError):
-        discovered = None
+    discovered = facts.cleartext_devices.get(vol.slug)
     return (
         (discovered, True)
         if discovered is not None
@@ -494,7 +505,7 @@ def _print_fstab_line(
                 console, f"UUID={mount.device_uuid}  {path}  {fs_and_options}", STEP
             )
         case MountConfig():
-            device, discovered = _cleartext_device(vol, mount, ctx.resolved_endpoints)
+            device, discovered = _cleartext_device(vol, mount, ctx.known_facts)
             print_cmd(console, f"{device}  {path}  {fs_and_options}", STEP)
             if not discovered:
                 _print_mapper_name_caveat(console, STEP)
@@ -715,7 +726,7 @@ def _print_mount_failed_fix(
         case MountConfig(encryption=None):
             device = f"/dev/disk/by-uuid/{mount.device_uuid}"
         case MountConfig():
-            device, _ = _cleartext_device(vol, mount, ctx.resolved_endpoints)
+            device, _ = _cleartext_device(vol, mount, ctx.known_facts)
         case None:
             device = "<device>"
     say(console, FIX, "udisksctl failed to mount the volume.")
@@ -740,9 +751,7 @@ def _print_mount_failed_fix(
     )
 
 
-def _resolve_volume_user(
-    vol: LocalVolume | RemoteVolume, ctx: TroubleshootContext
-) -> str:
+def polkit_user(vol: LocalVolume | RemoteVolume, ctx: TroubleshootContext) -> str:
     """System user for the polkit rule on a volume's host.
 
     The SSH endpoint user for remote volumes; otherwise the local user the
@@ -762,8 +771,8 @@ def _print_polkit_rules_missing_fix(
     ctx: TroubleshootContext,
 ) -> None:
     """Print fix for missing polkit rules, including generated content."""
-    user = _resolve_volume_user(vol, ctx)
-    block = generate_auth_rules(ctx.config, user).polkit_block()
+    user = polkit_user(vol, ctx)
+    block = ctx.known_facts.polkit_rules.get(user)
     say(
         console,
         FIX,
