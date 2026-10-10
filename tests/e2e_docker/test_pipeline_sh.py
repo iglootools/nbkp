@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import stat
 import subprocess
+import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 from nbkp.config import (
@@ -57,7 +59,8 @@ class TestChainSyncSh:
             # 4. Generate script
             script = generate_script(
                 config,
-                ScriptOptions(config_path="test.yaml"),
+                ScriptOptions(platform=sys.platform, config_path="test.yaml"),
+                now=datetime.now(UTC),
                 resolved_endpoints=resolved,
             )
 

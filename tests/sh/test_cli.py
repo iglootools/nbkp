@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from nbkp.cli import app
 from tests.clihelpers import (
@@ -54,6 +57,23 @@ class TestShCommand:
         mode = out.stat().st_mode
         assert mode & stat.S_IXUSR
         assert mode & stat.S_IXGRP
+
+    @patch("nbkp.config.cli.helpers.load_config")
+    def test_output_file_reported_relative_to_cwd(
+        self,
+        mock_load: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "out").mkdir()
+        mock_load.return_value = sample_config()
+
+        result = runner.invoke(
+            app, ["sh", "--config", "/fake.yaml", "-o", "out/backup.sh"]
+        )
+        assert result.exit_code == 0
+        assert "Written to out/backup.sh" in result.output
 
     def test_relative_without_output_file(self) -> None:
         result = runner.invoke(
