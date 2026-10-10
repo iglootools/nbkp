@@ -122,9 +122,20 @@ def print_rich_tree_graph(
         c.print(section)
 
 
-def print_mermaid_graph(config: Config) -> None:
-    """Print raw mermaid graph syntax to stdout."""
-    print(build_mermaid_graph(config))
+def print_mermaid_graph(config: Config, *, console: Console | None = None) -> None:
+    """Print raw mermaid graph syntax to stdout.
+
+    Markup, emoji codes, highlighting and wrapping are all disabled so the
+    output is the exact mermaid text, ready to pipe into a renderer.
+    """
+    c = console or Console()
+    c.print(
+        build_mermaid_graph(config),
+        markup=False,
+        emoji=False,
+        highlight=False,
+        soft_wrap=True,
+    )
 
 
 def build_graph_json(config: Config) -> dict[str, object]:

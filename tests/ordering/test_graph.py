@@ -19,6 +19,7 @@ from nbkp.ordering.output import (
     build_graph_json,
     build_mermaid_graph,
     print_mermaid_ascii_graph,
+    print_mermaid_graph,
     print_rich_tree_graph,
 )
 
@@ -100,6 +101,16 @@ class TestBuildMermaidGraph:
             i for i, line in enumerate(lines) if "server-to-usb" in line
         )
         assert laptop_to_server_idx < server_to_usb_idx
+
+
+class TestPrintMermaidGraph:
+    def test_output_is_exact_mermaid_text(self) -> None:
+        # Lines wider than the console must not be wrapped, and ``|``/``>``
+        # must not be highlighted: the output is piped into mermaid.
+        cfg = _chain_config()
+        buf = StringIO()
+        print_mermaid_graph(cfg, console=Console(file=buf, width=20))
+        assert buf.getvalue() == build_mermaid_graph(cfg) + "\n"
 
 
 class TestPrintMermaidAsciiGraph:

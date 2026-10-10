@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from graphlib import CycleError, TopologicalSorter
 
 from ..config import ConfigError
@@ -18,13 +17,11 @@ def _build_graph(
     A sync B depends on sync A when A's destination endpoint
     slug matches B's source endpoint slug.
     """
-    writers: dict[str, list[str]] = defaultdict(list)
-    for sync_slug, sync in syncs.items():
-        writers[sync.destination].append(sync_slug)
-
     return {
         sync_slug: {
-            writer for writer in writers.get(sync.source, []) if writer != sync_slug
+            writer
+            for writer, upstream in syncs.items()
+            if upstream.destination == sync.source and writer != sync_slug
         }
         for sync_slug, sync in syncs.items()
     }
@@ -73,10 +70,10 @@ def build_adjacency(
     - children maps source endpoint slug → list of SyncConfig
     - roots is the set of endpoint slugs that are never destinations
     """
-    children: dict[str, list[SyncConfig]] = defaultdict(list)
-    for sync in syncs.values():
-        children[sync.source].append(sync)
-
     all_sources = {sync.source for sync in syncs.values()}
     all_destinations = {sync.destination for sync in syncs.values()}
-    return dict(children), all_sources - all_destinations
+    children = {
+        source: [sync for sync in syncs.values() if sync.source == source]
+        for source in dict.fromkeys(sync.source for sync in syncs.values())
+    }
+    return children, all_sources - all_destinations
