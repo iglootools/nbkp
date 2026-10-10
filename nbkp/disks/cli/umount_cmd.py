@@ -59,7 +59,7 @@ def umount(
     ] = None,
 ) -> None:
     """Umount volumes and lock LUKS. Umounts all volumes with mount config, or specific ones via --name."""
-    cfg = load_config_or_exit(config)
+    cfg = load_config_or_exit(config, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
 
     use_progress = output == OutputFormat.HUMAN

@@ -57,7 +57,7 @@ def status(
     ] = None,
 ) -> None:
     """Show mount status for volumes with mount config."""
-    cfg = load_config_or_exit(config)
+    cfg = load_config_or_exit(config, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
 
     managed = [

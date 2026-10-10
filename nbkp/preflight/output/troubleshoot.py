@@ -115,12 +115,12 @@ def _print_sentinel_fix(
     console.print(f"{p2}Ensure the volume is mounted, then:")
     _print_cmd(
         console,
-        wrap_cmd(f"mkdir -p {path}", vol, resolved_endpoints),
+        wrap_cmd(["mkdir", "-p", path], vol, resolved_endpoints),
     )
     _print_cmd(
         console,
         wrap_cmd(
-            f"touch {path}/{sentinel}",
+            ["touch", f"{path}/{sentinel}"],
             vol,
             resolved_endpoints,
         ),
@@ -327,7 +327,7 @@ def _print_source_endpoint_error_fix(
             _print_cmd(
                 console,
                 wrap_cmd(
-                    f"ln -sfn /dev/null {path}/{LATEST_LINK}",
+                    ["ln", "-sfn", "/dev/null", f"{path}/{LATEST_LINK}"],
                     src_vol,
                     resolved_endpoints,
                 ),
@@ -344,7 +344,7 @@ def _print_source_endpoint_error_fix(
             _print_cmd(
                 console,
                 wrap_cmd(
-                    f"ln -sfn /dev/null {path}/{LATEST_LINK}",
+                    ["ln", "-sfn", "/dev/null", f"{path}/{LATEST_LINK}"],
                     src_vol,
                     resolved_endpoints,
                 ),
@@ -357,7 +357,9 @@ def _print_source_endpoint_error_fix(
             _print_cmd(
                 console,
                 wrap_cmd(
-                    f"mkdir -p {path}/{SNAPSHOTS_DIR}", src_vol, resolved_endpoints
+                    ["mkdir", "-p", f"{path}/{SNAPSHOTS_DIR}"],
+                    src_vol,
+                    resolved_endpoints,
                 ),
             )
 
@@ -392,7 +394,7 @@ def _print_destination_endpoint_error_fix(
             _print_cmd(
                 console,
                 wrap_cmd(
-                    f"sudo chown <user>:<group> {path}",
+                    ["sudo", "chown", "<user>:<group>", path],
                     dst_vol,
                     resolved_endpoints,
                 ),
@@ -400,13 +402,15 @@ def _print_destination_endpoint_error_fix(
         case DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME:
             path = endpoint_path(dst_vol, dst_ep.subdir)
             cmds = [
-                f"sudo btrfs subvolume create {path}/{STAGING_DIR}",
-                f"sudo mkdir {path}/{SNAPSHOTS_DIR}",
-                (
-                    "sudo chown <user>:<group>"
-                    f" {path}/{STAGING_DIR}"
-                    f" {path}/{SNAPSHOTS_DIR}"
-                ),
+                ["sudo", "btrfs", "subvolume", "create", f"{path}/{STAGING_DIR}"],
+                ["sudo", "mkdir", f"{path}/{SNAPSHOTS_DIR}"],
+                [
+                    "sudo",
+                    "chown",
+                    "<user>:<group>",
+                    f"{path}/{STAGING_DIR}",
+                    f"{path}/{SNAPSHOTS_DIR}",
+                ],
             ]
             for cmd in cmds:
                 _print_cmd(
@@ -421,7 +425,7 @@ def _print_destination_endpoint_error_fix(
             _print_cmd(
                 console,
                 wrap_cmd(
-                    f"btrfs subvolume create {path}/{STAGING_DIR}",
+                    ["btrfs", "subvolume", "create", f"{path}/{STAGING_DIR}"],
                     dst_vol,
                     resolved_endpoints,
                 ),
@@ -436,7 +440,7 @@ def _print_destination_endpoint_error_fix(
             _print_cmd(
                 console,
                 wrap_cmd(
-                    f"sudo chown <user>:<group> {path}/{STAGING_DIR}",
+                    ["sudo", "chown", "<user>:<group>", f"{path}/{STAGING_DIR}"],
                     dst_vol,
                     resolved_endpoints,
                 ),
@@ -449,7 +453,9 @@ def _print_destination_endpoint_error_fix(
             _print_cmd(
                 console,
                 wrap_cmd(
-                    f"mkdir -p {path}/{SNAPSHOTS_DIR}", dst_vol, resolved_endpoints
+                    ["mkdir", "-p", f"{path}/{SNAPSHOTS_DIR}"],
+                    dst_vol,
+                    resolved_endpoints,
                 ),
             )
         case DestinationEndpointError.SNAPSHOTS_DIR_NOT_WRITABLE:
@@ -462,7 +468,7 @@ def _print_destination_endpoint_error_fix(
             _print_cmd(
                 console,
                 wrap_cmd(
-                    f"sudo chown <user>:<group> {path}/{SNAPSHOTS_DIR}",
+                    ["sudo", "chown", "<user>:<group>", f"{path}/{SNAPSHOTS_DIR}"],
                     dst_vol,
                     resolved_endpoints,
                 ),
@@ -477,7 +483,7 @@ def _print_destination_endpoint_error_fix(
             _print_cmd(
                 console,
                 wrap_cmd(
-                    f"ln -sfn /dev/null {path}/{LATEST_LINK}",
+                    ["ln", "-sfn", "/dev/null", f"{path}/{LATEST_LINK}"],
                     dst_vol,
                     resolved_endpoints,
                 ),
@@ -492,7 +498,7 @@ def _print_destination_endpoint_error_fix(
             _print_cmd(
                 console,
                 wrap_cmd(
-                    f"ln -sfn /dev/null {path}/{LATEST_LINK}",
+                    ["ln", "-sfn", "/dev/null", f"{path}/{LATEST_LINK}"],
                     dst_vol,
                     resolved_endpoints,
                 ),
@@ -688,7 +694,7 @@ def _print_user_subvol_rm_fix(
     _print_cmd(
         console,
         wrap_cmd(
-            f"sudo mount -o remount,user_subvol_rm_allowed {path}",
+            ["sudo", "mount", "-o", "remount,user_subvol_rm_allowed", path],
             vol,
             resolved_endpoints,
         ),
@@ -812,7 +818,7 @@ def _print_mount_failed_fix(
     _print_cmd(
         console,
         wrap_cmd(
-            f"udisksctl mount -b {device}",
+            ["udisksctl", "mount", "-b", device],
             vol,
             resolved_endpoints,
         ),

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from nbkp.config import (
     Config,
+    ConfigValidationCode,
     CredentialProvider,
     LocalVolume,
     LuksEncryptionConfig,
@@ -14,6 +16,10 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+
+
+def _error_types(error: ValidationError) -> set[str]:
+    return {err["type"] for err in error.errors()}
 
 
 class TestMountConfig:
@@ -34,8 +40,9 @@ class TestMountConfig:
         assert mount.encryption.passphrase_id == "seagate8tb"
 
     def test_invalid_uuid_rejected(self) -> None:
-        with pytest.raises(ValueError, match="String should match pattern"):
+        with pytest.raises(ValidationError) as excinfo:
             MountConfig(device_uuid="not-a-uuid")
+        assert _error_types(excinfo.value) == {"string_pattern_mismatch"}
 
     def test_valid_uuid_formats(self) -> None:
         # lowercase
@@ -110,8 +117,9 @@ class TestVolumePathRequirement:
         assert vol.mount is not None
 
     def test_local_path_required_without_mount(self) -> None:
-        with pytest.raises(ValueError, match="'path' is required"):
+        with pytest.raises(ValidationError) as excinfo:
             LocalVolume(slug="data")
+        assert _error_types(excinfo.value) == {ConfigValidationCode.PATH_REQUIRED}
 
     def test_remote_path_optional_with_mount(self) -> None:
         vol = RemoteVolume(
@@ -123,8 +131,9 @@ class TestVolumePathRequirement:
         assert vol.mount is not None
 
     def test_remote_path_required_without_mount(self) -> None:
-        with pytest.raises(ValueError, match="'path' is required"):
+        with pytest.raises(ValidationError) as excinfo:
             RemoteVolume(slug="nas", ssh_endpoint="nas")
+        assert _error_types(excinfo.value) == {ConfigValidationCode.PATH_REQUIRED}
 
 
 class TestCredentialProviderConfig:
@@ -157,8 +166,11 @@ class TestCredentialProviderConfig:
         assert cfg.credential_provider == CredentialProvider.ENV
 
     def test_provider_command_requires_credential_command(self) -> None:
-        with pytest.raises(ValueError, match="credential-command is required"):
+        with pytest.raises(ValidationError) as excinfo:
             self._minimal_config(credential_provider="command")
+        assert _error_types(excinfo.value) == {
+            ConfigValidationCode.CREDENTIAL_COMMAND_REQUIRED
+        }
 
     def test_provider_command_with_credential_command(self) -> None:
         cfg = self._minimal_config(
@@ -169,11 +181,14 @@ class TestCredentialProviderConfig:
         assert cfg.credential_command == ["pass", "show", "nbkp/{id}"]
 
     def test_credential_command_must_contain_id_placeholder(self) -> None:
-        with pytest.raises(ValueError, match="\\{id\\}"):
+        with pytest.raises(ValidationError) as excinfo:
             self._minimal_config(
                 credential_provider="command",
                 credential_command=["pass", "show", "nbkp/fixed"],
             )
+        assert _error_types(excinfo.value) == {
+            ConfigValidationCode.CREDENTIAL_COMMAND_PLACEHOLDER
+        }
 
     def test_credential_command_without_command_provider(self) -> None:
         # credential-command can be set with other providers

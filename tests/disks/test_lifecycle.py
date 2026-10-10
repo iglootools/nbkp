@@ -195,7 +195,7 @@ class TestMountVolume:
         assert "polkit" in (result.detail or "")
 
     def test_unlock_stdin_closed_classified_as_not_authorized(self) -> None:
-        from nbkp.remote.fabricssh import STDIN_CLOSED_MARKER
+        from nbkp.remote.fabricssh import StdinClosedProcess
 
         vol = _encrypted_vol()
         with (
@@ -203,7 +203,7 @@ class TestMountVolume:
             patch("nbkp.disks.lifecycle.discover_cleartext_device", return_value=None),
             patch(
                 "nbkp.disks.lifecycle.run_on_volume",
-                return_value=_mock_run(1, stderr=STDIN_CLOSED_MARKER),
+                return_value=StdinClosedProcess(args="udisksctl unlock"),
             ),
         ):
             result = mount_volume(vol, vol.mount, {}, lambda x: "secret")  # type: ignore[arg-type]

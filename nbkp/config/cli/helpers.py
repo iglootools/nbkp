@@ -6,6 +6,7 @@ from pathlib import Path
 
 import typer
 
+from ...clihelpers import OutputFormat, echo_json
 from ...remote.resolution import resolve_all_endpoints
 from .. import Config, ConfigError, load_config
 from ..epresolution import (
@@ -13,17 +14,27 @@ from ..epresolution import (
     NetworkType,
     ResolvedEndpoints,
 )
-from ..output import print_config_error
+from ..output import config_error_json, print_config_error
 
 
 def load_config_or_exit(
     config_path: str | Path | None,
+    output_format: OutputFormat = OutputFormat.HUMAN,
 ) -> Config:
-    """Load config or exit with code 2 on error."""
+    """Load config or exit with code 2 on error.
+
+    The error is rendered in the command's output format: a Rich panel on
+    stderr, or a JSON ``{"error": ...}`` object on stdout for ``-o json`` so
+    scripted callers can still parse the output.
+    """
     try:
         return load_config(config_path)
     except ConfigError as e:
-        print_config_error(e)
+        match output_format:
+            case OutputFormat.JSON:
+                echo_json(config_error_json(e))
+            case OutputFormat.HUMAN:
+                print_config_error(e)
         raise typer.Exit(2)
 
 
@@ -49,28 +60,26 @@ def _validate_locations(
 ) -> None:
     """Exit with an error if any location value is not defined in the config."""
     known = set(cfg.known_locations())
-    if not known:
-        all_values = [*(locations or []), *(exclude_locations or [])]
-        if all_values:
-            typer.echo(
-                "Error: no locations are defined in the configuration."
-                " --location and --exclude-location cannot be used.",
-                err=True,
-            )
-            raise typer.Exit(2)
-        return
-    for label, values in [
-        ("--location", locations),
-        ("--exclude-location", exclude_locations),
-    ]:
-        for v in values or []:
-            if v not in known:
-                typer.echo(
-                    f"Error: unknown location '{v}' passed to {label}."
-                    f" Known locations: {', '.join(sorted(known))}",
-                    err=True,
-                )
-                raise typer.Exit(2)
+    unknown = [
+        (label, value)
+        for label, values in [
+            ("--location", locations),
+            ("--exclude-location", exclude_locations),
+        ]
+        for value in values or []
+        if value not in known
+    ]
+    if unknown:
+        label, value = unknown[0]
+        message = (
+            f"Error: unknown location '{value}' passed to {label}."
+            f" Known locations: {', '.join(sorted(known))}"
+            if known
+            else "Error: no locations are defined in the configuration."
+            " --location and --exclude-location cannot be used."
+        )
+        typer.echo(message, err=True)
+        raise typer.Exit(2)
 
 
 def resolve_endpoints(

@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from enum import StrEnum
 from pathlib import Path
 
 import yaml
 from platformdirs import site_config_dir, user_config_dir
+from pydantic import ValidationError
 
 from .protocol import Config
 
 _APP = "nbkp"
 _FILENAME = "config.yaml"
+_CONFIG_REFERENCE_URL = (
+    "https://github.com/iglootools/nbkp/blob/main/docs/config-reference.md"
+)
 
 
 class ConfigErrorReason(StrEnum):
@@ -34,7 +39,7 @@ class ConfigError(Exception):
         self.reason = reason
 
 
-def _config_search_paths() -> list[Path]:
+def _config_search_paths(environ: Mapping[str, str] = os.environ) -> list[Path]:
     """Config file search paths in priority order.
 
     Order: XDG > platform user config > platform site config.
@@ -43,7 +48,7 @@ def _config_search_paths() -> list[Path]:
     Added explicitly so that ~/.config/nbkp/config.yml works on Mac OS X
     (for which user_config_dir(_APP) defaults to ~/Library/Application Support/nbkp).
     """
-    xdg = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+    xdg = environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
     candidates = [
         Path(xdg) / _APP / _FILENAME,  # XDG (all platforms)
         Path(user_config_dir(_APP)) / _FILENAME,  # platform user config
@@ -52,7 +57,10 @@ def _config_search_paths() -> list[Path]:
     return list(dict.fromkeys(candidates))
 
 
-def find_config_file(config_path: str | Path | None = None) -> Path:
+def find_config_file(
+    config_path: str | Path | None = None,
+    environ: Mapping[str, str] = os.environ,
+) -> Path:
     """Find the configuration file using search order.
 
     Order: explicit path > XDG > platform user config > platform site config
@@ -67,20 +75,26 @@ def find_config_file(config_path: str | Path | None = None) -> Path:
         else:
             return p
     else:
-        search = _config_search_paths()
+        search = _config_search_paths(environ)
         found = next((p for p in search if p.is_file()), None)
         if found is not None:
             return found
         else:
             raise ConfigError(
-                f"No config file found. Searched: {', '.join(str(p) for p in search)}",
+                f"No config file found. Searched: {', '.join(str(p) for p in search)}."
+                f" Create one at {search[0]} or pass --config PATH (format:"
+                f" {_CONFIG_REFERENCE_URL}), or run `nbkp demo seed` to"
+                " generate a sample config to start from.",
                 reason=ConfigErrorReason.NO_CONFIG_FOUND,
             )
 
 
-def load_config(config_path: str | Path | None = None) -> Config:
+def load_config(
+    config_path: str | Path | None = None,
+    environ: Mapping[str, str] = os.environ,
+) -> Config:
     """Load and validate configuration from a YAML file."""
-    path = find_config_file(config_path)
+    path = find_config_file(config_path, environ)
     try:
         with open(path) as f:
             raw = yaml.safe_load(f)
@@ -98,6 +112,6 @@ def load_config(config_path: str | Path | None = None) -> Config:
     else:
         try:
             config = Config.model_validate(raw)
-        except Exception as e:
+        except ValidationError as e:
             raise ConfigError(str(e), reason=ConfigErrorReason.VALIDATION) from e
         return config

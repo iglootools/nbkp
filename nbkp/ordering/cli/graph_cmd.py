@@ -50,7 +50,7 @@ def graph(
     ] = GraphFormat.RICH_TREE,
 ) -> None:
     """Display the backup chain as a graph."""
-    cfg = load_config_or_exit(config)
+    cfg = load_config_or_exit(config, output)
     match output:
         case OutputFormat.JSON:
             echo_json(build_graph_json(cfg))

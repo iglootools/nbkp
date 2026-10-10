@@ -275,6 +275,7 @@ class TestGetLatestSnapshotRemote:
             config.ssh_endpoints["nas-server"],
             ["ls", "/backup/data/snapshots"],
             [],
+            input=None,
         )
 
 
@@ -295,6 +296,7 @@ class TestGetLatestSnapshotRemoteSpaces:
             config.ssh_endpoints["nas-server"],
             ["ls", "/my backup/my data/snapshots"],
             [],
+            input=None,
         )
 
 

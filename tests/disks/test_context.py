@@ -11,7 +11,7 @@ from nbkp.config import (
     LuksEncryptionConfig,
     MountConfig,
 )
-from nbkp.credentials import CredentialError
+from nbkp.credentials import CredentialError, CredentialErrorReason
 from nbkp.disks.context import managed_mount
 
 _ONLINE_UUID = "5941f273-f73c-44c5-a3ef-fae7248db1b6"
@@ -115,7 +115,10 @@ class TestPassphrasePrefetch:
 
     def test_prefetch_failure_does_not_abort_the_mount_phase(self) -> None:
         def passphrase_fn(pid: str) -> str:
-            raise CredentialError(f"No passphrase found in keyring for id '{pid}'")
+            raise CredentialError(
+                f"No passphrase found in keyring for id '{pid}'",
+                reason=CredentialErrorReason.NOT_FOUND,
+            )
 
         with (
             patch("nbkp.disks.lifecycle.detect_device_present", return_value=False),

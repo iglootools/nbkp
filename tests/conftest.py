@@ -49,6 +49,24 @@ _raise_fd_soft_limit()
 pytest_plugins = ["tests._docker_fixtures"]
 
 
+@pytest.fixture(autouse=True)
+def _isolate_from_user_ssh_config(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Never let a test read the developer's real ``~/.ssh/config``.
+
+    Endpoint resolution falls back to it when no SSH config is passed in, so
+    many tests calling ``resolve_all_endpoints(config)`` would otherwise pick
+    up the developer's ``Host`` entries (ports, users, identity files) and
+    behave differently from CI. Point the default at a file that never
+    exists; tests exercising enrichment pass their own ``ssh_config``.
+    """
+    absent = tmp_path_factory.getbasetemp() / "no-user-ssh-config"
+    monkeypatch.setattr(
+        "nbkp.remote.resolution.default_ssh_config_path", lambda: absent
+    )
+
+
 def config_to_yaml(config: Config) -> str:
     """Convert a Config to a YAML string."""
     return yaml.safe_dump(
