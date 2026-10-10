@@ -180,12 +180,15 @@ def _show_results(
 def _print_auth_hint(results: list[MountResult], invocation: Invocation) -> None:
     """Point at ``disks setup-auth`` when polkit refused an unlock or mount."""
     if any(r.failure_reason is MountFailureReason.NOT_AUTHORIZED for r in results):
-        Console().print(
-            Text.assemble(
-                "udisks refused the operation (no polkit rule). Generate one with: ",
-                (
-                    invocation.command("disks", "setup-auth", endpoint_flags=False),
-                    "bold",
-                ),
-            )
+        console = Console()
+        console.print(
+            "udisks refused the operation (no polkit rule). Generate one with:"
+        )
+        # soft_wrap: the command must stay on one line to copy-paste.
+        console.print(
+            Text(
+                invocation.command("disks", "setup-auth", endpoint_flags=False),
+                style="bold",
+            ),
+            soft_wrap=True,
         )

@@ -57,6 +57,11 @@ class TestGeneratePolkitRules:
         rule = generate_polkit_rules("backup")
         assert 'subject.user == "backup"' in rule
 
+    def test_user_is_escaped(self) -> None:
+        """A quote in the user name cannot break out of the JS string."""
+        rule = generate_polkit_rules('evil" || true || "')
+        assert r'subject.user == "evil\" || true || \""' in rule
+
     def test_contains_udisks_action_ids(self) -> None:
         rule = generate_polkit_rules("backup")
         assert "org.freedesktop.udisks2.filesystem-mount" in rule

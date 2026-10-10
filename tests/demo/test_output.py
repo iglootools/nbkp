@@ -37,8 +37,14 @@ def test_demo_config_builder_validates(builder) -> None:
     assert isinstance(config, Config)
 
 
-def test_demo_output_renders_all_sections() -> None:
+def test_demo_output_renders_all_sections(monkeypatch: pytest.MonkeyPatch) -> None:
     """`nbkp demo output` renders every human-output function without error."""
+    # The fstab fixes try to discover the unlocked LUKS mapper with lsblk;
+    # no real host commands in unit tests (see test_troubleshoot_mapper.py).
+    monkeypatch.setattr(
+        "nbkp.preflight.output.remediation.discover_cleartext_device",
+        lambda *_: None,
+    )
     result = CliRunner().invoke(app, ["output"])
     assert result.exit_code == 0, result.output
     # Sanity: the command renders panels named after the output functions.
