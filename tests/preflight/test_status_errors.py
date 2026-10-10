@@ -22,7 +22,6 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.config.epresolution import ResolvedEndpoint
 from nbkp.policy import Strictness
 from nbkp.preflight.endpoint_checks import _read_latest_state
 from nbkp.preflight.ssh_checks import observe_standalone_endpoint
@@ -48,6 +47,7 @@ from nbkp.preflight.status import (
 )
 from nbkp.preflight.strictness import has_fatal_errors
 from nbkp.preflight.volume_checks import observe_ssh_endpoint
+from nbkp.remote.endpoints import ResolvedEndpoint
 
 _TOOLS = HostToolCapabilities(
     has_rsync=True,
@@ -224,7 +224,7 @@ def _remote_volume() -> tuple[RemoteVolume, dict[str, ResolvedEndpoint]]:
 
 class TestObservationExceptions:
     @patch(
-        "nbkp.preflight.volume_checks._check_command_available",
+        "nbkp.preflight.volume_checks.check_command_available",
         side_effect=paramiko.AuthenticationException("Authentication failed."),
     )
     def test_auth_failure_recorded(self, _mock: object) -> None:
@@ -235,7 +235,7 @@ class TestObservationExceptions:
         assert diag.ssh_error == "Authentication failed."
 
     @patch(
-        "nbkp.preflight.volume_checks._check_command_available",
+        "nbkp.preflight.volume_checks.check_command_available",
         side_effect=paramiko.BadHostKeyException(
             "nas.local", paramiko.RSAKey.generate(1024), paramiko.RSAKey.generate(1024)
         ),
@@ -245,7 +245,7 @@ class TestObservationExceptions:
         assert observe_ssh_endpoint(vol, resolved).ssh_auth_failed is True
 
     @patch(
-        "nbkp.preflight.volume_checks._check_command_available",
+        "nbkp.preflight.volume_checks.check_command_available",
         side_effect=TimeoutError("timed out"),
     )
     def test_timeout_is_unreachable(self, _mock: object) -> None:
@@ -256,7 +256,7 @@ class TestObservationExceptions:
         assert diag.ssh_error == "timed out"
 
     @patch(
-        "nbkp.preflight.volume_checks._check_command_available",
+        "nbkp.preflight.volume_checks.check_command_available",
         side_effect=KeyError("bug"),
     )
     def test_programming_error_propagates(self, _mock: object) -> None:

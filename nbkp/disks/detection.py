@@ -10,8 +10,8 @@ from ..config import (
     MountConfig,
     Volume,
 )
-from ..config.epresolution import ResolvedEndpoints
 from ..remote.dispatch import run_on_volume
+from ..remote.endpoints import ResolvedEndpoints
 
 
 class DeviceProbeError(Exception):

@@ -11,11 +11,11 @@ from collections.abc import Sequence
 
 from ..clihelpers import StepProgressBar
 from ..config import Config, LocalVolume
-from ..config.epresolution import ResolvedEndpoints
 from ..disks.observation import MountObservation
 from ..policy import Strictness
 from ..preflight import PreflightResult, check_all_syncs
 from ..preflight.severity import PreflightError, severity_for_errors
+from ..remote.endpoints import ResolvedEndpoints
 
 
 def check_total(cfg: Config, only_syncs: list[str] | None) -> int:

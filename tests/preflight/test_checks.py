@@ -22,8 +22,8 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.config.epresolution import ResolvedEndpoint, ResolvedEndpoints
 from nbkp.preflight.checks import check_all_syncs, check_sync, check_volume
+from nbkp.preflight.probes import _check_rsync_version, parse_rsync_version
 from nbkp.preflight.snapshot_checks import (
     check_btrfs_filesystem,
     check_btrfs_mount_option,
@@ -47,11 +47,8 @@ from nbkp.preflight.status import (
     VolumeError,
     VolumeStatus,
 )
-from nbkp.remote.queries import (
-    _check_command_available,
-    _check_rsync_version,
-    parse_rsync_version,
-)
+from nbkp.remote.dispatch import check_command_available
+from nbkp.remote.endpoints import ResolvedEndpoint, ResolvedEndpoints
 from nbkp.remote.resolution import resolve_proxy_chain
 from nbkp.snapshots.common import create_snapshot_timestamp
 from nbkp.sync import SyncFailureKind, SyncOutcome, SyncResult
@@ -808,18 +805,18 @@ class TestCheckRemoteVolumeLocationExcluded:
 
 
 class TestCheckCommandAvailableLocal:
-    @patch("nbkp.remote.queries.shutil.which")
+    @patch("nbkp.remote.dispatch.shutil.which")
     def test_command_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = "/usr/bin/rsync"
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert _check_command_available(vol, "rsync", {}) is True
+        assert check_command_available(vol, "rsync", {}) is True
         mock_which.assert_called_once_with("rsync")
 
-    @patch("nbkp.remote.queries.shutil.which")
+    @patch("nbkp.remote.dispatch.shutil.which")
     def test_command_not_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = None
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert _check_command_available(vol, "rsync", {}) is False
+        assert check_command_available(vol, "rsync", {}) is False
         mock_which.assert_called_once_with("rsync")
 
 
@@ -829,7 +826,7 @@ class TestCheckCommandAvailableRemote:
         mock_run.return_value = MagicMock(returncode=0)
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert _check_command_available(vol, "rsync", resolved) is True
+        assert check_command_available(vol, "rsync", resolved) is True
         server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(server, ["which", "rsync"], [], input=None)
 
@@ -838,7 +835,7 @@ class TestCheckCommandAvailableRemote:
         mock_run.return_value = MagicMock(returncode=1)
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert _check_command_available(vol, "btrfs", resolved) is False
+        assert check_command_available(vol, "btrfs", resolved) is False
         server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(server, ["which", "btrfs"], [], input=None)
 

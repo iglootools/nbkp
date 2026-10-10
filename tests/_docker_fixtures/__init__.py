@@ -42,7 +42,7 @@ from nbkp.config import (
     SshEndpoint,
     SyncConfig,
 )
-from nbkp.config.epresolution import ResolvedEndpoints
+from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.testkit.docker import (  # noqa: F401
     DOCKER_DIR,

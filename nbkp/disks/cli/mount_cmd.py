@@ -15,8 +15,8 @@ from ...commands.credentials import prompt_passphrase
 from ...commands.invocation import Invocation
 from ...commands.mount_progress import LifecycleProgress, mount_display_names
 from ...config import Config
-from ...config.epresolution import NetworkType, ResolvedEndpoints
 from ...credentials import build_passphrase_fn, prefetch_passphrases
+from ...remote.endpoints import NetworkType, ResolvedEndpoints
 from ..lifecycle import MountResult, mount_volumes
 from ..models import MountFailureReason
 from ..observation import build_mount_observations

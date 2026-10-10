@@ -1,13 +1,13 @@
-"""Host-interaction primitives: run commands on local/remote hosts.
+"""Preflight probes: observe raw state on a volume's host.
 
-Low-level functions that run commands on local/remote hosts and
-return results.  No domain knowledge about syncs or snapshots.
+Sentinel, directory and symlink checks, and the rsync version probe —
+the observations the preflight checks are built from.  Each runs on the
+volume's host (locally or over SSH) via :func:`nbkp.remote.dispatch.run_on_volume`.
 """
 
 from __future__ import annotations
 
 import re as regex
-import shutil
 from pathlib import Path
 
 from ..config import (
@@ -15,8 +15,8 @@ from ..config import (
     RemoteVolume,
     Volume,
 )
-from ..config.epresolution import ResolvedEndpoints
-from .dispatch import run_on_volume
+from ..remote.dispatch import run_on_volume
+from ..remote.endpoints import ResolvedEndpoints
 
 
 def _check_endpoint_sentinel(
@@ -36,22 +36,6 @@ def _check_endpoint_sentinel(
                 run_on_volume(
                     ["test", "-f", rel_path], volume, resolved_endpoints
                 ).returncode
-                == 0
-            )
-
-
-def _check_command_available(
-    volume: Volume,
-    command: str,
-    resolved_endpoints: ResolvedEndpoints,
-) -> bool:
-    """Check if a command is available on the volume's host."""
-    match volume:
-        case LocalVolume():
-            return shutil.which(command) is not None
-        case RemoteVolume():
-            return (
-                run_on_volume(["which", command], volume, resolved_endpoints).returncode
                 == 0
             )
 

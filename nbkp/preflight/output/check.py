@@ -14,7 +14,6 @@ from ...config import (
     LocalVolume,
     RemoteVolume,
 )
-from ...config.epresolution import ResolvedEndpoints
 from ...config.output import (
     _sync_endpoint_display,
     _sync_options,
@@ -22,6 +21,7 @@ from ...config.output import (
     format_volume_display,
 )
 from ...policy import Severity, Strictness
+from ...remote.endpoints import ResolvedEndpoints
 from ..severity import severity_for_errors
 from ..status import (
     INACTIVE_SSH_ERRORS,

@@ -235,7 +235,7 @@ The deliberate exception is the **fstab-mapping** check (`findmnt --fstab --targ
 
 #### Preflight Conditional Probing
 
-The preflight check system uses two layers: an **observation layer** (`volume_checks.py`, `endpoint_checks.py`) that probes raw state, and an **error interpretation layer** (`status.py`) that decides what constitutes a problem based on config. Not all capabilities are checked for every volume or endpoint — probing is selective. This is an intentional design choice driven by three categories of conditional logic.
+The preflight check system uses two layers: an **observation layer** (`volume_checks.py`, `endpoint_checks.py`, built on the host probes in `probes.py`) that probes raw state, and an **error interpretation layer** (`status.py`) that decides what constitutes a problem based on config. Not all capabilities are checked for every volume or endpoint — probing is selective. This is an intentional design choice driven by three categories of conditional logic.
 
 ##### Physical cascade dependencies
 

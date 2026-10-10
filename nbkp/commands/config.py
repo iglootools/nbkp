@@ -8,12 +8,12 @@ import typer
 
 from ..clihelpers import OutputFormat, echo_json
 from ..config import Config, ConfigError, load_config
-from ..config.epresolution import (
+from ..config.output import config_error_json, print_config_error
+from ..remote.endpoints import (
     EndpointFilter,
     NetworkType,
     ResolvedEndpoints,
 )
-from ..config.output import config_error_json, print_config_error
 from ..remote.resolution import resolve_all_endpoints
 
 

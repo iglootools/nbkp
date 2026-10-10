@@ -13,8 +13,8 @@ from ...commands.config import load_config_or_exit, resolve_endpoints
 from ...commands.invocation import Invocation
 from ...commands.mount import managed_mount
 from ...commands.preflight import check_all_with_progress
-from ...config.epresolution import NetworkType
 from ...policy import Strictness
+from ...remote.endpoints import NetworkType
 from ..output import (
     TroubleshootContext,
     collect_issues,

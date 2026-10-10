@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from ....config import Config
-from ....config.epresolution import ResolvedEndpoints
 from ....policy import Strictness
 from ....preflight import SyncStatus
+from ....remote.endpoints import ResolvedEndpoints
 from ...common import list_snapshots, read_latest_symlink
 from ...errors import SnapshotOperationError
 from ...models import ShowResult, SnapshotSkipReason

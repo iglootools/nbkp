@@ -6,11 +6,11 @@ from ...clihelpers import OutputFormat
 from ...commands.invocation import Invocation
 from ...commands.preflight import check_all_with_progress
 from ...config import Config
-from ...config.epresolution import ResolvedEndpoints
 from ...disks.observation import MountObservation
 from ...policy import Strictness
 from ...preflight import PreflightResult
 from ...preflight.output import print_human_check
+from ...remote.endpoints import ResolvedEndpoints
 from ..strictness import has_fatal_errors
 
 

@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from ....config import Config, SyncConfig
-from ....config.epresolution import ResolvedEndpoints
 from ....config.protocol.sync_endpoint import SyncEndpoint
 from ....policy import Strictness
 from ....preflight import SyncStatus
+from ....remote.endpoints import ResolvedEndpoints
 from ...btrfs import prune_snapshots as btrfs_prune_snapshots
 from ...common import list_snapshots
 from ...errors import SnapshotOperationError

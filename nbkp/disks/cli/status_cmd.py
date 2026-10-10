@@ -9,7 +9,7 @@ import typer
 
 from ...clihelpers import OutputFormat
 from ...commands.config import load_config_or_exit, resolve_endpoints
-from ...config.epresolution import NetworkType
+from ...remote.endpoints import NetworkType
 from . import app
 from .helpers import _probe_and_show_status, require_known_names
 

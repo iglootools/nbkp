@@ -11,8 +11,8 @@ from ...clihelpers import OutputFormat, echo_json
 from ...commands.config import load_config_or_exit, resolve_endpoints
 from ...commands.invocation import Invocation
 from ...commands.mount import managed_mount
-from ...config.epresolution import NetworkType
 from ...policy import Strictness
+from ...remote.endpoints import NetworkType
 from ..status import PreflightResult
 from . import app
 from .helpers import check_and_display

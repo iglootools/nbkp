@@ -11,7 +11,7 @@ from ...clihelpers import OutputFormat
 from ...commands.config import load_config_or_exit, resolve_endpoints
 from ...commands.mount_progress import LifecycleProgress, mount_display_names
 from ...config import Config
-from ...config.epresolution import NetworkType, ResolvedEndpoints
+from ...remote.endpoints import NetworkType, ResolvedEndpoints
 from ..lifecycle import UmountResult, umount_volumes
 from ..plan import plan_lifecycle
 from . import app

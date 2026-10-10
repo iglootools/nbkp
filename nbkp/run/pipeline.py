@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from ..config import Config
-from ..config.epresolution import ResolvedEndpoints
 from ..disks.observation import MountObservation
 from ..policy import Severity, Strictness
 from ..preflight import (
@@ -24,6 +23,7 @@ from ..preflight import (
 )
 from ..preflight.severity import PreflightError
 from ..preflight.strictness import has_fatal_errors
+from ..remote.endpoints import ResolvedEndpoints
 from ..sync.rsync import ProgressMode
 from ..sync.runner import SyncResult, result_severity, run_all_syncs
 

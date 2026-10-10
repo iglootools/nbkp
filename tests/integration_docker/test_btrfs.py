@@ -22,8 +22,8 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.config.epresolution import ResolvedEndpoints
 from nbkp.fsprotocol import Snapshot
+from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.testkit.docker import REMOTE_BTRFS_PATH
 from nbkp.snapshots.btrfs import (

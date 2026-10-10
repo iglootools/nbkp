@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..config import Config, LocalVolume, RemoteVolume, SyncConfig, SyncEndpoint
-from ..config.epresolution import ResolvedEndpoints
 from ..fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
+from ..remote.endpoints import ResolvedEndpoints
 
 
 @dataclass(frozen=True)

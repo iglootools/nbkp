@@ -7,13 +7,13 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from nbkp.config import LocalVolume, RemoteVolume, SshConnectionOptions, SshEndpoint
-from nbkp.config.epresolution import ResolvedEndpoint
 from nbkp.remote import (
     build_ssh_base_args,
     build_ssh_e_option,
     format_remote_path,
     run_remote_command,
 )
+from nbkp.remote.endpoints import ResolvedEndpoint
 from nbkp.remote.ssh import wrap_cmd
 
 _SSH_KEY = str(Path("~/.ssh/key").expanduser())

@@ -1,4 +1,4 @@
-"""Tests for nbkp.config.resolution."""
+"""Tests for endpoint selection in nbkp.remote.resolution."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from nbkp.config import (
     RemoteVolume,
     SshEndpoint,
 )
-from nbkp.config.epresolution import EndpointFilter
+from nbkp.remote.endpoints import EndpointFilter
 from nbkp.remote.resolution import (
     resolve_all_endpoints,
     resolve_endpoint_for_volume,

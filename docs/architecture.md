@@ -114,6 +114,7 @@ graph TD
     run --> ordering
     run --> policy
     run --> preflight
+    run --> remote
     run --> sync
     sh --> commands
     sh --> config
@@ -144,3 +145,4 @@ Each domain module (`disks/`, `preflight/`, `snapshots/`, …) keeps its core lo
 
 - **No module imports another module's `cli/` package.** Wiring that several sub-apps need — loading the config (`load_config_or_exit`), resolving endpoints, the managed mount lifecycle and its progress bars, preflight checks with progress, and the `Invocation` flags echoed in follow-up suggestions — lives in `commands/`. Only the root `cli/` app imports the sub-apps.
 - **Decisions live in core, display in `clihelpers/`.** `policy` holds `Strictness`, `Severity` and `classify_severity` — whether a finding is fatal — and is what core modules (`sync/`, `run/`, `preflight/`, `disks/`) import. `clihelpers/` is presentation only (output format, JSON, severity symbols and styles, progress bars); core modules import neither it nor `rich` / `typer`. The `prompt` credential provider gets its terminal prompt injected from `commands/credentials.py`. The cycles between `commands/` and the modules in the graph above are between a module's `cli/` (or `output/`) subpackage and `commands/`, never with the module's core.
+- **`config/` is the base layer.** Its core (models, loader) imports nothing else from nbkp. Endpoint selection — the `EndpointFilter` / `ResolvedEndpoint` models (`remote/endpoints.py`) and the algorithm (`remote/resolution.py`) — lives in `remote/`; config's display code takes the selected endpoints through a structural protocol rather than importing them. Transport primitives (`run_on_volume`, `check_command_available`) are in `remote/dispatch.py`; preflight-only host probes (sentinels, directories, symlinks, rsync version) are in `preflight/probes.py`.

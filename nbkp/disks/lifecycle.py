@@ -13,9 +13,9 @@ from ..config import (
     MountConfig,
     Volume,
 )
-from ..config.epresolution import ResolvedEndpoints
 from ..credentials import CredentialError
 from ..remote.dispatch import run_on_volume
+from ..remote.endpoints import ResolvedEndpoints
 from ..remote.errors import SSH_CONNECTION_ERRORS, describe_error
 from ..remote.fabricssh import StdinClosedProcess
 from .detection import (

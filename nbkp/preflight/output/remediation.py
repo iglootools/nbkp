@@ -27,7 +27,6 @@ from ...config import (
     SshEndpoint,
     SyncConfig,
 )
-from ...config.epresolution import ResolvedEndpoints
 from ...config.output import endpoint_path, host_label
 from ...credentials import passphrase_env_var
 from ...disks.auth import generate_auth_rules
@@ -41,6 +40,7 @@ from ...fsprotocol import (
     STAGING_DIR,
     VOLUME_SENTINEL,
 )
+from ...remote.endpoints import ResolvedEndpoints
 from ...remote.ssh import format_proxy_jump_chain, ssh_prefix, wrap_cmd
 from ..status import (
     DestinationEndpointError,

@@ -16,8 +16,8 @@ from io import StringIO
 from rich.console import Console
 
 from ...config import Config, SyncConfig
-from ...config.epresolution import ResolvedEndpoints
 from ...policy import Severity, Strictness
+from ...remote.endpoints import ResolvedEndpoints
 from ..severity import PreflightError, severity_for_error
 from ..status import (
     DestinationEndpointError,

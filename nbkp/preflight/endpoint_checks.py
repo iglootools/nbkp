@@ -16,7 +16,6 @@ from ..config import (
     SyncEndpoint,
     Volume,
 )
-from ..config.epresolution import ResolvedEndpoints
 from ..fsprotocol import (
     DESTINATION_SENTINEL,
     DEVNULL_TARGET,
@@ -26,7 +25,8 @@ from ..fsprotocol import (
     STAGING_DIR,
     Snapshot,
 )
-from ..remote.queries import (
+from ..remote.endpoints import ResolvedEndpoints
+from .probes import (
     _check_directory_writable,
     _check_endpoint_sentinel,
     _check_symlink_exists,
