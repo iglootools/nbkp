@@ -125,7 +125,7 @@ mise deps install uv --force
 """
 
 [tasks.check]
-description = "Run all checks (format-check, lint, type-check, compat-check, lock-check, lock-check-uv, clidocs-check, configdocs-check, depgraph-check)"
+description = "Run all checks (format-check, lint, type-check, compat-check, lock-check, lock-check-uv, clidocs-check, configdocs-check, depgraph-check, lint-imports)"
 run = [
   { task = "format-check" },
   { task = "lint" },
@@ -136,6 +136,7 @@ run = [
   { task = "clidocs-check" },
   { task = "configdocs-check" },
   { task = "depgraph-check" },
+  { task = "lint-imports" },
 ]
 
 [tasks.check-all]
@@ -358,6 +359,10 @@ run = "uv run --no-sync python build-scripts/depgraph.py"
 [tasks.depgraph-check]
 description = "Check that Module Overview in docs/architecture.md is up to date"
 run = "uv run --no-sync python build-scripts/depgraph.py --check"
+
+[tasks.lint-imports]
+description = "Check the module layering rules ([tool.importlinter] in pyproject.toml)"
+run = "uv run --no-sync lint-imports"
 
 [tasks.depgraph-ascii]
 description = "Generate module dependency graph (ASCII art)"
