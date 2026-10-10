@@ -15,7 +15,7 @@ from ..config import (
 )
 from ..config.epresolution import ResolvedEndpoints
 from ..remote.dispatch import run_on_volume
-from ..remote.fabricssh import STDIN_CLOSED_MARKER
+from ..remote.fabricssh import StdinClosedProcess
 from .detection import (
     detect_device_present,
     discover_cleartext_device,
@@ -126,7 +126,7 @@ def _classify_udisks_failure(
     """
     stderr = result.stderr.strip()
     lowered = stderr.lower()
-    if stderr == STDIN_CLOSED_MARKER or any(
+    if isinstance(result, StdinClosedProcess) or any(
         sig in lowered for sig in _NOT_AUTHORIZED_SIGNATURES
     ):
         return (

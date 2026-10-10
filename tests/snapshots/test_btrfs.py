@@ -260,12 +260,14 @@ class TestDeleteSnapshotLocal:
                     ["btrfs", "property", "set", path, "ro", "false"],
                     capture_output=True,
                     text=True,
+                    input=None,
                     check=False,
                 ),
                 call(
                     ["btrfs", "subvolume", "delete", path],
                     capture_output=True,
                     text=True,
+                    input=None,
                     check=False,
                 ),
             ]
@@ -319,11 +321,13 @@ class TestDeleteSnapshotRemote:
                     server,
                     ["btrfs", "property", "set", path, "ro", "false"],
                     [],
+                    input=None,
                 ),
                 call(
                     server,
                     ["btrfs", "subvolume", "delete", path],
                     [],
+                    input=None,
                 ),
             ]
         )

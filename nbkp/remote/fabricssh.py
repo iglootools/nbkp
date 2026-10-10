@@ -13,11 +13,24 @@ from fabric import Connection  # type: ignore[import-untyped]
 
 from ..config import SshEndpoint
 
-# Marker used in stderr when the remote process exits before the stdin
-# writer thread finishes (e.g. sudo refuses without NOPASSWD under
-# BatchMode=yes). Callers can match this string to classify the failure
-# instead of crashing on the raw Paramiko/Fabric thread exception.
-STDIN_CLOSED_MARKER = "remote process exited before consuming stdin"
+
+class StdinClosedProcess(subprocess.CompletedProcess[str]):
+    """A remote command that exited before consuming the stdin sent to it.
+
+    Returned instead of crashing on the raw Paramiko/Fabric thread exception
+    (e.g. ``udisksctl unlock`` refusing fast under ``--no-user-interaction``).
+    The remote stderr is lost with the channel, so callers classify the
+    failure from the type — ``isinstance(result, StdinClosedProcess)`` — and
+    ``stderr`` only carries a human-readable explanation.
+    """
+
+    def __init__(self, args: str) -> None:
+        super().__init__(
+            args=args,
+            returncode=1,
+            stdout="",
+            stderr="remote process exited before consuming stdin",
+        )
 
 
 def _build_single_connection(
@@ -82,7 +95,7 @@ def run_remote_command(
     input: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run a command on a remote host via Fabric."""
-    cmd_string = " ".join(shlex.quote(arg) for arg in command)
+    cmd_string = shlex.join(command)
     # When input is provided, wrap it as a BytesIO stream for Fabric.
     # Otherwise, use in_stream=False to disable stdin entirely.
     in_stream: io.BytesIO | bool = (
@@ -99,14 +112,9 @@ def run_remote_command(
             # Stdin/stdout/stderr worker raised — usually because the remote
             # process exited before the stdin writer finished sending data
             # (Paramiko then raises OSError("Socket is closed")). The actual
-            # remote stderr is lost with the channel, so we surface a clean
-            # marker and let callers classify based on context.
-            return subprocess.CompletedProcess(
-                args=cmd_string,
-                returncode=1,
-                stdout="",
-                stderr=STDIN_CLOSED_MARKER,
-            )
+            # remote stderr is lost with the channel, so we return a typed
+            # result and let callers classify based on context.
+            return StdinClosedProcess(args=cmd_string)
     return subprocess.CompletedProcess(
         args=cmd_string,
         returncode=result.exited,

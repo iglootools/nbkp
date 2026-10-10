@@ -809,7 +809,7 @@ class TestCheckCommandAvailableRemote:
         resolved = _make_resolved(config)
         assert _check_command_available(vol, "rsync", resolved) is True
         server = config.ssh_endpoints["nas-server"]
-        mock_run.assert_called_once_with(server, ["which", "rsync"], [])
+        mock_run.assert_called_once_with(server, ["which", "rsync"], [], input=None)
 
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_command_not_found(self, mock_run: MagicMock) -> None:
@@ -818,7 +818,7 @@ class TestCheckCommandAvailableRemote:
         resolved = _make_resolved(config)
         assert _check_command_available(vol, "btrfs", resolved) is False
         server = config.ssh_endpoints["nas-server"]
-        mock_run.assert_called_once_with(server, ["which", "btrfs"], [])
+        mock_run.assert_called_once_with(server, ["which", "btrfs"], [], input=None)
 
 
 class TestCheckBtrfsFilesystemLocal:
@@ -831,6 +831,7 @@ class TestCheckBtrfsFilesystemLocal:
             ["stat", "-f", "-c", "%T", "/mnt/data"],
             capture_output=True,
             text=True,
+            input=None,
             check=False,
         )
 
@@ -859,6 +860,7 @@ class TestCheckBtrfsFilesystemRemote:
             server,
             ["stat", "-f", "-c", "%T", "/backup"],
             [],
+            input=None,
         )
 
     @patch("nbkp.remote.dispatch.run_remote_command")
@@ -879,6 +881,7 @@ class TestCheckBtrfsSubvolumeLocal:
             ["stat", "-c", "%i", "/mnt/data"],
             capture_output=True,
             text=True,
+            input=None,
             check=False,
         )
 
@@ -891,6 +894,7 @@ class TestCheckBtrfsSubvolumeLocal:
             ["stat", "-c", "%i", "/mnt/data/backup"],
             capture_output=True,
             text=True,
+            input=None,
             check=False,
         )
 
@@ -919,6 +923,7 @@ class TestCheckBtrfsSubvolumeRemote:
             server,
             ["stat", "-c", "%i", "/backup"],
             [],
+            input=None,
         )
 
     @patch("nbkp.remote.dispatch.run_remote_command")
@@ -932,6 +937,7 @@ class TestCheckBtrfsSubvolumeRemote:
             server,
             ["stat", "-c", "%i", "/backup/data"],
             [],
+            input=None,
         )
 
     @patch("nbkp.remote.dispatch.run_remote_command")
@@ -955,6 +961,7 @@ class TestCheckBtrfsMountOptionLocal:
             ["findmnt", "-T", "/mnt/data", "-n", "-o", "OPTIONS"],
             capture_output=True,
             text=True,
+            input=None,
             check=False,
         )
 
@@ -986,6 +993,7 @@ class TestCheckBtrfsMountOptionRemote:
             server,
             ["findmnt", "-T", "/backup", "-n", "-o", "OPTIONS"],
             [],
+            input=None,
         )
 
     @patch("nbkp.remote.dispatch.run_remote_command")
@@ -1947,6 +1955,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == ["test", "-f", "/data/data/.nbkp-src"]:
                 return MagicMock(returncode=0)
@@ -2020,6 +2029,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2106,6 +2116,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2190,6 +2201,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2274,6 +2286,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2365,6 +2378,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2458,6 +2472,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2548,6 +2563,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2647,6 +2663,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2754,6 +2771,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -3460,6 +3478,7 @@ class TestCheckHardLinkDest:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",

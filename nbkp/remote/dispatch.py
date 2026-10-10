@@ -20,14 +20,9 @@ def run_on_volume(
     match volume:
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
-            if input is not None:
-                return run_remote_command(ep.server, cmd, ep.proxy_chain, input=input)
-            else:
-                return run_remote_command(ep.server, cmd, ep.proxy_chain)
+            return run_remote_command(ep.server, cmd, ep.proxy_chain, input=input)
         case LocalVolume():
-            if input is not None:
-                return subprocess.run(
-                    cmd, capture_output=True, text=True, input=input, check=False
-                )
-            else:
-                return subprocess.run(cmd, capture_output=True, text=True, check=False)
+            # input=None leaves stdin inherited, as when it is omitted.
+            return subprocess.run(
+                cmd, capture_output=True, text=True, input=input, check=False
+            )

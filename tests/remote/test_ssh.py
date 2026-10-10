@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from nbkp.config import SshConnectionOptions, SshEndpoint
+from nbkp.config import LocalVolume, RemoteVolume, SshConnectionOptions, SshEndpoint
+from nbkp.config.epresolution import ResolvedEndpoint
 from nbkp.remote import (
     build_ssh_base_args,
     build_ssh_e_option,
     format_remote_path,
     run_remote_command,
 )
+from nbkp.remote.ssh import wrap_cmd
 
 _SSH_KEY = str(Path("~/.ssh/key").expanduser())
 
@@ -221,9 +224,11 @@ class TestBuildSshBaseArgs:
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
             " -W %%h:%%p user1@bastion1.example.com"
         )
+        # The hop runs through ``sh -c``: the nested ProxyCommand is one
+        # shell word, so it must be quoted.
         proxy_cmd = (
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
-            f" -o ProxyCommand={inner}"
+            f" -o {shlex.quote(f'ProxyCommand={inner}')}"
             " -p 2222"
             " -W %h:%p bastion2.example.com"
         )
@@ -294,8 +299,6 @@ class TestBuildSshEOption:
             " -p 2222"
             " -W %h:%p admin@bastion.example.com"
         )
-        import shlex
-
         quoted = shlex.quote(f"ProxyCommand={proxy_cmd}")
         assert result == [
             "-e",
@@ -322,19 +325,69 @@ class TestBuildSshEOption:
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
             " -W %%h:%%p user1@bastion1.example.com"
         )
+        # The hop runs through ``sh -c``: the nested ProxyCommand is one
+        # shell word, so it must be quoted.
         proxy_cmd = (
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
-            f" -o ProxyCommand={inner}"
+            f" -o {shlex.quote(f'ProxyCommand={inner}')}"
             " -p 2222"
             " -W %h:%p bastion2.example.com"
         )
-        import shlex
-
         quoted = shlex.quote(f"ProxyCommand={proxy_cmd}")
         assert result == [
             "-e",
             f"{_DEFAULT_E_PREFIX} -o {quoted}",
         ]
+
+
+class TestBuildSshEOptionQuoting:
+    def test_key_with_space_is_quoted(self) -> None:
+        server = SshEndpoint(slug="s", host="h", key="/keys/my key")
+        [flag, value] = build_ssh_e_option(server)
+        assert flag == "-e"
+        assert shlex.split(value) == [
+            "ssh",
+            *_DEFAULT_O_OPTIONS,
+            "-i",
+            "/keys/my key",
+        ]
+
+    def test_multi_hop_round_trips(self) -> None:
+        server = SshEndpoint(slug="t", host="target")
+        hops = [
+            SshEndpoint(slug="b1", host="b1", user="u1"),
+            SshEndpoint(slug="b2", host="b2"),
+        ]
+        [_, value] = build_ssh_e_option(server, hops)
+        # What rsync splits back out is exactly the argv ssh would get.
+        assert shlex.split(value) == build_ssh_base_args(server, hops)[:-1]
+
+
+class TestWrapCmd:
+    def test_local_quotes_arguments(self) -> None:
+        vol = LocalVolume(slug="v", path="/mnt/my data")
+        assert wrap_cmd(["mkdir", "-p", "/mnt/my data"], vol, {}) == (
+            "mkdir -p '/mnt/my data'"
+        )
+
+    def test_remote_nests_quoted_command(self) -> None:
+        vol = RemoteVolume(slug="v", ssh_endpoint="nas", path="/srv/my data")
+        resolved = {
+            "v": ResolvedEndpoint(
+                server=SshEndpoint(slug="nas", host="nas.lan", user="bk")
+            )
+        }
+        line = wrap_cmd(["touch", "/srv/my data/.nbkp-vol"], vol, resolved)
+        ssh_argv = shlex.split(line)
+        assert ssh_argv[:2] == ["ssh", "bk@nas.lan"]
+        # The remote shell re-parses the single command argument.
+        assert shlex.split(ssh_argv[2]) == ["touch", "/srv/my data/.nbkp-vol"]
+
+    def test_remote_tilde_stays_expandable(self) -> None:
+        vol = RemoteVolume(slug="v", ssh_endpoint="nas", path="~/backups")
+        resolved = {"v": ResolvedEndpoint(server=SshEndpoint(slug="nas", host="h"))}
+        line = wrap_cmd(["mkdir", "-p", "~/backups/my dir"], vol, resolved)
+        assert shlex.split(line)[2] == "mkdir -p ~/'backups/my dir'"
 
 
 class TestFormatRemotePath:
@@ -466,7 +519,7 @@ class TestRunRemoteCommand:
         """
         import invoke.exceptions
 
-        from nbkp.remote.fabricssh import STDIN_CLOSED_MARKER
+        from nbkp.remote.fabricssh import StdinClosedProcess
 
         mock_conn = mock_conn_cls.return_value.__enter__.return_value
         mock_conn.run.side_effect = invoke.exceptions.ThreadException(
@@ -486,8 +539,8 @@ class TestRunRemoteCommand:
             input="pw",
         )
 
+        assert isinstance(result, StdinClosedProcess)
         assert result.returncode == 1
-        assert result.stderr == STDIN_CLOSED_MARKER
         assert result.stdout == ""
 
     @patch("nbkp.remote.fabricssh.paramiko")
