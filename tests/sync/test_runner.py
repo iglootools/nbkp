@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from typing import Any
 from unittest.mock import MagicMock, patch
 
+from nbkp.clihelpers import Strictness
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
+    HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
     SshEndpoint,
@@ -14,6 +18,7 @@ from nbkp.config import (
     SyncEndpoint,
     Volume,
 )
+from nbkp.fsprotocol import Snapshot
 from nbkp.preflight import (
     DestinationEndpointDiagnostics,
     DestinationEndpointError,
@@ -31,8 +36,24 @@ from nbkp.preflight import (
     VolumeError,
     VolumeStatus,
 )
-from nbkp.sync import run_all_syncs
-from nbkp.sync.runner import SyncOutcome
+from nbkp.snapshots.errors import SnapshotOp, SnapshotOperationError
+from nbkp.sync import SyncResult, run_all_syncs
+from nbkp.sync.runner import SyncFailureKind, SyncOutcome, SyncWarningKind
+
+_FIXED_NOW = datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC)
+
+
+def _run(
+    config: Config, sync_statuses: dict[str, SyncStatus], **kwargs: Any
+) -> list[SyncResult]:
+    """run_all_syncs with a fixed clock and platform."""
+    return run_all_syncs(
+        config,
+        sync_statuses,
+        clock=lambda: _FIXED_NOW,
+        platform="linux",
+        **kwargs,
+    )
 
 
 def _active_ssh_status() -> SshEndpointStatus:
@@ -269,7 +290,7 @@ class TestRunAllSyncs:
         _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
 
-        results = run_all_syncs(config, sync_statuses)
+        results = _run(config, sync_statuses)
         assert len(results) == 1
         assert results[0].success is True
         assert results[0].rsync_exit_code == 0
@@ -278,10 +299,11 @@ class TestRunAllSyncs:
         config = _make_local_config()
         _, sync_statuses = _inactive_statuses(config)
 
-        results = run_all_syncs(config, sync_statuses)
+        results = _run(config, sync_statuses)
         assert len(results) == 1
         assert results[0].success is False
-        assert "not active" in (results[0].detail or "")
+        assert results[0].outcome == SyncOutcome.SKIPPED
+        assert results[0].failure == SyncFailureKind.INACTIVE
 
     @patch("nbkp.sync.runner.run_rsync")
     def test_rsync_failure(self, mock_rsync: MagicMock) -> None:
@@ -289,7 +311,7 @@ class TestRunAllSyncs:
         _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(returncode=23, stdout="", stderr="error")
 
-        results = run_all_syncs(config, sync_statuses)
+        results = _run(config, sync_statuses)
         assert results[0].success is False
         assert results[0].rsync_exit_code == 23
 
@@ -299,7 +321,7 @@ class TestRunAllSyncs:
         _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
 
-        results = run_all_syncs(config, sync_statuses, only_syncs=["nonexistent"])
+        results = _run(config, sync_statuses, only_syncs=["nonexistent"])
         assert len(results) == 0
 
     @patch("nbkp.sync.runner.update_latest_symlink")
@@ -316,10 +338,12 @@ class TestRunAllSyncs:
         mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
         mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
 
-        results = run_all_syncs(config, sync_statuses)
+        results = _run(config, sync_statuses)
         assert results[0].success is True
         assert results[0].snapshot_path == "/dst/snapshots/20240115T120000Z"
         mock_snap.assert_called_once()
+        assert mock_snap.call_args.kwargs["now"] == _FIXED_NOW
+        assert mock_snap.call_args.kwargs["platform"] == "linux"
         mock_symlink.assert_called_once()
 
     @patch("nbkp.sync.runner.run_rsync")
@@ -331,7 +355,7 @@ class TestRunAllSyncs:
         _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
 
-        results = run_all_syncs(config, sync_statuses, dry_run=True)
+        results = _run(config, sync_statuses, dry_run=True)
         assert results[0].success is True
         assert results[0].snapshot_path is None
 
@@ -349,7 +373,7 @@ class TestRunAllSyncs:
         mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
         mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
 
-        run_all_syncs(config, sync_statuses)
+        _run(config, sync_statuses)
 
         # Btrfs workflow no longer passes --link-dest
         call_kwargs = mock_rsync.call_args
@@ -369,7 +393,7 @@ class TestRunAllSyncs:
         mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
         mock_snap.return_value = "/backup/snapshots/20240115T120000Z"
 
-        results = run_all_syncs(config, sync_statuses)
+        results = _run(config, sync_statuses)
         assert results[0].success is True
         assert results[0].snapshot_path is not None
         mock_snap.assert_called_once()
@@ -385,11 +409,13 @@ class TestRunAllSyncs:
         config = _make_btrfs_config()
         _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
-        mock_snap.side_effect = RuntimeError("btrfs failed")
+        mock_snap.side_effect = SnapshotOperationError(
+            SnapshotOp.CREATE, "/dst/snapshots/x", "btrfs failed"
+        )
 
-        results = run_all_syncs(config, sync_statuses)
-        assert results[0].success is False
-        assert "Snapshot failed" in (results[0].detail or "")
+        results = _run(config, sync_statuses)
+        assert results[0].outcome == SyncOutcome.FAILED
+        assert results[0].failure == SyncFailureKind.SNAPSHOT
 
     @patch("nbkp.sync.runner.update_latest_symlink")
     @patch("nbkp.sync.runner.btrfs_prune_snapshots")
@@ -408,9 +434,9 @@ class TestRunAllSyncs:
         mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
         mock_prune.return_value = ["/dst/snapshots/old"]
 
-        results = run_all_syncs(config, sync_statuses)
+        results = _run(config, sync_statuses)
         assert results[0].success is True
-        assert results[0].pruned_paths == ["/dst/snapshots/old"]
+        assert results[0].pruned_paths == ("/dst/snapshots/old",)
         mock_prune.assert_called_once()
 
     @patch("nbkp.sync.runner.update_latest_symlink")
@@ -429,7 +455,7 @@ class TestRunAllSyncs:
         mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
         mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
 
-        results = run_all_syncs(config, sync_statuses)
+        results = _run(config, sync_statuses)
         assert results[0].success is True
         assert results[0].pruned_paths is None
         mock_prune.assert_not_called()
@@ -504,7 +530,7 @@ class TestFailurePropagation:
         _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(returncode=23, stdout="", stderr="error")
 
-        results = run_all_syncs(config, sync_statuses)
+        results = _run(config, sync_statuses)
         assert len(results) == 2
 
         # s1 failed
@@ -517,7 +543,8 @@ class TestFailurePropagation:
         r2 = next(r for r in results if r.sync_slug == "s2")
         assert r2.success is False
         assert r2.outcome == SyncOutcome.CANCELLED
-        assert "'s1'" in (r2.detail or "")
+        assert r2.failure == SyncFailureKind.UPSTREAM_FAILED
+        assert r2.cancelled_by == "s1"
 
     @patch("nbkp.sync.runner.run_rsync")
     def test_independent_sync_not_cancelled(
@@ -538,7 +565,7 @@ class TestFailurePropagation:
 
         mock_rsync.side_effect = _side_effect
 
-        results = run_all_syncs(config, sync_statuses)
+        results = _run(config, sync_statuses)
         assert len(results) == 2
         # One failed, one succeeded (order may vary)
         successes = [r for r in results if r.success]
@@ -593,7 +620,7 @@ class TestFailurePropagation:
         _, sync_statuses = _active_statuses(config)
         mock_rsync.return_value = MagicMock(returncode=23, stdout="", stderr="error")
 
-        results = run_all_syncs(config, sync_statuses)
+        results = _run(config, sync_statuses)
         assert len(results) == 3
 
         ra = next(r for r in results if r.sync_slug == "a")
@@ -609,3 +636,416 @@ class TestFailurePropagation:
 
         assert rc.success is False
         assert rc.outcome == SyncOutcome.CANCELLED
+
+
+# ── Hard-link snapshots ──────────────────────────────────────
+
+
+def _make_hard_link_config(max_snapshots: int | None = None) -> Config:
+    src = LocalVolume(slug="src", path="/src")
+    dst = LocalVolume(slug="dst", path="/dst")
+    return Config(
+        volumes={"src": src, "dst": dst},
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                hard_link_snapshots=HardLinkSnapshotConfig(
+                    enabled=True, max_snapshots=max_snapshots
+                ),
+            ),
+        },
+        syncs={"s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst")},
+    )
+
+
+_NEW_SNAPSHOT = "/dst/snapshots/2026-03-06T14:30:00.000Z"
+_PREVIOUS = Snapshot.from_name("2026-03-05T10:00:00.000Z")
+
+
+def _snapshot_error(op: SnapshotOp) -> SnapshotOperationError:
+    return SnapshotOperationError(op, "/dst/snapshots/x", "Permission denied")
+
+
+def _ok_proc() -> MagicMock:
+    return MagicMock(returncode=0, stdout="done\n", stderr="")
+
+
+@patch("nbkp.sync.runner.hl_prune_snapshots")
+@patch("nbkp.sync.runner.update_latest_symlink")
+@patch("nbkp.sync.runner.hl_delete_snapshot")
+@patch("nbkp.sync.runner.create_snapshot_dir")
+@patch("nbkp.sync.runner.cleanup_orphaned_snapshots")
+@patch("nbkp.sync.runner.run_rsync")
+class TestHardLinkSync:
+    def test_dry_run_never_modifies_destination(
+        self,
+        mock_rsync: MagicMock,
+        mock_cleanup: MagicMock,
+        mock_mkdir: MagicMock,
+        mock_delete: MagicMock,
+        mock_symlink: MagicMock,
+        mock_prune: MagicMock,
+    ) -> None:
+        """No orphan cleanup, no snapshot dir, no latest update in dry-run."""
+        config = _make_hard_link_config(max_snapshots=2)
+        _, statuses = _active_statuses(config)
+        statuses = {
+            k: v.model_copy(update={"destination_latest_snapshot": _PREVIOUS})
+            for k, v in statuses.items()
+        }
+        mock_rsync.return_value = _ok_proc()
+
+        results = _run(config, statuses, dry_run=True)
+
+        assert results[0].outcome == SyncOutcome.SUCCESS
+        assert results[0].snapshot_path is None
+        mock_cleanup.assert_not_called()
+        mock_mkdir.assert_not_called()
+        mock_delete.assert_not_called()
+        mock_symlink.assert_not_called()
+        mock_prune.assert_not_called()
+        kwargs = mock_rsync.call_args.kwargs
+        assert kwargs["dry_run"] is True
+        assert kwargs["dest_suffix"] == "snapshots/2026-03-06T14:30:00.000Z"
+        assert kwargs["link_dest"] == f"../{_PREVIOUS.name}"
+
+    def test_dry_run_rsync_failure_removes_nothing(
+        self,
+        mock_rsync: MagicMock,
+        mock_cleanup: MagicMock,
+        mock_mkdir: MagicMock,
+        mock_delete: MagicMock,
+        mock_symlink: MagicMock,
+        mock_prune: MagicMock,
+    ) -> None:
+        config = _make_hard_link_config()
+        _, statuses = _active_statuses(config)
+        mock_rsync.return_value = MagicMock(returncode=23, stdout="", stderr="err")
+
+        results = _run(config, statuses, dry_run=True)
+
+        assert results[0].failure == SyncFailureKind.RSYNC
+        mock_delete.assert_not_called()
+
+    def test_real_run_names_snapshot_from_clock(
+        self,
+        mock_rsync: MagicMock,
+        mock_cleanup: MagicMock,
+        mock_mkdir: MagicMock,
+        mock_delete: MagicMock,
+        mock_symlink: MagicMock,
+        mock_prune: MagicMock,
+    ) -> None:
+        config = _make_hard_link_config()
+        _, statuses = _active_statuses(config)
+        mock_rsync.return_value = _ok_proc()
+        mock_mkdir.return_value = _NEW_SNAPSHOT
+
+        results = _run(config, statuses)
+
+        assert results[0].outcome == SyncOutcome.SUCCESS
+        assert results[0].snapshot_path == _NEW_SNAPSHOT
+        assert results[0].warnings == ()
+        mock_cleanup.assert_called_once()
+        assert mock_mkdir.call_args.kwargs["now"] == _FIXED_NOW
+        assert mock_mkdir.call_args.kwargs["platform"] == "linux"
+        mock_symlink.assert_called_once()
+        mock_prune.assert_not_called()  # no max-snapshots
+
+    def test_orphan_cleanup_failure_is_a_warning(
+        self,
+        mock_rsync: MagicMock,
+        mock_cleanup: MagicMock,
+        mock_mkdir: MagicMock,
+        mock_delete: MagicMock,
+        mock_symlink: MagicMock,
+        mock_prune: MagicMock,
+    ) -> None:
+        config = _make_hard_link_config()
+        _, statuses = _active_statuses(config)
+        mock_cleanup.side_effect = _snapshot_error(SnapshotOp.DELETE)
+        mock_rsync.return_value = _ok_proc()
+        mock_mkdir.return_value = _NEW_SNAPSHOT
+
+        results = _run(config, statuses)
+
+        assert results[0].outcome == SyncOutcome.SUCCESS
+        assert [w.kind for w in results[0].warnings] == [SyncWarningKind.ORPHAN_CLEANUP]
+
+    def test_mkdir_failure(
+        self,
+        mock_rsync: MagicMock,
+        mock_cleanup: MagicMock,
+        mock_mkdir: MagicMock,
+        mock_delete: MagicMock,
+        mock_symlink: MagicMock,
+        mock_prune: MagicMock,
+    ) -> None:
+        config = _make_hard_link_config()
+        _, statuses = _active_statuses(config)
+        mock_mkdir.side_effect = _snapshot_error(SnapshotOp.MKDIR)
+
+        results = _run(config, statuses)
+
+        assert results[0].failure == SyncFailureKind.MKDIR
+        mock_rsync.assert_not_called()
+
+    def test_rsync_failure_removes_new_snapshot_dir(
+        self,
+        mock_rsync: MagicMock,
+        mock_cleanup: MagicMock,
+        mock_mkdir: MagicMock,
+        mock_delete: MagicMock,
+        mock_symlink: MagicMock,
+        mock_prune: MagicMock,
+    ) -> None:
+        config = _make_hard_link_config()
+        _, statuses = _active_statuses(config)
+        mock_mkdir.return_value = _NEW_SNAPSHOT
+        mock_rsync.return_value = MagicMock(returncode=23, stdout="", stderr="err")
+
+        results = _run(config, statuses)
+
+        assert results[0].failure == SyncFailureKind.RSYNC
+        assert results[0].rsync_exit_code == 23
+        assert mock_delete.call_args.args[0] == _NEW_SNAPSHOT
+        mock_symlink.assert_not_called()
+
+    def test_snapshot_dir_removal_failure_is_a_warning(
+        self,
+        mock_rsync: MagicMock,
+        mock_cleanup: MagicMock,
+        mock_mkdir: MagicMock,
+        mock_delete: MagicMock,
+        mock_symlink: MagicMock,
+        mock_prune: MagicMock,
+    ) -> None:
+        config = _make_hard_link_config()
+        _, statuses = _active_statuses(config)
+        mock_mkdir.return_value = _NEW_SNAPSHOT
+        mock_rsync.side_effect = OSError("rsync: not found")
+        mock_delete.side_effect = _snapshot_error(SnapshotOp.DELETE)
+
+        results = _run(config, statuses)
+
+        assert results[0].failure == SyncFailureKind.RSYNC
+        assert [w.kind for w in results[0].warnings] == [
+            SyncWarningKind.SNAPSHOT_DIR_CLEANUP
+        ]
+
+    def test_symlink_failure(
+        self,
+        mock_rsync: MagicMock,
+        mock_cleanup: MagicMock,
+        mock_mkdir: MagicMock,
+        mock_delete: MagicMock,
+        mock_symlink: MagicMock,
+        mock_prune: MagicMock,
+    ) -> None:
+        config = _make_hard_link_config()
+        _, statuses = _active_statuses(config)
+        mock_mkdir.return_value = _NEW_SNAPSHOT
+        mock_rsync.return_value = _ok_proc()
+        mock_symlink.side_effect = _snapshot_error(SnapshotOp.UPDATE_LATEST)
+
+        results = _run(config, statuses)
+
+        assert results[0].failure == SyncFailureKind.SYMLINK
+
+    def test_prune_failure_is_a_warning(
+        self,
+        mock_rsync: MagicMock,
+        mock_cleanup: MagicMock,
+        mock_mkdir: MagicMock,
+        mock_delete: MagicMock,
+        mock_symlink: MagicMock,
+        mock_prune: MagicMock,
+    ) -> None:
+        """A complete snapshot stays a success when pruning fails."""
+        config = _make_hard_link_config(max_snapshots=2)
+        _, statuses = _active_statuses(config)
+        mock_mkdir.return_value = _NEW_SNAPSHOT
+        mock_rsync.return_value = _ok_proc()
+        mock_prune.side_effect = _snapshot_error(SnapshotOp.DELETE)
+
+        results = _run(config, statuses)
+
+        assert results[0].outcome == SyncOutcome.SUCCESS
+        assert results[0].snapshot_path == _NEW_SNAPSHOT
+        assert results[0].pruned_paths is None
+        assert [w.kind for w in results[0].warnings] == [SyncWarningKind.PRUNE]
+
+
+class TestPruneFailureDoesNotAbortRun:
+    @patch("nbkp.sync.runner.update_latest_symlink")
+    @patch("nbkp.sync.runner.btrfs_prune_snapshots")
+    @patch("nbkp.sync.runner.create_snapshot")
+    @patch("nbkp.sync.runner.run_rsync")
+    def test_later_syncs_still_run(
+        self,
+        mock_rsync: MagicMock,
+        mock_snap: MagicMock,
+        mock_prune: MagicMock,
+        _mock_symlink: MagicMock,
+    ) -> None:
+        config = _make_btrfs_config_with_max()
+        config = config.model_copy(
+            update={
+                "volumes": {
+                    **config.volumes,
+                    "src2": LocalVolume(slug="src2", path="/src2"),
+                    "dst2": LocalVolume(slug="dst2", path="/dst2"),
+                },
+                "sync_endpoints": {
+                    **config.sync_endpoints,
+                    "ep-src2": SyncEndpoint(slug="ep-src2", volume="src2"),
+                    "ep-dst2": SyncEndpoint(slug="ep-dst2", volume="dst2"),
+                },
+                "syncs": {
+                    **config.syncs,
+                    "s2": SyncConfig(
+                        slug="s2", source="ep-src2", destination="ep-dst2"
+                    ),
+                },
+            }
+        )
+        _, statuses = _active_statuses(config)
+        mock_rsync.return_value = _ok_proc()
+        mock_snap.return_value = "/dst/snapshots/2026-03-06T14:30:00.000Z"
+        mock_prune.side_effect = _snapshot_error(SnapshotOp.DELETE)
+
+        results = _run(config, statuses)
+
+        assert {r.sync_slug: r.outcome for r in results} == {
+            "s1": SyncOutcome.SUCCESS,
+            "s2": SyncOutcome.SUCCESS,
+        }
+
+
+# ── Cancellation causes ──────────────────────────────────────
+
+
+def _three_chain_config() -> Config:
+    vols: dict[str, Volume] = {
+        f"v{i}": LocalVolume(slug=f"v{i}", path=f"/v{i}") for i in range(4)
+    }
+    return Config(
+        volumes=vols,
+        sync_endpoints={
+            f"ep-v{i}": SyncEndpoint(slug=f"ep-v{i}", volume=f"v{i}") for i in range(4)
+        },
+        syncs={
+            name: SyncConfig(slug=name, source=f"ep-v{i}", destination=f"ep-v{i + 1}")
+            for i, name in enumerate(["a", "b", "c"])
+        },
+    )
+
+
+class TestCancellationCause:
+    @patch("nbkp.sync.runner.run_rsync")
+    def test_inactive_upstream_cancels_as_skipped(self, mock_rsync: MagicMock) -> None:
+        config = _three_chain_config()
+        _, statuses = _active_statuses(config)
+        _, inactive = _inactive_statuses(config)
+        statuses = {**statuses, "a": inactive["a"]}
+
+        results = {r.sync_slug: r for r in _run(config, statuses)}
+
+        assert results["a"].failure == SyncFailureKind.INACTIVE
+        assert results["b"].failure == SyncFailureKind.UPSTREAM_SKIPPED
+        assert results["b"].cancelled_by == "a"
+        # Transitive: c is cancelled by b, whose root cause is inactivity.
+        assert results["c"].failure == SyncFailureKind.UPSTREAM_SKIPPED
+        assert results["c"].cancelled_by == "b"
+        mock_rsync.assert_not_called()
+
+    @patch("nbkp.sync.runner.run_rsync")
+    def test_failed_upstream_cancels_as_failed_transitively(
+        self, mock_rsync: MagicMock
+    ) -> None:
+        config = _three_chain_config()
+        _, statuses = _active_statuses(config)
+        mock_rsync.return_value = MagicMock(returncode=23, stdout="", stderr="e")
+
+        results = {r.sync_slug: r for r in _run(config, statuses)}
+
+        assert results["b"].failure == SyncFailureKind.UPSTREAM_FAILED
+        assert results["c"].failure == SyncFailureKind.UPSTREAM_FAILED
+        assert results["c"].cancelled_by == "b"
+
+
+# ── Strictness: ignore-all ───────────────────────────────────
+
+
+def _infra_broken_statuses(
+    config: Config, *, presence_proven: bool
+) -> dict[str, SyncStatus]:
+    """Destination snapshots/ missing (infrastructure), sentinels observed."""
+    _, statuses = _active_statuses(config)
+
+    def broken(ss: SyncStatus) -> SyncStatus:
+        dst = ss.destination_endpoint_status.model_copy(
+            update={
+                "errors": [DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND],
+                **({} if presence_proven else {"diagnostics": None}),
+            }
+        )
+        return ss.model_copy(
+            update={
+                "destination_endpoint_status": dst,
+                "errors": [SyncError.DESTINATION_ENDPOINT_INACTIVE],
+            }
+        )
+
+    return {k: broken(v) for k, v in statuses.items()}
+
+
+class TestIgnoreAll:
+    @patch("nbkp.sync.runner.run_rsync")
+    def test_attempts_broken_sync_with_proven_presence(
+        self, mock_rsync: MagicMock
+    ) -> None:
+        config = _make_local_config()
+        statuses = _infra_broken_statuses(config, presence_proven=True)
+        mock_rsync.return_value = _ok_proc()
+
+        results = _run(config, statuses, strictness=Strictness.IGNORE_ALL)
+
+        assert results[0].outcome == SyncOutcome.SUCCESS
+        mock_rsync.assert_called_once()
+
+    @patch("nbkp.sync.runner.run_rsync")
+    def test_skips_broken_sync_without_proven_presence(
+        self, mock_rsync: MagicMock
+    ) -> None:
+        config = _make_local_config()
+        statuses = _infra_broken_statuses(config, presence_proven=False)
+
+        results = _run(config, statuses, strictness=Strictness.IGNORE_ALL)
+
+        assert results[0].failure == SyncFailureKind.PREFLIGHT
+        mock_rsync.assert_not_called()
+
+    @patch("nbkp.sync.runner.run_rsync")
+    def test_never_attempts_inactive_sync(self, mock_rsync: MagicMock) -> None:
+        config = _make_local_config()
+        _, statuses = _inactive_statuses(config)
+
+        results = _run(config, statuses, strictness=Strictness.IGNORE_ALL)
+
+        assert results[0].failure == SyncFailureKind.INACTIVE
+        mock_rsync.assert_not_called()
+
+    @patch("nbkp.sync.runner.run_rsync")
+    def test_broken_sync_skipped_under_ignore_inactive(
+        self, mock_rsync: MagicMock
+    ) -> None:
+        config = _make_local_config()
+        statuses = _infra_broken_statuses(config, presence_proven=True)
+
+        results = _run(config, statuses, strictness=Strictness.IGNORE_INACTIVE)
+
+        assert results[0].failure == SyncFailureKind.PREFLIGHT
+        mock_rsync.assert_not_called()

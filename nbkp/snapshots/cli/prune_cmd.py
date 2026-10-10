@@ -7,11 +7,12 @@ from typing import Annotated
 
 import typer
 
-from ...clihelpers import OutputFormat, echo_json
+from ...clihelpers import OutputFormat, Strictness, echo_json
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
 from ...disks.cli.helpers import managed_mount
 from ...preflight.cli.helpers import check_all_with_progress
+from ..models import PruneResult
 from ..output import print_human_prune_results
 from . import app
 from .cmd_handler import prune_all_syncs
@@ -42,6 +43,19 @@ def prune(
         OutputFormat,
         typer.Option("--output", "-o", help="Output format"),
     ] = OutputFormat.HUMAN,
+    strictness: Annotated[
+        Strictness,
+        typer.Option(
+            "--strictness",
+            "-S",
+            help=(
+                "How to handle preflight errors:"
+                " ignore-none (inactive syncs fail),"
+                " ignore-inactive (skip expected-inactive, default),"
+                " ignore-all (skip syncs with preflight errors)"
+            ),
+        ),
+    ] = Strictness.IGNORE_INACTIVE,
     location: Annotated[
         list[str] | None,
         typer.Option(
@@ -84,31 +98,40 @@ def prune(
     """Remove snapshots beyond the `max-snapshots` limit. Normally handled automatically by `run`, but can be invoked manually."""
     cfg = load_config_or_exit(config, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
-    output_format = output
-
     with managed_mount(
-        cfg, resolved, mount=mount, umount=umount, output_format=output_format
+        cfg,
+        resolved,
+        mount=mount,
+        umount=umount,
+        output_format=output,
+        strictness=strictness,
     ) as (cfg, mount_observations):
         preflight = check_all_with_progress(
             cfg,
-            use_progress=output_format is OutputFormat.HUMAN,
+            use_progress=output is OutputFormat.HUMAN,
+            only_syncs=sync,
             resolved_endpoints=resolved,
             mount_observations=mount_observations,
+            strictness=strictness,
         )
-
         results = prune_all_syncs(
             cfg,
             preflight.sync_statuses,
             dry_run=dry_run,
             only_syncs=sync,
             resolved_endpoints=resolved,
+            strictness=strictness,
         )
-
-        match output_format:
-            case OutputFormat.JSON:
-                echo_json(list(results))
-            case OutputFormat.HUMAN:
-                print_human_prune_results(results, dry_run)
-
-        if any(r.detail and not r.skipped for r in results):
+        _print_results(results, dry_run, output)
+        if any(r.error is not None for r in results):
             raise typer.Exit(1)
+
+
+def _print_results(
+    results: list[PruneResult], dry_run: bool, output: OutputFormat
+) -> None:
+    match output:
+        case OutputFormat.JSON:
+            echo_json(list(results))
+        case OutputFormat.HUMAN:
+            print_human_prune_results(results, dry_run)

@@ -182,7 +182,7 @@ Preflight findings fall into two categories, mirroring the problem space:
 - **Inactive** — the situation is expected and transient: a sentinel is missing, a drive is not plugged in, a host is unreachable or excluded by location. The sync is not ready *now*.
 - **Infrastructure** (broken) — something is misconfigured and will not fix itself: rsync missing or too old, wrong filesystem for the snapshot mode, broken `latest` symlink, missing mount authorization.
 
-**Strictness** decides what each category does to the run. By default (`ignore-inactive`) inactive syncs are skipped silently and infrastructure problems are fatal — the right setting for configs containing drives that are only sometimes attached. `ignore-none` also treats inactivity as fatal, for scheduled runs where everything is expected to be present; `ignore-all` attempts the syncs regardless. The exit-code matrix: [Strictness](./internals.md#strictness).
+**Strictness** decides what each category does to the run. By default (`ignore-inactive`) inactive syncs are skipped silently and infrastructure problems are fatal — the right setting for configs containing drives that are only sometimes attached. `ignore-none` also treats inactivity as fatal, for scheduled runs where everything is expected to be present; `ignore-all` attempts syncs despite infrastructure errors — but never one whose sentinels are not all present, since presence must still be proven. The exit-code matrix: [Strictness](./internals.md#strictness).
 
 ### Sync Outcomes
 
@@ -194,6 +194,10 @@ Each sync ends a run in one of four states:
 | **failed** | the sync ran and rsync or the snapshot step failed |
 | **skipped** | inactive at preflight; never started |
 | **cancelled** | an upstream sync failed or was skipped |
+
+A cancellation is as serious as its cause: cancelled behind a skipped (inactive) sync, it is an expected non-run that does not fail the run under the default strictness; cancelled behind a failed sync, it is part of that failure.
+
+Best-effort steps — orphan cleanup, pruning, removing a half-written snapshot directory — never change the outcome: when they fail, the sync's result carries a warning instead.
 
 ## Beyond `run`
 

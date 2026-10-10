@@ -45,7 +45,7 @@ $ nbkp run [OPTIONS]
 * `-o, --output <human|json>`: Output format  [default: human]
 * `-p, --progress <none|overall|per-file|full>`: Progress mode: none, overall, per-file, or full
 * `--prune / --no-prune`: Prune old snapshots after sync  [default: prune]
-* `-S, --strictness <ignore-none|ignore-inactive|ignore-all>`: How to handle preflight errors: ignore-none (all errors fatal), ignore-inactive (skip expected-inactive, default), ignore-all (ignore all errors)  [default: ignore-inactive]
+* `-S, --strictness <ignore-none|ignore-inactive|ignore-all>`: How to handle preflight errors: ignore-none (all errors fatal), ignore-inactive (skip expected-inactive, default), ignore-all (attempt syncs despite preflight errors)  [default: ignore-inactive]
 * `-l, --location <str>`: Prefer endpoints at these locations
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
@@ -374,6 +374,7 @@ $ nbkp snapshots prune [OPTIONS]
 * `-s, --sync <str>`: Sync name(s) to prune
 * `-n, --dry-run`: Perform a dry run
 * `-o, --output <human|json>`: Output format  [default: human]
+* `-S, --strictness <ignore-none|ignore-inactive|ignore-all>`: How to handle preflight errors: ignore-none (inactive syncs fail), ignore-inactive (skip expected-inactive, default), ignore-all (skip syncs with preflight errors)  [default: ignore-inactive]
 * `-l, --location <str>`: Prefer endpoints at these locations
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
@@ -396,6 +397,7 @@ $ nbkp snapshots show [OPTIONS]
 * `-c, --config <file>`: Path to config file
 * `-s, --sync <str>`: Sync name(s) to show
 * `-o, --output <human|json>`: Output format  [default: human]
+* `-S, --strictness <ignore-none|ignore-inactive|ignore-all>`: How to handle preflight errors: ignore-none (inactive syncs fail), ignore-inactive (skip expected-inactive, default), ignore-all (skip syncs with preflight errors)  [default: ignore-inactive]
 * `-l, --location <str>`: Prefer endpoints at these locations
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints

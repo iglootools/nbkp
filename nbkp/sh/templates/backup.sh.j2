@@ -36,8 +36,13 @@ ${{ config_line }}
 #         destination writability
 #   - Strictness (--strictness ignore-inactive|ignore-none|ignore-all, default
 #     ignore-inactive): inactive syncs are skipped without failing the run,
-#     infrastructure errors abort it before any sync starts
-#   - Failure propagation: syncs downstream of a failed or skipped sync are cancelled
+#     infrastructure errors abort it before any sync starts; ignore-all attempts
+#     syncs with infrastructure errors once their sentinels are all present
+#   - Failure propagation: syncs downstream of a failed or skipped sync are
+#     cancelled; a cancellation caused by a skipped (inactive) upstream does not
+#     fail the run unless ignore-none, one caused by a failed upstream does
+#   - Best-effort steps (orphan cleanup, pruning, removal of a failed snapshot
+#     directory) log a warning and never fail the sync
 #   - Dry-run and progress mode support (as runtime script arguments)
 #   - Nonzero exit on any sync failure
 #
@@ -134,19 +139,33 @@ nbkp_snapshot_names() {
 }
 <% if portable %>
 NBKP_FAILED=" "
+NBKP_NOT_RUN=" "
 nbkp_mark_failed() {
     NBKP_FAILED="${NBKP_FAILED}$1 "
 }
 nbkp_has_failed() {
     case "$NBKP_FAILED" in *" $1 "*) return 0 ;; *) return 1 ;; esac
 }
+nbkp_mark_not_run() {
+    NBKP_NOT_RUN="${NBKP_NOT_RUN}$1 "
+}
+nbkp_was_not_run() {
+    case "$NBKP_NOT_RUN" in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
 <% else %>
 declare -A NBKP_FAILED=()
+declare -A NBKP_NOT_RUN=()
 nbkp_mark_failed() {
     NBKP_FAILED[$1]=1
 }
 nbkp_has_failed() {
     [ "${NBKP_FAILED[$1]+set}" = "set" ]
+}
+nbkp_mark_not_run() {
+    NBKP_NOT_RUN[$1]=1
+}
+nbkp_was_not_run() {
+    [ "${NBKP_NOT_RUN[$1]+set}" = "set" ]
 }
 <% endif %>
 # Abort before any sync starts when preflight results are fatal under the
@@ -170,32 +189,51 @@ nbkp_enforce_strictness() {
         exit 1
     fi
 }
+# Count a sync that did not run because of expected inactivity (its own, or
+# an upstream's): a failure only under ignore-none, as in nbkp run.
+nbkp_count_inactive() {
+    if [ "$NBKP_STRICTNESS" = ignore-none ]; then
+        NBKP_FAILURES=$((NBKP_FAILURES + 1))
+    else
+        NBKP_SKIPPED=$((NBKP_SKIPPED + 1))
+    fi
+}
 # nbkp_run_sync SLUG FN PREFLIGHT_RC [UPSTREAM_FN...]
-# Cancels when an upstream sync failed or was skipped, skips inactive syncs,
-# otherwise runs FN in a subshell with `set -e` in force: a function called in
-# a `||` or `if` context runs with errexit disabled, which would let a failed
-# rsync carry on into snapshotting.
+# Cancels when an upstream sync failed (a failure) or did not run (counted
+# like the inactivity it stems from), skips inactive syncs, otherwise runs FN
+# in a subshell with `set -e` in force: a function called in a `||` or `if`
+# context runs with errexit disabled, which would let a failed rsync carry on
+# into snapshotting. Under ignore-all, syncs with preflight errors (rc 1) are
+# attempted: their sentinel checks, which run first, all passed.
 nbkp_run_sync() {
-    local slug="$1" fn="$2" pf="$3" dep rc
+    local slug="$1" fn="$2" pf="$3" dep rc failed_dep="" not_run_dep=""
     shift 3
     for dep in "$@"; do
         if nbkp_has_failed "$dep"; then
-            nbkp_log "CANCELLED $slug: upstream sync failed or was skipped"
-            nbkp_mark_failed "$fn"
-            case "$pf" in
-                2|3) NBKP_SKIPPED=$((NBKP_SKIPPED + 1));;
-                *) NBKP_FAILURES=$((NBKP_FAILURES + 1));;
-            esac
-            return 0
+            failed_dep="${failed_dep:-$dep}"
+        elif nbkp_was_not_run "$dep"; then
+            not_run_dep="${not_run_dep:-$dep}"
         fi
     done
+    if [ -n "$failed_dep" ]; then
+        nbkp_log "CANCELLED $slug: upstream sync failed ($failed_dep)"
+        nbkp_mark_failed "$fn"; NBKP_FAILURES=$((NBKP_FAILURES + 1)); return 0
+    fi
+    if [ -n "$not_run_dep" ]; then
+        nbkp_log "CANCELLED $slug: upstream sync was skipped ($not_run_dep)"
+        nbkp_mark_not_run "$fn"; nbkp_count_inactive; return 0
+    fi
     case "$pf" in
         2) nbkp_log "SKIPPED $slug: inactive"
-           nbkp_mark_failed "$fn"; NBKP_SKIPPED=$((NBKP_SKIPPED + 1)); return 0;;
+           nbkp_mark_not_run "$fn"; nbkp_count_inactive; return 0;;
         3) nbkp_log "SKIPPED $slug: source snapshot pending (dry-run)"
            NBKP_SKIPPED=$((NBKP_SKIPPED + 1)); return 0;;
-        1) nbkp_log "SKIPPED $slug: preflight errors"
-           nbkp_mark_failed "$fn"; NBKP_FAILURES=$((NBKP_FAILURES + 1)); return 0;;
+        1) if [ "$NBKP_STRICTNESS" = ignore-all ]; then
+               nbkp_log "WARN $slug: preflight errors ignored (ignore-all), attempting"
+           else
+               nbkp_log "SKIPPED $slug: preflight errors"
+               nbkp_mark_not_run "$fn"; NBKP_FAILURES=$((NBKP_FAILURES + 1)); return 0
+           fi;;
     esac
     set +e
     ( set -e; "$fn" )

@@ -29,6 +29,12 @@ from .common import (
     update_latest_symlink as update_latest_symlink,
 )
 
+# ── errors ───────────────────────────────────────────────────
+from .errors import (
+    SnapshotOp as SnapshotOp,
+    SnapshotOperationError as SnapshotOperationError,
+)
+
 # ── hard-link ────────────────────────────────────────────────
 from .hardlinks import (
     cleanup_orphaned_snapshots as cleanup_orphaned_snapshots,
