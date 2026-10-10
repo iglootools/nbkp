@@ -10,11 +10,8 @@ from rich.console import Console
 from ..clihelpers import OutputFormat
 from ..config import Config
 from ..credentials import build_passphrase_fn
-from ..disks import (
-    MountObservation,
-    build_mount_status_table,
-    managed_mount as _disks_managed_mount,
-)
+from ..disks import MountObservation, managed_mount as _disks_managed_mount
+from ..disks.output import build_mount_status_table
 from ..policy import Strictness
 from ..remote.endpoints import ResolvedEndpoints
 from .credentials import prompt_passphrase

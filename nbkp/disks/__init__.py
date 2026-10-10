@@ -3,7 +3,9 @@
 This package's public interface: other modules (``preflight``, ``commands``,
 ``run``, ``demo``) import from ``nbkp.disks`` rather than from its
 submodules (``udisks``, ``detection``, ``mount_checks``, …), which are
-implementation details.
+implementation details. Presentation (Rich tables, icons) is not re-exported
+here, so importing ``nbkp.disks`` never loads Rich: display code imports
+``nbkp.disks.output`` explicitly.
 """
 
 from .auth import (
@@ -32,7 +34,7 @@ from .lifecycle import (
     umount_volume,
     umount_volumes,
 )
-from .models import MountCapabilities, MountToolCapabilities
+from .models import MountCapabilities, MountToolCapabilities, display_name
 from .mount_checks import (
     check_mount_capabilities,
     check_mount_status,
@@ -43,15 +45,9 @@ from .observation import (
     apply_effective_paths,
     build_mount_observations,
 )
-from .output import (
-    MountStatusData,
-    MountStatusLabel,
-    build_mount_status_json,
-    build_mount_status_table,
+from .severity import (
     device_fail_severity,
-    display_name,
     luks_fail_severity,
-    mount_state_icon,
     mounted_fail_severity,
 )
 from .udisks import (
@@ -71,16 +67,12 @@ __all__ = [
     "MountFailureReason",
     "MountObservation",
     "MountResult",
-    "MountStatusData",
-    "MountStatusLabel",
     "MountToolCapabilities",
     "UmountResult",
     "apply_effective_paths",
     "build_lock_command",
     "build_mount_command",
     "build_mount_observations",
-    "build_mount_status_json",
-    "build_mount_status_table",
     "build_unlock_command",
     "build_unmount_command",
     "check_mount_capabilities",
@@ -96,7 +88,6 @@ __all__ = [
     "luks_fail_severity",
     "managed_mount",
     "mount_count",
-    "mount_state_icon",
     "mount_volume",
     "mount_volumes",
     "mounted_fail_severity",
