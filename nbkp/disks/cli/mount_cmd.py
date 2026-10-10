@@ -10,9 +10,10 @@ from rich.console import Console
 from rich.text import Text
 
 from ...clihelpers import OutputFormat
-from ...clihelpers.invocation import Invocation
+from ...commands.config import load_config_or_exit, resolve_endpoints
+from ...commands.invocation import Invocation
+from ...commands.mount_progress import LifecycleProgress, mount_display_names
 from ...config import Config
-from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType, ResolvedEndpoints
 from ...credentials import build_passphrase_fn, prefetch_passphrases
 from ..lifecycle import MountResult, mount_volumes
@@ -27,7 +28,6 @@ from .helpers import (
     _unmanaged_statuses,
     require_known_names,
 )
-from .helpers.lifecycle_progress import LifecycleProgress, mount_display_names
 from .helpers.plan_output import show_plan
 
 

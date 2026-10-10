@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from nbkp.clihelpers import Severity, Strictness
-from nbkp.disks.cli.helpers.managed_mount import mount_result_severity
+from nbkp.commands.mount_progress import mount_result_severity
 from nbkp.disks.lifecycle import MountFailureReason, MountResult
 
 

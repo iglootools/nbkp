@@ -7,21 +7,14 @@ from contextlib import contextmanager
 
 from rich.console import Console
 
-from ....clihelpers import OutputFormat, Strictness
-from ....config import Config
-from ....config.epresolution import ResolvedEndpoints
-from ....credentials import build_passphrase_fn
-from ...context import managed_mount as _disks_managed_mount
-from ...observation import MountObservation
-from ...output import build_mount_status_table
-from .lifecycle_progress import (
-    LifecycleProgress,
-    mount_result_severity,
-)
-
-# ``mount_result_severity`` moved to ``lifecycle_progress``; re-exported for
-# existing importers.
-__all__ = ["managed_mount", "mount_result_severity"]
+from ..clihelpers import OutputFormat, Strictness
+from ..config import Config
+from ..config.epresolution import ResolvedEndpoints
+from ..credentials import build_passphrase_fn
+from ..disks.context import managed_mount as _disks_managed_mount
+from ..disks.observation import MountObservation
+from ..disks.output import build_mount_status_table
+from .mount_progress import LifecycleProgress
 
 
 def _print_mount_status(
@@ -78,7 +71,7 @@ def managed_mount(
         the provider is prefetchable and encrypted volumes are configured.
     strictness:
         Picks the per-mount severity icon when the operation fails.
-        See :func:`mount_result_severity`.
+        See :func:`.mount_progress.mount_result_severity`.
     """
     passphrase_fn, cache = build_passphrase_fn(
         cfg.credential_provider, cfg.credential_command

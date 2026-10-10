@@ -9,7 +9,7 @@ from typing import Annotated
 import typer
 
 from ...clihelpers import OutputFormat, echo_json
-from ...config.cli.helpers import load_config_or_exit
+from ...commands.config import load_config_or_exit
 from ..auth import AuthRuleBlock, generate_auth_rules
 from . import app
 

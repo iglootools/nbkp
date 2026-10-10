@@ -41,6 +41,7 @@ Dependencies between top-level modules (auto-generated via `mise run depgraph`):
 graph TD
     cli["cli/"]
     clihelpers["clihelpers/"]
+    commands["commands/"]
     config["config/"]
     credentials["credentials/"]
     demo["demo/"]
@@ -63,9 +64,16 @@ graph TD
     cli --> run
     cli --> sh
     cli --> snapshots
+    commands --> clihelpers
+    commands --> config
+    commands --> credentials
+    commands --> disks
+    commands --> preflight
+    commands --> remote
     config --> clihelpers
-    config --> remote
+    config --> commands
     credentials --> clihelpers
+    credentials --> commands
     credentials --> config
     demo --> clihelpers
     demo --> config
@@ -76,12 +84,15 @@ graph TD
     demo --> snapshots
     demo --> sync
     disks --> clihelpers
+    disks --> commands
     disks --> config
     disks --> credentials
     disks --> remote
     ordering --> clihelpers
+    ordering --> commands
     ordering --> config
     preflight --> clihelpers
+    preflight --> commands
     preflight --> config
     preflight --> credentials
     preflight --> disks
@@ -90,19 +101,21 @@ graph TD
     remote --> config
     remote --> fsprotocol
     run --> clihelpers
+    run --> commands
     run --> config
     run --> disks
     run --> ordering
     run --> preflight
     run --> sync
+    sh --> commands
     sh --> config
     sh --> fsprotocol
     sh --> ordering
     sh --> remote
     sh --> sync
     snapshots --> clihelpers
+    snapshots --> commands
     snapshots --> config
-    snapshots --> disks
     snapshots --> fsprotocol
     snapshots --> preflight
     snapshots --> remote
@@ -115,3 +128,10 @@ graph TD
     sync --> snapshots
 ```
 <!-- END MODULE OVERVIEW -->
+
+### Layering
+
+Each domain module (`disks/`, `preflight/`, `snapshots/`, …) keeps its core logic, its presentation (`output.py` / `output/`), and its Typer sub-app (`cli/`) side by side. Two rules keep them decoupled:
+
+- **No module imports another module's `cli/` package.** Wiring that several sub-apps need — loading the config (`load_config_or_exit`), resolving endpoints, the managed mount lifecycle and its progress bars, preflight checks with progress, and the `Invocation` flags echoed in follow-up suggestions — lives in `commands/`. Only the root `cli/` app imports the sub-apps.
+- **`clihelpers/` is presentation only** (output format, JSON, severity symbols and styles, progress bars). The cycles between `commands/` and the modules in the graph above are between a module's `cli/` (or `output/`) subpackage and `commands/`, never with the module's core.

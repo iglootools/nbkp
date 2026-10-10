@@ -9,13 +9,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ....clihelpers import Severity, Strictness, classify_severity
-from ....config import Config
-from ....credentials import PassphrasePrefetch, prefetch_count
-from ...lifecycle import MountResult, UmountResult, mount_count
-from ...models import MountFailureReason
-from ...output import display_name
-from .progress import (
+from ..clihelpers import Severity, Strictness, classify_severity
+from ..config import Config
+from ..credentials import PassphrasePrefetch, prefetch_count
+from ..disks.lifecycle import MountResult, UmountResult, mount_count
+from ..disks.models import MountFailureReason
+from ..disks.output import display_name
+from .mount_progress_bar import (
     DisksProgressBar,
     format_credential_result,
     format_mount_result,

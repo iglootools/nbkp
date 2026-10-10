@@ -1,4 +1,4 @@
-"""Config and endpoint resolution helpers for CLI commands."""
+"""Config loading and endpoint resolution shared by every command."""
 
 from __future__ import annotations
 
@@ -6,15 +6,15 @@ from pathlib import Path
 
 import typer
 
-from ...clihelpers import OutputFormat, echo_json
-from ...remote.resolution import resolve_all_endpoints
-from .. import Config, ConfigError, load_config
-from ..epresolution import (
+from ..clihelpers import OutputFormat, echo_json
+from ..config import Config, ConfigError, load_config
+from ..config.epresolution import (
     EndpointFilter,
     NetworkType,
     ResolvedEndpoints,
 )
-from ..output import config_error_json, print_config_error
+from ..config.output import config_error_json, print_config_error
+from ..remote.resolution import resolve_all_endpoints
 
 
 def load_config_or_exit(

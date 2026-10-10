@@ -9,10 +9,11 @@ from typing import Annotated
 import typer
 
 from ...clihelpers import OutputFormat, echo_json
-from ...clihelpers.invocation import Invocation
-from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
+from ...commands.config import load_config_or_exit, resolve_endpoints
+from ...commands.invocation import Invocation
+from ...commands.mount import managed_mount
+from ...commands.preflight import check_all_with_progress
 from ...config.epresolution import NetworkType
-from ...disks.cli.helpers import managed_mount
 from ..output import (
     TroubleshootContext,
     collect_issues,
@@ -22,7 +23,6 @@ from ..output import (
 from ..status import PreflightResult
 from ..strictness import Strictness, has_fatal_errors
 from . import app
-from .helpers import check_all_with_progress
 
 
 @app.command()

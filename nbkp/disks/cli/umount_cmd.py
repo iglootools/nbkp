@@ -8,14 +8,14 @@ from typing import Annotated
 import typer
 
 from ...clihelpers import OutputFormat
+from ...commands.config import load_config_or_exit, resolve_endpoints
+from ...commands.mount_progress import LifecycleProgress, mount_display_names
 from ...config import Config
-from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType, ResolvedEndpoints
 from ..lifecycle import UmountResult, umount_volumes
 from ..plan import plan_lifecycle
 from . import app
 from .helpers import _probe_and_show_status, require_known_names
-from .helpers.lifecycle_progress import LifecycleProgress, mount_display_names
 from .helpers.plan_output import show_plan
 
 

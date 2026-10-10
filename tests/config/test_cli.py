@@ -14,7 +14,7 @@ from tests.clihelpers import (
 
 
 class TestConfigShowCommand:
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.config.load_config")
     def test_human_output(self, mock_load: MagicMock) -> None:
         config = sample_config()
         mock_load.return_value = config
@@ -27,7 +27,7 @@ class TestConfigShowCommand:
         assert "nas" in result.output
         assert "photos" in result.output
 
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.config.load_config")
     def test_human_output_shows_servers(self, mock_load: MagicMock) -> None:
         config = sample_config()
         mock_load.return_value = config
@@ -38,7 +38,7 @@ class TestConfigShowCommand:
         assert "nas-server" in result.output
         assert "nas.example.com" in result.output
 
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.config.load_config")
     def test_json_output(self, mock_load: MagicMock) -> None:
         config = sample_config()
         mock_load.return_value = config
@@ -61,7 +61,7 @@ class TestConfigShowCommand:
         assert "ssh-endpoints" in data
 
     @patch(
-        "nbkp.config.cli.helpers.load_config",
+        "nbkp.commands.config.load_config",
         side_effect=__import__("nbkp.config", fromlist=["ConfigError"]).ConfigError(
             "bad config",
             reason=__import__(
@@ -79,7 +79,7 @@ class TestConfigShowCommand:
 
 class TestConfigError:
     @patch(
-        "nbkp.config.cli.helpers.load_config",
+        "nbkp.commands.config.load_config",
         side_effect=__import__("nbkp.config", fromlist=["ConfigError"]).ConfigError(
             "bad config",
             reason=__import__(
@@ -92,7 +92,7 @@ class TestConfigError:
         assert result.exit_code == 2
 
     @patch(
-        "nbkp.config.cli.helpers.load_config",
+        "nbkp.commands.config.load_config",
         side_effect=__import__("nbkp.config", fromlist=["ConfigError"]).ConfigError(
             "bad config",
             reason=__import__(
@@ -111,7 +111,7 @@ class TestConfigError:
             "Config file not found: /bad.yaml",
             reason=ConfigErrorReason.FILE_NOT_FOUND,
         )
-        with patch("nbkp.config.cli.helpers.load_config", side_effect=err):
+        with patch("nbkp.commands.config.load_config", side_effect=err):
             result = runner.invoke(app, ["preflight", "check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
         out = strip_panel(result.output)
@@ -129,7 +129,7 @@ class TestConfigError:
             err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
             err.__cause__ = ve
 
-        with patch("nbkp.config.cli.helpers.load_config", side_effect=err):
+        with patch("nbkp.commands.config.load_config", side_effect=err):
             result = runner.invoke(app, ["preflight", "check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
         out = strip_panel(result.output)
@@ -150,7 +150,7 @@ class TestConfigError:
             )
             err.__cause__ = ye
 
-        with patch("nbkp.config.cli.helpers.load_config", side_effect=err):
+        with patch("nbkp.commands.config.load_config", side_effect=err):
             result = runner.invoke(app, ["preflight", "check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
         out = strip_panel(result.output)
@@ -180,7 +180,7 @@ class TestConfigError:
             err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
             err.__cause__ = ve
 
-        with patch("nbkp.config.cli.helpers.load_config", side_effect=err):
+        with patch("nbkp.commands.config.load_config", side_effect=err):
             result = runner.invoke(app, ["preflight", "check", "--config", "/bad.yaml"])
         assert result.exit_code == 2
         out = strip_panel(result.output)
@@ -206,7 +206,7 @@ class TestConfigErrorJson:
             err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
             err.__cause__ = ve
 
-        with patch("nbkp.config.cli.helpers.load_config", side_effect=err):
+        with patch("nbkp.commands.config.load_config", side_effect=err):
             result = runner.invoke(
                 app, ["config", "show", "--config", "/bad.yaml", "-o", "json"]
             )
@@ -224,7 +224,7 @@ class TestConfigErrorJson:
             "Config file not found: /bad.yaml",
             reason=ConfigErrorReason.FILE_NOT_FOUND,
         )
-        with patch("nbkp.config.cli.helpers.load_config", side_effect=err):
+        with patch("nbkp.commands.config.load_config", side_effect=err):
             result = runner.invoke(
                 app, ["preflight", "check", "--config", "/bad.yaml", "-o", "json"]
             )

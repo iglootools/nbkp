@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from nbkp.cli import app
 from nbkp.clihelpers import Strictness
+from nbkp.commands.mount import managed_mount
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
@@ -15,7 +16,6 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.disks.cli.helpers import managed_mount
 from nbkp.fsprotocol import Snapshot
 from nbkp.preflight import (
     DestinationEndpointError,
@@ -139,8 +139,8 @@ def _invoke_json(*args: str) -> tuple[int, list[dict[str, object]]]:
 class TestPruneCommand:
     @patch("nbkp.snapshots.cli.cmd_handler.prune.list_snapshots")
     @patch("nbkp.snapshots.cli.cmd_handler.prune.btrfs_prune_snapshots")
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_successful_prune(
         self,
         mock_load: MagicMock,
@@ -172,8 +172,8 @@ class TestPruneCommand:
 
     @patch("nbkp.snapshots.cli.cmd_handler.prune.list_snapshots")
     @patch("nbkp.snapshots.cli.cmd_handler.prune.btrfs_prune_snapshots")
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_dry_run(
         self,
         mock_load: MagicMock,
@@ -195,8 +195,8 @@ class TestPruneCommand:
         assert data[0]["kept"] == 3
         assert mock_prune.call_args.kwargs.get("dry_run") is True
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_no_syncs_to_prune(
         self,
         mock_load: MagicMock,
@@ -219,8 +219,8 @@ class TestPruneCommand:
             SnapshotOp.DELETE, "/dst/snapshots/old1", "Permission denied"
         ),
     )
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_snapshot_error_is_reported(
         self,
         mock_load: MagicMock,
@@ -237,8 +237,8 @@ class TestPruneCommand:
         assert data[0]["skip_reason"] is None
         assert "Permission denied" in str(data[0]["error"])
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_infra_errors_fail_by_default(
         self,
         mock_load: MagicMock,
@@ -254,8 +254,8 @@ class TestPruneCommand:
         assert data[0]["skip_reason"] is None
         assert str(data[0]["error"]).startswith("preflight errors:")
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_infra_errors_skipped_under_ignore_all(
         self,
         mock_load: MagicMock,
@@ -271,8 +271,8 @@ class TestPruneCommand:
         assert data[0]["skip_reason"] == "preflight errors ignored"
         assert data[0]["error"] is None
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_sync_filter_limits_preflight(
         self,
         mock_load: MagicMock,
@@ -301,8 +301,8 @@ _SNAP_2 = Snapshot(
 class TestShowCommand:
     @patch("nbkp.snapshots.cli.cmd_handler.show.read_latest_symlink")
     @patch("nbkp.snapshots.cli.cmd_handler.show.list_snapshots")
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_successful_show(
         self,
         mock_load: MagicMock,
@@ -331,8 +331,8 @@ class TestShowCommand:
     def test_human_output_renders(self) -> None:
         """Smoke test of the human table (the content is asserted via JSON)."""
         with (
-            patch("nbkp.config.cli.helpers.load_config") as mock_load,
-            patch("nbkp.preflight.cli.helpers.check_all_syncs") as mock_checks,
+            patch("nbkp.commands.config.load_config") as mock_load,
+            patch("nbkp.commands.preflight.check_all_syncs") as mock_checks,
             patch("nbkp.snapshots.cli.cmd_handler.show.list_snapshots") as mock_list,
             patch(
                 "nbkp.snapshots.cli.cmd_handler.show.read_latest_symlink"
@@ -348,8 +348,8 @@ class TestShowCommand:
 
         assert result.exit_code == 0
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_no_snapshots_configured(
         self,
         mock_load: MagicMock,
@@ -368,8 +368,8 @@ class TestShowCommand:
 
     @patch("nbkp.snapshots.cli.cmd_handler.show.read_latest_symlink")
     @patch("nbkp.snapshots.cli.cmd_handler.show.list_snapshots")
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_sync_filter(
         self,
         mock_load: MagicMock,
@@ -389,8 +389,8 @@ class TestShowCommand:
         assert [r["sync_slug"] for r in data] == ["s1"]
         assert mock_checks.call_args.kwargs.get("only_syncs") == ["s1"]
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_inactive_sync(
         self,
         mock_load: MagicMock,
@@ -406,8 +406,8 @@ class TestShowCommand:
         assert data[0]["skip_reason"] == "inactive"
         assert data[0]["skipped"] is True
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_inactive_sync_fails_under_ignore_none(
         self,
         mock_load: MagicMock,
@@ -422,8 +422,8 @@ class TestShowCommand:
         assert exit_code == 1
         assert str(data[0]["error"]).startswith("inactive:")
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_infra_errors_fail(
         self,
         mock_load: MagicMock,
@@ -446,8 +446,8 @@ class TestShowCommand:
             SnapshotOp.LIST, "/dst/snapshots", "connection failed"
         ),
     )
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_snapshot_error(
         self,
         mock_load: MagicMock,
@@ -463,8 +463,8 @@ class TestShowCommand:
         assert exit_code == 1
         assert "connection failed" in str(data[0]["error"])
 
-    @patch("nbkp.preflight.cli.helpers.check_all_syncs")
-    @patch("nbkp.config.cli.helpers.load_config")
+    @patch("nbkp.commands.preflight.check_all_syncs")
+    @patch("nbkp.commands.config.load_config")
     def test_strictness_forwarded_to_managed_mount(
         self,
         mock_load: MagicMock,
