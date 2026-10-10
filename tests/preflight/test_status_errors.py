@@ -333,3 +333,24 @@ class TestFsTypeUnknown:
         )
         assert DestinationEndpointError.VOL_FS_TYPE_UNKNOWN in status.errors
         assert DestinationEndpointError.VOL_NOT_BTRFS not in status.errors
+
+
+class TestDisabledSyncNeverFatal:
+    """Regression: a disabled sync aborted `nbkp run` under the default mode."""
+
+    def _disabled(self) -> dict[str, SyncStatus]:
+        status = _sync_status(_ssh(SshEndpointDiagnostics(host_tools=_TOOLS)))
+        disabled = status.model_copy(
+            update={
+                "config": status.config.model_copy(update={"enabled": False}),
+                "errors": [SyncError.DISABLED],
+            }
+        )
+        return {"s": disabled}
+
+    @pytest.mark.parametrize("strictness", list(Strictness))
+    def test_not_fatal_under_any_strictness(self, strictness: Strictness) -> None:
+        assert has_fatal_errors(self._disabled(), strictness=strictness) is False
+
+    def test_expected_inactive(self) -> None:
+        assert self._disabled()["s"].is_expected_inactive() is True

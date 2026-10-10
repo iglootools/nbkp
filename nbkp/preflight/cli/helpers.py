@@ -81,11 +81,8 @@ def check_all_with_progress(
         def _on_start(label: str) -> None:
             bar.on_start(f"Checking {label}...")
 
-        def _on_end(label: str, errors: Sequence[object]) -> None:
-            # The checks-layer callback passes any-enum errors; the
-            # severity helper handles them uniformly via duck-typing
-            # on _is_inactive's match-case.
-            typed_errors: list[PreflightError] = list(errors)  # type: ignore[arg-type]
+        def _on_end(label: str, errors: Sequence[PreflightError]) -> None:
+            typed_errors = list(errors)
             severity = severity_for_errors(typed_errors, strictness)
             summary = ", ".join(e.value for e in typed_errors) if typed_errors else None
             bar.on_end(f"check {label}", severity, summary)

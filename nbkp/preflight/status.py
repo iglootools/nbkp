@@ -1161,6 +1161,8 @@ INACTIVE_DST_ENDPOINT_ERRORS: frozenset[DestinationEndpointError] = frozenset(
 
 INACTIVE_SYNC_ERRORS: frozenset[SyncError] = frozenset(
     {
+        # Switched off in the config: never attempted, so never a problem.
+        SyncError.DISABLED,
         SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING,
         SyncError.SOURCE_ENDPOINT_INACTIVE,
         SyncError.DESTINATION_ENDPOINT_INACTIVE,
