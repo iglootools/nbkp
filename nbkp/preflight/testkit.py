@@ -20,6 +20,7 @@ from ..config.testkit import (
     base_syncs,
     base_volumes,
 )
+from ..disks.models import MountFailureReason
 from ..fsprotocol import Snapshot
 from . import (
     BtrfsStagingSubvolumeDiagnostics,
@@ -46,6 +47,35 @@ from . import (
 )
 from .output.formatting import collect_ssh_endpoint_statuses
 from .status import PreflightResult
+
+
+def _demo_ssh_statuses(
+    vol_statuses: dict[str, VolumeStatus],
+    sync_statuses: dict[str, SyncStatus],
+) -> dict[str, SshEndpointStatus]:
+    """Every distinct SSH endpoint status embedded in the demo statuses.
+
+    Production has one status per endpoint, but the demo reuses ``localhost``
+    and ``nas`` across scenarios with different tool errors.  Keying by slug
+    alone would keep only one of them and hide the others' remediation, so
+    later variants of a slug get a numbered key (``localhost #2``).
+    """
+    embedded = [
+        *(vs.ssh_endpoint_status for vs in vol_statuses.values()),
+        *(
+            ep.volume_status.ssh_endpoint_status
+            for ss in sync_statuses.values()
+            for ep in (ss.source_endpoint_status, ss.destination_endpoint_status)
+        ),
+    ]
+    distinct = list({s.model_dump_json(): s for s in embedded}.values())
+    return {
+        key: status.model_copy(update={"slug": key})
+        for i, status in enumerate(distinct)
+        for n in [sum(1 for other in distinct[:i] if other.slug == status.slug)]
+        for key in [status.slug if n == 0 else f"{status.slug} #{n + 1}"]
+    }
+
 
 # ── Shared helpers ────────────────────────────────────────────
 
@@ -590,10 +620,23 @@ def _troubleshoot_volumes() -> dict[str, LocalVolume]:
                 ),
             ),
         ),
+        # Drive plugged in, but its passphrase cannot be retrieved.
+        "mount-no-passphrase": LocalVolume(
+            slug="mount-no-passphrase",
+            path="/mnt/no-passphrase",
+            mount=MountConfig(
+                device_uuid="bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+                encryption=LuksEncryptionConfig(
+                    passphrase_id="no-passphrase",
+                ),
+            ),
+        ),
         "usb-10": LocalVolume(slug="usb-10", path="/mnt/usb-10"),
         "usb-11": LocalVolume(slug="usb-11", path="/mnt/usb-11"),
         "usb-12": LocalVolume(slug="usb-12", path="/mnt/usb-12"),
         "usb-13": LocalVolume(slug="usb-13", path="/mnt/usb-13"),
+        "usb-14": LocalVolume(slug="usb-14", path="/mnt/usb-14"),
+        "usb-15": LocalVolume(slug="usb-15", path="/mnt/usb-15"),
     }
 
 
@@ -820,7 +863,7 @@ _TROUBLESHOOT_LOCALHOST_LUKS_FAILED_SSH = SshEndpointStatus.from_diagnostics(
 )
 
 # localhost for a btrfs-backed mount volume missing the udisks btrfs module
-# (warning-level SshEndpointError.UDISKS_BTRFS_MODULE_MISSING)
+# (SshEndpointWarning.UDISKS_BTRFS_MODULE_MISSING — a warning, not an error)
 _TROUBLESHOOT_LOCALHOST_BTRFS_MODULE_MISSING_SSH = SshEndpointStatus.from_diagnostics(
     slug="localhost",
     diagnostics=SshEndpointDiagnostics(
@@ -840,6 +883,39 @@ _TROUBLESHOOT_LOCALHOST_BTRFS_MODULE_MISSING_SSH = SshEndpointStatus.from_diagno
         ),
     ),
     needs=SshEndpointToolNeeds(has_mount_volumes=True, has_btrfs_mount=True),
+)
+
+# localhost with lsblk missing while a mount-managed volume is configured
+# (LSBLK_NOT_FOUND).  Localhost errors do not cascade to the volume; the
+# syncs on it carry SyncError.ENDPOINT_HOST_ERRORS instead.
+_TROUBLESHOOT_LOCALHOST_LSBLK_MISSING_SSH = SshEndpointStatus.from_diagnostics(
+    slug="localhost",
+    diagnostics=SshEndpointDiagnostics(
+        host_tools=HostToolCapabilities(
+            has_rsync=True,
+            rsync_version_ok=True,
+            has_btrfs=False,
+            has_stat=True,
+            has_findmnt=True,
+        ),
+        mount_tools=MountToolCapabilities(
+            has_udisksctl=True,
+            udisksd_running=True,
+            has_findmnt=True,
+            has_lsblk=False,
+        ),
+    ),
+    needs=SshEndpointToolNeeds(has_mount_volumes=True),
+)
+
+# Standalone endpoint whose host refuses our key (AUTH_FAILED).
+_TROUBLESHOOT_AUTH_FAILED_SSH = SshEndpointStatus.from_diagnostics(
+    slug="auth-fail",
+    diagnostics=SshEndpointDiagnostics(
+        ssh_reachable=False,
+        ssh_auth_failed=True,
+        ssh_error="Authentication failed.",
+    ),
 )
 
 # home-nas: location excluded
@@ -939,7 +1015,7 @@ _MOUNT_MOUNT_FAILED_CAPS = VolumeCapabilities(
         device_present=True,
         luks_unlocked=True,
         mounted=False,
-        mount_failure_reason="mount_failed",
+        mount_failure_reason=MountFailureReason.MOUNT_FAILED,
     ),
 )
 
@@ -959,7 +1035,7 @@ _MOUNT_POLKIT_REFUSED_CAPS = VolumeCapabilities(
         device_present=True,
         luks_unlocked=False,
         mounted=False,
-        mount_failure_reason="not_authorized",
+        mount_failure_reason=MountFailureReason.NOT_AUTHORIZED,
     ),
 )
 
@@ -978,7 +1054,7 @@ _MOUNT_LUKS_FAILED_CAPS = VolumeCapabilities(
         device_present=True,
         luks_unlocked=False,
         mounted=False,
-        mount_failure_reason="unlock_failed",
+        mount_failure_reason=MountFailureReason.UNLOCK_FAILED,
     ),
 )
 
@@ -1007,6 +1083,11 @@ def troubleshoot_config() -> Config:
         slug="home-only",
         host="192.168.1.50",
         location="home",
+    )
+    ssh_eps["auth-fail"] = SshEndpoint(
+        slug="auth-fail",
+        host="10.0.0.9",
+        user="backup",
     )
 
     sync_endpoints: dict[str, SyncEndpoint] = {
@@ -1171,6 +1252,19 @@ def troubleshoot_config() -> Config:
             slug="dst-src-latest-invalid",
             volume="usb-13",
         ),
+        "dst-host-errors": SyncEndpoint(
+            slug="dst-host-errors",
+            volume="usb-14",
+        ),
+        "mount-no-passphrase-dst": SyncEndpoint(
+            slug="mount-no-passphrase-dst",
+            volume="mount-no-passphrase",
+        ),
+        "dst-fs-unknown": SyncEndpoint(
+            slug="dst-fs-unknown",
+            volume="usb-15",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+        ),
     }
     return Config(
         ssh_endpoints=ssh_eps,
@@ -1320,6 +1414,21 @@ def troubleshoot_config() -> Config:
                 slug="src-devnull-no-upstream",
                 source="src-devnull-no-upstream",
                 destination="dst-devnull-no-upstream",
+            ),
+            "host-tool-errors": SyncConfig(
+                slug="host-tool-errors",
+                source="laptop-src",
+                destination="dst-host-errors",
+            ),
+            "mount-no-passphrase": SyncConfig(
+                slug="mount-no-passphrase",
+                source="laptop-src",
+                destination="mount-no-passphrase-dst",
+            ),
+            "fs-type-unknown": SyncConfig(
+                slug="fs-type-unknown",
+                source="laptop-src",
+                destination="dst-fs-unknown",
             ),
         },
     )
@@ -1575,6 +1684,64 @@ def troubleshoot_data(
         errors=[],
     )
 
+    # usb-14: healthy volume on a localhost missing lsblk (host-tool-errors)
+    usb14_vs = VolumeStatus(
+        slug="usb-14",
+        config=config.volumes["usb-14"],
+        ssh_endpoint_status=_TROUBLESHOOT_LOCALHOST_LSBLK_MISSING_SSH,
+        diagnostics=VolumeDiagnostics(
+            capabilities=VolumeCapabilities(
+                sentinel_exists=True,
+                is_btrfs_filesystem=False,
+                hardlink_supported=True,
+                btrfs_user_subvol_rm=False,
+            ),
+        ),
+        errors=[],
+    )
+
+    # usb-15: `stat -f` failed, filesystem type unknown (VOL_FS_TYPE_UNKNOWN
+    # on its btrfs-snapshot destination)
+    usb15_vs = VolumeStatus(
+        slug="usb-15",
+        config=config.volumes["usb-15"],
+        ssh_endpoint_status=localhost_ssh_btrfs,
+        diagnostics=VolumeDiagnostics(
+            capabilities=VolumeCapabilities(
+                sentinel_exists=True,
+                is_btrfs_filesystem=None,
+                hardlink_supported=True,
+                btrfs_user_subvol_rm=False,
+            ),
+        ),
+        errors=[],
+    )
+
+    # mount-no-passphrase: lifecycle reported passphrase_not_available →
+    # PASSPHRASE_NOT_AVAILABLE (Layer 2)
+    mount_no_passphrase_vs = VolumeStatus(
+        slug="mount-no-passphrase",
+        config=config.volumes["mount-no-passphrase"],
+        ssh_endpoint_status=_TROUBLESHOOT_LOCALHOST_LUKS_FAILED_SSH,
+        diagnostics=VolumeDiagnostics(
+            capabilities=VolumeCapabilities(
+                sentinel_exists=False,
+                is_btrfs_filesystem=False,
+                hardlink_supported=True,
+                btrfs_user_subvol_rm=False,
+                mount=MountCapabilities(
+                    has_fstab_entry=True,
+                    fstab_target="/mnt/no-passphrase",
+                    device_present=True,
+                    luks_unlocked=False,
+                    mounted=False,
+                    mount_failure_reason=MountFailureReason.PASSPHRASE_NOT_AVAILABLE,
+                ),
+            ),
+        ),
+        errors=[VolumeError.PASSPHRASE_NOT_AVAILABLE],
+    )
+
     usb13_vs = VolumeStatus(
         slug="usb-13",
         config=config.volumes["usb-13"],
@@ -1742,6 +1909,9 @@ def troubleshoot_data(
         "mount-luks-failed": mount_luks_failed_vs,
         "mount-mount-failed": mount_mount_failed_vs,
         "mount-polkit-refused": mount_polkit_refused_vs,
+        "mount-no-passphrase": mount_no_passphrase_vs,
+        "usb-14": usb14_vs,
+        "usb-15": usb15_vs,
     }
 
     # ── Source endpoint status (shared by most syncs) ─────────
@@ -2341,12 +2511,56 @@ def troubleshoot_data(
         errors=[SyncError.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM],
     )
 
+    # host-tool-errors: localhost lacks lsblk → SyncError.ENDPOINT_HOST_ERRORS
+    # (Layer 4; the fix lives at the SSH endpoint layer)
+    sync_statuses["host-tool-errors"] = SyncStatus(
+        slug="host-tool-errors",
+        config=config.syncs["host-tool-errors"],
+        source_endpoint_status=_active_src_ep_status("laptop-src", laptop_active_vs),
+        destination_endpoint_status=_active_dst_ep_status("dst-host-errors", usb14_vs),
+        errors=[SyncError.ENDPOINT_HOST_ERRORS],
+    )
+
+    # mount-no-passphrase: plugged-in drive whose passphrase is unavailable
+    sync_statuses["mount-no-passphrase"] = SyncStatus(
+        slug="mount-no-passphrase",
+        config=config.syncs["mount-no-passphrase"],
+        source_endpoint_status=laptop_src_inactive,
+        destination_endpoint_status=_inactive_dst_ep_status(
+            "mount-no-passphrase-dst", mount_no_passphrase_vs
+        ),
+        errors=[
+            SyncError.SOURCE_ENDPOINT_INACTIVE,
+            SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        ],
+    )
+
+    # fs-type-unknown: DestinationEndpointError.VOL_FS_TYPE_UNKNOWN (Layer 3)
+    sync_statuses["fs-type-unknown"] = SyncStatus(
+        slug="fs-type-unknown",
+        config=config.syncs["fs-type-unknown"],
+        source_endpoint_status=_active_src_ep_status("laptop-src", laptop_active_vs),
+        destination_endpoint_status=DestinationEndpointStatus(
+            endpoint_slug="dst-fs-unknown",
+            volume_status=usb15_vs,
+            diagnostics=DestinationEndpointDiagnostics(
+                endpoint_slug="dst-fs-unknown",
+                sentinel_exists=True,
+                endpoint_writable=True,
+            ),
+            errors=[DestinationEndpointError.VOL_FS_TYPE_UNKNOWN],
+        ),
+        errors=[SyncError.DESTINATION_ENDPOINT_INACTIVE],
+    )
+
     ssh_statuses = {
-        # Standalone endpoints: bastion reachable, bastion2 unreachable
+        # Standalone endpoints: bastion reachable, bastion2 unreachable,
+        # auth-fail refuses our key
         "bastion": _standalone_ssh_status("bastion"),
         "bastion2": _standalone_ssh_status("bastion2", reachable=False),
         "nas-public": _standalone_ssh_status("nas-public"),
-        **collect_ssh_endpoint_statuses(vol_statuses, sync_statuses),
+        "auth-fail": _TROUBLESHOOT_AUTH_FAILED_SSH,
+        **_demo_ssh_statuses(vol_statuses, sync_statuses),
     }
     src_ep_statuses = {
         slug: ss.source_endpoint_status for slug, ss in sync_statuses.items()

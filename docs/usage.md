@@ -235,6 +235,8 @@ This is a Linux-only feature. The target host (local or remote) must have udisks
    #   /etc/polkit-1/rules.d/50-nbkp.rules
    ```
 
+   `--user` is the user nbkp runs as on the host (the SSH user for remote volumes); it defaults to the user running `setup-auth`, so pass `-u <user>` when generating the rule on another machine. `-o json` emits the rule text and install path for scripting.
+
    The rule is the **only** authorization artifact — no sudoers file is generated. It grants the backup user the udisks actions (`filesystem-mount[-system]`, `filesystem-fstab`, `encrypted-unlock[-system]`, `encrypted-lock-others`, etc.) and is regenerated from the config so it always matches the configured volumes.
 
 ### Mount-point models: fstab × crypttab

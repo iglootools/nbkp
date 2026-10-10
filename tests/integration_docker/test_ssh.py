@@ -235,7 +235,8 @@ class TestHostKeyVerification:
         resolved = resolve_all_endpoints(config)
         status = check_volume(vol, resolved)
         assert status.active is False
-        assert SshEndpointError.UNREACHABLE in status.ssh_endpoint_status.errors
+        # Host key mismatch: the host answered and was refused (not inactive).
+        assert status.ssh_endpoint_status.errors == [SshEndpointError.AUTH_FAILED]
 
     def test_rsync_succeeds_with_correct_known_hosts(
         self,
@@ -463,7 +464,8 @@ class TestConnectionFailure:
         resolved = resolve_all_endpoints(config)
         status = check_volume(vol, resolved)
         assert status.active is False
-        assert SshEndpointError.UNREACHABLE in status.ssh_endpoint_status.errors
+        # Unauthorized key: the host answered and refused (not inactive).
+        assert status.ssh_endpoint_status.errors == [SshEndpointError.AUTH_FAILED]
 
 
 # ── Agent forwarding through bastion ────────────────────────

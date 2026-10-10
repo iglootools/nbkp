@@ -35,6 +35,7 @@ from ..config import (
 )
 from ..disks.models import (
     MountCapabilities,
+    MountFailureReason,
     MountToolCapabilities,
 )
 from ..fsprotocol import (
@@ -61,6 +62,7 @@ class SshEndpointError(str, enum.Enum):
     # Reachability
     UNREACHABLE = "unreachable"
     LOCATION_EXCLUDED = "excluded by location filter"
+    AUTH_FAILED = "ssh authentication or host key verification failed"
 
     # Always needed
     RSYNC_NOT_FOUND = "rsync not found"
@@ -81,7 +83,17 @@ class SshEndpointError(str, enum.Enum):
     UDISKSD_NOT_RUNNING = "udisksd (udisks2 daemon) not running"
     LSBLK_NOT_FOUND = "lsblk not found"
 
-    # Warning: needed to mount btrfs volumes via udisks
+
+class SshEndpointWarning(str, enum.Enum):
+    """Host-level findings worth fixing that do not make the endpoint inactive.
+
+    Kept apart from ``SshEndpointError`` so they never reach ``active`` or
+    the strictness policy: ``check`` and ``troubleshoot`` display them, and
+    nothing else reads them.
+    """
+
+    # Btrfs-backed mount volumes: udisks mounts btrfs without its btrfs
+    # module, but cannot manage btrfs-specific features.
     UDISKS_BTRFS_MODULE_MISSING = "udisks2 btrfs module not installed"
 
 
@@ -132,6 +144,11 @@ class SshEndpointDiagnostics(BaseModel):
     ssh_reachable: bool | None = None
     """Whether the SSH endpoint is reachable.
     ``None`` for implicit localhost (always reachable)."""
+    ssh_auth_failed: bool = False
+    """The host answered but refused authentication or failed host key
+    verification.  Only meaningful when ``ssh_reachable`` is ``False``."""
+    ssh_error: str | None = None
+    """First line of the connection error, when the connection failed."""
     host_tools: HostToolCapabilities | None = None
     """Host-level tool availability.
     ``None`` when the host is unreachable or excluded."""
@@ -149,10 +166,14 @@ Safe to share because ``SshEndpointToolNeeds`` is frozen."""
 class SshEndpointStatus(BaseModel):
     """Runtime status of an SSH endpoint (or implicit localhost)."""
 
+    model_config = ConfigDict(frozen=True)
+
     slug: str
     """SSH endpoint slug, or ``\"localhost\"`` for local volumes."""
     diagnostics: SshEndpointDiagnostics
     errors: list[SshEndpointError]
+    warnings: list[SshEndpointWarning] = []
+    """Non-fatal findings; never affect ``active``."""
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -170,6 +191,7 @@ class SshEndpointStatus(BaseModel):
             slug=slug,
             diagnostics=diagnostics,
             errors=_ssh_endpoint_errors(diagnostics, needs),
+            warnings=_ssh_endpoint_warnings(diagnostics, needs),
         )
 
 
@@ -181,22 +203,46 @@ def _ssh_endpoint_errors(
     needs: SshEndpointToolNeeds,
 ) -> list[SshEndpointError]:
     """Translate SSH endpoint diagnostics into errors."""
-    if diag.location_excluded:
-        return [SshEndpointError.LOCATION_EXCLUDED]
-    elif diag.ssh_reachable is False:
-        return [SshEndpointError.UNREACHABLE]
-    elif diag.host_tools is None:
-        return []
-    else:
-        return [
-            *_ssh_rsync_errors(diag.host_tools),
-            *_ssh_snapshot_tool_errors(diag.host_tools, needs),
-            *(
-                _ssh_mount_tool_errors(diag.mount_tools, needs)
-                if diag.mount_tools is not None
-                else []
-            ),
-        ]
+    match diag:
+        case SshEndpointDiagnostics(location_excluded=True):
+            return [SshEndpointError.LOCATION_EXCLUDED]
+        case SshEndpointDiagnostics(ssh_reachable=False, ssh_auth_failed=True):
+            return [SshEndpointError.AUTH_FAILED]
+        case SshEndpointDiagnostics(ssh_reachable=False):
+            return [SshEndpointError.UNREACHABLE]
+        case SshEndpointDiagnostics(host_tools=HostToolCapabilities() as tools):
+            # findmnt is needed both by btrfs endpoints and by mount
+            # management: report it once when both need it.
+            return list(
+                dict.fromkeys(
+                    [
+                        *_ssh_rsync_errors(tools),
+                        *_ssh_snapshot_tool_errors(tools, needs),
+                        *(
+                            _ssh_mount_tool_errors(diag.mount_tools, needs)
+                            if diag.mount_tools is not None
+                            else []
+                        ),
+                    ]
+                )
+            )
+        case _:
+            return []
+
+
+def _ssh_endpoint_warnings(
+    diag: SshEndpointDiagnostics,
+    needs: SshEndpointToolNeeds,
+) -> list[SshEndpointWarning]:
+    """Non-fatal host findings (only for a probed host)."""
+    return (
+        [SshEndpointWarning.UDISKS_BTRFS_MODULE_MISSING]
+        if diag.mount_tools is not None
+        and needs.has_mount_volumes
+        and needs.has_btrfs_mount
+        and diag.mount_tools.has_btrfs_module is False
+        else []
+    )
 
 
 def _ssh_rsync_errors(tools: HostToolCapabilities) -> list[SshEndpointError]:
@@ -242,8 +288,8 @@ def _ssh_mount_tool_errors(
 
     A mount-managed host needs ``udisksctl`` + a running ``udisksd`` (for
     unlock/mount/lock), ``findmnt`` (mountpoint discovery), and ``lsblk``
-    (cleartext-device discovery).  Btrfs-backed mount volumes additionally
-    want the udisks btrfs module (surfaced as a warning, not a hard error).
+    (cleartext-device discovery).  The udisks btrfs module that btrfs-backed
+    mount volumes want is a warning (see ``_ssh_endpoint_warnings``).
     """
     if not needs.has_mount_volumes:
         return []
@@ -274,11 +320,6 @@ def _ssh_mount_tool_errors(
         # resolution, multi-device btrfs enumeration, or a richer `disks status`
         # block-device tree.
         *([SshEndpointError.LSBLK_NOT_FOUND] if mount_tools.has_lsblk is False else []),
-        *(
-            [SshEndpointError.UDISKS_BTRFS_MODULE_MISSING]
-            if needs.has_btrfs_mount and mount_tools.has_btrfs_module is False
-            else []
-        ),
     ]
 
 
@@ -325,7 +366,8 @@ class VolumeCapabilities(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     sentinel_exists: bool
-    is_btrfs_filesystem: bool
+    is_btrfs_filesystem: bool | None
+    """``None`` when the probe (``stat -f``) failed: type unknown."""
     hardlink_supported: bool
     btrfs_user_subvol_rm: bool
     mount: MountCapabilities | None = None
@@ -351,6 +393,8 @@ class VolumeDiagnostics(BaseModel):
 class VolumeStatus(BaseModel):
     """Runtime status of a volume."""
 
+    model_config = ConfigDict(frozen=True)
+
     slug: str
     config: Volume
     ssh_endpoint_status: SshEndpointStatus
@@ -371,32 +415,25 @@ class VolumeStatus(BaseModel):
         ssh_endpoint_status: SshEndpointStatus,
         diagnostics: VolumeDiagnostics | None,
     ) -> VolumeStatus:
-        """Create status by interpreting diagnostics into errors."""
-        if isinstance(config, RemoteVolume) and not ssh_endpoint_status.active:
-            return VolumeStatus(
-                slug=slug,
-                config=config,
-                ssh_endpoint_status=ssh_endpoint_status,
-                diagnostics=diagnostics,
-                errors=[VolumeError.SSH_ENDPOINT_INACTIVE],
-            )
-        elif diagnostics is None:
-            return VolumeStatus(
-                slug=slug,
-                config=config,
-                ssh_endpoint_status=ssh_endpoint_status,
-                diagnostics=diagnostics,
-                errors=[],
-            )
-        else:
-            mount = getattr(config, "mount", None)
-            return VolumeStatus(
-                slug=slug,
-                config=config,
-                ssh_endpoint_status=ssh_endpoint_status,
-                diagnostics=diagnostics,
-                errors=_volume_errors(diagnostics, mount),
-            )
+        """Create status by interpreting diagnostics into errors.
+
+        Only remote volumes cascade an inactive SSH endpoint: localhost is
+        always reachable, and its tool errors surface at the sync level as
+        ``SyncError.ENDPOINT_HOST_ERRORS`` instead.
+        """
+        return VolumeStatus(
+            slug=slug,
+            config=config,
+            ssh_endpoint_status=ssh_endpoint_status,
+            diagnostics=diagnostics,
+            errors=(
+                [VolumeError.SSH_ENDPOINT_INACTIVE]
+                if isinstance(config, RemoteVolume) and not ssh_endpoint_status.active
+                else _volume_errors(diagnostics, config.mount)
+                if diagnostics is not None
+                else []
+            ),
+        )
 
 
 # ── Layer 2 error interpretation ───────────────────────────
@@ -407,31 +444,41 @@ def _volume_errors(
     mount: MountConfig | None = None,
 ) -> list[VolumeError]:
     """Translate volume diagnostics into VolumeError values."""
-    if diag.capabilities is not None and not diag.capabilities.sentinel_exists:
-        # When a volume has mount config and the mount step didn't
-        # succeed, prefer the most specific signal we have. Order:
-        # 1. Lifecycle recorded a known cause (e.g. NOT_AUTHORIZED →
-        #    POLKIT_RULES_MISSING) — surface that so troubleshoot points
-        #    at the real fix.
-        # 2. device not plugged in — DEVICE_NOT_PRESENT.
-        # 3. path declared but no fstab entry maps the device there —
-        #    FSTAB_MOUNTPOINT_MISMATCH (udisks would mount at /run/media).
-        # 4. device present but unmounted — VOLUME_NOT_MOUNTED.
-        # 5. Otherwise, fall back to SENTINEL_NOT_FOUND.
-        mount_caps = diag.capabilities.mount
-        if mount is not None and mount_caps is not None:
-            specific = _mount_lifecycle_failure_error(mount_caps)
-            if specific is not None:
-                return [specific]
-            if mount_caps.device_present is False:
-                return [VolumeError.DEVICE_NOT_PRESENT]
-            if mount_caps.has_fstab_entry is False:
-                return [VolumeError.FSTAB_MOUNTPOINT_MISMATCH]
-            if mount_caps.mounted is False:
-                return [VolumeError.VOLUME_NOT_MOUNTED]
-        return [VolumeError.SENTINEL_NOT_FOUND]
-    else:
-        return []
+    match (diag.capabilities, mount):
+        case (None | VolumeCapabilities(sentinel_exists=True), _):
+            return []
+        case (VolumeCapabilities(mount=MountCapabilities() as caps), MountConfig()):
+            return [_mount_sentinel_error(caps)]
+        case _:
+            return [VolumeError.SENTINEL_NOT_FOUND]
+
+
+def _mount_sentinel_error(mount_caps: MountCapabilities) -> VolumeError:
+    """Most specific reason a mount-managed volume's sentinel is missing.
+
+    Order:
+
+    1. Lifecycle recorded a known cause (e.g. NOT_AUTHORIZED →
+       POLKIT_RULES_MISSING) — surface that so troubleshoot points at the
+       real fix.
+    2. device not plugged in — DEVICE_NOT_PRESENT.
+    3. path declared but no fstab entry maps the device there —
+       FSTAB_MOUNTPOINT_MISMATCH (udisks would mount at /run/media).
+    4. device present but unmounted — VOLUME_NOT_MOUNTED.
+    5. Otherwise, fall back to SENTINEL_NOT_FOUND.
+    """
+    specific = _mount_lifecycle_failure_error(mount_caps)
+    match mount_caps:
+        case _ if specific is not None:
+            return specific
+        case MountCapabilities(device_present=False):
+            return VolumeError.DEVICE_NOT_PRESENT
+        case MountCapabilities(has_fstab_entry=False):
+            return VolumeError.FSTAB_MOUNTPOINT_MISMATCH
+        case MountCapabilities(mounted=False):
+            return VolumeError.VOLUME_NOT_MOUNTED
+        case _:
+            return VolumeError.SENTINEL_NOT_FOUND
 
 
 def _mount_lifecycle_failure_error(
@@ -443,11 +490,13 @@ def _mount_lifecycle_failure_error(
     DEVICE_NOT_PRESENT / VOLUME_NOT_MOUNTED / SENTINEL_NOT_FOUND.
     """
     match mount_caps.mount_failure_reason:
-        case "not_authorized":
+        case MountFailureReason.NOT_AUTHORIZED:
             return VolumeError.POLKIT_RULES_MISSING
-        case "unlock_failed":
+        case MountFailureReason.PASSPHRASE_NOT_AVAILABLE:
+            return VolumeError.PASSPHRASE_NOT_AVAILABLE
+        case MountFailureReason.UNLOCK_FAILED:
             return VolumeError.UNLOCK_FAILED
-        case "mount_failed":
+        case MountFailureReason.MOUNT_FAILED | MountFailureReason.PROBE_FAILED:
             return VolumeError.MOUNT_FAILED
         case _:
             return None
@@ -491,6 +540,7 @@ class DestinationEndpointError(str, enum.Enum):
     # Capability-gated: probed at volume level, error because endpoint config
     # requires the capability.
     VOL_NOT_BTRFS = "volume not on btrfs filesystem"
+    VOL_FS_TYPE_UNKNOWN = "could not determine the volume filesystem type"
     VOL_NOT_MOUNTED_USER_SUBVOL_RM = "volume not mounted with user_subvol_rm_allowed"
     VOL_NO_HARDLINK_SUPPORT = "volume filesystem does not support hard links"
 
@@ -593,6 +643,8 @@ class DestinationEndpointDiagnostics(BaseModel):
 class SourceEndpointStatus(BaseModel):
     """Runtime status of a source sync endpoint."""
 
+    model_config = ConfigDict(frozen=True)
+
     endpoint_slug: str
     volume_status: VolumeStatus
     diagnostics: SourceEndpointDiagnostics | None
@@ -611,22 +663,24 @@ class SourceEndpointStatus(BaseModel):
         diagnostics: SourceEndpointDiagnostics | None,
     ) -> SourceEndpointStatus:
         """Create status by interpreting diagnostics into errors."""
-        if not volume_status.active:
-            errors = [SourceEndpointError.VOLUME_INACTIVE]
-        elif diagnostics is not None:
-            errors = _source_endpoint_errors(diagnostics, endpoint)
-        else:
-            errors = []
         return SourceEndpointStatus(
             endpoint_slug=endpoint.slug,
             volume_status=volume_status,
             diagnostics=diagnostics,
-            errors=errors,
+            errors=(
+                [SourceEndpointError.VOLUME_INACTIVE]
+                if not volume_status.active
+                else _source_endpoint_errors(diagnostics, endpoint)
+                if diagnostics is not None
+                else []
+            ),
         )
 
 
 class DestinationEndpointStatus(BaseModel):
     """Runtime status of a destination sync endpoint."""
+
+    model_config = ConfigDict(frozen=True)
 
     endpoint_slug: str
     volume_status: VolumeStatus
@@ -645,29 +699,32 @@ class DestinationEndpointStatus(BaseModel):
         volume_status: VolumeStatus,
         diagnostics: DestinationEndpointDiagnostics | None,
     ) -> DestinationEndpointStatus:
-        """Create status by interpreting diagnostics into errors."""
-        if not volume_status.active:
-            errors: list[DestinationEndpointError] = [
-                DestinationEndpointError.VOLUME_INACTIVE
-            ]
-        elif diagnostics is not None:
-            # Capability-gated errors need host tools and volume capabilities
-            host_tools = volume_status.ssh_endpoint_status.diagnostics.host_tools
-            vol_caps = (
-                volume_status.diagnostics.capabilities
-                if volume_status.diagnostics is not None
-                else None
-            )
-            errors = _destination_endpoint_errors(
-                diagnostics, vol_caps, host_tools, endpoint
-            )
-        else:
-            errors = []
+        """Create status by interpreting diagnostics into errors.
+
+        Capability-gated errors need the host tools and volume capabilities
+        probed at the lower layers.
+        """
+        vol_caps = (
+            volume_status.diagnostics.capabilities
+            if volume_status.diagnostics is not None
+            else None
+        )
         return DestinationEndpointStatus(
             endpoint_slug=endpoint.slug,
             volume_status=volume_status,
             diagnostics=diagnostics,
-            errors=errors,
+            errors=(
+                [DestinationEndpointError.VOLUME_INACTIVE]
+                if not volume_status.active
+                else _destination_endpoint_errors(
+                    diagnostics,
+                    vol_caps,
+                    volume_status.ssh_endpoint_status.diagnostics.host_tools,
+                    endpoint,
+                )
+                if diagnostics is not None
+                else []
+            ),
         )
 
 
@@ -779,30 +836,44 @@ def _btrfs_destination_ep_errors(
     SSH endpoint level.  Here we check capability-gated errors: the
     endpoint config requires btrfs but the volume may not support it.
     """
-    if caps is None or host_tools is None:
-        return []
-    if not host_tools.has_stat:
-        # Can't determine filesystem type — stat error at SSH endpoint level
-        return []
-    elif not caps.is_btrfs_filesystem:
-        return [DestinationEndpointError.VOL_NOT_BTRFS]
-    else:
-        return [
-            *(
-                [DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM]
-                if host_tools.has_findmnt and not caps.btrfs_user_subvol_rm
-                else []
-            ),
-            *_btrfs_staging_ep_errors(diag),
-            *(
-                [DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME]
-                if diag.btrfs is not None
-                and diag.btrfs.staging_exists
-                and not diag.btrfs.staging_is_subvolume
-                else []
-            ),
-            *_snapshot_dirs_ep_errors(diag),
-        ]
+    match (caps, host_tools):
+        case (None, _) | (_, None):
+            return []
+        case (_, HostToolCapabilities(has_stat=False)):
+            # Can't determine filesystem type — stat error at SSH endpoint level
+            return []
+        case (VolumeCapabilities(is_btrfs_filesystem=None), _):
+            return [DestinationEndpointError.VOL_FS_TYPE_UNKNOWN]
+        case (VolumeCapabilities(is_btrfs_filesystem=False), _):
+            return [DestinationEndpointError.VOL_NOT_BTRFS]
+        case (VolumeCapabilities() as vol_caps, HostToolCapabilities() as tools):
+            return _btrfs_volume_ep_errors(diag, vol_caps, tools)
+        case _:
+            return []
+
+
+def _btrfs_volume_ep_errors(
+    diag: DestinationEndpointDiagnostics,
+    caps: VolumeCapabilities,
+    host_tools: HostToolCapabilities,
+) -> list[DestinationEndpointError]:
+    """Btrfs endpoint errors once the volume is known to be on btrfs."""
+    return [
+        *(
+            [DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM]
+            if host_tools.has_findmnt and not caps.btrfs_user_subvol_rm
+            else []
+        ),
+        *_btrfs_staging_ep_errors(diag),
+        *(
+            [DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME]
+            if diag.btrfs is not None
+            and diag.btrfs.staging_exists
+            and not diag.btrfs.staging_is_subvolume
+            else []
+        ),
+        *_snapshot_dirs_ep_errors(diag),
+    ]
 
 
 def _btrfs_staging_ep_errors(
@@ -882,6 +953,11 @@ class SyncError(str, enum.Enum):
     """
 
     DISABLED = "disabled"
+    ENDPOINT_HOST_ERRORS = "a host this sync runs on has tool errors"
+    """The host of either side (localhost included) has non-inactive SSH
+    endpoint errors — rsync missing or too old, btrfs/udisks tools missing.
+    Remote hosts already cascade through ``VolumeError.SSH_ENDPOINT_INACTIVE``;
+    this is what makes *localhost* tool errors stop the sync too."""
     SRC_EP_LATEST_DEVNULL_NO_UPSTREAM = (
         "source latest \u2192 /dev/null with no upstream sync"
     )
@@ -896,6 +972,8 @@ class SyncError(str, enum.Enum):
 
 class SyncStatus(BaseModel):
     """Runtime status of a sync."""
+
+    model_config = ConfigDict(frozen=True)
 
     slug: str
     config: SyncConfig
@@ -921,46 +999,22 @@ class SyncStatus(BaseModel):
         conditions (missing sentinels, offline volumes) from those with
         real infrastructure errors.
         """
-        if self.active:
-            return False
-
         src_ep = self.source_endpoint_status
         dst_ep = self.destination_endpoint_status
-        return all(
+        return not self.active and all(
             [
-                (
-                    set(src_ep.volume_status.ssh_endpoint_status.errors)
+                *(
+                    set(ep.volume_status.ssh_endpoint_status.errors)
                     <= INACTIVE_SSH_ERRORS
-                    if src_ep.volume_status.ssh_endpoint_status.errors
-                    else True
+                    for ep in (src_ep, dst_ep)
                 ),
-                (
-                    set(dst_ep.volume_status.ssh_endpoint_status.errors)
-                    <= INACTIVE_SSH_ERRORS
-                    if dst_ep.volume_status.ssh_endpoint_status.errors
-                    else True
+                *(
+                    set(ep.volume_status.errors) <= INACTIVE_VOLUME_ERRORS
+                    for ep in (src_ep, dst_ep)
                 ),
-                (
-                    set(src_ep.volume_status.errors) <= INACTIVE_VOLUME_ERRORS
-                    if src_ep.volume_status.errors
-                    else True
-                ),
-                (
-                    set(dst_ep.volume_status.errors) <= INACTIVE_VOLUME_ERRORS
-                    if dst_ep.volume_status.errors
-                    else True
-                ),
-                (
-                    set(src_ep.errors) <= INACTIVE_SRC_ENDPOINT_ERRORS
-                    if src_ep.errors
-                    else True
-                ),
-                (
-                    set(dst_ep.errors) <= INACTIVE_DST_ENDPOINT_ERRORS
-                    if dst_ep.errors
-                    else True
-                ),
-                (set(self.errors) <= INACTIVE_SYNC_ERRORS if self.errors else True),
+                set(src_ep.errors) <= INACTIVE_SRC_ENDPOINT_ERRORS,
+                set(dst_ep.errors) <= INACTIVE_DST_ENDPOINT_ERRORS,
+                set(self.errors) <= INACTIVE_SYNC_ERRORS,
             ]
         )
 
@@ -974,37 +1028,58 @@ class SyncStatus(BaseModel):
         dry_run: bool,
     ) -> SyncStatus:
         """Create status by interpreting sync-level errors."""
-        if not sync.enabled:
-            errors: list[SyncError] = [SyncError.DISABLED]
-        else:
-            errors = [
-                *_sync_errors(sync, src_endpoint, src_ep_status, all_syncs, dry_run),
-                *(
-                    [SyncError.SOURCE_ENDPOINT_INACTIVE]
-                    if not src_ep_status.active
-                    else []
-                ),
-                *(
-                    [SyncError.DESTINATION_ENDPOINT_INACTIVE]
-                    if not dst_ep_status.active
-                    else []
-                ),
-            ]
-
         dst_diag = dst_ep_status.diagnostics
-        dst_latest = dst_diag.latest.snapshot if dst_diag and dst_diag.latest else None
-
         return SyncStatus(
             slug=sync.slug,
             config=sync,
             source_endpoint_status=src_ep_status,
             destination_endpoint_status=dst_ep_status,
-            errors=errors,
-            destination_latest_snapshot=dst_latest,
+            errors=(
+                [
+                    *_host_errors(src_ep_status, dst_ep_status),
+                    *_sync_errors(
+                        sync, src_endpoint, src_ep_status, all_syncs, dry_run
+                    ),
+                    *(
+                        [SyncError.SOURCE_ENDPOINT_INACTIVE]
+                        if not src_ep_status.active
+                        else []
+                    ),
+                    *(
+                        [SyncError.DESTINATION_ENDPOINT_INACTIVE]
+                        if not dst_ep_status.active
+                        else []
+                    ),
+                ]
+                if sync.enabled
+                else [SyncError.DISABLED]
+            ),
+            destination_latest_snapshot=(
+                dst_diag.latest.snapshot if dst_diag and dst_diag.latest else None
+            ),
         )
 
 
 # ── Layer 4 error interpretation ───────────────────────────
+
+
+def _host_errors(
+    src_ep_status: SourceEndpointStatus,
+    dst_ep_status: DestinationEndpointStatus,
+) -> list[SyncError]:
+    """``ENDPOINT_HOST_ERRORS`` when either side's host has fatal tool errors.
+
+    Inactive host errors (unreachable, location-excluded) are left to the
+    volume cascade, which already classifies them as expected-inactive.
+    """
+    return (
+        [SyncError.ENDPOINT_HOST_ERRORS]
+        if any(
+            set(ep.volume_status.ssh_endpoint_status.errors) - INACTIVE_SSH_ERRORS
+            for ep in (src_ep_status, dst_ep_status)
+        )
+        else []
+    )
 
 
 def _sync_errors(
@@ -1086,6 +1161,8 @@ INACTIVE_DST_ENDPOINT_ERRORS: frozenset[DestinationEndpointError] = frozenset(
 
 INACTIVE_SYNC_ERRORS: frozenset[SyncError] = frozenset(
     {
+        # Switched off in the config: never attempted, so never a problem.
+        SyncError.DISABLED,
         SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING,
         SyncError.SOURCE_ENDPOINT_INACTIVE,
         SyncError.DESTINATION_ENDPOINT_INACTIVE,

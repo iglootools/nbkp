@@ -5,6 +5,9 @@ from __future__ import annotations
 import subprocess
 from unittest.mock import patch
 
+import paramiko
+import pytest
+
 from nbkp.config import (
     Config,
     LocalVolume,
@@ -13,6 +16,8 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.credentials import CredentialError, CredentialErrorReason
+from nbkp.disks.detection import DeviceProbeError
 from nbkp.disks.lifecycle import (
     MountFailureReason,
     mount_volume,
@@ -259,7 +264,7 @@ class TestMountVolume:
         multiline_msg = "first line\nsecond line\nthird line"
         with patch(
             "nbkp.disks.lifecycle.detect_device_present",
-            side_effect=RuntimeError(multiline_msg),
+            side_effect=OSError(multiline_msg),
         ):
             result = mount_volume(vol, vol.mount, {}, lambda x: "pass")  # type: ignore[arg-type]
         assert not result.success
@@ -267,6 +272,69 @@ class TestMountVolume:
         assert "\n" not in (result.detail or "")
         assert "first line" in (result.detail or "")
         assert "second line" not in (result.detail or "")
+
+    def test_programming_error_propagates(self) -> None:
+        """Only connection failures become UNREACHABLE; a bug must surface."""
+        vol = _encrypted_vol()
+        with (
+            patch(
+                "nbkp.disks.lifecycle.detect_device_present",
+                side_effect=RuntimeError("bug"),
+            ),
+            pytest.raises(RuntimeError),
+        ):
+            mount_volume(vol, vol.mount, {}, lambda x: "pass")  # type: ignore[arg-type]
+
+    def test_auth_failure_returns_unreachable(self) -> None:
+        vol = _encrypted_vol()
+        with patch(
+            "nbkp.disks.lifecycle.detect_device_present",
+            side_effect=paramiko.AuthenticationException("Authentication failed."),
+        ):
+            result = mount_volume(vol, vol.mount, {}, lambda x: "pass")  # type: ignore[arg-type]
+        assert result.failure_reason == MountFailureReason.UNREACHABLE
+        assert "Authentication failed." in (result.detail or "")
+
+    def test_missing_passphrase_on_plugged_in_drive(self) -> None:
+        """A plugged-in drive whose passphrase cannot be retrieved fails loudly.
+
+        Regression: the CredentialError used to be swallowed as UNREACHABLE,
+        so the drive was silently skipped as "inactive".
+        """
+        vol = _encrypted_vol()
+
+        def no_passphrase(pid: str) -> str:
+            raise CredentialError(
+                f"No passphrase found in keyring for id '{pid}'",
+                reason=CredentialErrorReason.NOT_FOUND,
+            )
+
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.discover_cleartext_device", return_value=None),
+            patch("nbkp.disks.lifecycle.run_on_volume") as mock_run,
+        ):
+            result = mount_volume(vol, vol.mount, {}, no_passphrase)  # type: ignore[arg-type]
+        assert not result.success
+        assert result.failure_reason == MountFailureReason.PASSPHRASE_NOT_AVAILABLE
+        assert result.device_present is True
+        assert result.luks_unlocked is False
+        mock_run.assert_not_called()
+
+    def test_failed_lsblk_probe_is_not_locked(self) -> None:
+        vol = _encrypted_vol()
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch(
+                "nbkp.disks.lifecycle.discover_cleartext_device",
+                side_effect=DeviceProbeError("lsblk", 1, "boom"),
+            ),
+            patch("nbkp.disks.lifecycle.run_on_volume") as mock_run,
+        ):
+            result = mount_volume(vol, vol.mount, {}, lambda x: "pass")  # type: ignore[arg-type]
+        assert result.failure_reason == MountFailureReason.PROBE_FAILED
+        # No unlock attempted on a guess.
+        mock_run.assert_not_called()
 
     def test_ssh_timeout_returns_unreachable(self) -> None:
         vol = _encrypted_vol()
@@ -371,6 +439,23 @@ class TestUmountVolume:
         assert not result.success
         assert "timed out" in (result.detail or "")
         assert result.warning is not None
+
+    def test_failed_probe_is_reported_not_skipped(self) -> None:
+        """A failed lsblk must not be read as "locked" and skip the lock."""
+        vol = _encrypted_vol()
+        mc = vol.mount
+        assert mc is not None
+        with (
+            patch(
+                "nbkp.disks.lifecycle.resolve_target_device",
+                side_effect=DeviceProbeError("lsblk", 1, "boom"),
+            ),
+            patch("nbkp.disks.lifecycle.run_on_volume") as mock_run,
+        ):
+            result = umount_volume(vol, mc, {})
+        assert not result.success
+        assert "device state unknown" in (result.detail or "")
+        mock_run.assert_not_called()
 
     def test_unencrypted_umount_no_lock(self) -> None:
         vol = _unencrypted_vol()

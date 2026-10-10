@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from nbkp.clihelpers import OutputFormat
 from nbkp.config import (
@@ -52,6 +55,25 @@ from nbkp.remote.queries import (
 from nbkp.remote.resolution import resolve_proxy_chain
 from nbkp.snapshots.common import create_snapshot_timestamp
 from nbkp.sync import SyncFailureKind, SyncOutcome, SyncResult
+
+
+@pytest.fixture(autouse=True)
+def _no_real_host_commands(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the check pipeline from spawning real ``rsync`` / ``test -w``.
+
+    Unit tests must not depend on the developer's rsync (project rule): the
+    version probe reports a good rsync, and writability is answered by
+    ``os.access`` — the same question ``test -w`` asks, without a process.
+    Tests exercising these probes patch them (or ``subprocess.run``) directly.
+    """
+    monkeypatch.setattr(
+        "nbkp.preflight.volume_checks._check_rsync_version", lambda *_: True
+    )
+    monkeypatch.setattr(
+        "nbkp.preflight.endpoint_checks._check_directory_writable",
+        lambda _vol, path, _re: os.access(path, os.W_OK),
+    )
+
 
 _STUB_HOST_TOOLS = HostToolCapabilities(
     has_rsync=True,
@@ -845,7 +867,8 @@ class TestCheckBtrfsFilesystemLocal:
     def test_stat_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_filesystem(vol, {}) is False
+        # Unknown, not "not btrfs": a failed probe must not trigger VOL_NOT_BTRFS.
+        assert check_btrfs_filesystem(vol, {}) is None
 
 
 class TestCheckBtrfsFilesystemRemote:
@@ -1197,6 +1220,10 @@ class TestCheckSync:
         assert SshEndpointError.RSYNC_NOT_FOUND in ssh_errors
         # Local volumes don't cascade SSH_ENDPOINT_INACTIVE — volume is active
         assert status.source_endpoint_status.volume_status.active is True
+        # ...but the sync is inactive, and not expected-inactive: a missing
+        # localhost rsync must fail preflight.
+        assert SyncError.ENDPOINT_HOST_ERRORS in status.errors
+        assert status.is_expected_inactive() is False
 
     @patch(
         "nbkp.preflight.checks.observe_ssh_endpoint",

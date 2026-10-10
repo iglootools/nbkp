@@ -13,6 +13,7 @@ from ...clihelpers import (
     severity_style,
     severity_symbol,
 )
+from ...clihelpers.invocation import Invocation
 from ...config import (
     Config,
     LocalVolume,
@@ -27,6 +28,8 @@ from ...config.output import (
 )
 from ..severity import severity_for_errors
 from ..status import (
+    INACTIVE_SSH_ERRORS,
+    DestinationEndpointDiagnostics,
     DestinationEndpointError,
     LatestSymlinkState,
     SourceEndpointError,
@@ -134,19 +137,30 @@ def _format_destination_diagnostics(ss: SyncStatus, strictness: Strictness) -> T
     diag = dst_ep.diagnostics
     if diag is None:
         return Text("")
-    items = [
-        check(
-            diag.sentinel_exists,
-            "sentinel",
-            fail_error=DestinationEndpointError.SENTINEL_NOT_FOUND,
-            strictness=strictness,
-        ),
-        check(
-            diag.endpoint_writable,
-            "writable",
-            fail_error=DestinationEndpointError.NOT_WRITABLE,
-            strictness=strictness,
-        ),
+    return join_text(
+        [
+            check(
+                diag.sentinel_exists,
+                "sentinel",
+                fail_error=DestinationEndpointError.SENTINEL_NOT_FOUND,
+                strictness=strictness,
+            ),
+            check(
+                diag.endpoint_writable,
+                "writable",
+                fail_error=DestinationEndpointError.NOT_WRITABLE,
+                strictness=strictness,
+            ),
+            *_destination_snapshot_items(diag, strictness),
+        ]
+    )
+
+
+def _destination_snapshot_items(
+    diag: DestinationEndpointDiagnostics, strictness: Strictness
+) -> list[Text]:
+    """Btrfs staging, snapshots/ and latest items (only when configured)."""
+    return [
         *(
             [
                 check(
@@ -179,7 +193,50 @@ def _format_destination_diagnostics(ss: SyncStatus, strictness: Strictness) -> T
         ),
         *([_format_latest(diag.latest)] if diag.latest is not None else []),
     ]
-    return join_text(items)
+
+
+def _ssh_status_text(status: SshEndpointStatus | None, strictness: Strictness) -> Text:
+    """Status cell: active/inactive plus any non-fatal warnings."""
+    match status:
+        case None:
+            return Text("")
+        case SshEndpointStatus():
+            return Text.assemble(
+                status_text(status.active, status.errors, strictness),
+                *(
+                    (
+                        f", {severity_symbol(Severity.WARNING)}{w.value}",
+                        severity_style(Severity.WARNING),
+                    )
+                    for w in status.warnings
+                ),
+            )
+
+
+def _localhost_row(
+    status: SshEndpointStatus | None, strictness: Strictness
+) -> list[tuple[RenderableType, ...]]:
+    """The implicit localhost endpoint, shown only when it has findings.
+
+    Local volumes run their tools here (rsync, btrfs, udisks…), so its tool
+    errors must be visible next to the configured endpoints.
+    """
+    return (
+        [
+            (
+                "localhost",
+                Text("this machine", style="dim"),
+                "",
+                "",
+                "",
+                "",
+                "",
+                _ssh_status_text(status, strictness),
+            )
+        ]
+        if status is not None and (status.errors or status.warnings)
+        else []
+    )
 
 
 def _build_ssh_endpoints_section(
@@ -188,7 +245,8 @@ def _build_ssh_endpoints_section(
     strictness: Strictness,
 ) -> list[RenderableType]:
     """Build the SSH Endpoints table section."""
-    if not config.ssh_endpoints:
+    localhost = _localhost_row(ssh_endpoint_statuses.get("localhost"), strictness)
+    if not config.ssh_endpoints and not localhost:
         return []
     table = Table(title="SSH Endpoints:")
     table.add_column("Name", style="bold")
@@ -200,12 +258,9 @@ def _build_ssh_endpoints_section(
     table.add_column("Locations")
     table.add_column("Status")
 
+    for row in localhost:
+        table.add_row(*row)
     for server in config.ssh_endpoints.values():
-        ssh_status = ssh_endpoint_statuses.get(server.slug)
-        if ssh_status is not None:
-            status = status_text(ssh_status.active, ssh_status.errors, strictness)
-        else:
-            status = Text("")
         # Host / user / key / paths are free-form config values; Text keeps a
         # bracket in one of them from being read as a style tag.
         table.add_row(
@@ -216,7 +271,7 @@ def _build_ssh_endpoints_section(
             Text(server.key or ""),
             ", ".join(server.proxy_jump_chain) or "",
             ", ".join(server.location_list),
-            status,
+            _ssh_status_text(ssh_endpoint_statuses.get(server.slug), strictness),
         )
 
     return [table, Text("")]
@@ -346,27 +401,27 @@ def print_human_check(
     resolved_endpoints: ResolvedEndpoints | None = None,
     wrap_in_panel: bool = True,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
+    invocation: Invocation | None = None,
 ) -> None:
-    """Print human-readable status output."""
-    re = resolved_endpoints or {}
-    if console is None:
-        console = Console()
+    """Print human-readable status output.
 
-    sections = build_check_sections(
-        ssh_statuses, vol_statuses, sync_statuses, config, re, strictness
-    )
-
-    has_errors = any(not s.active for s in sync_statuses.values())
-    if has_errors:
-        sections.append(Text(""))
-        sections.append(
-            Text.from_markup(
-                "Run [bold]nbkp preflight troubleshoot[/bold] for detailed remediation steps."
-            )
-        )
-
+    *invocation* carries the config path and endpoint flags so the
+    ``troubleshoot`` suggestion can be copy-pasted as-is.
+    """
+    con = console if console is not None else Console()
+    sections = [
+        *build_check_sections(
+            ssh_statuses,
+            vol_statuses,
+            sync_statuses,
+            config,
+            resolved_endpoints or {},
+            strictness,
+        ),
+        *_troubleshoot_hint(ssh_statuses, sync_statuses, invocation or Invocation()),
+    ]
     if wrap_in_panel:
-        console.print(
+        con.print(
             Panel(
                 Group(*sections),
                 title="[bold]Preflight Checks[/bold]",
@@ -376,4 +431,28 @@ def print_human_check(
         )
     else:
         for section in sections:
-            console.print(section)
+            con.print(section)
+
+
+def _troubleshoot_hint(
+    ssh_statuses: dict[str, SshEndpointStatus],
+    sync_statuses: dict[str, SyncStatus],
+    invocation: Invocation,
+) -> list[RenderableType]:
+    """Point at ``preflight troubleshoot`` when anything needs attention."""
+    needs_attention = any(not s.active for s in sync_statuses.values()) or any(
+        (set(s.errors) - INACTIVE_SSH_ERRORS) or s.warnings
+        for s in ssh_statuses.values()
+    )
+    return (
+        [
+            Text(""),
+            Text.assemble(
+                "Run ",
+                (invocation.command("preflight", "troubleshoot"), "bold"),
+                " for detailed remediation steps.",
+            ),
+        ]
+        if needs_attention
+        else []
+    )

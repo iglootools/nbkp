@@ -83,6 +83,7 @@ graph TD
     ordering --> config
     preflight --> clihelpers
     preflight --> config
+    preflight --> credentials
     preflight --> disks
     preflight --> fsprotocol
     preflight --> remote

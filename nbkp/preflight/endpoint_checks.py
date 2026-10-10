@@ -179,19 +179,32 @@ def _read_latest_state(
         return LatestSymlinkState(exists=False)
 
     raw_target = read_symlink_target(volume, latest_path, resolved_endpoints)
-    if raw_target is None:
-        return LatestSymlinkState(exists=False)
-    else:
-        target = str(raw_target)
-        if target == DEVNULL_TARGET:
-            return LatestSymlinkState(exists=True, raw_target=target)
-        else:
-            resolved = f"{endpoint_path}/{target}"
-            target_valid = check_directory_exists(volume, resolved, resolved_endpoints)
-            name = target.rsplit("/", 1)[-1] if "/" in target else target
+    match raw_target:
+        case None:
+            return LatestSymlinkState(exists=False)
+        case target if target == DEVNULL_TARGET:
+            return LatestSymlinkState(exists=True, raw_target=DEVNULL_TARGET)
+        case target:
+            snapshot = (
+                _parse_snapshot(target)
+                if check_directory_exists(
+                    volume, f"{endpoint_path}/{target}", resolved_endpoints
+                )
+                else None
+            )
+            # An existing directory whose name is not a snapshot timestamp
+            # (``latest -> snapshots/foo``) is as invalid as a missing one.
             return LatestSymlinkState(
                 exists=True,
                 raw_target=target,
-                target_valid=target_valid,
-                snapshot=(Snapshot.from_name(name) if target_valid else None),
+                target_valid=snapshot is not None,
+                snapshot=snapshot,
             )
+
+
+def _parse_snapshot(target: str) -> Snapshot | None:
+    """The snapshot *target* names, or ``None`` when it is not a snapshot name."""
+    try:
+        return Snapshot.from_path(target)
+    except ValueError:
+        return None

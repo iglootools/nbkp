@@ -7,61 +7,36 @@ from contextlib import contextmanager
 
 from rich.console import Console
 
-from ....clihelpers import (
-    OutputFormat,
-    Severity,
-    Strictness,
-    classify_severity,
-)
+from ....clihelpers import OutputFormat, Strictness
 from ....config import Config
 from ....config.epresolution import ResolvedEndpoints
-from ....credentials import (
-    PassphrasePrefetch,
-    build_passphrase_fn,
-    prefetch_count,
-)
+from ....credentials import build_passphrase_fn
 from ...context import managed_mount as _disks_managed_mount
-from ...lifecycle import MountFailureReason, MountResult, UmountResult, mount_count
 from ...observation import MountObservation
-from ...output import build_mount_status_table, display_name
-from .progress import (
-    DisksProgressBar,
-    format_credential_result,
-    format_mount_result,
-    format_umount_result,
+from ...output import build_mount_status_table
+from .lifecycle_progress import (
+    LifecycleProgress,
+    mount_result_severity,
 )
 
-# Mount failure reasons that correspond to "expected inactive" preflight
-# states (e.g. drive not plugged in maps to VolumeError.DEVICE_NOT_PRESENT
-# in INACTIVE_VOLUME_ERRORS; UNREACHABLE maps to SshEndpointError.UNREACHABLE
-# in INACTIVE_SSH_ERRORS).
-_INACTIVE_MOUNT_REASONS: frozenset[MountFailureReason] = frozenset(
-    {
-        MountFailureReason.DEVICE_NOT_PRESENT,
-        MountFailureReason.UNREACHABLE,
-    }
-)
+# ``mount_result_severity`` moved to ``lifecycle_progress``; re-exported for
+# existing importers.
+__all__ = ["managed_mount", "mount_result_severity"]
 
 
-def mount_result_severity(
-    result: MountResult,
-    strictness: Strictness = Strictness.IGNORE_INACTIVE,
-) -> Severity:
-    """Map a mount lifecycle result to display severity under *strictness*.
-
-    A drive not being plugged in is an expected condition (the user
-    backs up to removable media), so under the default
-    ``IGNORE_INACTIVE`` it renders as a warning.  Under ``IGNORE_NONE``
-    every mount failure is fatal, so it renders as an error to stay
-    consistent with the preflight abort that will follow.  Under
-    ``IGNORE_ALL`` every mount failure is non-fatal and renders as a
-    warning.
-    """
-    if result.success:
-        return Severity.OK
-    return classify_severity(
-        result.failure_reason in _INACTIVE_MOUNT_REASONS,
-        strictness,
+def _print_mount_status(
+    progress: LifecycleProgress,
+    mount_observations: dict[str, MountObservation],
+) -> None:
+    """Print the post-mount status table (human output only)."""
+    Console().print(
+        build_mount_status_table(
+            [
+                (progress.display_names.get(slug, slug), obs)
+                for slug, obs in mount_observations.items()
+            ],
+            strictness=progress.strictness,
+        )
     )
 
 
@@ -108,80 +83,10 @@ def managed_mount(
     passphrase_fn, cache = build_passphrase_fn(
         cfg.credential_provider, cfg.credential_command
     )
-
     use_progress = output_format is OutputFormat.HUMAN
-    total = mount_count(cfg)
-    credentials_total = prefetch_count(cfg)
-    display_names = {
-        slug: display_name(vol)
-        for slug, vol in cfg.volumes.items()
-        if vol.mount is not None
-    }
-
-    credential_bar = (
-        DisksProgressBar(
-            credentials_total, "Loading credential", format_credential_result
-        )
-        if use_progress and credentials_total > 0
-        else None
+    progress = LifecycleProgress.create(
+        cfg, enabled=use_progress, strictness=strictness
     )
-    mount_bar = (
-        DisksProgressBar(total, "Mounting", format_mount_result)
-        if use_progress
-        else None
-    )
-    umount_bar = (
-        DisksProgressBar(total, "Umounting", format_umount_result)
-        if use_progress
-        else None
-    )
-
-    def on_prefetch_start(passphrase_id: str) -> None:
-        if credential_bar is not None:
-            credential_bar.on_start(passphrase_id)
-
-    def on_prefetch_end(passphrase_id: str, result: PassphrasePrefetch) -> None:
-        if credential_bar is not None:
-            credential_bar.on_end(
-                passphrase_id,
-                # A passphrase that cannot be retrieved is only a problem for
-                # a drive that is actually plugged in, and the mount step
-                # reports that.  Prefetch failures are therefore warnings
-                # regardless of strictness.
-                Severity.OK if result.success else Severity.WARNING,
-                result.detail,
-            )
-
-    def on_mount_start(slug: str) -> None:
-        # Rich permits only one live display at a time, and the prefetch
-        # phase has no completion callback of its own — the first mount is
-        # the signal that it is over.  ``stop`` is idempotent.
-        if credential_bar is not None:
-            credential_bar.stop()
-        if mount_bar is not None:
-            mount_bar.on_start(display_names.get(slug, slug))
-
-    def on_mount_end(slug: str, result: MountResult) -> None:
-        if mount_bar is not None:
-            mount_bar.on_end(
-                display_names.get(slug, slug),
-                mount_result_severity(result, strictness),
-                result.detail,
-            )
-
-    def on_umount_start(slug: str) -> None:
-        if umount_bar is not None:
-            umount_bar.on_start(display_names.get(slug, slug))
-
-    def on_umount_end(slug: str, result: UmountResult) -> None:
-        if umount_bar is not None:
-            umount_bar.on_end(
-                display_names.get(slug, slug),
-                Severity.OK if result.success else Severity.ERROR,
-                result.detail,
-                result.warning,
-            )
-
     # try/finally instead of `with` because the bars are conditionally
     # created (None when output is JSON), and cache.clear() must also run.
     try:
@@ -191,30 +96,18 @@ def managed_mount(
             passphrase_fn,
             mount=mount,
             umount=umount,
-            on_prefetch_start=on_prefetch_start,
-            on_prefetch_end=on_prefetch_end,
-            on_mount_start=on_mount_start,
-            on_mount_end=on_mount_end,
-            on_umount_start=on_umount_start,
-            on_umount_end=on_umount_end,
+            on_prefetch_start=progress.on_prefetch_start,
+            on_prefetch_end=progress.on_prefetch_end,
+            on_mount_start=progress.on_mount_start,
+            on_mount_end=progress.on_mount_end,
+            on_umount_start=progress.on_umount_start,
+            on_umount_end=progress.on_umount_end,
         ) as result:
-            if credential_bar is not None:
-                credential_bar.stop()
-            if mount_bar is not None:
-                mount_bar.stop()
+            progress.stop_mounting()
             _resolved_config, mount_observations = result
             if use_progress and mount_observations:
-                display_statuses = [
-                    (display_names.get(slug, slug), obs)
-                    for slug, obs in mount_observations.items()
-                ]
-                Console().print(build_mount_status_table(display_statuses))
+                _print_mount_status(progress, mount_observations)
             yield result
     finally:
-        if credential_bar is not None:
-            credential_bar.stop()
-        if mount_bar is not None:
-            mount_bar.stop()
-        if umount_bar is not None:
-            umount_bar.stop()
+        progress.stop_all()
         cache.clear()

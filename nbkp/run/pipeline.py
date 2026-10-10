@@ -11,7 +11,6 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import cast
 
 from ..clihelpers import Severity
 from ..config import Config
@@ -79,23 +78,6 @@ def sync_failed(result: SyncResult, strictness: Strictness) -> bool:
     return result_severity(result, strictness) is Severity.ERROR
 
 
-def _adapt_check_end(
-    on_check_end: Callable[[str, Sequence[PreflightError]], None] | None,
-) -> Callable[[str, Sequence[object]], None] | None:
-    """Narrow the checks layer's loosely typed callback.
-
-    ``check_all_syncs`` reports each check's errors as ``Sequence[object]``,
-    though they are always preflight error enums; the cast confines that
-    looseness here instead of leaking it to every caller.
-    """
-    if on_check_end is None:
-        return None
-    else:
-        return lambda label, errors: on_check_end(
-            label, cast(Sequence[PreflightError], errors)
-        )
-
-
 def check_and_run(
     config: Config,
     *,
@@ -134,7 +116,7 @@ def check_and_run(
     preflight = check_all_syncs(
         config,
         on_check_start=on_check_start,
-        on_check_end=_adapt_check_end(on_check_end),
+        on_check_end=on_check_end,
         only_syncs=only_syncs,
         resolved_endpoints=resolved_endpoints,
         dry_run=dry_run,

@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from unittest.mock import patch
 
+import pytest
+
 from nbkp.config import (
     Config,
     LocalVolume,
@@ -130,3 +132,54 @@ class TestPassphrasePrefetch:
         ):
             assert resolved_config is not None
             assert set(observations) == {"online", "offline"}
+
+
+class TestUmountOnInterruption:
+    """Regression: an interruption during mounting left drives unlocked."""
+
+    def _interrupted(self, interrupt: BaseException) -> list[str]:
+        umounted: list[str] = []
+
+        def on_mount_end(slug: str, _result: object) -> None:
+            raise interrupt
+
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch(
+                "nbkp.disks.lifecycle.discover_cleartext_device",
+                return_value="/dev/mapper/luks-online",
+            ),
+            patch("nbkp.disks.lifecycle.find_mountpoint", return_value="/mnt/online"),
+            patch("nbkp.disks.lifecycle.run_on_volume"),
+            patch(
+                "nbkp.disks.context.umount_volumes",
+                side_effect=lambda *_a, **_k: umounted.append("umount") or [],
+            ),
+            pytest.raises(type(interrupt)),
+            managed_mount(_config(), {}, _recorder([]), on_mount_end=on_mount_end),
+        ):
+            pass
+        return umounted
+
+    def test_ctrl_c_during_mount_still_umounts(self) -> None:
+        assert self._interrupted(KeyboardInterrupt()) == ["umount"]
+
+    def test_callback_exception_during_mount_still_umounts(self) -> None:
+        assert self._interrupted(RuntimeError("display crashed")) == ["umount"]
+
+    def test_umount_false_is_respected_even_on_interruption(self) -> None:
+        umounted: list[str] = []
+        with (
+            patch(
+                "nbkp.disks.context.prefetch_passphrases",
+                side_effect=KeyboardInterrupt(),
+            ),
+            patch(
+                "nbkp.disks.context.umount_volumes",
+                side_effect=lambda *_a, **_k: umounted.append("umount") or [],
+            ),
+            pytest.raises(KeyboardInterrupt),
+            managed_mount(_config(), {}, _recorder([]), umount=False),
+        ):
+            pass
+        assert umounted == []
