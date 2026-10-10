@@ -185,6 +185,7 @@ $ nbkp disks mount [OPTIONS]
 * `-l, --location <str>`: Prefer endpoints at these locations
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
+* `--dry-run`: Report what would be unlocked and mounted without changing anything (no passphrase retrieval, no udisksctl unlock/mount). Long form only: -n is --name here.
 * `--help`: Show this message and exit.
 
 ### `nbkp disks umount`
@@ -205,6 +206,7 @@ $ nbkp disks umount [OPTIONS]
 * `-l, --location <str>`: Prefer endpoints at these locations
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
+* `--dry-run`: Report what would be unmounted and locked without changing anything (no udisksctl unmount/lock). Long form only: -n is --name here.
 * `--help`: Show this message and exit.
 
 ### `nbkp disks status`
@@ -240,7 +242,8 @@ $ nbkp disks setup-auth [OPTIONS]
 **Options**:
 
 * `-c, --config <file>`: Path to config file
-* `-u, --user <str>`: System user for auth rules  [default: ubuntu]
+* `-u, --user <str>`: System user the rule authorizes: the user nbkp runs as on the host (the SSH user for remote volumes). Defaults to the current user.
+* `-o, --output <human|json>`: Output format  [default: human]
 * `--help`: Show this message and exit.
 
 ## `nbkp ordering`
@@ -332,6 +335,8 @@ $ nbkp preflight troubleshoot [OPTIONS]
 **Options**:
 
 * `-c, --config <file>`: Path to config file
+* `-o, --output <human|json>`: Output format  [default: human]
+* `-S, --strictness <ignore-none|ignore-inactive|ignore-all>`: Which problems make the command exit non-zero: ignore-none (any), ignore-inactive (all but expected-inactive, default), ignore-all (none)  [default: ignore-inactive]
 * `-l, --location <str>`: Prefer endpoints at these locations
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
@@ -456,4 +461,5 @@ $ nbkp demo seed [OPTIONS]
 * `--bandwidth-limit <int>`: Rsync bandwidth limit in KiB/s (e.g. 100 for ~100 KiB/s). Set to 0 to disable.  [default: 250]
 * `--credential-provider <keyring|prompt|env|command>`: How LUKS passphrases are retrieved at runtime. Only relevant when --luks is enabled.  [default: keyring]
 * `--base-dir <directory>`: Use a fixed directory instead of a random temp folder. Created if it does not exist.
+* `-n, --dry-run`: List the steps without creating directories or containers.
 * `--help`: Show this message and exit.

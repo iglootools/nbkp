@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import shlex
 import tempfile
 from pathlib import Path
 from textwrap import dedent
@@ -36,7 +37,7 @@ try:
 except ImportError:
     _HAS_DOCKER = False
 from . import app, console as _console
-from .cmd_handler.seed import SeedError, SeedResult, seed_demo
+from .cmd_handler.seed import SeedError, SeedResult, seed_demo, seed_plan
 
 
 def _luks_setup_instructions(provider: CredentialProvider) -> list[str]:
@@ -144,24 +145,23 @@ def seed(
             resolve_path=True,
         ),
     ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            "-n",
+            help="List the steps without creating directories or containers.",
+        ),
+    ] = False,
 ) -> None:
     """Create a temp folder with config and test data."""
+    if dry_run:
+        _print_plan(seed_plan(base_dir, docker=docker, luks=luks))
+        return
     if docker:
-        _require_docker_extra()
-        check_docker()
-        if not DOCKER_DIR.is_dir():  # type: ignore[possibly-undefined]
-            typer.echo(
-                f"Error: Docker directory not found: {DOCKER_DIR}",
-                err=True,
-            )
-            raise typer.Exit(1)
+        _check_docker_prerequisites()
 
-    if base_dir is not None:
-        tmp = base_dir
-        tmp.mkdir(parents=True, exist_ok=True)
-    else:
-        tmp = Path(tempfile.mkdtemp(prefix="nbkp-demo-"))
-
+    tmp = _seed_dir(base_dir)
     with StepProgressBar(_step_count(docker, luks)) as bar:
         try:
             result = seed_demo(
@@ -179,6 +179,29 @@ def seed(
             raise typer.Exit(1)
 
     _print_summary(result, docker, credential_provider)
+
+
+def _check_docker_prerequisites() -> None:
+    _require_docker_extra()
+    check_docker()
+    if not DOCKER_DIR.is_dir():  # type: ignore[possibly-undefined]
+        typer.echo(f"Error: Docker directory not found: {DOCKER_DIR}", err=True)
+        raise typer.Exit(1)
+
+
+def _seed_dir(base_dir: Path | None) -> Path:
+    """The fixed *base_dir* (created if missing) or a fresh temp directory."""
+    if base_dir is not None:
+        base_dir.mkdir(parents=True, exist_ok=True)
+        return base_dir
+    else:
+        return Path(tempfile.mkdtemp(prefix="nbkp-demo-"))
+
+
+def _print_plan(steps: list[str]) -> None:
+    _console.print(Text("Dry run — nothing created. Seed would:", style="bold"))
+    for step in steps:
+        _console.print(Text(f"  - {step}"), highlight=False)
 
 
 def _print_summary(
@@ -200,12 +223,9 @@ def _print_summary(
         ),
     ]
     label_w = max(len(r[0]) for r in rows)
-    summary = Text()
-    for i, (label, value) in enumerate(rows):
-        if i > 0:
-            summary.append("\n")
-        summary.append(f"{label:<{label_w}}  ", style="bold")
-        summary.append(value)
+    summary = Text("\n").join(
+        Text.assemble((f"{label:<{label_w}}  ", "bold"), value) for label, value in rows
+    )
     _console.print(Panel(summary, border_style="blue", padding=(0, 1)))
 
     has_luks = any(
@@ -215,6 +235,93 @@ def _print_summary(
     _print_commands(result, docker, has_luks, credential_provider)
 
 
+_SUGGESTED_COMMANDS = dedent("""\
+    # Show parsed configuration
+    nbkp config show --config "$CFG"
+
+    # Show configuration as JSON
+    nbkp config show --config "$CFG" --output json
+
+    # Disk and sync health checks
+    nbkp preflight check --config "$CFG"
+
+    # Preview what rsync would do without changes
+    nbkp run --config "$CFG" --dry-run
+
+    # Execute backup syncs
+    nbkp run --config "$CFG"
+
+    # Show snapshot details
+    nbkp snapshots show --config "$CFG"
+
+    # Prune old btrfs snapshots
+    nbkp snapshots prune --config "$CFG"
+
+    # Mount the disks (the standalone bash script does not handle disk management)
+    nbkp disks mount --config "$CFG"
+
+    # Show the status of the disks
+    nbkp disks status --config "$CFG"
+
+    # Generate standalone bash script to stdout
+    nbkp sh --config "$CFG"
+
+    # Write script to file, validate, and run
+    nbkp sh --config "$CFG" -o "$SH" \\
+      && bash -n "$SH" \\
+      && "$SH" --dry-run \\
+      && "$SH"
+
+    # With relative paths (src and dst)
+    nbkp sh --config "$CFG" -o "$SH" --relative-src --relative-dst \\
+      && bash -n "$SH" \\
+      && "$SH" --dry-run \\
+      && "$SH"
+
+    # Unmount the disks
+    nbkp disks umount --config "$CFG\"""")
+
+
+def _docker_teardown() -> str:
+    return dedent(f"""\
+        # Teardown containers and network
+        docker rm -f {STORAGE_CONTAINER_NAME} {BASTION_CONTAINER_NAME}
+        docker network rm nbkp-demo-net""")
+
+
+def commands_script(
+    result: SeedResult,
+    docker: bool,
+    has_luks: bool,
+    credential_provider: CredentialProvider,
+) -> str:
+    """The suggested shell session, assembled from dedented blocks.
+
+    Blocks are joined *after* dedenting — splicing multi-line text into a
+    dedent template would need the template's indent hardcoded — and the
+    paths are shell-quoted, with every use of ``$CFG`` / ``$SH`` in quotes.
+    """
+    variables = "\n".join(
+        [
+            f"CFG={shlex.quote(str(result.config_path))}",
+            f"SH={shlex.quote(str(result.base_dir / 'backup.sh'))}",
+        ]
+    )
+    luks_setup = "\n".join(
+        _luks_setup_instructions(credential_provider)
+        if has_luks
+        else ["# No LUKS passphrase needed for this config"]
+    )
+    return "\n\n".join(
+        [
+            variables,
+            luks_setup,
+            _SUGGESTED_COMMANDS,
+            *([_docker_teardown()] if docker else []),
+        ]
+    )
+
+
 def _print_commands(
     result: SeedResult,
     docker: bool,
@@ -222,79 +329,10 @@ def _print_commands(
     credential_provider: CredentialProvider,
 ) -> None:
     """Print the suggested commands panel."""
-    backup_sh = result.base_dir / "backup.sh"
-
-    docker_teardown = (
-        dedent(f"""
-
-            # Teardown containers and network
-            docker rm -f {STORAGE_CONTAINER_NAME} {BASTION_CONTAINER_NAME}
-            docker network rm nbkp-demo-net""")
-        if docker
-        else ""
-    )
-    luks_setup_lines = (
-        _luks_setup_instructions(credential_provider)
-        if has_luks
-        else ["# No LUKS passphrase needed for this config"]
-    )
-    # 8-space indent matches the dedent() block below
-    luks_setup_line = ("\n" + " " * 8).join(luks_setup_lines)
-    commands = (
-        dedent(f"""\
-        CFG="{result.config_path}"
-        SH="{backup_sh}"
-        {luks_setup_line}
-        # Show parsed configuration
-        nbkp config show --config $CFG
-
-        # Show configuration as JSON
-        nbkp config show --config $CFG --output json
-
-        # Disk and sync health checks
-        nbkp preflight check --config $CFG
-
-        # Preview what rsync would do without changes
-        nbkp run --config $CFG --dry-run
-
-        # Execute backup syncs
-        nbkp run --config $CFG
-
-        # Show snapshot details
-        nbkp snapshots show --config $CFG
-
-        # Prune old btrfs snapshots
-        nbkp snapshots prune --config $CFG
-
-        # Mount the disks (the standalone bash script does not handle disk management)
-        nbkp disks mount --config $CFG
-
-        # Show the status of the disks
-        nbkp disks status --config $CFG
-
-        # Generate standalone bash script to stdout
-        nbkp sh --config $CFG
-
-        # Write script to file, validate, and run
-        nbkp sh --config $CFG -o $SH \\
-          && bash -n $SH \\
-          && $SH --dry-run \\
-          && $SH
-
-        # With relative paths (src and dst)
-        nbkp sh --config $CFG -o $SH --relative-src --relative-dst \\
-          && bash -n $SH \\
-          && $SH --dry-run \\
-          && $SH
-
-        # Unmount the disks
-        nbkp disks umount --config $CFG""")
-        + docker_teardown
-    )
     _console.print(
         Panel(
             Syntax(
-                commands,
+                commands_script(result, docker, has_luks, credential_provider),
                 "bash",
                 theme="monokai",
                 background_color="default",
