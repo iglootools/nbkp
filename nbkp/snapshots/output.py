@@ -6,7 +6,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from .models import PruneResult, ShowResult
+from .models import PruneResult, ShowResult, SnapshotSkipReason
 
 
 def retention_display(max_snapshots: int | None) -> str:
@@ -22,14 +22,19 @@ def retention_display(max_snapshots: int | None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _prune_status_text(r: PruneResult) -> Text:
-    """Map a prune result to a styled Rich Text label."""
-    if r.skipped:
-        return Text(f"SKIPPED ({r.detail})", style="dim")
-    elif r.detail:
-        return Text("FAILED", style="red")
-    else:
-        return Text("OK", style="green")
+def _status_text(skip_reason: SnapshotSkipReason | None, error: str | None) -> Text:
+    """Map a result's skip reason / error to a styled Rich Text label.
+
+    Text, not markup: the error carries remote stderr, which may contain
+    square brackets.
+    """
+    match (skip_reason, error):
+        case (_, str() as message):
+            return Text(f"FAILED ({message})", style="red")
+        case (SnapshotSkipReason() as reason, None):
+            return Text(f"SKIPPED ({reason.value})", style="dim")
+        case _:
+            return Text("OK", style="green")
 
 
 def print_human_prune_results(
@@ -51,7 +56,7 @@ def print_human_prune_results(
     table.add_column("Status")
 
     for r in results:
-        status = _prune_status_text(r)
+        status = _status_text(r.skip_reason, r.error)
         table.add_row(
             r.sync_slug,
             str(len(r.deleted)),
@@ -67,14 +72,21 @@ def print_human_prune_results(
 # ---------------------------------------------------------------------------
 
 
-def _show_status_text(r: ShowResult) -> Text:
-    """Map a show result to a styled Rich Text label."""
-    if r.skipped:
-        return Text(f"SKIPPED ({r.detail})", style="dim")
-    elif r.detail:
-        return Text("FAILED", style="red")
-    else:
-        return Text("OK", style="green")
+def _show_row(r: ShowResult) -> tuple[str, str, str, str, str, Text]:
+    """Table cells for one show result; ``--`` when snapshots are off."""
+    status = _status_text(r.skip_reason, r.error)
+    match r.snapshot_mode:
+        case "none":
+            return (r.sync_slug, "--", "--", "--", "--", status)
+        case mode:
+            return (
+                r.sync_slug,
+                mode,
+                str(len(r.snapshots)),
+                r.latest.name if r.latest else "--",
+                retention_display(r.max_snapshots),
+                status,
+            )
 
 
 def print_human_show_results(
@@ -94,18 +106,6 @@ def print_human_show_results(
     table.add_column("Status")
 
     for r in results:
-        status = _show_status_text(r)
-        if r.skipped and r.snapshot_mode == "none":
-            mode = "--"
-            count = "--"
-            latest = "--"
-            retention = "--"
-        else:
-            mode = r.snapshot_mode
-            count = str(len(r.snapshots))
-            latest = r.latest.name if r.latest else "--"
-            retention = retention_display(r.max_snapshots)
-
-        table.add_row(r.sync_slug, mode, count, latest, retention, status)
+        table.add_row(*_show_row(r))
 
     c.print(table)

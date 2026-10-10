@@ -2,124 +2,134 @@
 
 from __future__ import annotations
 
-from ....config import Config
+from collections.abc import Callable
+
+from ....clihelpers import Strictness
+from ....config import Config, SyncConfig
 from ....config.epresolution import ResolvedEndpoints
+from ....config.protocol.sync_endpoint import SyncEndpoint
 from ....preflight import SyncStatus
 from ...btrfs import prune_snapshots as btrfs_prune_snapshots
 from ...common import list_snapshots
+from ...errors import SnapshotOperationError
 from ...hardlinks import prune_snapshots as hl_prune_snapshots
-from ...models import PruneResult
+from ...models import PruneResult, SnapshotSkipReason
+from .common import max_snapshots, preflight_disposition
+
+type _PruneFn = Callable[..., list[str]]
 
 
-def _skip_reason(
-    slug: str,
-    status: SyncStatus,
-    config: Config,
-    only_syncs: list[str] | None = None,
-) -> str | None:
-    """Return skip reason, or None if prunable."""
-    if only_syncs and slug not in only_syncs:
-        return None  # filtered out by --sync, omit entirely
-    if not status.active:
-        return "inactive"
-    dst_ep = config.destination_endpoint(status.config)
-    match dst_ep.snapshot_mode:
-        case "btrfs" | "hard-link":
-            snap_cfg = (
-                dst_ep.btrfs_snapshots
-                if dst_ep.snapshot_mode == "btrfs"
-                else dst_ep.hard_link_snapshots
-            )
-            return "no max-snapshots limit" if snap_cfg.max_snapshots is None else None
+def _config_skip_reason(dst_ep: SyncEndpoint) -> SnapshotSkipReason | None:
+    """Skip reason that follows from the config alone, before preflight."""
+    match (dst_ep.snapshot_mode, max_snapshots(dst_ep)):
+        case ("none", _):
+            return SnapshotSkipReason.NO_SNAPSHOTS
+        case (_, None):
+            return SnapshotSkipReason.NO_MAX_SNAPSHOTS
         case _:
-            return "no snapshots configured"
+            return None
 
 
-def _existing_snapshot_count(
-    status: SyncStatus,
-    config: Config,
-    re: ResolvedEndpoints,
-) -> int:
-    """Count existing snapshots for a skipped sync, returning 0 on failure."""
-    if (
-        status.active
-        and config.destination_endpoint(status.config).snapshot_mode != "none"
-    ):
-        try:
-            return len(list_snapshots(status.config, config, re))
-        except RuntimeError:
-            return 0
-    else:
-        return 0
+def _prune_backend(dst_ep: SyncEndpoint) -> _PruneFn | None:
+    match dst_ep.snapshot_mode:
+        case "btrfs":
+            return btrfs_prune_snapshots
+        case "hard-link":
+            return hl_prune_snapshots
+        case _:
+            return None
 
 
-def _run_prune(
+def _count_snapshots(
+    sync: SyncConfig, config: Config, re: ResolvedEndpoints
+) -> tuple[int, str | None]:
+    """``(count, None)``, or ``(0, error)`` when the listing fails."""
+    try:
+        return (len(list_snapshots(sync, config, re)), None)
+    except SnapshotOperationError as e:
+        return (0, str(e))
+
+
+def _skipped(
+    slug: str,
     status: SyncStatus,
     config: Config,
     re: ResolvedEndpoints,
     dry_run: bool,
-) -> list[str]:
-    """Execute the appropriate prune backend, returning deleted paths."""
-    dst_ep = config.destination_endpoint(status.config)
-    match dst_ep.snapshot_mode:
-        case "btrfs":
-            assert dst_ep.btrfs_snapshots.max_snapshots is not None
-            return btrfs_prune_snapshots(
-                status.config,
-                config,
-                dst_ep.btrfs_snapshots.max_snapshots,
-                dry_run=dry_run,
-                resolved_endpoints=re,
-            )
-        case "hard-link":
-            assert dst_ep.hard_link_snapshots.max_snapshots is not None
-            return hl_prune_snapshots(
-                status.config,
-                config,
-                dst_ep.hard_link_snapshots.max_snapshots,
-                dry_run=dry_run,
-                resolved_endpoints=re,
-            )
-        case _:
-            return []
+    skip_reason: SnapshotSkipReason | None,
+    error: str | None,
+) -> PruneResult:
+    """A result for a sync that is not pruned.
+
+    For an active snapshot destination (e.g. no ``max-snapshots``), the
+    existing snapshots are still counted; a failure to list them is
+    reported as the result's error rather than as zero snapshots.
+    """
+    countable = (
+        status.active
+        and error is None
+        and config.destination_endpoint(status.config).snapshot_mode != "none"
+    )
+    kept, count_error = (
+        _count_snapshots(status.config, config, re) if countable else (0, None)
+    )
+    return PruneResult(
+        sync_slug=slug,
+        deleted=(),
+        kept=kept,
+        dry_run=dry_run,
+        skip_reason=skip_reason,
+        error=error or count_error,
+    )
+
+
+def _execute_prune(
+    slug: str,
+    sync: SyncConfig,
+    prune_fn: _PruneFn,
+    limit: int,
+    config: Config,
+    re: ResolvedEndpoints,
+    dry_run: bool,
+) -> PruneResult:
+    try:
+        deleted = prune_fn(sync, config, limit, dry_run=dry_run, resolved_endpoints=re)
+        remaining = list_snapshots(sync, config, re)
+        return PruneResult(
+            sync_slug=slug,
+            deleted=tuple(deleted),
+            kept=len(remaining) + (len(deleted) if dry_run else 0),
+            dry_run=dry_run,
+        )
+    except SnapshotOperationError as e:
+        return PruneResult(
+            sync_slug=slug, deleted=(), kept=0, dry_run=dry_run, error=str(e)
+        )
 
 
 def _process_candidate(
     slug: str,
     status: SyncStatus,
-    skip: str | None,
     config: Config,
     re: ResolvedEndpoints,
     dry_run: bool,
+    strictness: Strictness,
 ) -> PruneResult:
     """Process a single prune candidate into a PruneResult."""
-    if skip is not None:
-        return PruneResult(
-            sync_slug=slug,
-            deleted=[],
-            kept=_existing_snapshot_count(status, config, re),
-            dry_run=dry_run,
-            detail=skip,
-            skipped=True,
-        )
-    else:
-        try:
-            deleted = _run_prune(status, config, re, dry_run)
-            remaining = list_snapshots(status.config, config, re)
-            return PruneResult(
-                sync_slug=slug,
-                deleted=deleted,
-                kept=(len(remaining) + (len(deleted) if dry_run else 0)),
-                dry_run=dry_run,
+    dst_ep = config.destination_endpoint(status.config)
+    config_skip = _config_skip_reason(dst_ep)
+    skip_reason, error = (
+        (config_skip, None)
+        if config_skip is not None
+        else preflight_disposition(status, strictness)
+    )
+    match (skip_reason, error, _prune_backend(dst_ep), max_snapshots(dst_ep)):
+        case (None, None, prune_fn, int() as limit) if prune_fn is not None:
+            return _execute_prune(
+                slug, status.config, prune_fn, limit, config, re, dry_run
             )
-        except RuntimeError as e:
-            return PruneResult(
-                sync_slug=slug,
-                deleted=[],
-                kept=0,
-                dry_run=dry_run,
-                detail=str(e),
-            )
+        case _:
+            return _skipped(slug, status, config, re, dry_run, skip_reason, error)
 
 
 def prune_all_syncs(
@@ -128,6 +138,7 @@ def prune_all_syncs(
     dry_run: bool = False,
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> list[PruneResult]:
     """Prune old snapshots for all eligible syncs.
 
@@ -135,8 +146,7 @@ def prune_all_syncs(
     """
     re = resolved_endpoints or {}
     return [
-        _process_candidate(slug, status, skip, config, re, dry_run)
+        _process_candidate(slug, status, config, re, dry_run, strictness)
         for slug, status in sync_statuses.items()
-        if not (only_syncs and slug not in only_syncs)
-        for skip in [_skip_reason(slug, status, config, only_syncs)]
+        if not only_syncs or slug in only_syncs
     ]

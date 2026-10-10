@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -76,7 +77,9 @@ def _do_sync(
     Returns (sync, config, snapshot_name).
     """
     sync, config = _make_config(str(src), str(dst), max_snapshots)
-    snapshot_path = create_snapshot_dir(sync, config, now=now)
+    snapshot_path = create_snapshot_dir(
+        sync, config, now=now or datetime.now(UTC), platform=sys.platform
+    )
     snapshot = Snapshot.from_path(snapshot_path)
 
     result = run_rsync(
@@ -99,7 +102,9 @@ class TestCreateSnapshotDir:
         (src / "data.txt").write_text("hello")
 
         sync, config = _make_config(str(src), str(dst))
-        snapshot_path = create_snapshot_dir(sync, config)
+        snapshot_path = create_snapshot_dir(
+            sync, config, now=datetime.now(UTC), platform=sys.platform
+        )
 
         assert Path(snapshot_path).is_dir()
         assert "/snapshots/" in snapshot_path
@@ -111,7 +116,9 @@ class TestCreateSnapshotDir:
         dst.mkdir()
 
         sync, config = _make_config(str(src), str(dst))
-        snapshot_path = create_snapshot_dir(sync, config)
+        snapshot_path = create_snapshot_dir(
+            sync, config, now=datetime.now(UTC), platform=sys.platform
+        )
 
         snapshots_dir = Path(snapshot_path).parent
         assert snapshots_dir.name == "snapshots"
@@ -131,7 +138,7 @@ class TestCleanupOrphanedSnapshots:
         # Create an orphaned snapshot (newer than latest)
         dst_vol = config.volumes["dst"]
         orphan_snapshot = create_snapshot_timestamp(
-            datetime(9999, 1, 1, tzinfo=UTC), dst_vol
+            datetime(9999, 1, 1, tzinfo=UTC), dst_vol, sys.platform
         )
         orphan = Path(str(dst)) / "snapshots" / orphan_snapshot.name
         orphan.mkdir(parents=True)
@@ -175,7 +182,9 @@ class TestDeleteSnapshot:
         dst.mkdir()
 
         dst_vol = LocalVolume(slug="dst", path=str(dst))
-        snap = create_snapshot_timestamp(datetime(2024, 1, 1, tzinfo=UTC), dst_vol)
+        snap = create_snapshot_timestamp(
+            datetime(2024, 1, 1, tzinfo=UTC), dst_vol, sys.platform
+        )
         snap_dir = dst / "snapshots" / snap.name
         snap_dir.mkdir(parents=True)
         (snap_dir / "file.txt").write_text("delete me")
@@ -293,7 +302,7 @@ class TestHardLinkIncremental:
 
         # First sync
         now1 = datetime(2024, 1, 1, tzinfo=UTC)
-        snap1_path = create_snapshot_dir(sync, config, now=now1)
+        snap1_path = create_snapshot_dir(sync, config, now=now1, platform=sys.platform)
         snap1 = Snapshot.from_path(snap1_path)
         result = run_rsync(
             sync,
@@ -308,7 +317,7 @@ class TestHardLinkIncremental:
 
         # Second sync with --link-dest
         now2 = datetime(2024, 1, 2, tzinfo=UTC)
-        snap2_path = create_snapshot_dir(sync, config, now=now2)
+        snap2_path = create_snapshot_dir(sync, config, now=now2, platform=sys.platform)
         snap2 = Snapshot.from_path(snap2_path)
         result = run_rsync(
             sync,

@@ -9,7 +9,6 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from ..clihelpers import Severity, Strictness, classify_severity
 from ..config import (
     Config,
     LocalVolume,
@@ -74,6 +73,23 @@ def _snapshot_preview_commands(
             return None
 
 
+def _preview_rsync_target(
+    ss: SyncStatus, config: Config
+) -> tuple[str | None, str | None]:
+    """``(dest_suffix, link_dest)`` that ``run`` would pass to rsync."""
+    match config.destination_endpoint(ss.config).snapshot_mode:
+        case "btrfs":
+            return (STAGING_DIR, None)
+        case "hard-link":
+            latest = ss.destination_latest_snapshot
+            return (
+                f"{SNAPSHOTS_DIR}/<timestamp>",
+                f"../{latest.name}" if latest else None,
+            )
+        case _:
+            return (None, None)
+
+
 def _build_rsync_commands_section(
     sync_statuses: dict[str, SyncStatus],
     config: Config,
@@ -88,16 +104,7 @@ def _build_rsync_commands_section(
     table.add_column("Command")
 
     for ss in active_syncs:
-        dst_ep = config.destination_endpoint(ss.config)
-        dest_suffix: str | None = None
-        link_dest: str | None = None
-        match dst_ep.snapshot_mode:
-            case "btrfs":
-                dest_suffix = STAGING_DIR
-            case "hard-link":
-                dest_suffix = f"{SNAPSHOTS_DIR}/<timestamp>"
-                if ss.destination_latest_snapshot:
-                    link_dest = f"../{ss.destination_latest_snapshot.name}"
+        dest_suffix, link_dest = _preview_rsync_target(ss, config)
         cmd = build_rsync_command(
             ss.config,
             config,
@@ -214,36 +221,28 @@ def _outcome_text(outcome: SyncOutcome) -> Text:
             return Text("FAILED", style="red")
 
 
-def outcome_severity(
-    outcome: SyncOutcome,
-    strictness: Strictness = Strictness.IGNORE_INACTIVE,
-) -> Severity:
-    """Map a sync outcome to a display severity under *strictness*.
-
-    SKIPPED and CANCELLED reflect preflight-driven non-actions and are
-    classified by *strictness*: warning under ``IGNORE_INACTIVE`` /
-    ``IGNORE_ALL``, error under ``IGNORE_NONE`` (which would normally
-    abort before reaching the runner, so this branch is defensive).
-    FAILED is a runtime failure and is always an error.
-
-    CANCELLED is a known oversimplification: ``failed`` (the runner's
-    cascade trigger set) is populated by both ``FAILED`` upstreams and
-    ``SKIPPED`` upstreams, so CANCELLED's cause is ambiguous from the
-    result alone.  Treating it as ⚠ matches the SKIPPED-upstream case
-    cleanly and is acceptable for FAILED-upstream because the real
-    error is already visible on the upstream's own line, and the run's
-    exit code reflects the runtime failure regardless of how cancelled
-    downstreams render.  Threading the cause through ``SyncResult``
-    would let CANCELLED inherit the upstream's severity, but we don't
-    do that today.
-    """
-    match outcome:
-        case SyncOutcome.SUCCESS:
-            return Severity.OK
-        case SyncOutcome.FAILED:
-            return Severity.ERROR
-        case SyncOutcome.SKIPPED | SyncOutcome.CANCELLED:
-            return classify_severity(is_inactive=True, strictness=strictness)
+def _result_details(
+    r: SyncResult,
+    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
+) -> list[str]:
+    """Detail lines of one result: error, snapshot, pruning, warnings, output."""
+    return [
+        *([f"Error: {r.detail}"] if r.detail else []),
+        *(
+            [
+                "Snapshot: "
+                + _format_snapshot_display(
+                    r.snapshot_path, r.sync_slug, config, resolved_endpoints
+                )
+            ]
+            if r.snapshot_path
+            else []
+        ),
+        *([f"Pruned: {len(r.pruned_paths)} snapshot(s)"] if r.pruned_paths else []),
+        *(f"Warning: {w.message}" for w in r.warnings),
+        *(r.output.strip().split("\n")[:5] if r.output and not r.success else []),
+    ]
 
 
 def build_human_results_sections(
@@ -263,27 +262,13 @@ def build_human_results_sections(
     table.add_column("Details")
 
     for r in results:
-        status = _outcome_text(r.outcome)
-        details_parts = [
-            *([f"Error: {r.detail}"] if r.detail else []),
-            *(
-                [
-                    f"Snapshot: {_format_snapshot_display(r.snapshot_path, r.sync_slug, config, resolved_endpoints)}"
-                ]
-                if r.snapshot_path
-                else []
-            ),
-            *([f"Pruned: {len(r.pruned_paths)} snapshot(s)"] if r.pruned_paths else []),
-            *(r.output.strip().split("\n")[:5] if r.output and not r.success else []),
-        ]
-
         # Text, not str: details carry rsync's own output, which uses square
         # brackets liberally ("rsync error: ... [sender=3.4.1]") and would be
         # silently eaten by Rich's markup parser.
         table.add_row(
             r.sync_slug,
-            status,
-            Text("\n".join(details_parts)),
+            _outcome_text(r.outcome),
+            Text("\n".join(_result_details(r, config, resolved_endpoints))),
         )
 
     return [table]

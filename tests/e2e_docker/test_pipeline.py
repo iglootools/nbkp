@@ -30,6 +30,8 @@ Covered scenarios:
 
 from __future__ import annotations
 
+import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 from nbkp.config import (
@@ -39,7 +41,7 @@ from nbkp.disks.context import managed_mount
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.testkit.docker import REMOTE_BACKUP_PATH
 from nbkp.run.pipeline import Strictness, check_and_run
-from nbkp.sync.runner import SyncOutcome
+from nbkp.sync.runner import SyncFailureKind, SyncOutcome
 from nbkp.sync.testkit.seed import build_chain_config
 from tests._docker_fixtures import LUKS_PASSPHRASE, ssh_exec
 from tests.e2e_docker._pipeline_helpers import (
@@ -80,6 +82,8 @@ class TestChainSync:
             # 4–5. Preflight checks + run all syncs (production pipeline)
             pipeline = check_and_run(
                 config,
+                clock=lambda: datetime.now(UTC),
+                platform=sys.platform,
                 strictness=Strictness.IGNORE_NONE,
                 resolved_endpoints=resolved,
                 mount_observations=mount_observations,
@@ -138,6 +142,8 @@ class TestChainSync:
             #    cause skips rather than a hard preflight failure
             pipeline = check_and_run(
                 config,
+                clock=lambda: datetime.now(UTC),
+                platform=sys.platform,
                 strictness=Strictness.IGNORE_INACTIVE,
                 resolved_endpoints=resolved,
                 mount_observations=mount_observations,
@@ -158,3 +164,12 @@ class TestChainSync:
             assert results_by_slug["step-4"].outcome == SyncOutcome.CANCELLED
             assert results_by_slug["step-5"].outcome == SyncOutcome.CANCELLED
             assert results_by_slug["step-6"].outcome == SyncOutcome.CANCELLED
+
+            # The cancellations stem from an expected-inactive upstream, so
+            # under ignore-inactive they do not fail the run.
+            assert results_by_slug["step-2"].failure == SyncFailureKind.INACTIVE
+            assert results_by_slug["step-3"].failure == (
+                SyncFailureKind.UPSTREAM_SKIPPED
+            )
+            assert results_by_slug["step-3"].cancelled_by == "step-2"
+            assert not pipeline.has_sync_failures
