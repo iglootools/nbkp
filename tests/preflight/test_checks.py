@@ -54,7 +54,7 @@ from nbkp.remote.queries import (
 )
 from nbkp.remote.resolution import resolve_proxy_chain
 from nbkp.snapshots.common import create_snapshot_timestamp
-from nbkp.sync import SyncResult
+from nbkp.sync import SyncFailureKind, SyncOutcome, SyncResult
 
 
 @pytest.fixture(autouse=True)
@@ -589,7 +589,7 @@ class TestSyncResult:
     def test_construction_defaults(self) -> None:
         sr = SyncResult(
             sync_slug="s1",
-            success=True,
+            outcome=SyncOutcome.SUCCESS,
             dry_run=False,
             rsync_exit_code=0,
             output="done",
@@ -600,15 +600,15 @@ class TestSyncResult:
     def test_construction_full(self) -> None:
         sr = SyncResult(
             sync_slug="s1",
-            success=False,
+            outcome=SyncOutcome.FAILED,
             dry_run=False,
             rsync_exit_code=1,
             output="",
+            failure=SyncFailureKind.RSYNC,
             detail="failed",
-            snapshot_path="/snap/2024",
         )
         assert sr.detail == "failed"
-        assert sr.snapshot_path == "/snap/2024"
+        assert sr.success is False
 
 
 class TestSlugValidation:
@@ -3649,6 +3649,7 @@ class TestCheckSourceLatest:
         _ts = create_snapshot_timestamp(
             datetime(2026, 1, 1, tzinfo=UTC),
             LocalVolume(slug="x", path="/x"),
+            "linux",
         )
         (src / "data" / "snapshots").mkdir(exist_ok=True)
         snap = src / "data" / "snapshots" / _ts.name
@@ -3684,6 +3685,7 @@ class TestCheckSourceLatest:
         _ts = create_snapshot_timestamp(
             datetime(2024, 1, 1, tzinfo=UTC),
             LocalVolume(slug="x", path="/x"),
+            "linux",
         )
         snap = src / "data" / "snapshots" / _ts.name
         snap.mkdir(parents=True)
@@ -4161,6 +4163,7 @@ class TestCheckDevnullLatest:
         _ts = create_snapshot_timestamp(
             datetime(2099, 1, 1, tzinfo=UTC),
             LocalVolume(slug="x", path="/x"),
+            "linux",
         )
         (src / "data" / "snapshots").mkdir()
         (src / "data" / "latest").symlink_to(f"snapshots/{_ts.name}")
@@ -4259,6 +4262,7 @@ class TestCheckDevnullLatest:
         _ts = create_snapshot_timestamp(
             datetime(2099, 1, 1, tzinfo=UTC),
             LocalVolume(slug="x", path="/x"),
+            "linux",
         )
         (dst / "backup" / "snapshots").mkdir()
         (dst / "backup" / "latest").symlink_to(f"snapshots/{_ts.name}")

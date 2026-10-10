@@ -11,7 +11,6 @@ from ..config import (
     Config,
     LocalVolume,
     RemoteVolume,
-    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
 )
@@ -130,6 +129,11 @@ def _filter_args(sync: SyncConfig) -> list[str]:
     ]
 
 
+def _dest_target(base: str, dest_suffix: str | None) -> str:
+    """The rsync destination argument: *base* (plus suffix), trailing slash."""
+    return f"{base}/{dest_suffix}/" if dest_suffix else f"{base}/"
+
+
 def build_rsync_command(
     sync: SyncConfig,
     config: Config,
@@ -149,80 +153,45 @@ def build_rsync_command(
     dst_ep = config.destination_endpoint(sync)
     src_vol = config.volumes[src_ep.volume]
     dst_vol = config.volumes[dst_ep.volume]
-
     src_path = resolve_source_path(src_vol, src_ep)
     dst_path = resolve_path(dst_vol, dst_ep.subdir)
+    rsync_args = [
+        *_base_rsync_args(sync, dry_run, link_dest, progress),
+        *_filter_args(sync),
+    ]
 
     match (src_vol, dst_vol):
-        case (RemoteVolume() as sv, RemoteVolume() as dv):
+        case (RemoteVolume(), RemoteVolume() as dv):
+            # Same server (enforced by config validation): SSH in once and
+            # run rsync there with local paths.
             dst_re = re[dv.slug]
-            return _build_remote_same_server(
-                sync,
-                dst_re.server,
-                src_path,
-                dst_path,
-                dry_run,
-                link_dest,
-                progress,
-                proxy_chain=dst_re.proxy_chain,
-                dest_suffix=dest_suffix,
-            )
+            local_cmd = [
+                *rsync_args,
+                f"{src_path}/",
+                _dest_target(dst_path, dest_suffix),
+            ]
+            return [
+                *build_ssh_base_args(dst_re.server, dst_re.proxy_chain),
+                shlex.join(local_cmd),
+            ]
         case (RemoteVolume() as sv, LocalVolume()):
             src_re = re[sv.slug]
-            dst_target = f"{dst_path}/{dest_suffix}/" if dest_suffix else f"{dst_path}/"
             return [
-                *_base_rsync_args(sync, dry_run, link_dest, progress),
-                *_filter_args(sync),
+                *rsync_args,
                 *build_ssh_e_option(src_re.server, src_re.proxy_chain),
                 format_remote_path(src_re.server, src_path) + "/",
-                dst_target,
+                _dest_target(dst_path, dest_suffix),
             ]
         case (LocalVolume(), RemoteVolume() as dv):
             dst_re = re[dv.slug]
-            dst_remote = format_remote_path(dst_re.server, dst_path)
-            dst_target = (
-                f"{dst_remote}/{dest_suffix}/" if dest_suffix else f"{dst_remote}/"
-            )
             return [
-                *_base_rsync_args(sync, dry_run, link_dest, progress),
-                *_filter_args(sync),
+                *rsync_args,
                 *build_ssh_e_option(dst_re.server, dst_re.proxy_chain),
                 f"{src_path}/",
-                dst_target,
+                _dest_target(format_remote_path(dst_re.server, dst_path), dest_suffix),
             ]
         case _:
-            dst_target = f"{dst_path}/{dest_suffix}/" if dest_suffix else f"{dst_path}/"
-            return [
-                *_base_rsync_args(sync, dry_run, link_dest, progress),
-                *_filter_args(sync),
-                f"{src_path}/",
-                dst_target,
-            ]
-
-
-def _build_remote_same_server(
-    sync: SyncConfig,
-    server: SshEndpoint,
-    src_path: str,
-    dst_path: str,
-    dry_run: bool,
-    link_dest: str | None,
-    progress: ProgressMode | None = None,
-    proxy_chain: list[SshEndpoint] | None = None,
-    dest_suffix: str | None = None,
-) -> list[str]:
-    """Build rsync command when both volumes are on the same server.
-
-    SSH into the server once and run rsync with local paths.
-    """
-    dst_target = f"{dst_path}/{dest_suffix}/" if dest_suffix else f"{dst_path}/"
-    rsync_cmd = [
-        *_base_rsync_args(sync, dry_run, link_dest, progress),
-        *_filter_args(sync),
-        f"{src_path}/",
-        dst_target,
-    ]
-    return [*build_ssh_base_args(server, proxy_chain), shlex.join(rsync_cmd)]
+            return [*rsync_args, f"{src_path}/", _dest_target(dst_path, dest_suffix)]
 
 
 def run_rsync(
@@ -246,38 +215,33 @@ def run_rsync(
         dest_suffix=dest_suffix,
     )
     if on_output is None:
-        return subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        return subprocess.run(cmd, capture_output=True, text=True, check=False)
     else:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
+        return _run_streaming(cmd, on_output)
 
-        assert proc.stdout is not None
-        output_chunks: list[str] = []
 
-        # Stream one character at a time so rsync progress
-        # updates that rely on carriage returns are visible
-        # immediately.
-        while True:
-            ch = proc.stdout.read(1)
-            if ch:
-                output_chunks.append(ch)
-                on_output(ch)
-            elif proc.poll() is not None:
-                break
+def _run_streaming(
+    cmd: list[str], on_output: Callable[[str], None]
+) -> subprocess.CompletedProcess[str]:
+    """Run *cmd*, forwarding its merged stdout/stderr to *on_output*."""
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    assert proc.stdout is not None
+    stdout = proc.stdout
+    # Stream one character at a time so rsync progress updates that rely on
+    # carriage returns are visible immediately; read(1) returns "" at EOF.
+    output_chunks = [_forward(ch, on_output) for ch in iter(lambda: stdout.read(1), "")]
+    return subprocess.CompletedProcess(
+        cmd, proc.wait(), stdout="".join(output_chunks), stderr=""
+    )
 
-        return subprocess.CompletedProcess(
-            cmd,
-            proc.wait(),
-            stdout="".join(output_chunks),
-            stderr="",
-        )
+
+def _forward(chunk: str, on_output: Callable[[str], None]) -> str:
+    """Pass *chunk* to *on_output* and return it, to also collect it."""
+    on_output(chunk)
+    return chunk

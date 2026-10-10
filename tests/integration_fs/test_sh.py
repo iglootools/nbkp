@@ -280,8 +280,53 @@ class TestGeneratedScriptExecution:
         result = _run_script(config, tmp_path)
 
         assert "SKIPPED step-1: inactive" in result.stderr
-        assert "CANCELLED step-2" in result.stderr
+        assert "CANCELLED step-2: upstream sync was skipped" in result.stderr
         assert not (tmp_path / _DST_DIR / "sample.txt").exists()
+        # Rooted in expected inactivity: not a failure, as in `nbkp run`.
+        assert result.returncode == 0, result.stderr
+
+    def test_inactive_upstream_cancellation_fails_under_ignore_none(
+        self, tmp_path: Path
+    ) -> None:
+        """ignore-none aborts on the inactive sync before anything runs."""
+        config = _seeded_chain(tmp_path)
+        (tmp_path / _SRC_DIR / VOLUME_SENTINEL).unlink()
+
+        result = _run_script(config, tmp_path, "--strictness", "ignore-none")
+
+        assert result.returncode == 1
+
+    def test_ignore_all_attempts_sync_with_infrastructure_errors(
+        self, tmp_path: Path
+    ) -> None:
+        """Sentinels present, snapshots/ missing: attempted, and mkdir -p heals it."""
+        config = _seeded_chain(tmp_path)
+        (_stage(tmp_path) / SNAPSHOTS_DIR).rmdir()
+
+        result = _run_script(config, tmp_path, "--strictness", "ignore-all")
+
+        assert result.returncode == 0, result.stderr
+        assert "preflight errors ignored (ignore-all), attempting" in result.stderr
+        assert len(_snapshot_names(tmp_path)) == 1
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+    def test_prune_failure_is_a_warning(self, tmp_path: Path) -> None:
+        """As in `nbkp run`: the new snapshot stands when pruning fails."""
+        config = _seeded_chain(tmp_path, max_snapshots=1)
+        old = _stage(tmp_path) / SNAPSHOTS_DIR / "2020-01-01T00-00-00.000Z"
+        (old / "sub").mkdir(parents=True)
+        (old / "sub" / "f").write_text("x")
+        (old / "sub").chmod(0o555)
+        try:
+            result = _run_script(config, tmp_path)
+        finally:
+            (old / "sub").chmod(0o755)
+
+        assert result.returncode == 0, result.stderr
+        assert "WARN: pruning failed" in result.stderr
+        assert "Completed sync: step-1" in result.stderr
+        assert old.exists()
+        assert (tmp_path / _DST_DIR / "sample.txt").exists()
 
     def test_strictness_ignore_none_aborts_on_inactive(self, tmp_path: Path) -> None:
         config = _seeded_chain(tmp_path)

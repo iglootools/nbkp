@@ -115,7 +115,7 @@ nbkp sh -o /mnt/usb/backup.sh --relative-dst   # paths relative to the script
 ./backup.sh --strictness ignore-none    # any inactive sync aborts the run
 ```
 
-The script behaves like `nbkp run`: it checks every sync first (sentinels, tools, snapshot layout), skips inactive syncs without failing (`--strictness ignore-inactive`, the default), aborts on infrastructure errors before syncing anything, runs the syncs in dependency order, and cancels syncs downstream of a failed or skipped one. It exits non-zero when a sync fails or is cancelled.
+The script behaves like `nbkp run`: it checks every sync first (sentinels, tools, snapshot layout), skips inactive syncs without failing (`--strictness ignore-inactive`, the default), aborts on infrastructure errors before syncing anything, runs the syncs in dependency order, and cancels syncs downstream of a failed or skipped one. It exits non-zero when a sync fails or is cancelled because of a failure; a cancellation caused by an inactive (skipped) upstream sync is no more an error than that skip, unless `--strictness ignore-none`. With `--strictness ignore-all`, syncs with infrastructure errors are attempted once their sentinels are present. Pruning failures are logged as warnings, as in `nbkp run`.
 
 ### Example 2: Multi-hop chained backups
 

@@ -4,8 +4,8 @@ Each step is a block of shell code at indent 0.  Sync functions run in a
 ``set -e`` subshell (see ``nbkp_run_sync`` in the template), so any
 failing command aborts the sync; steps only handle failures explicitly
 where ``nbkp run`` does something other than stopping (best-effort
-orphan cleanup, removing the new snapshot after a failed hard-link
-rsync).
+orphan cleanup, pruning, and removal of the new snapshot after a failed
+hard-link rsync, each of which only logs a warning).
 """
 
 from __future__ import annotations
@@ -279,4 +279,32 @@ def _prune_block(spec: SyncSpec, max_snapshots: int) -> str:
     body = "\n".join(
         [selection, "for snap in $NBKP_SNAPS; do", _indent(loop_body, 1), "done"]
     )
-    return "\n".join(['if [ "$NBKP_DRY_RUN" = false ]; then', _indent(body, 1), "fi"])
+    return "\n".join(
+        ['if [ "$NBKP_DRY_RUN" = false ]; then', _indent(_best_effort(body), 1), "fi"]
+    )
+
+
+def _best_effort(body: str) -> str:
+    """Run *body* with ``set -e`` but turn its failure into a warning.
+
+    Pruning is best-effort in ``nbkp run``: the new snapshot is complete and
+    ``latest`` already points to it.  ``set +e`` around an explicit subshell,
+    as in ``nbkp_run_sync``: errexit is ignored inside an ``if``/``||``
+    condition, subshells included, so ``if ! ( set -e; ... )`` would not stop
+    at the first failing command.
+    """
+    warn = 'nbkp_log "WARN: pruning failed (exit $NBKP_PRUNE_RC); snapshots kept"'
+    return "\n".join(
+        [
+            "set +e",
+            "(",
+            _indent("set -e", 1),
+            _indent(body, 1),
+            ")",
+            "NBKP_PRUNE_RC=$?",
+            "set -e",
+            'if [ "$NBKP_PRUNE_RC" -ne 0 ]; then',
+            _indent(warn, 1),
+            "fi",
+        ]
+    )

@@ -79,7 +79,7 @@ Before running any sync, nbkp validates that all required infrastructure is in p
 - **Btrfs readiness**: filesystem type, subvolume existence, mount options (`user_subvol_rm_allowed`), required directories
 - **Hard-link readiness**: filesystem hard-link support, required directory structure
 - **Orphan detection**: warns about SSH endpoints, volumes, and sync endpoints that are defined but not referenced by anything
-- **Strictness control**: three modes (`ignore-none`, `ignore-inactive`, `ignore-all`) to control how preflight errors affect the exit code
+- **Strictness control**: three modes (`ignore-none`, `ignore-inactive`, `ignore-all`) to control how preflight errors affect the run and its exit code, for `run`, `snapshots show` and `snapshots prune`
 
 ## Configuration
 

@@ -8,21 +8,33 @@ from .rsync import ProgressMode as ProgressMode
 
 if TYPE_CHECKING:
     from .runner import (
+        SyncFailureKind as SyncFailureKind,
         SyncOutcome as SyncOutcome,
         SyncResult as SyncResult,
+        SyncWarning as SyncWarning,
+        SyncWarningKind as SyncWarningKind,
+        result_severity as result_severity,
         run_all_syncs as run_all_syncs,
     )
 
 __all__ = [
     "ProgressMode",
+    "SyncFailureKind",
     "SyncOutcome",
     "SyncResult",
+    "SyncWarning",
+    "SyncWarningKind",
+    "result_severity",
     "run_all_syncs",
 ]
 
 _LAZY_MODULES = {
+    "SyncFailureKind": "runner",
     "SyncOutcome": "runner",
     "SyncResult": "runner",
+    "SyncWarning": "runner",
+    "SyncWarningKind": "runner",
+    "result_severity": "runner",
     "run_all_syncs": "runner",
 }
 

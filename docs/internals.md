@@ -26,9 +26,17 @@ Both snapshot backends follow the same directory layout and lifecycle. Snapshot 
 
 **Hard-link flow** — Rsync writes directly into a new `snapshots/{timestamp}/` directory, using `--link-dest` to hard-link unchanged files from the previous snapshot (saving disk space). On success, the `latest` symlink is updated. No special filesystem commands are needed for creation or pruning.
 
-**Pruning** — When `max-snapshots` is set, old snapshots beyond the limit are removed after each `run`. The snapshot that `latest` points to is never pruned. Pruning can also be triggered manually with the `prune` command.
+**Pruning** — When `max-snapshots` is set, old snapshots beyond the limit are removed after each `run`. The snapshot that `latest` points to is never pruned: if `latest` exists but cannot be read, pruning stops with an error rather than proceeding without that protection. Pruning can also be triggered manually with the `snapshots prune` command.
 
-**Orphan cleanup** — Hard-link syncs detect and clean up orphaned snapshot directories before each run. An orphan is a `snapshots/{timestamp}/` directory left behind by a previously failed sync (one that `latest` does not point to and that is not the most recent by timestamp). Btrfs snapshots do not need orphan cleanup because snapshots are created atomically from a complete sync to `staging/` — a failed sync leaves `staging/` in a partial state but never creates a snapshot directory.
+**Orphan cleanup** — Hard-link syncs detect and clean up orphaned snapshot directories before each run. An orphan is a `snapshots/{timestamp}/` directory newer than the snapshot `latest` points to: one left behind by a previously failed sync. After a failed rsync the new snapshot directory is also removed straight away. Btrfs snapshots do not need orphan cleanup because snapshots are created atomically from a complete sync to `staging/` — a failed sync leaves `staging/` in a partial state but never creates a snapshot directory.
+
+**Best-effort steps** — Orphan cleanup, pruning, and removal of the snapshot directory after a failed rsync never fail a sync: the snapshot that matters is either complete (pruning runs after `latest` moved) or absent, and a leftover directory is removed by the next run's orphan cleanup. A failure in one of these steps is recorded as a warning on the sync's result (`warnings` in JSON, a `Warning:` line in the results table) instead of being silently ignored, and the remaining syncs carry on.
+
+**Dry runs** — `--dry-run` never modifies a destination: no orphan cleanup, no snapshot directory, no `latest` update, no pruning. Hard-link rsync previews its transfer into the snapshot directory it would create (`snapshots/<timestamp>/`, with `--link-dest` to the current `latest`).
+
+**Listing** — Only entries of `snapshots/` named as snapshot timestamps count as snapshots. Anything else (`lost+found` at the root of a dedicated filesystem, `.DS_Store`, a stray file) is ignored: it is neither listed nor pruned. An absent `snapshots/` directory lists as empty; any other listing failure is an error, so pruning never acts on a partial listing.
+
+**Errors** — Every failing snapshot operation (a non-zero exit status, a local `OSError`, an SSH transport error) is reported as one structured error naming the operation (create, mkdir, delete, list, read/update `latest`, …), the path, and the underlying message. `run` turns it into a failed sync (`failure`: `snapshot`, `mkdir` or `symlink`) or a warning; `snapshots show` / `prune` report it in the result's `error` field.
 
 ### The `latest` Symlink
 
@@ -187,19 +195,29 @@ Pre-flight checks distinguish between two categories of errors:
 - **Inactive errors** — Missing sentinel files (`.nbkp-vol`, `.nbkp-src`, `.nbkp-dst`), unavailable volumes, and pending snapshots in dry-run mode. These represent expected situations where a sync is not ready to run (e.g. a removable drive is not plugged in, a remote host is unreachable, or a volume is not mounted at the expected path).
 - **Infrastructure errors** — Everything else: missing rsync, wrong filesystem type, broken symlinks, a missing polkit rule or fstab entry, an unreachable udisks daemon, etc. These indicate real problems that need fixing.
 
-The `--strictness` flag controls how preflight errors affect the exit code:
+The `--strictness` flag controls how preflight errors affect the run and its exit code:
 
 | | `ignore-inactive` (default) | `ignore-none` | `ignore-all` |
 |---|---|---|---|
-| **Inactive errors** | Sync is silently skipped; other syncs still run | Fatal — aborts the entire run before any sync executes | Ignored |
-| **Infrastructure errors** | Fatal | Fatal | Ignored |
-| **Exit code** | 0 if only inactive syncs were skipped | 1 if any sync is inactive | 0 unless sync execution itself fails |
+| **Inactive errors** | Sync is skipped; other syncs still run | Fatal — aborts the entire run before any sync executes | Sync is skipped, not fatal |
+| **Infrastructure errors** | Fatal — aborts the entire run before any sync executes | Fatal | Sync is attempted when all its sentinels were observed, otherwise skipped; not fatal |
+| **Downstream of a skipped sync** | Cancelled, not fatal | (aborted earlier) | Cancelled, not fatal |
+| **Downstream of a failed sync** | Cancelled, fatal | Cancelled, fatal | Cancelled, fatal |
+| **Exit code** | 0 if only inactive syncs were skipped (and their downstream syncs cancelled) | 1 if any sync is inactive | 0 unless sync execution itself fails |
+
+A cancellation inherits the severity of its root cause: a sync cancelled because an upstream sync was skipped for inactivity is as expected as that skip, while one cancelled because an upstream sync failed is part of that failure. Each result records the cause (`failure`: `upstream-skipped` or `upstream-failed`, plus `cancelled_by`), and the cause propagates through a chain: in `A → B → C` with `A` inactive, both `B` and `C` are `upstream-skipped`.
 
 **`ignore-inactive`** (default) is designed for configs that include syncs which are not always runnable — for example, a backup to a USB drive that is only connected on weekends, or a remote server that is only reachable from a specific network. The run succeeds as long as all *active* syncs complete, and inactive ones are skipped without noise.
 
 **`ignore-none`** is useful for scheduled/automated runs where every sync is expected to be active. A missing sentinel or unreachable volume likely indicates a problem (drive not mounted, server down) rather than an expected absence, and the operator wants to be alerted.
 
-**`ignore-all`** ignores all preflight errors — only sync execution failures cause a non-zero exit. This can be useful when you want to attempt syncs regardless of preflight check results.
+**`ignore-all`** ignores all preflight errors — only sync execution failures cause a non-zero exit. Syncs with infrastructure errors are attempted (and fail at execution if the problem is real), which is useful to try a sync despite a check you know to be wrong. The sentinel guarantee is kept even here: a sync is only attempted when preflight observed all four of its sentinels, so an absent drive or unreachable host is still skipped rather than written to, and so is a sync whose volume problems kept preflight from checking its endpoint sentinels. The generated shell script applies the same rule with its own sentinel checks, which always run first.
+
+**Results** — Each sync result carries an `outcome` (`success`, `failed`, `skipped`, `cancelled`) and, unless successful, a `failure` saying why: `rsync`, `mkdir`, `snapshot`, `symlink` (a step failed), `inactive`, `dry-run-pending`, `preflight` (not attempted), `upstream-failed`, `upstream-skipped` (cancelled). `run -o json` exposes them, along with `warnings` for best-effort steps.
+
+**Aborted runs** — When preflight aborts a run, `run` lists the offending syncs and suggests the matching `nbkp preflight troubleshoot` command — same config file (relative to the current directory) and endpoint-selection flags — for step-by-step fixes. In JSON mode the command is the `hint` field.
+
+**`snapshots show` / `snapshots prune`** — accept the same `--strictness`. A sync without snapshots (or, for prune, without `max-snapshots`) is skipped. Otherwise an expected-inactive sync is skipped (an error under `ignore-none`), and a sync with infrastructure errors is an error, or a skip under `ignore-all` — these commands never read or delete snapshots on a destination preflight could not vouch for. Any error makes the command exit 1.
 
 #### Probe real state, not proxies
 

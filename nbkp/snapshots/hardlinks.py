@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import shutil
-from datetime import UTC, datetime
+from datetime import datetime
 
 from ..config import (
     Config,
@@ -13,40 +13,54 @@ from ..config import (
     Volume,
 )
 from ..config.epresolution import ResolvedEndpoints
-from ..fsprotocol import SNAPSHOTS_DIR
-from ..remote.dispatch import run_on_volume
 from .common import (
     create_snapshot_timestamp,
+    destination_volume,
     list_snapshots,
     read_latest_symlink,
-    resolve_dest_path,
+    snapshots_dir,
 )
+from .errors import SnapshotOp, local_fs_op, run_checked
 
 
 def create_snapshot_dir(
     sync: SyncConfig,
     config: Config,
     *,
-    now: datetime | None = None,
+    now: datetime,
+    platform: str,
     resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> str:
     """Create a snapshot directory for the current sync.
 
-    Returns the full snapshot path.
+    *now* names the snapshot and *platform* (``sys.platform``) decides the
+    macOS-safe name form; both come from the caller.  Returns the full
+    snapshot path.
     """
     re = resolved_endpoints or {}
-    ts = now or datetime.now(UTC)
-    dst = config.destination_endpoint(sync)
-    dst_vol = config.volumes[dst.volume]
-    dest_path = resolve_dest_path(sync, config)
-    snapshot = create_snapshot_timestamp(ts, dst_vol)
-    snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{snapshot.name}"
-    result = run_on_volume(["mkdir", "-p", snapshot_path], dst_vol, re)
+    dst_vol = destination_volume(sync, config)
+    snapshot = create_snapshot_timestamp(now, dst_vol, platform)
+    snapshot_path = f"{snapshots_dir(sync, config)}/{snapshot.name}"
+    run_checked(
+        SnapshotOp.MKDIR, snapshot_path, ["mkdir", "-p", snapshot_path], dst_vol, re
+    )
+    return snapshot_path
 
-    if result.returncode != 0:
-        raise RuntimeError(f"mkdir snapshot dir failed: {result.stderr}")
-    else:
-        return snapshot_path
+
+def snapshot_path_for(
+    sync: SyncConfig,
+    config: Config,
+    *,
+    now: datetime,
+    platform: str,
+) -> str:
+    """The path :func:`create_snapshot_dir` would create, without creating it.
+
+    Used by dry runs, which must not modify the destination.
+    """
+    dst_vol = destination_volume(sync, config)
+    snapshot = create_snapshot_timestamp(now, dst_vol, platform)
+    return f"{snapshots_dir(sync, config)}/{snapshot.name}"
 
 
 def cleanup_orphaned_snapshots(
@@ -65,16 +79,13 @@ def cleanup_orphaned_snapshots(
     if latest is None:
         return []
     else:
-        all_snapshots = list_snapshots(sync, config, re)
-        dst = config.destination_endpoint(sync)
-        dst_vol = config.volumes[dst.volume]
-        dest_path = resolve_dest_path(sync, config)
-        snapshots_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
+        base = snapshots_dir(sync, config)
         orphans = [
-            f"{snapshots_dir}/{s.name}"
-            for s in all_snapshots
+            f"{base}/{s.name}"
+            for s in list_snapshots(sync, config, re)
             if s.timestamp > latest.timestamp
         ]
+        dst_vol = destination_volume(sync, config)
         for path in orphans:
             delete_snapshot(path, dst_vol, re)
         return orphans
@@ -88,11 +99,11 @@ def delete_snapshot(
     """Delete a hard-link snapshot directory."""
     match volume:
         case RemoteVolume():
-            result = run_on_volume(["rm", "-rf", path], volume, resolved_endpoints)
-            if result.returncode != 0:
-                raise RuntimeError(f"rm -rf snapshot failed: {result.stderr}")
+            run_checked(
+                SnapshotOp.DELETE, path, ["rm", "-rf", path], volume, resolved_endpoints
+            )
         case LocalVolume():
-            shutil.rmtree(path)
+            local_fs_op(SnapshotOp.DELETE, path, lambda: shutil.rmtree(path))
 
 
 def prune_snapshots(
@@ -115,19 +126,17 @@ def prune_snapshots(
         return []
     else:
         latest = read_latest_symlink(sync, config, resolved_endpoints=re)
-        dest_path = resolve_dest_path(sync, config)
-        snapshots_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
+        base = snapshots_dir(sync, config)
 
         # Candidates: oldest first, skip the latest target, take up to excess
         to_delete = [
-            f"{snapshots_dir}/{s.name}"
+            f"{base}/{s.name}"
             for s in snapshots
             if latest is None or s.name != latest.name
         ][:excess]
 
         if not dry_run:
-            dst = config.destination_endpoint(sync)
-            dst_vol = config.volumes[dst.volume]
+            dst_vol = destination_volume(sync, config)
             for path in to_delete:
                 delete_snapshot(path, dst_vol, re)
 
