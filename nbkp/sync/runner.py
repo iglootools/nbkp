@@ -16,6 +16,7 @@ from ..config.epresolution import ResolvedEndpoints
 from ..fsprotocol import SNAPSHOTS_DIR, STAGING_DIR, Snapshot
 from ..ordering.graph import sort_syncs, sync_predecessors
 from ..preflight import SyncError, SyncStatus
+from ..remote.errors import SSH_CONNECTION_ERRORS
 from ..snapshots.btrfs import (
     create_snapshot,
     prune_snapshots as btrfs_prune_snapshots,
@@ -475,9 +476,10 @@ def _rsync(
             resolved_endpoints=ctx.resolved_endpoints,
             dest_suffix=dest_suffix,
         )
-    # Any transport-level failure (SSH, spawn, DNS) becomes a failed SyncResult so
+    # A transport-level failure (SSH, spawn, DNS) becomes a failed SyncResult so
     # the caller reports per-sync status instead of aborting the whole run.
-    except Exception as e:  # noqa: BLE001
+    # Programming errors still propagate.
+    except SSH_CONNECTION_ERRORS as e:
         return SyncResult.failed(sync.slug, ctx.dry_run, SyncFailureKind.RSYNC, str(e))
     if proc.returncode != 0:
         return SyncResult.failed(
