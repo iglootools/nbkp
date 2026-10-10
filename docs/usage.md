@@ -102,6 +102,21 @@ nbkp run --dry-run
 nbkp sh -o /mnt/usb-backup/backup.sh --relative-dst
 ```
 
+### `sh` — generate a standalone backup shell script
+
+`nbkp sh` compiles the config into a bash script with every path and option baked in, for hosts without Python or to review the exact commands before running them. Endpoints are resolved once, at generation time (`--location`, `--exclude-location` and `--network` apply then). Volumes with mount management must be mounted beforehand (`nbkp disks mount`).
+
+```bash
+nbkp sh -o backup.sh                    # write an executable script
+nbkp sh -o /mnt/usb/backup.sh --relative-dst   # paths relative to the script
+
+./backup.sh                             # run all syncs
+./backup.sh --dry-run --progress overall
+./backup.sh --strictness ignore-none    # any inactive sync aborts the run
+```
+
+The script behaves like `nbkp run`: it checks every sync first (sentinels, tools, snapshot layout), skips inactive syncs without failing (`--strictness ignore-inactive`, the default), aborts on infrastructure errors before syncing anything, runs the syncs in dependency order, and cancels syncs downstream of a failed or skipped one. It exits non-zero when a sync fails or is cancelled.
+
 ### Example 2: Multi-hop chained backups
 
 A more complex setup with a bastion host, chained syncs across local and remote volumes, mixed snapshot modes (btrfs and hard-link), and strict connection options. Data flows through a 6-step pipeline: local source, through a bastion to a remote server, across different snapshot backends, and back to a local destination.

@@ -273,6 +273,14 @@ Both `--location` and `--exclude-location` can be used together. Exclude is appl
 
 The `sh` command compiles a config into a self-contained bash script that reproduces the same backup operations as `run`, without requiring Python or the config file at runtime. The generated script preserves all sync functionality: rsync commands, SSH options, filters, snapshot creation and pruning, pre-flight checks, dependency ordering, and failure propagation. See [Usage](./usage.md#sh--generate-a-standalone-backup-shell-script) for details.
 
+It follows the same run structure as `nbkp run`:
+
+1. **Preflight, for every sync, before any sync starts.** Each sync has a generated `<sync>_preflight` function that classifies it as *active*, *inactive* (missing `.nbkp-vol` / `.nbkp-src` / `.nbkp-dst`, unreachable host — checked first), *broken* (rsync missing or older than 3.0 / openrsync, missing snapshot tools, wrong filesystem, missing `user_subvol_rm_allowed`, staging not a subvolume, FAT/exFAT under hard links, missing or invalid `latest`, unwritable directories), or *pending* (a dry-run whose source snapshot only an upstream sync would create).
+2. **Strictness.** `--strictness` (default `ignore-inactive`) decides whether those results abort the run, with the same matrix as [Strictness](#strictness).
+3. **Syncs in dependency order.** Inactive syncs are skipped without counting as failures; syncs downstream of a failed or skipped sync are cancelled. Each sync function runs in a `set -e` subshell, so any failing step — not only rsync — stops that sync before `latest` moves. (Calling a bash function in a `||` or `if` context silently disables `set -e` inside it, which is why the script never does.)
+
+Paths are quoted for each shell that interprets them: locally, and once more inside the command string sent over SSH. Only the snapshot timestamp and the snapshot-name loop variable are expanded at runtime, and snapshot names read back from the destination are filtered to timestamp-shaped names before use. What `sh` deliberately leaves out of `run` — mount management, endpoint re-selection, Rich and JSON output, Paramiko-only SSH options, the orchestrator's own coreutils checks — is listed with reasons in the header of every generated script.
+
 ### Outputs
 
 All commands support both human-readable output (Rich-formatted tables, spinners, progress bars) and machine-readable JSON output for scripting and automation. The `run` command additionally supports four progress display modes: `none`, `overall`, `per-file`, and `full`.

@@ -10,6 +10,13 @@ For general coding, Python, and tooling guidelines, see the [common guidelines](
 - **CLI**
   - Use `typer` for CLI implementation (argument parsing, formatting, etc.)
   - Provide both human-readable and JSON output formats for all commands, with human-readable as the default.
+    - *Exception — `sh`:* its output is a bash script, not a report, so there is no JSON
+      mode, and `-o` means `--output-file` (where to write the script) rather than the
+      `--output` format selector other commands use. Renaming the flag would break existing
+      invocations and cron entries for no gain in function. Retire this exception if `sh`
+      gains a structured report worth emitting (e.g. the list of generated syncs), at
+      which point it takes `--output human|json` and the script path moves to a
+      long-only `--output-file` in a major release.
   - Provide ability to pass a config file to all commands
   - Provide a dry-run parameter for all data-mutating or long-running operations
 - **Rich output**
