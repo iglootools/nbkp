@@ -24,8 +24,9 @@ from ..preflight import (
 from ..preflight.severity import PreflightError
 from ..preflight.strictness import has_fatal_errors
 from ..remote.endpoints import ResolvedEndpoints
+from ..sync.orchestration import run_all_syncs
+from ..sync.results import SyncResult, result_severity
 from ..sync.rsync import ProgressMode
-from ..sync.runner import SyncResult, result_severity, run_all_syncs
 
 __all__ = [
     "PipelineResult",

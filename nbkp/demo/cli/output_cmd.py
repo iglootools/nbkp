@@ -35,7 +35,7 @@ from ...sync.output import (
     print_human_results,
     print_run_preview,
 )
-from ...sync.testkit.runner import (
+from ...sync.testkit.results import (
     dry_run_results,
     prune_dry_run_results,
     prune_results,

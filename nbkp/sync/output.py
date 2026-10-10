@@ -19,8 +19,8 @@ from ..fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
 from ..preflight.status import SyncStatus
 from ..remote.endpoints import ResolvedEndpoints
 from ..snapshots.output import retention_display as _retention_display
+from .results import SyncOutcome, SyncResult
 from .rsync import build_rsync_command
-from .runner import SyncOutcome, SyncResult
 
 # ---------------------------------------------------------------------------
 # Run preview (rsync commands + snapshot commands)

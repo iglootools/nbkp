@@ -1,4 +1,4 @@
-"""The steps of a generated sync function, mirroring ``nbkp.sync.runner``.
+"""The steps of a generated sync function, mirroring ``nbkp.sync.modes``.
 
 Each step is a block of shell code at indent 0.  Sync functions run in a
 ``set -e`` subshell (see ``nbkp_run_sync`` in the template), so any

@@ -42,7 +42,7 @@ from nbkp.policy import Strictness
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.testkit.docker import REMOTE_BACKUP_PATH
 from nbkp.run.pipeline import check_and_run
-from nbkp.sync.runner import SyncFailureKind, SyncOutcome
+from nbkp.sync.results import SyncFailureKind, SyncOutcome
 from nbkp.sync.testkit.seed import build_chain_config
 from tests._docker_fixtures import LUKS_PASSPHRASE, ssh_exec
 from tests.e2e_docker._pipeline_helpers import (

@@ -7,7 +7,7 @@ import subprocess
 import pytest
 
 from nbkp.policy import Severity, Strictness
-from nbkp.sync.runner import SyncFailureKind, SyncResult, result_severity
+from nbkp.sync.results import SyncFailureKind, SyncResult, result_severity
 
 _OK_PROC = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
