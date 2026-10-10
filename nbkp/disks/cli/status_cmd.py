@@ -7,11 +7,11 @@ from typing import Annotated
 
 import typer
 
-from ...clihelpers import OutputFormat, StepProgressBar
+from ...clihelpers import OutputFormat
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
 from . import app
-from .helpers import _probe_volume_status, _show_status_table, _unmanaged_statuses
+from .helpers import _probe_and_show_status, require_known_names
 
 
 @app.command("status")
@@ -58,26 +58,6 @@ def status(
 ) -> None:
     """Show mount status for volumes with mount config."""
     cfg = load_config_or_exit(config, output)
+    require_known_names(cfg, name, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
-
-    managed = [
-        (slug, vol)
-        for slug, vol in cfg.volumes.items()
-        if vol.mount is not None and (name is None or slug in name)
-    ]
-
-    bar = (
-        StepProgressBar(len(managed))
-        if output == OutputFormat.HUMAN and managed
-        else None
-    )
-    managed_statuses = [
-        _probe_volume_status(vol, resolved, bar) for _slug, vol in managed
-    ]
-    if bar is not None:
-        bar.stop()
-
-    _show_status_table(
-        [*managed_statuses, *_unmanaged_statuses(cfg, name)],
-        output,
-    )
+    _probe_and_show_status(cfg, resolved, output, name)

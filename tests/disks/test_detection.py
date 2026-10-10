@@ -5,12 +5,15 @@ from __future__ import annotations
 import subprocess
 from unittest.mock import patch
 
+import pytest
+
 from nbkp.config import (
     LocalVolume,
     LuksEncryptionConfig,
     MountConfig,
 )
 from nbkp.disks.detection import (
+    DeviceProbeError,
     detect_device_present,
     discover_cleartext_device,
     find_mountpoint,
@@ -94,9 +97,22 @@ class TestDiscoverCleartextDevice:
         ):
             assert discover_cleartext_device(_local_vol(), _UUID, {}) is None
 
-    def test_lsblk_failure_returns_none(self) -> None:
-        with patch("nbkp.remote.dispatch.subprocess.run", return_value=_mock_run(1)):
+    def test_absent_device_returns_none(self) -> None:
+        # lsblk exits 32 when none of the requested devices exists.
+        with patch("nbkp.remote.dispatch.subprocess.run", return_value=_mock_run(32)):
             assert discover_cleartext_device(_local_vol(), _UUID, {}) is None
+
+    def test_lsblk_failure_raises(self) -> None:
+        # A failed probe is not "locked": callers must not act on a guess.
+        with (
+            patch(
+                "nbkp.remote.dispatch.subprocess.run",
+                return_value=_mock_run(127, stderr="lsblk: command not found"),
+            ),
+            pytest.raises(DeviceProbeError) as exc_info,
+        ):
+            discover_cleartext_device(_local_vol(), _UUID, {})
+        assert exc_info.value.returncode == 127
 
 
 class TestResolveTargetDevice:

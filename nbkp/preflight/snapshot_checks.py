@@ -18,14 +18,19 @@ from ..remote.queries import (
 def check_btrfs_filesystem(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
-) -> bool:
-    """Check if the volume path is on a btrfs filesystem."""
+) -> bool | None:
+    """Check if the volume path is on a btrfs filesystem.
+
+    ``None`` when ``stat`` fails: the filesystem type is unknown, which is
+    not the same as "not btrfs" (that would send the operator off to
+    reformat a volume that may be fine).
+    """
     result = run_on_volume(
         ["stat", "-f", "-c", "%T", resolve_endpoint(volume, None)],
         volume,
         resolved_endpoints,
     )
-    return result.returncode == 0 and result.stdout.strip() == "btrfs"
+    return result.stdout.strip() == "btrfs" if result.returncode == 0 else None
 
 
 _NO_HARDLINK_FILESYSTEMS = {"vfat", "msdos", "exfat"}

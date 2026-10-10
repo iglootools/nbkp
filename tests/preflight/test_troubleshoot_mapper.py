@@ -11,7 +11,8 @@ from __future__ import annotations
 import pytest
 
 from nbkp.config import LocalVolume, LuksEncryptionConfig, MountConfig
-from nbkp.preflight.output import troubleshoot as ts
+from nbkp.disks.detection import DeviceProbeError
+from nbkp.preflight.output import remediation as ts
 
 _UUID = "5941f273-f73c-44c5-a3ef-fae7248db1b6"
 
@@ -81,6 +82,17 @@ class TestCleartextDevice:
             raise FileNotFoundError(2, "No such file or directory", "lsblk")
 
         monkeypatch.setattr(ts, "discover_cleartext_device", _boom)
+        vol = _volume()
+        assert vol.mount is not None
+        device, discovered = ts._cleartext_device(vol, vol.mount, {})
+        assert device == f"/dev/mapper/luks-{_UUID}"
+        assert discovered is False
+
+    def test_survives_a_failed_lsblk(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def _fail(*_: object) -> str | None:
+            raise DeviceProbeError("lsblk", 1, "permission denied")
+
+        monkeypatch.setattr(ts, "discover_cleartext_device", _fail)
         vol = _volume()
         assert vol.mount is not None
         device, discovered = ts._cleartext_device(vol, vol.mount, {})

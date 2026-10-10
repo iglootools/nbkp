@@ -18,6 +18,9 @@ from ....clihelpers import (
 )
 from ....config import Config, LocalVolume, RemoteVolume
 from ....config.epresolution import ResolvedEndpoints
+from ....remote.errors import SSH_CONNECTION_ERRORS, describe_error
+from ...lifecycle import unknown_volume_names
+from ...models import MountFailureReason
 from ...mount_checks import check_mount_status
 from ...output import (
     MountStatusData,
@@ -39,7 +42,7 @@ class _ErrorStatus:
     device_present: bool | None = None
     luks_unlocked: bool | None = None
     mounted: bool | None = None
-    mount_failure_reason: str | None = None
+    mount_failure_reason: MountFailureReason | None = None
 
 
 def _unmanaged_statuses(
@@ -100,10 +103,10 @@ def _probe_volume_status(
         if bar is not None:
             bar.on_end(line, Severity.OK)
         return label, status
-    except Exception as e:  # noqa: BLE001
+    except SSH_CONNECTION_ERRORS as e:
         if bar is not None:
-            bar.on_end(line, Severity.ERROR, str(e))
-        return _error_label(label, f"unreachable: {e}"), _ErrorStatus()
+            bar.on_end(line, Severity.ERROR, describe_error(e))
+        return _error_label(label, f"unreachable: {describe_error(e)}"), _ErrorStatus()
 
 
 def _show_status_table(
@@ -147,3 +150,36 @@ def _probe_and_show_status(
         bar.stop()
 
     _show_status_table(statuses, output_format)
+
+
+def require_known_names(
+    cfg: Config,
+    names: list[str] | None,
+    output_format: OutputFormat,
+) -> None:
+    """Exit 1 when a ``--name`` matches no volume.
+
+    Without this, a typo filters every volume out and the command reports
+    success having done nothing.
+    """
+    unknown = unknown_volume_names(cfg, names)
+    if unknown:
+        known = ", ".join(sorted(cfg.volumes)) or "(none)"
+        message = (
+            f"Error: unknown volume name(s): {', '.join(unknown)}."
+            f" Known volumes: {known}"
+        )
+        match output_format:
+            case OutputFormat.JSON:
+                echo_json(
+                    {
+                        "error": {
+                            "reason": "unknown-volume",
+                            "message": message,
+                            "names": unknown,
+                        }
+                    }
+                )
+            case OutputFormat.HUMAN:
+                typer.echo(message, err=True)
+        raise typer.Exit(1)

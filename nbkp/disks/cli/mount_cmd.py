@@ -6,30 +6,29 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich.console import Console
+from rich.text import Text
 
-from ...clihelpers import OutputFormat, Severity
+from ...clihelpers import OutputFormat
+from ...clihelpers.invocation import Invocation
+from ...config import Config
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
-from ...config.epresolution import NetworkType
-from ...credentials import (
-    PassphrasePrefetch,
-    build_passphrase_fn,
-    prefetch_count,
-    prefetch_passphrases,
-)
-from ..lifecycle import MountResult, mount_count, mount_volumes
+from ...config.epresolution import NetworkType, ResolvedEndpoints
+from ...credentials import build_passphrase_fn, prefetch_passphrases
+from ..lifecycle import MountResult, mount_volumes
+from ..models import MountFailureReason
 from ..observation import build_mount_observations
-from ..output import display_name
+from ..plan import plan_lifecycle
 from . import app
 from .helpers import (
-    DisksProgressBar,
     _error_label,
     _ErrorStatus,
     _show_status_table,
     _unmanaged_statuses,
-    format_credential_result,
-    format_mount_result,
+    require_known_names,
 )
-from .helpers.managed_mount import mount_result_severity
+from .helpers.lifecycle_progress import LifecycleProgress, mount_display_names
+from .helpers.plan_output import show_plan
 
 
 @app.command("mount")
@@ -73,63 +72,55 @@ def mount(
             help="Prefer private (LAN) or public (WAN) endpoints",
         ),
     ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help=(
+                "Report what would be unlocked and mounted without changing"
+                " anything (no passphrase retrieval, no udisksctl unlock/mount)."
+                " Long form only: -n is --name here."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Unlock LUKS and mount volumes. Mounts all volumes with mount config, or specific ones via --name."""
     cfg = load_config_or_exit(config, output)
+    require_known_names(cfg, name, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
 
+    if dry_run:
+        show_plan(
+            plan_lifecycle(cfg, resolved, mounting=True, names=name),
+            mount_display_names(cfg),
+            output,
+        )
+        return
+
+    results = _mount_with_progress(cfg, resolved, name, output)
+    _show_results(cfg, results, name, output)
+    if output is OutputFormat.HUMAN:
+        _print_auth_hint(
+            results,
+            Invocation.of(config, network=network.value if network else None),
+        )
+    if any(not r.success for r in results):
+        raise typer.Exit(1)
+
+
+def _mount_with_progress(
+    cfg: Config,
+    resolved: ResolvedEndpoints,
+    names: list[str] | None,
+    output: OutputFormat,
+) -> list[MountResult]:
+    """Prefetch every passphrase, then mount, with progress bars for humans."""
     passphrase_fn, cache = build_passphrase_fn(
         cfg.credential_provider, cfg.credential_command
     )
-
-    use_progress = output == OutputFormat.HUMAN
-    display_names = {
-        slug: display_name(vol)
-        for slug, vol in cfg.volumes.items()
-        if vol.mount is not None
-    }
-    total = mount_count(cfg, name)
-    credentials_total = prefetch_count(cfg)
-    credential_bar = (
-        DisksProgressBar(
-            credentials_total, "Loading credential", format_credential_result
-        )
-        if use_progress and credentials_total > 0
-        else None
+    progress = LifecycleProgress.create(
+        cfg, enabled=output is OutputFormat.HUMAN, names=names, umounting=False
     )
-    mount_bar = (
-        DisksProgressBar(total, "Mounting", format_mount_result)
-        if use_progress
-        else None
-    )
-
-    def on_prefetch_start(passphrase_id: str) -> None:
-        if credential_bar is not None:
-            credential_bar.on_start(passphrase_id)
-
-    def on_prefetch_end(passphrase_id: str, result: PassphrasePrefetch) -> None:
-        if credential_bar is not None:
-            credential_bar.on_end(
-                passphrase_id,
-                # A passphrase that cannot be retrieved only matters for a
-                # drive that is plugged in, and the mount step below reports
-                # that — so a prefetch failure is a warning, not an error.
-                Severity.OK if result.success else Severity.WARNING,
-                result.detail,
-            )
-
-    def on_mount_start(slug: str) -> None:
-        if mount_bar is not None:
-            mount_bar.on_start(display_names.get(slug, slug))
-
-    def on_mount_end(slug: str, result: MountResult) -> None:
-        if mount_bar is not None:
-            mount_bar.on_end(
-                display_names.get(slug, slug),
-                mount_result_severity(result),
-                result.detail,
-            )
-
     # try/finally instead of `with` because the bars are conditionally
     # created (None when output is JSON), and cache.clear() must also run.
     try:
@@ -139,41 +130,62 @@ def mount(
         prefetch_passphrases(
             cfg,
             passphrase_fn,
-            on_prefetch_start=on_prefetch_start,
-            on_prefetch_end=on_prefetch_end,
+            on_prefetch_start=progress.on_prefetch_start,
+            on_prefetch_end=progress.on_prefetch_end,
         )
-        # Rich permits only one live display at a time.
-        if credential_bar is not None:
-            credential_bar.stop()
-        results = mount_volumes(
+        return mount_volumes(
             cfg,
             resolved,
             passphrase_fn,
-            names=name,
-            on_mount_start=on_mount_start,
-            on_mount_end=on_mount_end,
+            names=names,
+            on_mount_start=progress.on_mount_start,
+            on_mount_end=progress.on_mount_end,
         )
     finally:
-        if credential_bar is not None:
-            credential_bar.stop()
-        if mount_bar is not None:
-            mount_bar.stop()
+        progress.stop_all()
         cache.clear()
 
-    observations = build_mount_observations(results)
-    statuses = [
-        *((display_names.get(slug, slug), obs) for slug, obs in observations.items()),
-        *(
-            (
-                _error_label(display_names.get(r.volume_slug, r.volume_slug), r.detail),
-                _ErrorStatus(),
-            )
-            for r in results
-            if not r.success and r.volume_slug not in observations
-        ),
-        *_unmanaged_statuses(cfg, name),
-    ]
-    _show_status_table(statuses, output)
 
-    if any(not r.success for r in results):
-        raise typer.Exit(1)
+def _show_results(
+    cfg: Config,
+    results: list[MountResult],
+    names: list[str] | None,
+    output: OutputFormat,
+) -> None:
+    """Status table: observed volumes, unreachable ones, unmanaged ones."""
+    display_names = mount_display_names(cfg)
+    observations = build_mount_observations(results)
+    _show_status_table(
+        [
+            *(
+                (display_names.get(slug, slug), obs)
+                for slug, obs in observations.items()
+            ),
+            *(
+                (
+                    _error_label(
+                        display_names.get(r.volume_slug, r.volume_slug), r.detail
+                    ),
+                    _ErrorStatus(),
+                )
+                for r in results
+                if not r.success and r.volume_slug not in observations
+            ),
+            *_unmanaged_statuses(cfg, names),
+        ],
+        output,
+    )
+
+
+def _print_auth_hint(results: list[MountResult], invocation: Invocation) -> None:
+    """Point at ``disks setup-auth`` when polkit refused an unlock or mount."""
+    if any(r.failure_reason is MountFailureReason.NOT_AUTHORIZED for r in results):
+        Console().print(
+            Text.assemble(
+                "udisks refused the operation (no polkit rule). Generate one with: ",
+                (
+                    invocation.command("disks", "setup-auth", endpoint_flags=False),
+                    "bold",
+                ),
+            )
+        )

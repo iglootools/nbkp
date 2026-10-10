@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from ...clihelpers import OutputFormat, StepProgressBar
+from ...clihelpers.invocation import Invocation
 from ...config import Config, LocalVolume
 from ...config.epresolution import ResolvedEndpoints
 from ...disks.observation import MountObservation
@@ -108,6 +109,7 @@ def check_and_display(
     resolved_endpoints: ResolvedEndpoints | None = None,
     dry_run: bool = False,
     mount_observations: dict[str, MountObservation] | None = None,
+    invocation: Invocation | None = None,
 ) -> tuple[PreflightResult, bool]:
     """Compute statuses, display human output, and check for errors.
 
@@ -133,6 +135,7 @@ def check_and_display(
             cfg,
             resolved_endpoints=resolved_endpoints,
             strictness=strictness,
+            invocation=invocation,
         )
 
     return preflight, has_fatal_errors(preflight.sync_statuses, strictness=strictness)

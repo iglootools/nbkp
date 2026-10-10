@@ -845,7 +845,8 @@ class TestCheckBtrfsFilesystemLocal:
     def test_stat_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_filesystem(vol, {}) is False
+        # Unknown, not "not btrfs": a failed probe must not trigger VOL_NOT_BTRFS.
+        assert check_btrfs_filesystem(vol, {}) is None
 
 
 class TestCheckBtrfsFilesystemRemote:
