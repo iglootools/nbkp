@@ -10,8 +10,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from nbkp.cli import app
-from nbkp.config.epresolution import NetworkType
-from nbkp.run.cli.run_cmd import troubleshoot_command
 from nbkp.sync import ProgressMode, SyncFailureKind, SyncResult
 
 _DONE = subprocess.CompletedProcess(args=[], returncode=0, stdout="done", stderr="")
@@ -388,33 +386,3 @@ class TestRunAbortHint:
 
         assert result.exit_code == 1
         assert "nbkp preflight troubleshoot" in result.output
-
-
-class TestTroubleshootCommand:
-    def test_minimal(self) -> None:
-        assert troubleshoot_command(None, None, None, None, cwd=Path("/w")) == [
-            "nbkp",
-            "preflight",
-            "troubleshoot",
-        ]
-
-    def test_config_outside_cwd_is_relative(self) -> None:
-        cmd = troubleshoot_command(
-            Path("/etc/nbkp/config.yaml"), None, None, None, cwd=Path("/home/u")
-        )
-        assert cmd[3:] == ["-c", "../../etc/nbkp/config.yaml"]
-
-    def test_repeated_locations(self) -> None:
-        cmd = troubleshoot_command(
-            None, ["home", "office"], ["travel"], NetworkType.PUBLIC, cwd=Path("/w")
-        )
-        assert cmd[3:] == [
-            "-l",
-            "home",
-            "-l",
-            "office",
-            "-L",
-            "travel",
-            "-N",
-            "public",
-        ]

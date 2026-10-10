@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import shlex
 import sys
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -24,6 +22,7 @@ from ...clihelpers import (
     severity_style,
     severity_symbol,
 )
+from ...clihelpers.invocation import Invocation
 from ...config import Config
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType, ResolvedEndpoints
@@ -135,9 +134,10 @@ def run(
     """Execute all active syncs in dependency order. Supports dry-run, progress display, snapshot creation, and automatic pruning."""
     cfg = load_config_or_exit(config, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
-    hint = troubleshoot_command(
-        config, location, exclude_location, network, cwd=Path.cwd()
+    invocation = Invocation.of(
+        config, location, exclude_location, network.value if network else None
     )
+    hint = invocation.command("preflight", "troubleshoot")
     with managed_mount(
         cfg,
         resolved,
@@ -147,7 +147,7 @@ def run(
         strictness=strictness,
     ) as (cfg, mount_observations):
         display = (
-            _HumanProgress(cfg, resolved, sync, progress, strictness)
+            _HumanProgress(cfg, resolved, sync, progress, strictness, invocation)
             if output is OutputFormat.HUMAN
             else None
         )
@@ -172,30 +172,6 @@ def run(
             raise typer.Exit(1)
 
 
-def troubleshoot_command(
-    config_path: Path | None,
-    location: list[str] | None,
-    exclude_location: list[str] | None,
-    network: NetworkType | None,
-    *,
-    cwd: Path,
-) -> list[str]:
-    """The ``preflight troubleshoot`` invocation matching this run.
-
-    Carries the same config (relative to *cwd*, so it can be pasted as-is)
-    and endpoint-selection flags, so troubleshoot checks the same hosts.
-    """
-    return [
-        "nbkp",
-        "preflight",
-        "troubleshoot",
-        *(["-c", os.path.relpath(config_path, cwd)] if config_path else []),
-        *(arg for loc in location or [] for arg in ("-l", loc)),
-        *(arg for loc in exclude_location or [] for arg in ("-L", loc)),
-        *(["-N", network.value] if network is not None else []),
-    ]
-
-
 class _HumanProgress:
     """Live progress display of a human-format run.
 
@@ -210,11 +186,13 @@ class _HumanProgress:
         only_syncs: list[str] | None,
         progress: ProgressMode | None,
         strictness: Strictness,
+        invocation: Invocation,
     ) -> None:
         total = _check_total(cfg, only_syncs)
         self._cfg = cfg
         self._resolved = resolved
         self._strictness = strictness
+        self._invocation = invocation
         self._check_bar = StepProgressBar(total) if total > 0 else None
         self._use_spinner = progress in (None, ProgressMode.NONE)
         self._console = Console()
@@ -240,6 +218,7 @@ class _HumanProgress:
             self._cfg,
             resolved_endpoints=self._resolved,
             strictness=self._strictness,
+            invocation=self._invocation,
         )
 
     def sync_callbacks(self) -> SyncCallbacks:
@@ -277,7 +256,7 @@ def _print_outcome(
     output: OutputFormat,
     strictness: Strictness,
     dry_run: bool,
-    hint: list[str],
+    hint: str,
 ) -> None:
     match (output, pipeline.has_preflight_errors):
         case (OutputFormat.JSON, aborted):
@@ -290,14 +269,12 @@ def _print_outcome(
             )
 
 
-def _json_payload(
-    pipeline: PipelineResult, hint: list[str] | None
-) -> dict[str, object]:
+def _json_payload(pipeline: PipelineResult, hint: str | None) -> dict[str, object]:
     return {
         "volumes": list(pipeline.vol_statuses.values()),
         "syncs": list(pipeline.sync_statuses.values()),
         "results": list(pipeline.results),
-        **({"hint": shlex.join(hint)} if hint is not None else {}),
+        **({"hint": hint} if hint is not None else {}),
     }
 
 
@@ -314,7 +291,7 @@ def _fatal_sync_errors(
 
 
 def _abort_message(
-    pipeline: PipelineResult, strictness: Strictness, hint: list[str]
+    pipeline: PipelineResult, strictness: Strictness, hint: str
 ) -> RenderableType:
     errored = _fatal_sync_errors(pipeline.sync_statuses, strictness)
     plural = "s" if len(errored) != 1 else ""
@@ -331,7 +308,7 @@ def _abort_message(
             )
             for slug, errors in errored.items()
         ),
-        Text.assemble("Run ", (shlex.join(hint), "bold"), " for step-by-step fixes."),
+        Text.assemble("Run ", (hint, "bold"), " for step-by-step fixes."),
     )
 
 
