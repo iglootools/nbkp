@@ -102,6 +102,21 @@ nbkp run --dry-run
 nbkp sh -o /mnt/usb-backup/backup.sh --relative-dst
 ```
 
+### `sh` — generate a standalone backup shell script
+
+`nbkp sh` compiles the config into a bash script with every path and option baked in, for hosts without Python or to review the exact commands before running them. Endpoints are resolved once, at generation time (`--location`, `--exclude-location` and `--network` apply then). Volumes with mount management must be mounted beforehand (`nbkp disks mount`).
+
+```bash
+nbkp sh -o backup.sh                    # write an executable script
+nbkp sh -o /mnt/usb/backup.sh --relative-dst   # paths relative to the script
+
+./backup.sh                             # run all syncs
+./backup.sh --dry-run --progress overall
+./backup.sh --strictness ignore-none    # any inactive sync aborts the run
+```
+
+The script behaves like `nbkp run`: it checks every sync first (sentinels, tools, snapshot layout), skips inactive syncs without failing (`--strictness ignore-inactive`, the default), aborts on infrastructure errors before syncing anything, runs the syncs in dependency order, and cancels syncs downstream of a failed or skipped one. It exits non-zero when a sync fails or is cancelled because of a failure; a cancellation caused by an inactive (skipped) upstream sync is no more an error than that skip, unless `--strictness ignore-none`. With `--strictness ignore-all`, syncs with infrastructure errors are attempted once their sentinels are present. Pruning failures are logged as warnings, as in `nbkp run`.
+
 ### Example 2: Multi-hop chained backups
 
 A more complex setup with a bastion host, chained syncs across local and remote volumes, mixed snapshot modes (btrfs and hard-link), and strict connection options. Data flows through a 6-step pipeline: local source, through a bastion to a remote server, across different snapshot backends, and back to a local destination.
@@ -219,6 +234,8 @@ This is a Linux-only feature. The target host (local or remote) must have udisks
    # Review the output, then install the single block to:
    #   /etc/polkit-1/rules.d/50-nbkp.rules
    ```
+
+   `--user` is the user nbkp runs as on the host (the SSH user for remote volumes); it defaults to the user running `setup-auth`, so pass `-u <user>` when generating the rule on another machine. `-o json` emits the rule text and install path for scripting.
 
    The rule is the **only** authorization artifact — no sudoers file is generated. It grants the backup user the udisks actions (`filesystem-mount[-system]`, `filesystem-fstab`, `encrypted-unlock[-system]`, `encrypted-lock-others`, etc.) and is regenerated from the config so it always matches the configured volumes.
 

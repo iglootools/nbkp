@@ -10,6 +10,7 @@ from rich.text import Text
 
 from ..clihelpers import Severity, Strictness, classify_severity, severity_icon
 from .lifecycle import LUKS_STAGE_FAILURES, MOUNT_STAGE_FAILURES
+from .models import MountFailureReason
 
 if TYPE_CHECKING:
     from ..config.protocol.volume import LocalVolume, RemoteVolume
@@ -39,7 +40,7 @@ class MountStatusData(Protocol):
     def mounted(self) -> bool | None: ...
 
     @property
-    def mount_failure_reason(self) -> str | None: ...
+    def mount_failure_reason(self) -> MountFailureReason | None: ...
 
 
 # ── Mount-state column severity ─────────────────────────────────
@@ -70,12 +71,13 @@ def device_fail_severity(
 
 
 def luks_fail_severity(
-    mount_failure_reason: str | None,
+    mount_failure_reason: MountFailureReason | None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Severity:
     """Severity for ``luks_unlocked=False``.
 
-    Real LUKS-stage failures (``UNLOCK_FAILED`` / ``NOT_AUTHORIZED``)
+    Real LUKS-stage failures (``PASSPHRASE_NOT_AVAILABLE`` /
+    ``UNLOCK_FAILED`` / ``NOT_AUTHORIZED``)
     are non-inactive — they're real errors and surface as ✗ under any
     strictness that doesn't ignore everything.  Other states (probe
     found the cleartext device missing but no unlock was attempted,
@@ -86,12 +88,12 @@ def luks_fail_severity(
 
 
 def mounted_fail_severity(
-    mount_failure_reason: str | None,
+    mount_failure_reason: MountFailureReason | None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Severity:
     """Severity for ``mounted=False``.
 
-    Real mount-stage failures (``MOUNT_FAILED`` / ``POLKIT_REFUSED``)
+    Real mount-stage failures (``MOUNT_FAILED`` / ``NOT_AUTHORIZED``)
     are non-inactive.  Other states (probe-only, or a cascade from an
     earlier step) are inactive.
     """

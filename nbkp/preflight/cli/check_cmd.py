@@ -8,9 +8,11 @@ from typing import Annotated
 import typer
 
 from ...clihelpers import OutputFormat, echo_json
+from ...clihelpers.invocation import Invocation
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
 from ...config.epresolution import NetworkType
 from ...disks.cli.helpers import managed_mount
+from ..status import PreflightResult
 from ..strictness import Strictness
 from . import app
 from .helpers import check_and_display
@@ -86,28 +88,42 @@ def check(
     ] = True,
 ) -> None:
     """Verify that volumes are reachable, sentinel files exist, SSH connectivity works, and required tools are available. Use this before `run` to confirm everything is ready."""
-    cfg = load_config_or_exit(config)
+    cfg = load_config_or_exit(config, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
-    output_format = output
+    invocation = Invocation.of(
+        config, location, exclude_location, network.value if network else None
+    )
 
     with managed_mount(
-        cfg, resolved, mount=mount, umount=umount, output_format=output_format
+        cfg,
+        resolved,
+        mount=mount,
+        umount=umount,
+        output_format=output,
+        strictness=strictness,
     ) as (cfg, mount_observations):
         preflight, has_errors = check_and_display(
             cfg,
-            output_format,
+            output,
             strictness,
             resolved_endpoints=resolved,
             mount_observations=mount_observations,
+            invocation=invocation,
         )
-
-        if output_format is OutputFormat.JSON:
-            echo_json(
-                {
-                    "volumes": list(preflight.volume_statuses.values()),
-                    "syncs": list(preflight.sync_statuses.values()),
-                }
-            )
-
+        if output is OutputFormat.JSON:
+            echo_json(check_json(preflight))
         if has_errors:
             raise typer.Exit(1)
+
+
+def check_json(preflight: PreflightResult) -> dict[str, object]:
+    """JSON view of a check: every layer that can carry an error.
+
+    ``ssh_endpoints`` includes the implicit ``localhost`` endpoint, whose
+    tool errors (rsync missing, …) block the syncs of local volumes.
+    """
+    return {
+        "ssh_endpoints": list(preflight.ssh_endpoint_statuses.values()),
+        "volumes": list(preflight.volume_statuses.values()),
+        "syncs": list(preflight.sync_statuses.values()),
+    }

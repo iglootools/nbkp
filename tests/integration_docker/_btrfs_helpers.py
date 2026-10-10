@@ -7,6 +7,7 @@ exercise the btrfs snapshot module against either execution backend.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -47,7 +48,11 @@ def run_test_creates_readonly_snapshot(env: BtrfsEnv) -> None:
     env.seed_staging("test data")
 
     snapshot_path = create_snapshot(
-        env.sync, env.config, resolved_endpoints=env.resolved
+        env.sync,
+        env.config,
+        now=datetime.now(UTC),
+        platform=sys.platform,
+        resolved_endpoints=env.resolved,
     )
 
     assert env.check_exists(snapshot_path)
@@ -61,8 +66,20 @@ def run_test_lists_sorted_oldest_first(env: BtrfsEnv) -> None:
     now1 = datetime(2024, 1, 1, tzinfo=UTC)
     now2 = datetime(2024, 1, 2, tzinfo=UTC)
 
-    create_snapshot(env.sync, env.config, now=now1, resolved_endpoints=env.resolved)
-    create_snapshot(env.sync, env.config, now=now2, resolved_endpoints=env.resolved)
+    create_snapshot(
+        env.sync,
+        env.config,
+        now=now1,
+        platform=sys.platform,
+        resolved_endpoints=env.resolved,
+    )
+    create_snapshot(
+        env.sync,
+        env.config,
+        now=now2,
+        platform=sys.platform,
+        resolved_endpoints=env.resolved,
+    )
 
     snapshots = list_snapshots(env.sync, env.config, env.resolved)
     assert len(snapshots) == 2
@@ -77,8 +94,20 @@ def run_test_returns_most_recent(env: BtrfsEnv) -> None:
     now1 = datetime(2024, 1, 1, tzinfo=UTC)
     now2 = datetime(2024, 1, 2, tzinfo=UTC)
 
-    create_snapshot(env.sync, env.config, now=now1, resolved_endpoints=env.resolved)
-    create_snapshot(env.sync, env.config, now=now2, resolved_endpoints=env.resolved)
+    create_snapshot(
+        env.sync,
+        env.config,
+        now=now1,
+        platform=sys.platform,
+        resolved_endpoints=env.resolved,
+    )
+    create_snapshot(
+        env.sync,
+        env.config,
+        now=now2,
+        platform=sys.platform,
+        resolved_endpoints=env.resolved,
+    )
 
     latest = get_latest_snapshot(env.sync, env.config, env.resolved)
     assert latest is not None
@@ -95,7 +124,11 @@ def run_test_deletes_subvolume(env: BtrfsEnv) -> None:
     env.seed_staging("test data")
 
     snapshot_path = create_snapshot(
-        env.sync, env.config, resolved_endpoints=env.resolved
+        env.sync,
+        env.config,
+        now=datetime.now(UTC),
+        platform=sys.platform,
+        resolved_endpoints=env.resolved,
     )
     assert env.check_exists(snapshot_path)
 
@@ -113,7 +146,11 @@ def run_test_prunes_oldest_beyond_limit(env: BtrfsEnv) -> None:
     for i in range(3):
         now = datetime(2024, 1, 1 + i, tzinfo=UTC)
         path = create_snapshot(
-            env.sync, env.config, now=now, resolved_endpoints=env.resolved
+            env.sync,
+            env.config,
+            now=now,
+            platform=sys.platform,
+            resolved_endpoints=env.resolved,
         )
         names.append(Snapshot.from_path(path).name)
 
@@ -139,7 +176,11 @@ def run_test_dry_run_preserves_all(env: BtrfsEnv) -> None:
     for i in range(3):
         now = datetime(2024, 1, 1 + i, tzinfo=UTC)
         path = create_snapshot(
-            env.sync, env.config, now=now, resolved_endpoints=env.resolved
+            env.sync,
+            env.config,
+            now=now,
+            platform=sys.platform,
+            resolved_endpoints=env.resolved,
         )
     snapshot = Snapshot.from_path(path)
     update_latest_symlink(

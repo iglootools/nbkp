@@ -14,6 +14,21 @@ from ..config.epresolution import ResolvedEndpoints
 from ..remote.dispatch import run_on_volume
 
 
+class DeviceProbeError(Exception):
+    """A read-only device probe failed, so the device state is unknown.
+
+    Raised instead of returning ``None`` so that "the probe failed" is not
+    mistaken for "the container is locked" (which would, e.g., make umount
+    skip the lock step on a drive that is in fact unlocked).
+    """
+
+    def __init__(self, command: str, returncode: int, stderr: str) -> None:
+        super().__init__(f"{command} failed (exit {returncode}): {stderr}".rstrip())
+        self.command = command
+        self.returncode = returncode
+        self.stderr = stderr
+
+
 def detect_device_present(
     volume: Volume,
     device_uuid: str,
@@ -43,6 +58,7 @@ def discover_cleartext_device(
     Runs ``lsblk -rno NAME,TYPE /dev/disk/by-uuid/<luks-uuid>`` and returns
     ``/dev/mapper/<name>`` for the ``crypt`` child, or ``None`` when the
     container is still locked (no crypt child) or the device is absent.
+    Raises :class:`DeviceProbeError` when ``lsblk`` itself fails.
 
     Discovering the device (rather than assuming ``luks-<uuid>``) makes nbkp
     agnostic to what named the mapper: a LUKS2 header label and an
@@ -53,13 +69,20 @@ def discover_cleartext_device(
         volume,
         resolved_endpoints,
     )
-    if result.returncode != 0:
-        return None
-    for line in result.stdout.splitlines():
-        parts = line.split()
-        if len(parts) >= 2 and parts[1] == "crypt":
-            return f"/dev/mapper/{parts[0]}"
-    return None
+    match result.returncode:
+        case 0:
+            rows = (line.split() for line in result.stdout.splitlines())
+            return next(
+                (f"/dev/mapper/{row[0]}" for row in rows if row[1:2] == ["crypt"]),
+                None,
+            )
+        case 32:
+            # lsblk: none of the requested devices exists — the container is
+            # not plugged in.  Any other non-zero exit means the probe itself
+            # failed (lsblk missing, permission problem, …).
+            return None
+        case _:
+            raise DeviceProbeError("lsblk", result.returncode, result.stderr.strip())
 
 
 def resolve_target_device(
@@ -71,7 +94,8 @@ def resolve_target_device(
 
     For unencrypted volumes this is ``/dev/disk/by-uuid/<fs-uuid>``.  For
     encrypted volumes it is the discovered cleartext mapper, or ``None`` when
-    the container is still locked.
+    the container is still locked or absent.  Raises :class:`DeviceProbeError`
+    when the state cannot be determined.
     """
     if mount_config.encryption is None:
         return f"/dev/disk/by-uuid/{mount_config.device_uuid}"

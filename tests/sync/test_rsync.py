@@ -900,7 +900,7 @@ class TestBuildRsyncCommandMultiHopProxy:
         )
         proxy_cmd = (
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
-            f" -o ProxyCommand={inner}"
+            f" -o {shlex.quote(f'ProxyCommand={inner}')}"
             " -p 2222"
             " -W %h:%p bastion2.example.com"
         )
@@ -1249,7 +1249,7 @@ class TestDestSuffix:
         from datetime import datetime
 
         _now = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
-        _ts = create_snapshot_timestamp(_now, dst)
+        _ts = create_snapshot_timestamp(_now, dst, "linux")
         cmd = build_rsync_command(sync, config, dest_suffix=f"snapshots/{_ts.name}")
         assert cmd[-1] == f"/mnt/dst/snapshots/{_ts.name}/"
 

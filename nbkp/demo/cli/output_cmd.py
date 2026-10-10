@@ -181,18 +181,28 @@ def _show_troubleshoot() -> None:
     _print_panel("print_human_troubleshoot", buf)
 
 
-def _show_config_errors() -> None:
+def _show_error_panel(title: str, error: ConfigError) -> None:
     console, buf = _capture_console()
-    print_config_error(
-        ConfigError(
-            "Config file not found: /etc/nbkp/config.yaml",
-            reason=ConfigErrorReason.FILE_NOT_FOUND,
-        ),
-        console=console,
-    )
-    _print_panel("print_config_error (file not found)", buf)
+    print_config_error(error, console=console)
+    _print_panel(f"print_config_error ({title})", buf)
 
-    console, buf = _capture_console()
+
+def _validation_error(data: dict[str, object]) -> ConfigError:
+    """The ConfigError *data* produces; it must be an invalid config.
+
+    Raises when *data* unexpectedly validates — the panel would otherwise
+    render empty and the demo would silently stop showing that error.
+    """
+    try:
+        Config.model_validate(data)
+    except ValidationError as ve:
+        err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
+        err.__cause__ = ve
+        return err
+    raise AssertionError(f"demo config unexpectedly validates: {data!r}")
+
+
+def _yaml_error() -> ConfigError:
     try:
         yaml.safe_load("not_a_list:\n  - [invalid")
     except yaml.YAMLError as ye:
@@ -201,44 +211,36 @@ def _show_config_errors() -> None:
             reason=ConfigErrorReason.INVALID_YAML,
         )
         err.__cause__ = ye
-        print_config_error(err, console=console)
-    _print_panel("print_config_error (invalid YAML)", buf)
+        return err
+    raise AssertionError("demo YAML unexpectedly parses")
 
-    console, buf = _capture_console()
-    try:
-        Config.model_validate({"volumes": {"v": {"type": "ftp", "path": "/x"}}})
-    except ValidationError as ve:
-        err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
-        err.__cause__ = ve
-        print_config_error(err, console=console)
-    _print_panel("print_config_error (invalid volume type)", buf)
 
-    console, buf = _capture_console()
-    try:
-        Config.model_validate(
+def _show_config_errors() -> None:
+    _show_error_panel(
+        "file not found",
+        ConfigError(
+            "Config file not found: /etc/nbkp/config.yaml",
+            reason=ConfigErrorReason.FILE_NOT_FOUND,
+        ),
+    )
+    _show_error_panel("invalid YAML", _yaml_error())
+    _show_error_panel(
+        "invalid volume type",
+        _validation_error({"volumes": {"v": {"type": "ftp", "path": "/x"}}}),
+    )
+    _show_error_panel(
+        "unknown server reference",
+        _validation_error(
             {
                 "ssh-endpoints": {},
                 "volumes": {
-                    "v": {
-                        "type": "remote",
-                        "ssh-endpoint": "missing",
-                        "path": "/x",
-                    },
+                    "v": {"type": "remote", "ssh-endpoint": "missing", "path": "/x"},
                 },
                 "syncs": {},
             }
-        )
-    except ValidationError as ve:
-        err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
-        err.__cause__ = ve
-        print_config_error(err, console=console)
-    _print_panel("print_config_error (unknown server reference)", buf)
-
-    console, buf = _capture_console()
-    try:
-        Config.model_validate({"volumes": {"v": {"type": "local"}}, "syncs": {}})
-    except ValidationError as ve:
-        err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
-        err.__cause__ = ve
-        print_config_error(err, console=console)
-    _print_panel("print_config_error (missing required field)", buf)
+        ),
+    )
+    _show_error_panel(
+        "missing required field",
+        _validation_error({"volumes": {"v": {"type": "local"}}, "syncs": {}}),
+    )

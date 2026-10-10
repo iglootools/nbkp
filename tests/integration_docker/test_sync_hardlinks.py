@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 from nbkp.config import (
@@ -85,7 +87,13 @@ def _do_sync(
     sync, config, resolved = _make_hl_config(
         str(src), remote_hl_volume, docker_ssh_endpoint, max_snapshots
     )
-    snapshot_path = create_snapshot_dir(sync, config, resolved_endpoints=resolved)
+    snapshot_path = create_snapshot_dir(
+        sync,
+        config,
+        now=datetime.now(UTC),
+        platform=sys.platform,
+        resolved_endpoints=resolved,
+    )
     snapshot = Snapshot.from_path(snapshot_path)
 
     result = run_rsync(
@@ -122,7 +130,13 @@ class TestHardLinkSnapshots:
         sync, config, resolved = _make_hl_config(
             str(src), remote_hardlink_volume, docker_ssh_endpoint
         )
-        snapshot_path = create_snapshot_dir(sync, config, resolved_endpoints=resolved)
+        snapshot_path = create_snapshot_dir(
+            sync,
+            config,
+            now=datetime.now(UTC),
+            platform=sys.platform,
+            resolved_endpoints=resolved,
+        )
 
         # Verify directory exists on remote
         check = ssh_exec(docker_ssh_endpoint, f"test -d {snapshot_path}")
@@ -141,7 +155,13 @@ class TestHardLinkSnapshots:
         sync, config, resolved = _make_hl_config(
             str(src), remote_hardlink_volume, docker_ssh_endpoint
         )
-        snapshot_path = create_snapshot_dir(sync, config, resolved_endpoints=resolved)
+        snapshot_path = create_snapshot_dir(
+            sync,
+            config,
+            now=datetime.now(UTC),
+            platform=sys.platform,
+            resolved_endpoints=resolved,
+        )
         snapshot = Snapshot.from_path(snapshot_path)
 
         result = run_rsync(
@@ -212,7 +232,13 @@ class TestHardLinkSnapshots:
         time.sleep(0.1)  # distinct timestamp
 
         # Second sync with link-dest from first snapshot
-        snapshot_path = create_snapshot_dir(sync, config, resolved_endpoints=resolved)
+        snapshot_path = create_snapshot_dir(
+            sync,
+            config,
+            now=datetime.now(UTC),
+            platform=sys.platform,
+            resolved_endpoints=resolved,
+        )
         snap2 = Snapshot.from_path(snapshot_path)
 
         result = run_rsync(
@@ -262,7 +288,13 @@ class TestHardLinkSnapshots:
         (src / "changed.txt").write_text("v2 is different")
 
         # Second sync with --link-dest from first
-        snapshot_path = create_snapshot_dir(sync, config, resolved_endpoints=resolved)
+        snapshot_path = create_snapshot_dir(
+            sync,
+            config,
+            now=datetime.now(UTC),
+            platform=sys.platform,
+            resolved_endpoints=resolved,
+        )
         snap2 = Snapshot.from_path(snapshot_path).name
         result = run_rsync(
             sync,
@@ -304,7 +336,13 @@ class TestHardLinkSnapshots:
         sync, config, resolved = _make_hl_config(
             str(src), remote_hardlink_volume, docker_ssh_endpoint
         )
-        snapshot_path = create_snapshot_dir(sync, config, resolved_endpoints=resolved)
+        snapshot_path = create_snapshot_dir(
+            sync,
+            config,
+            now=datetime.now(UTC),
+            platform=sys.platform,
+            resolved_endpoints=resolved,
+        )
         snapshot = Snapshot.from_path(snapshot_path)
 
         # Dry-run rsync

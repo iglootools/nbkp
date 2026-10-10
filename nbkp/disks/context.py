@@ -75,40 +75,28 @@ def managed_mount(
     on_prefetch_start / on_prefetch_end:
         Called around each passphrase retrieval in the prefetch phase.
     """
-    has_mount_config = any(
-        getattr(v, "mount", None) is not None for v in config.volumes.values()
-    )
-    do_mount = mount and has_mount_config
+    do_mount = mount and any(v.mount is not None for v in config.volumes.values())
     do_umount = do_mount and umount
 
-    mount_observations: dict[str, MountObservation] = {}
-    resolved_config = config
-
-    if do_mount:
-        # Retrieve *every* configured passphrase before touching a device,
-        # not just the ones this run needs.  Unfiltered by *names* on
-        # purpose: the point is that one approval pass covers every drive,
-        # so a later run with a different drive attached needs no operator.
-        # See :func:`credentials.prefetch_passphrases`.
-        prefetch_passphrases(
-            config,
-            passphrase_fn,
-            on_prefetch_start=on_prefetch_start,
-            on_prefetch_end=on_prefetch_end,
-        )
-        mount_results = mount_volumes(
-            config,
-            resolved,
-            passphrase_fn,
-            names=names,
-            on_mount_start=on_mount_start,
-            on_mount_end=on_mount_end,
-        )
-        mount_observations = build_mount_observations(mount_results)
-        resolved_config = apply_effective_paths(config, mount_observations)
-
+    # The ``try`` covers prefetch and mounting, not just the body: a Ctrl-C or
+    # a callback exception half-way through mounting must still umount/lock
+    # the drives that were already unlocked (umount is unconditional and
+    # idempotent, see :func:`lifecycle.umount_volumes`).
     try:
-        yield resolved_config, mount_observations
+        yield (
+            _mount_phase(
+                config,
+                resolved,
+                passphrase_fn,
+                names=names,
+                on_prefetch_start=on_prefetch_start,
+                on_prefetch_end=on_prefetch_end,
+                on_mount_start=on_mount_start,
+                on_mount_end=on_mount_end,
+            )
+            if do_mount
+            else (config, {})
+        )
     finally:
         if do_umount:
             umount_volumes(
@@ -118,3 +106,38 @@ def managed_mount(
                 on_umount_start=on_umount_start,
                 on_umount_end=on_umount_end,
             )
+
+
+def _mount_phase(
+    config: Config,
+    resolved: ResolvedEndpoints,
+    passphrase_fn: Callable[[str], str],
+    *,
+    names: list[str] | None,
+    on_prefetch_start: Callable[[str], None] | None,
+    on_prefetch_end: Callable[[str, PassphrasePrefetch], None] | None,
+    on_mount_start: Callable[[str], None] | None,
+    on_mount_end: Callable[[str, MountResult], None] | None,
+) -> tuple[Config, dict[str, MountObservation]]:
+    """Prefetch every passphrase, mount, and resolve discovered mountpoints."""
+    # Retrieve *every* configured passphrase before touching a device, not
+    # just the ones this run needs.  Unfiltered by *names* on purpose: the
+    # point is that one approval pass covers every drive, so a later run with
+    # a different drive attached needs no operator.
+    # See :func:`credentials.prefetch_passphrases`.
+    prefetch_passphrases(
+        config,
+        passphrase_fn,
+        on_prefetch_start=on_prefetch_start,
+        on_prefetch_end=on_prefetch_end,
+    )
+    mount_results = mount_volumes(
+        config,
+        resolved,
+        passphrase_fn,
+        names=names,
+        on_mount_start=on_mount_start,
+        on_mount_end=on_mount_end,
+    )
+    observations = build_mount_observations(mount_results)
+    return apply_effective_paths(config, observations), observations

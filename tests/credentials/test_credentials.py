@@ -16,8 +16,10 @@ from nbkp.config import (
 )
 from nbkp.credentials import (
     CredentialError,
+    CredentialErrorReason,
     PassphraseCache,
     collect_passphrase_ids,
+    passphrase_env_var,
     prefetch_count,
     prefetch_passphrases,
     retrieve_passphrase,
@@ -38,16 +40,18 @@ class TestRetrievePassphraseKeyring:
         mock_keyring.get_password.return_value = None
         with (
             patch.dict("sys.modules", {"keyring": mock_keyring}),
-            pytest.raises(CredentialError, match="No passphrase found"),
+            pytest.raises(CredentialError) as excinfo,
         ):
             retrieve_passphrase("disk1", CredentialProvider.KEYRING)
+        assert excinfo.value.reason == CredentialErrorReason.NOT_FOUND
 
     def test_raises_when_keyring_not_installed(self) -> None:
         with (
             patch.dict("sys.modules", {"keyring": None}),
-            pytest.raises(CredentialError, match="keyring package not installed"),
+            pytest.raises(CredentialError) as excinfo,
         ):
             retrieve_passphrase("disk1", CredentialProvider.KEYRING)
+        assert excinfo.value.reason == CredentialErrorReason.NOT_INSTALLED
 
 
 class TestRetrievePassphrasePrompt:
@@ -63,21 +67,27 @@ class TestRetrievePassphrasePrompt:
 
 
 class TestRetrievePassphraseEnv:
-    def test_returns_env_value(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("NBKP_PASSPHRASE_DISK1", "env-secret")
-        result = retrieve_passphrase("disk1", CredentialProvider.ENV)
+    def test_returns_env_value(self) -> None:
+        result = retrieve_passphrase(
+            "disk1",
+            CredentialProvider.ENV,
+            environ={"NBKP_PASSPHRASE_DISK1": "env-secret"},
+        )
         assert result == "env-secret"
 
-    def test_converts_hyphens_to_underscores(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("NBKP_PASSPHRASE_MY_DISK", "env-secret")
-        result = retrieve_passphrase("my-disk", CredentialProvider.ENV)
+    def test_converts_hyphens_to_underscores(self) -> None:
+        result = retrieve_passphrase(
+            "my-disk",
+            CredentialProvider.ENV,
+            environ={"NBKP_PASSPHRASE_MY_DISK": "env-secret"},
+        )
         assert result == "env-secret"
 
     def test_raises_when_env_not_set(self) -> None:
-        with pytest.raises(CredentialError, match="NBKP_PASSPHRASE_DISK1"):
-            retrieve_passphrase("disk1", CredentialProvider.ENV)
+        with pytest.raises(CredentialError) as excinfo:
+            retrieve_passphrase("disk1", CredentialProvider.ENV, environ={})
+        assert excinfo.value.reason == CredentialErrorReason.ENV_UNSET
+        assert passphrase_env_var("disk1") in str(excinfo.value)
 
 
 class TestRetrievePassphraseCommand:
@@ -121,16 +131,18 @@ class TestRetrievePassphraseCommand:
             mock_run.return_value = subprocess.CompletedProcess(
                 args=[], returncode=1, stdout="", stderr="not found"
             )
-            with pytest.raises(CredentialError, match="failed.*exit 1"):
+            with pytest.raises(CredentialError) as excinfo:
                 retrieve_passphrase(
                     "disk1",
                     CredentialProvider.COMMAND,
                     command_template=["pass", "show", "nbkp/{id}"],
                 )
+        assert excinfo.value.reason == CredentialErrorReason.COMMAND_FAILED
 
     def test_raises_when_no_command_template(self) -> None:
-        with pytest.raises(CredentialError, match="credential-command is required"):
+        with pytest.raises(CredentialError) as excinfo:
             retrieve_passphrase("disk1", CredentialProvider.COMMAND)
+        assert excinfo.value.reason == CredentialErrorReason.COMMAND_MISSING
 
 
 class TestPassphraseCache:
@@ -239,13 +251,17 @@ class TestPrefetchPassphrases:
 
         def passphrase_fn(pid: str) -> str:
             if pid == "absent":
-                raise CredentialError("No passphrase found in keyring for id 'absent'")
+                raise CredentialError(
+                    "No passphrase found in keyring for id 'absent'",
+                    reason=CredentialErrorReason.NOT_FOUND,
+                )
             return "secret"
 
         results = {r.passphrase_id: r for r in prefetch_passphrases(cfg, passphrase_fn)}
         assert results["present"].success
+        assert results["present"].reason is None
         assert not results["absent"].success
-        assert "No passphrase found" in (results["absent"].detail or "")
+        assert results["absent"].reason == CredentialErrorReason.NOT_FOUND
 
     def test_skipped_for_prompt_provider(self) -> None:
         cfg = _cfg(provider=CredentialProvider.PROMPT, encrypted={"a": "id"})

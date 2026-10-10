@@ -20,6 +20,7 @@ from nbkp.config import (
 from nbkp.config.epresolution import ResolvedEndpoint
 from nbkp.fsprotocol import Snapshot
 from nbkp.snapshots.common import create_snapshot_timestamp
+from nbkp.snapshots.errors import SnapshotOp, SnapshotOperationError
 from nbkp.snapshots.hardlinks import (
     cleanup_orphaned_snapshots,
     create_snapshot_dir,
@@ -30,8 +31,8 @@ from nbkp.snapshots.hardlinks import (
 _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
 _LOCAL_VOL = LocalVolume(slug="dummy", path="/dummy")
 _REMOTE_VOL = RemoteVolume(slug="dummy", ssh_endpoint="dummy", path="/dummy")
-_TS_LOCAL = create_snapshot_timestamp(_NOW, _LOCAL_VOL)
-_TS_REMOTE = create_snapshot_timestamp(_NOW, _REMOTE_VOL)
+_TS_LOCAL = create_snapshot_timestamp(_NOW, _LOCAL_VOL, "linux")
+_TS_REMOTE = create_snapshot_timestamp(_NOW, _REMOTE_VOL, "linux")
 
 
 def _local_config() -> tuple[SyncConfig, Config]:
@@ -93,7 +94,7 @@ class TestCreateSnapshotDir:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         sync, config = _local_config()
 
-        path = create_snapshot_dir(sync, config, now=_NOW)
+        path = create_snapshot_dir(sync, config, now=_NOW, platform="linux")
 
         assert path == f"/dst/snapshots/{_TS_LOCAL.name}"
         mock_run.assert_called_once()
@@ -105,7 +106,9 @@ class TestCreateSnapshotDir:
         mock_remote.return_value = MagicMock(returncode=0, stderr="")
         sync, config, re = _remote_config()
 
-        path = create_snapshot_dir(sync, config, now=_NOW, resolved_endpoints=re)
+        path = create_snapshot_dir(
+            sync, config, now=_NOW, platform="linux", resolved_endpoints=re
+        )
 
         assert path == f"/backup/snapshots/{_TS_REMOTE.name}"
         mock_remote.assert_called_once()
@@ -115,8 +118,13 @@ class TestCreateSnapshotDir:
         mock_run.return_value = MagicMock(returncode=1, stderr="permission denied")
         sync, config = _local_config()
 
-        with pytest.raises(RuntimeError, match="mkdir"):
-            create_snapshot_dir(sync, config, now=_NOW)
+        with pytest.raises(
+            SnapshotOperationError,
+            check=lambda e: (
+                e.op is SnapshotOp.MKDIR and e.stderr == "permission denied"
+            ),
+        ):
+            create_snapshot_dir(sync, config, now=_NOW, platform="linux")
 
 
 class TestCleanupOrphanedSnapshots:

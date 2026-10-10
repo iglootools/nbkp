@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import enum
 import subprocess
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 
 from ..config import (
     Config,
@@ -14,14 +14,18 @@ from ..config import (
     Volume,
 )
 from ..config.epresolution import ResolvedEndpoints
+from ..credentials import CredentialError
 from ..remote.dispatch import run_on_volume
-from ..remote.fabricssh import STDIN_CLOSED_MARKER
+from ..remote.errors import SSH_CONNECTION_ERRORS, describe_error
+from ..remote.fabricssh import StdinClosedProcess
 from .detection import (
+    DeviceProbeError,
     detect_device_present,
     discover_cleartext_device,
     find_mountpoint,
     resolve_target_device,
 )
+from .models import MountFailureReason
 from .udisks import (
     build_lock_command,
     build_mount_command,
@@ -79,17 +83,6 @@ def _mount_with_retry(
     return result
 
 
-class MountFailureReason(str, enum.Enum):
-    """Structured reason for a mount failure."""
-
-    DEVICE_NOT_PRESENT = "device_not_present"
-    UNLOCK_FAILED = "unlock_failed"
-    MOUNT_FAILED = "mount_failed"
-    NOT_AUTHORIZED = "not_authorized"
-    UDISKS_NOT_AVAILABLE = "udisks_not_available"
-    UNREACHABLE = "unreachable"
-
-
 # Partition of MountFailureReason by lifecycle stage.  Consumed by
 # ``nbkp.disks.output`` to disambiguate "real failure at this stage" (✗)
 # from "no action attempted" (⚠).  ``NOT_AUTHORIZED`` appears in both
@@ -98,6 +91,7 @@ class MountFailureReason(str, enum.Enum):
 # in both colours only the failed cell.
 LUKS_STAGE_FAILURES: frozenset[MountFailureReason] = frozenset(
     {
+        MountFailureReason.PASSPHRASE_NOT_AVAILABLE,
         MountFailureReason.UNLOCK_FAILED,
         MountFailureReason.NOT_AUTHORIZED,
     }
@@ -126,19 +120,20 @@ def _classify_udisks_failure(
     """
     stderr = result.stderr.strip()
     lowered = stderr.lower()
-    if stderr == STDIN_CLOSED_MARKER or any(
+    if isinstance(result, StdinClosedProcess) or any(
         sig in lowered for sig in _NOT_AUTHORIZED_SIGNATURES
     ):
         return (
             MountFailureReason.NOT_AUTHORIZED,
             f"{action} not authorized — polkit rule not configured",
         )
-    if any(sig in lowered for sig in _UDISKS_UNAVAILABLE_SIGNATURES):
+    elif any(sig in lowered for sig in _UDISKS_UNAVAILABLE_SIGNATURES):
         return (
             MountFailureReason.UDISKS_NOT_AVAILABLE,
             f"{action} failed — udisks2 not available: {stderr}",
         )
-    return (failed, f"{action} failed (exit {result.returncode}): {stderr}")
+    else:
+        return (failed, f"{action} failed (exit {result.returncode}): {stderr}")
 
 
 @dataclass(frozen=True)
@@ -183,6 +178,15 @@ def _volumes_with_mount_config(
     ]
 
 
+def unknown_volume_names(config: Config, names: list[str] | None) -> list[str]:
+    """Names passed via ``--name`` that match no volume in *config*.
+
+    Validated up front so that a typo fails loudly instead of silently
+    matching nothing and reporting success.
+    """
+    return [name for name in names or [] if name not in config.volumes]
+
+
 def mount_count(
     config: Config,
     names: list[str] | None = None,
@@ -199,24 +203,28 @@ def mount_volume(
 ) -> MountResult:
     """Mount a single volume via udisks. Idempotent: skips already mounted.
 
-    Catches connection failures (timeout, DNS, SSH errors) and returns
-    a failed ``MountResult`` with ``UNREACHABLE`` rather than crashing.
+    Connection failures (timeout, DNS, SSH errors) yield a failed
+    ``MountResult`` with ``UNREACHABLE`` rather than crashing, and a failed
+    device probe yields ``PROBE_FAILED``.  Anything else — a programming
+    error — propagates.
     """
-    slug = volume.slug
-
     try:
         return _mount_volume_inner(
             volume, mount_config, resolved_endpoints, passphrase_fn
         )
-    except Exception as e:  # noqa: BLE001
-        first_line = next(
-            (line for line in str(e).splitlines() if line.strip()),
-            type(e).__name__,
-        )
+    except DeviceProbeError as e:
         return MountResult(
-            volume_slug=slug,
+            volume_slug=volume.slug,
             success=False,
-            detail=f"unreachable: {first_line}",
+            detail=f"device state unknown: {e}",
+            failure_reason=MountFailureReason.PROBE_FAILED,
+            device_present=True,
+        )
+    except SSH_CONNECTION_ERRORS as e:
+        return MountResult(
+            volume_slug=volume.slug,
+            success=False,
+            detail=f"unreachable: {describe_error(e)}",
             failure_reason=MountFailureReason.UNREACHABLE,
         )
 
@@ -228,100 +236,143 @@ def _mount_volume_inner(
     passphrase_fn: Callable[[str], str],
 ) -> MountResult:
     """Core mount logic, separated for exception boundary in ``mount_volume``."""
-    slug = volume.slug
-    enc = mount_config.encryption
-    encrypted = enc is not None
-
-    # 1. Check device present
     if not detect_device_present(volume, mount_config.device_uuid, resolved_endpoints):
         return MountResult(
-            volume_slug=slug,
+            volume_slug=volume.slug,
             success=False,
             detail=f"device not plugged in (UUID: {mount_config.device_uuid})",
             failure_reason=MountFailureReason.DEVICE_NOT_PRESENT,
             device_present=False,
         )
+    match _resolve_device_to_mount(
+        volume, mount_config, resolved_endpoints, passphrase_fn
+    ):
+        case MountResult() as failure:
+            return failure
+        case str() as device:
+            return _mount_device(volume, mount_config, device, resolved_endpoints)
 
-    # 2. Unlock LUKS if encrypted and not yet unlocked
-    cleartext_device: str | None = None
-    if enc is not None:
-        cleartext_device = discover_cleartext_device(
-            volume, mount_config.device_uuid, resolved_endpoints
-        )
-        if cleartext_device is None:
-            passphrase = passphrase_fn(enc.passphrase_id)
-            result = run_on_volume(
-                build_unlock_command(mount_config.device_uuid),
-                volume,
-                resolved_endpoints,
-                input=passphrase,
-            )
-            if result.returncode != 0:
-                reason, detail = _classify_udisks_failure(
-                    result, MountFailureReason.UNLOCK_FAILED, "unlock"
-                )
-                return MountResult(
-                    volume_slug=slug,
-                    success=False,
-                    detail=detail,
-                    failure_reason=reason,
-                    device_present=True,
-                    luks_unlocked=False,
-                )
-            # Prefer the device udisks reports on stdout ("Unlocked X as
-            # /dev/dm-N"); re-probing with lsblk here races the cleartext
-            # device's sysfs entry appearing asynchronously after unlock.
-            cleartext_device = parse_unlocked_device(
-                result.stdout
-            ) or discover_cleartext_device(
+
+def _resolve_device_to_mount(
+    volume: Volume,
+    mount_config: MountConfig,
+    resolved_endpoints: ResolvedEndpoints,
+    passphrase_fn: Callable[[str], str],
+) -> str | MountResult:
+    """The block device to mount, unlocking the LUKS container first if needed.
+
+    Returns a failed ``MountResult`` when the device cannot be produced.
+    """
+    match mount_config.encryption:
+        case None:
+            return f"/dev/disk/by-uuid/{mount_config.device_uuid}"
+        case encryption:
+            existing = discover_cleartext_device(
                 volume, mount_config.device_uuid, resolved_endpoints
             )
-
-    # 3. Determine the device to mount
-    device = (
-        cleartext_device
-        if encrypted
-        else f"/dev/disk/by-uuid/{mount_config.device_uuid}"
-    )
-    if device is None:
-        return MountResult(
-            volume_slug=slug,
-            success=False,
-            detail="unlocked device could not be resolved",
-            failure_reason=MountFailureReason.UNLOCK_FAILED,
-            device_present=True,
-            luks_unlocked=False,
-        )
-
-    # 4. Mount if not already mounted
-    effective_path = find_mountpoint(volume, device, resolved_endpoints)
-    if effective_path is None:
-        result = _mount_with_retry(device, volume, resolved_endpoints)
-        if result.returncode != 0:
-            reason, detail = _classify_udisks_failure(
-                result, MountFailureReason.MOUNT_FAILED, "mount"
+            return existing or _unlock(
+                volume,
+                mount_config.device_uuid,
+                encryption.passphrase_id,
+                resolved_endpoints,
+                passphrase_fn,
             )
-            return MountResult(
-                volume_slug=slug,
-                success=False,
-                detail=detail,
-                failure_reason=reason,
-                device_present=True,
-                luks_unlocked=True if encrypted else None,
-                mounted=False,
-                cleartext_device=cleartext_device,
-            )
-        effective_path = find_mountpoint(volume, device, resolved_endpoints)
 
+
+def _unlock_failure(slug: str, reason: MountFailureReason, detail: str) -> MountResult:
+    """Failed ``MountResult`` for the unlock stage (device is present)."""
     return MountResult(
         volume_slug=slug,
-        success=True,
+        success=False,
+        detail=detail,
+        failure_reason=reason,
+        device_present=True,
+        luks_unlocked=False,
+    )
+
+
+def _unlock(
+    volume: Volume,
+    device_uuid: str,
+    passphrase_id: str,
+    resolved_endpoints: ResolvedEndpoints,
+    passphrase_fn: Callable[[str], str],
+) -> str | MountResult:
+    """Unlock a LUKS container and return its cleartext device.
+
+    A passphrase that cannot be retrieved is reported as
+    ``PASSPHRASE_NOT_AVAILABLE`` for a drive that *is* plugged in — the case
+    prefetching deliberately leaves to this step (see
+    :func:`credentials.prefetch_passphrases`).
+    """
+    try:
+        passphrase = passphrase_fn(passphrase_id)
+    except CredentialError as e:
+        return _unlock_failure(
+            volume.slug,
+            MountFailureReason.PASSPHRASE_NOT_AVAILABLE,
+            f"passphrase '{passphrase_id}' not available: {describe_error(e)}",
+        )
+    result = run_on_volume(
+        build_unlock_command(device_uuid),
+        volume,
+        resolved_endpoints,
+        input=passphrase,
+    )
+    if result.returncode != 0:
+        reason, detail = _classify_udisks_failure(
+            result, MountFailureReason.UNLOCK_FAILED, "unlock"
+        )
+        return _unlock_failure(volume.slug, reason, detail)
+    # Prefer the device udisks reports on stdout ("Unlocked X as /dev/dm-N");
+    # re-probing with lsblk here races the cleartext device's sysfs entry
+    # appearing asynchronously after unlock.
+    device = parse_unlocked_device(result.stdout) or discover_cleartext_device(
+        volume, device_uuid, resolved_endpoints
+    )
+    return (
+        device
+        if device is not None
+        else _unlock_failure(
+            volume.slug,
+            MountFailureReason.UNLOCK_FAILED,
+            "unlocked device could not be resolved",
+        )
+    )
+
+
+def _mount_device(
+    volume: Volume,
+    mount_config: MountConfig,
+    device: str,
+    resolved_endpoints: ResolvedEndpoints,
+) -> MountResult:
+    """Mount *device* unless it is already mounted."""
+    encrypted = mount_config.encryption is not None
+    result_for = partial(
+        MountResult,
+        volume_slug=volume.slug,
         device_present=True,
         luks_unlocked=True if encrypted else None,
-        mounted=True,
-        cleartext_device=cleartext_device,
-        effective_path=effective_path,
+        cleartext_device=device if encrypted else None,
     )
+    existing = find_mountpoint(volume, device, resolved_endpoints)
+    if existing is not None:
+        return result_for(success=True, mounted=True, effective_path=existing)
+    result = _mount_with_retry(device, volume, resolved_endpoints)
+    if result.returncode != 0:
+        reason, detail = _classify_udisks_failure(
+            result, MountFailureReason.MOUNT_FAILED, "mount"
+        )
+        return result_for(
+            success=False, detail=detail, failure_reason=reason, mounted=False
+        )
+    else:
+        return result_for(
+            success=True,
+            mounted=True,
+            effective_path=find_mountpoint(volume, device, resolved_endpoints),
+        )
 
 
 def umount_volume(
@@ -332,22 +383,23 @@ def umount_volume(
     """Umount and lock LUKS for a single volume.
 
     Always attempts umount + lock LUKS regardless of who mounted.
-    Catches connection failures and returns a failed ``UmountResult``
-    rather than crashing.
+    Connection failures and failed device probes yield a failed
+    ``UmountResult`` rather than crashing; programming errors propagate.
     """
-    slug = volume.slug
-
     try:
         return _umount_volume_inner(volume, mount_config, resolved_endpoints)
-    except Exception as e:  # noqa: BLE001
-        first_line = next(
-            (line for line in str(e).splitlines() if line.strip()),
-            type(e).__name__,
-        )
+    except DeviceProbeError as e:
         return UmountResult(
-            volume_slug=slug,
+            volume_slug=volume.slug,
             success=False,
-            detail=f"unreachable: {first_line}",
+            detail=f"device state unknown: {e}",
+            warning="volume may still be mounted or unlocked, check manually",
+        )
+    except SSH_CONNECTION_ERRORS as e:
+        return UmountResult(
+            volume_slug=volume.slug,
+            success=False,
+            detail=f"unreachable: {describe_error(e)}",
             warning="volume may still be mounted, manual umount needed",
         )
 

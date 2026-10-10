@@ -5,7 +5,13 @@ from __future__ import annotations
 from ...config import Config
 from ...fsprotocol import SNAPSHOTS_DIR
 from ...snapshots.models import PruneResult
-from ..runner import SyncResult
+from ..runner import (
+    SyncFailureKind,
+    SyncOutcome,
+    SyncResult,
+    SyncWarning,
+    SyncWarningKind,
+)
 
 
 def _snap_base(config: Config, sync_slug: str) -> str:
@@ -22,34 +28,42 @@ def run_results(config: Config) -> list[SyncResult]:
     """Sync results: success, success+snapshot (local & remote), failure."""
     local_snap_base = _snap_base(config, "photos-to-usb")
     local_snap = f"{local_snap_base}/2026-02-19T10-30-00.000Z"
-    remote_snap_base = _snap_base(config, "docs-to-nas")
-    remote_snap = f"{remote_snap_base}/2026-02-19T11:00:00.000Z"
     _docs_src = config.source_endpoint(config.syncs["docs-to-nas"])
     src_vol = config.volumes[_docs_src.volume]
     src_subdir = _docs_src.subdir
     return [
         SyncResult(
             sync_slug="music-to-usb",
-            success=True,
+            outcome=SyncOutcome.SUCCESS,
             dry_run=False,
             rsync_exit_code=0,
             output="",
         ),
         SyncResult(
             sync_slug="photos-to-usb",
-            success=True,
+            outcome=SyncOutcome.SUCCESS,
             dry_run=False,
             rsync_exit_code=0,
             output="",
             snapshot_path=local_snap,
-            pruned_paths=[
+            pruned_paths=(
                 f"{local_snap_base}/2026-02-01T08-00-00.000Z",
                 f"{local_snap_base}/2026-02-10T12-00-00.000Z",
-            ],
+            ),
+            warnings=(
+                SyncWarning(
+                    kind=SyncWarningKind.ORPHAN_CLEANUP,
+                    message=(
+                        "Orphaned snapshot cleanup failed: delete snapshot failed"
+                        f" for {local_snap_base}/2026-02-18T10-30-00.000Z:"
+                        " Permission denied"
+                    ),
+                ),
+            ),
         ),
         SyncResult(
             sync_slug="docs-to-nas",
-            success=False,
+            outcome=SyncOutcome.FAILED,
             dry_run=False,
             rsync_exit_code=23,
             output=(
@@ -59,8 +73,8 @@ def run_results(config: Config) -> list[SyncResult]:
                 "rsync error: some files/attrs"
                 " were not transferred (code 23)\n"
             ),
+            failure=SyncFailureKind.RSYNC,
             detail="rsync exited with code 23",
-            snapshot_path=remote_snap,
         ),
     ]
 
@@ -76,26 +90,30 @@ def prune_results(config: Config) -> list[PruneResult]:
     return [
         PruneResult(
             sync_slug="photos-to-usb",
-            deleted=[
+            deleted=(
                 f"{snap_base}/2026-01-01T00-00-00.000Z",
                 f"{snap_base}/2026-01-15T00-00-00.000Z",
                 f"{snap_base}/2026-02-01T00-00-00.000Z",
-            ],
+            ),
             kept=7,
             dry_run=False,
         ),
         PruneResult(
             sync_slug="music-to-usb",
-            deleted=[],
+            deleted=(),
             kept=5,
             dry_run=False,
         ),
         PruneResult(
             sync_slug="docs-to-nas",
-            deleted=[],
+            deleted=(),
             kept=0,
             dry_run=False,
-            detail="btrfs delete failed: Permission denied",
+            error=(
+                "delete snapshot failed for"
+                f" {_snap_base(config, 'docs-to-nas')}/2026-01-01T00:00:00.000Z:"
+                " Permission denied"
+            ),
         ),
     ]
 
@@ -108,10 +126,10 @@ def prune_dry_run_results(
     return [
         PruneResult(
             sync_slug="photos-to-usb",
-            deleted=[
+            deleted=(
                 f"{snap_base}/2026-01-01T00-00-00.000Z",
                 f"{snap_base}/2026-01-15T00-00-00.000Z",
-            ],
+            ),
             kept=10,
             dry_run=True,
         ),

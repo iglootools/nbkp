@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import stat
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -125,11 +126,20 @@ def sh(
             portable=portable,
             platform=platform,
         ),
+        now=datetime.now(UTC),
         resolved_endpoints=resolved,
     )
     if output_file is not None:
         output_file.write_text(script, encoding="utf-8")
         output_file.chmod(output_file.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
-        typer.echo(f"Written to {output_file}", err=True)
+        typer.echo(f"Written to {_display_path(output_file)}", err=True)
     else:
         typer.echo(script)
+
+
+def _display_path(path: Path) -> str:
+    """*path* relative to the working directory when it lies under it."""
+    try:
+        return str(path.relative_to(Path.cwd()))
+    except ValueError:
+        return str(path)

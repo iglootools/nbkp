@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from ..config import (
     Config,
@@ -10,43 +10,45 @@ from ..config import (
     Volume,
 )
 from ..config.epresolution import ResolvedEndpoints
-from ..fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
-from ..remote.dispatch import run_on_volume
+from ..fsprotocol import STAGING_DIR
 from .common import (
     create_snapshot_timestamp,
+    destination_volume,
     list_snapshots,
+    read_latest_symlink,
     resolve_dest_path,
+    snapshots_dir,
 )
+from .errors import SnapshotOp, run_checked
 
 
 def create_snapshot(
     sync: SyncConfig,
     config: Config,
     *,
-    now: datetime | None = None,
+    now: datetime,
+    platform: str,
     resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> str:
     """Create a read-only btrfs snapshot of staging/ into snapshots/.
 
-    Returns the snapshot path.
+    *now* names the snapshot and *platform* (``sys.platform``) decides the
+    macOS-safe name form; both come from the caller so this stays
+    deterministic.  Returns the snapshot path.
     """
     re = resolved_endpoints or {}
-    ts = now or datetime.now(UTC)
-    dst = config.destination_endpoint(sync)
-    dst_vol = config.volumes[dst.volume]
-    dest_path = resolve_dest_path(sync, config)
-    snapshot = create_snapshot_timestamp(ts, dst_vol)
-    snapshot_path = f"{dest_path}/{SNAPSHOTS_DIR}/{snapshot.name}"
-    tmp_path = f"{dest_path}/{STAGING_DIR}"
-    result = run_on_volume(
-        ["btrfs", "subvolume", "snapshot", "-r", tmp_path, snapshot_path],
+    dst_vol = destination_volume(sync, config)
+    snapshot = create_snapshot_timestamp(now, dst_vol, platform)
+    snapshot_path = f"{snapshots_dir(sync, config)}/{snapshot.name}"
+    staging_path = f"{resolve_dest_path(sync, config)}/{STAGING_DIR}"
+    run_checked(
+        SnapshotOp.CREATE,
+        snapshot_path,
+        ["btrfs", "subvolume", "snapshot", "-r", staging_path, snapshot_path],
         dst_vol,
         re,
     )
-    if result.returncode != 0:
-        raise RuntimeError(f"btrfs snapshot failed: {result.stderr}")
-    else:
-        return snapshot_path
+    return snapshot_path
 
 
 def _make_snapshot_writable(
@@ -55,13 +57,13 @@ def _make_snapshot_writable(
     resolved_endpoints: ResolvedEndpoints,
 ) -> None:
     """Unset the readonly property so the snapshot can be deleted."""
-    result = run_on_volume(
+    run_checked(
+        SnapshotOp.MAKE_WRITABLE,
+        path,
         ["btrfs", "property", "set", path, "ro", "false"],
         volume,
         resolved_endpoints,
     )
-    if result.returncode != 0:
-        raise RuntimeError(f"btrfs property set ro=false failed: {result.stderr}")
 
 
 def delete_snapshot(
@@ -76,13 +78,13 @@ def delete_snapshot(
     CAP_SYS_ADMIN), then deletes the subvolume.
     """
     _make_snapshot_writable(path, volume, resolved_endpoints)
-    result = run_on_volume(
+    run_checked(
+        SnapshotOp.DELETE,
+        path,
         ["btrfs", "subvolume", "delete", path],
         volume,
         resolved_endpoints,
     )
-    if result.returncode != 0:
-        raise RuntimeError(f"btrfs delete failed: {result.stderr}")
 
 
 def prune_snapshots(
@@ -98,8 +100,6 @@ def prune_snapshots(
     Never prunes the snapshot that the latest symlink points to.
     Returns list of deleted (or would-be-deleted) paths.
     """
-    from .common import read_latest_symlink
-
     re = resolved_endpoints or {}
     snapshots = list_snapshots(sync, config, re)
     excess = len(snapshots) - max_snapshots
@@ -107,19 +107,17 @@ def prune_snapshots(
         return []
     else:
         latest = read_latest_symlink(sync, config, resolved_endpoints=re)
-        dest_path = resolve_dest_path(sync, config)
-        snapshots_dir = f"{dest_path}/{SNAPSHOTS_DIR}"
+        base = snapshots_dir(sync, config)
 
         # Candidates: oldest first, skip the latest target, take up to excess
         to_delete = [
-            f"{snapshots_dir}/{s.name}"
+            f"{base}/{s.name}"
             for s in snapshots
             if latest is None or s.name != latest.name
         ][:excess]
 
         if not dry_run:
-            dst = config.destination_endpoint(sync)
-            dst_vol = config.volumes[dst.volume]
+            dst_vol = destination_volume(sync, config)
             for path in to_delete:
                 delete_snapshot(path, dst_vol, re)
 

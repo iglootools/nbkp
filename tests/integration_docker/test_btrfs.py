@@ -6,7 +6,9 @@ sync-flow tests (rsync into staging → snapshot → verify).
 
 from __future__ import annotations
 
+import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -231,7 +233,13 @@ class TestBtrfsSnapshots:
         assert result.returncode == 0
 
         # Create snapshot
-        snapshot_path = create_snapshot(sync, config, resolved_endpoints=resolved)
+        snapshot_path = create_snapshot(
+            sync,
+            config,
+            now=datetime.now(UTC),
+            platform=sys.platform,
+            resolved_endpoints=resolved,
+        )
 
         # Verify snapshot exists
         check = ssh_exec(docker_ssh_endpoint, f"test -d {snapshot_path}")
@@ -266,7 +274,13 @@ class TestBtrfsSnapshots:
             str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
         run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="staging")
-        snapshot_path = create_snapshot(sync, config, resolved_endpoints=resolved)
+        snapshot_path = create_snapshot(
+            sync,
+            config,
+            now=datetime.now(UTC),
+            platform=sys.platform,
+            resolved_endpoints=resolved,
+        )
 
         # Check readonly property
         check = ssh_exec(
@@ -292,7 +306,13 @@ class TestBtrfsSnapshots:
 
         # First sync + snapshot + symlink
         run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="staging")
-        first_snap_path = create_snapshot(sync, config, resolved_endpoints=resolved)
+        first_snap_path = create_snapshot(
+            sync,
+            config,
+            now=datetime.now(UTC),
+            platform=sys.platform,
+            resolved_endpoints=resolved,
+        )
         first_snapshot = Snapshot.from_path(first_snap_path)
         update_latest_symlink(sync, config, first_snapshot, resolved_endpoints=resolved)
 
@@ -318,7 +338,13 @@ class TestBtrfsSnapshots:
         assert result.returncode == 0
 
         # Create second snapshot + symlink
-        snapshot_path = create_snapshot(sync, config, resolved_endpoints=resolved)
+        snapshot_path = create_snapshot(
+            sync,
+            config,
+            now=datetime.now(UTC),
+            platform=sys.platform,
+            resolved_endpoints=resolved,
+        )
         check = ssh_exec(docker_ssh_endpoint, f"test -d {snapshot_path}")
         assert check.returncode == 0
 
@@ -390,6 +416,8 @@ class TestPruneBtrfsSnapshotsViaSyncFlow:
             path = create_snapshot(
                 sync,
                 config,
+                now=datetime.now(UTC),
+                platform=sys.platform,
                 resolved_endpoints=resolved,
             )
             snapshot = Snapshot.from_path(path)

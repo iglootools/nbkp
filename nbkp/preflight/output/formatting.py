@@ -36,12 +36,7 @@ from ..strictness import Strictness
 
 def join_text(items: Iterable[Text], separator: str = ", ") -> Text:
     """Join styled Text fragments with a plain separator."""
-    result = Text()
-    for i, item in enumerate(items):
-        if i > 0:
-            result.append(separator)
-        result.append_text(item)
-    return result
+    return Text(separator).join(items)
 
 
 def status_text(
@@ -61,13 +56,15 @@ def status_text(
     non-fatal under *strictness* (e.g. missing sentinels with the
     default ``IGNORE_INACTIVE``), and the error icon otherwise.
     """
-    if active:
-        return Text(f"{OK_SYMBOL}active", style=severity_style(Severity.OK))
     severity = severity_for_errors(errors, strictness)
-    error_str = ", ".join(r.value for r in errors)
-    return Text(
-        f"{severity_symbol(severity)}inactive ({error_str})",
-        style=severity_style(severity),
+    return (
+        Text(f"{OK_SYMBOL}active", style=severity_style(Severity.OK))
+        if active
+        else Text(
+            f"{severity_symbol(severity)}inactive"
+            f" ({', '.join(r.value for r in errors)})",
+            style=severity_style(severity),
+        )
     )
 
 
@@ -127,14 +124,15 @@ def check(
       under *strictness*.
     - Otherwise, ``Severity.ERROR``.
     """
-    if ok:
-        return Text(f"{OK_SYMBOL}{label}", style=severity_style(Severity.OK))
-    if fail_severity is not None:
-        severity = fail_severity
-    elif fail_error is not None:
-        severity = severity_for_error(fail_error, strictness)
-    else:
-        severity = Severity.ERROR
+    match (ok, fail_severity, fail_error):
+        case (True, _, _):
+            severity = Severity.OK
+        case (_, Severity() as given, _):
+            severity = given
+        case (_, _, None):
+            severity = Severity.ERROR
+        case (_, _, error):
+            severity = severity_for_error(error, strictness)
     return Text(
         f"{severity_symbol(severity)}{label}",
         style=severity_style(severity),

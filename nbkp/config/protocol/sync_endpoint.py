@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from .base import Slug, _BaseModel
+from .errors import ConfigValidationCode, config_error
 
 SnapshotMode = Literal["none", "btrfs", "hard-link"]
 
@@ -56,11 +57,15 @@ class SyncEndpoint(_BaseModel):
 
     @field_validator("subdir", mode="before")
     @classmethod
-    def normalize_subdir(cls, v: Any) -> str | None:
-        if not isinstance(v, str):
-            return None
-        stripped = v.strip("/")
-        return stripped if stripped else None
+    def normalize_subdir(cls, v: Any) -> Any:
+        # Non-strings pass through so pydantic rejects them (e.g. an unquoted
+        # ``subdir: 2024``) instead of silently targeting the volume root.
+        match v:
+            case str():
+                stripped = v.strip("/")
+                return stripped if stripped else None
+            case _:
+                return v
 
     btrfs_snapshots: BtrfsSnapshotConfig = Field(
         default_factory=lambda: BtrfsSnapshotConfig(),
@@ -76,8 +81,9 @@ class SyncEndpoint(_BaseModel):
         self,
     ) -> SyncEndpoint:
         if self.btrfs_snapshots.enabled and self.hard_link_snapshots.enabled:
-            raise ValueError(
-                "btrfs-snapshots and hard-link-snapshots are mutually exclusive"
+            raise config_error(
+                ConfigValidationCode.MUTUALLY_EXCLUSIVE,
+                "btrfs-snapshots and hard-link-snapshots are mutually exclusive",
             )
         return self
 

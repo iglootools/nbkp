@@ -10,6 +10,19 @@ For general coding, Python, and tooling guidelines, see the [common guidelines](
 - **CLI**
   - Use `typer` for CLI implementation (argument parsing, formatting, etc.)
   - Provide both human-readable and JSON output formats for all commands, with human-readable as the default.
+    - *Exception — `sh`:* its output is a bash script, not a report, so there is no JSON
+      mode, and `-o` means `--output-file` (where to write the script) rather than the
+      `--output` format selector other commands use. Renaming the flag would break existing
+      invocations and cron entries for no gain in function. Retire this exception if `sh`
+      gains a structured report worth emitting (e.g. the list of generated syncs), at
+      which point it takes `--output human|json` and the script path moves to a
+      long-only `--output-file` in a major release.
+    - *Exception — `-n` in `disks`:* in `run` and `snapshots prune` (and `demo seed`)
+      `-n` is `--dry-run`, but in `disks mount|umount|status` it is `--name`, so their
+      `--dry-run` is long-only. `-n` meant `--name` there first; swapping it would turn
+      existing `disks mount -n <volume>` invocations into silent dry runs. Retire this
+      exception in the next major release by moving `--name` to a long-only flag (or
+      `-V`) and giving `-n` to `--dry-run` everywhere.
   - Provide ability to pass a config file to all commands
   - Provide a dry-run parameter for all data-mutating or long-running operations
 - **Rich output**
@@ -82,9 +95,9 @@ In general, keep the documentation in sync with the codebase. In particular:
 ### Domain Logic
 
 - When making changes to the config schema/models or preflight checks, make sure to update **all** of the following:
-  - **Troubleshoot output** (`nbkp/preflight/output.py`): add a `case` in the troubleshoot match-case for every new `SyncError` or `VolumeError`, with actionable remediation text.
-  - **Seed / demo test data** (`nbkp/preflight/testkit.py`): add a scenario to `troubleshoot_config` + `troubleshoot_data` that exercises the new error, so `nbkp-demo output` renders it.
-  - **CLI inactive-errors set** (`nbkp/cli.py`, `_INACTIVE_ERRORS`): if the new error should be treated as a non-fatal skip (like missing sentinels), add it here.
+  - **Troubleshoot output** (`nbkp/preflight/output/remediation.py`): add a `case` in the per-layer fix printer for every new `SshEndpointError`, `SshEndpointWarning`, `VolumeError`, `SourceEndpointError`, `DestinationEndpointError` or `SyncError`, with actionable remediation text.
+  - **Seed / demo test data** (`nbkp/preflight/testkit.py`): add a scenario to `troubleshoot_config` + `troubleshoot_data` that exercises the new error, so `nbkp-demo output` renders it. `tests/preflight/test_testkit_coverage.py` fails until every member is covered.
+  - **Inactive-errors sets** (`nbkp/preflight/status.py`, `INACTIVE_*_ERRORS`): if the new error should be treated as a non-fatal skip (like missing sentinels), add it to its layer's set.
   - The demo CLI (`nbkp/demo/`) to generate new test data that reflects the changes.
   - The `cli` CLI app to support the new functionality, and update the formatting logic in `output.py` if necessary.
 - When making changes to the `run` command and/or `sync` logic, make sure to update **all** of the following:

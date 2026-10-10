@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import ValidationError
 from pydantic_core import ErrorDetails
 from rich.console import Console
@@ -145,90 +147,142 @@ def print_human_config(
 ) -> None:
     """Print human-readable configuration."""
     re = resolved_endpoints or {}
-    if console is None:
-        console = Console()
+    c = console or Console()
+    tables = [
+        *([_ssh_endpoints_table(config)] if config.ssh_endpoints else []),
+        _volumes_table(config, re),
+        _syncs_table(config),
+    ]
+    for i, table in enumerate(tables):
+        if i > 0:
+            c.print()
+        c.print(table)
 
-    if config.ssh_endpoints:
-        server_table = Table(title="SSH Endpoints:")
-        server_table.add_column("Name", style="bold")
-        server_table.add_column("Host")
-        server_table.add_column("Port")
-        server_table.add_column("User")
-        server_table.add_column("Key")
-        server_table.add_column("Proxy Jump")
-        server_table.add_column("Locations")
 
-        for server in config.ssh_endpoints.values():
-            # Host / user / key / paths are free-form config values; Text
-            # keeps a bracket in one of them from being read as a style tag.
-            server_table.add_row(
-                server.slug,
-                Text(server.host),
-                str(server.port),
-                Text(server.user or ""),
-                Text(server.key or ""),
-                ", ".join(server.proxy_jump_chain) or "",
-                ", ".join(server.location_list),
-            )
+def _ssh_endpoints_table(config: Config) -> Table:
+    table = Table(title="SSH Endpoints:")
+    table.add_column("Name", style="bold")
+    table.add_column("Host")
+    table.add_column("Port")
+    table.add_column("User")
+    table.add_column("Key")
+    table.add_column("Proxy Jump")
+    table.add_column("Locations")
+    for server in config.ssh_endpoints.values():
+        # Host / user / key / paths are free-form config values; Text
+        # keeps a bracket in one of them from being read as a style tag.
+        table.add_row(
+            server.slug,
+            Text(server.host),
+            str(server.port),
+            Text(server.user or ""),
+            Text(server.key or ""),
+            ", ".join(server.proxy_jump_chain) or "",
+            Text(", ".join(server.location_list)),
+        )
+    return table
 
-        console.print(server_table)
-        console.print()
 
-    vol_table = Table(title="Volumes:")
-    vol_table.add_column("Name", style="bold")
-    vol_table.add_column("Type")
-    vol_table.add_column("SSH Endpoint")
-    vol_table.add_column("URI")
-    vol_table.add_column("Mount Config")
+def _volume_type_and_endpoint(
+    vol: LocalVolume | RemoteVolume, re: ResolvedEndpoints
+) -> tuple[str, str]:
+    match vol:
+        case RemoteVolume():
+            ep = re.get(vol.slug)
+            return "remote", ep.server.slug if ep else vol.ssh_endpoint
+        case LocalVolume():
+            return "local", ""
 
+
+def _volumes_table(config: Config, re: ResolvedEndpoints) -> Table:
+    table = Table(title="Volumes:")
+    table.add_column("Name", style="bold")
+    table.add_column("Type")
+    table.add_column("SSH Endpoint")
+    table.add_column("URI")
+    table.add_column("Mount Config")
     for vol in config.volumes.values():
-        match vol:
-            case RemoteVolume():
-                vol_type = "remote"
-                ep = re.get(vol.slug)
-                ssh_ep = ep.server.slug if ep else vol.ssh_endpoint
-            case LocalVolume():
-                vol_type = "local"
-                ssh_ep = ""
-        vol_table.add_row(
+        vol_type, ssh_ep = _volume_type_and_endpoint(vol, re)
+        table.add_row(
             vol.slug,
             vol_type,
             ssh_ep,
             Text(format_volume_display(vol, re)),
             format_mount_summary(vol.mount),
         )
+    return table
 
-    console.print(vol_table)
-    console.print()
 
-    sync_table = Table(title="Syncs:")
-    sync_table.add_column("Name", style="bold")
-    sync_table.add_column("Source")
-    sync_table.add_column("Destination")
-    sync_table.add_column("Options")
-    sync_table.add_column("Enabled")
-
+def _syncs_table(config: Config) -> Table:
+    table = Table(title="Syncs:")
+    table.add_column("Name", style="bold")
+    table.add_column("Source")
+    table.add_column("Destination")
+    table.add_column("Options")
+    table.add_column("Enabled")
     for sync in config.syncs.values():
         enabled = (
             Text("yes", style="green") if sync.enabled else Text("no", style="red")
         )
-        sync_table.add_row(
+        table.add_row(
             sync.slug,
             Text(_sync_endpoint_display(config.source_endpoint(sync))),
             Text(_sync_endpoint_display(config.destination_endpoint(sync))),
             _sync_options(sync, config),
             enabled,
         )
+    return table
 
-    console.print(sync_table)
+
+def _validation_message(err: ErrorDetails) -> str:
+    return str(err["msg"]).removeprefix("Value error, ")
 
 
 def _format_validation_error(err: ErrorDetails) -> str:
     """Format a single Pydantic validation error for display."""
     loc = " → ".join(str(p) for p in err["loc"])
-    msg = str(err["msg"])
-    msg = msg.removeprefix("Value error, ")
+    msg = _validation_message(err)
     return f"{loc}: {msg}" if loc else msg
+
+
+def _config_error_body(e: ConfigError) -> str:
+    """The human-readable detail of a ConfigError, one problem per line."""
+    match e.__cause__:
+        case ValidationError() as cause:
+            return "\n".join(_format_validation_error(err) for err in cause.errors())
+        case _:
+            return str(e)
+
+
+def _validation_errors_json(cause: ValidationError) -> list[dict[str, Any]]:
+    return [
+        {
+            "loc": [str(p) for p in err["loc"]],
+            "type": err["type"],
+            "message": _validation_message(err),
+        }
+        for err in cause.errors()
+    ]
+
+
+def config_error_json(e: ConfigError) -> dict[str, Any]:
+    """A ConfigError as JSON-ready data for ``--output json``.
+
+    Validation failures also list each problem with its location and its
+    stable ``type`` code (see ``ConfigValidationCode``).
+    """
+    cause = e.__cause__
+    return {
+        "error": {
+            "reason": e.reason.value,
+            "message": _config_error_body(e),
+            **(
+                {"errors": _validation_errors_json(cause)}
+                if isinstance(cause, ValidationError)
+                else {}
+            ),
+        }
+    }
 
 
 def print_config_error(
@@ -239,12 +293,7 @@ def print_config_error(
     """Print a ConfigError as a Rich panel to stderr."""
     if console is None:
         console = Console(stderr=True)
-    cause = e.__cause__
-    match cause:
-        case ValidationError():
-            body = "\n".join(_format_validation_error(err) for err in cause.errors())
-        case _:
-            body = str(e)
+    body = _config_error_body(e)
     # Both wrapped in Text: the title's own brackets would be read as a style
     # tag (rendering a bare "Config error"), and the body carries YAML parser
     # and pydantic messages, which embed "[type=..., input_value=...]".

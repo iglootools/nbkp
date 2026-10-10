@@ -12,7 +12,9 @@ from __future__ import annotations
 
 from ..config import SshEndpoint
 from ..remote import run_remote_command
+from ..remote.errors import SSH_CONNECTION_ERRORS
 from .status import SshEndpointDiagnostics
+from .volume_checks import unreachable_diagnostics
 
 
 def observe_standalone_endpoint(
@@ -29,10 +31,11 @@ def observe_standalone_endpoint(
     (with ``host_tools=None``), which ``_ssh_endpoint_errors()`` interprets
     as no errors (active, no tool requirements).
 
-    Returns ``SshEndpointDiagnostics(ssh_reachable=False)`` on SSH failure.
+    Returns ``SshEndpointDiagnostics(ssh_reachable=False)`` with the cause
+    on a connection failure; other exceptions (bugs) propagate.
     """
     try:
         run_remote_command(server, ["true"], proxy_chain)
         return SshEndpointDiagnostics(ssh_reachable=True)
-    except Exception:  # noqa: BLE001
-        return SshEndpointDiagnostics(ssh_reachable=False)
+    except SSH_CONNECTION_ERRORS as e:
+        return unreachable_diagnostics(e)

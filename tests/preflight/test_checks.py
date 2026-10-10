@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from nbkp.clihelpers import OutputFormat
 from nbkp.config import (
@@ -51,7 +54,26 @@ from nbkp.remote.queries import (
 )
 from nbkp.remote.resolution import resolve_proxy_chain
 from nbkp.snapshots.common import create_snapshot_timestamp
-from nbkp.sync import SyncResult
+from nbkp.sync import SyncFailureKind, SyncOutcome, SyncResult
+
+
+@pytest.fixture(autouse=True)
+def _no_real_host_commands(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the check pipeline from spawning real ``rsync`` / ``test -w``.
+
+    Unit tests must not depend on the developer's rsync (project rule): the
+    version probe reports a good rsync, and writability is answered by
+    ``os.access`` — the same question ``test -w`` asks, without a process.
+    Tests exercising these probes patch them (or ``subprocess.run``) directly.
+    """
+    monkeypatch.setattr(
+        "nbkp.preflight.volume_checks._check_rsync_version", lambda *_: True
+    )
+    monkeypatch.setattr(
+        "nbkp.preflight.endpoint_checks._check_directory_writable",
+        lambda _vol, path, _re: os.access(path, os.W_OK),
+    )
+
 
 _STUB_HOST_TOOLS = HostToolCapabilities(
     has_rsync=True,
@@ -567,7 +589,7 @@ class TestSyncResult:
     def test_construction_defaults(self) -> None:
         sr = SyncResult(
             sync_slug="s1",
-            success=True,
+            outcome=SyncOutcome.SUCCESS,
             dry_run=False,
             rsync_exit_code=0,
             output="done",
@@ -578,15 +600,15 @@ class TestSyncResult:
     def test_construction_full(self) -> None:
         sr = SyncResult(
             sync_slug="s1",
-            success=False,
+            outcome=SyncOutcome.FAILED,
             dry_run=False,
             rsync_exit_code=1,
             output="",
+            failure=SyncFailureKind.RSYNC,
             detail="failed",
-            snapshot_path="/snap/2024",
         )
         assert sr.detail == "failed"
-        assert sr.snapshot_path == "/snap/2024"
+        assert sr.success is False
 
 
 class TestSlugValidation:
@@ -809,7 +831,7 @@ class TestCheckCommandAvailableRemote:
         resolved = _make_resolved(config)
         assert _check_command_available(vol, "rsync", resolved) is True
         server = config.ssh_endpoints["nas-server"]
-        mock_run.assert_called_once_with(server, ["which", "rsync"], [])
+        mock_run.assert_called_once_with(server, ["which", "rsync"], [], input=None)
 
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_command_not_found(self, mock_run: MagicMock) -> None:
@@ -818,7 +840,7 @@ class TestCheckCommandAvailableRemote:
         resolved = _make_resolved(config)
         assert _check_command_available(vol, "btrfs", resolved) is False
         server = config.ssh_endpoints["nas-server"]
-        mock_run.assert_called_once_with(server, ["which", "btrfs"], [])
+        mock_run.assert_called_once_with(server, ["which", "btrfs"], [], input=None)
 
 
 class TestCheckBtrfsFilesystemLocal:
@@ -831,6 +853,7 @@ class TestCheckBtrfsFilesystemLocal:
             ["stat", "-f", "-c", "%T", "/mnt/data"],
             capture_output=True,
             text=True,
+            input=None,
             check=False,
         )
 
@@ -844,7 +867,8 @@ class TestCheckBtrfsFilesystemLocal:
     def test_stat_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_filesystem(vol, {}) is False
+        # Unknown, not "not btrfs": a failed probe must not trigger VOL_NOT_BTRFS.
+        assert check_btrfs_filesystem(vol, {}) is None
 
 
 class TestCheckBtrfsFilesystemRemote:
@@ -859,6 +883,7 @@ class TestCheckBtrfsFilesystemRemote:
             server,
             ["stat", "-f", "-c", "%T", "/backup"],
             [],
+            input=None,
         )
 
     @patch("nbkp.remote.dispatch.run_remote_command")
@@ -879,6 +904,7 @@ class TestCheckBtrfsSubvolumeLocal:
             ["stat", "-c", "%i", "/mnt/data"],
             capture_output=True,
             text=True,
+            input=None,
             check=False,
         )
 
@@ -891,6 +917,7 @@ class TestCheckBtrfsSubvolumeLocal:
             ["stat", "-c", "%i", "/mnt/data/backup"],
             capture_output=True,
             text=True,
+            input=None,
             check=False,
         )
 
@@ -919,6 +946,7 @@ class TestCheckBtrfsSubvolumeRemote:
             server,
             ["stat", "-c", "%i", "/backup"],
             [],
+            input=None,
         )
 
     @patch("nbkp.remote.dispatch.run_remote_command")
@@ -932,6 +960,7 @@ class TestCheckBtrfsSubvolumeRemote:
             server,
             ["stat", "-c", "%i", "/backup/data"],
             [],
+            input=None,
         )
 
     @patch("nbkp.remote.dispatch.run_remote_command")
@@ -955,6 +984,7 @@ class TestCheckBtrfsMountOptionLocal:
             ["findmnt", "-T", "/mnt/data", "-n", "-o", "OPTIONS"],
             capture_output=True,
             text=True,
+            input=None,
             check=False,
         )
 
@@ -986,6 +1016,7 @@ class TestCheckBtrfsMountOptionRemote:
             server,
             ["findmnt", "-T", "/backup", "-n", "-o", "OPTIONS"],
             [],
+            input=None,
         )
 
     @patch("nbkp.remote.dispatch.run_remote_command")
@@ -1189,6 +1220,10 @@ class TestCheckSync:
         assert SshEndpointError.RSYNC_NOT_FOUND in ssh_errors
         # Local volumes don't cascade SSH_ENDPOINT_INACTIVE — volume is active
         assert status.source_endpoint_status.volume_status.active is True
+        # ...but the sync is inactive, and not expected-inactive: a missing
+        # localhost rsync must fail preflight.
+        assert SyncError.ENDPOINT_HOST_ERRORS in status.errors
+        assert status.is_expected_inactive() is False
 
     @patch(
         "nbkp.preflight.checks.observe_ssh_endpoint",
@@ -1947,6 +1982,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == ["test", "-f", "/data/data/.nbkp-src"]:
                 return MagicMock(returncode=0)
@@ -2020,6 +2056,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2106,6 +2143,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2190,6 +2228,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2274,6 +2313,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2365,6 +2405,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2458,6 +2499,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2548,6 +2590,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2647,6 +2690,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -2754,6 +2798,7 @@ class TestCheckSyncRemoteCommands:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -3460,6 +3505,7 @@ class TestCheckHardLinkDest:
             server: SshEndpoint,
             cmd: list[str],
             proxy_chain: list[SshEndpoint] | None = None,
+            input: str | None = None,
         ) -> MagicMock:
             if cmd == [
                 "test",
@@ -3603,6 +3649,7 @@ class TestCheckSourceLatest:
         _ts = create_snapshot_timestamp(
             datetime(2026, 1, 1, tzinfo=UTC),
             LocalVolume(slug="x", path="/x"),
+            "linux",
         )
         (src / "data" / "snapshots").mkdir(exist_ok=True)
         snap = src / "data" / "snapshots" / _ts.name
@@ -3638,6 +3685,7 @@ class TestCheckSourceLatest:
         _ts = create_snapshot_timestamp(
             datetime(2024, 1, 1, tzinfo=UTC),
             LocalVolume(slug="x", path="/x"),
+            "linux",
         )
         snap = src / "data" / "snapshots" / _ts.name
         snap.mkdir(parents=True)
@@ -4115,6 +4163,7 @@ class TestCheckDevnullLatest:
         _ts = create_snapshot_timestamp(
             datetime(2099, 1, 1, tzinfo=UTC),
             LocalVolume(slug="x", path="/x"),
+            "linux",
         )
         (src / "data" / "snapshots").mkdir()
         (src / "data" / "latest").symlink_to(f"snapshots/{_ts.name}")
@@ -4213,6 +4262,7 @@ class TestCheckDevnullLatest:
         _ts = create_snapshot_timestamp(
             datetime(2099, 1, 1, tzinfo=UTC),
             LocalVolume(slug="x", path="/x"),
+            "linux",
         )
         (dst / "backup" / "snapshots").mkdir()
         (dst / "backup" / "latest").symlink_to(f"snapshots/{_ts.name}")

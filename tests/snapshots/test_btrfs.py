@@ -23,6 +23,7 @@ from nbkp.snapshots.btrfs import (
     prune_snapshots,
 )
 from nbkp.snapshots.common import create_snapshot_timestamp
+from nbkp.snapshots.errors import SnapshotOp, SnapshotOperationError
 
 
 def _local_config() -> tuple[Config, SyncConfig]:
@@ -92,8 +93,8 @@ class TestCreateSnapshotLocal:
 
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=UTC)
         dst_vol = config.volumes["dst"]
-        expected_ts = create_snapshot_timestamp(fixed_now, dst_vol)
-        path = create_snapshot(sync, config, now=fixed_now)
+        expected_ts = create_snapshot_timestamp(fixed_now, dst_vol, "linux")
+        path = create_snapshot(sync, config, now=fixed_now, platform="linux")
         assert path == f"/mnt/dst/backup/snapshots/{expected_ts.name}"
         mock_run.assert_called_once()
         call_args = mock_run.call_args[0][0]
@@ -113,8 +114,10 @@ class TestCreateSnapshotLocal:
         from datetime import datetime
 
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=UTC)
-        with pytest.raises(RuntimeError, match="btrfs snapshot"):
-            create_snapshot(sync, config, now=fixed_now)
+        with pytest.raises(
+            SnapshotOperationError, check=lambda e: e.op is SnapshotOp.CREATE
+        ):
+            create_snapshot(sync, config, now=fixed_now, platform="linux")
 
 
 class TestCreateSnapshotRemote:
@@ -126,7 +129,9 @@ class TestCreateSnapshotRemote:
         from datetime import datetime
 
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=UTC)
-        path = create_snapshot(sync, config, now=fixed_now, resolved_endpoints=resolved)
+        path = create_snapshot(
+            sync, config, now=fixed_now, platform="linux", resolved_endpoints=resolved
+        )
         assert path == "/backup/data/snapshots/2024-01-15T12:00:00.000Z"
         mock_run.assert_called_once()
         call_args = mock_run.call_args
@@ -208,8 +213,8 @@ class TestCreateSnapshotLocalSpaces:
 
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=UTC)
         dst_vol = config.volumes["dst"]
-        expected_ts = create_snapshot_timestamp(fixed_now, dst_vol)
-        path = create_snapshot(sync, config, now=fixed_now)
+        expected_ts = create_snapshot_timestamp(fixed_now, dst_vol, "linux")
+        path = create_snapshot(sync, config, now=fixed_now, platform="linux")
         assert path == f"/mnt/my dst/my backup/snapshots/{expected_ts.name}"
         call_args = mock_run.call_args[0][0]
         assert call_args == [
@@ -231,7 +236,9 @@ class TestCreateSnapshotRemoteSpaces:
         from datetime import datetime
 
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=UTC)
-        path = create_snapshot(sync, config, now=fixed_now, resolved_endpoints=resolved)
+        path = create_snapshot(
+            sync, config, now=fixed_now, platform="linux", resolved_endpoints=resolved
+        )
         assert path == "/my backup/my data/snapshots/2024-01-15T12:00:00.000Z"
         call_args = mock_run.call_args
         assert call_args[0][1] == [
@@ -260,12 +267,14 @@ class TestDeleteSnapshotLocal:
                     ["btrfs", "property", "set", path, "ro", "false"],
                     capture_output=True,
                     text=True,
+                    input=None,
                     check=False,
                 ),
                 call(
                     ["btrfs", "subvolume", "delete", path],
                     capture_output=True,
                     text=True,
+                    input=None,
                     check=False,
                 ),
             ]
@@ -277,7 +286,10 @@ class TestDeleteSnapshotLocal:
         config, _ = _local_config()
         dst_vol = config.volumes["dst"]
 
-        with pytest.raises(RuntimeError, match="btrfs property set ro=false"):
+        with pytest.raises(
+            SnapshotOperationError,
+            check=lambda e: e.op is SnapshotOp.MAKE_WRITABLE,
+        ):
             delete_snapshot(
                 "/mnt/dst/backup/snapshots/20240101T000000Z",
                 dst_vol,
@@ -293,7 +305,9 @@ class TestDeleteSnapshotLocal:
         config, _ = _local_config()
         dst_vol = config.volumes["dst"]
 
-        with pytest.raises(RuntimeError, match="btrfs delete"):
+        with pytest.raises(
+            SnapshotOperationError, check=lambda e: e.op is SnapshotOp.DELETE
+        ):
             delete_snapshot(
                 "/mnt/dst/backup/snapshots/20240101T000000Z",
                 dst_vol,
@@ -319,11 +333,13 @@ class TestDeleteSnapshotRemote:
                     server,
                     ["btrfs", "property", "set", path, "ro", "false"],
                     [],
+                    input=None,
                 ),
                 call(
                     server,
                     ["btrfs", "subvolume", "delete", path],
                     [],
+                    input=None,
                 ),
             ]
         )
@@ -331,7 +347,7 @@ class TestDeleteSnapshotRemote:
 
 class TestPruneSnapshotsLocal:
     @patch(
-        "nbkp.snapshots.common.read_latest_symlink",
+        "nbkp.snapshots.btrfs.read_latest_symlink",
         return_value=None,
     )
     @patch("nbkp.remote.dispatch.subprocess.run")
@@ -352,7 +368,7 @@ class TestPruneSnapshotsLocal:
         assert mock_run.call_count == 5
 
     @patch(
-        "nbkp.snapshots.common.read_latest_symlink",
+        "nbkp.snapshots.btrfs.read_latest_symlink",
         return_value=None,
     )
     @patch("nbkp.remote.dispatch.subprocess.run")
@@ -372,7 +388,7 @@ class TestPruneSnapshotsLocal:
         assert mock_run.call_count == 1
 
     @patch(
-        "nbkp.snapshots.common.read_latest_symlink",
+        "nbkp.snapshots.btrfs.read_latest_symlink",
         return_value=None,
     )
     @patch("nbkp.remote.dispatch.subprocess.run")
@@ -392,7 +408,7 @@ class TestPruneSnapshotsLocal:
         # Only the ls call, no delete calls
         assert mock_run.call_count == 1
 
-    @patch("nbkp.snapshots.common.read_latest_symlink")
+    @patch("nbkp.snapshots.btrfs.read_latest_symlink")
     @patch("nbkp.remote.dispatch.subprocess.run")
     def test_protects_latest_snapshot(
         self, mock_run: MagicMock, mock_latest: MagicMock
@@ -423,7 +439,7 @@ class TestPruneSnapshotsLocal:
 
 
 class TestPruneSnapshotsRemote:
-    @patch("nbkp.snapshots.common.read_latest_symlink", return_value=None)
+    @patch("nbkp.snapshots.btrfs.read_latest_symlink", return_value=None)
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_prunes_oldest(
         self,
@@ -447,7 +463,7 @@ class TestPruneSnapshotsRemote:
         # ls call (snapshots) + 1 × (property set + delete) calls (btrfs)
         assert mock_rrc.call_count == 3
 
-    @patch("nbkp.snapshots.common.read_latest_symlink")
+    @patch("nbkp.snapshots.btrfs.read_latest_symlink")
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_protects_latest_snapshot(
         self,

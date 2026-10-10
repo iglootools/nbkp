@@ -3,10 +3,22 @@
 from __future__ import annotations
 
 import json
+import subprocess
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from nbkp.cli import app
-from nbkp.sync import ProgressMode, SyncResult
+from nbkp.sync import ProgressMode, SyncFailureKind, SyncResult
+
+_DONE = subprocess.CompletedProcess(args=[], returncode=0, stdout="done", stderr="")
+
+
+def _ok(slug: str, *, dry_run: bool = False) -> SyncResult:
+    return SyncResult.succeeded(slug, dry_run, _DONE)
+
+
 from tests.clihelpers import (
     preflight,
     runner,
@@ -35,20 +47,18 @@ class TestRunCommand:
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
-        mock_run.return_value = [
-            SyncResult(
-                sync_slug="photos-to-nas",
-                success=True,
-                dry_run=False,
-                rsync_exit_code=0,
-                output="done",
-            )
+        mock_run.return_value = [_ok("photos-to-nas", dry_run=False)]
+
+        result = runner.invoke(app, ["run", "--config", "/fake.yaml", "-o", "json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert [(r["sync_slug"], r["outcome"]) for r in data["results"]] == [
+            ("photos-to-nas", "success")
         ]
+        assert "hint" not in data
 
         result = runner.invoke(app, ["run", "--config", "/fake.yaml"])
         assert result.exit_code == 0
-        assert "photos" in result.output
-        assert "OK" in result.output
         call_kwargs = mock_run.call_args
         assert call_kwargs.kwargs.get("on_rsync_output") is None
         assert callable(call_kwargs.kwargs.get("on_sync_start"))
@@ -68,15 +78,7 @@ class TestRunCommand:
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
-        mock_run.return_value = [
-            SyncResult(
-                sync_slug="photos-to-nas",
-                success=True,
-                dry_run=False,
-                rsync_exit_code=0,
-                output="done",
-            )
-        ]
+        mock_run.return_value = [_ok("photos-to-nas", dry_run=False)]
 
         result = runner.invoke(app, ["run", "--config", "/fake.yaml"])
         assert result.exit_code == 0
@@ -101,19 +103,20 @@ class TestRunCommand:
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
         mock_run.return_value = [
-            SyncResult(
-                sync_slug="photos-to-nas",
-                success=False,
-                dry_run=False,
+            SyncResult.failed(
+                "photos-to-nas",
+                False,
+                SyncFailureKind.RSYNC,
+                "rsync exited with code 23",
                 rsync_exit_code=23,
-                output="",
-                detail="rsync failed",
             )
         ]
 
-        result = runner.invoke(app, ["run", "--config", "/fake.yaml"])
+        result = runner.invoke(app, ["run", "--config", "/fake.yaml", "-o", "json"])
         assert result.exit_code == 1
-        assert "FAILED" in result.output
+        data = json.loads(result.output)
+        assert data["results"][0]["outcome"] == "failed"
+        assert data["results"][0]["failure"] == "rsync"
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
@@ -129,22 +132,14 @@ class TestRunCommand:
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
-        mock_run.return_value = [
-            SyncResult(
-                sync_slug="photos-to-nas",
-                success=True,
-                dry_run=True,
-                rsync_exit_code=0,
-                output="",
-            )
-        ]
+        mock_run.return_value = [_ok("photos-to-nas", dry_run=True)]
 
         result = runner.invoke(
             app,
-            ["run", "--config", "/fake.yaml", "--dry-run"],
+            ["run", "--config", "/fake.yaml", "--dry-run", "-o", "json"],
         )
         assert result.exit_code == 0
-        assert "dry run" in result.output
+        assert json.loads(result.output)["results"][0]["dry_run"] is True
         check_kwargs = mock_checks.call_args
         assert check_kwargs.kwargs.get("dry_run") is True
 
@@ -162,15 +157,7 @@ class TestRunCommand:
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
-        mock_run.return_value = [
-            SyncResult(
-                sync_slug="photos-to-nas",
-                success=True,
-                dry_run=False,
-                rsync_exit_code=0,
-                output="done",
-            )
-        ]
+        mock_run.return_value = [_ok("photos-to-nas", dry_run=False)]
 
         result = runner.invoke(
             app,
@@ -205,15 +192,7 @@ class TestRunCommand:
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_sync_statuses_with_snapshots(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
-        mock_run.return_value = [
-            SyncResult(
-                sync_slug="photos-to-nas",
-                success=True,
-                dry_run=False,
-                rsync_exit_code=0,
-                output="done",
-            )
-        ]
+        mock_run.return_value = [_ok("photos-to-nas", dry_run=False)]
 
         result = runner.invoke(
             app,
@@ -241,15 +220,7 @@ class TestRunCommand:
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
-        mock_run.return_value = [
-            SyncResult(
-                sync_slug="photos-to-nas",
-                success=True,
-                dry_run=False,
-                rsync_exit_code=0,
-                output="",
-            )
-        ]
+        mock_run.return_value = [_ok("photos-to-nas", dry_run=False)]
 
         result = runner.invoke(
             app,
@@ -275,15 +246,7 @@ class TestRunCommand:
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
-        mock_run.return_value = [
-            SyncResult(
-                sync_slug="photos-to-nas",
-                success=True,
-                dry_run=False,
-                rsync_exit_code=0,
-                output="",
-            )
-        ]
+        mock_run.return_value = [_ok("photos-to-nas", dry_run=False)]
 
         result = runner.invoke(
             app,
@@ -326,15 +289,7 @@ class TestRunCommand:
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_sentinel_only_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
-        mock_run.return_value = [
-            SyncResult(
-                sync_slug="photos-to-nas",
-                success=True,
-                dry_run=False,
-                rsync_exit_code=0,
-                output="done",
-            )
-        ]
+        mock_run.return_value = [_ok("photos-to-nas", dry_run=False)]
 
         result = runner.invoke(app, ["run", "--config", "/fake.yaml"])
         assert result.exit_code == 0
@@ -361,3 +316,73 @@ class TestRunCommand:
         )
         assert result.exit_code == 1
         mock_run.assert_not_called()
+
+
+class TestRunAbortHint:
+    """The abort points at `preflight troubleshoot` with the user's flags."""
+
+    @patch("nbkp.run.pipeline.run_all_syncs")
+    @patch("nbkp.run.pipeline.check_all_syncs")
+    @patch("nbkp.config.cli.helpers.load_config")
+    def test_json_hint_carries_config_and_network_flags(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+        mock_run: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        config = sample_config()
+        mock_load.return_value = config
+        vol_s = sample_vol_statuses(config)
+        mock_checks.return_value = preflight(
+            vol_s, sample_error_sync_statuses(config, vol_s)
+        )
+        config_file = tmp_path / "conf" / "nbkp.yaml"
+        config_file.parent.mkdir()
+        config_file.write_text("")  # existence is checked before load_config
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "-c",
+                str(config_file),
+                "-N",
+                "private",
+                "-o",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 1
+        data = json.loads(result.output)
+        assert data["results"] == []
+        # Location flags are covered by TestTroubleshootCommand: the sample
+        # config defines no locations, so the CLI rejects them here.
+        assert (
+            data["hint"] == "nbkp preflight troubleshoot -c conf/nbkp.yaml -N private"
+        )
+        mock_run.assert_not_called()
+
+    @patch("nbkp.run.pipeline.run_all_syncs")
+    @patch("nbkp.run.pipeline.check_all_syncs")
+    @patch("nbkp.config.cli.helpers.load_config")
+    def test_human_abort_suggests_troubleshoot(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+        _mock_run: MagicMock,
+    ) -> None:
+        config = sample_config()
+        mock_load.return_value = config
+        vol_s = sample_vol_statuses(config)
+        mock_checks.return_value = preflight(
+            vol_s, sample_error_sync_statuses(config, vol_s)
+        )
+
+        result = runner.invoke(app, ["run"])
+
+        assert result.exit_code == 1
+        assert "nbkp preflight troubleshoot" in result.output

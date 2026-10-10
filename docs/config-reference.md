@@ -259,7 +259,7 @@ Checked when the config is loaded, before anything runs:
 
 - Slugs are lowercase alphanumeric with hyphens, at most 50 characters.
 - Every slug reference (`ssh-endpoint`, `ssh-endpoints`, `proxy-jump(s)`, `extends`, `volume`, `source`, `destination`) must name an existing entry.
-- No circular `extends` or `proxy-jump` chains.
+- No circular `extends` or `proxy-jump` chains. Two hops sharing a bastion (e.g. `proxy-jumps: [b1, b2]` where `b1` itself jumps through `b2`) is not a cycle.
 - `proxy-jump` / `proxy-jumps` and `location` / `locations` are mutually exclusive.
 - Each sync endpoint targets a unique `(volume, subdir)` pair, and no endpoint may be nested inside another on the same volume (e.g. `subdir: photos` and `subdir: photos/2024`): sync dependencies cannot be detected between overlapping paths.
 - At most one of `btrfs-snapshots` and `hard-link-snapshots` is enabled per sync endpoint.
@@ -267,3 +267,6 @@ Checked when the config is loaded, before anything runs:
 - A remote-to-remote sync must stay on one server: both volumes must use the same primary `ssh-endpoint`.
 - A volume without a `mount` section must declare `path`.
 - `credential-command` is required when `credential-provider` is `command`, and must contain the `{id}` placeholder.
+- Every field must have its documented type; nothing is silently coerced. An unquoted number where a string is expected (e.g. `subdir: 2024`) is rejected rather than ignored — quote it (`subdir: "2024"`). `filters` must be a list, even for a single rule (`filters: ["- *.tmp"]`, not `filters: "- *.tmp"`).
+
+Each failure nbkp reports itself carries a stable error code (`unknown-reference`, `circular-proxy-jump`, `nested-endpoint`, …; see `ConfigValidationCode` in `nbkp/config/protocol/errors.py`). With `--output json`, a command that cannot load its config prints `{"error": {"reason": ..., "message": ..., "errors": [{"loc": ..., "type": ..., "message": ...}]}}` on stdout instead of the human-readable panel, and exits with code 2.

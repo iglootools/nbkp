@@ -33,9 +33,8 @@ def show(
     ] = OutputFormat.HUMAN,
 ) -> None:
     """Load, validate, and render the config as tables or JSON. Useful for verifying that inheritance, filters, and cross-references resolve correctly."""
-    cfg = load_config_or_exit(config)
-    output_format = output
-    match output_format:
+    cfg = load_config_or_exit(config, output)
+    match output:
         case OutputFormat.JSON:
             echo_json(cfg.model_dump(by_alias=True, mode="json"))
         case OutputFormat.HUMAN:

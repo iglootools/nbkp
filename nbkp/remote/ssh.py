@@ -66,7 +66,13 @@ def _ssh_endpoint_args(endpoint: SshEndpoint) -> list[str]:
 
 
 def _build_proxy_hop(proxy: SshEndpoint, inner_cmd: str | None) -> str:
-    """Build the SSH command string for a single proxy hop."""
+    """Build the SSH command string for a single proxy hop.
+
+    ssh runs a ProxyCommand through ``sh -c``, so the hop is shell-quoted
+    (``shlex.join``). Only ``%`` needs ssh-level escaping in a nested
+    command: ``%h:%p`` itself contains no shell metacharacters and stays
+    unquoted for ssh to expand.
+    """
     o_args = [
         arg for opt in _ssh_o_options(proxy.connection_options) for arg in ["-o", opt]
     ]
@@ -80,7 +86,7 @@ def _build_proxy_hop(proxy: SshEndpoint, inner_cmd: str | None) -> str:
         "%h:%p",
         _format_host(proxy),
     ]
-    return " ".join(parts)
+    return shlex.join(parts)
 
 
 def _build_proxy_command(
@@ -132,14 +138,13 @@ def build_ssh_e_option(
 
     Returns a list like:
         ["-e", "ssh -o ConnectTimeout=10 -o BatchMode=yes ..."]
+
+    rsync splits the ``-e`` value on spaces, honoring single and double
+    quotes (but not backslashes), so every argument is POSIX-quoted with
+    ``shlex.join`` — which never emits backslashes. This covers a key path
+    containing spaces as well as the ProxyCommand value.
     """
-    core = _build_ssh_core_args(server, proxy_chain)
-    # For -e, the ProxyCommand value needs shell quoting
-    parts = [
-        "ssh",
-        *(shlex.quote(arg) if arg.startswith("ProxyCommand=") else arg for arg in core),
-    ]
-    return ["-e", " ".join(parts)]
+    return ["-e", shlex.join(["ssh", *_build_ssh_core_args(server, proxy_chain)])]
 
 
 def format_remote_path(server: SshEndpoint, path: str) -> str:
@@ -177,12 +182,34 @@ def ssh_prefix(
     ]
 
 
+def _quote_arg(arg: str) -> str:
+    """Shell-quote one argument, keeping a leading ``~`` / ``~/`` expandable.
+
+    Remote volume paths may start with ``~`` (the remote user's home); quoting
+    the tilde would stop the remote shell from expanding it.
+    """
+    match arg.partition("/"):
+        case ("~", sep, rest):
+            return f"~{sep}{shlex.quote(rest)}" if rest else f"~{sep}"
+        case _:
+            return shlex.quote(arg)
+
+
+def shell_join(cmd: list[str]) -> str:
+    """Join arguments into a shell command line (``shlex.join``, tilde-aware)."""
+    return " ".join(_quote_arg(arg) for arg in cmd)
+
+
 def wrap_cmd(
-    cmd: str,
+    cmd: list[str],
     vol: LocalVolume | RemoteVolume,
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
-    """Wrap a shell command for remote execution."""
+    """Render a command as a copy-pasteable shell line, over SSH if remote.
+
+    For a remote volume the quoted command becomes a single argument to
+    ``ssh``, which hands it to the remote shell to parse again.
+    """
     from ..config import (
         LocalVolume,
         RemoteVolume,
@@ -190,8 +217,7 @@ def wrap_cmd(
 
     match vol:
         case LocalVolume():
-            return cmd
+            return shell_join(cmd)
         case RemoteVolume():
             ep = resolved_endpoints[vol.slug]
-            prefix = " ".join(ssh_prefix(ep.server, ep.proxy_chain))
-            return f"{prefix} '{cmd}'"
+            return shlex.join([*ssh_prefix(ep.server, ep.proxy_chain), shell_join(cmd)])

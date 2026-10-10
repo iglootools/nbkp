@@ -98,7 +98,11 @@ class DisksProgressBar:
         if self._progress is None:
             self._progress = Progress(
                 SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
+                # Descriptions embed slugs and paths: render them literally,
+                # not as Rich markup.
+                TextColumn(
+                    "{task.description}", style="progress.description", markup=False
+                ),
                 BarColumn(),
                 MofNCompleteColumn(),
                 transient=True,

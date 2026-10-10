@@ -32,7 +32,12 @@ from nbkp.sync.output import (
     build_human_results_sections,
     build_run_preview_sections,
 )
-from nbkp.sync.runner import SyncResult
+from nbkp.sync.runner import (
+    SyncFailureKind,
+    SyncResult,
+    SyncWarning,
+    SyncWarningKind,
+)
 
 
 def _localhost_ssh_status() -> SshEndpointStatus:
@@ -211,6 +216,7 @@ class TestRunPreviewRsyncCommandDisplay:
                 destination_latest_snapshot=create_snapshot_timestamp(
                     datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC),
                     dst,
+                    "linux",
                 ),
             )
         }
@@ -219,7 +225,7 @@ class TestRunPreviewRsyncCommandDisplay:
         assert "/mnt/dst/snapshots/<timestamp>/" in output
         assert "--link-dest" in output
         expected_ts = create_snapshot_timestamp(
-            datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC), dst
+            datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC), dst, "linux"
         )
         assert f"../{expected_ts.name}" in output
 
@@ -269,10 +275,11 @@ class TestRunResultsMarkupSafety:
         return buf.getvalue()
 
     def test_rsync_output_brackets_survive(self) -> None:
-        result = SyncResult(
-            sync_slug="s",
-            success=False,
-            dry_run=False,
+        result = SyncResult.failed(
+            "s",
+            False,
+            SyncFailureKind.RSYNC,
+            "rsync exited with code 23",
             rsync_exit_code=23,
             output=self.RSYNC_ERROR,
         )
@@ -281,12 +288,33 @@ class TestRunResultsMarkupSafety:
         assert "[sender=3.4.1]" in output
 
     def test_detail_brackets_survive(self) -> None:
-        result = SyncResult(
-            sync_slug="s",
-            success=False,
-            dry_run=False,
-            rsync_exit_code=1,
-            output="",
-            detail="Snapshot failed: mkdir '/mnt/x[1]' failed",
+        result = SyncResult.failed(
+            "s",
+            False,
+            SyncFailureKind.SNAPSHOT,
+            "Snapshot failed: mkdir '/mnt/x[1]' failed",
         )
         assert "/mnt/x[1]" in self._render_with_markup([result])
+
+
+class TestRunResultsWarnings:
+    def test_warnings_are_listed(self) -> None:
+        result = SyncResult.failed(
+            "s",
+            False,
+            SyncFailureKind.RSYNC,
+            "rsync exited with code 23",
+            warnings=(
+                SyncWarning(
+                    kind=SyncWarningKind.SNAPSHOT_DIR_CLEANUP,
+                    message="Failed to remove [dir]",
+                ),
+            ),
+        )
+        buf = StringIO()
+        console = Console(file=buf, width=300)
+        for section in build_human_results_sections(
+            [result], dry_run=False, config=Config(), resolved_endpoints={}
+        ):
+            console.print(section)
+        assert "Warning: Failed to remove [dir]" in buf.getvalue()

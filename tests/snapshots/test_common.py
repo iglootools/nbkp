@@ -6,6 +6,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import paramiko
+import pytest
+
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
@@ -24,6 +27,11 @@ from nbkp.snapshots.common import (
     list_snapshots,
     read_latest_symlink,
     update_latest_symlink,
+)
+from nbkp.snapshots.errors import SnapshotOp, SnapshotOperationError
+from nbkp.snapshots.hardlinks import (
+    delete_snapshot as hl_delete_snapshot,
+    prune_snapshots as hl_prune_snapshots,
 )
 
 # ── Config helpers ───────────────────────────────────────────
@@ -201,8 +209,8 @@ def _hl_remote_config() -> tuple[SyncConfig, Config, dict[str, ResolvedEndpoint]
 _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
 _LOCAL_VOL = LocalVolume(slug="dummy", path="/dummy")
 _REMOTE_VOL = RemoteVolume(slug="dummy", ssh_endpoint="dummy", path="/dummy")
-_TS_LOCAL = create_snapshot_timestamp(_NOW, _LOCAL_VOL)
-_TS_REMOTE = create_snapshot_timestamp(_NOW, _REMOTE_VOL)
+_TS_LOCAL = create_snapshot_timestamp(_NOW, _LOCAL_VOL, "linux")
+_TS_REMOTE = create_snapshot_timestamp(_NOW, _REMOTE_VOL, "linux")
 
 
 # ── create_snapshot_timestamp ────────────────────────────────
@@ -251,7 +259,11 @@ class TestGetLatestSnapshotLocal:
 
     @patch("nbkp.remote.dispatch.subprocess.run")
     def test_dir_missing(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=2, stdout="")
+        # ls fails, then `test -d` reports the directory absent
+        mock_run.side_effect = [
+            MagicMock(returncode=2, stdout="", stderr="No such file"),
+            MagicMock(returncode=1, stdout="", stderr=""),
+        ]
         config, sync = _local_config()
 
         result = get_latest_snapshot(sync, config)
@@ -275,6 +287,7 @@ class TestGetLatestSnapshotRemote:
             config.ssh_endpoints["nas-server"],
             ["ls", "/backup/data/snapshots"],
             [],
+            input=None,
         )
 
 
@@ -295,6 +308,7 @@ class TestGetLatestSnapshotRemoteSpaces:
             config.ssh_endpoints["nas-server"],
             ["ls", "/my backup/my data/snapshots"],
             [],
+            input=None,
         )
 
 
@@ -326,7 +340,11 @@ class TestListSnapshotsLocal:
 
     @patch("nbkp.remote.dispatch.subprocess.run")
     def test_dir_missing(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=2, stdout="")
+        # ls fails, then `test -d` reports the directory absent
+        mock_run.side_effect = [
+            MagicMock(returncode=2, stdout="", stderr="No such file"),
+            MagicMock(returncode=1, stdout="", stderr=""),
+        ]
         config, sync = _local_config()
 
         result = list_snapshots(sync, config)
@@ -404,7 +422,7 @@ class TestReadLatestSymlink:
         result = read_latest_symlink(sync, config)
         assert result is None
 
-    @patch("nbkp.snapshots.common.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_remote_exists(self, mock_remote: MagicMock) -> None:
         mock_remote.return_value = MagicMock(
             returncode=0,
@@ -415,7 +433,7 @@ class TestReadLatestSymlink:
         result = read_latest_symlink(sync, config, resolved_endpoints=re)
         assert result == _TS_REMOTE
 
-    @patch("nbkp.snapshots.common.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_remote_missing(self, mock_remote: MagicMock) -> None:
         mock_remote.return_value = MagicMock(returncode=1, stdout="")
         sync, config, re = _hl_remote_config()
@@ -450,7 +468,7 @@ class TestReadLatestSymlink:
         result = read_latest_symlink(sync, config)
         assert result is None
 
-    @patch("nbkp.snapshots.common.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_remote_devnull(self, mock_remote: MagicMock) -> None:
         """Remote latest -> /dev/null returns None."""
         mock_remote.return_value = MagicMock(
@@ -503,3 +521,121 @@ class TestUpdateLatestSymlink:
         cmd = mock_remote.call_args[0][1]
         assert "ln" in cmd
         assert f"snapshots/{_TS_REMOTE.name}" in cmd
+
+
+# ── failure handling ─────────────────────────────────────────
+
+
+def _is_op(op: SnapshotOp):
+    return lambda e: e.op is op
+
+
+class TestListSnapshotsFailures:
+    @patch("nbkp.remote.dispatch.subprocess.run")
+    def test_unreadable_existing_dir_raises(self, mock_run: MagicMock) -> None:
+        """ls failing on a directory that exists is not "no snapshots"."""
+        mock_run.side_effect = [
+            MagicMock(returncode=2, stdout="", stderr="Permission denied"),
+            MagicMock(returncode=0, stdout="", stderr=""),
+        ]
+        config, sync = _local_config()
+
+        with pytest.raises(
+            SnapshotOperationError,
+            check=lambda e: (
+                e.op is SnapshotOp.LIST
+                and e.path == "/mnt/dst/backup/snapshots"
+                and e.stderr == "Permission denied"
+            ),
+        ):
+            list_snapshots(sync, config)
+
+    @patch("nbkp.remote.dispatch.subprocess.run")
+    def test_ignores_non_snapshot_entries(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="2026-03-01T10:00:00.000Z\nlost+found\n.DS_Store\nnotes.txt\n",
+        )
+        config, sync = _local_config()
+
+        result = list_snapshots(sync, config)
+        assert [s.name for s in result] == ["2026-03-01T10:00:00.000Z"]
+
+    @patch("nbkp.remote.dispatch.run_remote_command")
+    def test_transport_error_is_translated(self, mock_remote: MagicMock) -> None:
+        mock_remote.side_effect = paramiko.SSHException("connection reset")
+        config, sync = _remote_config()
+        resolved = resolve_all_endpoints(config)
+
+        with pytest.raises(
+            SnapshotOperationError,
+            check=lambda e: e.op is SnapshotOp.LIST and "reset" in e.stderr,
+        ):
+            list_snapshots(sync, config, resolved)
+
+
+class TestReadLatestSymlinkFailures:
+    @patch("nbkp.remote.dispatch.run_remote_command")
+    def test_remote_unreadable_symlink_raises(self, mock_remote: MagicMock) -> None:
+        """readlink failing on an existing symlink must not read as "absent"."""
+        mock_remote.side_effect = [
+            MagicMock(returncode=1, stdout="", stderr="I/O error"),
+            MagicMock(returncode=0, stdout="", stderr=""),  # test -L: exists
+        ]
+        sync, config, re = _hl_remote_config()
+
+        with pytest.raises(
+            SnapshotOperationError, check=_is_op(SnapshotOp.READ_LATEST)
+        ):
+            read_latest_symlink(sync, config, resolved_endpoints=re)
+
+    @patch("nbkp.remote.dispatch.run_remote_command")
+    def test_prune_does_not_delete_when_latest_unknown(
+        self, mock_remote: MagicMock
+    ) -> None:
+        """An unreadable latest disables pruning instead of its protection."""
+        mock_remote.side_effect = [
+            MagicMock(
+                returncode=0,
+                stdout="".join(f"2026-03-0{i}T10:00:00.000Z\n" for i in range(1, 6)),
+                stderr="",
+            ),
+            MagicMock(returncode=1, stdout="", stderr="I/O error"),  # readlink
+            MagicMock(returncode=2, stdout="", stderr=""),  # test -L: error
+        ]
+        sync, config, re = _hl_remote_config()
+
+        with pytest.raises(
+            SnapshotOperationError, check=_is_op(SnapshotOp.READ_LATEST)
+        ):
+            hl_prune_snapshots(sync, config, 3, resolved_endpoints=re)
+        assert mock_remote.call_count == 3  # no rm -rf issued
+
+
+class TestLocalOSErrorTranslation:
+    def test_update_latest_symlink_missing_dir(self, tmp_path: Path) -> None:
+        dst = LocalVolume(slug="dst", path=str(tmp_path / "absent"))
+        src = LocalVolume(slug="src", path="/src")
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="dst",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+            },
+            syncs={"s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst")},
+        )
+        sync = config.syncs["s1"]
+
+        with pytest.raises(
+            SnapshotOperationError, check=_is_op(SnapshotOp.UPDATE_LATEST)
+        ):
+            update_latest_symlink(sync, config, _TS_LOCAL)
+
+    def test_hard_link_delete_missing_dir(self, tmp_path: Path) -> None:
+        vol = LocalVolume(slug="dst", path=str(tmp_path))
+        with pytest.raises(SnapshotOperationError, check=_is_op(SnapshotOp.DELETE)):
+            hl_delete_snapshot(str(tmp_path / "snapshots" / "missing"), vol, {})

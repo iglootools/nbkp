@@ -15,6 +15,7 @@ class _BaseModel(BaseModel):
     model_config = ConfigDict(
         alias_generator=_to_kebab,
         populate_by_name=True,
+        frozen=True,
     )
 
 

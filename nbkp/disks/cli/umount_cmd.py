@@ -7,13 +7,16 @@ from typing import Annotated
 
 import typer
 
-from ...clihelpers import OutputFormat, Severity
+from ...clihelpers import OutputFormat
+from ...config import Config
 from ...config.cli.helpers import load_config_or_exit, resolve_endpoints
-from ...config.epresolution import NetworkType
-from ..lifecycle import UmountResult, mount_count, umount_volumes
-from ..output import display_name
+from ...config.epresolution import NetworkType, ResolvedEndpoints
+from ..lifecycle import UmountResult, umount_volumes
+from ..plan import plan_lifecycle
 from . import app
-from .helpers import DisksProgressBar, _probe_and_show_status, format_umount_result
+from .helpers import _probe_and_show_status, require_known_names
+from .helpers.lifecycle_progress import LifecycleProgress, mount_display_names
+from .helpers.plan_output import show_plan
 
 
 @app.command("umount")
@@ -57,48 +60,58 @@ def umount(
             help="Prefer private (LAN) or public (WAN) endpoints",
         ),
     ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help=(
+                "Report what would be unmounted and locked without changing"
+                " anything (no udisksctl unmount/lock)."
+                " Long form only: -n is --name here."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Umount volumes and lock LUKS. Umounts all volumes with mount config, or specific ones via --name."""
-    cfg = load_config_or_exit(config)
+    cfg = load_config_or_exit(config, output)
+    require_known_names(cfg, name, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
 
-    use_progress = output == OutputFormat.HUMAN
-    display_names = {
-        slug: display_name(vol)
-        for slug, vol in cfg.volumes.items()
-        if vol.mount is not None
-    }
-    total = mount_count(cfg, name)
-    umount_bar = (
-        DisksProgressBar(total, "Umounting", format_umount_result)
-        if use_progress
-        else None
-    )
+    if dry_run:
+        show_plan(
+            plan_lifecycle(cfg, resolved, mounting=False, names=name),
+            mount_display_names(cfg),
+            output,
+        )
+        return
 
-    def on_umount_start(slug: str) -> None:
-        if umount_bar is not None:
-            umount_bar.on_start(display_names.get(slug, slug))
-
-    def on_umount_end(slug: str, result: UmountResult) -> None:
-        if umount_bar is not None:
-            umount_bar.on_end(
-                display_names.get(slug, slug),
-                Severity.OK if result.success else Severity.ERROR,
-                result.detail,
-                result.warning,
-            )
-
-    results = umount_volumes(
-        cfg,
-        resolved,
-        names=name,
-        on_umount_start=on_umount_start,
-        on_umount_end=on_umount_end,
-    )
-    if umount_bar is not None:
-        umount_bar.stop()
-
+    results = _umount_with_progress(cfg, resolved, name, output)
     _probe_and_show_status(cfg, resolved, output, name)
-
     if any(not r.success for r in results):
         raise typer.Exit(1)
+
+
+def _umount_with_progress(
+    cfg: Config,
+    resolved: ResolvedEndpoints,
+    names: list[str] | None,
+    output: OutputFormat,
+) -> list[UmountResult]:
+    """Umount and lock, with a progress bar for humans."""
+    progress = LifecycleProgress.create(
+        cfg,
+        enabled=output is OutputFormat.HUMAN,
+        names=names,
+        credentials=False,
+        mounting=False,
+    )
+    try:
+        return umount_volumes(
+            cfg,
+            resolved,
+            names=names,
+            on_umount_start=progress.on_umount_start,
+            on_umount_end=progress.on_umount_end,
+        )
+    finally:
+        progress.stop_all()
