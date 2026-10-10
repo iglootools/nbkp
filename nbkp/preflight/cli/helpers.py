@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ...clihelpers import OutputFormat
-from ...commands.invocation import Invocation
+from ...clihelpers.invocation import Invocation
 from ...commands.preflight import check_all_with_progress
 from ...config import Config
 from ...disks.observation import MountObservation

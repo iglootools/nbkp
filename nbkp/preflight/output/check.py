@@ -8,7 +8,7 @@ from rich.table import Table
 from rich.text import Text
 
 from ...clihelpers import OK_SYMBOL, severity_style, severity_symbol
-from ...commands.invocation import Invocation
+from ...clihelpers.invocation import Invocation
 from ...config import (
     Config,
     LocalVolume,

@@ -22,8 +22,8 @@ from ...clihelpers import (
     severity_style,
     severity_symbol,
 )
+from ...clihelpers.invocation import Invocation
 from ...commands.config import load_config_or_exit, resolve_endpoints
-from ...commands.invocation import Invocation
 from ...commands.mount import managed_mount
 from ...commands.preflight import check_total
 from ...config import Config

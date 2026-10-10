@@ -10,9 +10,9 @@ from rich.console import Console
 from rich.text import Text
 
 from ...clihelpers import OutputFormat
+from ...clihelpers.invocation import Invocation
 from ...commands.config import load_config_or_exit, resolve_endpoints
 from ...commands.credentials import prompt_passphrase
-from ...commands.invocation import Invocation
 from ...commands.mount_progress import LifecycleProgress, mount_display_names
 from ...config import Config
 from ...credentials import build_passphrase_fn, prefetch_passphrases

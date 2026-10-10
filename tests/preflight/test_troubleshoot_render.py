@@ -8,7 +8,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from nbkp.commands.invocation import Invocation
+from nbkp.clihelpers.invocation import Invocation
 from nbkp.config import (
     Config,
     LocalVolume,

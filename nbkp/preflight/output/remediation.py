@@ -18,7 +18,7 @@ from rich.padding import Padding
 from rich.syntax import Syntax
 from rich.text import Text
 
-from ...commands.invocation import Invocation
+from ...clihelpers.invocation import Invocation
 from ...config import (
     Config,
     LocalVolume,
