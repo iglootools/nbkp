@@ -9,7 +9,6 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 
-import typer
 from pydantic import SecretStr
 
 from ..config import Config, CredentialProvider
@@ -55,11 +54,21 @@ def _from_keyring(passphrase_id: str) -> str:
     return password
 
 
-def _from_prompt(passphrase_id: str) -> str:
-    return typer.prompt(
-        f"LUKS passphrase for {passphrase_id}",
-        hide_input=True,
-    )
+PromptFn = Callable[[str], str]
+"""Asks the operator for the passphrase of a passphrase-id (``prompt`` provider).
+
+Supplied by the CLI layer, so this package stays free of terminal I/O.
+"""
+
+
+def _from_prompt(passphrase_id: str, prompt: PromptFn | None) -> str:
+    if prompt is None:
+        # A wiring bug, not a user error: every caller that can retrieve a
+        # ``prompt``-provider passphrase must pass the CLI prompt.
+        raise ValueError(
+            "credential-provider 'prompt' needs a prompt function; none was supplied"
+        )
+    return prompt(passphrase_id)
 
 
 def passphrase_env_var(passphrase_id: str) -> str:
@@ -101,16 +110,18 @@ def retrieve_passphrase(
     provider: CredentialProvider,
     command_template: list[str] | None = None,
     environ: Mapping[str, str] = os.environ,
+    prompt: PromptFn | None = None,
 ) -> str:
     """Retrieve a LUKS passphrase using the configured provider.
 
-    ``environ`` is where the ``env`` provider looks the passphrase up.
+    ``environ`` is where the ``env`` provider looks the passphrase up;
+    ``prompt`` is how the ``prompt`` provider asks for it.
     """
     match provider:
         case CredentialProvider.KEYRING:
             return _from_keyring(passphrase_id)
         case CredentialProvider.PROMPT:
-            return _from_prompt(passphrase_id)
+            return _from_prompt(passphrase_id, prompt)
         case CredentialProvider.ENV:
             return _from_env(passphrase_id, environ)
         case CredentialProvider.COMMAND:
@@ -144,14 +155,21 @@ class PassphraseCache:
 def build_passphrase_fn(
     provider: CredentialProvider,
     command_template: list[str] | None,
+    *,
+    prompt: PromptFn,
 ) -> tuple[Callable[[str], str], PassphraseCache]:
-    """Build a passphrase retrieval function backed by a per-run cache."""
+    """Build a passphrase retrieval function backed by a per-run cache.
+
+    *prompt* is used only by the ``prompt`` provider.
+    """
     cache = PassphraseCache()
 
     def passphrase_fn(passphrase_id: str) -> str:
         return cache.get_or_retrieve(
             passphrase_id,
-            lambda pid: retrieve_passphrase(pid, provider, command_template),
+            lambda pid: retrieve_passphrase(
+                pid, provider, command_template, prompt=prompt
+            ),
         )
 
     return passphrase_fn, cache

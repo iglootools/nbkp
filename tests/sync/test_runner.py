@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from nbkp.clihelpers import Strictness
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
@@ -19,6 +18,7 @@ from nbkp.config import (
     Volume,
 )
 from nbkp.fsprotocol import Snapshot
+from nbkp.policy import Strictness
 from nbkp.preflight import (
     DestinationEndpointDiagnostics,
     DestinationEndpointError,

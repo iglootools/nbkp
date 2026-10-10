@@ -29,12 +29,13 @@ from ...commands.preflight import check_total
 from ...config import Config
 from ...config.epresolution import NetworkType, ResolvedEndpoints
 from ...ordering.output import build_rich_tree_sections
+from ...policy import Strictness
 from ...preflight import PreflightResult, SyncStatus
 from ...preflight.output import print_human_check
 from ...preflight.severity import PreflightError, severity_for_errors
 from ...sync import ProgressMode, SyncResult, result_severity
 from ...sync.output import build_human_results_sections
-from ..pipeline import PipelineResult, Strictness, SyncCallbacks, check_and_run
+from ..pipeline import PipelineResult, SyncCallbacks, check_and_run
 
 #: Indent of the per-sync lines under the abort message.
 _ABORT_DETAIL_INDENT = 2

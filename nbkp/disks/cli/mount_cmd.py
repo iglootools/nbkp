@@ -11,6 +11,7 @@ from rich.text import Text
 
 from ...clihelpers import OutputFormat
 from ...commands.config import load_config_or_exit, resolve_endpoints
+from ...commands.credentials import prompt_passphrase
 from ...commands.invocation import Invocation
 from ...commands.mount_progress import LifecycleProgress, mount_display_names
 from ...config import Config
@@ -116,7 +117,7 @@ def _mount_with_progress(
 ) -> list[MountResult]:
     """Prefetch every passphrase, then mount, with progress bars for humans."""
     passphrase_fn, cache = build_passphrase_fn(
-        cfg.credential_provider, cfg.credential_command
+        cfg.credential_provider, cfg.credential_command, prompt=prompt_passphrase
     )
     progress = LifecycleProgress.create(
         cfg, enabled=output is OutputFormat.HUMAN, names=names, umounting=False

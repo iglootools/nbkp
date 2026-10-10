@@ -19,7 +19,8 @@ from nbkp.config import (
     Volume,
 )
 from nbkp.fsprotocol import LATEST_LINK, SNAPSHOTS_DIR
-from nbkp.run.pipeline import Strictness, check_and_run
+from nbkp.policy import Strictness
+from nbkp.run.pipeline import check_and_run
 from nbkp.sync import SyncFailureKind, SyncOutcome, SyncResult, SyncWarningKind
 from nbkp.sync.testkit.seed import create_seed_sentinels
 

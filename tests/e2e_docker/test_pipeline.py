@@ -38,9 +38,10 @@ from nbkp.config import (
     SshEndpoint,
 )
 from nbkp.disks.context import managed_mount
+from nbkp.policy import Strictness
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.testkit.docker import REMOTE_BACKUP_PATH
-from nbkp.run.pipeline import Strictness, check_and_run
+from nbkp.run.pipeline import check_and_run
 from nbkp.sync.runner import SyncFailureKind, SyncOutcome
 from nbkp.sync.testkit.seed import build_chain_config
 from tests._docker_fixtures import LUKS_PASSPHRASE, ssh_exec

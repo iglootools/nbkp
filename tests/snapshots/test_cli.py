@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 from nbkp.cli import app
-from nbkp.clihelpers import Strictness
 from nbkp.commands.mount import managed_mount
 from nbkp.config import (
     BtrfsSnapshotConfig,
@@ -17,6 +16,7 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.fsprotocol import Snapshot
+from nbkp.policy import Strictness
 from nbkp.preflight import (
     DestinationEndpointError,
     SyncError,

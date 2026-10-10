@@ -7,12 +7,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from ...clihelpers import (
-    OK_SYMBOL,
-    Severity,
-    severity_style,
-    severity_symbol,
-)
+from ...clihelpers import OK_SYMBOL, severity_style, severity_symbol
 from ...commands.invocation import Invocation
 from ...config import (
     Config,
@@ -26,6 +21,7 @@ from ...config.output import (
     format_mount_summary,
     format_volume_display,
 )
+from ...policy import Severity, Strictness
 from ..severity import severity_for_errors
 from ..status import (
     INACTIVE_SSH_ERRORS,
@@ -37,7 +33,6 @@ from ..status import (
     SyncStatus,
     VolumeStatus,
 )
-from ..strictness import Strictness
 from .formatting import (
     check,
     format_capabilities,

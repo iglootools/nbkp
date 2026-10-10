@@ -14,6 +14,7 @@ from ...commands.invocation import Invocation
 from ...commands.mount import managed_mount
 from ...commands.preflight import check_all_with_progress
 from ...config.epresolution import NetworkType
+from ...policy import Strictness
 from ..output import (
     TroubleshootContext,
     collect_issues,
@@ -21,7 +22,7 @@ from ..output import (
     troubleshoot_json,
 )
 from ..status import PreflightResult
-from ..strictness import Strictness, has_fatal_errors
+from ..strictness import has_fatal_errors
 from . import app
 
 

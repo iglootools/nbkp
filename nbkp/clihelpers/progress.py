@@ -15,7 +15,8 @@ from rich.progress import (
 )
 from rich.text import Text
 
-from .severity import Severity, severity_style, severity_symbol
+from ..policy import Severity
+from .severity import severity_style, severity_symbol
 
 
 class StepProgressBar:

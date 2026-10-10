@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nbkp.clihelpers import Severity
+from nbkp.policy import Severity, Strictness
 from nbkp.preflight.severity import severity_for_error, severity_for_errors
 from nbkp.preflight.status import (
     DestinationEndpointError,
@@ -11,7 +11,6 @@ from nbkp.preflight.status import (
     SyncError,
     VolumeError,
 )
-from nbkp.preflight.strictness import Strictness
 
 
 class TestSeverityForError:

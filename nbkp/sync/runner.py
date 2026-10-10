@@ -10,11 +10,11 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, computed_field, model_validator
 
-from ..clihelpers import Severity, Strictness, classify_severity
 from ..config import Config, SyncConfig, SyncEndpoint
 from ..config.epresolution import ResolvedEndpoints
 from ..fsprotocol import SNAPSHOTS_DIR, STAGING_DIR, Snapshot
 from ..ordering.graph import sort_syncs, sync_predecessors
+from ..policy import Severity, Strictness, classify_severity
 from ..preflight import SyncError, SyncStatus
 from ..remote.errors import SSH_CONNECTION_ERRORS
 from ..snapshots.btrfs import (

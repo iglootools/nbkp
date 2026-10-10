@@ -16,7 +16,8 @@ from rich.progress import (
 )
 from rich.text import Text
 
-from ..clihelpers import Severity, severity_style, severity_symbol
+from ..clihelpers import severity_style, severity_symbol
+from ..policy import Severity
 
 # Result-line formatters for the credential/mount/umount bars.  They live
 # here, next to the bar that calls them, rather than in each caller: ``disks

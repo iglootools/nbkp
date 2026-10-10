@@ -7,11 +7,12 @@ from typing import Annotated
 
 import typer
 
-from ...clihelpers import OutputFormat, Strictness, echo_json
+from ...clihelpers import OutputFormat, echo_json
 from ...commands.config import load_config_or_exit, resolve_endpoints
 from ...commands.mount import managed_mount
 from ...commands.preflight import check_all_with_progress
 from ...config.epresolution import NetworkType
+from ...policy import Strictness
 from ..models import PruneResult
 from ..output import print_human_prune_results
 from . import app

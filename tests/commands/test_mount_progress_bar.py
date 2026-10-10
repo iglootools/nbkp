@@ -6,8 +6,8 @@ from io import StringIO
 
 from rich.console import Console
 
-from nbkp.clihelpers import Severity
 from nbkp.commands.mount_progress_bar import format_mount_result, format_umount_result
+from nbkp.policy import Severity
 
 # Real-world details that contain square brackets.  Rich reads "[...]" in a
 # markup string as a style tag, so these are the strings a markup-formatted

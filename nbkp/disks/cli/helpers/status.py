@@ -10,7 +10,6 @@ from rich.text import Text
 
 from ....clihelpers import (
     OutputFormat,
-    Severity,
     StepProgressBar,
     echo_json,
     severity_style,
@@ -18,6 +17,7 @@ from ....clihelpers import (
 )
 from ....config import Config, LocalVolume, RemoteVolume
 from ....config.epresolution import ResolvedEndpoints
+from ....policy import Severity
 from ....remote.errors import SSH_CONNECTION_ERRORS, describe_error
 from ...lifecycle import unknown_volume_names
 from ...models import MountFailureReason

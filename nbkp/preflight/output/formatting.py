@@ -6,18 +6,14 @@ from collections.abc import Iterable
 
 from rich.text import Text
 
-from ...clihelpers import (
-    OK_SYMBOL,
-    Severity,
-    severity_style,
-    severity_symbol,
-)
+from ...clihelpers import OK_SYMBOL, severity_style, severity_symbol
 from ...config import MountConfig
 from ...disks.output import (
     device_fail_severity,
     luks_fail_severity,
     mounted_fail_severity,
 )
+from ...policy import Severity, Strictness
 from ..severity import PreflightError, severity_for_error, severity_for_errors
 from ..status import (
     DestinationEndpointError,
@@ -31,7 +27,6 @@ from ..status import (
     VolumeError,
     VolumeStatus,
 )
-from ..strictness import Strictness
 
 
 def join_text(items: Iterable[Text], separator: str = ", ") -> Text:

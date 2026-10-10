@@ -8,12 +8,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from nbkp.config import Config, LocalVolume, SyncConfig, SyncEndpoint, Volume
+from nbkp.policy import Strictness
 from nbkp.preflight import (
     DestinationEndpointError,
     SyncError,
     SyncStatus,
 )
-from nbkp.run.pipeline import PipelineResult, Strictness, check_and_run
+from nbkp.run.pipeline import PipelineResult, check_and_run
 from nbkp.sync import SyncFailureKind, SyncOutcome
 from tests.clihelpers import (
     dst_ep_status,

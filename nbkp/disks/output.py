@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING, Protocol
 from rich.table import Table
 from rich.text import Text
 
-from ..clihelpers import Severity, Strictness, classify_severity, severity_icon
+from ..clihelpers import severity_icon
+from ..policy import Severity, Strictness, classify_severity
 from .lifecycle import LUKS_STAGE_FAILURES, MOUNT_STAGE_FAILURES
 from .models import MountFailureReason
 

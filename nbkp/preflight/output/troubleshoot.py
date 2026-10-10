@@ -15,9 +15,9 @@ from io import StringIO
 
 from rich.console import Console
 
-from ...clihelpers import Severity
 from ...config import Config, SyncConfig
 from ...config.epresolution import ResolvedEndpoints
+from ...policy import Severity, Strictness
 from ..severity import PreflightError, severity_for_error
 from ..status import (
     DestinationEndpointError,
@@ -32,7 +32,6 @@ from ..status import (
     VolumeError,
     VolumeStatus,
 )
-from ..strictness import Strictness
 from .remediation import (
     ERROR,
     HEADER,

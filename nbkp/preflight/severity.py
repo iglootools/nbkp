@@ -8,7 +8,7 @@ without re-implementing the policy at every call site.
 
 from __future__ import annotations
 
-from ..clihelpers import Severity, classify_severity
+from ..policy import Severity, Strictness, classify_severity
 from .status import (
     INACTIVE_DST_ENDPOINT_ERRORS,
     INACTIVE_SRC_ENDPOINT_ERRORS,
@@ -21,7 +21,6 @@ from .status import (
     SyncError,
     VolumeError,
 )
-from .strictness import Strictness
 
 PreflightError = (
     SshEndpointError

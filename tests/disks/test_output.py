@@ -8,7 +8,6 @@ from io import StringIO
 from rich.console import Console
 from rich.text import Text
 
-from nbkp.clihelpers import Severity
 from nbkp.disks.lifecycle import MountFailureReason
 from nbkp.disks.observation import MountObservation
 from nbkp.disks.output import (
@@ -16,6 +15,7 @@ from nbkp.disks.output import (
     build_mount_status_table,
     mount_state_icon,
 )
+from nbkp.policy import Severity
 from nbkp.preflight.status import MountCapabilities
 
 

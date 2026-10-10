@@ -6,7 +6,6 @@ from io import StringIO
 
 from rich.console import Console
 
-from nbkp.clihelpers import Severity
 from nbkp.config import (
     Config,
     LocalVolume,
@@ -14,6 +13,7 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.ordering.output import build_rich_tree_sections
+from nbkp.policy import Severity
 
 
 def _render(renderable) -> str:  # type: ignore[no-untyped-def]

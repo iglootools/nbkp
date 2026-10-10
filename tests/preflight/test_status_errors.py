@@ -23,6 +23,7 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.config.epresolution import ResolvedEndpoint
+from nbkp.policy import Strictness
 from nbkp.preflight.endpoint_checks import _read_latest_state
 from nbkp.preflight.ssh_checks import observe_standalone_endpoint
 from nbkp.preflight.status import (
@@ -45,7 +46,7 @@ from nbkp.preflight.status import (
     VolumeDiagnostics,
     VolumeStatus,
 )
-from nbkp.preflight.strictness import Strictness, has_fatal_errors
+from nbkp.preflight.strictness import has_fatal_errors
 from nbkp.preflight.volume_checks import observe_ssh_endpoint
 
 _TOOLS = HostToolCapabilities(

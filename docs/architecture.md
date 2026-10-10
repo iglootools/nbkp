@@ -48,6 +48,7 @@ graph TD
     disks["disks/"]
     fsprotocol["fsprotocol"]
     ordering["ordering/"]
+    policy["policy"]
     preflight["preflight/"]
     remote["remote/"]
     run["run/"]
@@ -64,10 +65,12 @@ graph TD
     cli --> run
     cli --> sh
     cli --> snapshots
+    clihelpers --> policy
     commands --> clihelpers
     commands --> config
     commands --> credentials
     commands --> disks
+    commands --> policy
     commands --> preflight
     commands --> remote
     config --> clihelpers
@@ -79,6 +82,7 @@ graph TD
     demo --> config
     demo --> disks
     demo --> ordering
+    demo --> policy
     demo --> preflight
     demo --> remote
     demo --> snapshots
@@ -87,16 +91,19 @@ graph TD
     disks --> commands
     disks --> config
     disks --> credentials
+    disks --> policy
     disks --> remote
     ordering --> clihelpers
     ordering --> commands
     ordering --> config
+    ordering --> policy
     preflight --> clihelpers
     preflight --> commands
     preflight --> config
     preflight --> credentials
     preflight --> disks
     preflight --> fsprotocol
+    preflight --> policy
     preflight --> remote
     remote --> config
     remote --> fsprotocol
@@ -105,6 +112,7 @@ graph TD
     run --> config
     run --> disks
     run --> ordering
+    run --> policy
     run --> preflight
     run --> sync
     sh --> commands
@@ -117,12 +125,13 @@ graph TD
     snapshots --> commands
     snapshots --> config
     snapshots --> fsprotocol
+    snapshots --> policy
     snapshots --> preflight
     snapshots --> remote
-    sync --> clihelpers
     sync --> config
     sync --> fsprotocol
     sync --> ordering
+    sync --> policy
     sync --> preflight
     sync --> remote
     sync --> snapshots
@@ -134,4 +143,4 @@ graph TD
 Each domain module (`disks/`, `preflight/`, `snapshots/`, …) keeps its core logic, its presentation (`output.py` / `output/`), and its Typer sub-app (`cli/`) side by side. Two rules keep them decoupled:
 
 - **No module imports another module's `cli/` package.** Wiring that several sub-apps need — loading the config (`load_config_or_exit`), resolving endpoints, the managed mount lifecycle and its progress bars, preflight checks with progress, and the `Invocation` flags echoed in follow-up suggestions — lives in `commands/`. Only the root `cli/` app imports the sub-apps.
-- **`clihelpers/` is presentation only** (output format, JSON, severity symbols and styles, progress bars). The cycles between `commands/` and the modules in the graph above are between a module's `cli/` (or `output/`) subpackage and `commands/`, never with the module's core.
+- **Decisions live in core, display in `clihelpers/`.** `policy` holds `Strictness`, `Severity` and `classify_severity` — whether a finding is fatal — and is what core modules (`sync/`, `run/`, `preflight/`, `disks/`) import. `clihelpers/` is presentation only (output format, JSON, severity symbols and styles, progress bars); core modules import neither it nor `rich` / `typer`. The `prompt` credential provider gets its terminal prompt injected from `commands/credentials.py`. The cycles between `commands/` and the modules in the graph above are between a module's `cli/` (or `output/`) subpackage and `commands/`, never with the module's core.

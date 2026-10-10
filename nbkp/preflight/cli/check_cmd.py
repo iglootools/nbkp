@@ -12,8 +12,8 @@ from ...commands.config import load_config_or_exit, resolve_endpoints
 from ...commands.invocation import Invocation
 from ...commands.mount import managed_mount
 from ...config.epresolution import NetworkType
+from ...policy import Strictness
 from ..status import PreflightResult
-from ..strictness import Strictness
 from . import app
 from .helpers import check_and_display
 
