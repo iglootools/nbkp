@@ -98,8 +98,8 @@ The `sh` command compiles a config into a self-contained bash script that reprod
 
 - **Standalone bash scripts**: no Python or config file required at runtime
 - **Portable paths**: `--relative-src` / `--relative-dst` make paths relative to the script location
-- **Runtime flags**: generated scripts support `--dry-run` and `-v` / `-vv` / `-vvv`
-- **Full feature parity**: rsync, SSH options, filters, btrfs snapshots, hard-link snapshots, pre-flight checks, dependency ordering, failure propagation
+- **Runtime flags**: generated scripts support `--dry-run`, `--progress` and `--strictness`
+- **Full feature parity**: rsync, SSH options, filters, btrfs snapshots, hard-link snapshots, pre-flight checks (sentinels gate syncs exactly as in `run`), strictness, dependency ordering, failure propagation
 - **Disabled syncs preserved**: appear as commented-out blocks for easy re-enabling
 
 ## Outputs
