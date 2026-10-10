@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from enum import StrEnum
 
 import typer
 from pydantic import SecretStr
@@ -13,8 +15,22 @@ from pydantic import SecretStr
 from ..config import Config, CredentialProvider
 
 
+class CredentialErrorReason(StrEnum):
+    """Structured error codes for passphrase retrieval failures."""
+
+    NOT_INSTALLED = "not-installed"
+    NOT_FOUND = "not-found"
+    ENV_UNSET = "env-unset"
+    COMMAND_MISSING = "command-missing"
+    COMMAND_FAILED = "command-failed"
+
+
 class CredentialError(Exception):
     """Raised when a passphrase cannot be retrieved."""
+
+    def __init__(self, message: str, reason: CredentialErrorReason) -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 def _from_keyring(passphrase_id: str) -> str:
@@ -25,14 +41,16 @@ def _from_keyring(passphrase_id: str) -> str:
             "keyring package not installed."
             " Install with: uv tool install 'nbkp[keyring]'"
             " (quotes required — the shell would glob the extra otherwise),"
-            " or switch to another credential-provider."
+            " or switch to another credential-provider.",
+            reason=CredentialErrorReason.NOT_INSTALLED,
         ) from None
 
     password = keyring.get_password("nbkp", passphrase_id)
     if password is None:
         raise CredentialError(
             f"No passphrase found in keyring for id '{passphrase_id}'."
-            f" Store it with: keyring set nbkp {passphrase_id}"
+            f" Store it with: keyring set nbkp {passphrase_id}",
+            reason=CredentialErrorReason.NOT_FOUND,
         )
     return password
 
@@ -44,13 +62,19 @@ def _from_prompt(passphrase_id: str) -> str:
     )
 
 
-def _from_env(passphrase_id: str) -> str:
-    env_var = f"NBKP_PASSPHRASE_{passphrase_id.upper().replace('-', '_')}"
-    value = os.environ.get(env_var)
+def passphrase_env_var(passphrase_id: str) -> str:
+    """Environment variable the ``env`` provider reads for ``passphrase_id``."""
+    return f"NBKP_PASSPHRASE_{passphrase_id.upper().replace('-', '_')}"
+
+
+def _from_env(passphrase_id: str, environ: Mapping[str, str]) -> str:
+    env_var = passphrase_env_var(passphrase_id)
+    value = environ.get(env_var)
     if value is None:
         raise CredentialError(
             f"Environment variable '{env_var}' not set."
-            f" Export it with: export {env_var}=..."
+            f" Export it with: export {env_var}=...",
+            reason=CredentialErrorReason.ENV_UNSET,
         )
     return value
 
@@ -58,15 +82,16 @@ def _from_env(passphrase_id: str) -> str:
 def _from_command(passphrase_id: str, command_template: list[str] | None) -> str:
     if command_template is None:
         raise CredentialError(
-            "credential-command is required when credential-provider is 'command'"
+            "credential-command is required when credential-provider is 'command'",
+            reason=CredentialErrorReason.COMMAND_MISSING,
         )
     command = [arg.replace("{id}", passphrase_id) for arg in command_template]
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode != 0:
-        cmd_str = " ".join(command)
         raise CredentialError(
             f"Credential command failed (exit {result.returncode}):"
-            f" {cmd_str}\nstderr: {result.stderr.strip()}"
+            f" {shlex.join(command)}\nstderr: {result.stderr.strip()}",
+            reason=CredentialErrorReason.COMMAND_FAILED,
         )
     return result.stdout.strip()
 
@@ -75,15 +100,19 @@ def retrieve_passphrase(
     passphrase_id: str,
     provider: CredentialProvider,
     command_template: list[str] | None = None,
+    environ: Mapping[str, str] = os.environ,
 ) -> str:
-    """Retrieve a LUKS passphrase using the configured provider."""
+    """Retrieve a LUKS passphrase using the configured provider.
+
+    ``environ`` is where the ``env`` provider looks the passphrase up.
+    """
     match provider:
         case CredentialProvider.KEYRING:
             return _from_keyring(passphrase_id)
         case CredentialProvider.PROMPT:
             return _from_prompt(passphrase_id)
         case CredentialProvider.ENV:
-            return _from_env(passphrase_id)
+            return _from_env(passphrase_id, environ)
         case CredentialProvider.COMMAND:
             return _from_command(passphrase_id, command_template)
 
@@ -134,12 +163,15 @@ def collect_passphrase_ids(config: Config) -> dict[str, list[str]]:
     Covers *every* encrypted mount-managed volume in the config, whether or
     not its drive is currently plugged in.
     """
-    result: dict[str, list[str]] = {}
-    for vol in config.volumes.values():
-        mount = vol.mount
-        if mount is not None and mount.encryption is not None:
-            result.setdefault(mount.encryption.passphrase_id, []).append(vol.slug)
-    return result
+    encrypted = [
+        (vol.mount.encryption.passphrase_id, vol.slug)
+        for vol in config.volumes.values()
+        if vol.mount is not None and vol.mount.encryption is not None
+    ]
+    return {
+        pid: [slug for other_pid, slug in encrypted if other_pid == pid]
+        for pid in dict.fromkeys(pid for pid, _ in encrypted)
+    }
 
 
 # Providers worth retrieving eagerly.  ``prompt`` is deliberately excluded:
@@ -155,6 +187,11 @@ _PREFETCHABLE_PROVIDERS: frozenset[CredentialProvider] = frozenset(
 )
 
 
+def is_prefetchable(provider: CredentialProvider) -> bool:
+    """Whether :func:`prefetch_passphrases` retrieves passphrases for ``provider``."""
+    return provider in _PREFETCHABLE_PROVIDERS
+
+
 @dataclass(frozen=True)
 class PassphrasePrefetch:
     """Outcome of eagerly retrieving one configured passphrase."""
@@ -163,6 +200,7 @@ class PassphrasePrefetch:
     volumes: tuple[str, ...]
     success: bool
     detail: str | None = None
+    reason: CredentialErrorReason | None = None
 
 
 def prefetch_passphrases(
@@ -193,28 +231,48 @@ def prefetch_passphrases(
     id order.  Returns an empty list when the provider is not prefetchable
     (see ``_PREFETCHABLE_PROVIDERS``) or no encrypted volume is configured.
     """
-    if config.credential_provider not in _PREFETCHABLE_PROVIDERS:
+    if not is_prefetchable(config.credential_provider):
         return []
 
     passphrase_ids = collect_passphrase_ids(config)
-    results: list[PassphrasePrefetch] = []
-    for pid in sorted(passphrase_ids):
-        if on_prefetch_start is not None:
-            on_prefetch_start(pid)
-        volumes = tuple(sorted(passphrase_ids[pid]))
-        try:
-            passphrase_fn(pid)
-            result = PassphrasePrefetch(pid, volumes, success=True)
-        except CredentialError as e:
-            result = PassphrasePrefetch(pid, volumes, success=False, detail=str(e))
-        results.append(result)
-        if on_prefetch_end is not None:
-            on_prefetch_end(pid, result)
-    return results
+    return [
+        _prefetch_one(
+            pid,
+            tuple(sorted(passphrase_ids[pid])),
+            passphrase_fn,
+            on_prefetch_start,
+            on_prefetch_end,
+        )
+        for pid in sorted(passphrase_ids)
+    ]
+
+
+def _prefetch_one(
+    pid: str,
+    volumes: tuple[str, ...],
+    passphrase_fn: Callable[[str], str],
+    on_prefetch_start: Callable[[str], None] | None,
+    on_prefetch_end: Callable[[str, PassphrasePrefetch], None] | None,
+) -> PassphrasePrefetch:
+    """Retrieve one passphrase, reporting progress and capturing failure."""
+    if on_prefetch_start is not None:
+        on_prefetch_start(pid)
+    try:
+        passphrase_fn(pid)
+        result = PassphrasePrefetch(pid, volumes, success=True)
+    except CredentialError as e:
+        result = PassphrasePrefetch(
+            pid, volumes, success=False, detail=str(e), reason=e.reason
+        )
+    if on_prefetch_end is not None:
+        on_prefetch_end(pid, result)
+    return result
 
 
 def prefetch_count(config: Config) -> int:
     """Number of passphrase-ids :func:`prefetch_passphrases` would retrieve."""
-    if config.credential_provider not in _PREFETCHABLE_PROVIDERS:
-        return 0
-    return len(collect_passphrase_ids(config))
+    return (
+        len(collect_passphrase_ids(config))
+        if is_prefetchable(config.credential_provider)
+        else 0
+    )
