@@ -33,7 +33,7 @@ from ..config import (
     SyncEndpoint,
     Volume,
 )
-from ..disks.models import (
+from ..disks import (
     MountCapabilities,
     MountFailureReason,
     MountToolCapabilities,

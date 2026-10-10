@@ -29,9 +29,12 @@ from ...config import (
 )
 from ...config.output import endpoint_path, host_label
 from ...credentials import passphrase_env_var
-from ...disks.auth import generate_auth_rules
-from ...disks.detection import DeviceProbeError, discover_cleartext_device
-from ...disks.udisks import cleartext_mapper_name
+from ...disks import (
+    DeviceProbeError,
+    cleartext_mapper_name,
+    discover_cleartext_device,
+    generate_auth_rules,
+)
 from ...fsprotocol import (
     DESTINATION_SENTINEL,
     LATEST_LINK,

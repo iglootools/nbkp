@@ -20,7 +20,7 @@ from ....config import (
     RsyncOptions,
     SshEndpoint,
 )
-from ....disks.lifecycle import mount_volumes, umount_volumes
+from ....disks import mount_volumes, umount_volumes
 from ....policy import Severity
 from ....remote.endpoints import ResolvedEndpoints
 from ....remote.resolution import resolve_all_endpoints

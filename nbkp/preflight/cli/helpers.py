@@ -6,7 +6,7 @@ from ...clihelpers import OutputFormat
 from ...clihelpers.invocation import Invocation
 from ...commands.preflight import check_all_with_progress
 from ...config import Config
-from ...disks.observation import MountObservation
+from ...disks import MountObservation
 from ...policy import Strictness
 from ...preflight import PreflightResult
 from ...preflight.output import print_human_check

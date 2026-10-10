@@ -8,7 +8,7 @@ from rich.text import Text
 
 from ...clihelpers import OK_SYMBOL, severity_style, severity_symbol
 from ...config import MountConfig
-from ...disks.output import (
+from ...disks import (
     device_fail_severity,
     luks_fail_severity,
     mounted_fail_severity,

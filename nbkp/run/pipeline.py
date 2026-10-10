@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from ..config import Config
-from ..disks.observation import MountObservation
+from ..disks import MountObservation
 from ..policy import Severity, Strictness
 from ..preflight import (
     PreflightResult,

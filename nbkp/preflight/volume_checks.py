@@ -24,11 +24,11 @@ from ..config import (
     RemoteVolume,
     Volume,
 )
-from ..disks.mount_checks import (
+from ..disks import (
+    MountObservation,
     check_mount_capabilities as _check_mount_capabilities,
     probe_mount_tools as _probe_mount_tools,
 )
-from ..disks.observation import MountObservation
 from ..fsprotocol import VOLUME_SENTINEL
 from ..remote import run_remote_command
 from ..remote.dispatch import check_command_available

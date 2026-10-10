@@ -11,7 +11,7 @@ from collections.abc import Sequence
 
 from ..clihelpers import StepProgressBar
 from ..config import Config, LocalVolume
-from ..disks.observation import MountObservation
+from ..disks import MountObservation
 from ..policy import Strictness
 from ..preflight import PreflightResult, check_all_syncs
 from ..preflight.severity import PreflightError, severity_for_errors

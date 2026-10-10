@@ -20,7 +20,7 @@ from ..config.testkit import (
     base_syncs,
     base_volumes,
 )
-from ..disks.models import MountFailureReason
+from ..disks import MountFailureReason
 from ..fsprotocol import Snapshot
 from . import (
     BtrfsStagingSubvolumeDiagnostics,

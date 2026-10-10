@@ -11,9 +11,13 @@ from dataclasses import dataclass
 
 from ..config import Config
 from ..credentials import PassphrasePrefetch, prefetch_count
-from ..disks.lifecycle import MountResult, UmountResult, mount_count
-from ..disks.models import MountFailureReason
-from ..disks.output import display_name
+from ..disks import (
+    MountFailureReason,
+    MountResult,
+    UmountResult,
+    display_name,
+    mount_count,
+)
 from ..policy import Severity, Strictness, classify_severity
 from .mount_progress_bar import (
     DisksProgressBar,
