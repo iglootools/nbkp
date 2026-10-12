@@ -60,6 +60,8 @@ nbkp uses lightweight sentinel files to guard against syncing to the wrong place
 
 nbkp can automatically mount and umount volumes before and after backups, including LUKS-encrypted drives, via [udisks2](https://www.freedesktop.org/wiki/Software/udisks/). This is especially useful for removable drives that need to be unlocked (LUKS) and mounted before syncing, and umounted and locked (LUKS) afterward. See [Mount management with udisks2](./usage.md#mount-management-with-udisks2) for the full setup guide.
 
+nbkp does not encrypt anything itself: LUKS provides encryption at rest, SSH protection in transit, and mount management only automates the unlock/lock routine. Encrypted volumes work without it too, unlocked by hand. What this protects against, and what it doesn't: [Encryption](./domain.md#encryption).
+
 - **udisks-based, single backend**: all unlock/mount/unmount/lock operations go through `udisksctl`. There is no `strategy` field and no `sudo` in the mount path
 - **LUKS encryption support**: automatic unlock via `udisksctl unlock`, lock via `udisksctl lock`. Passphrases come from the operator's own machine (e.g. the laptop's keyring) and are sent to the server only transiently at unlock time — **no passwords are stored on the server**, which holds only the encrypted drives. The unlocked device is discovered at runtime — no `mapper-name` to configure
 - **Hybrid mount-point model**: declare `path` (backed by an `/etc/fstab` entry) to mount at a fixed path, or omit it to let udisks mount at `/run/media/<user>/<label>`, which nbkp discovers at runtime
