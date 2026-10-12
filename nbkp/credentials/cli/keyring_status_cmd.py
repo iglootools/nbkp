@@ -10,8 +10,8 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from ...clihelpers import OutputFormat, echo_json
-from ...commands.config import load_config_or_exit
+from ...clidisplay import OutputFormat, echo_json
+from ...cliwiring.config import load_config_or_exit
 from ...config import Config
 from .. import (
     PassphrasePrefetch,

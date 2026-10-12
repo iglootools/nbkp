@@ -157,8 +157,8 @@ source_modules = [
 forbidden_modules = [
   "rich",
   "typer",
-  "nbkp.clihelpers",
-  "nbkp.commands",
+  "nbkp.clidisplay",
+  "nbkp.cliwiring",
   "nbkp.cli",
   "nbkp.*.cli",
 ]
@@ -174,7 +174,7 @@ ignore_imports = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "CLI sub-apps do not import each other (shared wiring lives in nbkp.commands)"
+name = "CLI sub-apps do not import each other (shared wiring lives in nbkp.cliwiring)"
 type = "independence"
 modules = [
   "nbkp.config.cli",
@@ -191,7 +191,7 @@ modules = [
 [[tool.importlinter.contracts]]
 name = "Command wiring sits below the CLI sub-apps"
 type = "forbidden"
-source_modules = ["nbkp.commands"]
+source_modules = ["nbkp.cliwiring"]
 forbidden_modules = ["nbkp.cli", "nbkp.*.cli"]
 
 [[tool.importlinter.contracts]]
@@ -217,12 +217,12 @@ ignore_imports = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "clihelpers is a presentation leaf"
+name = "clidisplay is a presentation leaf"
 type = "forbidden"
-source_modules = ["nbkp.clihelpers"]
+source_modules = ["nbkp.clidisplay"]
 forbidden_modules = [
   "nbkp.cli",
-  "nbkp.commands",
+  "nbkp.cliwiring",
   "nbkp.config",
   "nbkp.credentials",
   "nbkp.demo",

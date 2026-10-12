@@ -8,8 +8,8 @@ from typing import Annotated
 
 import typer
 
-from ...clihelpers import OutputFormat, echo_json
-from ...commands.config import load_config_or_exit
+from ...clidisplay import OutputFormat, echo_json
+from ...cliwiring.config import load_config_or_exit
 from ..auth import AuthRuleBlock, generate_auth_rules
 from . import app
 

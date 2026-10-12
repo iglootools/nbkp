@@ -7,7 +7,7 @@ from contextlib import contextmanager
 
 from rich.console import Console
 
-from ..clihelpers import OutputFormat
+from ..clidisplay import OutputFormat
 from ..config import Config
 from ..credentials import build_passphrase_fn
 from ..disks import MountObservation, managed_mount as _disks_managed_mount

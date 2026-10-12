@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from ...clihelpers import OutputFormat
-from ...clihelpers.invocation import Invocation
-from ...commands.preflight import check_all_with_progress
+from ...clidisplay import OutputFormat
+from ...clidisplay.invocation import Invocation
+from ...cliwiring.preflight import check_all_with_progress
 from ...config import Config
 from ...disks import MountObservation
 from ...policy import Strictness

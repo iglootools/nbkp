@@ -6,7 +6,7 @@ from collections.abc import Iterable
 
 from rich.text import Text
 
-from ...clihelpers import OK_SYMBOL, severity_style, severity_symbol
+from ...clidisplay import OK_SYMBOL, severity_style, severity_symbol
 from ...config import MountConfig
 from ...disks import (
     MountCapabilities,

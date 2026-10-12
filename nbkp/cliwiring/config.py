@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-from ..clihelpers import OutputFormat, echo_json
+from ..clidisplay import OutputFormat, echo_json
 from ..config import Config, ConfigError, load_config
 from ..config.output import config_error_json, print_config_error
 from ..remote.endpoints import (

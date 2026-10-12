@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from nbkp.clihelpers import echo_json
+from nbkp.clidisplay import echo_json
 from nbkp.fsprotocol import Snapshot
 
 

@@ -15,17 +15,17 @@ from rich.panel import Panel
 from rich.status import Status
 from rich.text import Text
 
-from ...clihelpers import (
+from ...clidisplay import (
     OutputFormat,
     StepProgressBar,
     echo_json,
     severity_style,
     severity_symbol,
 )
-from ...clihelpers.invocation import Invocation
-from ...commands.config import load_config_or_exit, resolve_endpoints
-from ...commands.mount import managed_mount
-from ...commands.preflight import check_total
+from ...clidisplay.invocation import Invocation
+from ...cliwiring.config import load_config_or_exit, resolve_endpoints
+from ...cliwiring.mount import managed_mount
+from ...cliwiring.preflight import check_total
 from ...config import Config
 from ...ordering.output import build_rich_tree_sections
 from ...policy import Strictness

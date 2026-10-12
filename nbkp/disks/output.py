@@ -8,7 +8,7 @@ from typing import Protocol
 from rich.table import Table
 from rich.text import Text
 
-from ..clihelpers import severity_icon
+from ..clidisplay import severity_icon
 from ..policy import Severity, Strictness
 from .models import MountFailureReason
 from .severity import device_fail_severity, luks_fail_severity, mounted_fail_severity

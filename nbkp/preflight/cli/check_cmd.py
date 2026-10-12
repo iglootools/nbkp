@@ -7,10 +7,10 @@ from typing import Annotated
 
 import typer
 
-from ...clihelpers import OutputFormat, echo_json
-from ...clihelpers.invocation import Invocation
-from ...commands.config import load_config_or_exit, resolve_endpoints
-from ...commands.mount import managed_mount
+from ...clidisplay import OutputFormat, echo_json
+from ...clidisplay.invocation import Invocation
+from ...cliwiring.config import load_config_or_exit, resolve_endpoints
+from ...cliwiring.mount import managed_mount
 from ...policy import Strictness
 from ...remote.endpoints import NetworkType
 from ..status.result import PreflightResult
