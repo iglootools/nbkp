@@ -7,8 +7,8 @@ from typing import Annotated
 
 import typer
 
-from ...clihelpers import OutputFormat, echo_json
-from ...commands.config import load_config_or_exit, resolve_endpoints
+from ...clidisplay import OutputFormat, echo_json
+from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ..output import print_human_config
 from . import app
 

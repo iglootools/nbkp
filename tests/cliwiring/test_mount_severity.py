@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nbkp.commands.mount_progress import mount_result_severity
+from nbkp.cliwiring.mount_progress import mount_result_severity
 from nbkp.disks.lifecycle import MountFailureReason, MountResult
 from nbkp.policy import Severity, Strictness
 

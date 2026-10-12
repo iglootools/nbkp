@@ -6,7 +6,7 @@ from mermaid_ascii import parse_mermaid, render_ascii
 from rich.console import Console, RenderableType
 from rich.tree import Tree
 
-from ..clihelpers import severity_icon
+from ..clidisplay import severity_icon
 from ..config import Config, SyncEndpoint
 from ..policy import Severity
 from .graph import build_adjacency

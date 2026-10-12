@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from nbkp.clihelpers import OutputFormat
+from nbkp.clidisplay import OutputFormat
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,

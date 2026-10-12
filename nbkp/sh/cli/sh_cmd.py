@@ -10,7 +10,7 @@ from typing import Annotated
 
 import typer
 
-from ...commands.config import load_config_or_exit, resolve_endpoints
+from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...remote.endpoints import NetworkType
 from .. import ScriptOptions, generate_script
 

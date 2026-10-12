@@ -7,9 +7,9 @@ from typing import Annotated
 
 import typer
 
-from ...clihelpers import OutputFormat
-from ...commands.config import load_config_or_exit, resolve_endpoints
-from ...commands.mount_progress import LifecycleProgress, mount_display_names
+from ...clidisplay import OutputFormat
+from ...cliwiring.config import load_config_or_exit, resolve_endpoints
+from ...cliwiring.mount_progress import LifecycleProgress, mount_display_names
 from ...config import Config
 from ...remote.endpoints import NetworkType, ResolvedEndpoints
 from ..lifecycle import UmountResult, umount_volumes

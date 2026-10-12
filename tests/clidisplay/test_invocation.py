@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nbkp.clihelpers.invocation import Invocation, display_path
+from nbkp.clidisplay.invocation import Invocation, display_path
 
 
 class TestDisplayPath:

@@ -16,7 +16,7 @@ from nbkp.preflight import (
 )
 from nbkp.run.pipeline import PipelineResult, check_and_run
 from nbkp.sync import SyncFailureKind, SyncOutcome
-from tests.clihelpers import (
+from tests.clidisplay import (
     dst_ep_status,
     localhost_ssh_status,
     preflight,

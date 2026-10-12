@@ -8,7 +8,7 @@ import typer
 from rich.console import Console
 from rich.text import Text
 
-from ....clihelpers import (
+from ....clidisplay import (
     OutputFormat,
     StepProgressBar,
     echo_json,

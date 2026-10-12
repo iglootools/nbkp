@@ -7,8 +7,8 @@ from typing import Annotated
 
 import typer
 
-from ...clihelpers import OutputFormat
-from ...commands.config import load_config_or_exit, resolve_endpoints
+from ...clidisplay import OutputFormat
+from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...remote.endpoints import NetworkType
 from . import app
 from .helpers import _probe_and_show_status, require_known_names

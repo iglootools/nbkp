@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ..clihelpers import StepProgressBar
+from ..clidisplay import StepProgressBar
 from ..config import Config, LocalVolume
 from ..disks import MountObservation
 from ..policy import Strictness

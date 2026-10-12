@@ -17,7 +17,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
-from ...clihelpers import StepProgressBar
+from ...clidisplay import StepProgressBar
 from ...config import (
     CredentialProvider,
 )

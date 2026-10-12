@@ -40,8 +40,8 @@ Dependencies between top-level modules (auto-generated via `mise run depgraph`):
 ```mermaid
 graph TD
     cli["cli/"]
-    clihelpers["clihelpers/"]
-    commands["commands/"]
+    clidisplay["clidisplay/"]
+    cliwiring["cliwiring/"]
     config["config/"]
     credentials["credentials/"]
     demo["demo/"]
@@ -65,20 +65,20 @@ graph TD
     cli --> run
     cli --> sh
     cli --> snapshots
-    clihelpers --> policy
-    commands --> clihelpers
-    commands --> config
-    commands --> credentials
-    commands --> disks
-    commands --> policy
-    commands --> preflight
-    commands --> remote
-    config --> clihelpers
-    config --> commands
-    credentials --> clihelpers
-    credentials --> commands
+    clidisplay --> policy
+    cliwiring --> clidisplay
+    cliwiring --> config
+    cliwiring --> credentials
+    cliwiring --> disks
+    cliwiring --> policy
+    cliwiring --> preflight
+    cliwiring --> remote
+    config --> clidisplay
+    config --> cliwiring
+    credentials --> clidisplay
+    credentials --> cliwiring
     credentials --> config
-    demo --> clihelpers
+    demo --> clidisplay
     demo --> config
     demo --> disks
     demo --> ordering
@@ -87,18 +87,18 @@ graph TD
     demo --> remote
     demo --> snapshots
     demo --> sync
-    disks --> clihelpers
-    disks --> commands
+    disks --> clidisplay
+    disks --> cliwiring
     disks --> config
     disks --> credentials
     disks --> policy
     disks --> remote
-    ordering --> clihelpers
-    ordering --> commands
+    ordering --> clidisplay
+    ordering --> cliwiring
     ordering --> config
     ordering --> policy
-    preflight --> clihelpers
-    preflight --> commands
+    preflight --> clidisplay
+    preflight --> cliwiring
     preflight --> config
     preflight --> credentials
     preflight --> disks
@@ -107,8 +107,8 @@ graph TD
     preflight --> remote
     remote --> config
     remote --> fsprotocol
-    run --> clihelpers
-    run --> commands
+    run --> clidisplay
+    run --> cliwiring
     run --> config
     run --> disks
     run --> ordering
@@ -116,14 +116,14 @@ graph TD
     run --> preflight
     run --> remote
     run --> sync
-    sh --> commands
+    sh --> cliwiring
     sh --> config
     sh --> fsprotocol
     sh --> ordering
     sh --> remote
     sh --> sync
-    snapshots --> clihelpers
-    snapshots --> commands
+    snapshots --> clidisplay
+    snapshots --> cliwiring
     snapshots --> config
     snapshots --> fsprotocol
     snapshots --> policy
@@ -143,8 +143,35 @@ graph TD
 
 Each domain module (`disks/`, `preflight/`, `snapshots/`, …) keeps its core logic, its presentation (`output.py` / `output/`), and its Typer sub-app (`cli/`) side by side. These rules keep them decoupled, and `mise run lint-imports` (part of `mise run check`) enforces them through the [import-linter](https://import-linter.readthedocs.io/) contracts in `pyproject.toml` (`[tool.importlinter]`). The generated graph above only *shows* dependencies; the contracts are what reject a new import that breaks a rule:
 
-- **No module imports another module's `cli/` package.** Wiring that several sub-apps need — loading the config (`load_config_or_exit`), resolving endpoints, the managed mount lifecycle and its progress bars, and preflight checks with progress — lives in `commands/`, which only `cli/` sub-apps import. Only the root `cli/` app imports the sub-apps.
-- **Decisions live in core, display in `clihelpers/`.** `policy` holds `Strictness`, `Severity` and `classify_severity` — whether a finding is fatal — and is what core modules (`sync/`, `run/`, `preflight/`, `disks/`) import. `clihelpers/` is presentation only (output format, JSON, severity symbols and styles, progress bars, and the `Invocation` that echoes the current flags in suggested follow-up commands); core modules import neither it nor `rich` / `typer`. The `prompt` credential provider gets its terminal prompt injected from `commands/credentials.py`. The two-way edges between `commands/` and the modules in the graph above are between a module's `cli/` subpackage and `commands/`, never with the module's core: the sub-apps sit above `commands/`, the module cores below it. Importing a core package (`nbkp.disks`, `nbkp.preflight`, `nbkp.sync`, …) loads neither Rich nor Typer: presentation is imported explicitly from `output` modules.
+- **No module imports another module's `cli/` package.** Wiring that several sub-apps need — loading the config (`load_config_or_exit`), resolving endpoints, the managed mount lifecycle and its progress bars, and preflight checks with progress — lives in `cliwiring/`, which only `cli/` sub-apps import. Only the root `cli/` app imports the sub-apps.
+- **Decisions live in core, display in `clidisplay/`.** `policy` holds `Strictness`, `Severity` and `classify_severity` — whether a finding is fatal — and is what core modules (`sync/`, `run/`, `preflight/`, `disks/`) import. `clidisplay/` is presentation only (output format, JSON, severity symbols and styles, progress bars, and the `Invocation` that echoes the current flags in suggested follow-up commands); core modules import neither it nor `rich` / `typer`. The `prompt` credential provider gets its terminal prompt injected from `cliwiring/credentials.py`. The two-way edges between `cliwiring/` and the modules in the graph above are between a module's `cli/` subpackage and `cliwiring/`, never with the module's core: the sub-apps sit above `cliwiring/`, the module cores below it. Importing a core package (`nbkp.disks`, `nbkp.preflight`, `nbkp.sync`, …) loads neither Rich nor Typer: presentation is imported explicitly from `output` modules.
 - **`config/` is the base layer.** Its core (models, loader) imports nothing else from nbkp. Endpoint selection — the `EndpointFilter` / `ResolvedEndpoint` models (`remote/endpoints.py`) and the algorithm (`remote/resolution.py`) — lives in `remote/`; config's display code takes the selected endpoints through a structural protocol rather than importing them. Transport primitives (`run_on_volume`, `check_command_available`) are in `remote/dispatch.py`; preflight-only host probes (sentinels, directories, symlinks, rsync version) are in `preflight/probes.py`.
-- **`clihelpers/` is a presentation leaf.** It imports nothing from nbkp but `policy`.
+- **`clidisplay/` is a presentation leaf.** It imports nothing from nbkp but `policy`.
 - **Test and demo fixtures (`testkit`) are exempt.** They build scenarios across modules for the tests and `nbkp demo`, and are not runtime code.
+
+### Package Map
+
+Where each concern lives, ordered by the layers above, from the base up:
+
+| Layer | Packages | Contents |
+|---|---|---|
+| Base | `config/` | Config models (`config/protocol/`: one module per entity, plus `errors.py` for validation codes) and the YAML `loader.py` |
+| Shared leaves | `policy.py`, `fsprotocol.py` | `policy`: strictness and severity classification. `fsprotocol`: sentinel names, directory layout, snapshot types |
+| Transport | `remote/` | Endpoint models and selection (`endpoints.py`, `resolution.py`), SSH argument building (`ssh.py`), Fabric/Paramiko (`fabricssh.py`), transport primitives (`dispatch.py`) |
+| Domain cores | `credentials/`, `disks/`, `preflight/`, `snapshots/`, `sync/`, `ordering/`, `run/`, `sh/` | The behavior of each command, described below |
+| CLI wiring | `cliwiring/` | Wiring shared by sub-apps: config loading, credential prompting, the mount lifecycle and its progress bars, preflight with progress |
+| Presentation | `clidisplay/` | Output format, JSON, severity display, progress bars, `Invocation` |
+| Root app | `cli/` | The top-level Typer app (`app.py`), which mounts every sub-app |
+
+Domain cores:
+
+- **`credentials/`** — LUKS passphrase providers (keyring, env, command, prompt) and the per-run cache.
+- **`disks/`** — the udisks mount lifecycle: device detection and observation (`detection.py`, `observation.py`), unlock/mount/umount/lock (`udisks.py`, `lifecycle.py`, `context.py`), dry-run planning (`plan.py`), mount checks, and polkit rule generation (`auth.py`).
+- **`preflight/`** — the two-layer check system described in [Preflight Conditional Probing](./internals.md#preflight-conditional-probing): observation (`probes.py`, `volume_checks.py`, `endpoint_checks.py`, `ssh_checks.py`, `snapshot_checks.py`) and interpretation (`status/`, one module per layer). `output/` renders `check` and `troubleshoot`, including remediation text.
+- **`snapshots/`** — listing, creation and pruning for both backends (`btrfs.py`, `hardlinks.py`, shared code in `common.py`).
+- **`sync/`** — rsync command building (`rsync.py`), orchestration and results (`orchestration.py`, `results.py`), and one module per snapshot mode in `modes/` (`plain`, `btrfs`, `hardlink`).
+- **`ordering/`** — the backup graph and its topological order (`graph.py`).
+- **`run/`** — the `nbkp run` pipeline (`pipeline.py`): prefetch, mount, preflight, sync, unmount.
+- **`sh/`** — standalone script generation: per-sync facts (`spec.py`), preflight and sync steps (`preflight.py`, `steps.py`), shell quoting (`quoting.py`), and the `backup.sh.j2` template.
+
+Outside the runtime layers, `demo/` implements `nbkp demo`, and the testkits (`remote/testkit/` for Docker and SSH fixtures, `sync/testkit/` for seeding and result helpers, `config/testkit.py`, `preflight/testkit.py`) supply test scenarios.

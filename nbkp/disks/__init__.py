@@ -1,6 +1,6 @@
 """Volume mount lifecycle management.
 
-This package's public interface: other modules (``preflight``, ``commands``,
+This package's public interface: other modules (``preflight``, ``cliwiring``,
 ``run``, ``demo``) import from ``nbkp.disks`` rather than from its
 submodules (``udisks``, ``detection``, ``mount_checks``, …), which are
 implementation details. Presentation (Rich tables, icons) is not re-exported

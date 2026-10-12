@@ -6,7 +6,7 @@ from io import StringIO
 
 from rich.console import Console
 
-from nbkp.commands.mount_progress_bar import format_mount_result, format_umount_result
+from nbkp.cliwiring.mount_progress_bar import format_mount_result, format_umount_result
 from nbkp.policy import Severity
 
 # Real-world details that contain square brackets.  Rich reads "[...]" in a
