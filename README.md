@@ -44,7 +44,7 @@ It replaces the rsync shell scripts you'd normally maintain, adding:
 - **Btrfs and hard-link snapshots** — keeps point-in-time copies so a bad sync can't wipe good backups
 - **Declarative config** — one YAML file describes all your backup pairs
 - **Structured output** — human-readable for convenience and JSON output for scripting and automation
-- **Automatic LUKS and volume activation** — automatically mount and unlock volumes before syncs, and unmount and lock them afterward, using credentials from the system keyring on your laptop.
+- **Automatic LUKS and volume activation (Linux)** — automatically unlock and mount volumes before syncs, and unmount and lock them afterward, using credentials from the system keyring on your laptop. Encryption itself is left to LUKS (or any other at-rest scheme you set up): nbkp only automates the unlock/lock routine — see [Encryption](https://github.com/iglootools/nbkp/blob/main/docs/domain.md#encryption).
 
 Full feature list: [docs/features.md](https://github.com/iglootools/nbkp/blob/main/docs/features.md).
 
@@ -90,7 +90,7 @@ No custom storage format, protocol, or encryption — just proven tools composed
 - **Plain directories** — no obscure storage formats; files are stored as-is and restoring is just a copy
 - **Btrfs snapshots (optional)** — space-efficient point-in-time copies via copy-on-write, with automatic pruning. Each snapshot is a read-only subvolume exposing a plain directory tree
 - **Hard-link snapshots (optional)** — alternative to btrfs snapshots, works on any filesystem that supports hard links, but less efficient and more fragile
-- **cryptsetup (optional)** — full-volume encryption for backup destinations
+- **LUKS (optional)** — full-volume encryption at rest for backup destinations, created once with `cryptsetup`; nbkp unlocks and locks it through udisks2. Data in transit is protected by SSH
 
 **Nomad backup metaphor**
 
@@ -122,13 +122,15 @@ documentation of the code.
 ### Dependencies
 - [rsync](https://rsync.samba.org/) — the underlying file synchronization tool
 - [btrfs](https://btrfs.wiki.kernel.org/index.php/Main_Page) — for space-efficient point-in-time copies via copy-on-write
-- [cryptsetup](https://gitlab.com/cryptsetup/cryptsetup) — for full-volume encryption
+- [cryptsetup](https://gitlab.com/cryptsetup/cryptsetup) — to create LUKS volumes for full-volume encryption
+- [udisks2](https://www.freedesktop.org/wiki/Software/udisks/) — to unlock, mount, unmount and lock drives on Linux hosts
 - [typer](https://typer.tiangolo.com/) — for building the CLI interface
 - [pydantic](https://pydantic.dev/) — for data modeling and validation
 
 ### Similar Tools
 
 There are a number of open source backup tools that use rsync, btrfs, or similar principles. This section describes how `nbkp` compares to some of the popular ones.
+One difference applies to every tool below that encrypts its backups: they encrypt on the client, so the storage never sees cleartext. nbkp keeps plain directories and relies on disk encryption, so the host holding the drive must be trusted (see [Encryption](https://github.com/iglootools/nbkp/blob/main/docs/domain.md#encryption)).
 If you believe that the representation is inaccurate or if there are other tools that should be included in this list, please submit an issue or PR to update this section.
 
 #### Rsync-related

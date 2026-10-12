@@ -17,7 +17,7 @@ nbkp is a thin orchestrator over proven, standard tools — no custom storage fo
 
 - **udisks2** (`udisksctl`) — the single backend for the unlock → mount → umount → lock lifecycle of removable and encrypted drives, on local and remote hosts alike. No `sudo` and no `systemctl` in the mount path: [Volume Mount Management](./internals.md#volume-mount-management), [Why udisks2](./internals.md#why-udisks2).
 - **polkit** — the *only* authorization mechanism for udisks. A single generated rule (`50-nbkp.rules`) lets the backup user unlock/mount/lock without a password — required because nbkp runs over SSH or from a timer in an inactive session: [Why polkit-only](./internals.md#why-polkit-only).
-- **LUKS / dm-crypt** (`cryptsetup`) — full-volume encryption for backup destinations. At runtime nbkp never calls `cryptsetup` directly: udisks unlocks/locks the container and nbkp discovers the cleartext device, so the operator only uses `cryptsetup` once, to create the LUKS volume: [Volume Mount Management → Encrypted volumes](./internals.md#volume-mount-management), [Why no `dm-crypt` kernel module check](./internals.md#why-no-dm-crypt-kernel-module-check).
+- **LUKS / dm-crypt** (`cryptsetup`) — full-volume encryption at rest for backup destinations; nbkp has no encryption of its own ([Encryption](./domain.md#encryption)). At runtime nbkp never calls `cryptsetup` directly: udisks unlocks/locks the container and nbkp discovers the cleartext device, so the operator only uses `cryptsetup` once, to create the LUKS volume: [Volume Mount Management → Encrypted volumes](./internals.md#volume-mount-management), [Why no `dm-crypt` kernel module check](./internals.md#why-no-dm-crypt-kernel-module-check).
 
 ### Snapshots
 
