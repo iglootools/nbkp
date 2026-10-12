@@ -148,3 +148,30 @@ Each domain module (`disks/`, `preflight/`, `snapshots/`, …) keeps its core lo
 - **`config/` is the base layer.** Its core (models, loader) imports nothing else from nbkp. Endpoint selection — the `EndpointFilter` / `ResolvedEndpoint` models (`remote/endpoints.py`) and the algorithm (`remote/resolution.py`) — lives in `remote/`; config's display code takes the selected endpoints through a structural protocol rather than importing them. Transport primitives (`run_on_volume`, `check_command_available`) are in `remote/dispatch.py`; preflight-only host probes (sentinels, directories, symlinks, rsync version) are in `preflight/probes.py`.
 - **`clihelpers/` is a presentation leaf.** It imports nothing from nbkp but `policy`.
 - **Test and demo fixtures (`testkit`) are exempt.** They build scenarios across modules for the tests and `nbkp demo`, and are not runtime code.
+
+### Package Map
+
+Where each concern lives, ordered by the layers above, from the base up:
+
+| Layer | Packages | Contents |
+|---|---|---|
+| Base | `config/` | Config models (`config/protocol/`: one module per entity, plus `errors.py` for validation codes) and the YAML `loader.py` |
+| Shared leaves | `policy.py`, `fsprotocol.py` | `policy`: strictness and severity classification. `fsprotocol`: sentinel names, directory layout, snapshot types |
+| Transport | `remote/` | Endpoint models and selection (`endpoints.py`, `resolution.py`), SSH argument building (`ssh.py`), Fabric/Paramiko (`fabricssh.py`), transport primitives (`dispatch.py`) |
+| Domain cores | `credentials/`, `disks/`, `preflight/`, `snapshots/`, `sync/`, `ordering/`, `run/`, `sh/` | The behavior of each command, described below |
+| CLI wiring | `commands/` | Wiring shared by sub-apps: config loading, credential prompting, the mount lifecycle and its progress bars, preflight with progress |
+| Presentation | `clihelpers/` | Output format, JSON, severity display, progress bars, `Invocation` |
+| Root app | `cli/` | The top-level Typer app (`app.py`), which mounts every sub-app |
+
+Domain cores:
+
+- **`credentials/`** — LUKS passphrase providers (keyring, env, command, prompt) and the per-run cache.
+- **`disks/`** — the udisks mount lifecycle: device detection and observation (`detection.py`, `observation.py`), unlock/mount/umount/lock (`udisks.py`, `lifecycle.py`, `context.py`), dry-run planning (`plan.py`), mount checks, and polkit rule generation (`auth.py`).
+- **`preflight/`** — the two-layer check system described in [Preflight Conditional Probing](./internals.md#preflight-conditional-probing): observation (`probes.py`, `volume_checks.py`, `endpoint_checks.py`, `ssh_checks.py`, `snapshot_checks.py`) and interpretation (`status/`, one module per layer). `output/` renders `check` and `troubleshoot`, including remediation text.
+- **`snapshots/`** — listing, creation and pruning for both backends (`btrfs.py`, `hardlinks.py`, shared code in `common.py`).
+- **`sync/`** — rsync command building (`rsync.py`), orchestration and results (`orchestration.py`, `results.py`), and one module per snapshot mode in `modes/` (`plain`, `btrfs`, `hardlink`).
+- **`ordering/`** — the backup graph and its topological order (`graph.py`).
+- **`run/`** — the `nbkp run` pipeline (`pipeline.py`): prefetch, mount, preflight, sync, unmount.
+- **`sh/`** — standalone script generation: per-sync facts (`spec.py`), preflight and sync steps (`preflight.py`, `steps.py`), shell quoting (`quoting.py`), and the `backup.sh.j2` template.
+
+Outside the runtime layers, `demo/` implements `nbkp demo`, and the testkits (`remote/testkit/` for Docker and SSH fixtures, `sync/testkit/` for seeding and result helpers, `config/testkit.py`, `preflight/testkit.py`) supply test scenarios.
