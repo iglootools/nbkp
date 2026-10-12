@@ -131,7 +131,7 @@ pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv"
 
-# Module layering rules, enforced by `mise run lint-imports` (part of `check`).
+# Module layering rules, enforced by `mise run boundaries-check` (part of `check`).
 # The rationale for each rule is in docs/architecture.md#layering.
 [tool.importlinter]
 root_package = "nbkp"
