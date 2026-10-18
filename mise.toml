@@ -1,6 +1,6 @@
 [tools]
 python = "3.14.8"
-uv = "0.12.22"
+uv = "0.12.23"
 github-cli = "2.102.0"
 "aqua:asciinema/asciinema" = "3.2.1"
 "aqua:asciinema/agg" = "1.9.0"
