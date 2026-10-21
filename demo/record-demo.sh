@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Record the demo and convert to GIF.
+# Record the demo as an asciinema cast.
 #
 # Usage:
 #   ./demo/record-demo.sh [VERSION]
@@ -10,7 +10,7 @@
 #
 # Output:
 #   demo/demo.cast  — asciinema recording
-#   demo/demo.gif   — GIF for README
+#   (demo/demo.gif  — only once the agg conversion at the end is re-enabled)
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -20,7 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # the installed distribution rather than asking the build tool, since the version is
 # VCS-derived and only materializes in .dist-info at install time.
 VERSION="${1:-$(uv run --no-sync python -c 'import nbkp; print(nbkp.__version__)' 2>/dev/null || echo "")}"
-TITLE="nbkp ${VERSION:+ v$VERSION} demo"
+TITLE="nbkp${VERSION:+ v$VERSION} demo"
 CAST="$SCRIPT_DIR/demo.cast"
 GIF="$SCRIPT_DIR/demo.gif"
 
@@ -51,4 +51,4 @@ asciinema rec \
 #     "$CAST" \
 #     "$GIF"
 
-echo "Done: $GIF"
+echo "Done: $CAST"

@@ -25,6 +25,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from textwrap import indent
 from typing import Annotated
 
 import typer
@@ -275,7 +276,7 @@ def _update_readme(url: str) -> bool:
     if not result.found:
         print(
             f"No asciicast embed found in {README}; expected a line like\n"
-            f"  {render_embed(url)}\n"
+            f"{indent(render_embed(url), '  ')}\n"
             "The upload succeeded — add or fix that line by hand.",
             file=sys.stderr,
         )
@@ -316,7 +317,7 @@ def main(
     """Download the demo recorded by CI and upload it to asciinema.org."""
     readme_was_dirty = update_readme and commit and _readme_was_dirty()
     run = _view_run(run_id) if run_id else _latest_run()
-    print(f"Run {run.run_id}:\n  {run.describe()}")
+    print(f"Run {run.run_id}:\n{indent(run.describe(), '  ')}")
 
     with tempfile.TemporaryDirectory() as workdir:
         cast = _download_cast(run, Path(workdir))
