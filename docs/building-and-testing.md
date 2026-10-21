@@ -14,8 +14,7 @@ mise run test-all           # All tests
 
 mise run test-unit               # Unit tests only (no Docker, no external dependencies)
 
-mise run test-e2e                # End-to-end sync tests (Docker + local)
-mise run test-e2e-local           # End-to-end sync tests (local)
+mise run test-e2e                # End-to-end sync tests (Docker)
 mise run test-e2e-docker           # End-to-end sync tests (Docker only)
 
 mise run test-integration   # All integration tests (Docker + filesystem)
@@ -120,7 +119,7 @@ Automated tests are organized into 4 categories based on what they test and what
 
 2. **E2E (Docker)** (`tests/e2e_docker/`) — Full pipeline tests against Docker containers. The chain sync test exercises a 6-hop pipeline covering all four sync direction combinations (local→local, local→remote, remote→remote, remote→local), both snapshot modes (hard-link and btrfs), bastion/proxy-jump, LUKS-encrypted volumes, filter exclusion, topological ordering, and failure propagation. The shell script test generates and executes the equivalent standalone bash script.
 
-3. **Integration (Docker)** (`tests/integration_docker/`) — Component-level tests against real infrastructure in Docker. Tests individual module functions (preflight observations, btrfs snapshot operations, hard-link snapshots, mount lifecycle, SSH connectivity, subdir endpoint mapping) via SSH. Includes local btrfs tests that run inside a privileged Docker container (`mise run test-btrfs-local`).
+3. **Integration (Docker)** (`tests/integration_docker/`) — Component-level tests against real infrastructure in Docker. Tests individual module functions (preflight observations, btrfs snapshot operations, hard-link snapshots, mount lifecycle, SSH connectivity, subdir endpoint mapping) via SSH. Includes local btrfs tests that run inside a privileged Docker container (`mise run test-integration-docker-btrfs`).
 
 4. **Integration (filesystem)** (`tests/integration_fs/`) — Component-level tests using real local filesystem operations (local-to-local syncs with real rsync, hard-link snapshots, symlinks, inode verification, shell script generation). Runs on any OS that supports hard links.
 
