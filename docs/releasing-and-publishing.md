@@ -25,9 +25,15 @@ The following GitHub workflows are set up to automate the release and publishing
 
 ## PyPI Config
 
-[PyPI](https://pypi.org/) and [Test PyPI](https://test.pypi.org/) have been configured to allow the `nbkp` project to be published using OpenID Connect (OIDC) authentication:
-- Github project name: `iglootools/nbkp`
-- Workflow: `publish.yml`
-- Github Environment: `pypi` for production releases (to PyPI), `testpypi` for testing releases (to Test PyPI)
+[PyPI](https://pypi.org/) and [Test PyPI](https://test.pypi.org/) have been configured to allow the `nbkp` project to be published using OpenID Connect (OIDC) authentication. Each index trusts a different workflow file — the one that uploads to it:
+
+| Field | PyPI | Test PyPI |
+|---|---|---|
+| Owner | `iglootools` | `iglootools` |
+| Repository name | `nbkp` | `nbkp` |
+| Workflow name | `publish.yml` | `publish-test.yml` |
+| Environment name | `pypi` | `testpypi` |
+
+A mismatch in any field is only reported when an upload is attempted, as an `invalid-publisher` error. Rehearse the publish path on Test PyPI with `gh workflow run publish-test.yml --ref main` after changing the workflows, the build backend, or these settings.
 
 Check [Publishing to PyPI with a Trusted Publisher](https://docs.pypi.org/trusted-publishers/) for more details on OIDC authentication.

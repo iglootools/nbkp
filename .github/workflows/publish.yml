@@ -57,6 +57,7 @@ jobs:
       url: https://pypi.org/p/nbkp/
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+      contents: read   # checkout; a permissions block sets every scope it omits to none
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       with:

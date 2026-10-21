@@ -26,6 +26,11 @@ jobs:
   bump-version:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      # Write, not read: github-tag-action pushes the release tag through the API and
+      # release-action creates the GitHub release. Declared rather than inherited, so the
+      # release does not depend on the repository's default token being read-write.
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

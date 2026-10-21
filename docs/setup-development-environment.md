@@ -30,7 +30,7 @@
    and `uv.lock` together. (`mise deps add` does not support uv.)
 
    Run tools with `uv run <tool>` rather than bare — see
-   [Building and Testing](build-test.md) for why that matters when more than one
+   [Building and Testing](building-and-testing.md) for why that matters when more than one
    project's virtualenv is in play.
 
 6. Upgrade rsync if you're on macOS, as the default version is too old and lacks some features nbkp relies on:

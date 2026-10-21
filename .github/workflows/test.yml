@@ -41,6 +41,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Checkout only. Declared so the job does not inherit the repository's read-write default.
+    permissions:
+      contents: read
     # No Python matrix: the supported floor is the version pinned in mise.toml, so the one
     # interpreter worth testing is the one the locked install below already provides.
     # See common/guidelines/coding/python.md "Python Version Policy".
