@@ -6,7 +6,8 @@ See [Installation instructions](./installation.md)
 
 ## Quick Start
 
-1. Create a config file at `~/.config/nbkp/config.yaml` (see [examples](#examples) below)
+1. Create a config file at `~/.config/nbkp/config.yaml` (see [Example 1](#example-1-home-nas-backup) and the examples after it below, or start from a
+   file in [config-examples/](config-examples/))
 2. Create sentinel files on each volume:
 
 For regular destinations (without snapshots):
