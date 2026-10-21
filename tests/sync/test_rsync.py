@@ -1,9 +1,8 @@
 """Tests for nbkp.rsync."""
 
-from __future__ import annotations
-
 import io
-from datetime import UTC
+import shlex
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -757,7 +756,6 @@ class TestBuildRsyncCommandProxyJump:
         resolved = resolve_all_endpoints(config)
 
         cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
-        import shlex
 
         proxy_cmd = (
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
@@ -822,7 +820,6 @@ class TestBuildRsyncCommandProxyJump:
         resolved = resolve_all_endpoints(config)
 
         cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
-        import shlex
 
         proxy_cmd = (
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
@@ -892,7 +889,6 @@ class TestBuildRsyncCommandMultiHopProxy:
         resolved = resolve_all_endpoints(config)
 
         cmd = build_rsync_command(sync, config, resolved_endpoints=resolved)
-        import shlex
 
         inner = (
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
@@ -1245,8 +1241,6 @@ class TestDestSuffix:
             },
             syncs={"s1": sync},
         )
-
-        from datetime import datetime
 
         _now = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
         _ts = create_snapshot_timestamp(_now, dst, "linux")

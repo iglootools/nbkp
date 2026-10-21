@@ -6,8 +6,6 @@ tests.  Display/output, mount lifecycle, and config loading are the
 caller's responsibility.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime

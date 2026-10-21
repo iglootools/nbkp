@@ -1,7 +1,5 @@
 """Output format enum and JSON emission shared across CLI commands."""
 
-from __future__ import annotations
-
 import enum
 import json
 from typing import Any

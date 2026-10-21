@@ -5,8 +5,6 @@ can be eyeballed; an enum member missing from it is a fix nobody ever looks
 at.  This guards the checklist item in docs/guidelines.md.
 """
 
-from __future__ import annotations
-
 import enum
 from functools import cache
 

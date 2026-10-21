@@ -1,7 +1,5 @@
 """Tests for the shared severity classifier."""
 
-from __future__ import annotations
-
 from nbkp.policy import Severity, Strictness, classify_severity
 
 

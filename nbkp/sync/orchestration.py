@@ -5,8 +5,6 @@ preflight) or cancel it (an upstream did not succeed), and delegates the run
 itself to the sync's snapshot mode (:mod:`.modes`).
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from datetime import datetime
 

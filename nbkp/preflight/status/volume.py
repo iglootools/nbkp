@@ -1,7 +1,5 @@
 """Layer 2 — Volume: sentinel, mount config/state, filesystem properties."""
 
-from __future__ import annotations
-
 import enum
 
 from pydantic import BaseModel, ConfigDict, computed_field

@@ -1,7 +1,5 @@
 """Fake sync and prune result builders for manual testing."""
 
-from __future__ import annotations
-
 from ...config import Config
 from ...fsprotocol import SNAPSHOTS_DIR
 from ...snapshots.models import PruneResult

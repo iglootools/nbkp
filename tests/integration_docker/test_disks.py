@@ -17,8 +17,6 @@ These files are made import-clean / pyright-clean and internally consistent
 here; their actual execution requires that updated container.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from nbkp.config import (
@@ -43,7 +41,11 @@ from nbkp.disks.lifecycle import (
     umount_volumes,
 )
 from nbkp.disks.observation import build_mount_observations
-from nbkp.disks.udisks import build_lock_command, build_unlock_command
+from nbkp.disks.udisks import (
+    build_lock_command,
+    build_unlock_command,
+    build_unmount_command,
+)
 from nbkp.remote.dispatch import run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
 from tests._docker_fixtures import (
@@ -81,8 +83,6 @@ def _cleanup(
     """Idempotent cleanup: umount + lock via udisksctl (ignore errors)."""
     device = resolve_target_device(volume, volume.mount, resolved)  # type: ignore[arg-type]
     if device is not None:
-        from nbkp.disks.udisks import build_unmount_command
-
         run_on_volume(build_unmount_command(device), volume, resolved)
     _lock_luks(volume, resolved, luks_uuid)
 
@@ -609,6 +609,4 @@ class TestUnencryptedMount:
         finally:
             device = resolve_target_device(volume, mount_config, resolved)
             if device is not None:
-                from nbkp.disks.udisks import build_unmount_command
-
                 run_on_volume(build_unmount_command(device), volume, resolved)

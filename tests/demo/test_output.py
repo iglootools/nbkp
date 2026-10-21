@@ -10,8 +10,6 @@ produces a valid ``Config`` and that the full ``output`` command renders every
 section without raising.
 """
 
-from __future__ import annotations
-
 import pytest
 from typer.testing import CliRunner
 

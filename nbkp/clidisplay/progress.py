@@ -1,7 +1,5 @@
 """Generic Rich progress bar for step-by-step operations."""
 
-from __future__ import annotations
-
 from types import TracebackType
 from typing import Self
 

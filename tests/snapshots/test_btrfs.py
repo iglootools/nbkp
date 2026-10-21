@@ -1,8 +1,6 @@
 """Tests for nbkp.btrfs."""
 
-from __future__ import annotations
-
-from datetime import UTC
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -16,6 +14,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.fsprotocol import Snapshot
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.snapshots.btrfs import (
     create_snapshot,
@@ -89,7 +88,6 @@ class TestCreateSnapshotLocal:
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _local_config()
-        from datetime import datetime
 
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=UTC)
         dst_vol = config.volumes["dst"]
@@ -111,7 +109,6 @@ class TestCreateSnapshotLocal:
     def test_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stderr="permission denied")
         config, sync = _local_config()
-        from datetime import datetime
 
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=UTC)
         with pytest.raises(
@@ -126,7 +123,6 @@ class TestCreateSnapshotRemote:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _remote_config()
         resolved = resolve_all_endpoints(config)
-        from datetime import datetime
 
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=UTC)
         path = create_snapshot(
@@ -209,7 +205,6 @@ class TestCreateSnapshotLocalSpaces:
     def test_success(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _local_config_spaces()
-        from datetime import datetime
 
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=UTC)
         dst_vol = config.volumes["dst"]
@@ -233,7 +228,6 @@ class TestCreateSnapshotRemoteSpaces:
         mock_run.return_value = MagicMock(returncode=0, stderr="")
         config, sync = _remote_config_spaces()
         resolved = resolve_all_endpoints(config)
-        from datetime import datetime
 
         fixed_now = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=UTC)
         path = create_snapshot(
@@ -420,7 +414,6 @@ class TestPruneSnapshotsLocal:
             stderr="",
         )
         # latest points to the second-oldest snapshot
-        from nbkp.fsprotocol import Snapshot
 
         mock_latest.return_value = Snapshot.from_name("20240102T000000Z")
         config, sync = _local_config()
@@ -477,7 +470,6 @@ class TestPruneSnapshotsRemote:
             stderr="",
         )
         # latest points to the oldest snapshot
-        from nbkp.fsprotocol import Snapshot
 
         mock_latest.return_value = Snapshot.from_name("20240101T000000Z")
         config, sync = _remote_config()

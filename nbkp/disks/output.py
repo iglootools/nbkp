@@ -1,7 +1,5 @@
 """Mount status display helpers (Rich tables and JSON)."""
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 from typing import Protocol
 

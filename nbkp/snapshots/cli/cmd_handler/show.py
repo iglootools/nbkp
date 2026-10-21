@@ -1,7 +1,5 @@
 """Show orchestration: list snapshots for each sync endpoint."""
 
-from __future__ import annotations
-
 from ....config import Config
 from ....policy import Strictness
 from ....preflight import SyncStatus

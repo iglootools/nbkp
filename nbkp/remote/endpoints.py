@@ -5,8 +5,6 @@ the operator's hints (:class:`EndpointFilter`) go in, the SSH endpoint
 chosen for each remote volume (:class:`ResolvedEndpoint`) comes out.
 """
 
-from __future__ import annotations
-
 from enum import Enum
 
 from pydantic import ConfigDict, Field

@@ -1,7 +1,5 @@
 """Per-sync facts shared by the preflight and step builders."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from ..config import Config, LocalVolume, RemoteVolume, SyncConfig, SyncEndpoint

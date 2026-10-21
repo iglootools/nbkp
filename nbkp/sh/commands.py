@@ -1,7 +1,5 @@
 """Shell command snippets that run on a volume's host (local or over SSH)."""
 
-from __future__ import annotations
-
 from ..config import LocalVolume, RemoteVolume
 from ..remote.endpoints import ResolvedEndpoints
 from ..remote.ssh import build_ssh_base_args

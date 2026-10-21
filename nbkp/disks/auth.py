@@ -9,8 +9,6 @@ udisks would otherwise demand admin authentication).
 See docs/internals.md § "Why polkit-only".
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Iterator
 from dataclasses import dataclass

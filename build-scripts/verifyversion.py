@@ -15,8 +15,6 @@ Usage:
     python build-scripts/verifyversion.py --dist-dir b/ # check another directory
 """
 
-from __future__ import annotations
-
 import sys
 import zipfile
 from dataclasses import dataclass

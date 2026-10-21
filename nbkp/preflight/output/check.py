@@ -1,7 +1,5 @@
 """Check output: status tables for SSH endpoints, volumes, and syncs."""
 
-from __future__ import annotations
-
 from rich.console import Console, Group, RenderableType
 from rich.panel import Panel
 from rich.table import Table

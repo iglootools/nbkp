@@ -1,4 +1,4 @@
-FROM python:3.14-slim
+FROM python:3.15-slim
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -20,8 +20,11 @@ COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /uvx /usr/local/bin/
 #    inside a Linux container. This exposure is new relative to poetry.
 #  - UV_CACHE_DIR / UV_LINK_MODE: keep the cache and hardlink target on the container fs.
 #  - UV_PYTHON / UV_PYTHON_DOWNLOADS: use this image's interpreter, never a downloaded one.
+#  - UV_NO_SYNC: the entrypoint's `uv sync` is the only sync, so a `uv run` command cannot
+#    re-sync and undo the packages it deliberately skips (see btrfs-local-entrypoint.sh).
 ENV UV_PROJECT_ENVIRONMENT=/tmp/venv \
     UV_FROZEN=1 \
+    UV_NO_SYNC=1 \
     UV_CACHE_DIR=/tmp/uv-cache \
     UV_LINK_MODE=copy \
     UV_PYTHON=/usr/local/bin/python3 \

@@ -11,8 +11,6 @@ How a severity is *shown* (symbols, colors) is presentation, left to the
 CLI layer (``severity_symbol`` / ``severity_style``).
 """
 
-from __future__ import annotations
-
 import enum
 
 

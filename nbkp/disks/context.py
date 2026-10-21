@@ -4,8 +4,6 @@ Provides a display-agnostic building block for mount/umount lifecycle
 that both the CLI and tests can share.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 
@@ -40,11 +38,7 @@ def managed_mount(
     on_mount_end: Callable[[str, MountResult], None] | None = None,
     on_umount_start: Callable[[str], None] | None = None,
     on_umount_end: Callable[[str, UmountResult], None] | None = None,
-) -> Generator[
-    tuple[Config, dict[str, MountObservation]],
-    None,
-    None,
-]:
+) -> Generator[tuple[Config, dict[str, MountObservation]]]:
     """Context manager that mounts volumes on entry and umounts on exit.
 
     Yields ``(resolved_config, mount_observations)``.  ``resolved_config`` is

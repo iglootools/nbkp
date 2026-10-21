@@ -1,7 +1,5 @@
 """Sync dependency graph and topological ordering."""
 
-from __future__ import annotations
-
 from graphlib import CycleError, TopologicalSorter
 
 from ..config import ConfigError

@@ -1,7 +1,5 @@
 """Tests for AuthRules block accessors and polkit rule generation."""
 
-from __future__ import annotations
-
 from nbkp.config import (
     Config,
     LocalVolume,

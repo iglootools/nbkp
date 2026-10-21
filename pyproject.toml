@@ -2,16 +2,17 @@
 name = "nbkp"
 description = "Nomad Backup: An rsync-based backup tool for nomadic setups where sources and destinations aren't always available — laptops on the move, removable drives, home servers behind changing networks. Sentinel files ensure backups only run when volumes are genuinely present, with optional btrfs or hard-link snapshots for point-in-time recovery."
 readme = "README.md"
-# Floor is Ubuntu 24.04 LTS's python3; upper bound keeps installs off an untested
-# Python. See common/guidelines/coding/python.md "Python Version Policy".
-requires-python = ">=3.12,<3.15"
+# Floor is the same version as local development and CI (mise.toml [tools] python): the
+# latest stable CPython every dependency ships wheels for. The upper bound keeps installs off
+# an untested Python. See common/guidelines/coding/python.md "Python Version Policy".
+requires-python = ">=3.15,<3.16"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Sami Dalouche", email = "sami.dalouche@gmail.com" }]
 dependencies = [
   "fabric>=3.0,<4.0",
   "jinja2>=3.0,<4.0",
-  "pydantic>=2.13.4,<3.0.0",
+  "pydantic>=2.14.1,<3.0.0",
   "pyyaml>=6.0,<7.0",
   "typer>=0.27.0,<1.0.0",
   "platformdirs>=4.11.0,<5.0",
@@ -29,12 +30,11 @@ nbkp-demo = "nbkp.demo:main"
 
 [dependency-groups]
 dev = [
-  "ruff>=0.16,<0.17",
+  "ruff>=0.17,<0.18",
   "pyright>=1.1,<2.0",
   "pytest>=9.1.1,<10.0",
   "pytest-xdist>=3.5.0,<4.0",
   "testcontainers>=4.15.0,<5.0",
-  "vermin>=1.8.0,<2.0",
   # The `python = ">=3.12,<4.0"` marker this carried under poetry is subsumed by
   # [project] requires-python, so it is dropped rather than translated.
   "pydeps>=3.0.7",
@@ -110,7 +110,14 @@ build-constraint-dependencies = [
 ]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py315"
+
+[tool.ruff.lint]
+# TID255: a `lazy` import that module-level code uses right away (a global, a base
+# class, a decorator argument) is reified at import time anyway, so `lazy` silently
+# does nothing. That nbkp.cli stays free of the heavy imports is asserted by
+# tests/test_startup_imports.py; this catches the per-statement mistake.
+extend-select = ["TID255"]
 
 [tool.ruff.lint.isort]
 # Keep aliased re-imports in the same `from x import (a, b as c)` block instead of
@@ -125,7 +132,7 @@ markers = [
 ]
 
 [tool.pyright]
-pythonVersion = "3.12"
+pythonVersion = "3.15"
 # uv creates the project venv at .venv; restating it here is what lets editors and
 # language servers resolve imports against it, since they inherit no shell activation.
 venvPath = "."

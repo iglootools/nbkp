@@ -6,15 +6,13 @@ options baked in.  The generated script accepts ``--dry-run``,
 ``--progress`` and ``--strictness`` flags at runtime.
 """
 
-from __future__ import annotations
-
 import importlib.resources
 import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from jinja2 import Environment, Template
+lazy from jinja2 import Environment, Template
 
 from ..config import Config, LocalVolume, RemoteVolume
 from ..ordering.graph import sort_syncs, sync_predecessors

@@ -5,8 +5,6 @@ Re-exports all public names so that external code can import from
 a given symbol.
 """
 
-from __future__ import annotations
-
 # ── conventions ──────────────────────────────────────────────
 from ..fsprotocol import (
     DEVNULL_TARGET as DEVNULL_TARGET,

@@ -19,15 +19,24 @@ Why hand-rolled instead of a library?
     fundamentally changes.
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
-from typing import Annotated, Any, get_args, get_origin
+from types import UnionType
+from typing import Annotated, Any, Literal, get_args, get_origin
 
 import typer
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
+
+from nbkp.config.protocol.ssh_endpoint import SshConnectionOptions, SshEndpoint
+from nbkp.config.protocol.sync import RsyncOptions, SyncConfig
+from nbkp.config.protocol.sync_endpoint import BtrfsSnapshotConfig, SyncEndpoint
+from nbkp.config.protocol.volume import (
+    LocalVolume,
+    LuksEncryptionConfig,
+    MountConfig,
+    RemoteVolume,
+)
 
 CONFIG_REFERENCE_MD = Path("docs/config-reference.md")
 
@@ -212,13 +221,9 @@ def _type_str(info: FieldInfo) -> str:
         inner_info.metadata = info.metadata
         return _type_str(inner_info)
 
-    # Optional[X] → show the inner type with original constraints
-    # On Python < 3.14, typing.Union and types.UnionType are distinct classes.
-    # get_origin(Optional[X]) returns typing.Union, not types.UnionType.
-    from types import UnionType
-    from typing import Union
-
-    if origin in (type(None),) or origin is UnionType or origin is Union:
+    # X | None → show the inner type with original constraints. Since 3.14,
+    # typing.Union is types.UnionType, so this also covers Optional[X] and Union[...].
+    if origin is UnionType:
         non_none = [a for a in args if a is not type(None)]
         if len(non_none) == 1:
             # Pass original info to preserve constraints
@@ -227,8 +232,6 @@ def _type_str(info: FieldInfo) -> str:
             return _type_str(inner_info)
 
     # Literal
-    from typing import Literal
-
     if origin is Literal:
         return " \\| ".join(f'`"{a}"`' for a in args)
 
@@ -319,19 +322,6 @@ def _generate_table(model: type[BaseModel]) -> str:
 
 def _generate_sections() -> dict[str, str]:
     """Generate all marker-delimited sections as a dict of {name: body}."""
-    from nbkp.config.protocol.ssh_endpoint import SshConnectionOptions, SshEndpoint
-    from nbkp.config.protocol.sync import RsyncOptions, SyncConfig
-    from nbkp.config.protocol.sync_endpoint import (
-        BtrfsSnapshotConfig,
-        SyncEndpoint,
-    )
-    from nbkp.config.protocol.volume import (
-        LocalVolume,
-        LuksEncryptionConfig,
-        MountConfig,
-        RemoteVolume,
-    )
-
     sections: dict[str, str] = {}
 
     # TOP_LEVEL

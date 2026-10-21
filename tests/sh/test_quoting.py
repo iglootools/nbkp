@@ -1,7 +1,5 @@
 """Tests for nbkp.sh.quoting."""
 
-from __future__ import annotations
-
 import subprocess
 
 from nbkp.sh.quoting import SCRIPT_DIR, SNAPSHOT_TS, comment_out, quote, shell_var

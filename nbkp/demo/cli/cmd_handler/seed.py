@@ -1,14 +1,9 @@
 """Seed orchestration: create demo environment with config and test data."""
 
-# pyright: reportPossiblyUnboundVariable=false
-# Docker imports are conditionally available (try/except ImportError),
-# guarded at runtime by _require_docker().
-
-from __future__ import annotations
-
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from importlib.util import find_spec
 from pathlib import Path
 
 import yaml
@@ -24,31 +19,29 @@ from ....disks import mount_volumes, umount_volumes
 from ....policy import Severity
 from ....remote.endpoints import ResolvedEndpoints
 from ....remote.resolution import resolve_all_endpoints
-
-try:
-    from ....remote.testkit.docker import (
-        LUKS_PASSPHRASE,
-        build_docker_image,
-        create_docker_network,
-        create_test_ssh_endpoint,
-        generate_ssh_keypair,
-        read_luks_metadata,
-        ssh_exec,
-        start_bastion_container,
-        start_storage_container,
-        wait_for_ssh,
-    )
-
-    _HAS_DOCKER = True
-except ImportError:
-    # The 'docker' extra is optional; seed_demo(docker=True) reports it.
-    _HAS_DOCKER = False
 from ....sync.testkit.seed import (
     build_chain_config,
     build_local_chain_config,
     create_seed_sentinels,
     seed_volume,
 )
+
+# The 'docker' extra is optional; seed_demo(docker=True) reports it through
+# _require_docker() before anything here resolves these lazy names.
+lazy from ....remote.testkit.docker import (
+    LUKS_PASSPHRASE,
+    build_docker_image,
+    create_docker_network,
+    create_test_ssh_endpoint,
+    generate_ssh_keypair,
+    read_luks_metadata,
+    ssh_exec,
+    start_bastion_container,
+    start_storage_container,
+    wait_for_ssh,
+)
+
+_HAS_DOCKER = find_spec("docker") is not None
 
 
 class SeedError(Exception):
@@ -274,7 +267,7 @@ def _encrypted_volume_mounted(
     resolved: ResolvedEndpoints,
     enabled: bool,
     steps: _Steps,
-) -> Generator[None, None, None]:
+) -> Generator[None]:
     """Mount the encrypted volume around seeding, and check the umount.
 
     A failed umount leaves the demo LUKS volume unlocked: it is reported and,

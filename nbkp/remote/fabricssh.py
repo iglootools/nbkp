@@ -1,7 +1,5 @@
 """Fabric-based remote command execution."""
 
-from __future__ import annotations
-
 import io
 import shlex
 import subprocess

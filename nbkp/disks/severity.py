@@ -4,8 +4,6 @@ Decisions, not display: shared by the disks status table and the preflight
 check display, which render the result with their own icons.
 """
 
-from __future__ import annotations
-
 from ..policy import Severity, Strictness, classify_severity
 from .lifecycle import LUKS_STAGE_FAILURES, MOUNT_STAGE_FAILURES
 from .models import MountFailureReason

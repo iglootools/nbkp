@@ -1,16 +1,10 @@
 """SSH CLI command building helpers."""
 
-from __future__ import annotations
-
 import shlex
 from functools import reduce
-from typing import TYPE_CHECKING
 
-from ..config import SshConnectionOptions, SshEndpoint
-
-if TYPE_CHECKING:
-    from ..config import LocalVolume, RemoteVolume
-    from .endpoints import ResolvedEndpoints
+from ..config import LocalVolume, RemoteVolume, SshConnectionOptions, SshEndpoint
+lazy from .endpoints import ResolvedEndpoints
 
 
 # Kept in `ssh` instead of `output` as this is core to remote command execution, not just display formatting.
@@ -210,11 +204,6 @@ def wrap_cmd(
     For a remote volume the quoted command becomes a single argument to
     ``ssh``, which hands it to the remote shell to parse again.
     """
-    from ..config import (
-        LocalVolume,
-        RemoteVolume,
-    )
-
     match vol:
         case LocalVolume():
             return shell_join(cmd)

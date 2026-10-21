@@ -1,7 +1,5 @@
 """Tests for the check-then-run pipeline's strictness semantics."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 

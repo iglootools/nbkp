@@ -5,8 +5,6 @@ context manager used by ``run`` / ``preflight`` / ``snapshots``, which used
 to each carry their own copy of these callbacks.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from ..config import Config

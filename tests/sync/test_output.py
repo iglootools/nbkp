@@ -1,7 +1,5 @@
 """Tests for nbkp.sync.output (run preview formatting)."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from io import StringIO
 

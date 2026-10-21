@@ -6,8 +6,6 @@ is probed with the same read-only queries ``disks status`` uses, and the
 lifecycle steps that state calls for are listed.
 """
 
-from __future__ import annotations
-
 import enum
 from dataclasses import dataclass
 

@@ -1,7 +1,5 @@
 """Managed mount context manager with Rich display callbacks."""
 
-from __future__ import annotations
-
 from collections.abc import Generator
 from contextlib import contextmanager
 
@@ -43,11 +41,7 @@ def managed_mount(
     umount: bool = True,
     output_format: OutputFormat = OutputFormat.HUMAN,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
-) -> Generator[
-    tuple[Config, dict[str, MountObservation]],
-    None,
-    None,
-]:
+) -> Generator[tuple[Config, dict[str, MountObservation]]]:
     """Context manager that mounts volumes on entry and umounts on exit.
 
     Thin wrapper around :func:`disks.context.managed_mount` that adds

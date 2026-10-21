@@ -1,7 +1,5 @@
 """Integration tests: the run pipeline against real local hard-link snapshots."""
 
-from __future__ import annotations
-
 import os
 import sys
 from collections.abc import Iterator

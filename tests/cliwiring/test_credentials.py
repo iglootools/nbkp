@@ -1,7 +1,5 @@
 """Tests for the CLI passphrase prompt."""
 
-from __future__ import annotations
-
 from unittest.mock import patch
 
 from nbkp.cliwiring.credentials import prompt_passphrase

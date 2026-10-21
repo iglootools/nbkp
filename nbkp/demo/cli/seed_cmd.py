@@ -1,13 +1,8 @@
 """Demo CLI seed command: create temp folder with config and test data."""
 
-# pyright: reportPossiblyUnboundVariable=false
-# Docker imports are conditionally available (try/except ImportError),
-# guarded at runtime by _require_docker_extra().
-
-from __future__ import annotations
-
 import shlex
 import tempfile
+from importlib.util import find_spec
 from pathlib import Path
 from textwrap import dedent
 from typing import Annotated
@@ -22,20 +17,18 @@ from ...config import (
     CredentialProvider,
 )
 
-# Docker-dependent imports are deferred to seed --docker.
-# They require the 'docker' extra: uv tool install 'nbkp[docker]'
-try:
-    from ...remote.testkit.docker import (
-        BASTION_CONTAINER_NAME,
-        DOCKER_DIR,
-        LUKS_PASSPHRASE,
-        STORAGE_CONTAINER_NAME,
-        check_docker,
-    )
+# Docker-dependent imports are deferred to seed --docker. They require the 'docker'
+# extra (uv tool install 'nbkp[docker]'), which _require_docker_extra() checks before
+# anything here resolves them: being lazy, a missing extra only fails on first use.
+lazy from ...remote.testkit.docker import (
+    BASTION_CONTAINER_NAME,
+    DOCKER_DIR,
+    LUKS_PASSPHRASE,
+    STORAGE_CONTAINER_NAME,
+    check_docker,
+)
 
-    _HAS_DOCKER = True
-except ImportError:
-    _HAS_DOCKER = False
+_HAS_DOCKER = find_spec("docker") is not None
 from . import app, console as _console
 from .cmd_handler.seed import SeedError, SeedResult, seed_demo, seed_plan
 
@@ -184,7 +177,7 @@ def seed(
 def _check_docker_prerequisites() -> None:
     _require_docker_extra()
     check_docker()
-    if not DOCKER_DIR.is_dir():  # type: ignore[possibly-undefined]
+    if not DOCKER_DIR.is_dir():
         typer.echo(f"Error: Docker directory not found: {DOCKER_DIR}", err=True)
         raise typer.Exit(1)
 

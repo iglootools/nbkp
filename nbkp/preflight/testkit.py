@@ -1,7 +1,5 @@
 """Fake check/troubleshoot data for manual testing."""
 
-from __future__ import annotations
-
 from ..config import (
     BtrfsSnapshotConfig,
     Config,

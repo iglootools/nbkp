@@ -5,8 +5,6 @@ diagnostics into error enums, separately from full ``check_all_syncs``
 orchestration tests.
 """
 
-from __future__ import annotations
-
 from nbkp.config import (
     BtrfsSnapshotConfig,
     LocalVolume,

@@ -6,8 +6,6 @@ setup-auth …``) must be copy-pasteable as-is: they carry the same config file
 as the command that printed them, so the follow-up looks at the same setup.
 """
 
-from __future__ import annotations
-
 import shlex
 from dataclasses import dataclass
 from pathlib import Path

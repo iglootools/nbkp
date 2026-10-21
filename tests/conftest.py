@@ -1,7 +1,5 @@
 """Shared test fixtures."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest
@@ -40,7 +38,7 @@ def _raise_fd_soft_limit(target: int = 8192) -> None:
     if soft < new_soft:
         try:
             resource.setrlimit(resource.RLIMIT_NOFILE, (new_soft, hard))
-        except (ValueError, OSError):
+        except ValueError, OSError:
             pass
 
 

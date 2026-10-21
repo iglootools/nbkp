@@ -16,7 +16,13 @@ git config --global --add safe.directory /app
 # Install project dependencies into UV_PROJECT_ENVIRONMENT (/tmp/venv, set in the Dockerfile),
 # never the host's bind-mounted .venv. --frozen so the container cannot rewrite the host's
 # uv.lock; --all-extras to match the host-side [deps.uv] command.
-uv sync --frozen --all-extras --quiet
+#
+# import-linter and grimp are skipped: only the host-side boundaries-check uses them, and
+# grimp publishes no linux-aarch64 wheel for Python 3.15, which this image (no C toolchain)
+# cannot build — so on an Apple Silicon host the whole sync would fail. Drop the two
+# --no-install-package flags once grimp ships that wheel.
+uv sync --frozen --all-extras --quiet \
+    --no-install-package grimp --no-install-package import-linter
 
 # Run the command passed as arguments (default: pytest)
 exec "$@"

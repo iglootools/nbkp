@@ -21,8 +21,6 @@ because the container shares the host ``/dev`` and ``/run/udev`` (see the
 so a fresh unlock always succeeds after a prior test's lock.
 """
 
-from __future__ import annotations
-
 import shutil
 import tempfile
 import uuid
@@ -155,7 +153,7 @@ pytestmark = pytest.mark.skipif(not _docker_available(), reason="Docker not avai
 
 
 @pytest.fixture(scope="session")
-def ssh_key_pair() -> Generator[tuple[Path, Path], None, None]:
+def ssh_key_pair() -> Generator[tuple[Path, Path]]:
     """Generate an ephemeral ed25519 SSH key pair for tests."""
     tmpdir = Path(tempfile.mkdtemp(prefix="nbkp-test-ssh-"))
     pair = generate_ssh_keypair(tmpdir)
@@ -179,7 +177,7 @@ def _docker_image() -> str:
 
 
 @pytest.fixture(scope="session")
-def _docker_network() -> Generator[Any, None, None]:
+def _docker_network() -> Generator[Any]:
     """Create a Docker bridge network for inter-container comms."""
     client = dockerlib.from_env()
     name = f"nbkp-test-{uuid.uuid4().hex[:8]}"
@@ -216,7 +214,7 @@ def docker_container(
     _docker_image: str,
     _docker_network: Any,
     luks_mapper_name: str,
-) -> Generator[SshEndpoint, None, None]:
+) -> Generator[SshEndpoint]:
     """Start Docker container and yield SshEndpoint."""
     from testcontainers.core.container import DockerContainer
     from testcontainers.core.wait_strategies import (
@@ -323,7 +321,7 @@ def bastion_container(
     ssh_key_pair: tuple[Path, Path],
     _docker_image: str,
     _docker_network: Any,
-) -> Generator[SshEndpoint, None, None]:
+) -> Generator[SshEndpoint]:
     """Start a bastion (jump proxy) container."""
     from testcontainers.core.container import DockerContainer
     from testcontainers.core.wait_strategies import (
@@ -574,7 +572,7 @@ fi
 @pytest.fixture(autouse=True)
 def _cleanup_remote(
     request: pytest.FixtureRequest,
-) -> Generator[None, None, None]:
+) -> Generator[None]:
     """Clean up /srv/backups and /srv/btrfs-backups between tests.
 
     All cleanup runs in a single SSH round-trip for performance.

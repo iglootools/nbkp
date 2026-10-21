@@ -4,8 +4,6 @@ Includes both component-level tests (direct btrfs operations) and
 sync-flow tests (rsync into staging → snapshot → verify).
 """
 
-from __future__ import annotations
-
 import sys
 import time
 from datetime import UTC, datetime

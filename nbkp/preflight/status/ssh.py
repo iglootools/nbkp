@@ -1,7 +1,5 @@
 """Layer 1 — SSH endpoint: reachability and host tool availability."""
 
-from __future__ import annotations
-
 import enum
 from dataclasses import dataclass
 

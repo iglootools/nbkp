@@ -8,8 +8,6 @@ When btrfs is unavailable (e.g. on macOS), the tests automatically
 run inside a privileged Docker container instead.
 """
 
-from __future__ import annotations
-
 import os
 import platform
 import shutil

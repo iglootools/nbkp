@@ -1,7 +1,5 @@
 """Tests for `nbkp demo seed` helpers that need no Docker."""
 
-from __future__ import annotations
-
 import shlex
 from pathlib import Path
 from unittest.mock import patch

@@ -1,7 +1,5 @@
 """Tests for preflight error severity classification."""
 
-from __future__ import annotations
-
 from nbkp.policy import Severity, Strictness
 from nbkp.preflight.severity import severity_for_error, severity_for_errors
 from nbkp.preflight.status.endpoint import DestinationEndpointError, SourceEndpointError

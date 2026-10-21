@@ -1,7 +1,5 @@
 """Tests for follow-up command suggestions built from the invocation."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from nbkp.clidisplay.invocation import Invocation, display_path

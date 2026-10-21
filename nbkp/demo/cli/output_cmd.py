@@ -1,7 +1,5 @@
 """Demo CLI output command: render all human output functions with fake data."""
 
-from __future__ import annotations
-
 from io import StringIO
 
 import yaml

@@ -1,7 +1,5 @@
 """Volume status probing and display helpers."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 import typer

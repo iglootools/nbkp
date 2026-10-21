@@ -7,8 +7,6 @@ inspect *what* failed (``op``), *where* (``path``), and *why*
 (``stderr``) without parsing a message string.
 """
 
-from __future__ import annotations
-
 import enum
 import subprocess
 from collections.abc import Callable

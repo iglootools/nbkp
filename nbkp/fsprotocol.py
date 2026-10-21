@@ -4,8 +4,6 @@ This module is a leaf dependency with no internal imports, so any
 module can use it without introducing circular dependencies.
 """
 
-from __future__ import annotations
-
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict

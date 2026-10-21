@@ -10,8 +10,6 @@ Discovery is a live probe, done while *gathering* facts
 :class:`RemediationFacts`, so the rendering tests below need no patching.
 """
 
-from __future__ import annotations
-
 from io import StringIO
 
 import pytest

@@ -9,8 +9,6 @@ rendered, either for humans — grouped under a header per subject — or as JSO
 with the same remediation text in plain form; rendering itself does no I/O.
 """
 
-from __future__ import annotations
-
 import enum
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -258,7 +256,7 @@ def _discover_cleartext_device(
     """
     try:
         return discover_cleartext_device(vol, mount.device_uuid, resolved_endpoints)
-    except (OSError, DeviceProbeError):
+    except OSError, DeviceProbeError:
         return None
 
 

@@ -1,11 +1,14 @@
 """Tests for nbkp config CLI commands."""
 
-from __future__ import annotations
-
 import json
 from unittest.mock import MagicMock, patch
 
+import yaml
+from pydantic import ValidationError
+
 from nbkp.cli import app
+from nbkp.config import ConfigError, ConfigErrorReason, ConfigValidationCode
+from nbkp.config.protocol import Config
 from tests.clidisplay import (
     runner,
     sample_config,
@@ -105,8 +108,6 @@ class TestConfigError:
         assert result.exit_code == 2
 
     def test_plain_error_message(self) -> None:
-        from nbkp.config import ConfigError, ConfigErrorReason
-
         err = ConfigError(
             "Config file not found: /bad.yaml",
             reason=ConfigErrorReason.FILE_NOT_FOUND,
@@ -118,11 +119,6 @@ class TestConfigError:
         assert "Config file not found: /bad.yaml" in out
 
     def test_validation_error_message(self) -> None:
-        from pydantic import ValidationError
-
-        from nbkp.config import ConfigError, ConfigErrorReason
-        from nbkp.config.protocol import Config
-
         try:
             Config.model_validate({"volumes": {"v": {"type": "ftp", "path": "/x"}}})
         except ValidationError as ve:
@@ -137,10 +133,6 @@ class TestConfigError:
         assert "does not match any of the expected tags" in out
 
     def test_yaml_error_message(self) -> None:
-        import yaml
-
-        from nbkp.config import ConfigError, ConfigErrorReason
-
         try:
             yaml.safe_load("not_a_list:\n  - [invalid")
         except yaml.YAMLError as ye:
@@ -157,11 +149,6 @@ class TestConfigError:
         assert "Invalid YAML" in out
 
     def test_cross_reference_error_message(self) -> None:
-        from pydantic import ValidationError
-
-        from nbkp.config import ConfigError, ConfigErrorReason
-        from nbkp.config.protocol import Config
-
         try:
             Config.model_validate(
                 {
@@ -189,11 +176,6 @@ class TestConfigError:
 
 class TestConfigErrorJson:
     def test_validation_error_as_json(self) -> None:
-        from pydantic import ValidationError
-
-        from nbkp.config import ConfigError, ConfigErrorReason, ConfigValidationCode
-        from nbkp.config.protocol import Config
-
         try:
             Config.model_validate(
                 {
@@ -218,8 +200,6 @@ class TestConfigErrorJson:
         ]
 
     def test_plain_error_as_json(self) -> None:
-        from nbkp.config import ConfigError, ConfigErrorReason
-
         err = ConfigError(
             "Config file not found: /bad.yaml",
             reason=ConfigErrorReason.FILE_NOT_FOUND,

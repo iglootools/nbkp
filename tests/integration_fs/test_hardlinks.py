@@ -1,7 +1,5 @@
 """Integration tests: hard-link snapshots on local filesystem."""
 
-from __future__ import annotations
-
 import os
 import sys
 from datetime import UTC, datetime

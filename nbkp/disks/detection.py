@@ -4,8 +4,6 @@ This is morally equivalent to the `preflight.queries` module, but the mounting l
 so these functions are separate and have no dependencies on preflight code.
 """
 
-from __future__ import annotations
-
 from ..config import (
     MountConfig,
     Volume,

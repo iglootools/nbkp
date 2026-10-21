@@ -1,7 +1,5 @@
 """Shared candidate classification for ``snapshots show`` and ``prune``."""
 
-from __future__ import annotations
-
 from ....config.protocol.sync_endpoint import SyncEndpoint
 from ....policy import Strictness
 from ....preflight import SyncStatus

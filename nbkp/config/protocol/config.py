@@ -1,7 +1,5 @@
 """Top-level NBKP configuration model."""
 
-from __future__ import annotations
-
 import enum
 from collections.abc import Iterable, Iterator, Mapping
 from itertools import combinations

@@ -15,8 +15,6 @@ diagnostics into errors using ``SshEndpointToolNeeds`` and
 ``SyncEndpointStatus.from_diagnostics``.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from ..config import (

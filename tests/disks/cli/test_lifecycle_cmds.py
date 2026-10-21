@@ -1,7 +1,5 @@
 """Tests for `disks mount` / `disks umount` / `disks setup-auth`."""
 
-from __future__ import annotations
-
 import json
 from unittest.mock import MagicMock, patch
 

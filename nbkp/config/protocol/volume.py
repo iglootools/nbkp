@@ -1,7 +1,5 @@
 """Volume models: local and remote filesystem volumes."""
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Annotated, Any, Literal
 

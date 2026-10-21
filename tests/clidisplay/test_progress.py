@@ -1,7 +1,5 @@
 """Tests for StepProgressBar result lines."""
 
-from __future__ import annotations
-
 import pytest
 
 from nbkp.clidisplay import StepProgressBar

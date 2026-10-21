@@ -8,8 +8,6 @@ Usage:
     python build-scripts/clidocs.py --check  # exit non-zero if out of date
 """
 
-from __future__ import annotations
-
 import subprocess
 import sys
 from pathlib import Path

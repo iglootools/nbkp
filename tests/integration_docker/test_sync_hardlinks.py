@@ -1,7 +1,5 @@
 """Integration tests: hard-link snapshots via remote Docker container."""
 
-from __future__ import annotations
-
 import sys
 import time
 from datetime import UTC, datetime

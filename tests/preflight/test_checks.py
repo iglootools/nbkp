@@ -1,12 +1,13 @@
 """Tests for nbkp.preflight.checks."""
 
-from __future__ import annotations
-
 import os
-from datetime import UTC
+from contextlib import ExitStack
+from datetime import UTC, datetime
+from functools import wraps
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pydantic
 import pytest
 
 from nbkp.clidisplay import OutputFormat
@@ -257,13 +258,11 @@ class TestLocalVolume:
         assert vol.path == "/mnt/data"
 
     def test_frozen(self) -> None:
-        import pydantic
-
         vol = LocalVolume(slug="data", path="/mnt/data")
         try:
             vol.slug = "other"  # type: ignore[misc]
             assert False, "Should be frozen"
-        except (AttributeError, pydantic.ValidationError):
+        except AttributeError, pydantic.ValidationError:
             pass
 
 
@@ -317,8 +316,6 @@ class TestRemoteVolume:
         assert vol.path == "/backup"
 
     def test_frozen(self) -> None:
-        import pydantic
-
         vol = RemoteVolume(
             slug="nas",
             ssh_endpoint="nas-server",
@@ -327,7 +324,7 @@ class TestRemoteVolume:
         try:
             vol.path = "other"  # type: ignore[misc]
             assert False, "Should be frozen"
-        except (AttributeError, pydantic.ValidationError):
+        except AttributeError, pydantic.ValidationError:
             pass
 
 
@@ -417,9 +414,6 @@ class TestConfig:
 
 class TestCrossServerValidation:
     def test_cross_server_remote_to_remote_rejected(self) -> None:
-        import pydantic
-        import pytest
-
         with pytest.raises(pydantic.ValidationError):
             Config(
                 ssh_endpoints={
@@ -625,51 +619,30 @@ class TestSlugValidation:
         assert vol.slug == "nas2"
 
     def test_invalid_uppercase(self) -> None:
-        import pydantic
-        import pytest
-
         with pytest.raises(pydantic.ValidationError):
             LocalVolume(slug="MyDrive", path="/mnt")
 
     def test_invalid_underscore(self) -> None:
-        import pydantic
-        import pytest
-
         with pytest.raises(pydantic.ValidationError):
             LocalVolume(slug="my_drive", path="/mnt")
 
     def test_invalid_spaces(self) -> None:
-        import pydantic
-        import pytest
-
         with pytest.raises(pydantic.ValidationError):
             LocalVolume(slug="my drive", path="/mnt")
 
     def test_invalid_trailing_hyphen(self) -> None:
-        import pydantic
-        import pytest
-
         with pytest.raises(pydantic.ValidationError):
             LocalVolume(slug="drive-", path="/mnt")
 
     def test_invalid_leading_hyphen(self) -> None:
-        import pydantic
-        import pytest
-
         with pytest.raises(pydantic.ValidationError):
             LocalVolume(slug="-drive", path="/mnt")
 
     def test_invalid_empty(self) -> None:
-        import pydantic
-        import pytest
-
         with pytest.raises(pydantic.ValidationError):
             LocalVolume(slug="", path="/mnt")
 
     def test_invalid_too_long(self) -> None:
-        import pydantic
-        import pytest
-
         with pytest.raises(pydantic.ValidationError):
             LocalVolume(slug="a" * 51, path="/mnt")
 
@@ -2998,8 +2971,6 @@ class TestStandaloneEndpointProbing:
         observations, and bastion-specific functions to avoid real
         SSH/DNS calls.
         """
-        from contextlib import ExitStack
-        from functools import wraps
 
         def decorator(fn):  # type: ignore[no-untyped-def]
             @wraps(fn)
@@ -3644,7 +3615,6 @@ class TestCheckSourceLatest:
         src.mkdir()
         dst.mkdir()
         self._setup_sentinels(src, dst)
-        from datetime import datetime
 
         _ts = create_snapshot_timestamp(
             datetime(2026, 1, 1, tzinfo=UTC),
@@ -3680,7 +3650,6 @@ class TestCheckSourceLatest:
         src.mkdir()
         dst.mkdir()
         self._setup_sentinels(src, dst)
-        from datetime import datetime
 
         _ts = create_snapshot_timestamp(
             datetime(2024, 1, 1, tzinfo=UTC),
@@ -4158,7 +4127,6 @@ class TestCheckDevnullLatest:
         src.mkdir()
         dst.mkdir()
         self._setup_sentinels(src, dst)
-        from datetime import datetime
 
         _ts = create_snapshot_timestamp(
             datetime(2099, 1, 1, tzinfo=UTC),
@@ -4257,7 +4225,6 @@ class TestCheckDevnullLatest:
         src.mkdir()
         dst.mkdir()
         self._setup_sentinels(src, dst)
-        from datetime import datetime
 
         _ts = create_snapshot_timestamp(
             datetime(2099, 1, 1, tzinfo=UTC),

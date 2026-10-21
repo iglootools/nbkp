@@ -12,8 +12,6 @@ the transient "drive/host not around right now" condition that ``UNREACHABLE``
 models, so preflight reports it as a separate, non-inactive error.
 """
 
-from __future__ import annotations
-
 import invoke.exceptions  # type: ignore[import-untyped]
 import paramiko
 

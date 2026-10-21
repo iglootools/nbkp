@@ -1,7 +1,7 @@
 """Tests for nbkp sh CLI command."""
 
-from __future__ import annotations
-
+import pathlib
+import stat
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -37,9 +37,6 @@ class TestShCommand:
 
     @patch("nbkp.cliwiring.config.load_config")
     def test_output_file(self, mock_load: MagicMock, tmp_path: object) -> None:
-        import pathlib
-        import stat
-
         tp = pathlib.Path(str(tmp_path))
         config = sample_config()
         mock_load.return_value = config
@@ -88,7 +85,6 @@ class TestShCommand:
         mock_load: MagicMock,
         tmp_path: object,
     ) -> None:
-        import pathlib
 
         tp = pathlib.Path(str(tmp_path))
         config = sample_config()

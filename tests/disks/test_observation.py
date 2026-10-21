@@ -1,7 +1,5 @@
 """Tests for MountObservation building from mount lifecycle results."""
 
-from __future__ import annotations
-
 from nbkp.config import (
     Config,
     LocalVolume,

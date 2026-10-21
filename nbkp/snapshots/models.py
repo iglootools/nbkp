@@ -1,7 +1,5 @@
 """Snapshot data models."""
 
-from __future__ import annotations
-
 import enum
 
 from pydantic import BaseModel, ConfigDict, computed_field

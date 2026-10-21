@@ -1,7 +1,5 @@
 """Docker helpers for the developer test CLI seed command."""
 
-from __future__ import annotations
-
 import socket
 import subprocess
 import time
@@ -11,6 +9,8 @@ from pathlib import Path
 import docker as dockerlib
 import docker.errors as docker_errors
 import typer
+lazy from cryptography.hazmat.primitives import serialization
+lazy from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from ...config import SshConnectionOptions, SshEndpoint
 from ...fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
@@ -92,11 +92,6 @@ def generate_ssh_keypair(
     seed_dir: Path,
 ) -> tuple[Path, Path]:
     """Generate Ed25519 SSH key pair in seed_dir/ssh/."""
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-        Ed25519PrivateKey,
-    )
-
     ssh_dir = seed_dir / "ssh"
     ssh_dir.mkdir()
     private_key_path = ssh_dir / "id_ed25519"

@@ -5,8 +5,6 @@ Basic rsync for all direction combinations is covered by
 for local-to-remote and remote-to-local syncs.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from nbkp.config import (

@@ -8,8 +8,6 @@ Separate from ``volume_checks.py`` because these endpoints have no
 volume involvement — there is no ``Volume`` to dispatch on.
 """
 
-from __future__ import annotations
-
 from ..config import SshEndpoint
 from ..remote import run_remote_command
 from ..remote.errors import SSH_CONNECTION_ERRORS
