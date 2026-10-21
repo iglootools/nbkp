@@ -20,9 +20,10 @@ jobs:
       contents: write
     uses: iglootools/common/.github/workflows/reusable-renovate-mise-lock.yml@37d4345e2148c8a464d3a6f434d7a3af93f08727 # v1.14.0
     with:
-      # Pinned here, not in the shared workflow: project-setup.md requires it to match the
-      # version this project's mise.lock was generated with, and the custom manager below lives
-      # in this repository's renovate.json. The input is named `version` because that is what
-      # that manager matches — see the shared workflow's input description.
+      # Pinned here, not in the shared workflow: guidelines/project-setup/workflows.md in
+      # iglootools/common requires it to match the version this project's mise.lock was
+      # generated with, and the custom manager below lives in this repository's renovate.json.
+      # The input is named `version` because that is what that manager matches — see the
+      # shared workflow's input description.
       # renovate: datasource=github-releases depName=jdx/mise
       version: 2026.10.7
