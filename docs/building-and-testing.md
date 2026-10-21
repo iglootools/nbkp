@@ -2,7 +2,7 @@
 
 The unit tests cover the core logic of the tool. Integration and end-to-end tests exercise the real rsync/SSH/btrfs pipeline against Docker containers and local filesystems. See [Testing Strategy](guidelines.md#testing-strategy) for details on each test category.
 
-Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/QA. The `seed --docker` command requires the `docker` extra: `uv tool install 'nbkp[docker]'`. In dev: `mise run demo`.
+Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/QA. The `seed --docker` command requires the `docker` extra: `uv tool install 'nbkp[docker]'`. In dev, run it from the project environment: `uv run nbkp demo seed` (or `uv run nbkp demo output`).
 
 Run automated tests and checks (no external dependencies):
 ```bash
