@@ -155,7 +155,7 @@ run = [
 ]
 
 [tasks.ci-build]
-description = "Run all checks needed on CI"
+description = "Install, build the package and verify its version (what the publish workflows run)"
 run = [
   { task = "install" },
   { task = "build" },
@@ -303,7 +303,7 @@ run = [
 ]
 
 [tasks.demo-record]
-description = "Record the demo and convert to GIF"
+description = "Record the demo to demo/demo.cast"
 run = "./demo/record-demo.sh \"$(uv run --no-sync python -c 'import nbkp; print(nbkp.__version__)')\""
 
 [tasks.demo-upload]
@@ -332,7 +332,7 @@ run = [
 ]
 
 [tasks.clidocs]
-description = "Regenerate CLI reference in docs/usage.md"
+description = "Regenerate CLI reference in docs/cli-reference.md"
 run = "uv run --no-sync python build-scripts/clidocs.py"
 
 [tasks.clidocs-check]
