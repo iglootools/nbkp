@@ -7,7 +7,7 @@ so parallelizing the handful of e2e tests would multiply container and
 shared-kernel (loop-device / device-mapper) contention for almost no
 wall-clock gain. This is a deliberate cost/benefit choice, not a hard blocker
 (the Docker network is UUID-named, so per-worker isolation would work). See
-``docs/build-test.md`` ("Parallel test execution") and the
+``docs/building-and-testing.md`` ("Parallel test execution") and the
 ``test-e2e-docker`` task in ``mise.toml``.
 """
 

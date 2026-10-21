@@ -120,7 +120,7 @@ The Docker-based test suites use [testcontainers](https://testcontainers-python.
     - update `README.md` to include the latest [asciinema recording](https://asciinema.org/~samidalouche/recordings) 
 
 
-## Github Config
+## GitHub Config
 - **Protect `main` and the release tags with rulesets.** Configured as the shared
   [repository conventions](https://github.com/iglootools/common/blob/main/guidelines/project-setup/repository.md#protect-the-default-branch-and-release-tags)
   describe: `main` cannot be deleted or force-pushed, changes go through a pull request
