@@ -1,7 +1,5 @@
 """Shared helpers for chain sync tests (run vs sh)."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from nbkp.config import (

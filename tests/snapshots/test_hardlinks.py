@@ -1,7 +1,5 @@
 """Tests for nbkp.snapshots.hardlinks."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch

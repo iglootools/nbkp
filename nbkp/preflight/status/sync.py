@@ -1,7 +1,5 @@
 """Layer 4 — Sync: disabled, ``latest → /dev/null`` interpretation."""
 
-from __future__ import annotations
-
 import enum
 
 from pydantic import BaseModel, ConfigDict, computed_field

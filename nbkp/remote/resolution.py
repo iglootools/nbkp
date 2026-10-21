@@ -1,7 +1,5 @@
 """SSH host resolution, network classification, and endpoint resolution."""
 
-from __future__ import annotations
-
 import ipaddress
 import socket
 from collections.abc import Callable
@@ -23,7 +21,7 @@ from .endpoints import (
 )
 
 #: Resolves a hostname to its IP addresses, or ``None`` when it does not resolve.
-AddressLookup = Callable[[str], set[str] | None]
+type AddressLookup = Callable[[str], set[str] | None]
 
 
 def default_ssh_config_path() -> Path:

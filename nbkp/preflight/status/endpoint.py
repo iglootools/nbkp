@@ -4,8 +4,6 @@ Endpoint sentinel, directories, symlinks, writability, and the
 capability-gated errors whose requirement comes from the endpoint config.
 """
 
-from __future__ import annotations
-
 import enum
 
 from pydantic import BaseModel, ConfigDict, computed_field

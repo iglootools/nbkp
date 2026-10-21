@@ -1,7 +1,5 @@
 """Preflight-specific CLI helpers."""
 
-from __future__ import annotations
-
 from ...clidisplay import OutputFormat
 from ...clidisplay.invocation import Invocation
 from ...cliwiring.preflight import check_all_with_progress

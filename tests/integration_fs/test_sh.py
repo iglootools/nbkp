@@ -1,7 +1,5 @@
 """Integration tests: generate scripts from chain configs and execute them."""
 
-from __future__ import annotations
-
 import os
 import shutil
 import stat

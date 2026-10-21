@@ -5,8 +5,6 @@ Covers auth failures, warnings, host-tool errors on localhost
 handling, and the ``latest`` symlink target parsing.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import patch
 

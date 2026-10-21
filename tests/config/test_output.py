@@ -1,7 +1,5 @@
 """Tests for config error display."""
 
-from __future__ import annotations
-
 from io import StringIO
 
 import pytest

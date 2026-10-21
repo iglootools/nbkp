@@ -1,7 +1,5 @@
 """Seed filesystem helpers: sentinels and sample data."""
 
-from __future__ import annotations
-
 import shlex
 import subprocess
 from collections.abc import Callable

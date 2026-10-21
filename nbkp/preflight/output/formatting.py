@@ -1,7 +1,5 @@
 """Shared formatting helpers for preflight output."""
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 
 from rich.text import Text

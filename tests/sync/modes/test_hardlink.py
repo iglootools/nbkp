@@ -1,7 +1,5 @@
 """Tests for nbkp.sync.modes.hardlink: snapshot dirs, --link-dest, cleanup."""
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock, patch
 
 from nbkp.config import (

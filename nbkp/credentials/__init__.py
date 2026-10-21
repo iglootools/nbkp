@@ -1,7 +1,5 @@
 """Credential retrieval for LUKS passphrases."""
 
-from __future__ import annotations
-
 import os
 import shlex
 import subprocess
@@ -54,7 +52,7 @@ def _from_keyring(passphrase_id: str) -> str:
     return password
 
 
-PromptFn = Callable[[str], str]
+type PromptFn = Callable[[str], str]
 """Asks the operator for the passphrase of a passphrase-id (``prompt`` provider).
 
 Supplied by the CLI layer, so this package stays free of terminal I/O.

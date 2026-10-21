@@ -1,7 +1,5 @@
 """YAML configuration loading, parsing, and validation."""
 
-from __future__ import annotations
-
 import os
 from collections.abc import Mapping
 from enum import StrEnum

@@ -12,8 +12,6 @@ install — are gathered beforehand by :mod:`.troubleshoot` and handed over as
 :class:`RemediationFacts`.
 """
 
-from __future__ import annotations
-
 import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass, field

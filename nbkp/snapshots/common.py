@@ -3,8 +3,6 @@
 Items shared by both hard-link and btrfs snapshot backends.
 """
 
-from __future__ import annotations
-
 from datetime import datetime
 from pathlib import Path
 

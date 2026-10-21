@@ -1,7 +1,5 @@
 """Shared CLI test helpers: status builders, config fixtures, and runner."""
 
-from __future__ import annotations
-
 import re
 
 from typer.testing import CliRunner

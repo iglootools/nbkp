@@ -1,7 +1,5 @@
 """Tests for nbkp.sync.ordering."""
 
-from __future__ import annotations
-
 import pytest
 
 from nbkp.config import (

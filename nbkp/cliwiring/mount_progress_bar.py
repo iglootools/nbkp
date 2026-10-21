@@ -1,7 +1,5 @@
 """Rich progress bar for disk mount/umount operations."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from types import TracebackType
 from typing import Self

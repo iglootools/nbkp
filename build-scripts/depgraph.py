@@ -13,8 +13,6 @@ Usage:
     python build-scripts/depgraph.py --format ascii    # print ASCII art to stdout
 """
 
-from __future__ import annotations
-
 import enum
 import re
 import shutil
@@ -24,6 +22,9 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+
+# Lazy: only --format ascii renders through it.
+lazy from mermaid_ascii import parse_mermaid, render_ascii
 
 PACKAGE = "nbkp"
 ARCHITECTURE_MD = Path("docs/architecture.md")
@@ -114,8 +115,6 @@ def _dot_to_mermaid(dot: str) -> str:
 
 def _render_ascii(mermaid_src: str) -> str:
     """Render mermaid to ASCII via mermaid-ascii-diagrams."""
-    from mermaid_ascii import parse_mermaid, render_ascii
-
     diagram = parse_mermaid(mermaid_src)
     return render_ascii(diagram)
 

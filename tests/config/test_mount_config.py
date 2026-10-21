@@ -1,7 +1,5 @@
 """Tests for mount and encryption config models."""
 
-from __future__ import annotations
-
 import pytest
 from pydantic import ValidationError
 

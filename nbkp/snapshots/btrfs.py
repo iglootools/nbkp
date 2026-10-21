@@ -1,7 +1,5 @@
 """Btrfs snapshot creation, lookup, and pruning."""
 
-from __future__ import annotations
-
 from datetime import datetime
 
 from ..config import (

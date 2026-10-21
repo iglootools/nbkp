@@ -1,7 +1,5 @@
 """Tests for nbkp.sync.modes.btrfs: snapshot after rsync into staging, pruning."""
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock, patch
 
 from nbkp.snapshots.errors import SnapshotOp, SnapshotOperationError

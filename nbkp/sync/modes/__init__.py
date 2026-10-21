@@ -1,7 +1,5 @@
 """Per-snapshot-mode sync execution (plain, btrfs, hard-link)."""
 
-from __future__ import annotations
-
 from ...preflight.status.sync import SyncStatus
 from ..results import SyncResult
 from .btrfs import run_btrfs_sync

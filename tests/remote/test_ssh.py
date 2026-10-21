@@ -1,10 +1,10 @@
 """Tests for nbkp.ssh."""
 
-from __future__ import annotations
-
 import shlex
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import invoke.exceptions
 
 from nbkp.config import LocalVolume, RemoteVolume, SshConnectionOptions, SshEndpoint
 from nbkp.remote import (
@@ -14,6 +14,7 @@ from nbkp.remote import (
     run_remote_command,
 )
 from nbkp.remote.endpoints import ResolvedEndpoint
+from nbkp.remote.fabricssh import StdinClosedProcess
 from nbkp.remote.ssh import wrap_cmd
 
 _SSH_KEY = str(Path("~/.ssh/key").expanduser())
@@ -517,9 +518,6 @@ class TestRunRemoteCommand:
         raises OSError on the closed channel, and Fabric wraps it in
         invoke.exceptions.ThreadException.
         """
-        import invoke.exceptions
-
-        from nbkp.remote.fabricssh import StdinClosedProcess
 
         mock_conn = mock_conn_cls.return_value.__enter__.return_value
         mock_conn.run.side_effect = invoke.exceptions.ThreadException(

@@ -1,7 +1,5 @@
 """Tests for mount.output display helpers."""
 
-from __future__ import annotations
-
 import json
 from io import StringIO
 

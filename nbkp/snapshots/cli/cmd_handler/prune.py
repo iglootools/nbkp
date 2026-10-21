@@ -1,7 +1,5 @@
 """Prune orchestration: candidate selection and snapshot pruning."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 
 from ....config import Config, SyncConfig

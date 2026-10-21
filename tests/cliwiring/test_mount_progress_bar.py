@@ -1,7 +1,5 @@
 """Tests for the mount/umount result-line formatters."""
 
-from __future__ import annotations
-
 from io import StringIO
 
 from rich.console import Console

@@ -1,7 +1,5 @@
 """Graph output rendering for sync dependency visualization."""
 
-from __future__ import annotations
-
 from mermaid_ascii import parse_mermaid, render_ascii
 from rich.console import Console, RenderableType
 from rich.tree import Tree

@@ -1,7 +1,5 @@
 """Plain sync: rsync straight into the destination, no snapshots."""
 
-from __future__ import annotations
-
 from ...config import SyncConfig
 from ..results import SyncResult
 from .common import RunContext, rsync_step

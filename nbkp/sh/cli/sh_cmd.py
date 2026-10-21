@@ -1,7 +1,5 @@
 """CLI sh command."""
 
-from __future__ import annotations
-
 import stat
 import sys
 from datetime import UTC, datetime

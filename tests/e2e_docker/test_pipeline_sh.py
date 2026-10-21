@@ -4,8 +4,6 @@ Same 6-hop chain as test_chain.py, but executed through a
 generated bash script (`nbkp sh`) instead of `run_all_syncs`.
 """
 
-from __future__ import annotations
-
 import stat
 import subprocess
 import sys

@@ -1,7 +1,5 @@
 """Tests for mount-related preflight checks (udisks2 backend)."""
 
-from __future__ import annotations
-
 import subprocess
 from unittest.mock import patch
 

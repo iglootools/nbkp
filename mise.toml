@@ -1,5 +1,5 @@
 [tools]
-python = "3.14.8"
+python = "3.15.0"
 uv = "0.12.23"
 github-cli = "2.102.0"
 "aqua:asciinema/asciinema" = "3.2.1"
@@ -125,12 +125,11 @@ mise deps install uv --force
 """
 
 [tasks.check]
-description = "Run all checks (format-check, lint, type-check, compat-check, lock-check, lock-check-uv, clidocs-check, configdocs-check, depgraph-check, boundaries-check)"
+description = "Run all checks (format-check, lint, type-check, lock-check, lock-check-uv, clidocs-check, configdocs-check, depgraph-check, boundaries-check)"
 run = [
   { task = "format-check" },
   { task = "lint" },
   { task = "type-check" },
-  { task = "compat-check" },
   { task = "lock-check" },
   { task = "lock-check-uv" },
   { task = "clidocs-check" },
@@ -140,7 +139,7 @@ run = [
 ]
 
 [tasks.check-all]
-description = "Run all checks (format, lint, type-check, compat-check, test)"
+description = "Run all checks (format, lint, type-check, test)"
 run = [
   { task = "check" },
   { task = "test-all" },
@@ -280,10 +279,6 @@ run = "uv run --no-sync ruff check nbkp/ tests/ build-scripts/"
 [tasks.type-check]
 description = "Run pyright type checking"
 run = "uv run --no-sync pyright nbkp/ build-scripts/"
-
-[tasks.compat-check]
-description = "Verify no Python features above 3.12 are used"
-run = "uv run --no-sync vermin --target=3.12- --no-tips --no-parse-comments nbkp/ tests/"
 
 [tasks.lock-check]
 description = "Check that mise.lock is up to date"

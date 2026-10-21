@@ -1,7 +1,5 @@
 """Hard-link snapshot creation, lookup, symlink management, and pruning."""
 
-from __future__ import annotations
-
 import shutil
 from datetime import datetime
 

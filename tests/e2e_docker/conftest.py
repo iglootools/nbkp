@@ -11,8 +11,6 @@ wall-clock gain. This is a deliberate cost/benefit choice, not a hard blocker
 ``test-e2e-docker`` task in ``mise.toml``.
 """
 
-from __future__ import annotations
-
 import pytest
 
 pytestmark = pytest.mark.e2e_docker

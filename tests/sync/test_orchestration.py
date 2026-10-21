@@ -1,7 +1,5 @@
 """Tests for nbkp.sync.orchestration: ordering, skipping, cancellation, strictness."""
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock, patch
 
 from nbkp.config import (

@@ -6,8 +6,6 @@ the standard test fixtures (which always disable host key
 checking).
 """
 
-from __future__ import annotations
-
 import os
 import subprocess
 from collections.abc import Generator
@@ -107,7 +105,7 @@ def _make_endpoint(
 @contextmanager
 def _ssh_agent(
     private_key: Path,
-) -> Generator[str, None, None]:
+) -> Generator[str]:
     """Start an ephemeral ssh-agent and load the given key.
 
     Sets ``SSH_AUTH_SOCK`` in the process environment for the

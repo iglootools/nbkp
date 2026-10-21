@@ -20,12 +20,9 @@ Four-phase check hierarchy (each level gates the next):
    ``SyncStatus.from_diagnostics``)
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
-from typing import TypeVar
 
 from ..config import (
     Config,
@@ -48,14 +45,6 @@ from .status.sync import SyncStatus
 from .status.volume import VolumeCapabilities, VolumeStatus
 from .volume_checks import observe_ssh_endpoint, observe_volume
 
-_S = TypeVar(
-    "_S",
-    SshEndpointStatus,
-    VolumeStatus,
-    SourceEndpointStatus,
-    DestinationEndpointStatus,
-)
-
 
 @dataclass(frozen=True)
 class _Progress:
@@ -64,7 +53,14 @@ class _Progress:
     on_start: Callable[[str], None] | None
     on_end: Callable[[str, Sequence[PreflightError]], None] | None
 
-    def track(self, label: str, run: Callable[[], _S]) -> _S:
+    def track[
+        S: (
+            SshEndpointStatus,
+            VolumeStatus,
+            SourceEndpointStatus,
+            DestinationEndpointStatus,
+        )
+    ](self, label: str, run: Callable[[], S]) -> S:
         """Run *run* between the start/end callbacks for *label*."""
         if self.on_start is not None:
             self.on_start(label)

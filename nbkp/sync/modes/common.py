@@ -4,8 +4,6 @@
 publish a completed snapshot (``latest`` update, then best-effort pruning).
 """
 
-from __future__ import annotations
-
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass

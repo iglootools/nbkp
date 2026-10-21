@@ -5,8 +5,6 @@ callbacks, and verification callbacks — and plain test functions that
 exercise the btrfs snapshot module against either execution backend.
 """
 
-from __future__ import annotations
-
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass

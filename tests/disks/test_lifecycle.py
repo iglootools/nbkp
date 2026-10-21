@@ -1,7 +1,5 @@
 """Tests for nbkp.disks.lifecycle (udisks2 backend)."""
 
-from __future__ import annotations
-
 import subprocess
 from unittest.mock import patch
 
@@ -25,6 +23,7 @@ from nbkp.disks.lifecycle import (
     umount_volume,
     umount_volumes,
 )
+from nbkp.remote.fabricssh import StdinClosedProcess
 
 _ENC_UUID = "5941f273-f73c-44c5-a3ef-fae7248db1b6"
 _USB_UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
@@ -200,8 +199,6 @@ class TestMountVolume:
         assert "polkit" in (result.detail or "")
 
     def test_unlock_stdin_closed_classified_as_not_authorized(self) -> None:
-        from nbkp.remote.fabricssh import StdinClosedProcess
-
         vol = _encrypted_vol()
         with (
             patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),

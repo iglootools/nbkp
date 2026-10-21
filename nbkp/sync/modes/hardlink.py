@@ -1,7 +1,5 @@
 """Hard-link snapshot sync: rsync into a new snapshot dir with ``--link-dest``."""
 
-from __future__ import annotations
-
 from ...config import SyncConfig, SyncEndpoint
 from ...fsprotocol import SNAPSHOTS_DIR, Snapshot
 from ...preflight.status.sync import SyncStatus

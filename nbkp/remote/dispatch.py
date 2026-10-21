@@ -1,7 +1,5 @@
 """Local/remote command dispatch based on volume type."""
 
-from __future__ import annotations
-
 import shutil
 import subprocess
 

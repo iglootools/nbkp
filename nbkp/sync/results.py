@@ -1,7 +1,5 @@
 """Sync results: outcomes, failure and warning kinds, and their severity."""
 
-from __future__ import annotations
-
 import subprocess
 from enum import Enum
 

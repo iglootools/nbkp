@@ -8,8 +8,6 @@ orphan cleanup, pruning, and removal of the new snapshot after a failed
 hard-link rsync, each of which only logs a warning).
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from textwrap import dedent
 

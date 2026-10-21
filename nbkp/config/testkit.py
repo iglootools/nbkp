@@ -1,7 +1,5 @@
 """Fake config builders for manual testing."""
 
-from __future__ import annotations
-
 from . import (
     BtrfsSnapshotConfig,
     Config,

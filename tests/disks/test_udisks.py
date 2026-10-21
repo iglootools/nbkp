@@ -1,7 +1,5 @@
 """Tests for nbkp.disks.udisks command builders."""
 
-from __future__ import annotations
-
 from nbkp.disks.udisks import (
     build_lock_command,
     build_mount_command,

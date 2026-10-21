@@ -10,8 +10,6 @@ or denies (no prompt).  The passphrase for ``unlock`` is piped to
 (udisks reads the key file's raw bytes).
 """
 
-from __future__ import annotations
-
 import re
 
 # ``udisksctl unlock`` prints e.g. "Unlocked /dev/sdb1 as /dev/dm-0." — capture

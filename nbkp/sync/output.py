@@ -1,7 +1,5 @@
 """Sync run/prune output formatting."""
 
-from __future__ import annotations
-
 import shlex
 
 from rich.console import Console, Group, RenderableType

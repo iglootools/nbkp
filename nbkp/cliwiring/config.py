@@ -1,7 +1,5 @@
 """Config loading and endpoint resolution shared by every command."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import typer

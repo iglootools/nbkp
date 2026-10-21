@@ -1,7 +1,5 @@
 """Rsync command building and execution."""
 
-from __future__ import annotations
-
 import shlex
 import subprocess
 from collections.abc import Callable

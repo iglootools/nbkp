@@ -1,7 +1,5 @@
 """Interactive credential input for the ``prompt`` credential provider."""
 
-from __future__ import annotations
-
 import typer
 
 

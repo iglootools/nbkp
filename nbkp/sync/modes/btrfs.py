@@ -1,7 +1,5 @@
 """Btrfs snapshot sync: rsync into ``staging/``, then a read-only snapshot."""
 
-from __future__ import annotations
-
 import subprocess
 
 from ...config import SyncConfig, SyncEndpoint

@@ -1,7 +1,5 @@
 """Integration tests: local-to-local sync (no Docker needed)."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from nbkp.config import (

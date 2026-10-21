@@ -2,15 +2,13 @@
 
 ## System Requirements
 
-- Python 3.12–3.14
+- Python 3.15 (installed for you by `uv tool install` if your system lacks it — see below)
 - rsync 3.0+ (macOS ships with openrsync which is not supported — install GNU rsync via `brew install rsync`)
 - `btrfs-progs` (only if using btrfs snapshots)
 
-The 3.12 floor tracks Ubuntu 24.04 LTS, whose system `python3` is 3.12 — so nbkp
-installs on the current LTS without a PPA or a source build. Ubuntu 26.04 LTS ships
-3.14, which is also supported. See the
+nbkp targets the latest stable Python rather than the one your distribution ships. See the
 [Python Version Policy](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#python-version-policy)
-for how both versions are maintained.
+for the rationale.
 
 ## Install with uv
 
@@ -20,9 +18,18 @@ for how both versions are maintained.
 uv tool install nbkp
 ```
 
+If no Python 3.15 is installed, uv downloads a managed one and builds nbkp's environment on
+it, leaving your system Python untouched.
+
 [pipx](https://pipx.pypa.io/) does the same thing and is a fine alternative if you already
 have it — substitute `pipx install` for `uv tool install` throughout this page, and
 `pipx upgrade` for `uv tool upgrade`. The one command that differs in name is noted below.
+Unlike uv, pipx does not fetch an interpreter for you by default: point it at a Python 3.15
+you installed yourself, or the install fails on the version requirement:
+
+```bash
+pipx install --python python3.15 nbkp
+```
 
 ### Optional Extras
 

@@ -18,8 +18,6 @@ Usage:
     python build-scripts/demoupload.py --no-commit   # update README but do not commit
 """
 
-from __future__ import annotations
-
 import json
 import re
 import subprocess

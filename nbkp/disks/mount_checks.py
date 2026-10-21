@@ -4,8 +4,6 @@ Probes whether udisks tools are installed and whether volumes are currently
 unlocked/mounted.  Used by both ``disks status`` and preflight checks.
 """
 
-from __future__ import annotations
-
 import shlex
 from dataclasses import dataclass
 

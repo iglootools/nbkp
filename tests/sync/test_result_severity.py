@@ -1,7 +1,5 @@
 """Tests for sync result → severity mapping (display icon and exit code)."""
 
-from __future__ import annotations
-
 import subprocess
 
 import pytest

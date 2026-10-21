@@ -1,8 +1,6 @@
 """Rendering details of `preflight troubleshoot`: markup safety, suggested
 commands, warnings, and the JSON form."""
 
-from __future__ import annotations
-
 from io import StringIO
 from pathlib import Path
 

@@ -5,8 +5,6 @@ which severity a finding has is policy (:mod:`nbkp.policy`); this module
 only maps it to symbols and Rich styles.
 """
 
-from __future__ import annotations
-
 from ..policy import Severity
 
 OK_SYMBOL = "✓"  # ✓

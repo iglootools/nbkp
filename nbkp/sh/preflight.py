@@ -14,8 +14,6 @@ inactive rather than as a cascade of infrastructure errors, matching the
 layered model of ``nbkp preflight``.
 """
 
-from __future__ import annotations
-
 from ..config import LocalVolume, RemoteVolume
 from ..fsprotocol import (
     DESTINATION_SENTINEL,

@@ -1,7 +1,5 @@
 """Integration tests: volume and sync checks."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from nbkp.config import (

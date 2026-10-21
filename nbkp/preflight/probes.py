@@ -5,8 +5,6 @@ the observations the preflight checks are built from.  Each runs on the
 volume's host (locally or over SSH) via :func:`nbkp.remote.dispatch.run_on_volume`.
 """
 
-from __future__ import annotations
-
 import re as regex
 from pathlib import Path
 

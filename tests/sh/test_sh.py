@@ -1,7 +1,5 @@
 """Tests for nbkp.sh."""
 
-from __future__ import annotations
-
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path

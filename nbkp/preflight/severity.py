@@ -6,8 +6,6 @@ The interpretation of "is this error fatal?" depends on the
 without re-implementing the policy at every call site.
 """
 
-from __future__ import annotations
-
 from ..policy import Severity, Strictness, classify_severity
 from .status.endpoint import (
     INACTIVE_DST_ENDPOINT_ERRORS,

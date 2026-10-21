@@ -6,8 +6,6 @@ each failure surfaces in ``ValidationError.errors()`` with a machine-readable
 branch on the code rather than match against the human-readable message.
 """
 
-from __future__ import annotations
-
 from enum import StrEnum
 
 from pydantic_core import PydanticCustomError

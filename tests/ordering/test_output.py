@@ -1,7 +1,5 @@
 """Tests for ordering output rendering."""
 
-from __future__ import annotations
-
 from io import StringIO
 
 from rich.console import Console

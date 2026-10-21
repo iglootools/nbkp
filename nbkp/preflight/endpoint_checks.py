@@ -10,8 +10,6 @@ into errors.
 wasteful remote commands.
 """
 
-from __future__ import annotations
-
 from ..config import (
     SyncEndpoint,
     Volume,

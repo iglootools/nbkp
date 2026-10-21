@@ -3,8 +3,6 @@
 Low-level queries used by ``volume_checks`` and ``endpoint_checks``.
 """
 
-from __future__ import annotations
-
 from ..config import Volume
 from ..remote.dispatch import run_on_volume
 from ..remote.endpoints import ResolvedEndpoints

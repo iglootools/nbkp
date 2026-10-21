@@ -1,7 +1,5 @@
 """Tests for endpoint selection in nbkp.remote.resolution."""
 
-from __future__ import annotations
-
 from nbkp.config import (
     Config,
     RemoteVolume,

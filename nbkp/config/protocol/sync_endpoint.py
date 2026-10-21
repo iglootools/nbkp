@@ -1,7 +1,5 @@
 """Sync endpoint model: volume + optional subdir + snapshot config."""
 
-from __future__ import annotations
-
 from typing import Any, Literal
 
 from pydantic import ConfigDict, Field, field_validator, model_validator

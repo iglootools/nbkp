@@ -5,8 +5,6 @@ The :class:`~nbkp.policy.Strictness` enum is generic run policy and lives in
 :func:`has_fatal_errors` helper.
 """
 
-from __future__ import annotations
-
 from ..policy import Strictness
 from .status.sync import SyncError, SyncStatus
 

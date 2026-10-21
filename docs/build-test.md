@@ -7,7 +7,7 @@ Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/Q
 Run automated tests and checks (no external dependencies):
 ```bash
 # mise tasks
-mise run check              # Run all checks: format-check + lint + type-check + compat-check + lock-check + lock-check-uv + clidocs-check + configdocs-check + depgraph-check + boundaries-check
+mise run check              # Run all checks: format-check + lint + type-check + lock-check + lock-check-uv + clidocs-check + configdocs-check + depgraph-check + boundaries-check
 mise run check-all          # Run all checks: regular checks + all tests
 
 mise run test-all           # All tests
@@ -27,7 +27,6 @@ mise run format             # ruff format (rewrites files)
 mise run format-check       # ruff format --check (verifies only; what check runs)
 mise run lint               # ruff check
 mise run type-check         # pyright
-mise run compat-check       # vermin (enforce Python >=3.12 compatibility — see Python version policy below)
 mise run lock-check         # check mise.lock is up to date
 mise run lock-check-uv      # check uv.lock is consistent with pyproject.toml
 
@@ -51,7 +50,6 @@ uv run pytest tests/ -v                                              # All tests
 uv run ruff format .                                                 # formatting
 uv run ruff check nbkp/ tests/                                       # linting
 uv run pyright nbkp/                                                 # type-checking
-uv run vermin --target=3.12- --no-tips --no-parse-comments nbkp/ tests/  # compat check
 uv run pytest tests/test_ssh.py::TestBuildSshBaseArgs::test_full -v  # run a single test
 ```
 
@@ -68,18 +66,13 @@ automatic check cannot see — a `.venv` that is *dirty* rather than *stale*, e.
 
 ### Python versions
 
-Local development runs Python 3.14 (pinned in `mise.toml`), while the supported floor
-is 3.12 — the system `python3` on Ubuntu 24.04 LTS. Code must therefore not use any
-feature newer than 3.12, even though you are running 3.14. `mise run compat-check`
-(vermin) is what catches violations; ruff's and pyright's 3.12 targets catch some but
-not all of them.
-
-CI currently tests only the 3.12 floor — the 3.14 matrix entry in
-`.github/workflows/test.yml` is commented out to save CI minutes.
-
-Raising the floor to 3.14 (Ubuntu 26.04 LTS) is under consideration; see the
+nbkp supports exactly one Python version, the one pinned in `mise.toml` (`[tools] python`):
+local development, CI and the `requires-python` floor all use it, so there is no separate
+compatibility check. Raising it means moving `[tools] python` (then `mise lock`),
+`requires-python`, ruff's `target-version`, pyright's `pythonVersion`, and the base image in
+`nbkp/remote/testkit/dockerbuild/Dockerfile.btrfs-local-test` together. See the
 [Python Version Policy](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#python-version-policy)
-for the full rationale and the list of knobs that must move together.
+for the rationale.
 
 ### Parallel test execution
 

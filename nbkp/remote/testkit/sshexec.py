@@ -4,8 +4,6 @@ Test-only counterpart of ``fabricssh.run_remote_command``: integration tests
 run the same commands through both transports to cross-check them.
 """
 
-from __future__ import annotations
-
 import shlex
 import subprocess
 

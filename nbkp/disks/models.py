@@ -1,14 +1,10 @@
 """Mount-related data models: tool capabilities, mount state, failure reasons."""
 
-from __future__ import annotations
-
 import enum
-from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict
 
-if TYPE_CHECKING:
-    from ..config.protocol.volume import LocalVolume, RemoteVolume
+lazy from ..config.protocol.volume import LocalVolume, RemoteVolume
 
 
 class MountFailureReason(str, enum.Enum):
@@ -84,8 +80,6 @@ class MountCapabilities(BaseModel):
 
 def display_name(vol: LocalVolume | RemoteVolume) -> str:
     """Display name for a volume: ``ssh-endpoint:slug`` for remote, ``slug`` for local."""
-    from ..config.protocol.volume import RemoteVolume
-
     return (
         f"{vol.ssh_endpoint}:{vol.slug}" if isinstance(vol, RemoteVolume) else vol.slug
     )

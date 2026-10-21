@@ -5,8 +5,6 @@ probe the config before acting on it; they share the step counting and the
 per-step severity icons here.
 """
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 
 from ..clidisplay import StepProgressBar
