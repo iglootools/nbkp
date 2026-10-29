@@ -26,7 +26,7 @@
     "customManagers": [
         {
             "customType": "regex",
-            "description": "[tool.uv] build-constraint-dependencies pins the PEP 517 build backend closure. uv.lock does not cover build dependencies, so these are the only pin on hatchling/uv-dynamic-versioning/dunamai — and no built-in manager reads this field, so without this they rot silently.",
+            "description": "[tool.uv] build-constraint-dependencies pins the PEP 517 build backend closure. uv.lock does not resolve build dependencies, so these are the only pin on hatchling/uv-dynamic-versioning/dunamai — and no built-in manager reads this field, so without this they rot silently. uv.lock does record the constraints in its [manifest], and Renovate does not re-lock for a regex manager's bump; the renovate-mise-lock workflow runs uv lock on the branch instead.",
             "managerFilePatterns": [
                 "/pyproject.toml/"
             ],
