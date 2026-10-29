@@ -90,9 +90,11 @@ exclude = [".DS_Store"]
 # install time, so without this a new commit or tag leaves a stale version in place.
 cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
 
-# uv.lock does not cover PEP 517 build dependencies — `uv build` resolves them fresh from
+# uv.lock does not resolve PEP 517 build dependencies — `uv build` resolves them fresh from
 # PyPI on a cold cache — so these constraints are the only pin on the build backend, and
-# on dunamai in particular, which is what computes the version. Regenerate with:
+# on dunamai in particular, which is what computes the version. uv.lock does record the
+# constraints themselves in its [manifest], so changing one needs a `uv lock`; on Renovate
+# branches the renovate-mise-lock workflow runs it. Regenerate with:
 #   printf '%s\n' hatchling uv-dynamic-versioning \
 #     | uv pip compile - --no-annotate --no-header --quiet
 # [build-system].requires is left unpinned so the two can never contradict each other.
