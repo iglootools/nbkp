@@ -21,6 +21,7 @@ because the container shares the host ``/dev`` and ``/run/udev`` (see the
 so a fresh unlock always succeeds after a prior test's lock.
 """
 
+import fcntl
 import shutil
 import tempfile
 import uuid
@@ -157,16 +158,33 @@ def ssh_key_pair() -> Generator[tuple[Path, Path]]:
     shutil.rmtree(tmpdir, ignore_errors=True)
 
 
+_TEST_IMAGE_TAG = "nbkp-test-server:latest"
+
+
 @pytest.fixture(scope="session")
-def _docker_image() -> str:
+def _docker_image(tmp_path_factory: pytest.TempPathFactory, worker_id: str) -> str:
+    # xdist instantiates session fixtures once per worker, and concurrent builds
+    # of one tag race inside the Docker daemon ("already exists, but accessing it
+    # also failed"). So the first worker builds, under a lock, and the others wait
+    # for it. The basetemp's parent is shared by the workers of one run only, so
+    # every run still rebuilds and picks up Dockerfile changes.
+    if worker_id == "master":
+        _build_test_image()
+    else:
+        shared = tmp_path_factory.getbasetemp().parent
+        built = shared / "docker-image.built"
+        with (shared / "docker-image.lock").open("w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if not built.exists():
+                _build_test_image()
+                built.touch()
+    return _TEST_IMAGE_TAG
+
+
+def _build_test_image() -> None:
     from testcontainers.core.image import DockerImage
 
-    image = DockerImage(
-        path=str(DOCKER_DIR),
-        tag="nbkp-test-server:latest",
-    )
-    image.build()
-    return str(image)
+    DockerImage(path=str(DOCKER_DIR), tag=_TEST_IMAGE_TAG).build()
 
 
 @pytest.fixture(scope="session")
