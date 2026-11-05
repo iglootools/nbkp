@@ -27,6 +27,32 @@ class DeviceProbeError(Exception):
         self.stderr = stderr
 
 
+# Long enough for udev to finish a lock/unlock or a drive being plugged in; settle
+# returns as soon as the queue is empty, so this only bounds the worst case.
+_UDEV_SETTLE_TIMEOUT_S = 10
+
+
+def settle_udev(volume: Volume, resolved_endpoints: ResolvedEndpoints) -> None:
+    """Wait until udev has processed the pending device events, best effort.
+
+    A lock, an unlock or a newly plugged drive makes udev remove and re-create the
+    ``/dev/disk/by-uuid`` links, so a check right after one can miss a device that
+    is there. Settling first closes that window, and costs nothing when the queue
+    is already empty, as it is for a drive that is genuinely absent.
+
+    Never fails: without ``udevadm``, or when it times out or is refused, the
+    caller's own checks still run and report what they find.
+    """
+    try:
+        run_on_volume(
+            ["udevadm", "settle", f"--timeout={_UDEV_SETTLE_TIMEOUT_S}"],
+            volume,
+            resolved_endpoints,
+        )
+    except OSError:
+        pass
+
+
 def detect_device_present(
     volume: Volume,
     device_uuid: str,

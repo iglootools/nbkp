@@ -37,6 +37,7 @@ from nbkp.disks.lifecycle import (
     MountFailureReason,
     mount_volume,
     mount_volumes,
+    run_udisks,
     umount_volume,
     umount_volumes,
 )
@@ -61,9 +62,7 @@ def _unlock_luks(
     luks_uuid: str,
 ) -> None:
     """Unlock the LUKS container via the production udisksctl builder."""
-    run_on_volume(
-        build_unlock_command(luks_uuid), volume, resolved, input=LUKS_PASSPHRASE
-    )
+    run_udisks(build_unlock_command(luks_uuid), volume, resolved, input=LUKS_PASSPHRASE)
 
 
 def _lock_luks(
@@ -72,7 +71,7 @@ def _lock_luks(
     luks_uuid: str,
 ) -> None:
     """Lock the LUKS container via the production udisksctl builder."""
-    run_on_volume(build_lock_command(luks_uuid), volume, resolved)
+    run_udisks(build_lock_command(luks_uuid), volume, resolved)
 
 
 def _cleanup(

@@ -20,6 +20,7 @@ from nbkp.disks.lifecycle import (
     MountFailureReason,
     mount_volume,
     mount_volumes,
+    run_udisks,
     umount_volume,
     umount_volumes,
 )
@@ -55,7 +56,82 @@ def _unencrypted_vol() -> LocalVolume:
     )
 
 
+@pytest.fixture(autouse=True)
+def _no_udev_settle():
+    """Keep the best-effort ``udevadm settle`` off the machine running the tests."""
+    with patch("nbkp.disks.lifecycle.settle_udev") as settle:
+        yield settle
+
+
+_LOOKUP_ERROR = "Error looking up object for device /dev/disk/by-uuid/" + _ENC_UUID
+
+
+class TestRunUdisks:
+    def test_retries_while_udisks_has_no_object_for_the_device(
+        self, _no_udev_settle
+    ) -> None:
+        sleeps: list[float] = []
+        with patch(
+            "nbkp.disks.lifecycle.run_on_volume",
+            side_effect=[
+                _mock_run(1, stderr=_LOOKUP_ERROR),
+                _mock_run(1, stderr=_LOOKUP_ERROR),
+                _mock_run(0, stdout="Unlocked"),
+            ],
+        ) as mock_run:
+            result = run_udisks(
+                ["udisksctl", "unlock"],
+                _encrypted_vol(),
+                {},
+                input="secret",
+                sleep=sleeps.append,
+            )
+        assert result.returncode == 0
+        assert mock_run.call_count == 3
+        assert all(c.kwargs["input"] == "secret" for c in mock_run.call_args_list)
+        assert _no_udev_settle.call_count == 2
+        assert len(sleeps) == 2
+
+    def test_gives_up_after_bounded_attempts(self) -> None:
+        sleeps: list[float] = []
+        with patch(
+            "nbkp.disks.lifecycle.run_on_volume",
+            return_value=_mock_run(1, stderr=_LOOKUP_ERROR),
+        ) as mock_run:
+            result = run_udisks(
+                ["udisksctl", "unlock"], _encrypted_vol(), {}, sleep=sleeps.append
+            )
+        assert result.returncode == 1
+        assert mock_run.call_count == len(sleeps) + 1
+        assert 1 < mock_run.call_count < 20
+
+    def test_wrong_passphrase_is_not_retried(self) -> None:
+        sleeps: list[float] = []
+        with patch(
+            "nbkp.disks.lifecycle.run_on_volume",
+            return_value=_mock_run(
+                1, stderr="Error unlocking /dev/sda1: Failed to activate device"
+            ),
+        ) as mock_run:
+            run_udisks(
+                ["udisksctl", "unlock"], _encrypted_vol(), {}, sleep=sleeps.append
+            )
+        assert mock_run.call_count == 1
+        assert sleeps == []
+
+
 class TestMountVolume:
+    def test_settles_udev_before_looking_for_the_device(self, _no_udev_settle) -> None:
+        """Regression: a check right after a lock found the by-uuid link missing."""
+        order: list[str] = []
+        _no_udev_settle.side_effect = lambda *_: order.append("settle")
+        with patch(
+            "nbkp.disks.lifecycle.detect_device_present",
+            side_effect=lambda *_: order.append("detect") or False,
+        ):
+            mount_volume(_unencrypted_vol(), _unencrypted_vol().mount, {}, lambda _: "")
+        assert order == ["settle", "detect"]
+
     def test_device_not_present(self) -> None:
         vol = _encrypted_vol()
         with patch("nbkp.disks.lifecycle.detect_device_present", return_value=False):
