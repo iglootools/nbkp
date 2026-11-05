@@ -22,6 +22,7 @@ from .detection import (
     discover_cleartext_device,
     find_mountpoint,
     resolve_target_device,
+    settle_udev,
 )
 from .models import MountFailureReason
 from .udisks import (
@@ -46,35 +47,41 @@ _UDISKS_UNAVAILABLE_SIGNATURES = (
     "org.freedesktop.dbus.error.serviceunknown",
 )
 
-# Transient post-unlock races worth a brief retry: right after unlock, udisks
-# may not have probed the cleartext filesystem yet (blkid/udev run
-# asynchronously), so the mount momentarily reports the device as having no
-# mountable filesystem, or can't look up its D-Bus object.  Also covers
-# slow/loaded remote hosts where udev lags.
-_TRANSIENT_MOUNT_SIGNATURES = (
+# Transient udisks races worth a brief retry. udisks learns about block devices
+# from udev events, asynchronously: right after a lock, an unlock or a drive being
+# plugged in it may not have an object for the device yet ("looking up object"), or
+# not have probed it ("no such interface", "is not a mountable filesystem"). Also
+# covers slow or loaded remote hosts where udev lags. A wrong passphrase or a
+# refused authorization matches none of these, so it is reported at once.
+_TRANSIENT_UDISKS_SIGNATURES = (
     "is not a mountable filesystem",
     "looking up object",
     "no such interface",
 )
 
-_MOUNT_RETRY_ATTEMPTS = 8
-_MOUNT_RETRY_DELAY_S = 0.5
+_UDISKS_RETRY_ATTEMPTS = 8
+_UDISKS_RETRY_DELAY_S = 0.5
 
 
-def _mount_with_retry(
-    device: str,
+def run_udisks(
+    command: list[str],
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    input: str | None = None,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> subprocess.CompletedProcess[str]:
-    result = run_on_volume(build_mount_command(device), volume, resolved_endpoints)
+    """Run a ``udisksctl`` command, retrying while udisks catches up with udev."""
+    result = run_on_volume(command, volume, resolved_endpoints, input=input)
     attempts = 1
     while (
         result.returncode != 0
-        and attempts < _MOUNT_RETRY_ATTEMPTS
-        and any(sig in result.stderr.lower() for sig in _TRANSIENT_MOUNT_SIGNATURES)
+        and attempts < _UDISKS_RETRY_ATTEMPTS
+        and any(sig in result.stderr.lower() for sig in _TRANSIENT_UDISKS_SIGNATURES)
     ):
-        time.sleep(_MOUNT_RETRY_DELAY_S)
-        result = run_on_volume(build_mount_command(device), volume, resolved_endpoints)
+        settle_udev(volume, resolved_endpoints)
+        sleep(_UDISKS_RETRY_DELAY_S)
+        result = run_on_volume(command, volume, resolved_endpoints, input=input)
         attempts += 1
     return result
 
@@ -228,6 +235,7 @@ def _mount_volume_inner(
     passphrase_fn: Callable[[str], str],
 ) -> MountResult:
     """Core mount logic, separated for exception boundary in ``mount_volume``."""
+    settle_udev(volume, resolved_endpoints)
     if not detect_device_present(volume, mount_config.device_uuid, resolved_endpoints):
         return MountResult(
             volume_slug=volume.slug,
@@ -305,7 +313,7 @@ def _unlock(
             MountFailureReason.PASSPHRASE_NOT_AVAILABLE,
             f"passphrase '{passphrase_id}' not available: {describe_error(e)}",
         )
-    result = run_on_volume(
+    result = run_udisks(
         build_unlock_command(device_uuid),
         volume,
         resolved_endpoints,
@@ -350,7 +358,7 @@ def _mount_device(
     existing = find_mountpoint(volume, device, resolved_endpoints)
     if existing is not None:
         return result_for(success=True, mounted=True, effective_path=existing)
-    result = _mount_with_retry(device, volume, resolved_endpoints)
+    result = run_udisks(build_mount_command(device), volume, resolved_endpoints)
     if result.returncode != 0:
         reason, detail = _classify_udisks_failure(
             result, MountFailureReason.MOUNT_FAILED, "mount"
@@ -406,9 +414,7 @@ def _umount_volume_inner(
     device = resolve_target_device(volume, mount_config, resolved_endpoints)
 
     if device is not None and find_mountpoint(volume, device, resolved_endpoints):
-        result = run_on_volume(
-            build_unmount_command(device), volume, resolved_endpoints
-        )
+        result = run_udisks(build_unmount_command(device), volume, resolved_endpoints)
         if result.returncode != 0:
             return UmountResult(
                 volume_slug=slug,
@@ -422,7 +428,7 @@ def _umount_volume_inner(
     # For an encrypted volume, a resolved device is the cleartext mapper, which
     # only exists while the container is unlocked.
     if mount_config.encryption is not None and device is not None:
-        result = run_on_volume(
+        result = run_udisks(
             build_lock_command(mount_config.device_uuid),
             volume,
             resolved_endpoints,
