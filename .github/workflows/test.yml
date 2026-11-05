@@ -38,7 +38,10 @@ env:
   UV_LOCKED: 1
 
 jobs:
-  test:
+  # Three jobs in parallel, one per ci-* task, so the two minute-long Docker suites do not
+  # wait for each other. The `test` job at the end gathers them under the one check name
+  # the main ruleset requires.
+  check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Checkout only. Declared so the job does not inherit the repository's read-write default.
@@ -47,7 +50,7 @@ jobs:
     # No Python matrix: the supported floor is the version pinned in mise.toml, so the one
     # interpreter worth testing is the one the locked install below already provides.
     # See common/guidelines/coding/python.md "Python Version Policy".
-    steps:
+    steps: &steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # graphviz not available on mise
       - name: Install system dependencies
@@ -59,4 +62,43 @@ jobs:
         with:
           # renovate: datasource=github-releases depName=jdx/mise
           version: 2026.10.15
-      - run: mise run ci-test
+      # pyyaml publishes no wheel for the pinned Python yet, so every run built it from
+      # source (about 5s). `uv cache prune --ci` below keeps exactly such locally built
+      # wheels and drops the downloaded ones, which are faster to fetch again than to
+      # restore. Retire the cache when every dependency ships wheels for the pin.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+      # Each job is named after its task: check runs ci-check, test-docker ci-test-docker.
+      - run: mise run ci-${{ github.job }}
+      - run: uv cache prune --ci
+
+  test-docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Checkout only. Declared so the job does not inherit the repository's read-write default.
+    permissions:
+      contents: read
+    steps: *steps
+
+  test-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Checkout only. Declared so the job does not inherit the repository's read-write default.
+    permissions:
+      contents: read
+    steps: *steps
+
+  test:
+    # The main ruleset requires a check named "test". A job skipped because a dependency
+    # failed would count as passing, so this one always runs and fails unless all three did.
+    if: always()
+    needs: [check, test-docker, test-e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: '[ "$RESULTS" = "success success success" ]'

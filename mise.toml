@@ -144,12 +144,29 @@ run = [
   { task = "test-all" },
 ]
 
-[tasks.ci-test]
-description = "Run all checks needed on CI"
+# CI runs three jobs in parallel, one per ci-* task: the two Docker suites take about a
+# minute each and do not need each other, so running them one after the other only made
+# CI wait. Together the three cover check-all.
+[tasks.ci-check]
+description = "Build, run the static checks, and the unit and filesystem tests (CI job 1/3)"
 run = [
   { task = "install" },
   { task = "build" },
-  { task = "check-all" },
+  { tasks = ["check", "test-unit", "test-integration-fs"] },
+]
+
+[tasks.ci-test-docker]
+description = "Run the Docker integration tests (CI job 2/3)"
+run = [
+  { task = "install" },
+  { task = "test-integration-docker" },
+]
+
+[tasks.ci-test-e2e]
+description = "Run the end-to-end Docker tests (CI job 3/3)"
+run = [
+  { task = "install" },
+  { task = "test-e2e-docker" },
 ]
 
 [tasks.ci-build]
@@ -189,16 +206,14 @@ run = [
 
 [tasks.test-e2e-docker]
 description = "Run end-to-end sync tests (Docker only)"
-# Serial on purpose (no -n auto). Unlike test-integration-docker — one light
-# container per worker across many tests, so -n auto is a big win — each e2e
-# test needs a multi-container topology (backup-server + bastion + proxy-jump)
-# running the heaviest workload (btrfs + LUKS + multi-hop SSH). With only a
-# handful of such tests, xdist would multiply that container and shared-kernel
-# (loop-device / device-mapper) contention for negligible wall-clock gain.
-# Nothing hard-blocks it (the Docker network is UUID-named, so per-worker
-# isolation would just work) — it is purely a cost/benefit choice.
+# -n 3, one worker per test: each e2e test needs a multi-container topology
+# (backup-server + bastion + proxy-jump), so every worker brings up its own. The
+# Docker network is UUID-named and the testkit isolates the shared kernel resources
+# (see test-integration-docker), so the topologies stay independent. It halves the
+# suite (36s to 18s locally). Raise the count when tests are added: beyond one
+# worker per test it only multiplies container start-up.
 # See docs/building-and-testing.md "Parallel test execution".
-run = "uv run --no-sync pytest tests/e2e_docker/ -v"
+run = "uv run --no-sync pytest tests/e2e_docker/ -n 3 -v"
 
 [tasks.test-integration]
 description = "Run all integration tests (Docker + filesystem)"

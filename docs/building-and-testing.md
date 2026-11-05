@@ -83,7 +83,7 @@ Tests run under [pytest-xdist](https://pytest-xdist.readthedocs.io/), with per-s
 | Filesystem integration | `test-integration-fs` | `-n auto` | Each test isolates real-rsync work under a unique `tmp_path`. |
 | Docker integration | `test-integration-docker` | `-n auto` | One privileged container per worker; testkit isolates shared kernel resources — see below. |
 | Local btrfs (privileged) | `test-integration-docker-btrfs` | serial | Single privileged container; real btrfs ops share one loopback mount. |
-| End-to-end | `test-e2e` | serial | A few heavy multi-container chain-pipeline tests; value is in the single ordered pipeline, so parallelism only multiplies container overhead. |
+| End-to-end | `test-e2e` | `-n 3` | One worker per test, each with its own multi-container topology (UUID-named network); halves the suite. Raise the count with the number of tests. |
 
 **How Docker integration parallelizes safely:** session-scoped container fixtures are instantiated **once per xdist worker**, so each worker spins up its own privileged container. All those containers share the host VM kernel's **loop-device pool** and **device-mapper namespace** — naively concurrent containers contend on them (loop-device exhaustion, device-mapper name collisions, and a global `losetup -D` that would detach siblings' devices). The testkit ([`entrypoint.sh`](../nbkp/remote/testkit/dockerbuild/entrypoint.sh), [`setup-luks.sh`](../nbkp/remote/testkit/dockerbuild/setup-luks.sh), and the `luks_mapper_name` fixture) keeps them independent:
 
@@ -94,6 +94,8 @@ Tests run under [pytest-xdist](https://pytest-xdist.readthedocs.io/), with per-s
 - **No destructive global cleanup.** Startup never runs a blanket `losetup -D` (it would yank live siblings' devices); it only detaches loops whose backing file is `(deleted)`, as a best-effort reap of orphans from killed runs.
 
 Within a worker, the autouse `_cleanup_remote` fixture scrubs shared remote paths between tests, keeping them independent.
+
+Keep xdist's default `load` scheduling. `--dist worksteal` moves queued tests between workers, which makes `TestLuksLifecycle` fail (`device not plugged in`): the containers share the host's `/dev` and udev, so LUKS lifecycle tests on different workers interfere with each other.
 
 To debug a flaky test in isolation, run a single process by passing `-n0` (or omitting `-n`).
 
