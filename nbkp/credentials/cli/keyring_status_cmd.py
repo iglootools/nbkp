@@ -1,5 +1,3 @@
-"""CLI keyring-status command."""
-
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -58,7 +56,6 @@ def keyring_status(
 
 
 def _status_json(cfg: Config, results: list[PassphrasePrefetch]) -> dict[str, Any]:
-    """JSON report; ``checked`` is false when the provider is not swept."""
     checked = is_prefetchable(cfg.credential_provider)
     by_id = {r.passphrase_id: r for r in results}
     return {

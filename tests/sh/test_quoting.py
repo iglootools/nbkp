@@ -1,5 +1,3 @@
-"""Tests for nbkp.sh.quoting."""
-
 import subprocess
 
 from nbkp.sh.quoting import SCRIPT_DIR, SNAPSHOT_TS, comment_out, quote, shell_var

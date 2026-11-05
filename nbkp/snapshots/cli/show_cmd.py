@@ -1,5 +1,3 @@
-"""CLI show command."""
-
 from pathlib import Path
 from typing import Annotated
 

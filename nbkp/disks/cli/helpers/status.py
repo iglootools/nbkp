@@ -1,5 +1,3 @@
-"""Volume status probing and display helpers."""
-
 from dataclasses import dataclass
 
 import typer
@@ -46,7 +44,6 @@ def _unmanaged_statuses(
     cfg: Config,
     names: list[str] | None = None,
 ) -> list[tuple[Text, MountStatusData]]:
-    """Build status entries for volumes without mount config."""
     return [
         (
             Text.assemble(display_name(vol), " ", ("(not managed)", "dim")),
@@ -110,7 +107,6 @@ def _show_status_table(
     statuses: list[tuple[MountStatusLabel, MountStatusData]],
     output_format: OutputFormat,
 ) -> None:
-    """Display the mount status table or JSON."""
     match output_format:
         case OutputFormat.JSON:
             echo_json(build_mount_status_json(statuses))
@@ -127,7 +123,6 @@ def _probe_and_show_status(
     output_format: OutputFormat,
     names: list[str] | None = None,
 ) -> None:
-    """Probe mount status and display as table or JSON."""
     managed = [
         (slug, vol)
         for slug, vol in cfg.volumes.items()

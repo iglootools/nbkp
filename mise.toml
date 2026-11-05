@@ -65,7 +65,6 @@ python.uv_venv_auto = "source"
 auto = true
 run = "uv sync --all-extras"
 
-# Build and Publishing Tasks
 [tasks.clean]
 description = "Clean up build artifacts"
 run = """
@@ -145,7 +144,6 @@ run = [
   { task = "test-all" },
 ]
 
-# CI Workflow Tasks
 [tasks.ci-test]
 description = "Run all checks needed on CI"
 run = [
@@ -177,7 +175,6 @@ run = [
   { task = "demo-upload" },
 ]
 
-# Test Tasks
 [tasks.test-unit]
 description = "Run unit tests (no Docker, no external dependencies)"
 # -n auto: distribute across worker processes (pytest-xdist). Unit tests are fully
@@ -208,10 +205,9 @@ description = "Run all integration tests (Docker + filesystem)"
 run = [
   { task = "test-integration-fs" },
   { task = "test-integration-docker" },
-
-  # Do not automatically. Does not work on CI and can cause issues on local machines due to the privileged Docker requirement.
-  # Useful for local debugging of btrfs-related code changes.
-  # { task = "test-integration-docker-btrfs" },
+  # test-integration-docker-btrfs is left out on purpose: it needs privileged Docker, which
+  # does not work on CI and can cause issues on local machines. Run it by hand when
+  # debugging btrfs-related code changes.
 ]
 
 [tasks.test-integration-docker]
@@ -257,7 +253,6 @@ run = [
   { task = "test-e2e" },
 ]
 
-# Lint / Formatting Tasks
 [tasks.format]
 description = "Format code with ruff (rewrites files; see format-check to verify only)"
 run = "uv run --no-sync ruff format ."
@@ -294,7 +289,6 @@ run = "./scripts/lock-check.sh"
 description = "Check that uv.lock is up to date with pyproject.toml"
 run = "uv lock --check"
 
-# Demo Tasks
 [tasks.demo]
 description = "Record the demo and upload to asciinema.org"
 run = [
@@ -322,7 +316,6 @@ run = "asciinema upload demo/demo.cast"
 description = "Download the demo recorded by CI and upload it to asciinema.org"
 run = "uv run --no-sync python build-scripts/demoupload.py"
 
-# Reference Documentation Generation Tasks
 [tasks.reference-doc]
 description = "Regenerate the reference documentation"
 run = [

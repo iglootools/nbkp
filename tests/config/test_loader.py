@@ -1,5 +1,3 @@
-"""Tests for nbkp.configloader."""
-
 from pathlib import Path
 from textwrap import dedent
 
@@ -707,7 +705,6 @@ class TestLoadConfig:
         assert chain[0].host == "bastion3.example.com"
 
     def test_proxy_jump_chain_property(self) -> None:
-        # Single proxy-jump
         ep_single = SshEndpoint(
             slug="single",
             host="host.example.com",
@@ -715,7 +712,6 @@ class TestLoadConfig:
         )
         assert ep_single.proxy_jump_chain == ["bastion"]
 
-        # List proxy-jumps
         ep_list = SshEndpoint(
             slug="multi",
             host="host.example.com",
@@ -726,7 +722,6 @@ class TestLoadConfig:
             "bastion2",
         ]
 
-        # No proxy
         ep_none = SshEndpoint(
             slug="no-proxy",
             host="host.example.com",
@@ -869,7 +864,6 @@ class TestLoadConfig:
         assert ConfigValidationCode.MUTUALLY_EXCLUSIVE in _validation_error_types(p)
 
     def test_location_list_property(self) -> None:
-        # Single location
         ep_single = SshEndpoint(
             slug="single",
             host="host.example.com",
@@ -877,7 +871,6 @@ class TestLoadConfig:
         )
         assert ep_single.location_list == ["home"]
 
-        # List locations
         ep_list = SshEndpoint(
             slug="multi",
             host="host.example.com",
@@ -885,7 +878,6 @@ class TestLoadConfig:
         )
         assert ep_list.location_list == ["home", "travel"]
 
-        # No location
         ep_none = SshEndpoint(
             slug="no-loc",
             host="host.example.com",

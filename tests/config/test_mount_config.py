@@ -43,10 +43,8 @@ class TestMountConfig:
         assert _error_types(excinfo.value) == {"string_pattern_mismatch"}
 
     def test_valid_uuid_formats(self) -> None:
-        # lowercase
         m1 = MountConfig(device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6")
         assert m1.device_uuid == "5941f273-f73c-44c5-a3ef-fae7248db1b6"
-        # uppercase
         m2 = MountConfig(device_uuid="5941F273-F73C-44C5-A3EF-FAE7248DB1B6")
         assert m2.device_uuid == "5941F273-F73C-44C5-A3EF-FAE7248DB1B6"
 

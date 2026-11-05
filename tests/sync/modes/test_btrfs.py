@@ -66,7 +66,6 @@ class TestBtrfsSync:
 
         run_syncs(config, sync_statuses)
 
-        # Btrfs workflow no longer passes --link-dest
         call_kwargs = mock_rsync.call_args
         assert call_kwargs.kwargs.get("link_dest") is None
 

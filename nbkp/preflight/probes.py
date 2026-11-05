@@ -1,10 +1,3 @@
-"""Preflight probes: observe raw state on a volume's host.
-
-Sentinel, directory and symlink checks, and the rsync version probe —
-the observations the preflight checks are built from.  Each runs on the
-volume's host (locally or over SSH) via :func:`nbkp.remote.dispatch.run_on_volume`.
-"""
-
 import re as regex
 from pathlib import Path
 
@@ -23,7 +16,6 @@ def _check_endpoint_sentinel(
     sentinel_name: str,
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
-    """Check if an endpoint sentinel file exists."""
     base = resolve_endpoint(volume, subdir)
     rel_path = f"{base}/{sentinel_name}"
     match volume:
@@ -39,11 +31,9 @@ def _check_endpoint_sentinel(
 
 
 def resolve_endpoint(volume: Volume, subdir: str | None) -> str:
-    """Resolve the full endpoint path for a volume.
-
-    The volume's ``path`` must be resolved by this point — either declared in
+    """The volume's ``path`` must be resolved by this point — either declared in
     config, or filled in from the discovered mountpoint after mounting (see
-    ``disks.observation.apply_effective_paths``).
+    ``disks.observation.apply_effective_paths``); ``ValueError`` otherwise.
     """
     if volume.path is None:
         msg = f"volume '{volume.slug}': mount path not resolved"
@@ -56,7 +46,6 @@ def _check_directory_writable(
     path: str,
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
-    """Check if a directory is writable on the volume's host."""
     return (
         run_on_volume(["test", "-w", path], volume, resolved_endpoints).returncode == 0
     )
@@ -67,7 +56,6 @@ def check_directory_exists(
     path: str,
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
-    """Check if a directory exists on the volume's host."""
     match volume:
         case LocalVolume():
             return Path(path).is_dir()
@@ -85,7 +73,6 @@ def _check_symlink_exists(
     path: str,
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
-    """Check if a symlink exists on the volume's host."""
     match volume:
         case LocalVolume():
             return Path(path).is_symlink()
@@ -134,7 +121,6 @@ def _check_rsync_version(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
-    """Check that rsync is GNU rsync >= 3.0.0."""
     result = run_on_volume(["rsync", "--version"], volume, resolved_endpoints)
     return (
         result.returncode == 0

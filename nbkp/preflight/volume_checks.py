@@ -42,17 +42,13 @@ from .snapshot_checks import (
 from .status.ssh import HostToolCapabilities, SshEndpointDiagnostics
 from .status.volume import VolumeCapabilities, VolumeDiagnostics
 
-# ── SSH Endpoint Observation ──────────────────────────────
-
 
 def observe_ssh_endpoint(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints | None = None,
     probe_mount_tools: bool = False,
 ) -> SshEndpointDiagnostics:
-    """Observe SSH endpoint state: reachability, host tools, mount tools.
-
-    Uses *volume* as the dispatch target for running commands on the host.
+    """Uses *volume* as the dispatch target for running commands on the host.
     For local volumes, commands run locally (implicit localhost endpoint).
     For remote volumes, commands run over SSH via the resolved endpoint.
 
@@ -72,7 +68,6 @@ def _observe_ssh_endpoint_local(
     resolved_endpoints: ResolvedEndpoints,
     probe_mount_tools: bool,
 ) -> SshEndpointDiagnostics:
-    """Observe implicit localhost SSH endpoint."""
     host_tools = _probe_host_tools(volume, resolved_endpoints)
     mount_tools = (
         _probe_mount_tools(volume, resolved_endpoints) if probe_mount_tools else None
@@ -88,9 +83,7 @@ def _observe_ssh_endpoint_remote(
     resolved_endpoints: ResolvedEndpoints,
     probe_mount_tools: bool,
 ) -> SshEndpointDiagnostics:
-    """Observe a remote SSH endpoint.
-
-    SSH reachability is tested implicitly via the first host tool probe
+    """SSH reachability is tested implicitly via the first host tool probe
     (``which rsync``).  A connection failure marks the host unreachable
     (or auth-failed) and records the cause; any other exception is a bug
     and propagates.
@@ -113,7 +106,6 @@ def _observe_ssh_endpoint_remote(
 
 
 def unreachable_diagnostics(error: BaseException) -> SshEndpointDiagnostics:
-    """Diagnostics for a failed SSH connection, keeping its cause."""
     return SshEndpointDiagnostics(
         ssh_reachable=False,
         ssh_auth_failed=is_auth_error(error),
@@ -125,9 +117,7 @@ def _probe_host_tools(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
 ) -> HostToolCapabilities:
-    """Probe host-level tool availability (rsync, btrfs, stat, findmnt).
-
-    For remote volumes, any of these ``which`` probes implicitly tests
+    """For remote volumes, any of these ``which`` probes implicitly tests
     SSH reachability — if the connection fails, the caller catches the
     exception.
     """
@@ -147,9 +137,6 @@ def _probe_host_tools(
     )
 
 
-# ── Volume Observation ────────────────────────────────────
-
-
 def observe_volume(
     volume: Volume,
     host_tools: HostToolCapabilities,
@@ -157,12 +144,7 @@ def observe_volume(
     resolved_endpoints: ResolvedEndpoints | None = None,
     mount_observation: MountObservation | None = None,
 ) -> VolumeDiagnostics:
-    """Observe volume state without interpreting errors.
-
-    Returns a ``VolumeDiagnostics`` capturing raw observations:
-    sentinel existence and capabilities.
-
-    Called only when the SSH endpoint is active.  SSH reachability and
+    """Called only when the SSH endpoint is active.  SSH reachability and
     location exclusion are handled at the SSH endpoint level.
 
     *host_tools* and *mount_tools* come from the SSH endpoint observation.
@@ -186,7 +168,6 @@ def _observe_local(
     resolved_endpoints: ResolvedEndpoints,
     mount_observation: MountObservation | None = None,
 ) -> VolumeDiagnostics:
-    """Observe a local volume's state."""
     # A mount-managed volume with no declared path that is not yet mounted
     # has no knowable location — treat as sentinel-missing (inactive).
     sentinel_exists = (
@@ -211,10 +192,7 @@ def _observe_remote(
     resolved_endpoints: ResolvedEndpoints,
     mount_observation: MountObservation | None = None,
 ) -> VolumeDiagnostics:
-    """Observe a remote volume's state.
-
-    SSH reachability has already been verified at the SSH endpoint level.
-    """
+    """SSH reachability has already been verified at the SSH endpoint level."""
     ep = resolved_endpoints[volume.slug]
     if volume.path is None:
         # Unmounted discovery-model volume — no knowable location.
@@ -276,9 +254,6 @@ def check_volume_capabilities(
         btrfs_user_subvol_rm=btrfs_user_subvol_rm,
         mount=mount_caps,
     )
-
-
-# ── Mount capabilities (volume-specific config + runtime state) ───
 
 
 def _sentinel_only_capabilities(

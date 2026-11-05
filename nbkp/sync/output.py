@@ -1,5 +1,3 @@
-"""Sync run/prune output formatting."""
-
 import shlex
 
 from rich.console import Console, Group, RenderableType
@@ -20,16 +18,11 @@ from ..snapshots.output import retention_display as _retention_display
 from .results import SyncOutcome, SyncResult
 from .rsync import build_rsync_command
 
-# ---------------------------------------------------------------------------
-# Run preview (rsync commands + snapshot commands)
-# ---------------------------------------------------------------------------
-
 
 def _resolve_dest_display_path(
     sync_status: SyncStatus,
     config: Config,
 ) -> str:
-    """Resolve the destination display path for a sync."""
     dst_ep = config.destination_endpoint(sync_status.config)
     vol = config.volumes[dst_ep.volume]
     return endpoint_path(vol, dst_ep.subdir)
@@ -39,11 +32,7 @@ def _snapshot_preview_commands(
     sync_status: SyncStatus,
     config: Config,
 ) -> tuple[str, list[str], str] | None:
-    """Build snapshot preview commands for an active sync.
-
-    Returns ``(mode, command_lines, retention)`` or ``None`` if
-    the sync has no snapshot configuration.
-    """
+    """``(mode, command_lines, retention)``, or ``None`` without snapshots."""
     dst_ep = config.destination_endpoint(sync_status.config)
     dest_path = _resolve_dest_display_path(sync_status, config)
     match dst_ep.snapshot_mode:
@@ -93,7 +82,6 @@ def _build_rsync_commands_section(
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
 ) -> list[RenderableType]:
-    """Build the Rsync Commands table section."""
     active_syncs = [ss for ss in sync_statuses.values() if ss.active]
     if not active_syncs:
         return []
@@ -121,7 +109,6 @@ def _build_snapshot_commands_section(
     sync_statuses: dict[str, SyncStatus],
     config: Config,
 ) -> list[RenderableType]:
-    """Build the Snapshot Commands table section."""
     rows = [
         (ss.slug, preview)
         for ss in sync_statuses.values()
@@ -148,7 +135,6 @@ def build_run_preview_sections(
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
 ) -> list[RenderableType]:
-    """Build renderable sections for run preview output."""
     return [
         *_build_rsync_commands_section(sync_statuses, config, resolved_endpoints),
         *_build_snapshot_commands_section(sync_statuses, config),
@@ -163,7 +149,6 @@ def print_run_preview(
     resolved_endpoints: ResolvedEndpoints | None = None,
     wrap_in_panel: bool = True,
 ) -> None:
-    """Print human-readable run preview (rsync + snapshot commands)."""
     re = resolved_endpoints or {}
     c = console or Console()
 
@@ -183,18 +168,12 @@ def print_run_preview(
             c.print(section)
 
 
-# ---------------------------------------------------------------------------
-# Run results
-# ---------------------------------------------------------------------------
-
-
 def _format_snapshot_display(
     snapshot_path: str,
     sync_slug: str,
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
-    """Format a snapshot path with SSH URI prefix for remote volumes."""
     sync = config.syncs[sync_slug]
     dst_ep = config.destination_endpoint(sync)
     vol = config.volumes[dst_ep.volume]
@@ -207,7 +186,6 @@ def _format_snapshot_display(
 
 
 def _outcome_text(outcome: SyncOutcome) -> Text:
-    """Map a sync outcome to a styled Rich Text label."""
     match outcome:
         case SyncOutcome.SUCCESS:
             return Text("OK", style="green")
@@ -224,7 +202,6 @@ def _result_details(
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
 ) -> list[str]:
-    """Detail lines of one result: error, snapshot, pruning, warnings, output."""
     return [
         *([f"Error: {r.detail}"] if r.detail else []),
         *(
@@ -249,7 +226,6 @@ def build_human_results_sections(
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
 ) -> list[RenderableType]:
-    """Build renderable sections for run results output."""
     mode = " (dry run)" if dry_run else ""
 
     table = Table(
@@ -280,7 +256,6 @@ def print_human_results(
     *,
     console: Console | None = None,
 ) -> None:
-    """Print human-readable run results."""
     c = console or Console()
     for section in build_human_results_sections(
         results, dry_run, config, resolved_endpoints

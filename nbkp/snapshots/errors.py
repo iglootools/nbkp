@@ -19,8 +19,6 @@ from ..remote.endpoints import ResolvedEndpoints
 
 
 class SnapshotOp(str, enum.Enum):
-    """The snapshot operation that failed."""
-
     CREATE = "create snapshot"
     MKDIR = "create snapshot directory"
     MAKE_WRITABLE = "make snapshot writable"

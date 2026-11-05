@@ -1,5 +1,3 @@
-"""Shared formatting helpers for preflight output."""
-
 from collections.abc import Iterable
 
 from rich.text import Text
@@ -21,7 +19,6 @@ from ..status.volume import VolumeCapabilities, VolumeError, VolumeStatus
 
 
 def join_text(items: Iterable[Text], separator: str = ", ") -> Text:
-    """Join styled Text fragments with a plain separator."""
     return Text(separator).join(items)
 
 
@@ -36,9 +33,7 @@ def status_text(
     ),
     strictness: Strictness,
 ) -> Text:
-    """Format status with optional errors as styled text.
-
-    Inactive statuses use the warning icon when their errors are all
+    """Inactive statuses use the warning icon when their errors are all
     non-fatal under *strictness* (e.g. missing sentinels with the
     default ``IGNORE_INACTIVE``), and the error icon otherwise.
     """
@@ -57,9 +52,7 @@ def status_text(
 def mount_capability_items(
     mount: MountCapabilities,
 ) -> list[tuple[bool | None, str | None]]:
-    """Build capability display items for a mount-managed volume.
-
-    udisks has no backend/strategy distinction, so we surface the
+    """udisks has no backend/strategy distinction, so we surface the
     effective mountpoint (the path udisks mounted at, or the discovered
     cleartext device) instead of a systemd mount-unit name.
     """
@@ -76,7 +69,6 @@ def mount_capability_items(
 
 
 def format_capabilities(caps: VolumeCapabilities | None) -> Text:
-    """Format volume capabilities as styled text."""
     if caps is None:
         return Text("")
     items = [
@@ -130,9 +122,7 @@ def format_mount_status(
     mount_config: MountConfig | None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Text:
-    """Format runtime mount state as styled text.
-
-    Shows \u2713/\u26a0/\u2717 for each probed mount state item.  Items whose value
+    """Shows \u2713/\u26a0/\u2717 for each probed mount state item.  Items whose value
     is ``None`` (not probed / not applicable) are omitted, matching
     the pattern used by source/destination diagnostics columns.
     Empty when the volume has no mount config or caps are unavailable.
@@ -169,9 +159,7 @@ def collect_ssh_endpoint_statuses(
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
 ) -> dict[str, SshEndpointStatus]:
-    """Collect unique SSH endpoint statuses from volumes and sync statuses.
-
-    SSH endpoint statuses are embedded in volume statuses.  This extracts
+    """SSH endpoint statuses are embedded in volume statuses.  This extracts
     them for display in the SSH Endpoints table.  First-seen wins for
     duplicate slugs.
     """

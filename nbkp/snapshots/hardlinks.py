@@ -1,5 +1,3 @@
-"""Hard-link snapshot creation, lookup, symlink management, and pruning."""
-
 import shutil
 from datetime import datetime
 
@@ -29,9 +27,7 @@ def create_snapshot_dir(
     platform: str,
     resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> str:
-    """Create a snapshot directory for the current sync.
-
-    *now* names the snapshot and *platform* (``sys.platform``) decides the
+    """*now* names the snapshot and *platform* (``sys.platform``) decides the
     macOS-safe name form; both come from the caller.  Returns the full
     snapshot path.
     """
@@ -94,7 +90,6 @@ def delete_snapshot(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
 ) -> None:
-    """Delete a hard-link snapshot directory."""
     match volume:
         case RemoteVolume():
             run_checked(
@@ -126,7 +121,7 @@ def prune_snapshots(
         latest = read_latest_symlink(sync, config, resolved_endpoints=re)
         base = snapshots_dir(sync, config)
 
-        # Candidates: oldest first, skip the latest target, take up to excess
+        # list_snapshots sorts oldest first, so the slice takes the oldest.
         to_delete = [
             f"{base}/{s.name}"
             for s in snapshots

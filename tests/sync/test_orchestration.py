@@ -142,13 +142,11 @@ class TestFailurePropagation:
         results = run_syncs(config, sync_statuses)
         assert len(results) == 2
 
-        # s1 failed
         r1 = next(r for r in results if r.sync_slug == "s1")
         assert r1.success is False
         assert r1.outcome == SyncOutcome.FAILED
         assert r1.rsync_exit_code == 23
 
-        # s2 cancelled
         r2 = next(r for r in results if r.sync_slug == "s2")
         assert r2.success is False
         assert r2.outcome == SyncOutcome.CANCELLED
@@ -176,7 +174,7 @@ class TestFailurePropagation:
 
         results = run_syncs(config, sync_statuses)
         assert len(results) == 2
-        # One failed, one succeeded (order may vary)
+        # Independent syncs, so the result order is not fixed.
         successes = [r for r in results if r.success]
         failures = [r for r in results if not r.success]
         assert len(successes) == 1

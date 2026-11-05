@@ -1,5 +1,3 @@
-"""CLI run command."""
-
 import sys
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -35,7 +33,6 @@ from ...sync import ProgressMode, SyncResult, result_severity
 from ...sync.output import build_human_results_sections
 from ..pipeline import PipelineResult, SyncCallbacks, check_and_run
 
-#: Indent of the per-sync lines under the abort message.
 _ABORT_DETAIL_INDENT = 2
 
 

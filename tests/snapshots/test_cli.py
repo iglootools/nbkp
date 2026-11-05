@@ -1,5 +1,3 @@
-"""Tests for nbkp snapshots CLI commands."""
-
 import json
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
@@ -33,8 +31,6 @@ from tests.clidisplay import (
     src_ep_status,
     vol_status,
 )
-
-# ── Snapshot-specific config helpers ─────────────────────────
 
 
 def _prune_config() -> Config:

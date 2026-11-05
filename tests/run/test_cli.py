@@ -1,5 +1,3 @@
-"""Tests for nbkp run CLI command."""
-
 import json
 import subprocess
 from pathlib import Path

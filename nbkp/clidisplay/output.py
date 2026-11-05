@@ -1,5 +1,3 @@
-"""Output format enum and JSON emission shared across CLI commands."""
-
 import enum
 import json
 from typing import Any
@@ -9,8 +7,6 @@ from pydantic import BaseModel
 
 
 class OutputFormat(str, enum.Enum):
-    """Output format for CLI commands."""
-
     HUMAN = "human"
     JSON = "json"
 

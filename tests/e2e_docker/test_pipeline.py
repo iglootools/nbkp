@@ -61,7 +61,6 @@ class TestChainSync:
         """Data seeded in src-local-bare arrives at
         dst-local-bare after traversing the full chain,
         with btrfs volumes on a LUKS-encrypted filesystem."""
-        # 1. Build config — stage-remote-btrfs-snapshots has MountConfig
         config = build_chain_config(
             tmp_path,
             bastion_container,
@@ -70,15 +69,12 @@ class TestChainSync:
         )
         resolved = resolve_all_endpoints(config)
 
-        # 2. Mount encrypted volume via production lifecycle
         with managed_mount(config, resolved, lambda _: LUKS_PASSPHRASE) as (
             _resolved_config,
             mount_observations,
         ):
-            # 3. Setup: sentinels, seed data
             src = setup_chain(config, tmp_path, docker_ssh_endpoint, resolved)
 
-            # 4–5. Preflight checks + run all syncs (production pipeline)
             pipeline = check_and_run(
                 config,
                 clock=lambda: datetime.now(UTC),
@@ -95,12 +91,10 @@ class TestChainSync:
             for r in pipeline.results:
                 assert r.success, f"{r.sync_slug}: {r.detail}"
 
-            # 6. Verify topological ordering
             slugs = [r.sync_slug for r in pipeline.results]
             for i in range(1, 6):
                 assert slugs.index(f"step-{i}") < slugs.index(f"step-{i + 1}")
 
-            # 7. Verify results (tree equality, snapshots, sentinels)
             assert_chain_results(src, tmp_path, config, docker_ssh_endpoint, resolved)
 
     def test_failure_cancels_downstream_syncs(
@@ -113,7 +107,6 @@ class TestChainSync:
     ) -> None:
         """When an upstream sync is skipped (inactive), all transitive
         downstream syncs are cancelled via failure propagation."""
-        # 1. Build the same 6-hop chain config
         config = build_chain_config(
             tmp_path,
             bastion_container,
@@ -122,23 +115,21 @@ class TestChainSync:
         )
         resolved = resolve_all_endpoints(config)
 
-        # 2. Mount encrypted volume via production lifecycle
         with managed_mount(config, resolved, lambda _: LUKS_PASSPHRASE) as (
             _resolved_config,
             mount_observations,
         ):
-            # 3. Setup: sentinels, seed data
             setup_chain(config, tmp_path, docker_ssh_endpoint, resolved)
 
-            # 4. Deliberately remove the .nbkp-dst sentinel on step-2's
-            #    destination (ep-stage-remote-bare) to make step-2 inactive
+            # Without the .nbkp-dst sentinel on its destination
+            # (ep-stage-remote-bare), step-2 is inactive.
             ssh_exec(
                 docker_ssh_endpoint,
                 f"rm -f {REMOTE_BACKUP_PATH}/bare/.nbkp-dst",
             )
 
-            # 5. Run pipeline in non-strict mode so missing sentinels
-            #    cause skips rather than a hard preflight failure
+            # IGNORE_INACTIVE, so the missing sentinel causes skips rather than
+            # a hard preflight failure.
             pipeline = check_and_run(
                 config,
                 clock=lambda: datetime.now(UTC),
@@ -148,7 +139,6 @@ class TestChainSync:
                 mount_observations=mount_observations,
             )
 
-            # 6. Verify outcomes
             results_by_slug = {r.sync_slug: r for r in pipeline.results}
 
             # step-1 (local->local) has no dependency on step-2

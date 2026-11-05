@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e
 
-# Set up authorized keys from mounted file
 if [ -f /mnt/ssh-authorized-keys ]; then
     cp /mnt/ssh-authorized-keys /home/testuser/.ssh/authorized_keys
     chmod 600 /home/testuser/.ssh/authorized_keys
@@ -55,7 +54,6 @@ if [ -z "$NBKP_BASTION_ONLY" ]; then
         [ -e "/dev/loop$n" ] || mknod "/dev/loop$n" b 7 "$n" 2>/dev/null || true
     done
 
-    # Create btrfs filesystem on a file-backed image
     BTRFS_IMG="${BTRFS_PATH}.img"
     truncate -s 256M "$BTRFS_IMG"
     mkfs.btrfs -f "$BTRFS_IMG"
@@ -71,15 +69,11 @@ if [ -z "$NBKP_BASTION_ONLY" ]; then
     # free nodes to avoid contention at high concurrency.
     mount -o loop -o user_subvol_rm_allowed "$BTRFS_IMG" "$BTRFS_PATH"
 
-    # Create base directories
     mkdir -p "$BACKUP_PATH"
-
-    # Set ownership
     chown -R testuser:testuser "$BACKUP_PATH"
     chown -R testuser:testuser "$BTRFS_PATH"
 
-    # ── LUKS-encrypted file-backed volume ───────────────────────
-    # Disabled by default to speed up container startup (~5-10s).
+    # The LUKS-encrypted volume is disabled by default to speed up container startup (~5-10s).
     # Tests that need LUKS trigger setup lazily via SSH
     # (calling /setup-luks.sh), or set NBKP_LUKS_ENABLED=1 to
     # run it at startup.
@@ -91,7 +85,6 @@ if [ -z "$NBKP_BASTION_ONLY" ]; then
     fi
 fi
 
-# ── udisks2 stack ───────────────────────────────────────────
 # nbkp drives mount management through udisksctl, which talks to udisksd
 # over the system D-Bus and is authorized by polkitd.  This image has no
 # systemd, so start the three daemons directly.  Best-effort: guarded with

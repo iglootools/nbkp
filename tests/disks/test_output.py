@@ -1,5 +1,3 @@
-"""Tests for mount.output display helpers."""
-
 import json
 from io import StringIO
 
@@ -35,7 +33,6 @@ class TestMountStateIcon:
 
 
 def _render(table) -> str:  # type: ignore[no-untyped-def]
-    """Render a Rich renderable to plain text for substring assertions."""
     buf = StringIO()
     Console(file=buf, highlight=False, markup=True).print(table)
     return buf.getvalue()
@@ -43,7 +40,6 @@ def _render(table) -> str:  # type: ignore[no-untyped-def]
 
 class TestMountStatusTableSeverity:
     def test_device_missing_renders_as_warning(self) -> None:
-        """device_present=False shows the warning icon, not the error icon."""
         obs = MountObservation(
             device_present=False,
             luks_unlocked=None,
@@ -54,7 +50,6 @@ class TestMountStatusTableSeverity:
         assert "✗" not in rendered
 
     def test_mounted_false_renders_as_warning(self) -> None:
-        """mounted=False (with device present, no failure reason) -> warning."""
         obs = MountObservation(
             device_present=True,
             luks_unlocked=None,
@@ -77,7 +72,6 @@ class TestMountStatusTableSeverity:
         assert "✗" not in rendered
 
     def test_unlock_failed_renders_luks_as_error(self) -> None:
-        """A real LUKS-stage failure (UNLOCK_FAILED) renders an error on LUKS."""
         obs = MountObservation(
             device_present=True,
             luks_unlocked=False,
@@ -88,7 +82,6 @@ class TestMountStatusTableSeverity:
         assert "✗" in rendered
 
     def test_not_authorized_renders_luks_as_error(self) -> None:
-        """NOT_AUTHORIZED at the unlock step -> error on LUKS column."""
         obs = MountObservation(
             device_present=True,
             luks_unlocked=False,
@@ -99,7 +92,6 @@ class TestMountStatusTableSeverity:
         assert "✗" in rendered
 
     def test_mount_failed_renders_mounted_as_error(self) -> None:
-        """MOUNT_FAILED happens during the mount step -> error on Mounted."""
         obs = MountObservation(
             device_present=True,
             luks_unlocked=True,
@@ -110,7 +102,6 @@ class TestMountStatusTableSeverity:
         assert "✗" in rendered
 
     def test_not_authorized_renders_mounted_as_error(self) -> None:
-        """NOT_AUTHORIZED at the mount step -> error on Mounted column."""
         obs = MountObservation(
             device_present=True,
             luks_unlocked=True,
@@ -131,7 +122,6 @@ class TestBuildMountStatusTable:
         table = build_mount_status_table([("my-vol", obs)])
         assert table.title == "Volume Mount Status:"
         assert len(table.rows) == 1
-        # Name / Device / Unlocked / Mounted — no Strategy column.
         assert len(table.columns) == 4
         assert [c.header for c in table.columns] == [
             "Name",

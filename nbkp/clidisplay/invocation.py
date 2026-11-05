@@ -38,7 +38,6 @@ class Invocation:
         exclude_locations: list[str] | None = None,
         network: str | None = None,
     ) -> Invocation:
-        """Build from Typer option values."""
         return Invocation(
             config_path=config_path,
             locations=tuple(locations or []),

@@ -1,5 +1,3 @@
-"""Demo CLI seed command: create temp folder with config and test data."""
-
 import shlex
 import tempfile
 from importlib.util import find_spec
@@ -34,7 +32,6 @@ from .cmd_handler.seed import SeedError, SeedResult, seed_demo, seed_plan
 
 
 def _luks_setup_instructions(provider: CredentialProvider) -> list[str]:
-    """Return shell lines that set up the LUKS passphrase."""
     match provider:
         case CredentialProvider.ENV:
             return [
@@ -59,7 +56,6 @@ def _luks_setup_instructions(provider: CredentialProvider) -> list[str]:
 
 
 def _require_docker_extra() -> None:
-    """Exit with install hint if docker extra is not installed."""
     if not _HAS_DOCKER:
         typer.echo(
             "Docker support requires the 'docker' extra.\n"
@@ -70,7 +66,6 @@ def _require_docker_extra() -> None:
 
 
 def _step_count(docker: bool, luks: bool) -> int:
-    """Compute the total number of progress bar steps."""
     # Docker: build image, create network, start bastion, wait bastion SSH,
     #         start storage, wait storage SSH = 6
     # LUKS:   read metadata, mount, umount = 3
@@ -183,7 +178,6 @@ def _check_docker_prerequisites() -> None:
 
 
 def _seed_dir(base_dir: Path | None) -> Path:
-    """The fixed *base_dir* (created if missing) or a fresh temp directory."""
     if base_dir is not None:
         base_dir.mkdir(parents=True, exist_ok=True)
         return base_dir
@@ -202,7 +196,6 @@ def _print_summary(
     docker: bool,
     credential_provider: CredentialProvider,
 ) -> None:
-    """Print the summary panel and suggested commands."""
     rows = [
         ("Seed directory", str(result.base_dir)),
         ("Config file", str(result.config_path)),
@@ -321,7 +314,6 @@ def _print_commands(
     has_luks: bool,
     credential_provider: CredentialProvider,
 ) -> None:
-    """Print the suggested commands panel."""
     _console.print(
         Panel(
             Syntax(

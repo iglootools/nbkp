@@ -61,16 +61,12 @@ class _Progress:
             DestinationEndpointStatus,
         )
     ](self, label: str, run: Callable[[], S]) -> S:
-        """Run *run* between the start/end callbacks for *label*."""
         if self.on_start is not None:
             self.on_start(label)
         status = run()
         if self.on_end is not None:
             self.on_end(label, status.errors)
         return status
-
-
-# ── Top-level orchestration ─────────────────────────────────
 
 
 def check_all_syncs(
@@ -144,9 +140,6 @@ def _needed_volumes(
     )
 
 
-# ── Phase 1: SSH endpoints ────────────────────────────────
-
-
 def _check_ssh_endpoints(
     config: Config,
     needed_volumes: set[str],
@@ -154,13 +147,10 @@ def _check_ssh_endpoints(
     resolved_endpoints: ResolvedEndpoints,
     progress: _Progress,
 ) -> dict[str, SshEndpointStatus]:
-    """Observe and interpret SSH endpoint statuses.
+    """Each endpoint is probed once, through a representative volume.
 
-    Groups volumes by their SSH endpoint, picks a representative volume for
-    dispatching commands, computes tool needs from config, and creates an
-    ``SshEndpointStatus`` for each unique endpoint.  Endpoints no needed
-    volume uses (bastions, alternates, orphans) are probed for reachability
-    only.
+    Endpoints no needed volume uses (bastions, alternates, orphans) are
+    probed for reachability only.
     """
     by_endpoint = _volumes_by_ssh_endpoint(config, needed_volumes)
     volume_endpoints = {
@@ -204,7 +194,6 @@ def _check_volume_ssh_endpoint(
     syncs: dict[str, SyncConfig],
     resolved_endpoints: ResolvedEndpoints,
 ) -> SshEndpointStatus:
-    """Probe a volume-backed endpoint through a representative volume."""
     diag = observe_ssh_endpoint(
         config.volumes[vol_slugs[0]],
         resolved_endpoints=resolved_endpoints,
@@ -230,11 +219,6 @@ def _check_standalone_endpoint(config: Config, slug: str) -> SshEndpointStatus:
 
 
 def _ssh_endpoint_slug(volume: Volume) -> str:
-    """Return the SSH endpoint slug for a volume.
-
-    Local volumes use the implicit ``"localhost"`` endpoint.
-    Remote volumes use their SSH endpoint slug.
-    """
     match volume:
         case LocalVolume():
             return "localhost"
@@ -247,7 +231,6 @@ def _endpoints_on(
     vol_slugs: list[str],
     syncs: dict[str, SyncConfig],
 ) -> list[SyncEndpoint]:
-    """Sync endpoints (either side of a selected sync) on the given volumes."""
     return [
         ep
         for sync in syncs.values()
@@ -261,11 +244,6 @@ def _compute_tool_needs(
     vol_slugs: list[str],
     syncs: dict[str, SyncConfig],
 ) -> SshEndpointToolNeeds:
-    """Compute what tools are required on an SSH endpoint.
-
-    Scans volumes and sync endpoints on the given volumes to determine
-    which host-level tools are needed.
-    """
     endpoints = _endpoints_on(config, vol_slugs, syncs)
     btrfs_volumes = {ep.volume for ep in endpoints if ep.btrfs_snapshots.enabled}
     mount_volumes = {v for v in vol_slugs if config.volumes[v].mount is not None}
@@ -277,9 +255,6 @@ def _compute_tool_needs(
         # btrfs and wants the udisks btrfs module.
         has_btrfs_mount=bool(mount_volumes & btrfs_volumes),
     )
-
-
-# ── Phase 2: Volumes ──────────────────────────────────────
 
 
 def _check_volumes(
@@ -333,9 +308,6 @@ def _check_volume(
     )
 
 
-# ── Phase 3: Sync endpoints ──────────────────────────────
-
-
 def _check_sync_endpoints(
     config: Config,
     syncs: dict[str, SyncConfig],
@@ -344,7 +316,6 @@ def _check_sync_endpoints(
     resolved_endpoints: ResolvedEndpoints,
     progress: _Progress,
 ) -> tuple[dict[str, SourceEndpointStatus], dict[str, DestinationEndpointStatus]]:
-    """Observe and interpret the unique source and destination endpoints."""
     src_eps = {
         config.source_endpoint(s).slug: config.source_endpoint(s)
         for s in syncs.values()
@@ -389,7 +360,6 @@ def _check_source_endpoint(
     probe: _EndpointProbe | None,
     resolved_endpoints: ResolvedEndpoints,
 ) -> SourceEndpointStatus:
-    """Observe (when the volume is active) and interpret a source endpoint."""
     return SourceEndpointStatus.from_diagnostics(
         endpoint=ep,
         volume_status=volume_status,
@@ -413,7 +383,6 @@ def _check_destination_endpoint(
     probe: _EndpointProbe | None,
     resolved_endpoints: ResolvedEndpoints,
 ) -> DestinationEndpointStatus:
-    """Observe (when the volume is active) and interpret a destination endpoint."""
     return DestinationEndpointStatus.from_diagnostics(
         endpoint=ep,
         volume_status=volume_status,
@@ -462,9 +431,6 @@ def _endpoint_probe(
     )
 
 
-# ── Phase 4: Syncs ───────────────────────────────────────
-
-
 def _sync_statuses(
     config: Config,
     syncs: dict[str, SyncConfig],
@@ -484,9 +450,6 @@ def _sync_statuses(
         )
         for slug, sync in syncs.items()
     }
-
-
-# ── Convenience functions ─────────────────────────────────
 
 
 def check_sync(
@@ -513,11 +476,7 @@ def check_volume(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> VolumeStatus:
-    """Convenience: observe + interpret in one call.
-
-    Creates an implicit SSH endpoint status and runs volume observation.
-    Kept for use in integration/docker tests that call it directly.
-    """
+    """Kept for use in integration/docker tests that call it directly."""
     re = resolved_endpoints or {}
     ssh_status = SshEndpointStatus.from_diagnostics(
         slug=_ssh_endpoint_slug(volume),

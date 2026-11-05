@@ -1,5 +1,3 @@
-"""Tests for nbkp.sh."""
-
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -370,7 +368,6 @@ class TestVolumeChecks:
         script = generate_script(
             config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
         )
-        # Remote volume check uses ssh
         assert "ssh" in script
         assert "/volume1/backups/.nbkp-vol" in script
 
@@ -521,7 +518,6 @@ class TestPreflightChecks:
         script = generate_script(
             config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
         )
-        # Remote destination checks should use ssh
         assert "ssh" in script
         assert ".nbkp-dst" in script
 
@@ -815,7 +811,6 @@ class TestEdgeCases:
             },
         )
         script = generate_script(config, _OPTIONS, now=_NOW)
-        # Paths with spaces should be properly quoted
         assert "'/mnt/my data/'" in script
         assert "'/mnt/my backup/'" in script
         result = subprocess.run(
@@ -1165,9 +1160,7 @@ class TestRelativePaths:
             relative_dst=True,
         )
         script = generate_script(config, options, now=_NOW)
-        # Source stays absolute
         assert "/mnt/src/photos/" in script
-        # Dest uses NBKP_SCRIPT_DIR-relative path
         assert "${NBKP_SCRIPT_DIR}" in script
         assert "/mnt/dst/backup/" not in script
 
@@ -1180,9 +1173,7 @@ class TestRelativePaths:
             relative_src=True,
         )
         script = generate_script(config, options, now=_NOW)
-        # Source uses NBKP_SCRIPT_DIR-relative path
         assert "${NBKP_SCRIPT_DIR}" in script
-        # Dest stays absolute
         assert "/mnt/dst/backup/" in script
 
     def test_relative_both(self) -> None:
@@ -1196,7 +1187,6 @@ class TestRelativePaths:
         )
         script = generate_script(config, options, now=_NOW)
         assert "${NBKP_SCRIPT_DIR}" in script
-        # Both absolute paths replaced
         assert "/mnt/src/photos/" not in script
         assert "/mnt/dst/backup/" not in script
 
@@ -1210,7 +1200,6 @@ class TestRelativePaths:
             relative_src=True,
         )
         script = generate_script(config, options, now=_NOW, resolved_endpoints=resolved)
-        # Local source relativized
         assert "${NBKP_SCRIPT_DIR}" in script
         # Remote dest stays absolute
         assert "nas.example.com" in script
@@ -1225,7 +1214,6 @@ class TestRelativePaths:
             relative_dst=True,
         )
         script = generate_script(config, options, now=_NOW, resolved_endpoints=resolved)
-        # Local dest relativized
         assert "${NBKP_SCRIPT_DIR}" in script
         # Remote source stays absolute
         assert "admin@remote.example.com" in script
@@ -1317,9 +1305,7 @@ class TestRelativePaths:
             relative_dst=True,
         )
         script = generate_script(config, options, now=_NOW)
-        # Dst volume check should use relative path
         assert "${NBKP_SCRIPT_DIR}" in script
-        # Src volume check stays absolute
         assert "test -f /mnt/src/.nbkp-vol" in script
 
     def test_relative_preflight_checks(self) -> None:
@@ -1331,15 +1317,12 @@ class TestRelativePaths:
             relative_dst=True,
         )
         script = generate_script(config, options, now=_NOW)
-        # Source preflight stays absolute
         assert "/mnt/src/photos/.nbkp-src" in script
-        # Dest preflight uses relative
         assert ".nbkp-dst" in script
 
 
 class TestDependencyGuard:
     def test_downstream_sync_has_guard(self) -> None:
-        """A downstream sync should have a dependency guard."""
         src = LocalVolume(slug="src", path="/src")
         mid = LocalVolume(slug="mid", path="/mid")
         dst = LocalVolume(slug="dst", path="/dst")
@@ -1372,13 +1355,11 @@ class TestDependencyGuard:
         ) in script
 
     def test_independent_syncs_no_guard(self) -> None:
-        """Independent syncs should not have guards."""
         config = _local_to_local_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert 'nbkp_run_sync my-sync sync_my_sync "$NBKP_PF_sync_my_sync"\n' in script
 
     def test_dependency_guard_valid_syntax(self) -> None:
-        """Generated script with guards must pass bash -n."""
         src = LocalVolume(slug="src", path="/src")
         mid = LocalVolume(slug="mid", path="/mid")
         dst = LocalVolume(slug="dst", path="/dst")
@@ -1442,21 +1423,18 @@ class TestNoPortable:
         )
 
     def test_uses_declare_a(self) -> None:
-        """--no-portable uses declare -A."""
         opts = ScriptOptions(platform="linux", config_path="test.yaml", portable=False)
         script = generate_script(self._chain_config(), opts, now=_NOW)
         assert "declare -A NBKP_FAILED=()" in script
         assert 'NBKP_FAILED=" "' not in script
 
     def test_associative_array_guard(self) -> None:
-        """--no-portable uses associative array for guards."""
         opts = ScriptOptions(platform="linux", config_path="test.yaml", portable=False)
         script = generate_script(self._chain_config(), opts, now=_NOW)
         assert "NBKP_FAILED[$1]=1" in script
         assert '${NBKP_FAILED[$1]+set}" = "set"' in script
 
     def test_valid_bash_syntax(self) -> None:
-        """--no-portable script passes bash -n."""
         opts = ScriptOptions(platform="linux", config_path="test.yaml", portable=False)
         script = generate_script(self._chain_config(), opts, now=_NOW)
         result = subprocess.run(
@@ -1471,7 +1449,6 @@ class TestNoPortable:
     def test_simple_sync_uses_associative_array(
         self,
     ) -> None:
-        """--no-portable uses associative array for simple."""
         config = _local_to_local_config()
         opts = ScriptOptions(platform="linux", config_path="test.yaml", portable=False)
         script = generate_script(config, opts, now=_NOW)

@@ -38,7 +38,6 @@ def _is_package(label: str) -> bool:
 
 
 def _run_pydeps(package: str = PACKAGE) -> str:
-    """Run pydeps and return DOT output."""
     if not shutil.which("dot"):
         print(
             "Error: graphviz is not installed.\n"
@@ -80,25 +79,22 @@ def _dot_to_mermaid(dot: str) -> str:
     pydeps edges point from dependency to dependent (A -> B means "A is used by B"),
     so we reverse them to match the convention "B depends on A" (B --> A).
     """
-    # Extract node declarations: node_id [... label="name" ...]
     node_pattern = re.compile(r'^\s+(\w+)\s+\[.*?label="([^"]+)".*?\]', re.MULTILINE)
     nodes: dict[str, str] = {}
     for match in node_pattern.finditer(dot):
         node_id, label = match.group(1), match.group(2)
         nodes[node_id] = label
 
-    # Extract edges: src -> dst
     edge_pattern = re.compile(r"^\s+(\w+)\s+->\s+(\w+)", re.MULTILINE)
     edges: list[tuple[str, str]] = []
     for match in edge_pattern.finditer(dot):
         dep, dependent = match.group(1), match.group(2)
-        # Reverse: dependent depends on dep
+        # pydeps draws dep -> dependent; the graph points from the dependent.
         edges.append((nodes.get(dependent, dependent), nodes.get(dep, dep)))
 
-    # Build mermaid
     lines = ["graph TD"]
 
-    # Node declarations (sorted for determinism)
+    # Sorted so that --check compares against stable output.
     for node_id in sorted(nodes):
         label = nodes[node_id]
         display = f"{label}/" if _is_package(label) else label
@@ -106,7 +102,6 @@ def _dot_to_mermaid(dot: str) -> str:
 
     lines.append("")
 
-    # Edges (sorted for determinism)
     for src, dst in sorted(edges):
         lines.append(f"    {src} --> {dst}")
 
@@ -120,7 +115,6 @@ def _render_ascii(mermaid_src: str) -> str:
 
 
 def _build_section(mermaid: str) -> str:
-    """Build the marker-delimited section content."""
     return (
         f"{BEGIN_MARKER}\n"
         "## Module Overview\n"
@@ -134,7 +128,6 @@ def _build_section(mermaid: str) -> str:
 
 
 def _splice_section(file_content: str, section: str) -> str:
-    """Replace content between markers in the file."""
     begin_idx = file_content.find(BEGIN_MARKER)
     end_idx = file_content.find(END_MARKER)
     if begin_idx == -1 or end_idx == -1:
@@ -177,7 +170,6 @@ def main(
     dot = _run_pydeps()
     mermaid = _dot_to_mermaid(dot)
 
-    # --format: print to stdout and exit
     if fmt is not None:
         match fmt:
             case GraphFormat.MERMAID:
@@ -186,7 +178,6 @@ def main(
                 print(_render_ascii(mermaid))
         return
 
-    # Default: update architecture.md (or --check)
     section = _build_section(mermaid)
     current = ARCHITECTURE_MD.read_text() if ARCHITECTURE_MD.exists() else ""
     expected = _splice_section(current, section)

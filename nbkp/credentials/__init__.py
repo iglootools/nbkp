@@ -13,8 +13,6 @@ from ..config import Config, CredentialProvider
 
 
 class CredentialErrorReason(StrEnum):
-    """Structured error codes for passphrase retrieval failures."""
-
     NOT_INSTALLED = "not-installed"
     NOT_FOUND = "not-found"
     ENV_UNSET = "env-unset"
@@ -23,8 +21,6 @@ class CredentialErrorReason(StrEnum):
 
 
 class CredentialError(Exception):
-    """Raised when a passphrase cannot be retrieved."""
-
     def __init__(self, message: str, reason: CredentialErrorReason) -> None:
         super().__init__(message)
         self.reason = reason
@@ -110,9 +106,7 @@ def retrieve_passphrase(
     environ: Mapping[str, str] = os.environ,
     prompt: PromptFn | None = None,
 ) -> str:
-    """Retrieve a LUKS passphrase using the configured provider.
-
-    ``environ`` is where the ``env`` provider looks the passphrase up;
+    """``environ`` is where the ``env`` provider looks the passphrase up;
     ``prompt`` is how the ``prompt`` provider asks for it.
     """
     match provider:
@@ -140,13 +134,11 @@ class PassphraseCache:
         passphrase_id: str,
         retrieve_fn: Callable[[str], str],
     ) -> str:
-        """Return cached passphrase or retrieve and cache it."""
         if passphrase_id not in self._cache:
             self._cache[passphrase_id] = SecretStr(retrieve_fn(passphrase_id))
         return self._cache[passphrase_id].get_secret_value()
 
     def clear(self) -> None:
-        """Drop all cached passphrases."""
         self._cache.clear()
 
 
@@ -210,8 +202,6 @@ def is_prefetchable(provider: CredentialProvider) -> bool:
 
 @dataclass(frozen=True)
 class PassphrasePrefetch:
-    """Outcome of eagerly retrieving one configured passphrase."""
-
     passphrase_id: str
     volumes: tuple[str, ...]
     success: bool
@@ -270,7 +260,6 @@ def _prefetch_one(
     on_prefetch_start: Callable[[str], None] | None,
     on_prefetch_end: Callable[[str, PassphrasePrefetch], None] | None,
 ) -> PassphrasePrefetch:
-    """Retrieve one passphrase, reporting progress and capturing failure."""
     if on_prefetch_start is not None:
         on_prefetch_start(pid)
     try:

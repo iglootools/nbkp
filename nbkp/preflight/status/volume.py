@@ -20,25 +20,20 @@ from .ssh import SshEndpointStatus
 
 
 class VolumeError(str, enum.Enum):
-    """Volume-level errors.
-
-    Only volume-specific errors remain here.  SSH reachability and host
-    tool availability errors moved to ``SshEndpointError``.
+    """SSH reachability and host tool availability errors are
+    ``SshEndpointError``s, not volume errors.
     """
 
-    # Mount management — runtime state
     VOLUME_NOT_MOUNTED = "volume not mounted"
 
-    # Sentinel management
     SENTINEL_NOT_FOUND = f"{VOLUME_SENTINEL} volume sentinel not found"
 
-    # Mount management — lifecycle errors
     DEVICE_NOT_PRESENT = "device not plugged in"
     UNLOCK_FAILED = "failed to unlock luks encrypted device"
     MOUNT_FAILED = "failed to mount volume"
     PASSPHRASE_NOT_AVAILABLE = "passphrase not available"
 
-    # Mount management — fstab config (fixed-path / Option A only)
+    # fstab config: fixed-path (Option A) mounts only
     FSTAB_MOUNTPOINT_MISMATCH = "no fstab entry maps the device to the configured path"
 
     # Auth rules (polkit only — udisks has no sudoers path)
@@ -88,14 +83,11 @@ class VolumeDiagnostics(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     capabilities: VolumeCapabilities | None = None
-    """Volume-level capabilities.
-    ``None`` when the volume sentinel is missing and no mount config
+    """``None`` when the volume sentinel is missing and no mount config
     to probe (rare — usually at least sentinel_exists is set)."""
 
 
 class VolumeStatus(BaseModel):
-    """Runtime status of a volume."""
-
     model_config = ConfigDict(frozen=True)
 
     slug: str
@@ -118,9 +110,7 @@ class VolumeStatus(BaseModel):
         ssh_endpoint_status: SshEndpointStatus,
         diagnostics: VolumeDiagnostics | None,
     ) -> VolumeStatus:
-        """Create status by interpreting diagnostics into errors.
-
-        Only remote volumes cascade an inactive SSH endpoint: localhost is
+        """Only remote volumes cascade an inactive SSH endpoint: localhost is
         always reachable, and its tool errors surface at the sync level as
         ``SyncError.ENDPOINT_HOST_ERRORS`` instead.
         """
@@ -139,14 +129,10 @@ class VolumeStatus(BaseModel):
         )
 
 
-# ── Layer 2 error interpretation ───────────────────────────
-
-
 def _volume_errors(
     diag: VolumeDiagnostics,
     mount: MountConfig | None = None,
 ) -> list[VolumeError]:
-    """Translate volume diagnostics into VolumeError values."""
     match (diag.capabilities, mount):
         case (None | VolumeCapabilities(sentinel_exists=True), _):
             return []
@@ -159,16 +145,10 @@ def _volume_errors(
 def _mount_sentinel_error(mount_caps: MountCapabilities) -> VolumeError:
     """Most specific reason a mount-managed volume's sentinel is missing.
 
-    Order:
-
-    1. Lifecycle recorded a known cause (e.g. NOT_AUTHORIZED →
-       POLKIT_RULES_MISSING) — surface that so troubleshoot points at the
-       real fix.
-    2. device not plugged in — DEVICE_NOT_PRESENT.
-    3. path declared but no fstab entry maps the device there —
-       FSTAB_MOUNTPOINT_MISMATCH (udisks would mount at /run/media).
-    4. device present but unmounted — VOLUME_NOT_MOUNTED.
-    5. Otherwise, fall back to SENTINEL_NOT_FOUND.
+    A cause the mount lifecycle recorded (e.g. NOT_AUTHORIZED →
+    POLKIT_RULES_MISSING) wins, so troubleshoot points at the real fix.
+    A missing fstab entry matters because udisks would then mount at
+    /run/media rather than at the declared path.
     """
     specific = _mount_lifecycle_failure_error(mount_caps)
     match mount_caps:
@@ -187,9 +167,7 @@ def _mount_sentinel_error(mount_caps: MountCapabilities) -> VolumeError:
 def _mount_lifecycle_failure_error(
     mount_caps: MountCapabilities,
 ) -> VolumeError | None:
-    """Map a lifecycle ``MountFailureReason`` to a more specific VolumeError.
-
-    Returns ``None`` when no upgrade is available — caller falls back to
+    """Returns ``None`` when no upgrade is available — caller falls back to
     DEVICE_NOT_PRESENT / VOLUME_NOT_MOUNTED / SENTINEL_NOT_FOUND.
     """
     match mount_caps.mount_failure_reason:

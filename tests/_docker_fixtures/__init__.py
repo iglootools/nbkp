@@ -81,7 +81,6 @@ def assert_sentinels_after_sync(
     vol_path = dst_vol.path
     subdir = dst_ep.subdir
 
-    # Where rsync actually wrote files
     if dest_suffix:
         if subdir:
             rsync_target = f"{vol_path}/{subdir}/{dest_suffix}"
@@ -92,7 +91,6 @@ def assert_sentinels_after_sync(
     else:
         rsync_target = vol_path
 
-    # Where .nbkp-dst lives
     if subdir:
         sentinel_dir = f"{vol_path}/{subdir}"
     else:
@@ -109,19 +107,15 @@ def assert_sentinels_after_sync(
             case RemoteVolume():
                 return _remote_exists(path)
 
-    # 1. .nbkp-src must NOT be at the rsync target
     assert not _check_exists(f"{rsync_target}/.nbkp-src"), (
         f".nbkp-src was copied to rsync target {rsync_target}"
     )
 
-    # 2. .nbkp-vol must NOT be at the rsync target
-    #    (unless rsync target IS the volume root)
     if rsync_target != vol_path:
         assert not _check_exists(f"{rsync_target}/.nbkp-vol"), (
             f".nbkp-vol found at rsync target {rsync_target}"
         )
 
-    # 3. .nbkp-dst must still exist at the sentinel dir
     assert _check_exists(f"{sentinel_dir}/.nbkp-dst"), (
         f".nbkp-dst missing from {sentinel_dir}"
     )
@@ -165,7 +159,6 @@ def ssh_key_pair() -> Generator[tuple[Path, Path]]:
 
 @pytest.fixture(scope="session")
 def _docker_image() -> str:
-    """Build the Docker image and return its tag."""
     from testcontainers.core.image import DockerImage
 
     image = DockerImage(
@@ -422,9 +415,6 @@ def remote_hardlink_volume() -> RemoteVolume:
     )
 
 
-# ── LUKS / encrypted volume fixtures ────────────────────────────
-
-
 @pytest.fixture(scope="session")
 def luks_metadata(docker_ssh_endpoint: SshEndpoint) -> LuksMetadata:
     """Lazily set up LUKS and read metadata from the Docker container.
@@ -506,9 +496,6 @@ def remote_unencrypted_volume(unencrypted_uuid: str) -> RemoteVolume:
     )
 
 
-# ── Cleanup ─────────────────────────────────────────────────────
-
-
 def _build_cleanup_script(luks_mapper_name: str) -> str:
     """Build a single bash script that cleans all test artifacts.
 
@@ -521,7 +508,6 @@ def _build_cleanup_script(luks_mapper_name: str) -> str:
 #!/bin/bash
 set -e
 
-# Helper: clean btrfs snapshot artifacts at a given base path
 clean_btrfs_base() {{
     local base="$1"
     if [ -d "$base/snapshots" ]; then
@@ -536,17 +522,14 @@ clean_btrfs_base() {{
     rm -rf "$base/snapshots" 2>/dev/null || true
 }}
 
-# Clean /srv/backups
 rm -rf {REMOTE_BACKUP_PATH}/*
 find {REMOTE_BACKUP_PATH} -name '.nbkp-*' -delete 2>/dev/null || true
 
-# Clean btrfs root and subpaths
 clean_btrfs_base {REMOTE_BTRFS_PATH}
 clean_btrfs_base {REMOTE_BTRFS_PATH}/snapshots
 rm -rf {REMOTE_BTRFS_PATH}/bare 2>/dev/null || true
 find {REMOTE_BTRFS_PATH} -name '.nbkp-*' -delete 2>/dev/null || true
 
-# Clean encrypted volume (if LUKS was set up)
 if [ -f /srv/luks-uuid ]; then
     LUKS_UUID=$(cat /srv/luks-uuid)
     if [ -n "$LUKS_UUID" ]; then
@@ -579,7 +562,6 @@ def _cleanup_remote(
     """
     yield
 
-    # Only clean up if docker_ssh_endpoint was used by this test
     if "docker_ssh_endpoint" not in request.fixturenames:
         return
 

@@ -1,5 +1,3 @@
-"""Pre-flight checks for volumes and syncs."""
-
 from .checks import (
     check_all_syncs,
     check_sync,

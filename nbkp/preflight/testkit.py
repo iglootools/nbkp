@@ -75,8 +75,6 @@ def _demo_ssh_statuses(
     }
 
 
-# ── Shared helpers ────────────────────────────────────────────
-
 _LOCALHOST_SSH_STATUS = SshEndpointStatus.from_diagnostics(
     slug="localhost",
     diagnostics=SshEndpointDiagnostics(
@@ -105,7 +103,6 @@ _LOCALHOST_SSH_STATUS_BTRFS = SshEndpointStatus.from_diagnostics(
 
 
 def _standalone_ssh_status(slug: str, *, reachable: bool = True) -> SshEndpointStatus:
-    """SSH-reachability-only status for endpoints not tied to a volume."""
     return SshEndpointStatus.from_diagnostics(
         slug=slug,
         diagnostics=SshEndpointDiagnostics(ssh_reachable=reachable),
@@ -126,7 +123,6 @@ def _active_src_ep_status(
     *,
     snapshot_mode: bool = False,
 ) -> SourceEndpointStatus:
-    """Build an active SourceEndpointStatus (sentinel exists, no errors)."""
     return SourceEndpointStatus(
         endpoint_slug=endpoint_slug,
         volume_status=volume_status,
@@ -158,7 +154,6 @@ def _active_dst_ep_status(
     volume_status: VolumeStatus,
     diagnostics: DestinationEndpointDiagnostics | None = None,
 ) -> DestinationEndpointStatus:
-    """Build an active DestinationEndpointStatus."""
     diag = diagnostics or DestinationEndpointDiagnostics(
         endpoint_slug=endpoint_slug,
         sentinel_exists=True,
@@ -176,7 +171,6 @@ def _inactive_dst_ep_status(
     endpoint_slug: str,
     volume_status: VolumeStatus,
 ) -> DestinationEndpointStatus:
-    """Build a DestinationEndpointStatus where volume is inactive."""
     return DestinationEndpointStatus(
         endpoint_slug=endpoint_slug,
         volume_status=volume_status,
@@ -193,7 +187,6 @@ def _inactive_src_ep_status(
     endpoint_slug: str,
     volume_status: VolumeStatus,
 ) -> SourceEndpointStatus:
-    """Build a SourceEndpointStatus where volume is inactive."""
     return SourceEndpointStatus(
         endpoint_slug=endpoint_slug,
         volume_status=volume_status,
@@ -202,9 +195,6 @@ def _inactive_src_ep_status(
             [SourceEndpointError.VOLUME_INACTIVE] if not volume_status.active else []
         ),
     )
-
-
-# ── check_config / check_data ────────────────────────────────
 
 
 def check_config() -> Config:
@@ -305,7 +295,6 @@ def check_data(
         btrfs_user_subvol_rm=True,
     )
 
-    # SSH endpoint statuses
     localhost_ssh = _LOCALHOST_SSH_STATUS
     localhost_ssh_btrfs = _LOCALHOST_SSH_STATUS_BTRFS
 
@@ -401,7 +390,6 @@ def check_data(
         "mount-unencrypted": mount_unencrypted_vs,
     }
 
-    # Source/destination endpoint statuses for active syncs
     photos_src_ep = _active_src_ep_status("laptop-photos", laptop_vs)
     photos_dst_ep = _active_dst_ep_status(
         "usb-photos",
@@ -523,11 +511,7 @@ def check_data(
     )
 
 
-# ── troubleshoot_config / troubleshoot_data ───────────────────
-
-
 def _troubleshoot_volumes() -> dict[str, LocalVolume]:
-    """Extra local volumes for troubleshoot scenarios."""
     return {
         "usb-1": LocalVolume(slug="usb-1", path="/mnt/usb-1"),
         "usb-2": LocalVolume(slug="usb-2", path="/mnt/usb-2"),
@@ -637,8 +621,6 @@ def _troubleshoot_volumes() -> dict[str, LocalVolume]:
         "usb-15": LocalVolume(slug="usb-15", path="/mnt/usb-15"),
     }
 
-
-# ── Troubleshoot SSH endpoint statuses ────────────────────────
 
 # localhost with udisksctl missing (for mount-encrypted scenario)
 _TROUBLESHOOT_LOCALHOST_MOUNT_ENCRYPTED_SSH = SshEndpointStatus.from_diagnostics(
@@ -938,8 +920,6 @@ _TROUBLESHOOT_NAS_REACHABLE_SSH = SshEndpointStatus.from_diagnostics(
 )
 
 
-# ── Troubleshoot volume capabilities ─────────────────────────
-
 # mount-encrypted: udisks tools missing at SSH level; volume probe shows the
 # device is present but not unlocked/mounted (VOLUME_NOT_MOUNTED).
 _MOUNT_ENCRYPTED_CAPS = VolumeCapabilities(
@@ -1089,7 +1069,6 @@ def troubleshoot_config() -> Config:
     )
 
     sync_endpoints: dict[str, SyncEndpoint] = {
-        # Source endpoints
         "laptop-src": SyncEndpoint(
             slug="laptop-src",
             volume="laptop",
@@ -1183,7 +1162,6 @@ def troubleshoot_config() -> Config:
             slug="dst-no-snap-perms",
             volume="usb-9",
         ),
-        # Mount management endpoints
         "mount-encrypted-dst": SyncEndpoint(
             slug="mount-encrypted-dst",
             volume="mount-encrypted",
@@ -1217,7 +1195,6 @@ def troubleshoot_config() -> Config:
             slug="mount-polkit-refused-dst",
             volume="mount-polkit-refused",
         ),
-        # Symlink error endpoints
         "dst-latest-missing": SyncEndpoint(
             slug="dst-latest-missing",
             volume="usb-10",
@@ -1445,14 +1422,11 @@ def troubleshoot_data(
     - Sync level: disabled, latest → /dev/null interpretation
     """
 
-    # ── Layer 1: SSH endpoint statuses ────────────────────────
     # The troubleshoot output collects SSH statuses from volume statuses,
     # so we embed the appropriate SSH status in each volume.
 
     localhost_ssh = _LOCALHOST_SSH_STATUS
     localhost_ssh_btrfs = _LOCALHOST_SSH_STATUS_BTRFS
-
-    # ── Layer 2: Volume statuses ──────────────────────────────
 
     # laptop: sentinel missing (Layer 2 error)
     laptop_vs = VolumeStatus(
@@ -1912,8 +1886,7 @@ def troubleshoot_data(
         "usb-15": usb15_vs,
     }
 
-    # ── Source endpoint status (shared by most syncs) ─────────
-    # laptop-src: volume sentinel missing → source EP inactive (no diag)
+    # laptop-src (shared by most syncs): volume sentinel missing → source EP inactive (no diag)
     laptop_src_inactive = _inactive_src_ep_status("laptop-src", laptop_vs)
 
     # laptop-src with active volume (for syncs where laptop is active)
@@ -1932,7 +1905,6 @@ def troubleshoot_data(
         ),
         errors=[],
     )
-    # ── Build sync statuses ───────────────────────────────────
 
     sync_statuses: dict[str, SyncStatus] = {}
 
@@ -2278,7 +2250,7 @@ def troubleshoot_data(
     )
 
     # mount-encrypted-errors: SSH endpoint has mount tool errors (Layer 1)
-    # + volume has polkit rule missing (Layer 2)
+    # + volume not mounted (Layer 2)
     sync_statuses["mount-encrypted-errors"] = SyncStatus(
         slug="mount-encrypted-errors",
         config=config.syncs["mount-encrypted-errors"],
@@ -2292,7 +2264,7 @@ def troubleshoot_data(
         ],
     )
 
-    # mount-unencrypted-errors: volume has mount unit not configured (Layer 2)
+    # mount-unencrypted-errors: volume not mounted (Layer 2)
     sync_statuses["mount-unencrypted-errors"] = SyncStatus(
         slug="mount-unencrypted-errors",
         config=config.syncs["mount-unencrypted-errors"],

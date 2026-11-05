@@ -1,5 +1,3 @@
-"""Rich progress bar for disk mount/umount operations."""
-
 from collections.abc import Callable
 from types import TracebackType
 from typing import Self
@@ -31,7 +29,6 @@ from ..policy import Severity
 def format_mount_result(
     slug: str, severity: Severity, detail: str | None, _warning: str | None
 ) -> Text:
-    """Format a mount result as a styled result line."""
     return Text.assemble(
         (severity_symbol(severity), severity_style(severity)),
         f" mount {slug}",
@@ -42,7 +39,6 @@ def format_mount_result(
 def format_credential_result(
     passphrase_id: str, severity: Severity, detail: str | None, _warning: str | None
 ) -> Text:
-    """Format a passphrase prefetch result as a styled result line."""
     return Text.assemble(
         (severity_symbol(severity), severity_style(severity)),
         f" credential {passphrase_id}",
@@ -53,7 +49,6 @@ def format_credential_result(
 def format_umount_result(
     slug: str, severity: Severity, detail: str | None, warning: str | None
 ) -> Text:
-    """Format an umount result as a styled result line."""
     return Text.assemble(
         (severity_symbol(severity), severity_style(severity)),
         f" umount {slug}",
@@ -63,21 +58,10 @@ def format_umount_result(
 
 
 class DisksProgressBar:
-    """Rich progress bar for mount/umount operations.
+    """Transient bar: spinner, current volume name, bar and M/N counter.
 
-    Manages a transient progress bar that shows a spinner, description
-    (current volume name), visual bar, and M/N counter.  Result lines
-    are printed above the bar as each volume completes.
-
-    Parameters
-    ----------
-    total:
-        Number of volumes to process.
-    label:
-        Verb shown in the progress description (e.g. ``"Mounting"``).
-    format_result:
-        Callable that formats a result line given ``(slug, severity,
-        detail, warning)``.  Called once per volume on completion.
+    Result lines are printed above the bar as each volume completes.
+    *label* is the verb shown before the volume name (e.g. ``"Mounting"``).
     """
 
     def __init__(
@@ -93,7 +77,6 @@ class DisksProgressBar:
         self._task_id: TaskID | None = None
 
     def on_start(self, slug: str) -> None:
-        """Call at the beginning of each volume operation."""
         if self._progress is None:
             self._progress = Progress(
                 SpinnerColumn(),
@@ -121,7 +104,6 @@ class DisksProgressBar:
         detail: str | None = None,
         warning: str | None = None,
     ) -> None:
-        """Call at the end of each volume operation."""
         if self._progress is not None:
             assert self._task_id is not None
             line = self._format_result(slug, severity, detail, warning)
@@ -129,7 +111,7 @@ class DisksProgressBar:
             self._progress.advance(self._task_id)
 
     def stop(self) -> None:
-        """Stop the progress bar (idempotent)."""
+        """Idempotent."""
         if self._progress is not None:
             self._progress.stop()
 

@@ -47,8 +47,6 @@ from tests.integration_docker._btrfs_helpers import (
     run_test_returns_none_when_empty,
 )
 
-# ── Remote BtrfsEnv fixture ─────────────────────────────────────────
-
 
 def _make_btrfs_config(
     src_path: str,
@@ -134,9 +132,6 @@ def btrfs_env_remote(
     )
 
 
-# ── Component-level tests (delegated to shared helpers) ─────────────
-
-
 class TestCreateSnapshot:
     def test_creates_readonly_snapshot(self, btrfs_env_remote: BtrfsEnv) -> None:
         run_test_creates_readonly_snapshot(btrfs_env_remote)
@@ -166,9 +161,6 @@ class TestPruneSnapshots:
 
     def test_dry_run_preserves_all(self, btrfs_env_remote: BtrfsEnv) -> None:
         run_test_dry_run_preserves_all(btrfs_env_remote)
-
-
-# ── Sync-flow tests (rsync into staging → snapshot → verify) ────────
 
 
 def _make_btrfs_sync_config(
@@ -224,13 +216,11 @@ class TestBtrfsSnapshots:
             str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
 
-        # Rsync into staging
         result = run_rsync(
             sync, config, resolved_endpoints=resolved, dest_suffix="staging"
         )
         assert result.returncode == 0
 
-        # Create snapshot
         snapshot_path = create_snapshot(
             sync,
             config,
@@ -239,15 +229,12 @@ class TestBtrfsSnapshots:
             resolved_endpoints=resolved,
         )
 
-        # Verify snapshot exists
         check = ssh_exec(docker_ssh_endpoint, f"test -d {snapshot_path}")
         assert check.returncode == 0
 
-        # Update latest symlink
         snapshot = Snapshot.from_path(snapshot_path)
         update_latest_symlink(sync, config, snapshot, resolved_endpoints=resolved)
 
-        # Verify latest symlink
         link = ssh_exec(
             docker_ssh_endpoint,
             f"readlink {REMOTE_BTRFS_PATH}/latest",
@@ -280,7 +267,6 @@ class TestBtrfsSnapshots:
             resolved_endpoints=resolved,
         )
 
-        # Check readonly property
         check = ssh_exec(
             docker_ssh_endpoint,
             f"btrfs property get {snapshot_path} ro",
@@ -302,7 +288,6 @@ class TestBtrfsSnapshots:
             str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
 
-        # First sync + snapshot + symlink
         run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="staging")
         first_snap_path = create_snapshot(
             sync,
@@ -335,7 +320,6 @@ class TestBtrfsSnapshots:
         )
         assert result.returncode == 0
 
-        # Create second snapshot + symlink
         snapshot_path = create_snapshot(
             sync,
             config,
@@ -349,7 +333,6 @@ class TestBtrfsSnapshots:
         snapshot = Snapshot.from_path(snapshot_path)
         update_latest_symlink(sync, config, snapshot, resolved_endpoints=resolved)
 
-        # Verify latest symlink points to second snapshot
         link = ssh_exec(
             docker_ssh_endpoint,
             f"readlink {REMOTE_BTRFS_PATH}/latest",
@@ -366,7 +349,6 @@ class TestBtrfsSnapshots:
         docker_ssh_endpoint: SshEndpoint,
         remote_btrfs_volume: RemoteVolume,
     ) -> None:
-        # Count existing snapshots before dry run
         before = ssh_exec(
             docker_ssh_endpoint,
             f"ls {REMOTE_BTRFS_PATH}/snapshots 2>/dev/null || true",
@@ -381,7 +363,6 @@ class TestBtrfsSnapshots:
             str(src), remote_btrfs_volume, docker_ssh_endpoint
         )
 
-        # Dry-run rsync
         result = run_rsync(
             sync,
             config,
@@ -391,7 +372,6 @@ class TestBtrfsSnapshots:
         )
         assert result.returncode == 0
 
-        # Verify no new snapshot was created
         after = ssh_exec(
             docker_ssh_endpoint,
             f"ls {REMOTE_BTRFS_PATH}/snapshots 2>/dev/null || true",
@@ -441,7 +421,6 @@ class TestPruneBtrfsSnapshotsViaSyncFlow:
 
         self._create_snapshots(sync, config, resolved, 3)
 
-        # Prune to keep only 1
         deleted = prune_snapshots(
             sync,
             config,
@@ -450,7 +429,6 @@ class TestPruneBtrfsSnapshotsViaSyncFlow:
         )
         assert len(deleted) == 2
 
-        # Verify only 1 snapshot remains
         remaining = list_snapshots(
             sync,
             config,
@@ -475,7 +453,6 @@ class TestPruneBtrfsSnapshotsViaSyncFlow:
 
         self._create_snapshots(sync, config, resolved, 3)
 
-        # Dry-run prune
         deleted = prune_snapshots(
             sync,
             config,
@@ -485,7 +462,6 @@ class TestPruneBtrfsSnapshotsViaSyncFlow:
         )
         assert len(deleted) == 2
 
-        # All 3 snapshots still exist
         remaining = list_snapshots(
             sync,
             config,
@@ -510,7 +486,6 @@ class TestPruneBtrfsSnapshotsViaSyncFlow:
 
         self._create_snapshots(sync, config, resolved, 2)
 
-        # Prune with limit higher than count
         deleted = prune_snapshots(
             sync,
             config,
@@ -519,7 +494,6 @@ class TestPruneBtrfsSnapshotsViaSyncFlow:
         )
         assert deleted == []
 
-        # All 2 snapshots still exist
         remaining = list_snapshots(
             sync,
             config,

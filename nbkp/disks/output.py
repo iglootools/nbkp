@@ -1,5 +1,3 @@
-"""Mount status display helpers (Rich tables and JSON)."""
-
 from collections.abc import Sequence
 from typing import Protocol
 

@@ -34,7 +34,6 @@ SSH_CONNECTION_ERRORS: tuple[type[BaseException], ...] = (
 
 
 def is_auth_error(error: BaseException) -> bool:
-    """Whether *error* is an authentication / host-key refusal."""
     return isinstance(error, SSH_AUTH_ERRORS)
 
 

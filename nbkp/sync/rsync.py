@@ -1,5 +1,3 @@
-"""Rsync command building and execution."""
-
 import shlex
 import subprocess
 from collections.abc import Callable
@@ -22,8 +20,6 @@ from ..remote.endpoints import ResolvedEndpoints
 
 
 class ProgressMode(str, Enum):
-    """Rsync progress reporting mode."""
-
     NONE = "none"
     OVERALL = "overall"
     PER_FILE = "per-file"
@@ -42,10 +38,9 @@ _DEFAULT_RSYNC_OPTIONS: list[str] = [
 
 
 def resolve_path(volume: LocalVolume | RemoteVolume, subdir: str | None) -> str:
-    """Resolve the full path for a volume with optional subdir.
-
-    The volume's ``path`` must be resolved by this point (declared in config,
-    or filled from the discovered mountpoint after mounting).
+    """The volume's ``path`` must be resolved by this point (declared in config,
+    or filled from the discovered mountpoint after mounting); raises
+    ``ValueError`` otherwise.
     """
     if volume.path is None:
         msg = f"volume '{volume.slug}': mount path not resolved"
@@ -60,9 +55,7 @@ def resolve_source_path(
     volume: LocalVolume | RemoteVolume,
     source: SyncEndpoint,
 ) -> str:
-    """Resolve source path, appending /latest for snapshots.
-
-    When the source endpoint has snapshots configured (btrfs or
+    """When the source endpoint has snapshots configured (btrfs or
     hard-link), rsync should read from the ``latest/`` directory
     rather than the volume root.  For hard-link snapshots,
     ``latest`` is a symlink — rsync's trailing slash causes it
@@ -76,7 +69,6 @@ def resolve_source_path(
 
 
 def _progress_args(progress: ProgressMode | None) -> list[str]:
-    """Build rsync progress flags for a given mode."""
     match progress:
         case ProgressMode.OVERALL:
             return ["--info=progress2", "--stats", "--human-readable"]
@@ -100,7 +92,6 @@ def _base_rsync_args(
     link_dest: str | None,
     progress: ProgressMode | None = None,
 ) -> list[str]:
-    """Build common rsync flags."""
     rsync_opts = sync.rsync_options
     options = (
         rsync_opts.default_options_override
@@ -120,7 +111,6 @@ def _base_rsync_args(
 
 
 def _filter_args(sync: SyncConfig) -> list[str]:
-    """Build rsync --filter arguments."""
     return [
         *[f"--filter={rule}" for rule in sync.filters],
         *([f"--filter=merge {sync.filter_file}"] if sync.filter_file else []),
@@ -128,7 +118,6 @@ def _filter_args(sync: SyncConfig) -> list[str]:
 
 
 def _dest_target(base: str, dest_suffix: str | None) -> str:
-    """The rsync destination argument: *base* (plus suffix), trailing slash."""
     return f"{base}/{dest_suffix}/" if dest_suffix else f"{base}/"
 
 
@@ -141,11 +130,7 @@ def build_rsync_command(
     resolved_endpoints: ResolvedEndpoints | None = None,
     dest_suffix: str | None = None,
 ) -> list[str]:
-    """Build the rsync command for a sync operation.
-
-    Returns the full command as a list of args, potentially
-    wrapped in SSH for remote-to-remote syncs.
-    """
+    """For a remote-to-remote sync the command is wrapped in SSH."""
     re = resolved_endpoints or {}
     src_ep = config.source_endpoint(sync)
     dst_ep = config.destination_endpoint(sync)
@@ -202,7 +187,6 @@ def run_rsync(
     resolved_endpoints: ResolvedEndpoints | None = None,
     dest_suffix: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Build and execute the rsync command for a sync."""
     cmd = build_rsync_command(
         sync,
         config,
@@ -240,6 +224,5 @@ def _run_streaming(
 
 
 def _forward(chunk: str, on_output: Callable[[str], None]) -> str:
-    """Pass *chunk* to *on_output* and return it, to also collect it."""
     on_output(chunk)
     return chunk

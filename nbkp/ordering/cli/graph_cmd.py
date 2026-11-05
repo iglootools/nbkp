@@ -1,5 +1,3 @@
-"""CLI graph command for sync dependency visualization."""
-
 import enum
 from pathlib import Path
 from typing import Annotated
@@ -18,8 +16,6 @@ from . import app
 
 
 class GraphFormat(str, enum.Enum):
-    """Graph output format."""
-
     RICH_TREE = "rich-tree"
     MERMAID_ASCII = "mermaid-ascii"
     MERMAID = "mermaid"

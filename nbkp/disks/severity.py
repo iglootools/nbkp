@@ -8,17 +8,10 @@ from ..policy import Severity, Strictness, classify_severity
 from .lifecycle import LUKS_STAGE_FAILURES, MOUNT_STAGE_FAILURES
 from .models import MountFailureReason
 
-# ── Mount-state column severity ─────────────────────────────────
-#
-# These helpers are the single source of truth for severity in mount-state
-# columns (``device``, ``LUKS``, ``mounted``) across both the disks status
-# table and the preflight check display.  Each answers the question "did
-# the action for this column actually attempt and fail?" using
-# ``mount_failure_reason``, then routes the answer through
-# ``classify_severity`` so strictness is respected.
-#
-# Note: the "is this a real failure?" rule lives here, separate from the
-# preflight ``INACTIVE_*_ERRORS`` frozensets, because the mount-state
+# Each helper answers "did the action for this column actually attempt and
+# fail?" from ``mount_failure_reason``, then routes the answer through
+# ``classify_severity`` so strictness is respected.  That rule lives here rather
+# than in the preflight ``INACTIVE_*_ERRORS`` frozensets because the mount-state
 # table answers a different question than general preflight error
 # classification (action-was-attempted vs. policy-inactive).
 

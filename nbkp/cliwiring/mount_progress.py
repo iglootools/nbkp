@@ -61,7 +61,6 @@ def mount_result_severity(
 
 
 def mount_display_names(cfg: Config) -> dict[str, str]:
-    """Display name of every mount-managed volume, keyed by slug."""
     return {
         slug: display_name(vol)
         for slug, vol in cfg.volumes.items()

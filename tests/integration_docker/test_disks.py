@@ -87,9 +87,6 @@ def _cleanup(
     _lock_luks(volume, resolved, luks_uuid)
 
 
-# ── Device detection ─────────────────────────────────────────────
-
-
 class TestDetectDevicePresent:
     def test_present(
         self,
@@ -153,7 +150,6 @@ class TestDiscoverCleartextDevice:
         remote_encrypted_volume: RemoteVolume,
         luks_uuid: str,
     ) -> None:
-        """Cleartext device disappears after lock."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
         _unlock_luks(remote_encrypted_volume, resolved, luks_uuid)
         _lock_luks(remote_encrypted_volume, resolved, luks_uuid)
@@ -161,9 +157,6 @@ class TestDiscoverCleartextDevice:
             discover_cleartext_device(remote_encrypted_volume, luks_uuid, resolved)
             is None
         )
-
-
-# ── LUKS unlock / mount / umount / lock lifecycle ────────────────
 
 
 class TestLuksLifecycle:
@@ -256,9 +249,6 @@ class TestLuksLifecycle:
             _cleanup(remote_encrypted_volume, resolved, luks_uuid)
 
 
-# ── Helpers for Config-level tests ──────────────────────────────
-
-
 def _make_config(
     server: SshEndpoint,
     volume: RemoteVolume,
@@ -272,9 +262,6 @@ def _make_config(
     return config, resolved
 
 
-# ── Mount detection via findmnt ─────────────────────────────────
-
-
 class TestFindMountpoint:
     def test_none_when_umounted(
         self,
@@ -282,7 +269,6 @@ class TestFindMountpoint:
         remote_encrypted_volume: RemoteVolume,
         luks_uuid: str,
     ) -> None:
-        """find_mountpoint returns None when device is not mounted."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
         # While locked there is no cleartext device, so target resolves to None.
         device = resolve_target_device(
@@ -301,7 +287,6 @@ class TestFindMountpoint:
         remote_encrypted_volume: RemoteVolume,
         luks_uuid: str,
     ) -> None:
-        """find_mountpoint returns the target after a successful mount."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
         mount_config = remote_encrypted_volume.mount
         assert mount_config is not None
@@ -323,9 +308,6 @@ class TestFindMountpoint:
             )
         finally:
             _cleanup(remote_encrypted_volume, resolved, luks_uuid)
-
-
-# ── Mount idempotency ───────────────────────────────────────────
 
 
 class TestMountVolumeIdempotency:
@@ -393,16 +375,12 @@ class TestUmountVolumeIdempotency:
         docker_ssh_endpoint: SshEndpoint,
         remote_encrypted_volume: RemoteVolume,
     ) -> None:
-        """Umounting an already-umounted volume succeeds."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
         mount_config = remote_encrypted_volume.mount
         assert mount_config is not None
 
         result = umount_volume(remote_encrypted_volume, mount_config, resolved)
         assert result.success
-
-
-# ── Mount observations ──────────────────────────────────────────
 
 
 class TestMountObservations:
@@ -464,9 +442,6 @@ class TestMountObservations:
         assert obs.device_present is False
 
 
-# ── managed_mount orchestration ─────────────────────────────────
-
-
 class TestManagedMount:
     def test_mounts_and_umounts(
         self,
@@ -474,7 +449,6 @@ class TestManagedMount:
         remote_encrypted_volume: RemoteVolume,
         luks_uuid: str,
     ) -> None:
-        """managed_mount mounts on entry and umounts on exit."""
         config, resolved = _make_config(docker_ssh_endpoint, remote_encrypted_volume)
         with managed_mount(config, resolved, lambda _: LUKS_PASSPHRASE) as (
             _resolved_config,
@@ -552,7 +526,6 @@ class TestManagedMount:
         remote_encrypted_volume: RemoteVolume,
         luks_uuid: str,
     ) -> None:
-        """Volume is umounted even when an exception occurs inside the context."""
         config, resolved = _make_config(docker_ssh_endpoint, remote_encrypted_volume)
         with (
             pytest.raises(RuntimeError, match="deliberate"),
@@ -567,9 +540,6 @@ class TestManagedMount:
             device is None
             or find_mountpoint(remote_encrypted_volume, device, resolved) is None
         )
-
-
-# ── Unencrypted mount ───────────────────────────────────────────
 
 
 class TestUnencryptedMount:

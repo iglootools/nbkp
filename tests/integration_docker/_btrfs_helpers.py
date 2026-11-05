@@ -38,9 +38,6 @@ class BtrfsEnv:
     check_readonly: Callable[[str], bool]
 
 
-# ── Shared test functions ────────────────────────────────────────────
-
-
 def run_test_creates_readonly_snapshot(env: BtrfsEnv) -> None:
     env.create_staging()
     env.seed_staging("test data")

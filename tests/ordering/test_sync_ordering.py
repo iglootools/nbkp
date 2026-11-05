@@ -1,5 +1,3 @@
-"""Tests for nbkp.sync.ordering."""
-
 import pytest
 
 from nbkp.config import (
@@ -32,7 +30,6 @@ class TestSortSyncs:
         assert set(result) == {"a", "b"}
 
     def test_upstream_downstream_syncs_sorted(self) -> None:
-        # upstream a writes to ep-usb, downstream b reads from ep-usb
         syncs = {
             "b": _sync("b", "ep-usb", "ep-nas"),
             "a": _sync("a", "ep-laptop", "ep-usb"),
@@ -41,8 +38,6 @@ class TestSortSyncs:
         assert result.index("a") < result.index("b")
 
     def test_no_dependency_different_endpoints(self) -> None:
-        # a writes to ep-usb-photos, b reads from ep-usb-music
-        # No dependency since endpoint slugs differ
         syncs = {
             "a": _sync("a", "ep-laptop", "ep-usb-photos"),
             "b": _sync("b", "ep-usb-music", "ep-nas"),
@@ -51,7 +46,6 @@ class TestSortSyncs:
         assert set(result) == {"a", "b"}
 
     def test_chain_dependency(self) -> None:
-        # a -> b -> c
         syncs = {
             "c": _sync("c", "ep-v2", "ep-v3"),
             "a": _sync("a", "ep-v0", "ep-v1"),

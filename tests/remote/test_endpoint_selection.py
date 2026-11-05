@@ -48,7 +48,6 @@ class TestResolveEndpoint:
             },
             syncs={},
         )
-        # Filter for "travel" should match multi-server
         ef = EndpointFilter(locations=["travel"])
         result = resolve_endpoint_for_volume(
             config,
@@ -92,7 +91,6 @@ class TestResolveEndpoint:
             },
             syncs={},
         )
-        # Exclude "home" — should pick travel-server (first non-excluded)
         ef = EndpointFilter(exclude_locations=["home"])
         result = resolve_endpoint_for_volume(
             config,
@@ -136,7 +134,6 @@ class TestResolveEndpoint:
             },
             syncs={},
         )
-        # Exclude "home", include "office" — should pick office-server
         ef = EndpointFilter(
             locations=["office"],
             exclude_locations=["home"],
@@ -210,6 +207,5 @@ class TestResolveEndpoint:
         )
         ef = EndpointFilter(exclude_locations=["home"])
         result = resolve_all_endpoints(config, ef)
-        # home-vol should be excluded (not resolved)
         assert "home-vol" not in result
         assert "travel-vol" in result

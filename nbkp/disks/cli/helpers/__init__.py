@@ -1,5 +1,3 @@
-"""Disk CLI helpers used only by the ``disks`` commands: status probing and plans."""
-
 from .status import (
     _error_label as _error_label,
     _ErrorStatus as _ErrorStatus,

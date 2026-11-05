@@ -1,5 +1,3 @@
-"""Tests for nbkp.disks.detection."""
-
 import subprocess
 from unittest.mock import patch
 
@@ -77,8 +75,6 @@ class TestDiscoverCleartextDevice:
 
     def test_returns_mapper_for_crypt_child(self) -> None:
         # lsblk lists the parent (the LUKS container) and its crypt child.
-        stdout = f"sda crypt\nluks-{_UUID} crypt\n"
-        # The first crypt row wins; build deterministic output instead.
         stdout = f"sdb part\nluks-{_UUID} crypt\n"
         with patch(
             "nbkp.remote.dispatch.subprocess.run",

@@ -1,5 +1,3 @@
-"""Prune orchestration: candidate selection and snapshot pruning."""
-
 from collections.abc import Callable
 
 from ....config import Config, SyncConfig
@@ -113,7 +111,6 @@ def _process_candidate(
     dry_run: bool,
     strictness: Strictness,
 ) -> PruneResult:
-    """Process a single prune candidate into a PruneResult."""
     dst_ep = config.destination_endpoint(status.config)
     config_skip = _config_skip_reason(dst_ep)
     skip_reason, error = (
@@ -138,10 +135,6 @@ def prune_all_syncs(
     resolved_endpoints: ResolvedEndpoints | None = None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> list[PruneResult]:
-    """Prune old snapshots for all eligible syncs.
-
-    Returns a list of PruneResult for each candidate sync.
-    """
     re = resolved_endpoints or {}
     return [
         _process_candidate(slug, status, config, re, dry_run, strictness)

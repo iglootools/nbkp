@@ -31,7 +31,6 @@ _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
 
 
 def _has_bash4() -> bool:
-    """Check whether a bash 4+ binary is available."""
     bash = shutil.which("bash")
     if bash is None:
         return False
@@ -117,7 +116,6 @@ def _run_script(
     *args: str,
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Write the generated script to a file and execute it."""
     script = generate_script(
         config,
         ScriptOptions(platform=sys.platform, config_path="test.yaml"),

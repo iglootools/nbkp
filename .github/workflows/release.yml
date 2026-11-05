@@ -5,9 +5,6 @@ on:
   # gh run list --workflow release.yml
   workflow_dispatch:
   repository_dispatch:
-  # push:
-  #   branches:
-  #     - main
 
 concurrency:
   # Deliberately unlike test.yml: this workflow mutates state outside the repository and is

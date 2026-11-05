@@ -33,14 +33,12 @@ from nbkp.preflight.output import print_human_troubleshoot
 
 
 def _make_console() -> tuple[Console, StringIO]:
-    """Return a Console that writes to a StringIO buffer."""
     buf = StringIO()
     console = Console(file=buf, highlight=False, markup=False)
     return console, buf
 
 
 def _localhost_ssh_status() -> SshEndpointStatus:
-    """Create an active localhost SSH endpoint status."""
     return SshEndpointStatus(
         slug="localhost",
         diagnostics=SshEndpointDiagnostics(),
@@ -72,7 +70,6 @@ def _btrfs_config() -> Config:
 def _ssh_statuses_from(
     vol_statuses: dict[str, VolumeStatus],
 ) -> dict[str, SshEndpointStatus]:
-    """Extract unique SSH endpoint statuses from volume statuses."""
     return {
         vs.ssh_endpoint_status.slug: vs.ssh_endpoint_status
         for vs in vol_statuses.values()
@@ -112,7 +109,6 @@ def _make_sync_status(
     sync_errors: list[SyncError] | None = None,
     sync_slug: str = "btrfs-sync",
 ) -> SyncStatus:
-    """Build a SyncStatus with the new 4-layer model."""
     sync_cfg = config.syncs[sync_slug]
     src_ep_slug = sync_cfg.source
     dst_ep_slug = sync_cfg.destination
@@ -149,7 +145,6 @@ def _make_sync_status(
 
 class TestTroubleshootBtrfsStagingNotFound:
     def test_destination_staging_not_found_text(self) -> None:
-        """Output mentions staging/ for STAGING_SUBVOL_NOT_FOUND."""
         config = _btrfs_config()
         vol_statuses = _make_vol_statuses(config)
         sync_statuses = {
@@ -192,11 +187,9 @@ class TestTroubleshootBtrfsStagingNotFound:
             console=console,
         )
         output = buf.getvalue()
-        # The fix instructions must reference staging/, not latest/
         assert "btrfs subvolume create /mnt/dst/staging" in output
 
     def test_destination_staging_not_found_reason_label(self) -> None:
-        """DestinationEndpointError label for STAGING_SUBVOL_NOT_FOUND appears."""
         config = _btrfs_config()
         vol_statuses = _make_vol_statuses(config)
         sync_statuses = {
@@ -218,7 +211,6 @@ class TestTroubleshootBtrfsStagingNotFound:
         assert DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND.value in output
 
     def test_no_issues_message(self) -> None:
-        """When all statuses are active, prints no-issues message."""
         config = _btrfs_config()
         vol_statuses = _make_vol_statuses(config)
         sync_statuses = {"btrfs-sync": _make_sync_status(config, vol_statuses)}
@@ -234,7 +226,6 @@ class TestTroubleshootBtrfsStagingNotFound:
         assert "No issues found" in output
 
     def test_destination_staging_not_found_with_subdir(self) -> None:
-        """Troubleshoot output uses the correct subdir path for staging/."""
         src = LocalVolume(slug="src", path="/mnt/src")
         dst = LocalVolume(slug="dst", path="/mnt/dst")
         ep_src = SyncEndpoint(slug="ep-src", volume="src")
@@ -292,7 +283,6 @@ class TestTroubleshootBtrfsStagingNotFound:
 
 class TestTroubleshootDryRunPendingSnapshot:
     def test_dry_run_pending_snapshot_text(self) -> None:
-        """Troubleshoot output explains dry-run snapshot skip."""
         config = _btrfs_config()
         vol_statuses = _make_vol_statuses(config)
         sync_statuses = {
@@ -318,7 +308,6 @@ class TestTroubleshootDryRunPendingSnapshot:
 
 class TestTroubleshootLocationExcluded:
     def test_location_excluded_volume_text(self) -> None:
-        """Troubleshoot output explains location-excluded SSH endpoint."""
         vol = RemoteVolume(
             slug="remote",
             ssh_endpoint="server",

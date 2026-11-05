@@ -1,5 +1,3 @@
-"""Tests for nbkp preflight CLI commands."""
-
 import json
 from unittest.mock import MagicMock, patch
 

@@ -1,5 +1,3 @@
-"""Fabric-based remote command execution."""
-
 import io
 import shlex
 import subprocess
@@ -35,7 +33,6 @@ def _build_single_connection(
     server: SshEndpoint,
     gateway: Connection | None = None,
 ) -> Connection:
-    """Build a single Fabric Connection with optional gateway."""
     opts = server.connection_options
     connect_kwargs: dict[str, object] = {
         "allow_agent": opts.allow_agent,
@@ -77,7 +74,6 @@ def _build_connection(
     server: SshEndpoint,
     proxy_chain: list[SshEndpoint] | None = None,
 ) -> Connection:
-    """Build a Fabric Connection with optional proxy chain."""
     gateway = reduce(
         lambda gw, proxy: _build_single_connection(proxy, gw),
         proxy_chain or [],
@@ -92,10 +88,9 @@ def run_remote_command(
     proxy_chain: list[SshEndpoint] | None = None,
     input: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a command on a remote host via Fabric."""
     cmd_string = shlex.join(command)
-    # When input is provided, wrap it as a BytesIO stream for Fabric.
-    # Otherwise, use in_stream=False to disable stdin entirely.
+    # in_stream=False disables stdin; Fabric's default would forward this
+    # process's own stdin to the remote command.
     in_stream: io.BytesIO | bool = (
         io.BytesIO(input.encode()) if input is not None else False
     )

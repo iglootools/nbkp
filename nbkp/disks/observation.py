@@ -1,5 +1,3 @@
-"""Pre-computed mount state from mount lifecycle, reusable by preflight."""
-
 from dataclasses import dataclass
 
 from ..config import Config, Volume

@@ -1,5 +1,3 @@
-"""Local/remote command dispatch based on volume type."""
-
 import shutil
 import subprocess
 
@@ -15,7 +13,6 @@ def run_on_volume(
     *,
     input: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a command on the volume's host (local or remote)."""
     match volume:
         case RemoteVolume():
             ep = resolved_endpoints[volume.slug]
@@ -32,7 +29,6 @@ def check_command_available(
     command: str,
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
-    """Whether *command* is on the ``PATH`` of the volume's host."""
     match volume:
         case LocalVolume():
             return shutil.which(command) is not None

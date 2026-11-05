@@ -1,5 +1,3 @@
-"""Configuration protocol models."""
-
 from .base import Slug, _BaseModel
 from .config import Config, CredentialProvider
 from .errors import ConfigValidationCode

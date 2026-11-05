@@ -1,5 +1,3 @@
-"""Demo CLI output command: render all human output functions with fake data."""
-
 from io import StringIO
 
 import yaml
@@ -43,7 +41,6 @@ from . import app, console as _console
 
 
 def _capture_console() -> tuple[Console, StringIO]:
-    """Create a Console that captures output to a StringIO buffer."""
     buf = StringIO()
     con = Console(
         file=buf,
@@ -54,7 +51,6 @@ def _capture_console() -> tuple[Console, StringIO]:
 
 
 def _print_panel(title: str, buf: StringIO) -> None:
-    """Wrap captured console output in a titled panel."""
     content = Text.from_ansi(buf.getvalue().rstrip("\n"))
     _console.print(
         Panel(

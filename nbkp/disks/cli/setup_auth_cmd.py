@@ -1,5 +1,3 @@
-"""Disks setup-auth command."""
-
 import getpass
 from pathlib import Path
 from typing import Annotated

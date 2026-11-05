@@ -1,5 +1,3 @@
-"""Tests for nbkp.btrfs."""
-
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, call, patch
 

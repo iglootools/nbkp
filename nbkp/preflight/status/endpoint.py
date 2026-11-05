@@ -25,8 +25,6 @@ from .volume import VolumeCapabilities, VolumeStatus
 
 
 class SourceEndpointError(str, enum.Enum):
-    """Errors at the source sync endpoint level."""
-
     SENTINEL_NOT_FOUND = f"{SOURCE_SENTINEL} sentinel not found"
     SNAPSHOTS_DIR_NOT_FOUND = f"{SNAPSHOTS_DIR}/ directory not found"
     LATEST_SYMLINK_NOT_FOUND = f"{LATEST_LINK} symlink not found"
@@ -45,9 +43,7 @@ INACTIVE_SRC_ENDPOINT_ERRORS: frozenset[SourceEndpointError] = frozenset(
 
 
 class DestinationEndpointError(str, enum.Enum):
-    """Errors at the destination sync endpoint level.
-
-    Includes capability-gated errors that are probed at the volume or
+    """Includes capability-gated errors that are probed at the volume or
     host level but become errors because the endpoint config requires
     a capability the volume doesn't have.  Troubleshoot offers dual
     remediation: fix the volume (e.g. create btrfs filesystem) or
@@ -83,13 +79,8 @@ INACTIVE_DST_ENDPOINT_ERRORS: frozenset[DestinationEndpointError] = frozenset(
 )
 
 
-# Diagnostics models (shared by source and destination endpoints)
-
-
 class LatestSymlinkState(BaseModel):
-    """Observed state of a ``latest`` symlink at an endpoint.
-
-    Captures the raw readlink result and whether the resolved
+    """Captures the raw readlink result and whether the resolved
     target directory exists, without interpreting what constitutes
     an error.
     """
@@ -101,17 +92,14 @@ class LatestSymlinkState(BaseModel):
     """Raw readlink value.  ``/dev/null``, a relative path, or ``None``
     when the symlink is absent or unreadable."""
     target_valid: bool | None = None
-    """Whether the resolved target directory exists.
+    """Whether the target is an existing directory named like a snapshot.
     ``None`` when there is no symlink or target is ``/dev/null``."""
     snapshot: Snapshot | None = None
-    """Snapshot extracted from the target path.
-    ``None`` when target is ``/dev/null``, invalid, or absent."""
+    """``None`` when target is ``/dev/null``, invalid, or absent."""
 
 
 class BtrfsStagingSubvolumeDiagnostics(BaseModel):
-    """Btrfs staging subvolume diagnostics for a destination endpoint.
-
-    Present only when btrfs snapshots are enabled, the filesystem
+    """Present only when btrfs snapshots are enabled, the filesystem
     is btrfs, and ``stat`` is available on the host.
     """
 
@@ -172,12 +160,7 @@ class DestinationEndpointDiagnostics(BaseModel):
     latest: LatestSymlinkState | None = None
 
 
-# Sync endpoint status models
-
-
 class SourceEndpointStatus(BaseModel):
-    """Runtime status of a source sync endpoint."""
-
     model_config = ConfigDict(frozen=True)
 
     endpoint_slug: str
@@ -197,7 +180,6 @@ class SourceEndpointStatus(BaseModel):
         volume_status: VolumeStatus,
         diagnostics: SourceEndpointDiagnostics | None,
     ) -> SourceEndpointStatus:
-        """Create status by interpreting diagnostics into errors."""
         return SourceEndpointStatus(
             endpoint_slug=endpoint.slug,
             volume_status=volume_status,
@@ -213,8 +195,6 @@ class SourceEndpointStatus(BaseModel):
 
 
 class DestinationEndpointStatus(BaseModel):
-    """Runtime status of a destination sync endpoint."""
-
     model_config = ConfigDict(frozen=True)
 
     endpoint_slug: str
@@ -234,9 +214,7 @@ class DestinationEndpointStatus(BaseModel):
         volume_status: VolumeStatus,
         diagnostics: DestinationEndpointDiagnostics | None,
     ) -> DestinationEndpointStatus:
-        """Create status by interpreting diagnostics into errors.
-
-        Capability-gated errors need the host tools and volume capabilities
+        """Capability-gated errors need the host tools and volume capabilities
         probed at the lower layers.
         """
         vol_caps = (
@@ -263,14 +241,10 @@ class DestinationEndpointStatus(BaseModel):
         )
 
 
-# ── Layer 3 error interpretation ───────────────────────────
-
-
 def _source_endpoint_errors(
     diag: SourceEndpointDiagnostics,
     endpoint: SyncEndpoint,
 ) -> list[SourceEndpointError]:
-    """Translate source endpoint diagnostics into errors."""
     return [
         *([SourceEndpointError.SENTINEL_NOT_FOUND] if not diag.sentinel_exists else []),
         *(
@@ -291,9 +265,7 @@ def _source_endpoint_errors(
 def _source_latest_ep_errors(
     diag: SourceEndpointDiagnostics,
 ) -> list[SourceEndpointError]:
-    """Interpret source latest symlink state at endpoint level.
-
-    Only structural validity is checked here.  The ``/dev/null``
+    """Only structural validity is checked here.  The ``/dev/null``
     interpretation requires sync-level context (upstream sync check)
     and stays at Layer 4.
     """
@@ -315,9 +287,7 @@ def _destination_endpoint_errors(
     host_tools: HostToolCapabilities | None,
     endpoint: SyncEndpoint,
 ) -> list[DestinationEndpointError]:
-    """Translate destination endpoint diagnostics into errors.
-
-    ``NOT_WRITABLE`` is only emitted when the endpoint directory is
+    """``NOT_WRITABLE`` is only emitted when the endpoint directory is
     known to exist — approximated via ``sentinel_exists`` (the sentinel
     lives inside the endpoint dir, so its presence proves the dir
     exists).  When the sentinel is missing we suppress NOT_WRITABLE
@@ -351,7 +321,6 @@ def _destination_snapshot_backend_ep_errors(
     host_tools: HostToolCapabilities | None,
     endpoint: SyncEndpoint,
 ) -> list[DestinationEndpointError]:
-    """Route to the appropriate snapshot backend error check."""
     if endpoint.btrfs_snapshots.enabled:
         return _btrfs_destination_ep_errors(diag, caps, host_tools)
     elif endpoint.hard_link_snapshots.enabled:
@@ -365,9 +334,7 @@ def _btrfs_destination_ep_errors(
     caps: VolumeCapabilities | None,
     host_tools: HostToolCapabilities | None,
 ) -> list[DestinationEndpointError]:
-    """Btrfs destination endpoint errors.
-
-    Tool availability (btrfs, stat, findmnt) errors are reported at the
+    """Tool availability (btrfs, stat, findmnt) errors are reported at the
     SSH endpoint level.  Here we check capability-gated errors: the
     endpoint config requires btrfs but the volume may not support it.
     """
@@ -414,7 +381,6 @@ def _btrfs_volume_ep_errors(
 def _btrfs_staging_ep_errors(
     diag: DestinationEndpointDiagnostics,
 ) -> list[DestinationEndpointError]:
-    """Translate btrfs staging directory diagnostics."""
     if diag.btrfs is None:
         return []
     if not diag.btrfs.staging_exists:
@@ -430,7 +396,6 @@ def _hardlink_destination_ep_errors(
     caps: VolumeCapabilities | None,
     host_tools: HostToolCapabilities | None,
 ) -> list[DestinationEndpointError]:
-    """Hard-link destination endpoint errors."""
     if caps is None or host_tools is None:
         return []
     if not host_tools.has_stat:
@@ -450,7 +415,6 @@ def _hardlink_destination_ep_errors(
 def _snapshot_dirs_ep_errors(
     diag: DestinationEndpointDiagnostics,
 ) -> list[DestinationEndpointError]:
-    """Translate snapshot directory diagnostics into errors."""
     sd = diag.snapshot_dirs
     if sd is None:
         return []
@@ -465,7 +429,6 @@ def _snapshot_dirs_ep_errors(
 def _destination_latest_ep_errors(
     diag: DestinationEndpointDiagnostics,
 ) -> list[DestinationEndpointError]:
-    """Interpret the destination latest symlink state."""
     latest = diag.latest
     if latest is None or not latest.exists:
         return [DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND]

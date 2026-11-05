@@ -64,7 +64,6 @@ class TestGeneratePolkitRules:
         rule = generate_polkit_rules("backup")
         assert "org.freedesktop.udisks2.filesystem-mount" in rule
         assert "org.freedesktop.udisks2.encrypted-unlock-system" in rule
-        # Every configured action must appear in the rule.
         for action in UDISKS_ACTIONS:
             assert action in rule
 

@@ -19,9 +19,7 @@ from .rsync import ProgressMode
 
 
 def _collect_all_errors(status: SyncStatus) -> str:
-    """Collect error messages from sync-level errors into a single string.
-
-    With cascade errors, ``status.errors`` is self-describing — it
+    """With cascade errors, ``status.errors`` is self-describing — it
     contains sync-level errors plus cascade pointers to inactive lower
     layers.  No need to walk the full 4-layer chain.
     """

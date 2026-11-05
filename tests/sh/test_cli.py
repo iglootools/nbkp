@@ -1,5 +1,3 @@
-"""Tests for nbkp sh CLI command."""
-
 import pathlib
 import stat
 from pathlib import Path

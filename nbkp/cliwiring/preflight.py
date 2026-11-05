@@ -37,7 +37,6 @@ def check_total(cfg: Config, only_syncs: list[str] | None) -> int:
         else set(cfg.volumes.keys())
     )
 
-    # SSH endpoints: volume-referenced + all remaining defined endpoints
     volume_ssh_slugs = {
         "localhost"
         if isinstance(cfg.volumes[v_slug], LocalVolume)
@@ -59,9 +58,7 @@ def check_all_with_progress(
     mount_observations: dict[str, MountObservation] | None = None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> PreflightResult:
-    """Run check_all_syncs with an optional progress bar.
-
-    *strictness* picks the per-step icon: errors that are fatal under
+    """*strictness* picks the per-step icon: errors that are fatal under
     the current policy show ``✗`` (red), errors that are non-fatal
     (e.g. inactive volumes under ``IGNORE_INACTIVE``) show ``⚠``
     (orange).

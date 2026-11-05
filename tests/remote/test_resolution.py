@@ -1,5 +1,3 @@
-"""Tests for nbkp.remote.resolution."""
-
 from pathlib import Path
 
 import paramiko
@@ -119,9 +117,6 @@ class TestIsPrivateHost:
         assert is_private_host("localhost", _NO_SSH_CONFIG, lookup) is True
 
 
-# ── SSH config enrichment ────────────────────────────────────
-
-
 _NAS_SSH_CONFIG = _ssh_config(
     "Host mynas\n"
     "  HostName 192.168.1.100\n"
@@ -132,8 +127,6 @@ _NAS_SSH_CONFIG = _ssh_config(
 
 
 class TestEnrichFromSshConfig:
-    """Tests for enrich_from_ssh_config."""
-
     def test_fills_port_from_ssh_config(self) -> None:
         ep = SshEndpoint(slug="nas", host="mynas")
         assert enrich_from_ssh_config(ep, _NAS_SSH_CONFIG).port == 5022
@@ -147,7 +140,6 @@ class TestEnrichFromSshConfig:
         enriched = enrich_from_ssh_config(ep, _NAS_SSH_CONFIG)
         assert enriched.key is not None
         assert enriched.key.endswith("nas_key")
-        # ~ should be expanded
         assert "~" not in enriched.key
 
     def test_explicit_port_takes_precedence(self) -> None:
@@ -171,7 +163,6 @@ class TestEnrichFromSshConfig:
         assert enrich_from_ssh_config(ep, _NAS_SSH_CONFIG) == ep
 
     def test_host_preserved_as_alias(self) -> None:
-        """host should stay as the alias, not resolved."""
         ep = SshEndpoint(slug="nas", host="mynas")
         assert enrich_from_ssh_config(ep, _NAS_SSH_CONFIG).host == "mynas"
 

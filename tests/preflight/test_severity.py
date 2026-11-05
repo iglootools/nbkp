@@ -10,7 +10,6 @@ from nbkp.preflight.status.volume import VolumeError
 
 class TestSeverityForError:
     def test_ignore_inactive_inactive_error_is_warning(self) -> None:
-        """Under IGNORE_INACTIVE, errors in the inactive set are warnings."""
         assert (
             severity_for_error(
                 VolumeError.SENTINEL_NOT_FOUND, Strictness.IGNORE_INACTIVE
@@ -25,7 +24,6 @@ class TestSeverityForError:
         )
 
     def test_ignore_inactive_infra_error_is_error(self) -> None:
-        """Under IGNORE_INACTIVE, infrastructure errors stay fatal."""
         assert (
             severity_for_error(
                 DestinationEndpointError.NOT_WRITABLE, Strictness.IGNORE_INACTIVE
@@ -38,14 +36,12 @@ class TestSeverityForError:
         )
 
     def test_ignore_none_everything_fatal(self) -> None:
-        """Under IGNORE_NONE, even inactive errors are fatal."""
         assert (
             severity_for_error(VolumeError.SENTINEL_NOT_FOUND, Strictness.IGNORE_NONE)
             is Severity.ERROR
         )
 
     def test_ignore_all_nothing_fatal(self) -> None:
-        """Under IGNORE_ALL, even infrastructure errors are warnings."""
         assert (
             severity_for_error(
                 DestinationEndpointError.NOT_WRITABLE, Strictness.IGNORE_ALL
@@ -55,19 +51,16 @@ class TestSeverityForError:
 
     def test_each_layer_classifier(self) -> None:
         """Sanity-check that each enum layer routes through correctly."""
-        # SSH: UNREACHABLE is inactive
         assert (
             severity_for_error(SshEndpointError.UNREACHABLE, Strictness.IGNORE_INACTIVE)
             is Severity.WARNING
         )
-        # Source EP: SENTINEL_NOT_FOUND is inactive
         assert (
             severity_for_error(
                 SourceEndpointError.SENTINEL_NOT_FOUND, Strictness.IGNORE_INACTIVE
             )
             is Severity.WARNING
         )
-        # Dest EP: SENTINEL_NOT_FOUND is inactive
         assert (
             severity_for_error(
                 DestinationEndpointError.SENTINEL_NOT_FOUND,
@@ -75,7 +68,6 @@ class TestSeverityForError:
             )
             is Severity.WARNING
         )
-        # Sync: SOURCE_ENDPOINT_INACTIVE is inactive
         assert (
             severity_for_error(
                 SyncError.SOURCE_ENDPOINT_INACTIVE, Strictness.IGNORE_INACTIVE
@@ -101,7 +93,6 @@ class TestSeverityForErrors:
         )
 
     def test_any_error_makes_it_error(self) -> None:
-        """A single fatal error elevates the overall severity to ERROR."""
         assert (
             severity_for_errors(
                 [
@@ -114,7 +105,6 @@ class TestSeverityForErrors:
         )
 
     def test_strictness_changes_classification(self) -> None:
-        """Same errors classify differently under different strictness."""
         errors: list = [VolumeError.SENTINEL_NOT_FOUND]
         assert (
             severity_for_errors(errors, Strictness.IGNORE_INACTIVE) is Severity.WARNING

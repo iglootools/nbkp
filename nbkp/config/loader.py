@@ -1,5 +1,3 @@
-"""YAML configuration loading, parsing, and validation."""
-
 import os
 from collections.abc import Mapping
 from enum import StrEnum
@@ -19,8 +17,6 @@ _CONFIG_REFERENCE_URL = (
 
 
 class ConfigErrorReason(StrEnum):
-    """Structured error codes for configuration failures."""
-
     FILE_NOT_FOUND = "file-not-found"
     NO_CONFIG_FOUND = "no-config-found"
     INVALID_YAML = "invalid-yaml"
@@ -30,8 +26,6 @@ class ConfigErrorReason(StrEnum):
 
 
 class ConfigError(Exception):
-    """Raised when configuration is invalid."""
-
     def __init__(self, message: str, reason: ConfigErrorReason) -> None:
         super().__init__(message)
         self.reason = reason
@@ -48,9 +42,9 @@ def _config_search_paths(environ: Mapping[str, str] = os.environ) -> list[Path]:
     """
     xdg = environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
     candidates = [
-        Path(xdg) / _APP / _FILENAME,  # XDG (all platforms)
-        Path(user_config_dir(_APP)) / _FILENAME,  # platform user config
-        Path(site_config_dir(_APP)) / _FILENAME,  # platform site config
+        Path(xdg) / _APP / _FILENAME,
+        Path(user_config_dir(_APP)) / _FILENAME,
+        Path(site_config_dir(_APP)) / _FILENAME,
     ]
     return list(dict.fromkeys(candidates))
 
@@ -91,7 +85,9 @@ def load_config(
     config_path: str | Path | None = None,
     environ: Mapping[str, str] = os.environ,
 ) -> Config:
-    """Load and validate configuration from a YAML file."""
+    """Raises ``ConfigError`` when the file is missing, is not a YAML mapping,
+    or fails validation; ``reason`` says which.
+    """
     path = find_config_file(config_path, environ)
     try:
         with open(path) as f:

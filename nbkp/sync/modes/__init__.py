@@ -1,5 +1,3 @@
-"""Per-snapshot-mode sync execution (plain, btrfs, hard-link)."""
-
 from ...preflight.status.sync import SyncStatus
 from ..results import SyncResult
 from .btrfs import run_btrfs_sync
@@ -11,7 +9,6 @@ __all__ = ["RunContext", "run_single_sync"]
 
 
 def run_single_sync(status: SyncStatus, ctx: RunContext) -> SyncResult:
-    """Run a single sync operation."""
     sync = status.config
     dst = ctx.config.destination_endpoint(sync)
     match dst.snapshot_mode:

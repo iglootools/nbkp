@@ -19,9 +19,7 @@ from .common import RunContext, publish_snapshot, rsync_step
 def run_hard_link_sync(
     status: SyncStatus, dst: SyncEndpoint, ctx: RunContext
 ) -> SyncResult:
-    """Run a sync with hard-link snapshot strategy.
-
-    A dry run never modifies the destination: no orphan cleanup, and
+    """A dry run never modifies the destination: no orphan cleanup, and
     rsync previews a transfer into a snapshot directory that is never
     created.
     """
@@ -107,9 +105,7 @@ def _rsync_into_snapshot(
 def _discard_snapshot_dir(
     snapshot_path: str, sync: SyncConfig, ctx: RunContext
 ) -> tuple[SyncWarning, ...]:
-    """Remove the new snapshot dir after a failed rsync (best-effort).
-
-    A leftover is harmless — the next run's orphan cleanup removes it — so
+    """A leftover is harmless — the next run's orphan cleanup removes it — so
     a failure is a warning.  Dry runs never created the directory.
     """
     if ctx.dry_run:

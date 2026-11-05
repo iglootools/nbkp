@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e
 
-# Create btrfs filesystem on a loopback device
 truncate -s 128M /srv/btrfs-backups.img
 mkfs.btrfs -f /srv/btrfs-backups.img
 mkdir -p /srv/btrfs-backups

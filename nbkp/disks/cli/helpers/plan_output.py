@@ -1,5 +1,3 @@
-"""Rendering of ``--dry-run`` lifecycle plans."""
-
 from rich.console import Console
 from rich.text import Text
 

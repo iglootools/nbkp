@@ -1,5 +1,3 @@
-"""Tests for nbkp.ssh."""
-
 import shlex
 from pathlib import Path
 from unittest.mock import MagicMock, patch

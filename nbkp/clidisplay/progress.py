@@ -1,5 +1,3 @@
-"""Generic Rich progress bar for step-by-step operations."""
-
 from types import TracebackType
 from typing import Self
 
@@ -18,16 +16,9 @@ from .severity import severity_style, severity_symbol
 
 
 class StepProgressBar:
-    """Rich progress bar for multi-step operations.
+    """Spinner, current step label, bar and M/N counter.
 
-    Shows a spinner, description (current step label), visual bar,
-    and M/N counter.  Result lines are printed above the bar
-    as each step completes.
-
-    Parameters
-    ----------
-    total:
-        Number of steps to perform.
+    Result lines are printed above the bar as each step completes.
     """
 
     def __init__(self, total: int) -> None:
@@ -88,7 +79,7 @@ class StepProgressBar:
             self._progress.advance(self._task_id)
 
     def stop(self) -> None:
-        """Stop the progress bar (idempotent)."""
+        """Idempotent."""
         if self._progress is not None:
             self._progress.stop()
 

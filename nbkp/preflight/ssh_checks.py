@@ -19,13 +19,7 @@ def observe_standalone_endpoint(
     server: SshEndpoint,
     proxy_chain: list[SshEndpoint],
 ) -> SshEndpointDiagnostics:
-    """Observe an SSH endpoint: test SSH reachability only.
-
-    Used for endpoints not tied to a volume (bastions, alternate
-    endpoints, orphan endpoints).  Runs ``true`` to verify the SSH
-    connection works.  No host tools or mount tools are probed.
-
-    Returns ``SshEndpointDiagnostics(ssh_reachable=True)`` on success
+    """Returns ``SshEndpointDiagnostics(ssh_reachable=True)`` on success
     (with ``host_tools=None``), which ``_ssh_endpoint_errors()`` interprets
     as no errors (active, no tool requirements).
 

@@ -27,8 +27,6 @@ class MountAction(str, enum.Enum):
 
 @dataclass(frozen=True)
 class VolumePlan:
-    """What the lifecycle would do for one volume."""
-
     volume_slug: str
     actions: tuple[MountAction, ...]
     detail: str | None = None
@@ -39,7 +37,6 @@ class VolumePlan:
 def _mount_actions(
     mount: MountConfig, caps: MountCapabilities
 ) -> tuple[tuple[MountAction, ...], str | None]:
-    """Mount-direction steps the probed state calls for."""
     match (caps.device_present, caps.mounted):
         case (False, _):
             return (), "device not plugged in"
@@ -59,7 +56,6 @@ def _mount_actions(
 def _umount_actions(
     mount: MountConfig, caps: MountCapabilities
 ) -> tuple[tuple[MountAction, ...], str | None]:
-    """Umount-direction steps the probed state calls for."""
     actions = (
         *([MountAction.UNMOUNT] if caps.mounted is True else []),
         *(
@@ -113,7 +109,6 @@ def plan_lifecycle(
 
 
 def plan_json(plans: list[VolumePlan]) -> list[dict[str, object]]:
-    """JSON-serializable view of *plans*."""
     return [
         {
             "volume": plan.volume_slug,

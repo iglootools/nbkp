@@ -1,5 +1,3 @@
-"""Configuration types and loading."""
-
 from .loader import ConfigError, ConfigErrorReason, find_config_file, load_config
 from .protocol import (
     BtrfsSnapshotConfig,

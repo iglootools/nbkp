@@ -83,7 +83,6 @@ class TestMountVolume:
         assert result.mounted is True
         assert result.luks_unlocked is None
         assert result.effective_path == "/mnt/usb"
-        # The mount command targets the by-uuid device.
         mount_cmd = mock_run.call_args_list[-1][0][0]
         assert mount_cmd == [
             "udisksctl",
@@ -106,7 +105,6 @@ class TestMountVolume:
             result = mount_volume(vol, vol.mount, {}, lambda x: "pass")  # type: ignore[arg-type]
         assert result.success
         assert result.mounted is True
-        # No udisksctl invocation when already mounted.
         mock_run.assert_not_called()
 
     def test_encrypted_unlock_then_mount(self) -> None:
@@ -137,7 +135,6 @@ class TestMountVolume:
         unlock_cmd = unlock_call[0][0]
         assert unlock_cmd[:2] == ["udisksctl", "unlock"]
         assert unlock_call.kwargs["input"] == "secret"
-        # Second run_on_volume mounts the discovered cleartext device.
         mount_cmd = mock_run.call_args_list[1][0][0]
         assert mount_cmd[:3] == ["udisksctl", "mount", "-b"]
         assert mount_cmd[3] == _CLEARTEXT
@@ -160,7 +157,6 @@ class TestMountVolume:
         ):
             result = mount_volume(vol, vol.mount, {}, lambda x: "secret")  # type: ignore[arg-type]
         assert result.success
-        # Only the mount command runs (no unlock).
         assert len(mock_run.call_args_list) == 1
         assert mock_run.call_args_list[0][0][0][:2] == ["udisksctl", "mount"]
 
@@ -400,7 +396,6 @@ class TestUmountVolume:
         ):
             result = umount_volume(vol, mc, {})
         assert result.success
-        # only lock runs (no unmount)
         assert len(run_cmds) == 1
         assert run_cmds[0][:2] == ["udisksctl", "lock"]
 

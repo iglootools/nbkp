@@ -1,5 +1,3 @@
-"""Shared test fixtures."""
-
 from pathlib import Path
 
 import pytest
@@ -66,7 +64,6 @@ def _isolate_from_user_ssh_config(
 
 
 def config_to_yaml(config: Config) -> str:
-    """Convert a Config to a YAML string."""
     return yaml.safe_dump(
         config.model_dump(by_alias=True, mode="json"),
         default_flow_style=False,
@@ -75,7 +72,6 @@ def config_to_yaml(config: Config) -> str:
 
 
 def _sample_config() -> Config:
-    """Build the full sample Config."""
     return Config(
         ssh_endpoints={
             "nas-server": SshEndpoint(
@@ -120,7 +116,6 @@ def _sample_config() -> Config:
 
 
 def _sample_minimal_config() -> Config:
-    """Build the minimal sample Config."""
     return Config(
         volumes={
             "src": LocalVolume(slug="src", path="/src"),
@@ -142,7 +137,6 @@ def _sample_minimal_config() -> Config:
 
 @pytest.fixture()
 def sample_config_file(tmp_path: Path) -> Path:
-    """Write sample YAML config to a temp file."""
     p = tmp_path / "config.yaml"
     p.write_text(config_to_yaml(_sample_config()))
     return p
@@ -150,7 +144,6 @@ def sample_config_file(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def sample_minimal_config_file(tmp_path: Path) -> Path:
-    """Write minimal YAML config to a temp file."""
     p = tmp_path / "config.yaml"
     p.write_text(config_to_yaml(_sample_minimal_config()))
     return p

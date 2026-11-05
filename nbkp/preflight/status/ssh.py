@@ -11,13 +11,10 @@ from ...disks import (
 
 
 class SshEndpointError(str, enum.Enum):
-    """Errors at the SSH endpoint (host) level.
-
-    Host tool availability errors live here because tool presence is a
+    """Host tool availability errors live here because tool presence is a
     property of the host, shared by all volumes on that host.
     """
 
-    # Reachability
     UNREACHABLE = "unreachable"
     LOCATION_EXCLUDED = "excluded by location filter"
     AUTH_FAILED = "ssh authentication or host key verification failed"
@@ -108,19 +105,16 @@ class SshEndpointDiagnostics(BaseModel):
     """Whether all SSH endpoints for this volume were excluded by location
     filter.  Only meaningful for remote volumes."""
     ssh_reachable: bool | None = None
-    """Whether the SSH endpoint is reachable.
-    ``None`` for implicit localhost (always reachable)."""
+    """``None`` for implicit localhost (always reachable)."""
     ssh_auth_failed: bool = False
     """The host answered but refused authentication or failed host key
     verification.  Only meaningful when ``ssh_reachable`` is ``False``."""
     ssh_error: str | None = None
     """First line of the connection error, when the connection failed."""
     host_tools: HostToolCapabilities | None = None
-    """Host-level tool availability.
-    ``None`` when the host is unreachable or excluded."""
+    """``None`` when the host is unreachable or excluded."""
     mount_tools: MountToolCapabilities | None = None
-    """Mount management tool availability.
-    ``None`` when no volumes on this host have mount config,
+    """``None`` when no volumes on this host have mount config,
     or when the host is unreachable."""
 
 
@@ -130,8 +124,6 @@ Safe to share because ``SshEndpointToolNeeds`` is frozen."""
 
 
 class SshEndpointStatus(BaseModel):
-    """Runtime status of an SSH endpoint (or implicit localhost)."""
-
     model_config = ConfigDict(frozen=True)
 
     slug: str
@@ -152,7 +144,6 @@ class SshEndpointStatus(BaseModel):
         diagnostics: SshEndpointDiagnostics,
         needs: SshEndpointToolNeeds = _NO_TOOL_NEEDS,
     ) -> SshEndpointStatus:
-        """Create status by interpreting diagnostics into errors."""
         return SshEndpointStatus(
             slug=slug,
             diagnostics=diagnostics,
@@ -161,14 +152,10 @@ class SshEndpointStatus(BaseModel):
         )
 
 
-# ── Layer 1 error interpretation ───────────────────────────
-
-
 def _ssh_endpoint_errors(
     diag: SshEndpointDiagnostics,
     needs: SshEndpointToolNeeds,
 ) -> list[SshEndpointError]:
-    """Translate SSH endpoint diagnostics into errors."""
     match diag:
         case SshEndpointDiagnostics(location_excluded=True):
             return [SshEndpointError.LOCATION_EXCLUDED]
@@ -200,7 +187,6 @@ def _ssh_endpoint_warnings(
     diag: SshEndpointDiagnostics,
     needs: SshEndpointToolNeeds,
 ) -> list[SshEndpointWarning]:
-    """Non-fatal host findings (only for a probed host)."""
     return (
         [SshEndpointWarning.UDISKS_BTRFS_MODULE_MISSING]
         if diag.mount_tools is not None
@@ -212,7 +198,6 @@ def _ssh_endpoint_warnings(
 
 
 def _ssh_rsync_errors(tools: HostToolCapabilities) -> list[SshEndpointError]:
-    """Rsync availability errors (always needed)."""
     match (tools.has_rsync, tools.rsync_version_ok):
         case (False, _):
             return [SshEndpointError.RSYNC_NOT_FOUND]
@@ -226,7 +211,6 @@ def _ssh_snapshot_tool_errors(
     tools: HostToolCapabilities,
     needs: SshEndpointToolNeeds,
 ) -> list[SshEndpointError]:
-    """Snapshot-related tool errors (btrfs, stat, findmnt)."""
     return [
         *(
             [SshEndpointError.BTRFS_NOT_FOUND]
@@ -250,9 +234,7 @@ def _ssh_mount_tool_errors(
     mount_tools: MountToolCapabilities,
     needs: SshEndpointToolNeeds,
 ) -> list[SshEndpointError]:
-    """udisks mount management tool errors.
-
-    A mount-managed host needs ``udisksctl`` + a running ``udisksd`` (for
+    """A mount-managed host needs ``udisksctl`` + a running ``udisksd`` (for
     unlock/mount/lock), ``findmnt`` (mountpoint discovery), and ``lsblk``
     (cleartext-device discovery).  The udisks btrfs module that btrfs-backed
     mount volumes want is a warning (see ``_ssh_endpoint_warnings``).

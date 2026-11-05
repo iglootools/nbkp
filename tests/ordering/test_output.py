@@ -58,19 +58,16 @@ class TestBuildRichTreeSectionsSeverity:
         }
         trees = build_rich_tree_sections(config, severities)
         rendered = "\n".join(_render(t) for t in trees)
-        # Each sync's icon appears immediately before its slug.
         assert "✓" in rendered
         assert "⚠" in rendered
 
     def test_missing_severity_renders_without_icon(self) -> None:
         """Syncs not in the severities dict appear without an icon (defensive)."""
         config = _chain_config()
-        # Only sync-ab classified; sync-bc missing
         severities = {"sync-ab": Severity.OK}
         trees = build_rich_tree_sections(config, severities)
         rendered = "\n".join(_render(t) for t in trees)
         assert "✓" in rendered  # from sync-ab
-        # sync-bc still appears in the tree, just without an icon
         assert "sync-bc" in rendered
 
     def test_error_severity_renders_cross(self) -> None:

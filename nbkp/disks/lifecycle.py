@@ -39,7 +39,6 @@ _NOT_AUTHORIZED_SIGNATURES = (
     "notauthorized",
 )
 
-# stderr fragments indicating udisksctl/udisksd is unavailable.
 _UDISKS_UNAVAILABLE_SIGNATURES = (
     "command not found",
     "not found",
@@ -67,7 +66,6 @@ def _mount_with_retry(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
 ) -> subprocess.CompletedProcess[str]:
-    """Run ``udisksctl mount`` for *device*, retrying transient post-unlock races."""
     result = run_on_volume(build_mount_command(device), volume, resolved_endpoints)
     attempts = 1
     while (
@@ -156,8 +154,6 @@ class MountResult:
 
 @dataclass(frozen=True)
 class UmountResult:
-    """Result of attempting to umount a single volume."""
-
     volume_slug: str
     success: bool
     detail: str | None = None
@@ -168,7 +164,6 @@ def _volumes_with_mount_config(
     config: Config,
     names: list[str] | None = None,
 ) -> list[tuple[str, Volume, MountConfig]]:
-    """Return volumes that have mount config, optionally filtered by name."""
     return [
         (slug, vol, vol.mount)
         for slug, vol in config.volumes.items()
@@ -189,7 +184,6 @@ def mount_count(
     config: Config,
     names: list[str] | None = None,
 ) -> int:
-    """Return the number of volumes with mount config, optionally filtered by name."""
     return len(_volumes_with_mount_config(config, names))
 
 
@@ -345,7 +339,6 @@ def _mount_device(
     device: str,
     resolved_endpoints: ResolvedEndpoints,
 ) -> MountResult:
-    """Mount *device* unless it is already mounted."""
     encrypted = mount_config.encryption is not None
     result_for = partial(
         MountResult,
@@ -412,7 +405,6 @@ def _umount_volume_inner(
 
     device = resolve_target_device(volume, mount_config, resolved_endpoints)
 
-    # 1. Umount if mounted
     if device is not None and find_mountpoint(volume, device, resolved_endpoints):
         result = run_on_volume(
             build_unmount_command(device), volume, resolved_endpoints
@@ -427,7 +419,8 @@ def _umount_volume_inner(
                 warning="device may still be mounted, manual umount needed",
             )
 
-    # 2. Lock LUKS if encrypted and still unlocked
+    # For an encrypted volume, a resolved device is the cleartext mapper, which
+    # only exists while the container is unlocked.
     if mount_config.encryption is not None and device is not None:
         result = run_on_volume(
             build_lock_command(mount_config.device_uuid),
