@@ -6,6 +6,7 @@ from typing import Annotated
 
 import typer
 
+from ...clidisplay.invocation import display_path
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...remote.endpoints import NetworkType
 from .. import ScriptOptions, generate_script
@@ -128,13 +129,6 @@ def sh(
     if output_file is not None:
         output_file.write_text(script, encoding="utf-8")
         output_file.chmod(output_file.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
-        typer.echo(f"Written to {_display_path(output_file)}", err=True)
+        typer.echo(f"Written to {display_path(output_file)}", err=True)
     else:
         typer.echo(script)
-
-
-def _display_path(path: Path) -> str:
-    try:
-        return str(path.relative_to(Path.cwd()))
-    except ValueError:
-        return str(path)

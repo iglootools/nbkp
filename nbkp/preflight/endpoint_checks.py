@@ -43,10 +43,7 @@ from .status.volume import VolumeCapabilities
 def observe_source_endpoint(
     endpoint: SyncEndpoint,
     volume: Volume,
-    capabilities: VolumeCapabilities,
     resolved_endpoints: ResolvedEndpoints,
-    *,
-    host_tools: HostToolCapabilities,
 ) -> SourceEndpointDiagnostics:
     sentinel_exists = _check_endpoint_sentinel(
         volume, endpoint.subdir, SOURCE_SENTINEL, resolved_endpoints

@@ -364,13 +364,7 @@ def _check_source_endpoint(
         endpoint=ep,
         volume_status=volume_status,
         diagnostics=(
-            observe_source_endpoint(
-                ep,
-                probe.volume,
-                probe.capabilities,
-                resolved_endpoints,
-                host_tools=probe.host_tools,
-            )
+            observe_source_endpoint(ep, probe.volume, resolved_endpoints)
             if probe is not None
             else None
         ),

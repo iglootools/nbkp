@@ -116,6 +116,7 @@ graph TD
     run --> preflight
     run --> remote
     run --> sync
+    sh --> clidisplay
     sh --> cliwiring
     sh --> config
     sh --> fsprotocol

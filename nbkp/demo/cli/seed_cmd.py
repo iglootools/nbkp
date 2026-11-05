@@ -65,17 +65,24 @@ def _require_docker_extra() -> None:
         raise typer.Exit(1)
 
 
+_ALWAYS_STEPS = ("seed volumes",)
+_DOCKER_STEPS = (
+    "build image",
+    "create network",
+    "start bastion",
+    "wait bastion SSH",
+    "start storage",
+    "wait storage SSH",
+)
+_LUKS_STEPS = ("read metadata", "mount", "umount")
+
+
 def _step_count(docker: bool, luks: bool) -> int:
-    # Docker: build image, create network, start bastion, wait bastion SSH,
-    #         start storage, wait storage SSH = 6
-    # LUKS:   read metadata, mount, umount = 3
-    # Always: seed volumes = 1
-    count = 1  # seed volumes
-    if docker:
-        count += 6
-    if docker and luks:
-        count += 3
-    return count
+    return (
+        len(_ALWAYS_STEPS)
+        + (len(_DOCKER_STEPS) if docker else 0)
+        + (len(_LUKS_STEPS) if docker and luks else 0)
+    )
 
 
 @app.command()

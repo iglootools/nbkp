@@ -15,8 +15,6 @@ from ..disks import MountObservation
 from ..policy import Severity, Strictness
 from ..preflight import (
     PreflightResult,
-    SyncStatus,
-    VolumeStatus,
     check_all_syncs,
 )
 from ..preflight.severity import PreflightError
@@ -43,16 +41,6 @@ class PipelineResult:
     has_preflight_errors: bool
     has_sync_failures: bool
     """True when any result is fatal under the strictness (see ``sync_failed``)."""
-
-    @property
-    def vol_statuses(self) -> dict[str, VolumeStatus]:
-        """Backward-compatible access to volume statuses."""
-        return self.preflight.volume_statuses
-
-    @property
-    def sync_statuses(self) -> dict[str, SyncStatus]:
-        """Backward-compatible access to sync statuses."""
-        return self.preflight.sync_statuses
 
 
 @dataclass(frozen=True)
