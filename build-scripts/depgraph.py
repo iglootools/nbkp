@@ -18,6 +18,8 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
+from importlib.metadata import packages_distributions
 from pathlib import Path
 from typing import Annotated
 
@@ -35,6 +37,33 @@ END_MARKER = "<!-- END MODULE OVERVIEW -->"
 def _is_package(label: str) -> bool:
     """Check if a module label corresponds to a package (directory with __init__.py)."""
     return (Path(PACKAGE) / label / "__init__.py").exists()
+
+
+def _third_party_imports() -> list[str]:
+    """Import names of the project's declared dependencies, direct and optional."""
+    project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))[
+        "project"
+    ]
+    requirements = [
+        *project.get("dependencies", []),
+        *(
+            r
+            for extra in project.get("optional-dependencies", {}).values()
+            for r in extra
+        ),
+    ]
+    declared = {
+        _canonical(re.split(r"[\s<>=!~;\[(]", r, maxsplit=1)[0]) for r in requirements
+    }
+    return sorted(
+        module
+        for module, dists in packages_distributions().items()
+        if any(_canonical(dist) in declared for dist in dists)
+    )
+
+
+def _canonical(distribution: str) -> str:
+    return re.sub(r"[-_.]+", "-", distribution).lower()
 
 
 def _run_pydeps(package: str = PACKAGE) -> str:
@@ -62,6 +91,10 @@ def _run_pydeps(package: str = PACKAGE) -> str:
             f"{package}.",
             "--exclude",
             f"{package}.templates",
+            # --only filters what pydeps prints, not what it traverses: without
+            # these exclusions it follows every import into the third-party
+            # packages, which is most of its run time. The graph is unchanged.
+            *_third_party_imports(),
         ],
         capture_output=True,
         text=True,
