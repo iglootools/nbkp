@@ -43,11 +43,7 @@ def strip_panel(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-# ── Helper: build the 4-layer chain for tests ───────────────
-
-
 def localhost_ssh_status(*, active: bool = True) -> SshEndpointStatus:
-    """Build an implicit localhost SSH endpoint status."""
     if active:
         return SshEndpointStatus(
             slug="localhost",
@@ -77,7 +73,6 @@ def remote_ssh_status(
     active: bool = True,
     rsync_missing: bool = False,
 ) -> SshEndpointStatus:
-    """Build a remote SSH endpoint status."""
     if not active:
         return SshEndpointStatus(
             slug=slug,
@@ -123,7 +118,6 @@ def vol_status(
     *,
     sentinel_exists: bool = True,
 ) -> VolumeStatus:
-    """Build a VolumeStatus with the 4-layer chain."""
     if not ssh_status.active:
         return VolumeStatus(
             slug=slug,
@@ -157,7 +151,6 @@ def src_ep_status(
     *,
     sentinel_exists: bool = True,
 ) -> SourceEndpointStatus:
-    """Build a SourceEndpointStatus."""
     if not vol_s.active:
         return SourceEndpointStatus(
             endpoint_slug=endpoint_slug,
@@ -185,9 +178,7 @@ def dst_ep_status(
     sentinel_exists: bool = True,
     latest_snapshot: str | None = None,
 ) -> DestinationEndpointStatus:
-    """Build a DestinationEndpointStatus.
-
-    *latest_snapshot* is a snapshot directory name (e.g.
+    """*latest_snapshot* is a snapshot directory name (e.g.
     ``2026-03-06T14:30:00.000Z``); passing one populates the ``latest``
     symlink state with a parsed :class:`Snapshot`, whose ``timestamp`` is a
     ``datetime``.  That field is the one non-JSON-native type reachable from
@@ -251,9 +242,6 @@ def preflight(
         destination_endpoint_statuses=dst_ep_statuses,
         sync_statuses=sync_statuses,
     )
-
-
-# ── Test config builders ─────────────────────────────────────
 
 
 def sample_config() -> Config:

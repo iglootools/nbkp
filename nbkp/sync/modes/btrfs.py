@@ -14,7 +14,6 @@ from .common import RunContext, failed_after_rsync, publish_snapshot, rsync_step
 
 
 def run_btrfs_sync(sync: SyncConfig, dst: SyncEndpoint, ctx: RunContext) -> SyncResult:
-    """Run a sync with btrfs snapshot strategy (rsync into ``staging/``)."""
     match rsync_step(sync, ctx, dest_suffix=STAGING_DIR):
         case SyncResult() as failure:
             return failure
@@ -30,7 +29,6 @@ def _btrfs_post_rsync(
     proc: subprocess.CompletedProcess[str],
     ctx: RunContext,
 ) -> SyncResult:
-    """Snapshot ``staging/``, update ``latest``, and prune."""
     try:
         snapshot_path = create_snapshot(
             sync,

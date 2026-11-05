@@ -59,7 +59,7 @@ _CASCADE_ERRORS: frozenset[PreflightError] = frozenset(
 
 
 class Layer(str, enum.Enum):
-    """Where an issue originates; also the human section header prefix."""
+    """Where an issue originates; the value is the JSON ``layer`` field."""
 
     SSH_ENDPOINT = "ssh-endpoint"
     VOLUME = "volume"
@@ -90,9 +90,6 @@ class TroubleshootIssue:
     vol_status: VolumeStatus | None = None
     sync: SyncConfig | None = None
     """A sync using the endpoint (endpoint layers) or the sync itself."""
-
-
-# ── Collection ────────────────────────────────────────────────
 
 
 def _ssh_issues(
@@ -213,8 +210,6 @@ def collect_issues(
     ]
 
 
-# ── Fact gathering ────────────────────────────────────────────
-
 # Errors whose fix names the cleartext device of an encrypted volume (an
 # fstab line or a manual ``udisksctl mount``).
 _NEEDS_CLEARTEXT_DEVICE: frozenset[PreflightError] = frozenset(
@@ -229,7 +224,6 @@ _NEEDS_CLEARTEXT_DEVICE: frozenset[PreflightError] = frozenset(
 def _issue_volume(
     issue: TroubleshootIssue, config: Config
 ) -> LocalVolume | RemoteVolume | None:
-    """The volume an issue's fix is about, when it is about one."""
     match issue:
         case TroubleshootIssue(vol_status=VolumeStatus() as vs):
             return vs.config
@@ -246,9 +240,7 @@ def _discover_cleartext_device(
     mount: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
 ) -> str | None:
-    """The cleartext device udisks created for *vol*, or ``None``.
-
-    Discovery runs ``lsblk``, which this code path cannot assume exists — it
+    """Discovery runs ``lsblk``, which this code path cannot assume exists — it
     is the *error reporting* path, reached precisely when the host is not in
     the expected state, and it also runs on machines with no udisks at all
     (e.g. ``nbkp demo output`` on macOS).  Any failure therefore degrades to
@@ -263,9 +255,7 @@ def _discover_cleartext_device(
 def gather_remediation_facts(
     issues: list[TroubleshootIssue], ctx: TroubleshootContext
 ) -> RemediationFacts:
-    """Probe and generate what the fixes of *issues* will show.
-
-    Only issues that print a cleartext device trigger a discovery, once per
+    """Only issues that print a cleartext device trigger a discovery, once per
     encrypted volume; only a missing polkit rule triggers rule generation.
     """
     encrypted = {
@@ -301,7 +291,6 @@ def gather_remediation_facts(
 def with_remediation_facts(
     issues: list[TroubleshootIssue], ctx: TroubleshootContext
 ) -> TroubleshootContext:
-    """*ctx* with its facts gathered for *issues*, unless already supplied."""
     return (
         ctx
         if ctx.facts is not None
@@ -309,13 +298,9 @@ def with_remediation_facts(
     )
 
 
-# ── Rendering ─────────────────────────────────────────────────
-
-
 def print_issue_fix(
     console: Console, issue: TroubleshootIssue, ctx: TroubleshootContext
 ) -> None:
-    """Dispatch to the fix printer of the issue's layer."""
     match issue:
         case TroubleshootIssue(
             error=SshEndpointWarning() as warning, ssh_status=SshEndpointStatus() as st
@@ -344,7 +329,6 @@ def print_issue_fix(
 
 
 def _issue_label(issue: TroubleshootIssue) -> tuple[str, str]:
-    """``(text, style)`` for the issue line; warnings say so."""
     return (
         (f"warning: {issue.error.value}", "yellow")
         if isinstance(issue.error, SshEndpointWarning)
@@ -377,9 +361,7 @@ def print_issues(
     issues: list[TroubleshootIssue],
     ctx: TroubleshootContext,
 ) -> None:
-    """Print issues grouped under one header per (layer, subject).
-
-    Pure rendering: facts missing from ``ctx.facts`` are rendered as unknown
+    """Pure rendering: facts missing from ``ctx.facts`` are rendered as unknown
     (default mapper name, no polkit rule body).
     """
     groups = list(dict.fromkeys((i.layer, i.subject) for i in issues))
@@ -404,12 +386,8 @@ def print_human_troubleshoot(
     context: TroubleshootContext | None = None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> None:
-    """Print troubleshooting instructions for all 4 layers.
-
-    Iterates through SSH endpoints, volumes, sync endpoints (source
-    and destination), and syncs, printing fix instructions for each
-    error at the layer where it originates.  *context* carries the
-    invocation flags and local user used in suggested commands.
+    """*context* carries the invocation flags and local user used in
+    suggested commands.
     """
     con = console if console is not None else Console()
     ctx = context or TroubleshootContext(
@@ -422,11 +400,7 @@ def print_human_troubleshoot(
         con.print("No issues found. All volumes and syncs are active.")
 
 
-# ── JSON ──────────────────────────────────────────────────────
-
-
 def _render_plain(render: Callable[[Console], None]) -> str:
-    """Capture what *render* prints, without styling, as plain text."""
     buf = StringIO()
     render(Console(file=buf, width=100, color_system=None, highlight=False))
     return buf.getvalue().rstrip("\n")
@@ -438,9 +412,7 @@ def troubleshoot_json(
     *,
     has_fatal_errors: bool,
 ) -> dict[str, object]:
-    """Structured troubleshoot output: one entry per issue.
-
-    ``code`` is the stable enum member name (``RSYNC_NOT_FOUND``) and the
+    """``code`` is the stable enum member name (``RSYNC_NOT_FOUND``) and the
     identifier to branch on; ``remediation`` is the human fix as plain text.
     """
     ctx = with_remediation_facts(issues, ctx)

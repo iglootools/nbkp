@@ -37,8 +37,6 @@ __all__ = [
 
 @dataclass(frozen=True)
 class PipelineResult:
-    """Outcome of a check-then-run pipeline execution."""
-
     preflight: PreflightResult
     results: list[SyncResult]
     """Empty when preflight found fatal errors and syncs were not executed."""
@@ -59,8 +57,6 @@ class PipelineResult:
 
 @dataclass(frozen=True)
 class SyncCallbacks:
-    """Progress callbacks fired while syncs run."""
-
     on_rsync_output: Callable[[str], None] | None = None
     on_sync_start: Callable[[str], None] | None = None
     on_sync_end: Callable[[str, SyncResult], None] | None = None

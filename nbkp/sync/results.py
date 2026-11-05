@@ -1,5 +1,3 @@
-"""Sync results: outcomes, failure and warning kinds, and their severity."""
-
 import subprocess
 from enum import Enum
 
@@ -9,8 +7,6 @@ from ..policy import Severity, Strictness, classify_severity
 
 
 class SyncOutcome(str, Enum):
-    """Outcome of a sync operation."""
-
     SUCCESS = "success"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -88,8 +84,6 @@ class SyncWarningKind(str, Enum):
 
 
 class SyncWarning(BaseModel):
-    """A non-fatal problem encountered while running a sync."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     kind: SyncWarningKind
@@ -97,9 +91,7 @@ class SyncWarning(BaseModel):
 
 
 class SyncResult(BaseModel):
-    """Result of running a sync.
-
-    ``failure`` says why a sync did not succeed and determines
+    """``failure`` says why a sync did not succeed and determines
     ``outcome``; ``detail`` is the human-readable rendering of it.
     Prefer the constructors (:meth:`succeeded`, :meth:`failed`,
     :meth:`skipped`, :meth:`cancelled`), which keep the two consistent.
@@ -219,9 +211,7 @@ def result_severity(
     result: SyncResult,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Severity:
-    """Severity of a sync result under *strictness*.
-
-    Runtime failures — and cancellations caused by one — are errors under
+    """Runtime failures — and cancellations caused by one — are errors under
     every strictness.  Non-runs rooted in expected inactivity follow the
     strictness policy for inactive errors, and syncs skipped for
     infrastructure errors follow the policy for infrastructure errors.

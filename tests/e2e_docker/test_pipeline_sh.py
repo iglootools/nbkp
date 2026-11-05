@@ -40,7 +40,6 @@ class TestChainSyncSh:
         (matching the real-world usage where mount management is
         excluded from generated scripts).
         """
-        # 1. Build config — with LUKS-encrypted btrfs volume
         config = build_chain_config(
             tmp_path,
             bastion_container,
@@ -49,12 +48,9 @@ class TestChainSyncSh:
         )
         resolved = resolve_all_endpoints(config)
 
-        # 2. Mount encrypted volume, then run the generated script
         with managed_mount(config, resolved, lambda _: LUKS_PASSPHRASE):
-            # 3. Setup: btrfs subvolume, sentinels, seed data
             src = setup_chain(config, tmp_path, docker_ssh_endpoint, resolved)
 
-            # 4. Generate script
             script = generate_script(
                 config,
                 ScriptOptions(platform=sys.platform, config_path="test.yaml"),
@@ -62,13 +58,12 @@ class TestChainSyncSh:
                 resolved_endpoints=resolved,
             )
 
-            # 5. Write script to file (piping via stdin would let
-            #    SSH commands consume the remaining script text)
+            # Run from a file: piped via stdin, the SSH commands in the script
+            # would consume the rest of the script text.
             script_path = tmp_path / "backup.sh"
             script_path.write_text(script, encoding="utf-8")
             script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR)
 
-            # 6. Validate syntax
             syntax = subprocess.run(
                 ["bash", "-n", str(script_path)],
                 capture_output=True,
@@ -77,7 +72,6 @@ class TestChainSyncSh:
             )
             assert syntax.returncode == 0, f"bash -n failed:\n{syntax.stderr}"
 
-            # 7. Run the generated script
             result = subprocess.run(
                 [str(script_path)],
                 capture_output=True,
@@ -87,5 +81,4 @@ class TestChainSyncSh:
             assert result.returncode == 0, f"script failed:\n{result.stderr}"
             assert "All syncs completed" in result.stderr
 
-            # 8. Verify results (tree equality, snapshots, sentinels)
             assert_chain_results(src, tmp_path, config, docker_ssh_endpoint, resolved)

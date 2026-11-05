@@ -6,5 +6,4 @@ __all__ = ["app", "main"]
 
 
 def main() -> None:
-    """Demo CLI entry point."""
     app()

@@ -9,5 +9,4 @@ __all__ = ["app", "main"]
 
 
 def main() -> None:
-    """Main CLI entry point."""
     app()

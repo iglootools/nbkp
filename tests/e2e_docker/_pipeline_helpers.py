@@ -53,7 +53,6 @@ def setup_chain(
 
     create_seed_sentinels(config, remote_exec=_run_remote)
 
-    # Seed data in src-local-bare only
     src_vol = config.volumes["src-local-bare"]
     seed_volume(src_vol)
 
@@ -118,7 +117,6 @@ def assert_chain_results(
 
     dst = tmp_path / "dst-local-bare"
 
-    # Final destination matches source (minus excluded/)
     assert_trees_equal(src, dst, exclude_dirs={"excluded"})
     assert (src / "excluded").is_dir()
     assert not (dst / "excluded").exists()
@@ -139,12 +137,12 @@ def assert_chain_results(
     assert btrfs_link_target is not None, "btrfs latest symlink missing"
     assert "snapshots/" in btrfs_link_target
 
-    # Verify btrfs latest target is a valid directory and a read-only snapshot
     btrfs_latest_abs = f"{btrfs_vol.path}/{btrfs_link_target}"
     assert check_directory_exists(btrfs_vol, btrfs_latest_abs, resolved), (
         f"btrfs latest target is not a directory: {btrfs_latest_abs}"
     )
-    # Extract the subdir relative to the volume path for check_btrfs_subvolume
+    # The link target is already relative to the volume path, which is what
+    # check_btrfs_subvolume expects.
     btrfs_snapshot_subdir = btrfs_link_target
     assert check_btrfs_subvolume(btrfs_vol, btrfs_snapshot_subdir, resolved), (
         f"btrfs latest target is not a subvolume: {btrfs_latest_abs}"
@@ -164,7 +162,6 @@ def assert_chain_results(
         f"remote-hl latest target is not a directory: {hl_latest_abs}"
     )
 
-    # Sentinel handling on final destination
     step6 = config.syncs["step-6"]
     assert_sentinels_after_sync(step6, config, docker_ssh_endpoint)
 

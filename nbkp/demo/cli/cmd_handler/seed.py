@@ -1,5 +1,3 @@
-"""Seed orchestration: create demo environment with config and test data."""
-
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -45,12 +43,10 @@ _HAS_DOCKER = find_spec("docker") is not None
 
 
 class SeedError(Exception):
-    """Raised when seed fails with a user-facing message."""
+    """Its message is shown to the user as-is."""
 
 
 class SeedResult(BaseModel):
-    """Result of seeding a demo environment."""
-
     model_config = ConfigDict(frozen=True)
 
     base_dir: Path
@@ -62,8 +58,6 @@ class SeedResult(BaseModel):
 
 @dataclass(frozen=True)
 class _Steps:
-    """Progress callbacks around each seed step."""
-
     on_start: Callable[[str], None] | None
     on_end: Callable[[str, Severity, str | None], None] | None
 
@@ -78,8 +72,6 @@ class _Steps:
 
 @dataclass(frozen=True)
 class _Containers:
-    """The running demo containers and how to reach them."""
-
     private_key: Path
     bastion: SshEndpoint
     storage: SshEndpoint
@@ -136,15 +128,8 @@ def seed_demo(
     on_step_start: Callable[[str], None] | None = None,
     on_step_end: Callable[[str, Severity, str | None], None] | None = None,
 ) -> SeedResult:
-    """Create a demo environment with config and test data.
-
-    Parameters
-    ----------
-    on_step_start:
-        Called before each step with an in-progress label
-        (e.g. ``"Building Docker image..."``).
-    on_step_end:
-        Called after each step with ``(label, severity, detail)``.
+    """*on_step_start* receives an in-progress label (e.g.
+    ``"Building Docker image..."``), *on_step_end* the step's result line.
     """
     steps = _Steps(on_step_start, on_step_end)
     rsync_opts = (
@@ -179,7 +164,6 @@ def seed_demo(
 
 
 def _start_containers(base_dir: Path, luks: bool, steps: _Steps) -> _Containers:
-    """Build the image, start bastion + storage, wait for their SSH."""
     private_key, pub_key = generate_ssh_keypair(base_dir)
 
     steps.start("Building Docker image...")
@@ -317,7 +301,6 @@ def _seed_data(
     big_file_size: int,
     steps: _Steps,
 ) -> None:
-    """Create sentinels everywhere and seed the bare source volume."""
     storage = containers.storage if containers is not None else None
 
     def _run_remote(_vol: object, cmd: str) -> None:

@@ -136,7 +136,6 @@ class TestHardLinkSnapshots:
             resolved_endpoints=resolved,
         )
 
-        # Verify directory exists on remote
         check = ssh_exec(docker_ssh_endpoint, f"test -d {snapshot_path}")
         assert check.returncode == 0
 
@@ -170,7 +169,6 @@ class TestHardLinkSnapshots:
         )
         assert result.returncode == 0
 
-        # Verify file arrived in the snapshot dir
         check = ssh_exec(
             docker_ssh_endpoint,
             f"cat {snapshot_path}/hello.txt",
@@ -199,12 +197,10 @@ class TestHardLinkSnapshots:
             src, docker_ssh_endpoint, remote_hardlink_volume
         )
 
-        # Verify symlink exists and points to correct snapshot
         latest = read_latest_symlink(sync, config, resolved_endpoints=resolved)
         assert latest is not None
         assert latest.name == snap_name
 
-        # Verify the file is accessible via the symlink
         check = ssh_exec(
             docker_ssh_endpoint,
             f"cat {REMOTE_BACKUP_PATH}/latest/data.txt",
@@ -222,14 +218,12 @@ class TestHardLinkSnapshots:
         src.mkdir()
         (src / "file.txt").write_text("v1")
 
-        # First sync
         sync, config, resolved, snap1 = _do_sync(
             src, docker_ssh_endpoint, remote_hardlink_volume
         )
 
         time.sleep(0.1)  # distinct timestamp
 
-        # Second sync with link-dest from first snapshot
         snapshot_path = create_snapshot_dir(
             sync,
             config,
@@ -250,7 +244,6 @@ class TestHardLinkSnapshots:
 
         update_latest_symlink(sync, config, snap2, resolved_endpoints=resolved)
 
-        # Verify second snapshot has the file
         check = ssh_exec(
             docker_ssh_endpoint,
             f"cat {REMOTE_BACKUP_PATH}/snapshots/{snap2.name}/file.txt",
@@ -258,7 +251,6 @@ class TestHardLinkSnapshots:
         assert check.returncode == 0
         assert check.stdout.strip() == "v1"
 
-        # Verify latest now points to second snapshot
         latest = read_latest_symlink(sync, config, resolved_endpoints=resolved)
         assert latest is not None
         assert latest.name == snap2.name
@@ -275,17 +267,14 @@ class TestHardLinkSnapshots:
         (src / "unchanged.txt").write_text("same content")
         (src / "changed.txt").write_text("v1")
 
-        # First sync
         sync, config, resolved, snap1 = _do_sync(
             src, docker_ssh_endpoint, remote_hardlink_volume
         )
 
         time.sleep(0.1)
 
-        # Modify one file, leave the other unchanged
         (src / "changed.txt").write_text("v2 is different")
 
-        # Second sync with --link-dest from first
         snapshot_path = create_snapshot_dir(
             sync,
             config,
@@ -303,7 +292,6 @@ class TestHardLinkSnapshots:
         )
         assert result.returncode == 0
 
-        # Verify the unchanged file shares inode (hard-linked)
         inode1 = ssh_exec(
             docker_ssh_endpoint,
             f"stat -c %i {REMOTE_BACKUP_PATH}/snapshots/{snap1}/unchanged.txt",
@@ -314,7 +302,6 @@ class TestHardLinkSnapshots:
         )
         assert inode1.stdout.strip() == inode2.stdout.strip()
 
-        # Verify the changed file has different content
         check = ssh_exec(
             docker_ssh_endpoint,
             f"cat {REMOTE_BACKUP_PATH}/snapshots/{snap2}/changed.txt",
@@ -343,7 +330,6 @@ class TestHardLinkSnapshots:
         )
         snapshot = Snapshot.from_path(snapshot_path)
 
-        # Dry-run rsync
         result = run_rsync(
             sync,
             config,
@@ -369,7 +355,6 @@ class TestHardLinkOrphanCleanup:
         src.mkdir()
         (src / "data.txt").write_text("orphan test")
 
-        # First sync (complete)
         sync, config, resolved, snap1 = _do_sync(
             src, docker_ssh_endpoint, remote_hardlink_volume
         )
@@ -383,19 +368,16 @@ class TestHardLinkOrphanCleanup:
             (f"mkdir -p {REMOTE_BACKUP_PATH}/snapshots/9999-01-01T00:00:00.000Z"),
         )
 
-        # Verify orphan exists
         check = ssh_exec(
             docker_ssh_endpoint,
             (f"test -d {REMOTE_BACKUP_PATH}/snapshots/9999-01-01T00:00:00.000Z"),
         )
         assert check.returncode == 0
 
-        # Cleanup should remove it
         deleted = cleanup_orphaned_snapshots(sync, config, resolved_endpoints=resolved)
         assert len(deleted) == 1
         assert "9999-01-01T00:00:00.000Z" in deleted[0]
 
-        # Verify orphan is gone
         check = ssh_exec(
             docker_ssh_endpoint,
             (f"test -d {REMOTE_BACKUP_PATH}/snapshots/9999-01-01T00:00:00.000Z"),
@@ -403,7 +385,6 @@ class TestHardLinkOrphanCleanup:
         )
         assert check.returncode != 0
 
-        # Verify the real snapshot is still there
         check = ssh_exec(
             docker_ssh_endpoint,
             f"test -d {REMOTE_BACKUP_PATH}/snapshots/{snap1}",
@@ -472,11 +453,9 @@ class TestHardLinkPrune:
             src, docker_ssh_endpoint, remote_hardlink_volume, 3
         )
 
-        # Prune to keep only 1
         deleted = prune_snapshots(sync, config, 1, resolved_endpoints=resolved)
         assert len(deleted) == 2
 
-        # Verify only the latest snapshot remains
         remaining = list_snapshots(sync, config, resolved)
         assert len(remaining) == 1
         assert names[-1] == remaining[0].name
@@ -499,7 +478,6 @@ class TestHardLinkPrune:
         # keep it
         deleted = prune_snapshots(sync, config, 0, resolved_endpoints=resolved)
 
-        # names[0] should be deleted, names[-1] (latest) kept
         assert len(deleted) == 1
         assert names[0] in deleted[0]
 
@@ -521,13 +499,11 @@ class TestHardLinkPrune:
             src, docker_ssh_endpoint, remote_hardlink_volume, 3
         )
 
-        # Dry-run prune to 1
         deleted = prune_snapshots(
             sync, config, 1, dry_run=True, resolved_endpoints=resolved
         )
         assert len(deleted) == 2
 
-        # All 3 snapshots still exist
         remaining = list_snapshots(sync, config, resolved)
         assert len(remaining) == 3
 
@@ -545,7 +521,6 @@ class TestHardLinkPrune:
             src, docker_ssh_endpoint, remote_hardlink_volume, 2
         )
 
-        # Prune with limit higher than count
         deleted = prune_snapshots(sync, config, 10, resolved_endpoints=resolved)
         assert deleted == []
 

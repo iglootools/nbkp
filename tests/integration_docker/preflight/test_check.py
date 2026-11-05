@@ -533,7 +533,6 @@ class TestMountCapabilities:
         assert result.success, result.detail
 
         try:
-            # Create sentinel on the mounted encrypted volume
             create_sentinels(
                 docker_ssh_endpoint,
                 REMOTE_BTRFS_ENCRYPTED_PATH,

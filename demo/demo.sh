@@ -31,7 +31,6 @@ SH="$DEMO_DIR/backup.sh"
 # Pause between commands so the viewer can read the output
 pause() { sleep "${1:-2}"; }
 
-# ── Setup ────────────────────────────────────────────────
 rm -rf "$DEMO_DIR"
 
 p "# Display nbkp version"

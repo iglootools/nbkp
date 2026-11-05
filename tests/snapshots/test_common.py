@@ -32,8 +32,6 @@ from nbkp.snapshots.hardlinks import (
     prune_snapshots as hl_prune_snapshots,
 )
 
-# ── Config helpers ───────────────────────────────────────────
-
 
 def _local_config() -> tuple[Config, SyncConfig]:
     src = LocalVolume(slug="src", path="/mnt/src")
@@ -211,9 +209,6 @@ _TS_LOCAL = create_snapshot_timestamp(_NOW, _LOCAL_VOL, "linux")
 _TS_REMOTE = create_snapshot_timestamp(_NOW, _REMOTE_VOL, "linux")
 
 
-# ── create_snapshot_timestamp ────────────────────────────────
-
-
 class TestCreateSnapshotTimestamp:
     def test_remote_volume_uses_colons(self) -> None:
         vol = RemoteVolume(slug="r", ssh_endpoint="s", path="/p")
@@ -229,9 +224,6 @@ class TestCreateSnapshotTimestamp:
         vol = LocalVolume(slug="l", path="/p")
         result = create_snapshot_timestamp(_NOW, vol, platform="linux")
         assert result.name == "2026-02-21T12:00:00.000Z"
-
-
-# ── get_latest_snapshot ──────────────────────────────────────
 
 
 class TestGetLatestSnapshotLocal:
@@ -310,9 +302,6 @@ class TestGetLatestSnapshotRemoteSpaces:
         )
 
 
-# ── list_snapshots ───────────────────────────────────────────
-
-
 class TestListSnapshotsLocal:
     @patch("nbkp.remote.dispatch.subprocess.run")
     def test_found(self, mock_run: MagicMock) -> None:
@@ -364,9 +353,6 @@ class TestListSnapshotsRemote:
             "20240101T000000Z",
             "20240115T120000Z",
         ]
-
-
-# ── read_latest_symlink ─────────────────────────────────────
 
 
 class TestReadLatestSymlink:
@@ -479,9 +465,6 @@ class TestReadLatestSymlink:
         assert result is None
 
 
-# ── update_latest_symlink ────────────────────────────────────
-
-
 class TestUpdateLatestSymlink:
     def test_local(self, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
@@ -519,9 +502,6 @@ class TestUpdateLatestSymlink:
         cmd = mock_remote.call_args[0][1]
         assert "ln" in cmd
         assert f"snapshots/{_TS_REMOTE.name}" in cmd
-
-
-# ── failure handling ─────────────────────────────────────────
 
 
 def _is_op(op: SnapshotOp):

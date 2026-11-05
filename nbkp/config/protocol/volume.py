@@ -1,5 +1,3 @@
-"""Volume models: local and remote filesystem volumes."""
-
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -10,9 +8,7 @@ from .errors import ConfigValidationCode, config_error
 
 
 class LuksEncryptionConfig(_BaseModel):
-    """LUKS encryption config.
-
-    ``type='luks'`` serves as discriminator for future encryption backends
+    """``type='luks'`` serves as discriminator for future encryption backends
     (e.g. VeraCrypt, BitLocker).
     """
 
@@ -62,8 +58,6 @@ class MountConfig(_BaseModel):
 
 
 class LocalVolume(_BaseModel):
-    """A local filesystem volume."""
-
     model_config = ConfigDict(frozen=True)
     type: Literal["local"] = "local"
     slug: Slug
@@ -101,8 +95,6 @@ class LocalVolume(_BaseModel):
 
 
 class RemoteVolume(_BaseModel):
-    """A remote volume accessible via SSH."""
-
     model_config = ConfigDict(frozen=True)
     type: Literal["remote"] = "remote"
     slug: Slug
@@ -149,9 +141,7 @@ class RemoteVolume(_BaseModel):
 
 
 def _validate_path_requirement(volume: LocalVolume | RemoteVolume) -> None:
-    """Enforce that ``path`` is set unless the volume is mount-managed.
-
-    Mount-managed volumes may omit ``path`` (the mountpoint is discovered at
+    """Mount-managed volumes may omit ``path`` (the mountpoint is discovered at
     runtime). Externally-mounted volumes must declare ``path`` — it is their
     only locator.
     """

@@ -1,5 +1,3 @@
-"""Mount-related data models: tool capabilities, mount state, failure reasons."""
-
 import enum
 
 from pydantic import BaseModel, ConfigDict
@@ -8,9 +6,7 @@ lazy from ..config.protocol.volume import LocalVolume, RemoteVolume
 
 
 class MountFailureReason(str, enum.Enum):
-    """Structured reason for a mount lifecycle failure.
-
-    Lives here (not in ``lifecycle``) so that ``MountCapabilities`` can carry
+    """Lives here (not in ``lifecycle``) so that ``MountCapabilities`` can carry
     it as a typed field and preflight can ``match`` on members instead of
     string literals.
     """
@@ -37,12 +33,9 @@ class MountToolCapabilities(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    # udisks
     has_udisksctl: bool | None = None
     udisksd_running: bool | None = None
     has_btrfs_module: bool | None = None
-
-    # Detection helpers
     has_findmnt: bool | None = None
     has_lsblk: bool | None = None
 

@@ -77,5 +77,4 @@ class Snapshot(BaseModel):
 
     @staticmethod
     def from_path(path: str) -> Snapshot:
-        """Extract the snapshot name from a full path and parse it."""
         return Snapshot.from_name(path.rsplit("/", 1)[-1])

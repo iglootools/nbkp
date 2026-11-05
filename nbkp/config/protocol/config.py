@@ -1,5 +1,3 @@
-"""Top-level NBKP configuration model."""
-
 import enum
 from collections.abc import Iterable, Iterator, Mapping
 from itertools import combinations
@@ -80,7 +78,6 @@ def _resolve_endpoint(
 
 
 def _inject_slugs(entries: Any) -> Any:
-    """Copy each mapping key into its entry's ``slug`` field, unless set."""
     match entries:
         case dict():
             return {
@@ -121,7 +118,6 @@ def _is_nested(path_a: str, path_b: str) -> bool:
 def _location_error(
     slug_a: str, ep_a: SyncEndpoint, slug_b: str, ep_b: SyncEndpoint
 ) -> ValueError | None:
-    """Error for two sync endpoints on one volume sharing or nesting a path."""
     path_a, path_b = ep_a.subdir or "", ep_b.subdir or ""
     if path_a == path_b:
         subdir_msg = f" subdir '{ep_b.subdir}'" if ep_b.subdir else ""
@@ -145,8 +141,6 @@ def _location_error(
 
 
 class Config(_BaseModel):
-    """Top-level NBKP configuration."""
-
     credential_provider: CredentialProvider = Field(
         default=CredentialProvider.KEYRING,
         description=(
@@ -171,7 +165,6 @@ class Config(_BaseModel):
     @model_validator(mode="before")
     @classmethod
     def resolve_ssh_endpoint_extends(cls, data: Any) -> Any:
-        """Resolve `extends` inheritance on ssh-endpoints."""
         if not isinstance(data, dict):
             return data
         key = "ssh-endpoints" if "ssh-endpoints" in data else "ssh_endpoints"
@@ -192,21 +185,17 @@ class Config(_BaseModel):
         return _inject_slugs(v)
 
     def source_endpoint(self, sync: SyncConfig) -> SyncEndpoint:
-        """Resolve the source sync endpoint for a sync."""
         return self.sync_endpoints[sync.source]
 
     def destination_endpoint(self, sync: SyncConfig) -> SyncEndpoint:
-        """Resolve the destination sync endpoint for a sync."""
         return self.sync_endpoints[sync.destination]
 
     def known_locations(self) -> list[str]:
-        """All distinct location tags declared across SSH endpoints."""
         return sorted(
             {loc for ep in self.ssh_endpoints.values() for loc in ep.location_list}
         )
 
     def orphan_ssh_endpoints(self) -> list[str]:
-        """SSH endpoints not referenced by any volume or proxy-jump chain."""
         used = {
             ref
             for vol in self.volumes.values()
@@ -216,12 +205,10 @@ class Config(_BaseModel):
         return sorted(set(self.ssh_endpoints) - used)
 
     def orphan_volumes(self) -> list[str]:
-        """Volumes not referenced by any sync endpoint."""
         used = {ep.volume for ep in self.sync_endpoints.values()}
         return sorted(set(self.volumes) - used)
 
     def orphan_sync_endpoints(self) -> list[str]:
-        """Sync endpoints not referenced by any sync."""
         used = {
             ref
             for sync in self.syncs.values()
@@ -248,7 +235,6 @@ class Config(_BaseModel):
         return self
 
     def _unknown_proxy_jump_errors(self) -> Iterator[ValueError]:
-        """Proxy-jump hops naming an undeclared ssh-endpoint."""
         return (
             _unknown_reference(
                 f"Server '{slug}' references unknown proxy-jump server '{hop}'"
@@ -259,7 +245,6 @@ class Config(_BaseModel):
         )
 
     def _circular_proxy_jump_errors(self) -> Iterator[ValueError]:
-        """Servers whose transitive proxy-jump chain leads back to a server."""
         return (
             config_error(
                 ConfigValidationCode.CIRCULAR_PROXY_JUMP,
@@ -270,14 +255,12 @@ class Config(_BaseModel):
         )
 
     def _has_proxy_cycle(self, slug: str, visited: frozenset[str]) -> bool:
-        """Whether following proxy-jumps from ``slug`` revisits a server."""
         return slug in visited or any(
             self._has_proxy_cycle(hop, visited | {slug})
             for hop in self.ssh_endpoints[slug].proxy_jump_chain
         )
 
     def _volume_reference_errors(self) -> Iterator[ValueError]:
-        """Volumes naming unknown ssh-endpoints, sync endpoints unknown volumes."""
         yield from (
             _unknown_reference(
                 f"Volume '{vol_slug}' references unknown ssh-endpoint '{ref}'"
@@ -296,7 +279,6 @@ class Config(_BaseModel):
         )
 
     def _sync_endpoint_location_errors(self) -> Iterator[ValueError]:
-        """Sync endpoints on one volume that share or nest a path."""
         candidates = (
             _location_error(slug_a, ep_a, slug_b, ep_b)
             for (slug_a, ep_a), (slug_b, ep_b) in combinations(
@@ -307,7 +289,6 @@ class Config(_BaseModel):
         return (error for error in candidates if error is not None)
 
     def _sync_reference_errors(self) -> Iterator[ValueError]:
-        """Syncs naming unknown source or destination endpoints."""
         return (
             _unknown_reference(
                 f"Sync '{sync_slug}' references unknown {role} endpoint '{ref}'"
@@ -321,7 +302,6 @@ class Config(_BaseModel):
         )
 
     def _shared_destination_errors(self) -> Iterator[ValueError]:
-        """Pairs of syncs writing to the same destination endpoint."""
         return (
             config_error(
                 ConfigValidationCode.SHARED_DESTINATION,
@@ -335,7 +315,6 @@ class Config(_BaseModel):
         )
 
     def _cross_server_errors(self) -> Iterator[ValueError]:
-        """Remote-to-remote syncs whose volumes live on different servers."""
         volume_pairs = (
             (
                 sync_slug,
@@ -359,7 +338,6 @@ class Config(_BaseModel):
         )
 
     def _credential_errors(self) -> Iterator[ValueError]:
-        """A ``command`` provider without a command, or one lacking ``{id}``."""
         missing_command = (
             self.credential_provider == CredentialProvider.COMMAND
             and self.credential_command is None

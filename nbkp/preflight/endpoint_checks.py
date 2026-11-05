@@ -1,9 +1,5 @@
-"""Sync-endpoint-level diagnostics (source and destination).
-
-Each function observes subdir-dependent state of an endpoint and
-returns a diagnostics model.  No ``SyncError`` interpretation
-happens here — the sync layer translates diagnostics + capabilities
-into errors.
+"""No ``SyncError`` interpretation happens here — the sync layer translates
+diagnostics + capabilities into errors.
 
 ``VolumeCapabilities`` is accepted to decide *which* checks to run
 (e.g. btrfs subvolume only when the filesystem is btrfs), avoiding
@@ -52,7 +48,6 @@ def observe_source_endpoint(
     *,
     host_tools: HostToolCapabilities,
 ) -> SourceEndpointDiagnostics:
-    """Observe state of a source sync endpoint."""
     sentinel_exists = _check_endpoint_sentinel(
         volume, endpoint.subdir, SOURCE_SENTINEL, resolved_endpoints
     )
@@ -82,7 +77,6 @@ def observe_destination_endpoint(
     *,
     host_tools: HostToolCapabilities,
 ) -> DestinationEndpointDiagnostics:
-    """Observe state of a destination sync endpoint."""
     sentinel_exists = _check_endpoint_sentinel(
         volume, endpoint.subdir, DESTINATION_SENTINEL, resolved_endpoints
     )
@@ -116,10 +110,6 @@ def _check_btrfs_diagnostics(
     resolved_endpoints: ResolvedEndpoints,
     host_tools: HostToolCapabilities,
 ) -> BtrfsStagingSubvolumeDiagnostics | None:
-    """Check btrfs staging subvolume state.
-
-    ``has_stat`` comes from the SSH endpoint level (host tool probe).
-    """
     if not (
         endpoint.btrfs_snapshots.enabled
         and host_tools.has_stat
@@ -147,15 +137,11 @@ def _check_btrfs_diagnostics(
     )
 
 
-# ── Helpers ─────────────────────────────────────────────────
-
-
 def _check_snapshot_dirs(
     volume: Volume,
     endpoint_path: str,
     resolved_endpoints: ResolvedEndpoints,
 ) -> SnapshotDirsDiagnostics:
-    """Check snapshot directory existence and writability."""
     snaps_path = f"{endpoint_path}/{SNAPSHOTS_DIR}"
     exists = check_directory_exists(volume, snaps_path, resolved_endpoints)
     writable = (
@@ -171,7 +157,6 @@ def _read_latest_state(
     endpoint_path: str,
     resolved_endpoints: ResolvedEndpoints,
 ) -> LatestSymlinkState:
-    """Read the latest symlink and return its observed state."""
     latest_path = f"{endpoint_path}/{LATEST_LINK}"
     if not _check_symlink_exists(volume, latest_path, resolved_endpoints):
         return LatestSymlinkState(exists=False)
@@ -201,7 +186,6 @@ def _read_latest_state(
 
 
 def _parse_snapshot(target: str) -> Snapshot | None:
-    """The snapshot *target* names, or ``None`` when it is not a snapshot name."""
     try:
         return Snapshot.from_path(target)
     except ValueError:

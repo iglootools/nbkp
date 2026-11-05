@@ -10,7 +10,6 @@ from nbkp.fsprotocol import Snapshot
 
 
 def _emit(data: object, capsys: pytest.CaptureFixture[str]) -> dict | list:
-    """Call echo_json and parse what it printed."""
     echo_json(data)
     return json.loads(capsys.readouterr().out)
 

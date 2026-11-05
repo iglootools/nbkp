@@ -1,5 +1,3 @@
-"""Demo CLI sub-app."""
-
 import typer
 from rich.console import Console
 

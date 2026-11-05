@@ -1,5 +1,3 @@
-"""Show orchestration: list snapshots for each sync endpoint."""
-
 from ....config import Config
 from ....policy import Strictness
 from ....preflight import SyncStatus
@@ -56,7 +54,6 @@ def _process_candidate(
     re: ResolvedEndpoints,
     strictness: Strictness,
 ) -> ShowResult:
-    """Process a single show candidate into a ShowResult."""
     match _disposition(status, config, strictness):
         case (None, None):
             return _read_snapshots(slug, status, config, re)
@@ -80,10 +77,6 @@ def show_all_syncs(
     resolved_endpoints: ResolvedEndpoints | None = None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> list[ShowResult]:
-    """Show snapshot information for all eligible syncs.
-
-    Returns a list of ShowResult for each candidate sync.
-    """
     re = resolved_endpoints or {}
     return [
         _process_candidate(slug, status, config, re, strictness)

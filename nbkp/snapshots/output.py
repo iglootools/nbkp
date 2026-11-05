@@ -1,5 +1,3 @@
-"""Snapshot output formatting (prune and show results)."""
-
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
@@ -8,22 +6,14 @@ from .models import PruneResult, ShowResult, SnapshotSkipReason
 
 
 def retention_display(max_snapshots: int | None) -> str:
-    """Format a max_snapshots value for display."""
     if max_snapshots is None:
         return "unlimited"
     else:
         return f"keep {max_snapshots}"
 
 
-# ---------------------------------------------------------------------------
-# Prune results
-# ---------------------------------------------------------------------------
-
-
 def _status_text(skip_reason: SnapshotSkipReason | None, error: str | None) -> Text:
-    """Map a result's skip reason / error to a styled Rich Text label.
-
-    Text, not markup: the error carries remote stderr, which may contain
+    """Text, not markup: the error carries remote stderr, which may contain
     square brackets.
     """
     match (skip_reason, error):
@@ -41,7 +31,6 @@ def print_human_prune_results(
     *,
     console: Console | None = None,
 ) -> None:
-    """Print human-readable prune results."""
     c = console or Console()
     mode = " (dry run)" if dry_run else ""
 
@@ -63,11 +52,6 @@ def print_human_prune_results(
         )
 
     c.print(table)
-
-
-# ---------------------------------------------------------------------------
-# Show results
-# ---------------------------------------------------------------------------
 
 
 def _show_row(r: ShowResult) -> tuple[str, str, str, str, str, Text]:
@@ -92,7 +76,6 @@ def print_human_show_results(
     *,
     console: Console | None = None,
 ) -> None:
-    """Print human-readable snapshot show results."""
     c = console or Console()
 
     table = Table(title="Snapshots:")

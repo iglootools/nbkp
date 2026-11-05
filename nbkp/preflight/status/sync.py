@@ -23,12 +23,8 @@ from .volume import INACTIVE_VOLUME_ERRORS
 
 
 class SyncError(str, enum.Enum):
-    """Sync-level errors.
-
-    Drastically reduced from the pre-refactor version.  Most errors
-    that were previously ``SyncError`` variants now live at the SSH
-    endpoint, volume, or sync endpoint level.  Only errors that
-    require sync-graph context remain here.
+    """Only errors that require sync-graph context live here; the rest
+    are at the SSH endpoint, volume or sync endpoint level.
     """
 
     DISABLED = "disabled"
@@ -61,8 +57,6 @@ INACTIVE_SYNC_ERRORS: frozenset[SyncError] = frozenset(
 
 
 class SyncStatus(BaseModel):
-    """Runtime status of a sync."""
-
     model_config = ConfigDict(frozen=True)
 
     slug: str
@@ -117,7 +111,6 @@ class SyncStatus(BaseModel):
         all_syncs: dict[str, SyncConfig],
         dry_run: bool,
     ) -> SyncStatus:
-        """Create status by interpreting sync-level errors."""
         dst_diag = dst_ep_status.diagnostics
         return SyncStatus(
             slug=sync.slug,
@@ -150,9 +143,6 @@ class SyncStatus(BaseModel):
         )
 
 
-# ── Layer 4 error interpretation ───────────────────────────
-
-
 def _host_errors(
     src_ep_status: SourceEndpointStatus,
     dst_ep_status: DestinationEndpointStatus,
@@ -179,11 +169,6 @@ def _sync_errors(
     all_syncs: dict[str, SyncConfig],
     dry_run: bool,
 ) -> list[SyncError]:
-    """Sync-level errors: ``latest → /dev/null`` interpretation.
-
-    Only errors that require sync-graph context (upstream dependency)
-    remain at this level.  All other errors cascade from lower layers.
-    """
     if not src_ep_status.active:
         return []
     if src_endpoint.snapshot_mode == "none":
@@ -193,7 +178,6 @@ def _sync_errors(
         return []
     if diag.latest.raw_target != DEVNULL_TARGET:
         return []
-    # latest → /dev/null: interpret based on sync graph
     if not _has_upstream_sync(sync, all_syncs):
         return [SyncError.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM]
     elif dry_run:
@@ -206,11 +190,6 @@ def _has_upstream_sync(
     sync: SyncConfig,
     all_syncs: dict[str, SyncConfig],
 ) -> bool:
-    """Check if an enabled upstream sync writes to this sync's source.
-
-    An upstream sync is one whose destination endpoint slug
-    matches this sync's source endpoint slug.
-    """
     return any(
         other.destination == sync.source and other.slug != sync.slug and other.enabled
         for other in all_syncs.values()

@@ -16,7 +16,6 @@ from textwrap import dedent
 
 from ..config import Config
 
-# Install path for the generated polkit rule
 POLKIT_RULES_PATH = "/etc/polkit-1/rules.d/50-nbkp.rules"
 
 # udisks polkit actions nbkp needs.  The ``-system`` variants cover
@@ -55,19 +54,15 @@ class AuthRuleBlock:
 
     @property
     def install_hint(self) -> str:
-        """Single-line "Install to: <path>" hint used in user-facing output."""
         return f"Install to: {self.path}"
 
 
 @dataclass(frozen=True)
 class AuthRules:
-    """Generated authorization rules for mount management."""
-
     polkit: str | None
     """polkit rules content, or None if no volumes have mount config."""
 
     def polkit_block(self) -> AuthRuleBlock | None:
-        """Polkit block, or None when no polkit rules were generated."""
         if self.polkit:
             return AuthRuleBlock("polkit rules", POLKIT_RULES_PATH, self.polkit)
         return None

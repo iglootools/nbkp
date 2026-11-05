@@ -1,5 +1,3 @@
-"""Tests for the `disks status` CLI command."""
-
 import json
 from unittest.mock import MagicMock, patch
 

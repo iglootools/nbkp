@@ -1,5 +1,3 @@
-"""CLI sh command."""
-
 import stat
 import sys
 from datetime import UTC, datetime
@@ -136,7 +134,6 @@ def sh(
 
 
 def _display_path(path: Path) -> str:
-    """*path* relative to the working directory when it lies under it."""
     try:
         return str(path.relative_to(Path.cwd()))
     except ValueError:

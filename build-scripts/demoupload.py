@@ -213,7 +213,6 @@ def parse_recording_url(upload_output: str) -> str | None:
 
 
 def render_embed(url: str) -> str:
-    """The README's asciicast embed for *url*."""
     return f"[![asciicast]({url}.svg)]({url})"
 
 

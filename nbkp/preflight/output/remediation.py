@@ -102,13 +102,11 @@ def say(console: Console, level: int, *parts: Part) -> None:
 
 
 def print_cmd(console: Console, cmd: str, level: int = FIX) -> None:
-    """Print a shell command with bash syntax highlighting at nesting *level*."""
     syntax = Syntax(cmd, "bash", theme="monokai", background_color="default")
     console.print(Padding(syntax, (0, 0, 0, level * _INDENT_WIDTH)))
 
 
 def _say_lines(console: Console, level: int, block: str) -> None:
-    """Print each line of a ``dedent`` block at *level*."""
     for line in block.splitlines():
         say(console, level, line)
 
@@ -158,11 +156,7 @@ _UDISKS_MOUNT_OPTIONS = dedent("""\
     btrfs_defaults=user_subvol_rm_allowed""")
 
 
-# ── Shared fixes ──────────────────────────────────────────────
-
-
 def _print_titled(console: Console, title: Part, details: str) -> None:
-    """A fix headline followed by indented detail lines."""
     say(console, FIX, title)
     _say_lines(console, STEP, details)
 
@@ -179,7 +173,6 @@ def _print_sentinel_fix(
     sentinel: str,
     ctx: TroubleshootContext,
 ) -> None:
-    """Print sentinel creation fix with mount reminder."""
     say(console, FIX, "Ensure the volume is mounted, then:")
     print_cmd(console, wrap_cmd(["mkdir", "-p", path], vol, ctx.resolved_endpoints))
     print_cmd(
@@ -227,9 +220,6 @@ def _print_mkdir(
     print_cmd(console, wrap_cmd(["mkdir", "-p", path], vol, ctx.resolved_endpoints))
 
 
-# ── Layer 1: SSH endpoints ────────────────────────────────────
-
-
 def _proxy_chain(config: Config, server: SshEndpoint) -> list[SshEndpoint] | None:
     return (
         [config.ssh_endpoints[s] for s in server.proxy_jump_chain]
@@ -260,7 +250,6 @@ def _print_ssh_auth_steps(
     server: SshEndpoint,
     proxy_chain: list[SshEndpoint] | None,
 ) -> None:
-    """Key setup steps: ensure/generate a key, copy it, verify."""
     echo_ok = shlex.join([*ssh_prefix(server, proxy_chain), "echo", "ok"])
     say(
         console,
@@ -281,7 +270,6 @@ def _print_ssh_auth_steps(
 def _print_ssh_unreachable(
     console: Console, status: SshEndpointStatus, ctx: TroubleshootContext
 ) -> None:
-    """Connectivity checks plus key setup, with the recorded cause if any."""
     server = ctx.config.ssh_endpoints.get(status.slug)
     cause = status.diagnostics.ssh_error
     if server is None:
@@ -328,7 +316,6 @@ def print_ssh_endpoint_error_fix(
     error: SshEndpointError,
     ctx: TroubleshootContext,
 ) -> None:
-    """Print fix instructions for an SSH endpoint error."""
     slug = status.slug
     match error:
         case SshEndpointError.UNREACHABLE:
@@ -390,7 +377,6 @@ def print_ssh_endpoint_warning_fix(
     status: SshEndpointStatus,
     warning: SshEndpointWarning,
 ) -> None:
-    """Print advice for a non-fatal SSH endpoint warning."""
     match warning:
         case SshEndpointWarning.UDISKS_BTRFS_MODULE_MISSING:
             _print_titled(
@@ -402,16 +388,12 @@ def print_ssh_endpoint_warning_fix(
             )
 
 
-# ── Layer 2: Volumes ─────────────────────────────────────────
-
-
 def print_volume_error_fix(
     console: Console,
     vol_status: VolumeStatus,
     error: VolumeError,
     ctx: TroubleshootContext,
 ) -> None:
-    """Print fix instructions for a volume error."""
     vol = vol_status.config
     match error:
         case VolumeError.SENTINEL_NOT_FOUND:
@@ -472,7 +454,6 @@ def _cleartext_device(
 
 
 def _print_mapper_name_caveat(console: Console, level: int) -> None:
-    """Warn that a derived mapper name may not be the real one."""
     say(
         console,
         level,
@@ -490,7 +471,6 @@ def _print_fstab_line(
     fs_and_options: str,
     ctx: TroubleshootContext,
 ) -> None:
-    """An fstab line naming the right device (cleartext mapper if encrypted)."""
     match mount:
         case MountConfig(encryption=None):
             print_cmd(
@@ -510,9 +490,7 @@ def _print_fstab_mountpoint_mismatch_fix(
     vol_status: VolumeStatus,
     ctx: TroubleshootContext,
 ) -> None:
-    """Print fix for a declared path with no fstab entry for this device.
-
-    The volume declares a fixed ``path`` but no ``/etc/fstab`` entry maps the
+    """The volume declares a fixed ``path`` but no ``/etc/fstab`` entry maps the
     device to that path (none at all, or one naming another device), so
     udisks would mount it at its own ``/run/media/<user>/<label>`` location
     instead.  Two remediations: add/fix the fstab entry, or drop ``path``.
@@ -564,9 +542,7 @@ def _print_user_subvol_rm_fix(
     vol: LocalVolume | RemoteVolume,
     ctx: TroubleshootContext,
 ) -> None:
-    """Print fix for a btrfs volume not mounted with user_subvol_rm_allowed.
-
-    The option is required for snapshot pruning.  nbkp does not pass it to
+    """The option is required for snapshot pruning.  nbkp does not pass it to
     udisks at mount time — udisks rejects any non-allowlisted mount option
     (``OptionNotPermitted``), which would fail the mount — so the option must
     come from operator config: ``/etc/fstab`` (udisks honors fstab verbatim) or,
@@ -607,7 +583,6 @@ def _print_udisks_persistence(
     path: str,
     ctx: TroubleshootContext,
 ) -> None:
-    """The two persistence routes for a udisks-managed btrfs volume."""
     say(console, FIX, "To persist (udisks-managed volume), use ONE of:")
     say(console, FIX, "Option A — /etc/fstab (udisks honors fstab options):")
     _print_fstab_line(
@@ -648,7 +623,6 @@ def _print_passphrase_not_available_fix(
     mount: MountConfig | None,
     ctx: TroubleshootContext,
 ) -> None:
-    """Print fix for a passphrase that could not be retrieved."""
     pid = _passphrase_id(mount)
     say(
         console,
@@ -678,7 +652,6 @@ def _print_unlock_failed_fix(
     mount: MountConfig | None,
     ctx: TroubleshootContext,
 ) -> None:
-    """Print fix for a failed LUKS unlock via udisks."""
     uuid = mount.device_uuid if mount else "<uuid>"
     say(console, FIX, "udisksctl failed to unlock the LUKS container.")
     say(
@@ -713,7 +686,6 @@ def _print_mount_failed_fix(
     mount: MountConfig | None,
     ctx: TroubleshootContext,
 ) -> None:
-    """Print fix for a failed udisks mount."""
     match mount:
         case MountConfig(encryption=None):
             device = f"/dev/disk/by-uuid/{mount.device_uuid}"
@@ -744,11 +716,6 @@ def _print_mount_failed_fix(
 
 
 def polkit_user(vol: LocalVolume | RemoteVolume, ctx: TroubleshootContext) -> str:
-    """System user for the polkit rule on a volume's host.
-
-    The SSH endpoint user for remote volumes; otherwise the local user the
-    CLI supplied.
-    """
     match vol:
         case RemoteVolume():
             ep = ctx.resolved_endpoints.get(vol.slug)
@@ -762,7 +729,6 @@ def _print_polkit_rules_missing_fix(
     vol: LocalVolume | RemoteVolume,
     ctx: TroubleshootContext,
 ) -> None:
-    """Print fix for missing polkit rules, including generated content."""
     user = polkit_user(vol, ctx)
     block = ctx.known_facts.polkit_rules.get(user)
     say(
@@ -789,16 +755,12 @@ def _print_polkit_rules_missing_fix(
     )
 
 
-# ── Layer 3: Sync endpoints ──────────────────────────────────
-
-
 def print_source_endpoint_error_fix(
     console: Console,
     error: SourceEndpointError,
     sync: SyncConfig,
     ctx: TroubleshootContext,
 ) -> None:
-    """Print fix instructions for a source endpoint error."""
     src_ep = ctx.config.source_endpoint(sync)
     src_vol = ctx.config.volumes[src_ep.volume]
     path = endpoint_path(src_vol, src_ep.subdir)
@@ -839,7 +801,6 @@ def print_destination_endpoint_error_fix(
     sync: SyncConfig,
     ctx: TroubleshootContext,
 ) -> None:
-    """Print fix instructions for a destination endpoint error."""
     dst_ep = ctx.config.destination_endpoint(sync)
     dst_vol = ctx.config.volumes[dst_ep.volume]
     path = endpoint_path(dst_vol, dst_ep.subdir)
@@ -992,16 +953,12 @@ def _print_destination_btrfs_fix(
             pass
 
 
-# ── Layer 4: Syncs ───────────────────────────────────────────
-
-
 def print_sync_error_fix(
     console: Console,
     sync: SyncConfig,
     error: SyncError,
     ctx: TroubleshootContext,
 ) -> None:
-    """Print fix instructions for a sync-level error."""
     match error:
         case SyncError.DISABLED:
             say(console, FIX, "Enable the sync in the configuration file.")

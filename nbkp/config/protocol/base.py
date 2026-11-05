@@ -1,5 +1,3 @@
-"""Base model and common types for the configuration protocol."""
-
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field

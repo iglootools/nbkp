@@ -78,7 +78,6 @@ def run_results(config: Config) -> list[SyncResult]:
 
 
 def dry_run_results(config: Config) -> list[SyncResult]:
-    """Same results as run_results but flagged as dry run."""
     return [r.model_copy(update={"dry_run": True}) for r in run_results(config)]
 
 
@@ -119,7 +118,6 @@ def prune_results(config: Config) -> list[PruneResult]:
 def prune_dry_run_results(
     config: Config,
 ) -> list[PruneResult]:
-    """Prune dry-run results."""
     snap_base = _snap_base(config, "photos-to-usb")
     return [
         PruneResult(

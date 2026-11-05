@@ -1,5 +1,3 @@
-"""Btrfs snapshot creation, lookup, and pruning."""
-
 from datetime import datetime
 
 from ..config import (
@@ -107,7 +105,7 @@ def prune_snapshots(
         latest = read_latest_symlink(sync, config, resolved_endpoints=re)
         base = snapshots_dir(sync, config)
 
-        # Candidates: oldest first, skip the latest target, take up to excess
+        # list_snapshots sorts oldest first, so the slice takes the oldest.
         to_delete = [
             f"{base}/{s.name}"
             for s in snapshots

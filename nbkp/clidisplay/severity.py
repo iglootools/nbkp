@@ -7,9 +7,9 @@ only maps it to symbols and Rich styles.
 
 from ..policy import Severity
 
-OK_SYMBOL = "✓"  # ✓
-WARNING_SYMBOL = "⚠"  # ⚠
-ERROR_SYMBOL = "✗"  # ✗
+OK_SYMBOL = "✓"
+WARNING_SYMBOL = "⚠"
+ERROR_SYMBOL = "✗"
 
 OK_STYLE = "green"
 WARNING_STYLE = "dark_orange"
@@ -28,7 +28,6 @@ def severity_symbol(severity: Severity) -> str:
 
 
 def severity_style(severity: Severity) -> str:
-    """Rich style name for a severity level."""
     match severity:
         case Severity.OK:
             return OK_STYLE

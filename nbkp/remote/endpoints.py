@@ -13,14 +13,12 @@ from ..config.protocol import SshEndpoint, _BaseModel
 
 
 class NetworkType(str, Enum):
-    """Network type for endpoint filtering."""
-
     PRIVATE = "private"
     PUBLIC = "public"
 
 
 class EndpointFilter(_BaseModel):
-    """Endpoint selection filter (not serialized)."""
+    """Not serialized."""
 
     model_config = ConfigDict(frozen=True)
     locations: list[str] = Field(default_factory=list)
@@ -29,8 +27,6 @@ class EndpointFilter(_BaseModel):
 
 
 class ResolvedEndpoint(_BaseModel):
-    """Pre-resolved SSH endpoint with proxy chain."""
-
     model_config = ConfigDict(frozen=True)
     server: SshEndpoint
     proxy_chain: list[SshEndpoint] = Field(default_factory=list)

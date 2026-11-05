@@ -1,5 +1,3 @@
-"""Sync execution: rsync command building, orchestration, and per-mode runs."""
-
 from .rsync import ProgressMode as ProgressMode
 lazy from .orchestration import run_all_syncs as run_all_syncs
 lazy from .results import (

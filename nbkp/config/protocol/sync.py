@@ -1,5 +1,3 @@
-"""Sync configuration and rsync options."""
-
 from pathlib import Path
 from typing import Any
 
@@ -10,8 +8,6 @@ from .errors import ConfigValidationCode, config_error
 
 
 class RsyncOptions(_BaseModel):
-    """Rsync flag configuration for a sync operation."""
-
     model_config = ConfigDict(frozen=True)
     compress: bool = Field(default=False, description="Enable rsync `--compress`")
     checksum: bool = Field(default=False, description="Enable rsync `--checksum`")
@@ -28,7 +24,6 @@ _DIR_MERGE_OPTS = {"path", "exclude-self"}
 
 
 def _validate_dir_merge_opts(opts: dict[str, Any]) -> None:
-    """Reject unknown keys in a dir-merge dict."""
     unknown = set(opts) - _DIR_MERGE_OPTS
     if unknown:
         raise config_error(
@@ -71,8 +66,6 @@ def _filter_rules(item: Any) -> list[str]:
 
 
 class SyncConfig(_BaseModel):
-    """Configuration for a single sync operation."""
-
     slug: Slug
     source: str = Field(..., min_length=1, description="Source sync endpoint slug")
     destination: str = Field(

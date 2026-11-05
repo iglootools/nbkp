@@ -39,7 +39,6 @@ from nbkp.sync.results import (
 
 
 def _localhost_ssh_status() -> SshEndpointStatus:
-    """Create an active localhost SSH endpoint status."""
     return SshEndpointStatus(
         slug="localhost",
         diagnostics=SshEndpointDiagnostics(),
@@ -100,7 +99,6 @@ def _make_sync_status(
     *,
     destination_latest_snapshot=None,
 ) -> SyncStatus:
-    """Build a SyncStatus with the new 4-layer model."""
     src_ep_slug = sync_cfg.source
     dst_ep_slug = sync_cfg.destination
     src_vol_slug = config.sync_endpoints[src_ep_slug].volume
@@ -136,7 +134,6 @@ def _make_sync_status(
 
 
 def _render_sections(sections: list) -> str:
-    """Render Rich sections to a plain string."""
     buf = StringIO()
     console = Console(file=buf, highlight=False, markup=False, width=300)
     for s in sections:

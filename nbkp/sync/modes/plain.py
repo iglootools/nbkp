@@ -6,7 +6,6 @@ from .common import RunContext, rsync_step
 
 
 def run_plain_sync(sync: SyncConfig, ctx: RunContext) -> SyncResult:
-    """Run a sync with no snapshot strategy."""
     match rsync_step(sync, ctx, dest_suffix=None):
         case SyncResult() as failure:
             return failure

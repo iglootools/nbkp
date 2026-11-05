@@ -1,5 +1,3 @@
-"""Tests for nbkp.rsync."""
-
 import io
 import shlex
 from datetime import UTC, datetime
@@ -257,7 +255,6 @@ class TestBuildRsyncCommandRemoteToRemoteSameServer:
 
         inner = cmd[-1]
         assert inner.startswith("rsync")
-        # No SSH transport — both paths are local
         assert "-e 'ssh" not in inner
         assert "backup@nas.local:" not in inner
         assert "/data/src/photos/" in inner

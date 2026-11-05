@@ -1,5 +1,3 @@
-"""Tests for nbkp.credentials."""
-
 import subprocess
 from unittest.mock import MagicMock, patch
 

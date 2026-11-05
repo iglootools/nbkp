@@ -1,5 +1,3 @@
-"""The complete result of a preflight run, across all 4 layers."""
-
 from dataclasses import dataclass
 
 from .endpoint import DestinationEndpointStatus, SourceEndpointStatus

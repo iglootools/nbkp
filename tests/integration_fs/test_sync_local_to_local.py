@@ -76,7 +76,7 @@ class TestLocalToLocal:
         run_rsync(sync, config)
         assert (dst / "file1.txt").read_text() == "version-one"
 
-        # Modify (different size) and re-sync
+        # A different size, so rsync's size+mtime quick check sees the change.
         (src / "file1.txt").write_text("version-two-updated")
         result = run_rsync(sync, config)
 
@@ -96,7 +96,7 @@ class TestLocalToLocal:
         run_rsync(sync, config)
         assert (dst / "remove.txt").exists()
 
-        # Delete from source and re-sync (--delete is in rsync args)
+        # Propagates only because the rsync args include --delete.
         (src / "remove.txt").unlink()
         result = run_rsync(sync, config)
 

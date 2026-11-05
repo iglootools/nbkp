@@ -1,5 +1,3 @@
-"""Disks CLI sub-app."""
-
 import typer
 
 app = typer.Typer(

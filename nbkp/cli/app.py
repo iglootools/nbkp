@@ -1,5 +1,3 @@
-"""CLI app: root Typer app with domain sub-apps wired in."""
-
 import importlib.metadata
 from typing import Annotated
 
@@ -45,7 +43,6 @@ def _main(
     pass
 
 
-# ── Sub-apps ────────────────────────────────────────────────────────
 app.add_typer(config_app)
 app.add_typer(credentials_app)
 app.add_typer(disks_app)
@@ -58,6 +55,5 @@ app.add_typer(
     help="Demo CLI: sample output rendering and seed data",
 )
 
-# ── Top-level commands ──────────────────────────────────────────────
 app.command()(run_fn)
 app.command(name="sh")(sh_fn)

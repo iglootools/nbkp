@@ -1,5 +1,3 @@
-"""Preflight output formatting: check tables and troubleshoot instructions."""
-
 from .check import print_human_check
 from .remediation import RemediationFacts, TroubleshootContext
 from .troubleshoot import (

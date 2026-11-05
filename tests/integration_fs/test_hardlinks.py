@@ -55,7 +55,6 @@ def _make_config(
         syncs={"test-sync": sync},
     )
 
-    # Create sentinels
     Path(src_path, ".nbkp-vol").touch()
     Path(src_path, ".nbkp-src").touch()
     Path(dst_path, ".nbkp-vol").touch()
@@ -155,7 +154,6 @@ class TestCleanupOrphanedSnapshots:
 
         sync, config, snap_name = _do_sync(src, dst)
 
-        # Verify latest target still exists after cleanup
         cleanup_orphaned_snapshots(sync, config)
         snap_dir = Path(str(dst)) / "snapshots" / snap_name
         assert snap_dir.exists()
@@ -229,7 +227,6 @@ class TestPruneSnapshots:
 
         remaining = list_snapshots(sync, config)
         assert len(remaining) == 3
-        # Oldest two should be deleted
         for snap in remaining:
             assert snap.name not in [names[0], names[1]]
 
@@ -262,7 +259,6 @@ class TestPruneSnapshots:
         deleted = prune_snapshots(sync, config, 2, dry_run=True)
         assert len(deleted) == 2
 
-        # All 4 should still exist
         remaining = list_snapshots(sync, config)
         assert len(remaining) == 4
 
@@ -298,7 +294,6 @@ class TestHardLinkIncremental:
 
         sync, config = _make_config(str(src), str(dst))
 
-        # First sync
         now1 = datetime(2024, 1, 1, tzinfo=UTC)
         snap1_path = create_snapshot_dir(sync, config, now=now1, platform=sys.platform)
         snap1 = Snapshot.from_path(snap1_path)
@@ -310,10 +305,8 @@ class TestHardLinkIncremental:
         assert result.returncode == 0
         update_latest_symlink(sync, config, snap1)
 
-        # Change one file
         (src / "changed.txt").write_text("v2 is different")
 
-        # Second sync with --link-dest
         now2 = datetime(2024, 1, 2, tzinfo=UTC)
         snap2_path = create_snapshot_dir(sync, config, now=now2, platform=sys.platform)
         snap2 = Snapshot.from_path(snap2_path)
@@ -325,11 +318,9 @@ class TestHardLinkIncremental:
         )
         assert result.returncode == 0
 
-        # Verify unchanged file shares inode (hard-linked)
         inode1 = os.stat(f"{snap1_path}/unchanged.txt").st_ino
         inode2 = os.stat(f"{snap2_path}/unchanged.txt").st_ino
         assert inode1 == inode2
 
-        # Verify changed file has new content
         content = Path(f"{snap2_path}/changed.txt").read_text()
         assert content == "v2 is different"

@@ -90,14 +90,10 @@ def _unencrypted_vol() -> LocalVolume:
 
 
 def _active_ssh_endpoint_status() -> SshEndpointStatus:
-    """Build an active (no errors) SshEndpointStatus for localhost."""
     return SshEndpointStatus.from_diagnostics(
         slug="localhost",
         diagnostics=SshEndpointDiagnostics(),
     )
-
-
-# ── _volume_errors: lifecycle-failure upgrades ─────────────────
 
 
 class TestVolumeErrorsMountUpgrades:
@@ -205,9 +201,6 @@ class TestVolumeErrorsMountUpgrades:
         assert _volume_errors(diag, _encrypted_mount()) == []
 
 
-# ── VolumeStatus.from_diagnostics integration ──────────────────
-
-
 class TestVolumeStatusFromDiagnostics:
     def test_all_checks_pass_active(self) -> None:
         diag = VolumeDiagnostics(capabilities=_base_caps())
@@ -249,9 +242,6 @@ class TestVolumeStatusFromDiagnostics:
         assert VolumeError.DEVICE_NOT_PRESENT in status.errors
 
 
-# ── MountCapabilities runtime state fields ─────────────────────
-
-
 class TestMountCapabilitiesRuntimeState:
     def test_defaults_to_none(self) -> None:
         mc = MountCapabilities()
@@ -271,9 +261,6 @@ class TestMountCapabilitiesRuntimeState:
         assert mc.device_present is True
         assert mc.luks_unlocked is True
         assert mc.mounted is False
-
-
-# ── format_mount_status ────────────────────────────────────────
 
 
 class TestFormatMountStatus:
@@ -342,9 +329,6 @@ class TestFormatMountStatus:
         assert "mounted" not in result
 
 
-# ── Observation reuse ──────────────────────────────────────────
-
-
 class TestObservationReuse:
     """Verify that mount observation values bypass runtime detection probes."""
 
@@ -374,12 +358,10 @@ class TestObservationReuse:
             _encrypted_vol(), _encrypted_mount(), _MOUNT_TOOLS, {}, obs
         )
 
-        # Runtime probes should not have been called.
         mock_device.assert_not_called()  # type: ignore[union-attr]
         mock_discover.assert_not_called()  # type: ignore[union-attr]
         mock_findmnt.assert_not_called()  # type: ignore[union-attr]
 
-        # Values come from observation.
         assert result.device_present is True
         assert result.luks_unlocked is True
         assert result.mounted is True

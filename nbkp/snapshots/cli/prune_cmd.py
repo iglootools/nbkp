@@ -1,5 +1,3 @@
-"""CLI prune command."""
-
 from pathlib import Path
 from typing import Annotated
 

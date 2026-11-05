@@ -27,7 +27,6 @@ PreflightError = (
 
 
 def _is_inactive(error: PreflightError) -> bool:
-    """Whether an error is in the 'expected inactive' category at its layer."""
     match error:
         case SshEndpointError():
             return error in INACTIVE_SSH_ERRORS

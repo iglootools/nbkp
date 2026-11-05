@@ -48,7 +48,6 @@ def _make_btrfs_config(
     src_path: str,
     dst_path: str,
 ) -> tuple[SyncConfig, Config]:
-    """Build local btrfs config."""
     src_vol = LocalVolume(slug="src", path=src_path)
     dst_vol = LocalVolume(slug="dst", path=dst_path)
     config = Config(
@@ -170,9 +169,6 @@ def btrfs_env_local(tmp_path: Path, btrfs_dst: Path) -> BtrfsEnv:
     )
 
 
-# ── Component-level tests (delegated to shared helpers) ─────────────
-
-
 @_skip_no_btrfs
 class TestCreateSnapshot:
     def test_creates_readonly_snapshot(self, btrfs_env_local: BtrfsEnv) -> None:
@@ -205,8 +201,6 @@ class TestPruneSnapshots:
     def test_dry_run_preserves_all(self, btrfs_env_local: BtrfsEnv) -> None:
         run_test_dry_run_preserves_all(btrfs_env_local)
 
-
-# ── Guard: at least one execution path must be available ─────
 
 _docker_available_cached: bool | None = None
 
@@ -293,8 +287,8 @@ class TestBtrfsLocalViaDocker:
                     "mode": "rw",
                 },
             },
-            # The POETRY_VIRTUALENVS_* escape hatch that used to live here is now the UV_*
-            # block in Dockerfile.btrfs-local-test, so it travels with the image.
+            # The venv environment variables are set in Dockerfile.btrfs-local-test,
+            # so they travel with the image.
             working_dir="/app",
             privileged=True,
             detach=True,

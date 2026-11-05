@@ -1,5 +1,3 @@
-"""Config-level display formatting helpers."""
-
 from collections.abc import Mapping
 from typing import Any, Protocol
 
@@ -41,7 +39,6 @@ def format_volume_display(
     vol: LocalVolume | RemoteVolume,
     resolved_endpoints: SelectedEndpoints,
 ) -> str:
-    """Format a volume for human display."""
     match vol:
         case RemoteVolume():
             ep = resolved_endpoints.get(vol.slug)
@@ -60,7 +57,6 @@ def format_volume_display(
 
 
 def _display_path(vol: LocalVolume | RemoteVolume) -> str:
-    """Path for display: the declared path, or a marker for discovered ones."""
     return vol.path if vol.path is not None else "(discovered at runtime)"
 
 
@@ -68,7 +64,6 @@ def host_label(
     vol: LocalVolume | RemoteVolume,
     resolved_endpoints: SelectedEndpoints,
 ) -> str:
-    """Human-readable host label for a volume."""
     match vol:
         case LocalVolume():
             return "this machine"
@@ -81,7 +76,6 @@ def endpoint_path(
     vol: LocalVolume | RemoteVolume,
     subdir: str | None,
 ) -> str:
-    """Resolve the full endpoint path."""
     path = _display_path(vol)
     if subdir:
         return f"{path}/{subdir}"
@@ -90,7 +84,6 @@ def endpoint_path(
 
 
 def format_mount_summary(mount: MountConfig | None) -> str:
-    """Compact mount config summary for table display."""
     if mount is None:
         return ""
     return " ".join(
@@ -102,7 +95,6 @@ def format_mount_summary(mount: MountConfig | None) -> str:
 
 
 def _sync_endpoint_display(endpoint: SyncEndpoint) -> str:
-    """Format a sync endpoint as volume or volume/subdir."""
     if endpoint.subdir:
         return f"{endpoint.volume}:/{endpoint.subdir}"
     else:
@@ -149,7 +141,6 @@ def _sync_options(sync: SyncConfig, config: Config) -> str:
 
 
 def _snapshot_label(name: str, max_snapshots: int | None) -> str:
-    """Format a snapshot backend label with optional max count."""
     return f"{name}(max:{max_snapshots})" if max_snapshots is not None else name
 
 
@@ -159,7 +150,6 @@ def print_human_config(
     console: Console | None = None,
     resolved_endpoints: SelectedEndpoints | None = None,
 ) -> None:
-    """Print human-readable configuration."""
     re = resolved_endpoints or {}
     c = console or Console()
     tables = [
@@ -253,14 +243,12 @@ def _validation_message(err: ErrorDetails) -> str:
 
 
 def _format_validation_error(err: ErrorDetails) -> str:
-    """Format a single Pydantic validation error for display."""
     loc = " → ".join(str(p) for p in err["loc"])
     msg = _validation_message(err)
     return f"{loc}: {msg}" if loc else msg
 
 
 def _config_error_body(e: ConfigError) -> str:
-    """The human-readable detail of a ConfigError, one problem per line."""
     match e.__cause__:
         case ValidationError() as cause:
             return "\n".join(_format_validation_error(err) for err in cause.errors())

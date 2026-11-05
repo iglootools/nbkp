@@ -1,8 +1,3 @@
-"""Snapshot shared helpers and latest-symlink management.
-
-Items shared by both hard-link and btrfs snapshot backends.
-"""
-
 from datetime import datetime
 from pathlib import Path
 
@@ -29,18 +24,11 @@ def create_snapshot_timestamp(
     volume: Volume,
     platform: str,
 ) -> Snapshot:
-    """Create a Snapshot for the given timestamp and volume.
-
-    Resolves the macOS local-volume flag from the volume type and the
-    orchestrator *platform* (``sys.platform``, supplied by the caller) and
-    delegates to ``Snapshot.create``.
-    """
     macos_local = isinstance(volume, LocalVolume) and platform == "darwin"
     return Snapshot.create(now, macos_local=macos_local)
 
 
 def resolve_dest_path(sync: SyncConfig, config: Config) -> str:
-    """Resolve the destination path for a sync."""
     dst = config.destination_endpoint(sync)
     vol = config.volumes[dst.volume]
     if vol.path is None:
@@ -53,17 +41,14 @@ def resolve_dest_path(sync: SyncConfig, config: Config) -> str:
 
 
 def destination_volume(sync: SyncConfig, config: Config) -> Volume:
-    """The volume holding a sync's destination endpoint."""
     return config.volumes[config.destination_endpoint(sync).volume]
 
 
 def snapshots_dir(sync: SyncConfig, config: Config) -> str:
-    """The ``snapshots/`` directory of a sync's destination."""
     return f"{resolve_dest_path(sync, config)}/{SNAPSHOTS_DIR}"
 
 
 def _parse_snapshot_name(name: str) -> Snapshot | None:
-    """Parse a ``snapshots/`` entry, or ``None`` for a non-snapshot entry."""
     try:
         return Snapshot.from_name(name)
     except ValueError:
@@ -132,7 +117,6 @@ def get_latest_snapshot(
     config: Config,
     resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> Snapshot | None:
-    """Get the most recent snapshot, or None."""
     snapshots = list_snapshots(sync, config, resolved_endpoints)
     if snapshots:
         return snapshots[-1]
@@ -224,7 +208,6 @@ def update_latest_symlink(
     *,
     resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> None:
-    """Create or update the latest symlink to point to a snapshot."""
     re = resolved_endpoints or {}
     latest_path = f"{resolve_dest_path(sync, config)}/{LATEST_LINK}"
     target = f"{SNAPSHOTS_DIR}/{snapshot.name}"

@@ -5,20 +5,15 @@ Re-exports all public names so that external code can import from
 a given symbol.
 """
 
-# ── conventions ──────────────────────────────────────────────
 from ..fsprotocol import (
     DEVNULL_TARGET as DEVNULL_TARGET,
     LATEST_LINK as LATEST_LINK,
     SNAPSHOTS_DIR as SNAPSHOTS_DIR,
     STAGING_DIR as STAGING_DIR,
 )
-
-# ── btrfs ────────────────────────────────────────────────────
 from .btrfs import (
     create_snapshot as create_snapshot,
 )
-
-# ── common ───────────────────────────────────────────────────
 from .common import (
     get_latest_snapshot as get_latest_snapshot,
     list_snapshots as list_snapshots,
@@ -26,14 +21,10 @@ from .common import (
     resolve_dest_path as resolve_dest_path,
     update_latest_symlink as update_latest_symlink,
 )
-
-# ── errors ───────────────────────────────────────────────────
 from .errors import (
     SnapshotOp as SnapshotOp,
     SnapshotOperationError as SnapshotOperationError,
 )
-
-# ── hard-link ────────────────────────────────────────────────
 from .hardlinks import (
     cleanup_orphaned_snapshots as cleanup_orphaned_snapshots,
     create_snapshot_dir as create_snapshot_dir,

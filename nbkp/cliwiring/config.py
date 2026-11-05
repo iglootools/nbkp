@@ -41,7 +41,7 @@ def build_endpoint_filter(
     exclude_locations: list[str] | None,
     network: NetworkType | None,
 ) -> EndpointFilter | None:
-    """Build an EndpointFilter from CLI options."""
+    """``None`` when no option narrows the endpoint selection."""
     locs = locations or []
     excl = exclude_locations or []
     return (
@@ -86,7 +86,6 @@ def resolve_endpoints(
     exclude_locations: list[str] | None,
     network: NetworkType | None,
 ) -> ResolvedEndpoints:
-    """Build filter and resolve all endpoints once."""
     _validate_locations(cfg, locations, exclude_locations)
     ef = build_endpoint_filter(locations, exclude_locations, network)
     return resolve_all_endpoints(cfg, ef)

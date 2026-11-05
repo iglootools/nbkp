@@ -1,5 +1,3 @@
-"""SSH endpoint and connection options."""
-
 from pathlib import Path
 from typing import Any
 
@@ -10,9 +8,7 @@ from .errors import ConfigValidationCode, config_error
 
 
 class SshConnectionOptions(_BaseModel):
-    """SSH connection options.
-
-    These fields map to parameters across three layers:
+    """These fields map to parameters across three layers:
     - SSH client: ssh(1) -o options
     - Paramiko: SSHClient.connect() kwargs
       https://docs.paramiko.org/en/stable/api/client.html
@@ -22,7 +18,6 @@ class SshConnectionOptions(_BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    # Connection
     # SSH: ConnectTimeout | Paramiko: timeout | Fabric: connect_timeout
     connect_timeout: int = Field(
         default=10, ge=1, description="Connection timeout in seconds"
@@ -34,31 +29,28 @@ class SshConnectionOptions(_BaseModel):
         default=None, ge=1, description="Keepalive interval in seconds"
     )
 
-    # Authentication
-    # Paramiko: allow_agent — use SSH agent for key lookup
+    # Paramiko: allow_agent
     allow_agent: bool = Field(
         default=True, description="Use SSH agent for authentication"
     )
-    # Paramiko: look_for_keys — search ~/.ssh/ for keys
+    # Paramiko: look_for_keys
     look_for_keys: bool = Field(default=True, description="Search ~/.ssh/ for keys")
 
-    # Timeouts
-    # Paramiko: banner_timeout — wait for SSH banner
+    # Paramiko: banner_timeout
     banner_timeout: float | None = Field(
         default=None, ge=0, description="Wait time for SSH banner"
     )
-    # Paramiko: auth_timeout — wait for auth response
+    # Paramiko: auth_timeout
     auth_timeout: float | None = Field(
         default=None, ge=0, description="Wait time for auth response"
     )
-    # Paramiko: channel_timeout — wait for channel open
+    # Paramiko: channel_timeout (no SSH CLI equivalent)
     channel_timeout: float | None = Field(
         default=None,
         ge=0,
         description="Wait time for channel open (Paramiko/Fabric only)",
     )
 
-    # Host key verification
     # SSH: StrictHostKeyChecking
     # Paramiko: SSHClient.set_missing_host_key_policy()
     strict_host_key_checking: bool = Field(
@@ -70,15 +62,12 @@ class SshConnectionOptions(_BaseModel):
         default=None, description="Custom known hosts file path"
     )
 
-    # Forwarding
     # SSH: ForwardAgent | Fabric: forward_agent
     forward_agent: bool = Field(
         default=False, description="Enable SSH agent forwarding"
     )
 
-    # Algorithm restrictions
-    # Paramiko: disabled_algorithms — disable specific algorithms
-    # (Paramiko/Fabric only — no SSH CLI equivalent)
+    # Paramiko: disabled_algorithms (no SSH CLI equivalent)
     disabled_algorithms: dict[str, list[str]] | None = Field(
         default=None,
         description="Disable specific SSH algorithms (Paramiko/Fabric only)",
@@ -151,7 +140,6 @@ class SshEndpoint(_BaseModel):
 
     @property
     def proxy_jump_chain(self) -> list[str]:
-        """Return the proxy-jump chain as a list of slugs."""
         if self.proxy_jumps is not None:
             return list(self.proxy_jumps)
         elif self.proxy_jump is not None:
@@ -161,7 +149,6 @@ class SshEndpoint(_BaseModel):
 
     @property
     def location_list(self) -> list[str]:
-        """Return locations as a list."""
         if self.locations is not None:
             return list(self.locations)
         elif self.location is not None:

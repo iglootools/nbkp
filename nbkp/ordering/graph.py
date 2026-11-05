@@ -1,5 +1,3 @@
-"""Sync dependency graph and topological ordering."""
-
 from graphlib import CycleError, TopologicalSorter
 
 from ..config import ConfigError
@@ -28,24 +26,12 @@ def _build_graph(
 def sync_predecessors(
     syncs: dict[str, SyncConfig],
 ) -> dict[str, set[str]]:
-    """Return direct upstream syncs for each sync slug.
-
-    A sync B has upstream sync A when A's destination endpoint
-    matches B's source endpoint (same slug).
-    """
+    """Direct upstream syncs for each sync slug."""
     return _build_graph(syncs)
 
 
 def sort_syncs(syncs: dict[str, SyncConfig]) -> list[str]:
-    """Topologically sort syncs by their endpoint dependencies.
-
-    A sync B depends on sync A when A's destination endpoint
-    matches B's source endpoint (same slug).  Returns sync
-    slugs in an order where upstream syncs come before
-    downstream syncs.
-
-    Raises ``ConfigError`` when a dependency cycle is detected.
-    """
+    """Raises ``ConfigError`` when a dependency cycle is detected."""
     graph = _build_graph(syncs)
 
     ts = TopologicalSorter(graph)
@@ -62,9 +48,7 @@ def sort_syncs(syncs: dict[str, SyncConfig]) -> list[str]:
 def build_adjacency(
     syncs: dict[str, SyncConfig],
 ) -> tuple[dict[str, list[SyncConfig]], set[str]]:
-    """Build endpoint adjacency list and root set.
-
-    Returns (children, roots) where:
+    """Returns (children, roots) where:
     - children maps source endpoint slug → list of SyncConfig
     - roots is the set of endpoint slugs that are never destinations
     """

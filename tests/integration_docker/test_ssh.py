@@ -42,8 +42,6 @@ from nbkp.sync.rsync import run_rsync
 from nbkp.sync.testkit.seed import create_seed_sentinels
 from tests._docker_fixtures import ssh_exec
 
-# ── Helpers ──────────────────────────────────────────────────
-
 
 def _extract_host_key(endpoint: SshEndpoint) -> str:
     """Extract the ed25519 host public key from a container.
@@ -152,9 +150,6 @@ def _ssh_agent(
             capture_output=True,
             check=False,
         )
-
-
-# ── Host key verification ───────────────────────────────────
 
 
 class TestHostKeyVerification:
@@ -300,10 +295,9 @@ class TestHostKeyVerification:
         assert check.stdout.strip() == "strict-ssh"
 
 
-# ── Explicit key only (no agent, no key discovery) ──────────
-
-
 class TestExplicitKeyOnly:
+    """No agent and no key discovery: only the configured key is offered."""
+
     def test_check_with_explicit_key_only(
         self,
         docker_ssh_endpoint: SshEndpoint,
@@ -395,9 +389,6 @@ class TestExplicitKeyOnly:
         assert check.stdout.strip() == "explicit-key"
 
 
-# ── Connection failure handling ──────────────────────────────
-
-
 class TestConnectionFailure:
     def test_unreachable_volume_wrong_port(self) -> None:
         endpoint = SshEndpoint(
@@ -466,9 +457,6 @@ class TestConnectionFailure:
         assert status.ssh_endpoint_status.errors == [SshEndpointError.AUTH_FAILED]
 
 
-# ── Agent forwarding through bastion ────────────────────────
-
-
 class TestAgentForwarding:
     """Verify SSH agent forwarding through a bastion host.
 
@@ -482,7 +470,6 @@ class TestAgentForwarding:
         private_key: Path,
         bastion: SshEndpoint,
     ) -> tuple[Config, RemoteVolume]:
-        """Build config with agent-forwarding endpoint."""
         destination = SshEndpoint(
             slug="fwd-dst",
             host="backup-server",

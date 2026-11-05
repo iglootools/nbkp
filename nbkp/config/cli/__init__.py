@@ -1,5 +1,3 @@
-"""Config CLI sub-app."""
-
 import typer
 
 app = typer.Typer(name="config", help="Configuration commands", no_args_is_help=True)

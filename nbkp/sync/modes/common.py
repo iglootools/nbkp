@@ -1,9 +1,3 @@
-"""Per-run context and the steps shared by every sync mode.
-
-:class:`RunContext` carries the per-run parameters; the steps run rsync and
-publish a completed snapshot (``latest`` update, then best-effort pruning).
-"""
-
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,8 +15,6 @@ from ..rsync import ProgressMode, run_rsync
 
 @dataclass(frozen=True)
 class RunContext:
-    """Per-run parameters shared by every sync."""
-
     config: Config
     dry_run: bool
     progress: ProgressMode | None
@@ -122,7 +114,6 @@ def publish_snapshot(
     prune_fn: Callable[..., list[str]],
     ctx: RunContext,
 ) -> SyncResult:
-    """Point ``latest`` at the completed snapshot, then prune."""
     try:
         update_latest_symlink(
             sync,

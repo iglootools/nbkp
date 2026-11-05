@@ -1,5 +1,3 @@
-"""Snapshot data models."""
-
 import enum
 
 from pydantic import BaseModel, ConfigDict, computed_field
@@ -21,8 +19,6 @@ class SnapshotSkipReason(str, enum.Enum):
 
 
 class PruneResult(BaseModel):
-    """Result of pruning snapshots for a sync."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     sync_slug: str
@@ -39,8 +35,6 @@ class PruneResult(BaseModel):
 
 
 class ShowResult(BaseModel):
-    """Result of showing snapshots for a sync."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     sync_slug: str

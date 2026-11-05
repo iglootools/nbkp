@@ -31,9 +31,7 @@ class ConfigValidationCode(StrEnum):
 
 
 def config_error(code: ConfigValidationCode, message: str) -> PydanticCustomError:
-    """Build a pydantic error carrying a stable ``code`` and a display message.
-
-    The message travels as a context value behind a fixed ``{message}``
+    """The message travels as a context value behind a fixed ``{message}``
     template, so braces in it (e.g. the literal ``{id}`` placeholder) are
     rendered verbatim rather than read as template fields.
     """

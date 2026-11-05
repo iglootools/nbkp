@@ -113,7 +113,6 @@ def _mount_phase(
     on_mount_start: Callable[[str], None] | None,
     on_mount_end: Callable[[str, MountResult], None] | None,
 ) -> tuple[Config, dict[str, MountObservation]]:
-    """Prefetch every passphrase, mount, and resolve discovered mountpoints."""
     # Retrieve *every* configured passphrase before touching a device, not
     # just the ones this run needs.  Unfiltered by *names* on purpose: the
     # point is that one approval pass covers every drive, so a later run with

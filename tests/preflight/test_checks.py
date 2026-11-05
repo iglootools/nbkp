@@ -1,5 +1,3 @@
-"""Tests for nbkp.preflight.checks."""
-
 import os
 from contextlib import ExitStack
 from datetime import UTC, datetime
@@ -657,9 +655,6 @@ class TestOutputFormat:
         assert OutputFormat.JSON.value == "json"
 
 
-# --- Check function tests (moved from test_checks.py) ---
-
-
 def _remote_config(
     vol_name: str = "nas",
     server_name: str = "nas-server",
@@ -680,7 +675,6 @@ def _remote_config(
 
 
 def _make_resolved(config: Config) -> ResolvedEndpoints:
-    """Build resolved endpoints from config for testing."""
     result: ResolvedEndpoints = {}
     for slug, vol in config.volumes.items():
         if isinstance(vol, RemoteVolume):
@@ -1007,7 +1001,6 @@ def _ssh_diag(
     ssh_reachable: bool | None = None,
     location_excluded: bool = False,
 ) -> SshEndpointDiagnostics:
-    """Helper to create SshEndpointDiagnostics for tests."""
     return SshEndpointDiagnostics(
         ssh_reachable=ssh_reachable,
         location_excluded=location_excluded,
@@ -1692,7 +1685,7 @@ class TestCheckSync:
         src.mkdir()
         dst.mkdir()
         self._setup_active_sentinels(src, dst)
-        # tmp exists but snapshots does not
+        # staging/ exists but snapshots/ does not
         (dst / "backup" / "staging").mkdir()
 
         src_vol = LocalVolume(slug="src", path=str(src))
@@ -1857,7 +1850,6 @@ class TestCheckSync:
 
         status = check_sync(sync, config)
         assert status.active is False
-        # SSH endpoint reports rsync missing
         ssh_errors = (
             status.source_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
@@ -3214,7 +3206,6 @@ class TestStandaloneEndpointProbing:
                     ),
                 },
             )
-            # Orphan endpoint is probed and appears in statuses
             assert "orphan" in result.ssh_endpoint_statuses
             assert result.ssh_endpoint_statuses["orphan"].active is True
             assert result.ssh_endpoint_statuses["orphan"].errors == []
@@ -3938,8 +3929,6 @@ class TestCheckDevnullLatest:
         (dst / "backup").mkdir(exist_ok=True)
         (dst / "backup" / ".nbkp-dst").touch()
 
-    # ── Source latest → /dev/null with upstream sync ────
-
     @patch(
         "nbkp.preflight.volume_checks.check_volume_capabilities",
         return_value=_STUB_CAPS,
@@ -4012,8 +4001,6 @@ class TestCheckDevnullLatest:
             not in status.source_endpoint_status.errors
         )
 
-    # ── Source latest → /dev/null with upstream sync (dry-run) ────
-
     @patch(
         "nbkp.preflight.volume_checks.check_volume_capabilities",
         return_value=_STUB_CAPS,
@@ -4081,8 +4068,6 @@ class TestCheckDevnullLatest:
         assert SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING in status.errors
         assert not status.active
 
-    # ── Source latest → /dev/null without upstream sync ────
-
     @patch(
         "nbkp.preflight.volume_checks.check_volume_capabilities",
         return_value=_STUB_CAPS,
@@ -4108,8 +4093,6 @@ class TestCheckDevnullLatest:
 
         status = check_sync(sync, config)
         assert SyncError.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM in status.errors
-
-    # ── Source latest → dangling path ────
 
     @patch(
         "nbkp.preflight.volume_checks.check_volume_capabilities",
@@ -4146,8 +4129,6 @@ class TestCheckDevnullLatest:
             in status.source_endpoint_status.errors
         )
 
-    # ── Destination latest → /dev/null (valid) ────
-
     @patch(
         "nbkp.preflight.volume_checks.check_volume_capabilities",
         return_value=_STUB_CAPS,
@@ -4179,8 +4160,6 @@ class TestCheckDevnullLatest:
             not in status.destination_endpoint_status.errors
         )
 
-    # ── Destination latest missing ────
-
     @patch(
         "nbkp.preflight.volume_checks.check_volume_capabilities",
         return_value=_STUB_CAPS,
@@ -4206,8 +4185,6 @@ class TestCheckDevnullLatest:
             DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND
             in status.destination_endpoint_status.errors
         )
-
-    # ── Destination latest → dangling path ────
 
     @patch(
         "nbkp.preflight.volume_checks.check_volume_capabilities",

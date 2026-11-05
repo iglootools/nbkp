@@ -1,5 +1,3 @@
-"""Check output: status tables for SSH endpoints, volumes, and syncs."""
-
 from rich.console import Console, Group, RenderableType
 from rich.panel import Panel
 from rich.table import Table
@@ -40,9 +38,7 @@ from .formatting import (
 
 
 def _format_latest(latest: LatestSymlinkState) -> Text:
-    """Format latest symlink state as styled text.
-
-    A missing or invalid ``latest`` is always fatal under the standard
+    """A missing or invalid ``latest`` is always fatal under the standard
     strictness modes (``LATEST_SYMLINK_NOT_FOUND`` is not in any
     ``INACTIVE_*_ERRORS``), so this stays as an error icon.
     """
@@ -59,11 +55,6 @@ def _format_latest(latest: LatestSymlinkState) -> Text:
 
 
 def _format_volume_issues(vol_status: VolumeStatus, strictness: Strictness) -> Text:
-    """Format volume-level issues as warning/error volume(reason).
-
-    Icon severity reflects whether any of the volume's errors are
-    fatal under *strictness*.
-    """
     severity = severity_for_errors(vol_status.errors, strictness)
     if severity is Severity.OK:
         severity = Severity.ERROR
@@ -74,14 +65,8 @@ def _format_volume_issues(vol_status: VolumeStatus, strictness: Strictness) -> T
 
 
 def _format_source_diagnostics(ss: SyncStatus, strictness: Strictness) -> Text:
-    """Format source endpoint diagnostics as styled text.
-
-    When the source volume is inactive, shows warning/error
-    volume(reason) instead of endpoint-level items (which weren't
-    computed).  Otherwise shows OK/warning/error for each checked
-    item.  Items only appear when the corresponding feature is
-    configured (e.g. snapshots/ and latest are omitted when the
-    endpoint has no snapshot mode).
+    """Endpoint-level items are not computed on an inactive volume, so the
+    volume's own issues are shown instead.
     """
     src_ep = ss.source_endpoint_status
     if not src_ep.volume_status.active:
@@ -114,14 +99,8 @@ def _format_source_diagnostics(ss: SyncStatus, strictness: Strictness) -> Text:
 
 
 def _format_destination_diagnostics(ss: SyncStatus, strictness: Strictness) -> Text:
-    """Format destination endpoint diagnostics as styled text.
-
-    When the destination volume is inactive, shows warning/error
-    volume(reason) instead of endpoint-level items.  Otherwise shows
-    OK/warning/error for each checked item.  Btrfs-specific items
-    (subvolume, staging/) only appear when btrfs diagnostics are
-    present.  Snapshot items only appear when snapshot mode is
-    configured.
+    """Endpoint-level items are not computed on an inactive volume, so the
+    volume's own issues are shown instead.
     """
     dst_ep = ss.destination_endpoint_status
     if not dst_ep.volume_status.active:
@@ -151,7 +130,6 @@ def _format_destination_diagnostics(ss: SyncStatus, strictness: Strictness) -> T
 def _destination_snapshot_items(
     diag: DestinationEndpointDiagnostics, strictness: Strictness
 ) -> list[Text]:
-    """Btrfs staging, snapshots/ and latest items (only when configured)."""
     return [
         *(
             [
@@ -188,7 +166,6 @@ def _destination_snapshot_items(
 
 
 def _ssh_status_text(status: SshEndpointStatus | None, strictness: Strictness) -> Text:
-    """Status cell: active/inactive plus any non-fatal warnings."""
     match status:
         case None:
             return Text("")
@@ -236,7 +213,6 @@ def _build_ssh_endpoints_section(
     ssh_endpoint_statuses: dict[str, SshEndpointStatus],
     strictness: Strictness,
 ) -> list[RenderableType]:
-    """Build the SSH Endpoints table section."""
     localhost = _localhost_row(ssh_endpoint_statuses.get("localhost"), strictness)
     if not config.ssh_endpoints and not localhost:
         return []
@@ -274,7 +250,6 @@ def _build_volumes_section(
     resolved_endpoints: ResolvedEndpoints,
     strictness: Strictness,
 ) -> list[RenderableType]:
-    """Build the Volumes table section."""
     table = Table(title="Volumes:")
     table.add_column("Name", style="bold")
     table.add_column("Type")
@@ -316,7 +291,6 @@ def _build_syncs_section(
     config: Config,
     strictness: Strictness,
 ) -> list[RenderableType]:
-    """Build the Syncs table section."""
     table = Table(title="Syncs:")
     table.add_column("Name", style="bold")
     table.add_column("Source")
@@ -343,7 +317,6 @@ def _build_syncs_section(
 def _build_orphan_warnings_section(
     config: Config,
 ) -> list[RenderableType]:
-    """Build warnings for orphan config items."""
     warnings = [
         *[
             f"SSH endpoint '{slug}' is not referenced by any volume"
@@ -374,7 +347,6 @@ def build_check_sections(
     resolved_endpoints: ResolvedEndpoints,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> list[RenderableType]:
-    """Build renderable sections for check output."""
     return [
         *_build_ssh_endpoints_section(config, ssh_statuses, strictness),
         *_build_volumes_section(vol_statuses, resolved_endpoints, strictness),
@@ -395,9 +367,7 @@ def print_human_check(
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
     invocation: Invocation | None = None,
 ) -> None:
-    """Print human-readable status output.
-
-    *invocation* carries the config path and endpoint flags so the
+    """*invocation* carries the config path and endpoint flags so the
     ``troubleshoot`` suggestion can be copy-pasted as-is.
     """
     con = console if console is not None else Console()
@@ -431,7 +401,6 @@ def _troubleshoot_hint(
     sync_statuses: dict[str, SyncStatus],
     invocation: Invocation,
 ) -> list[RenderableType]:
-    """Point at ``preflight troubleshoot`` when anything needs attention."""
     needs_attention = any(not s.active for s in sync_statuses.values()) or any(
         (set(s.errors) - INACTIVE_SSH_ERRORS) or s.warnings
         for s in ssh_statuses.values()

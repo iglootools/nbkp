@@ -26,7 +26,6 @@ class Step:
 
 
 def build_steps(spec: SyncSpec) -> tuple[Step, ...]:
-    """Ordered steps of the sync function for *spec*'s snapshot mode."""
     prune = _prune_steps(spec)
     match spec.dst_ep.snapshot_mode:
         case "hard-link":

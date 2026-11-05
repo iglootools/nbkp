@@ -22,14 +22,10 @@ from .quoting import SCRIPT_DIR, comment_out, has_shell_var
 from .spec import build_sync_spec
 from .steps import Step, build_steps
 
-# ── Public API ────────────────────────────────────────────────
-
 
 @dataclass(frozen=True, kw_only=True)
 class ScriptOptions:
-    """Options for script generation.
-
-    ``platform`` (a ``sys.platform`` value) selects the snapshot timestamp
+    """``platform`` (a ``sys.platform`` value) selects the snapshot timestamp
     format; it is supplied by the CLI so generation stays deterministic.
     """
 
@@ -48,17 +44,11 @@ def generate_script(
     now: datetime,
     resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> str:
-    """Generate a standalone bash script from config.
-
-    *now* is the generation time written to the header.
-    """
+    """*now* is the generation time written to the header."""
     re = resolved_endpoints or {}
     vol_paths = _build_vol_paths(config, options)
     ctx = _build_script_context(config, options, vol_paths, now, re)
     return _load_template().render(ctx) + "\n"
-
-
-# ── Context ──────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
@@ -94,7 +84,6 @@ def _load_template() -> Template:
 
 
 def _build_vol_paths(config: Config, options: ScriptOptions) -> dict[str, str]:
-    """Compute volume slug -> effective path."""
     src_slugs = {config.source_endpoint(s).volume for s in config.syncs.values()}
     dst_slugs = {config.destination_endpoint(s).volume for s in config.syncs.values()}
     return {
@@ -110,9 +99,7 @@ def _resolve_vol_path(
     dst_slugs: set[str],
     options: ScriptOptions,
 ) -> str:
-    """Resolve effective path for a single volume.
-
-    The generated script is static, so a volume must have a declared ``path``
+    """The generated script is static, so a volume must have a declared ``path``
     (mount management — including discovery-model volumes with no ``path`` —
     is excluded from ``sh``).
     """
@@ -148,10 +135,7 @@ def _build_sync_context(
     platform: str,
     predecessors: set[str],
 ) -> _SyncContext:
-    """Pre-render the preflight and steps of one sync.
-
-    Disabled syncs are rendered too: the template emits them commented out.
-    """
+    """Disabled syncs are rendered too: the template emits them commented out."""
     spec = build_sync_spec(slug, config, vol_paths, resolved_endpoints, platform)
     return _SyncContext(
         slug=slug,
@@ -170,7 +154,6 @@ def _build_script_context(
     now: datetime,
     resolved_endpoints: ResolvedEndpoints,
 ) -> dict[str, object]:
-    """Build the full template context dict."""
     pred_map = sync_predecessors(config.syncs)
     syncs = [
         _build_sync_context(

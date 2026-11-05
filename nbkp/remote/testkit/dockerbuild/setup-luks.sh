@@ -19,7 +19,6 @@ set -e
 # manages its own devices independently.
 export DM_DISABLE_UDEV=1
 
-# Already set up?
 if [ -f /srv/luks-available ] && [ "$(cat /srv/luks-available)" = "1" ]; then
     exit 0
 fi
@@ -95,7 +94,6 @@ if command -v cryptsetup >/dev/null 2>&1; then
         fi
         mkfs.btrfs -f "$FMT_DEV"
 
-        # Create mount point, mount, prepare for testuser, umount
         mkdir -p "$BTRFS_ENCRYPTED_PATH"
         mount -o user_subvol_rm_allowed "$FMT_DEV" "$BTRFS_ENCRYPTED_PATH"
         chown testuser:testuser "$BTRFS_ENCRYPTED_PATH"
@@ -145,7 +143,7 @@ POLKIT
 
         NBKP_LUKS_AVAILABLE=1
 
-        # ── Plain unencrypted ext4 volume (udisks unencrypted-mount test) ──
+        # Plain unencrypted ext4 volume, for the udisks unencrypted-mount test.
         # Exercises the non-LUKS udisks path: device_uuid is the filesystem
         # UUID and nbkp mounts it directly (no unlock).  Best-effort and
         # NON-fatal: Docker Desktop's loop allocation is flaky for secondary

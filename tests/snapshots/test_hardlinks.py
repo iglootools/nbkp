@@ -1,5 +1,3 @@
-"""Tests for nbkp.snapshots.hardlinks."""
-
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -148,7 +146,6 @@ class TestCleanupOrphanedSnapshots:
             syncs={"s1": sync},
         )
 
-        # Create snapshots dir and symlink
         snaps = tmp_path / "snapshots"
         snaps.mkdir()
         (snaps / "2024-01-01T00:00:00.000Z").mkdir()
@@ -278,7 +275,6 @@ class TestPruneSnapshots:
             syncs={"s1": sync},
         )
 
-        # Create snapshots + latest symlink
         snaps = tmp_path / "snapshots"
         snaps.mkdir()
         for name in [_S1, _S2, _S3]:
@@ -375,7 +371,6 @@ class TestPruneSnapshots:
 
         deleted = prune_snapshots(sync, config, 1, dry_run=True)
         assert len(deleted) == 2
-        # Dry run: directories still exist
         assert (snaps / _S1).exists()
         assert (snaps / _S2).exists()
 

@@ -1,5 +1,3 @@
-"""Graph output rendering for sync dependency visualization."""
-
 from mermaid_ascii import parse_mermaid, render_ascii
 from rich.console import Console, RenderableType
 from rich.tree import Tree
@@ -11,7 +9,6 @@ from .graph import build_adjacency
 
 
 def _endpoint_annotation(ep: SyncEndpoint) -> str:
-    """Format snapshot mode annotation for a sync endpoint."""
     match ep.snapshot_mode:
         case "btrfs":
             max_s = ep.btrfs_snapshots.max_snapshots
@@ -26,7 +23,6 @@ def _endpoint_annotation(ep: SyncEndpoint) -> str:
 
 
 def build_mermaid_graph(config: Config) -> str:
-    """Generate mermaid graph LR syntax from config."""
     children, roots = build_adjacency(config.syncs)
     lines = ["graph LR"]
     visited: set[str] = set()
@@ -55,7 +51,6 @@ def print_mermaid_ascii_graph(
     *,
     console: Console | None = None,
 ) -> None:
-    """Render the config graph as ASCII art using mermaid-ascii-diagrams."""
     if console is None:
         console = Console()
     mermaid_src = build_mermaid_graph(config)
@@ -69,9 +64,7 @@ def build_rich_tree_sections(
     config: Config,
     sync_severities: dict[str, Severity] | None = None,
 ) -> list[RenderableType]:
-    """Build Rich Tree renderables for the sync dependency graph.
-
-    When *sync_severities* is given, each sync node's label is
+    """When *sync_severities* is given, each sync node's label is
     prefixed with the matching severity icon (``✓`` / ``⚠`` / ``✗``)
     so the tree doubles as a per-sync result summary.  Syncs missing
     from the map render without an icon (e.g. config preview where
@@ -115,16 +108,13 @@ def print_rich_tree_graph(
     *,
     console: Console | None = None,
 ) -> None:
-    """Render the config graph as Rich Trees."""
     c = console or Console()
     for section in build_rich_tree_sections(config):
         c.print(section)
 
 
 def print_mermaid_graph(config: Config, *, console: Console | None = None) -> None:
-    """Print raw mermaid graph syntax to stdout.
-
-    Markup, emoji codes, highlighting and wrapping are all disabled so the
+    """Markup, emoji codes, highlighting and wrapping are all disabled so the
     output is the exact mermaid text, ready to pipe into a renderer.
     """
     c = console or Console()
@@ -138,7 +128,6 @@ def print_mermaid_graph(config: Config, *, console: Console | None = None) -> No
 
 
 def build_graph_json(config: Config) -> dict[str, object]:
-    """Build JSON-serializable graph structure."""
     ep_slugs = {
         slug
         for sync in config.syncs.values()

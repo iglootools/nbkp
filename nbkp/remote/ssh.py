@@ -1,5 +1,3 @@
-"""SSH CLI command building helpers."""
-
 import shlex
 from functools import reduce
 
@@ -9,12 +7,10 @@ lazy from .endpoints import ResolvedEndpoints
 
 # Kept in `ssh` instead of `output` as this is core to remote command execution, not just display formatting.
 def _format_host(endpoint: SshEndpoint) -> str:
-    """Format [user@]host for an SSH endpoint."""
     return f"{endpoint.user}@{endpoint.host}" if endpoint.user else endpoint.host
 
 
 def _ssh_o_options(opts: SshConnectionOptions) -> list[str]:
-    """Derive SSH -o option values from structured options."""
     return [
         opt
         for opt in [
@@ -46,7 +42,6 @@ def _ssh_o_options(opts: SshConnectionOptions) -> list[str]:
 
 
 def _ssh_endpoint_args(endpoint: SshEndpoint) -> list[str]:
-    """Build SSH args for a single endpoint: -o options, -p port, -i key."""
     o_args = [
         arg
         for opt in _ssh_o_options(endpoint.connection_options)
@@ -60,9 +55,7 @@ def _ssh_endpoint_args(endpoint: SshEndpoint) -> list[str]:
 
 
 def _build_proxy_hop(proxy: SshEndpoint, inner_cmd: str | None) -> str:
-    """Build the SSH command string for a single proxy hop.
-
-    ssh runs a ProxyCommand through ``sh -c``, so the hop is shell-quoted
+    """ssh runs a ProxyCommand through ``sh -c``, so the hop is shell-quoted
     (``shlex.join``). Only ``%`` needs ssh-level escaping in a nested
     command: ``%h:%p`` itself contains no shell metacharacters and stays
     unquoted for ssh to expand.
@@ -86,9 +79,7 @@ def _build_proxy_hop(proxy: SshEndpoint, inner_cmd: str | None) -> str:
 def _build_proxy_command(
     proxies: list[SshEndpoint],
 ) -> str:
-    """Build a nested ProxyCommand string for the proxy chain.
-
-    Uses ProxyCommand instead of -J so that per-proxy SSH
+    """Uses ProxyCommand instead of -J so that per-proxy SSH
     options (e.g. StrictHostKeyChecking) are propagated to
     each hop.
     """
@@ -101,7 +92,6 @@ def _build_ssh_core_args(
     server: SshEndpoint,
     proxy_chain: list[SshEndpoint] | None = None,
 ) -> list[str]:
-    """Build common SSH args: -o options, port, key, proxy command."""
     return [
         *_ssh_endpoint_args(server),
         *(
@@ -116,11 +106,7 @@ def build_ssh_base_args(
     server: SshEndpoint,
     proxy_chain: list[SshEndpoint] | None = None,
 ) -> list[str]:
-    """Build base SSH command args for a remote volume.
-
-    Returns args like:
-        ssh -o ConnectTimeout=10 -o BatchMode=yes [opts] host
-    """
+    """Returns args like ``ssh -o ConnectTimeout=10 -o BatchMode=yes [opts] host``."""
     return ["ssh", *_build_ssh_core_args(server, proxy_chain), _format_host(server)]
 
 
@@ -128,9 +114,8 @@ def build_ssh_e_option(
     server: SshEndpoint,
     proxy_chain: list[SshEndpoint] | None = None,
 ) -> list[str]:
-    """Build rsync's -e option for SSH with custom port/key.
+    """Returns a list like:
 
-    Returns a list like:
         ["-e", "ssh -o ConnectTimeout=10 -o BatchMode=yes ..."]
 
     rsync splits the ``-e`` value on spaces, honoring single and double
@@ -142,23 +127,19 @@ def build_ssh_e_option(
 
 
 def format_remote_path(server: SshEndpoint, path: str) -> str:
-    """Format a remote path as [user@]host:path."""
     return f"{_format_host(server)}:{path}"
 
 
-# ---------------------------------------------------------------------------
-# Human-friendly SSH CLI helpers (for troubleshooting / display)
-# ---------------------------------------------------------------------------
+# Below: commands printed for the operator to copy-paste (troubleshooting
+# output), not run by nbkp itself.
 
 
 def _format_host_port(endpoint: SshEndpoint) -> str:
-    """Format [user@]host[:port] for proxy-jump notation."""
     host = _format_host(endpoint)
     return f"{host}:{endpoint.port}" if endpoint.port != 22 else host
 
 
 def format_proxy_jump_chain(proxies: list[SshEndpoint]) -> str:
-    """Format proxy chain as comma-separated [user@]host[:port] for -J."""
     return ",".join(_format_host_port(p) for p in proxies)
 
 
@@ -166,7 +147,6 @@ def ssh_prefix(
     server: SshEndpoint,
     proxy_chain: list[SshEndpoint] | None = None,
 ) -> list[str]:
-    """Build human-friendly SSH command prefix as a list of arguments."""
     return [
         "ssh",
         *(["-p", str(server.port)] if server.port != 22 else []),

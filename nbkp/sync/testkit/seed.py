@@ -1,5 +1,3 @@
-"""Seed filesystem helpers: sentinels and sample data."""
-
 import shlex
 import subprocess
 from collections.abc import Callable
@@ -35,7 +33,7 @@ from ...remote.testkit.constants import (
 )
 from ..rsync import resolve_path
 
-_CHUNK_SIZE = 1024 * 1024  # 1 MB
+_CHUNK_SIZE = 1024 * 1024
 
 #: Filter rules that exclude the ``excluded/`` directory seeded
 #: by :func:`seed_volume`.  Reuse in test configs to verify
@@ -73,7 +71,6 @@ def create_seed_sentinels(
     command over that volume's own SSH endpoint (e.g. through a bastion), which
     matters when the volume is mounted by udisks over that same connection.
     """
-    # Volume sentinels (.nbkp-vol)
     for vol in config.volumes.values():
         match vol:
             case LocalVolume():
@@ -86,7 +83,6 @@ def create_seed_sentinels(
                     remote_exec(vol, f"mkdir -p {vol.path}")
                     remote_exec(vol, f"touch {vol.path}/{VOLUME_SENTINEL}")
 
-    # Sync endpoint sentinels — iterate unique endpoints
     seen_src: set[str] = set()
     seen_dst: set[str] = set()
     for sync in config.syncs.values():
@@ -214,7 +210,6 @@ def seed_volume(
     big_file_size_bytes: int = 0,
     remote_exec: Callable[[str], None] | None = None,
 ) -> None:
-    """Write sample files into a single source volume."""
     match vol:
         case LocalVolume():
             assert vol.path is not None
@@ -403,40 +398,33 @@ def build_chain_config(
     btrfs = BtrfsSnapshotConfig(enabled=True, max_snapshots=max_snapshots)
 
     sync_endpoints: dict[str, SyncEndpoint] = {
-        # step-1 source: bare local origin
         "ep-src-local-bare": SyncEndpoint(
             slug="ep-src-local-bare",
             volume="src-local-bare",
         ),
-        # step-1 dest / step-2 source: local HL snapshots
         "ep-stage-local-hl": SyncEndpoint(
             slug="ep-stage-local-hl",
             volume="stage-local-hl-snapshots",
             hard_link_snapshots=hl,
         ),
-        # step-2 dest / step-3 source: remote bare
         "ep-stage-remote-bare": SyncEndpoint(
             slug="ep-stage-remote-bare",
             volume="stage-remote-bare",
         ),
-        # step-3 dest / step-4 source: remote btrfs snapshots
         "ep-stage-remote-btrfs": SyncEndpoint(
             slug="ep-stage-remote-btrfs",
             volume="stage-remote-btrfs-snapshots",
             btrfs_snapshots=btrfs,
         ),
-        # step-4 dest / step-5 source: remote btrfs bare
         "ep-stage-remote-btrfs-bare": SyncEndpoint(
             slug="ep-stage-remote-btrfs-bare",
             volume="stage-remote-btrfs-bare",
         ),
-        # step-5 dest / step-6 source: remote HL snapshots
         "ep-stage-remote-hl": SyncEndpoint(
             slug="ep-stage-remote-hl",
             volume="stage-remote-hl-snapshots",
             hard_link_snapshots=hl,
         ),
-        # step-6 dest: bare local terminus
         "ep-dst-local-bare": SyncEndpoint(
             slug="ep-dst-local-bare",
             volume="dst-local-bare",

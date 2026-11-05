@@ -1,5 +1,3 @@
-"""Disks mount command."""
-
 from pathlib import Path
 from typing import Annotated
 
@@ -113,7 +111,6 @@ def _mount_with_progress(
     names: list[str] | None,
     output: OutputFormat,
 ) -> list[MountResult]:
-    """Prefetch every passphrase, then mount, with progress bars for humans."""
     passphrase_fn, cache = build_passphrase_fn(
         cfg.credential_provider, cfg.credential_command, prompt=prompt_passphrase
     )
