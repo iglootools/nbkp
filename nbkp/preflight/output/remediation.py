@@ -816,7 +816,7 @@ def print_destination_endpoint_error_fix(
         ):
             _print_destination_layout_fix(console, error, dst_vol, path, ctx)
         case _:
-            _print_destination_btrfs_fix(console, error, dst_vol, path, ctx)
+            _print_destination_snapshot_backend_fix(console, error, dst_vol, path, ctx)
 
 
 def _print_destination_layout_fix(
@@ -877,14 +877,13 @@ def _print_destination_layout_fix(
             say(console, FIX, "Fix the volume errors reported above.")
 
 
-def _print_destination_btrfs_fix(
+def _print_destination_snapshot_backend_fix(
     console: Console,
     error: DestinationEndpointError,
     vol: LocalVolume | RemoteVolume,
     path: str,
     ctx: TroubleshootContext,
 ) -> None:
-    """Fixes for snapshot-backend (btrfs / hard-link) capability errors."""
     staging = f"{path}/{STAGING_DIR}"
     snapshots = f"{path}/{SNAPSHOTS_DIR}"
     match error:

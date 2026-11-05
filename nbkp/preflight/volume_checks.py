@@ -11,8 +11,8 @@ Two levels of observation:
    whose SSH endpoint is active.
 
 No error interpretation happens here — the ``status`` package translates
-diagnostics into errors using ``SshEndpointToolNeeds`` and
-``SyncEndpointStatus.from_diagnostics``.
+diagnostics into errors using ``SshEndpointToolNeeds``,
+``SshEndpointStatus.from_diagnostics`` and ``VolumeStatus.from_diagnostics``.
 """
 
 from pathlib import Path

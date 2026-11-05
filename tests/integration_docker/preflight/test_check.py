@@ -420,21 +420,7 @@ class TestObserveEndpoints:
         resolved = resolve_all_endpoints(config)
 
         src_endpoint = config.sync_endpoints["ep-src"]
-        # Observe SSH endpoint + volume capabilities (needed by endpoint checks)
-        ssh_diag = observe_ssh_endpoint(src_vol)
-        assert ssh_diag.host_tools is not None
-        vol_diag = observe_volume(
-            src_vol, host_tools=ssh_diag.host_tools, mount_tools=ssh_diag.mount_tools
-        )
-        assert vol_diag.capabilities is not None
-
-        diag = observe_source_endpoint(
-            src_endpoint,
-            src_vol,
-            vol_diag.capabilities,
-            resolved,
-            host_tools=ssh_diag.host_tools,
-        )
+        diag = observe_source_endpoint(src_endpoint, src_vol, resolved)
 
         assert diag.sentinel_exists is True
         assert diag.snapshot_dirs is not None

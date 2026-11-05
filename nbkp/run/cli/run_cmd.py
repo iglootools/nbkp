@@ -267,8 +267,8 @@ def _print_outcome(
 
 def _json_payload(pipeline: PipelineResult, hint: str | None) -> dict[str, object]:
     return {
-        "volumes": list(pipeline.vol_statuses.values()),
-        "syncs": list(pipeline.sync_statuses.values()),
+        "volumes": list(pipeline.preflight.volume_statuses.values()),
+        "syncs": list(pipeline.preflight.sync_statuses.values()),
         "results": list(pipeline.results),
         **({"hint": hint} if hint is not None else {}),
     }
@@ -289,7 +289,7 @@ def _fatal_sync_errors(
 def _abort_message(
     pipeline: PipelineResult, strictness: Strictness, hint: str
 ) -> RenderableType:
-    errored = _fatal_sync_errors(pipeline.sync_statuses, strictness)
+    errored = _fatal_sync_errors(pipeline.preflight.sync_statuses, strictness)
     plural = "s" if len(errored) != 1 else ""
     # Text, not markup: slugs and error values are not nbkp-authored markup.
     return Group(

@@ -61,7 +61,7 @@ def _run(config: Config, *, dry_run: bool = False) -> list[SyncResult]:
         strictness=Strictness.IGNORE_INACTIVE,
         dry_run=dry_run,
     )
-    assert not pipeline.has_preflight_errors, pipeline.sync_statuses
+    assert not pipeline.has_preflight_errors, pipeline.preflight.sync_statuses
     return pipeline.results
 
 

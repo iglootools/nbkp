@@ -18,11 +18,11 @@
 #    stanza and drops the per-platform checksums it can no longer vouch for — which is
 #    precisely the state that makes `mise install --locked` fail on a fresh runner. The
 #    working copy is therefore not a stable reference, so "up to date" can only mean "matches
-#    what is staged". Reading the index also makes this immune to CI's
-#    `mise use python@<matrix>`, which rewrites the working copy of mise.toml.
+#    what is staged". Reading the index also makes this immune to anything that rewrites
+#    the working copy of mise.toml, such as a `mise use` in CI or a local experiment.
 #
-#  - Unsets MISE_PYTHON_VERSION, which `mise lock` honours — otherwise an env-selected matrix
-#    interpreter would be locked in place of the committed pin.
+#  - Unsets MISE_PYTHON_VERSION, which `mise lock` honours — otherwise an interpreter
+#    selected through the environment would be locked in place of the committed pin.
 #
 #  - Uses `set -euo pipefail`. Without it, a failing `mise lock` leaves the copied lockfile
 #    untouched, the diff finds no difference, and the check *passes* — the guard defeated by

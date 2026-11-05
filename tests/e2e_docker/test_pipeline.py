@@ -85,7 +85,7 @@ class TestChainSync:
             )
             assert not pipeline.has_preflight_errors, {
                 slug: [e.value for e in s.errors]
-                for slug, s in pipeline.sync_statuses.items()
+                for slug, s in pipeline.preflight.sync_statuses.items()
                 if s.errors
             }
             for r in pipeline.results:
