@@ -1180,6 +1180,27 @@ class TestSourceSnapshotPath:
         assert "/data/src/photos/latest/" in inner
         assert "/data/dst/" in inner
 
+    def test_remote_to_remote_keeps_tilde_paths_expandable(self) -> None:
+        server = SshEndpoint(slug="nas", host="nas.local", user="backup")
+        sync = SyncConfig(slug="s1", source="ep-src", destination="ep-dst")
+        config = Config(
+            ssh_endpoints={"nas": server},
+            volumes={
+                "src": RemoteVolume(slug="src", ssh_endpoint="nas", path="~/src"),
+                "dst": RemoteVolume(slug="dst", ssh_endpoint="nas", path="~/dst"),
+            },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+            },
+            syncs={"s1": sync},
+        )
+        resolved = resolve_all_endpoints(config)
+
+        inner = build_rsync_command(sync, config, resolved_endpoints=resolved)[-1]
+        assert " ~/src/ ~/dst" in inner
+        assert "'~" not in inner
+
 
 class TestDestSuffix:
     def test_default_bare(self) -> None:

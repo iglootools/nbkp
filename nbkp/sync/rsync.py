@@ -1,4 +1,3 @@
-import shlex
 import subprocess
 from collections.abc import Callable
 from enum import Enum
@@ -15,6 +14,7 @@ from ..remote import (
     build_ssh_base_args,
     build_ssh_e_option,
     format_remote_path,
+    shell_join,
 )
 from ..remote.endpoints import ResolvedEndpoints
 
@@ -155,7 +155,7 @@ def build_rsync_command(
             ]
             return [
                 *build_ssh_base_args(dst_re.server, dst_re.proxy_chain),
-                shlex.join(local_cmd),
+                shell_join(local_cmd),
             ]
         case (RemoteVolume() as sv, LocalVolume()):
             src_re = re[sv.slug]

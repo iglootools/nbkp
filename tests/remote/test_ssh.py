@@ -402,6 +402,21 @@ class TestFormatRemotePath:
 class TestRunRemoteCommand:
     @patch("nbkp.remote.fabricssh.paramiko")
     @patch("nbkp.remote.fabricssh.Connection")
+    def test_leading_tilde_left_for_the_remote_shell(
+        self,
+        mock_conn_cls: MagicMock,
+        mock_paramiko: MagicMock,
+        ssh_endpoint: SshEndpoint,
+    ) -> None:
+        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_conn.run.return_value = MagicMock(exited=0, stdout="", stderr="")
+
+        run_remote_command(ssh_endpoint, ["test", "-f", "~/my backups/.nbkp-vol"])
+
+        assert mock_conn.run.call_args.args[0] == "test -f ~/'my backups/.nbkp-vol'"
+
+    @patch("nbkp.remote.fabricssh.paramiko")
+    @patch("nbkp.remote.fabricssh.Connection")
     def test_run_remote_command(
         self,
         mock_conn_cls: MagicMock,

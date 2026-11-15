@@ -5,6 +5,7 @@ from .ssh import (
     build_ssh_base_args,
     build_ssh_e_option,
     format_remote_path,
+    shell_join,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "build_ssh_e_option",
     "format_remote_path",
     "run_remote_command",
+    "shell_join",
 ]
