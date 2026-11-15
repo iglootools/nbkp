@@ -1,4 +1,4 @@
-"""Snapshot backends: shared helpers, btrfs, and hard-link snapshots.
+"""Snapshot backends (btrfs, hard-link), their shared helpers, and show/prune.
 
 Re-exports all public names so that external code can import from
 ``nbkp.snapshots`` without knowing which submodule provides
@@ -29,3 +29,5 @@ from .hardlinks import (
     cleanup_orphaned_snapshots as cleanup_orphaned_snapshots,
     create_snapshot_dir as create_snapshot_dir,
 )
+from .prune import prune_all_syncs as prune_all_syncs
+from .show import show_all_syncs as show_all_syncs

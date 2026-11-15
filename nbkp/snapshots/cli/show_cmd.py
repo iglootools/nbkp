@@ -13,10 +13,10 @@ from ...cliwiring.mount import managed_mount
 from ...cliwiring.preflight import check_all_with_progress
 from ...policy import Strictness
 from ...remote.endpoints import NetworkType
+from .. import show_all_syncs
 from ..models import ShowResult
 from ..output import print_human_show_results
 from . import app
-from .cmd_handler import show_all_syncs
 
 
 @app.command()

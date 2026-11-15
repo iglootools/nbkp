@@ -133,8 +133,8 @@ def _invoke_json(*args: str) -> tuple[int, list[dict[str, object]]]:
 
 
 class TestPruneCommand:
-    @patch("nbkp.snapshots.cli.cmd_handler.prune.list_snapshots")
-    @patch("nbkp.snapshots.cli.cmd_handler.prune.btrfs_prune_snapshots")
+    @patch("nbkp.snapshots.prune.list_snapshots")
+    @patch("nbkp.snapshots.prune.btrfs_prune_snapshots")
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
     @patch("nbkp.cliwiring.config.load_config")
     def test_successful_prune(
@@ -166,8 +166,8 @@ class TestPruneCommand:
         ]
         mock_prune.assert_called_once()
 
-    @patch("nbkp.snapshots.cli.cmd_handler.prune.list_snapshots")
-    @patch("nbkp.snapshots.cli.cmd_handler.prune.btrfs_prune_snapshots")
+    @patch("nbkp.snapshots.prune.list_snapshots")
+    @patch("nbkp.snapshots.prune.btrfs_prune_snapshots")
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
     @patch("nbkp.cliwiring.config.load_config")
     def test_dry_run(
@@ -210,7 +210,7 @@ class TestPruneCommand:
         assert {r["skip_reason"] for r in data} == {"no snapshots configured"}
 
     @patch(
-        "nbkp.snapshots.cli.cmd_handler.prune.btrfs_prune_snapshots",
+        "nbkp.snapshots.prune.btrfs_prune_snapshots",
         side_effect=SnapshotOperationError(
             SnapshotOp.DELETE, "/dst/snapshots/old1", "Permission denied"
         ),
@@ -302,8 +302,8 @@ _SNAP_2 = Snapshot(
 
 
 class TestShowCommand:
-    @patch("nbkp.snapshots.cli.cmd_handler.show.read_latest_symlink")
-    @patch("nbkp.snapshots.cli.cmd_handler.show.list_snapshots")
+    @patch("nbkp.snapshots.show.read_latest_symlink")
+    @patch("nbkp.snapshots.show.list_snapshots")
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
     @patch("nbkp.cliwiring.config.load_config")
     def test_successful_show(
@@ -336,10 +336,8 @@ class TestShowCommand:
         with (
             patch("nbkp.cliwiring.config.load_config") as mock_load,
             patch("nbkp.cliwiring.preflight.check_all_syncs") as mock_checks,
-            patch("nbkp.snapshots.cli.cmd_handler.show.list_snapshots") as mock_list,
-            patch(
-                "nbkp.snapshots.cli.cmd_handler.show.read_latest_symlink"
-            ) as mock_latest,
+            patch("nbkp.snapshots.show.list_snapshots") as mock_list,
+            patch("nbkp.snapshots.show.read_latest_symlink") as mock_latest,
         ):
             config = _prune_config()
             mock_load.return_value = config
@@ -371,8 +369,8 @@ class TestShowCommand:
         assert exit_code == 0
         assert {r["skip_reason"] for r in data} == {"no snapshots configured"}
 
-    @patch("nbkp.snapshots.cli.cmd_handler.show.read_latest_symlink")
-    @patch("nbkp.snapshots.cli.cmd_handler.show.list_snapshots")
+    @patch("nbkp.snapshots.show.read_latest_symlink")
+    @patch("nbkp.snapshots.show.list_snapshots")
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
     @patch("nbkp.cliwiring.config.load_config")
     def test_sync_filter(
@@ -471,7 +469,7 @@ class TestShowCommand:
         assert data[0]["error"]["preflight_errors"] == ["DESTINATION_ENDPOINT_INACTIVE"]
 
     @patch(
-        "nbkp.snapshots.cli.cmd_handler.show.list_snapshots",
+        "nbkp.snapshots.show.list_snapshots",
         side_effect=SnapshotOperationError(
             SnapshotOp.LIST, "/dst/snapshots", "connection failed"
         ),

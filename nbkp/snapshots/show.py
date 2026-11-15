@@ -1,11 +1,11 @@
-from ....config import Config
-from ....policy import Strictness
-from ....preflight import SyncStatus
-from ....remote.endpoints import ResolvedEndpoints
-from ...common import list_snapshots, read_latest_symlink
-from ...errors import SnapshotOperationError
-from ...models import ShowResult, SnapshotResultError, SnapshotSkipReason
-from .common import preflight_disposition
+from ..config import Config
+from ..policy import Strictness
+from ..preflight import SyncStatus
+from ..remote.endpoints import ResolvedEndpoints
+from .common import list_snapshots, read_latest_symlink
+from .disposition import preflight_disposition
+from .errors import SnapshotOperationError
+from .models import ShowResult, SnapshotResultError, SnapshotSkipReason
 
 
 def _disposition(

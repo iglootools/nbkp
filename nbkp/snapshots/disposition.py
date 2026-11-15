@@ -1,8 +1,8 @@
 """Shared candidate classification for ``snapshots show`` and ``prune``."""
 
-from ....policy import Strictness
-from ....preflight import SyncStatus, is_fatal
-from ...models import SnapshotErrorKind, SnapshotResultError, SnapshotSkipReason
+from ..policy import Strictness
+from ..preflight import SyncStatus, is_fatal
+from .models import SnapshotErrorKind, SnapshotResultError, SnapshotSkipReason
 
 
 def _preflight_error(

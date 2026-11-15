@@ -170,7 +170,7 @@ Domain cores:
 - **`credentials/`** — LUKS passphrase providers (keyring, env, command, prompt) and the per-run cache.
 - **`disks/`** — the udisks mount lifecycle: device detection and observation (`detection.py`, `observation.py`), unlock/mount/umount/lock (`udisks.py`, `lifecycle.py`, `context.py`), dry-run planning (`plan.py`), mount checks, and polkit rule generation (`auth.py`).
 - **`preflight/`** — the two-layer check system described in [Preflight Conditional Probing](./internals.md#preflight-conditional-probing): observation (`probes.py`, `volume_checks.py`, `endpoint_checks.py`, `ssh_checks.py`, `snapshot_checks.py`) and interpretation (`status/`, one module per layer). `output/` renders `check` and `troubleshoot`, including remediation text.
-- **`snapshots/`** — listing, creation and pruning for both backends (`btrfs.py`, `hardlinks.py`, shared code in `common.py`).
+- **`snapshots/`** — listing, creation and pruning for both backends (`btrfs.py`, `hardlinks.py`, shared code in `common.py`), and the `snapshots show` / `prune` decisions: which syncs are read, skipped or pruned under each strictness (`show.py`, `prune.py`, `disposition.py`).
 - **`sync/`** — rsync command building (`rsync.py`), orchestration and results (`orchestration.py`, `results.py`), and one module per snapshot mode in `modes/` (`plain`, `btrfs`, `hardlink`).
 - **`ordering/`** — the backup graph and its topological order (`graph.py`).
 - **`run/`** — the `nbkp run` pipeline (`pipeline.py`): prefetch, mount, preflight, sync, unmount.
