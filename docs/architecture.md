@@ -62,6 +62,7 @@ graph TD
     cli --> disks
     cli --> ordering
     cli --> preflight
+    cli --> remote
     cli --> run
     cli --> sh
     cli --> snapshots
@@ -158,7 +159,7 @@ Where each concern lives, ordered by the layers above, from the base up:
 |---|---|---|
 | Base | `config/` | Config models (`config/protocol/`: one module per entity, plus `errors.py` for validation codes) and the YAML `loader.py` |
 | Shared leaves | `policy.py`, `fsprotocol.py` | `policy`: strictness and severity classification. `fsprotocol`: sentinel names, directory layout, snapshot types |
-| Transport | `remote/` | Endpoint models and selection (`endpoints.py`, `resolution.py`), SSH argument building (`ssh.py`), Fabric/Paramiko (`fabricssh.py`), transport primitives (`dispatch.py`) |
+| Transport | `remote/` | Endpoint models and selection (`endpoints.py`, `resolution.py`), SSH argument building (`ssh.py`), Fabric/Paramiko (`fabricssh.py`) and per-command connection reuse (`pool.py`), transport primitives (`dispatch.py`) |
 | Domain cores | `credentials/`, `disks/`, `preflight/`, `snapshots/`, `sync/`, `ordering/`, `run/`, `sh/` | The behavior of each command, described below |
 | CLI wiring | `cliwiring/` | Wiring shared by sub-apps: config loading, credential prompting, the mount lifecycle and its progress bars, preflight with progress |
 | Presentation | `clidisplay/` | Output format, JSON, severity display, progress bars, `Invocation` |

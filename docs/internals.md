@@ -395,6 +395,8 @@ All mount operations go through `udisksctl`, authorized by polkit (no `sudo`):
 
 ### SSH transport
 
+Remote commands other than rsync (preflight probes, snapshot operations, the mount lifecycle) run over Fabric/Paramiko. Within one `nbkp` invocation they share a single connection per endpoint and proxy chain: it is opened on first use and closed when the command ends, after unmounting. A reused connection found dead is replaced, and a command it failed to start is retried once on the new connection. rsync opens its own `ssh` process for each sync.
+
 SSH arguments are constructed dynamically per endpoint. Common options:
 
 | Option | Purpose |

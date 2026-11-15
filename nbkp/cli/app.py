@@ -9,6 +9,7 @@ from ..demo import app as demo_app
 from ..disks.cli import app as disks_app
 from ..ordering.cli import app as ordering_app
 from ..preflight.cli import app as preflight_app
+from ..remote.pool import connection_scope
 from ..run.cli.run_cmd import run as run_fn
 from ..sh.cli.sh_cmd import sh as sh_fn
 from ..snapshots.cli import app as snapshots_app
@@ -29,6 +30,7 @@ app = typer.Typer(
 
 @app.callback(invoke_without_command=True)
 def _main(
+    ctx: typer.Context,
     version: Annotated[
         bool | None,
         typer.Option(
@@ -40,7 +42,10 @@ def _main(
         ),
     ] = None,
 ) -> None:
-    pass
+    # Every remote command of the invoked subcommand shares one SSH connection
+    # per host, closed when the subcommand returns or fails, after its own
+    # cleanup (unmounting included).
+    ctx.with_resource(connection_scope())
 
 
 app.add_typer(config_app)
