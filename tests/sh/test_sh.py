@@ -21,6 +21,13 @@ _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
 _OPTIONS = ScriptOptions(platform="linux", config_path="/etc/nbkp/config.yaml")
 
 
+def _bash_n(script: str) -> None:
+    result = subprocess.run(
+        ["bash", "-n"], input=script, capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+
+
 def _local_to_local_config() -> Config:
     src = LocalVolume(slug="src", path="/mnt/src")
     dst = LocalVolume(slug="dst", path="/mnt/dst")
@@ -591,14 +598,7 @@ class TestProxyJump:
             now=_NOW,
             resolved_endpoints=resolved,
         )
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+        _bash_n(script)
 
 
 class TestSshConnectionOptions:
@@ -649,14 +649,7 @@ class TestShellValidity:
     def test_local_to_local_valid_syntax(self) -> None:
         config = _local_to_local_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+        _bash_n(script)
 
     def test_local_to_remote_valid_syntax(self) -> None:
         config = _local_to_remote_config()
@@ -664,14 +657,7 @@ class TestShellValidity:
         script = generate_script(
             config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
         )
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+        _bash_n(script)
 
     def test_remote_to_local_valid_syntax(self) -> None:
         config = _remote_to_local_config()
@@ -679,50 +665,22 @@ class TestShellValidity:
         script = generate_script(
             config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
         )
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+        _bash_n(script)
 
     def test_btrfs_valid_syntax(self) -> None:
         config = _btrfs_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+        _bash_n(script)
 
     def test_disabled_valid_syntax(self) -> None:
         config = _disabled_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+        _bash_n(script)
 
     def test_filters_valid_syntax(self) -> None:
         config = _filters_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+        _bash_n(script)
 
     def test_proxy_jump_valid_syntax(self) -> None:
         config = _proxy_jump_config()
@@ -730,14 +688,7 @@ class TestShellValidity:
         script = generate_script(
             config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
         )
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+        _bash_n(script)
 
 
 class TestEdgeCases:
@@ -746,14 +697,7 @@ class TestEdgeCases:
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert "#!/bin/bash" in script
         assert "All syncs completed successfully" in script
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0
+        _bash_n(script)
 
     def test_all_disabled(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/src")
@@ -784,14 +728,7 @@ class TestEdgeCases:
         assert "# : disabled" in script
         assert "# sync_s_one" in script
         assert "# sync_s_two" in script
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0
+        _bash_n(script)
 
     def test_paths_with_spaces(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/my data")
@@ -813,14 +750,7 @@ class TestEdgeCases:
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert "'/mnt/my data/'" in script
         assert "'/mnt/my backup/'" in script
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0
+        _bash_n(script)
 
     def test_no_config_path(self) -> None:
         config = _local_to_local_config()
@@ -885,14 +815,7 @@ class TestEdgeCases:
         ) in script
         assert "sync_off_sync_preflight &&" not in script
         assert "# sync_off_sync  # disabled" in script
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0
+        _bash_n(script)
 
 
 class TestSummary:
@@ -945,14 +868,7 @@ class TestRemoteBtrfs:
         assert "btrfs property set" in script
         assert "btrfs subvolume delete" in script
         assert "nas.example.com" in script
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+        _bash_n(script)
 
 
 class TestHardLink:
@@ -1108,14 +1024,7 @@ class TestHardLink:
     def test_valid_syntax(self) -> None:
         config = self._hl_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+        _bash_n(script)
 
     def test_remote_valid_syntax(self) -> None:
         config = self._hl_remote_config()
@@ -1126,14 +1035,7 @@ class TestHardLink:
             now=_NOW,
             resolved_endpoints=resolved,
         )
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+        _bash_n(script)
 
     def test_remote_orphan_cleanup_uses_ssh(self) -> None:
         config = self._hl_remote_config()
@@ -1244,14 +1146,7 @@ class TestRelativePaths:
             relative_dst=True,
         )
         script = generate_script(config, options, now=_NOW)
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+        _bash_n(script)
 
     def test_relative_both_shell_valid(self) -> None:
         config = _local_to_local_config()
@@ -1263,14 +1158,7 @@ class TestRelativePaths:
             relative_dst=True,
         )
         script = generate_script(config, options, now=_NOW)
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+        _bash_n(script)
 
     def test_relative_btrfs(self) -> None:
         config = _btrfs_config()
@@ -1287,14 +1175,7 @@ class TestRelativePaths:
         assert "subvolume" in script
         assert "snapshot" in script
         assert "${NBKP_SCRIPT_DIR}" in script
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+        _bash_n(script)
 
     def test_relative_volume_checks(self) -> None:
         config = _local_to_local_config()
@@ -1384,14 +1265,7 @@ class TestDependencyGuard:
             },
         )
         script = generate_script(config, _OPTIONS, now=_NOW)
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+        _bash_n(script)
 
 
 class TestNoPortable:
@@ -1437,14 +1311,7 @@ class TestNoPortable:
     def test_valid_bash_syntax(self) -> None:
         opts = ScriptOptions(platform="linux", config_path="test.yaml", portable=False)
         script = generate_script(self._chain_config(), opts, now=_NOW)
-        result = subprocess.run(
-            ["bash", "-n"],
-            input=script,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+        _bash_n(script)
 
     def test_simple_sync_uses_associative_array(
         self,
@@ -1454,13 +1321,6 @@ class TestNoPortable:
         script = generate_script(config, opts, now=_NOW)
         assert "declare -A NBKP_FAILED=()" in script
         assert "NBKP_FAILED[$1]=1" in script
-
-
-def _bash_n(script: str) -> None:
-    result = subprocess.run(
-        ["bash", "-n"], input=script, capture_output=True, text=True, check=False
-    )
-    assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
 
 def _remote_snapshot_config(mode: str) -> Config:
