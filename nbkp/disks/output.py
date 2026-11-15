@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from dataclasses import asdict
 from typing import Protocol
 
 from rich.table import Table
@@ -9,6 +10,7 @@ from ..policy import Severity, Strictness
 from .lifecycle import MountResult, UmountResult
 from .models import (
     LifecycleFailure,
+    LifecycleStep,
     MountFailureReason,
     UmountFailureReason,
 )
@@ -208,3 +210,40 @@ def umount_failure_warning(result: UmountResult) -> str | None:
             return "volume may still be mounted or unlocked, check manually"
         case UmountFailureReason.UNREACHABLE | UmountFailureReason.UDISKS_NOT_AVAILABLE:
             return "volume may still be mounted, manual umount needed"
+
+
+def _failure_json(failure: LifecycleFailure) -> dict[str, object]:
+    return {
+        key: value.value if isinstance(value, LifecycleStep) else value
+        for key, value in asdict(failure).items()
+        if value is not None
+    }
+
+
+def mount_result_json(result: MountResult) -> dict[str, object]:
+    """Why a mount failed, for ``-o json``: the reason, the rendered detail and
+    the facts behind it.  Empty for a successful mount.
+    """
+    return (
+        {
+            "failure_reason": result.failure_reason.value,
+            "detail": mount_failure_detail(result),
+            "failure": _failure_json(result.failure),
+        }
+        if result.failure_reason is not None and result.failure is not None
+        else {}
+    )
+
+
+def umount_result_json(result: UmountResult) -> dict[str, object]:
+    """Like :func:`mount_result_json`, plus what the failure leaves behind."""
+    return (
+        {
+            "failure_reason": result.failure_reason.value,
+            "detail": umount_failure_detail(result),
+            "warning": umount_failure_warning(result),
+            "failure": _failure_json(result.failure),
+        }
+        if result.failure_reason is not None and result.failure is not None
+        else {}
+    )

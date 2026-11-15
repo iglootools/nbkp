@@ -82,7 +82,7 @@ def umount(
         return
 
     results = _umount_with_progress(cfg, resolved, name, output)
-    _probe_and_show_status(cfg, resolved, output, name)
+    _probe_and_show_status(cfg, resolved, output, name, umount_results=results)
     if any(not r.success for r in results):
         raise typer.Exit(1)
 

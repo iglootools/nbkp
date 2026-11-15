@@ -7,12 +7,13 @@ from typer.testing import CliRunner
 
 from nbkp.cli import app
 from nbkp.config import Config, LocalVolume, LuksEncryptionConfig, MountConfig
-from nbkp.disks.lifecycle import MountResult
+from nbkp.disks.lifecycle import MountResult, UmountResult
 from nbkp.disks.models import (
     LifecycleFailure,
     LifecycleStep,
     MountCapabilities,
     MountFailureReason,
+    UmountFailureReason,
 )
 
 runner = CliRunner()
@@ -138,6 +139,70 @@ class TestMountAuthHint:
         result = runner.invoke(app, ["disks", "mount", "-c", "/f.yaml"])
         assert result.exit_code == 1
         assert "nbkp disks setup-auth -c /f.yaml" in result.output
+
+
+class TestFailureJson:
+    @patch(
+        "nbkp.disks.cli.mount_cmd.mount_volumes",
+        return_value=[
+            MountResult(
+                volume_slug="enc",
+                success=False,
+                failure_reason=MountFailureReason.UNLOCK_FAILED,
+                failure=LifecycleFailure(
+                    step=LifecycleStep.UNLOCK, exit_code=1, message="bad key"
+                ),
+                device_present=True,
+                luks_unlocked=False,
+            )
+        ],
+    )
+    @patch("nbkp.disks.cli.mount_cmd.prefetch_passphrases", return_value=[])
+    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
+    def test_mount_reports_why_it_failed(self, *_mocks: MagicMock) -> None:
+        result = runner.invoke(app, ["disks", "mount", "-c", "/f.yaml", "-o", "json"])
+
+        assert result.exit_code == 1
+        [entry] = json.loads(result.output)
+        assert entry == {
+            "volume": "enc",
+            "device_present": True,
+            "luks_unlocked": False,
+            "mounted": None,
+            "failure_reason": "unlock_failed",
+            "detail": "unlock failed (exit 1): bad key",
+            "failure": {"step": "unlock", "exit_code": 1, "message": "bad key"},
+        }
+
+    @patch(
+        "nbkp.disks.cli.helpers.status.check_mount_status",
+        return_value=MountCapabilities(
+            device_present=True, luks_unlocked=True, mounted=False
+        ),
+    )
+    @patch(
+        "nbkp.disks.cli.umount_cmd.umount_volumes",
+        return_value=[
+            UmountResult(
+                volume_slug="enc",
+                success=False,
+                failure_reason=UmountFailureReason.LOCK_FAILED,
+                failure=LifecycleFailure(
+                    step=LifecycleStep.LOCK, exit_code=1, message="busy"
+                ),
+            )
+        ],
+    )
+    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
+    def test_umount_reports_why_it_failed(self, *_mocks: MagicMock) -> None:
+        result = runner.invoke(app, ["disks", "umount", "-c", "/f.yaml", "-o", "json"])
+
+        assert result.exit_code == 1
+        [entry] = json.loads(result.output)
+        assert entry["luks_unlocked"] is True
+        assert entry["failure_reason"] == "lock_failed"
+        assert entry["detail"] == "lock failed (exit 1): busy"
+        assert entry["warning"] == "LUKS container still unlocked, manual lock needed"
 
 
 class TestSetupAuth:

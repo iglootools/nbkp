@@ -5,7 +5,7 @@ import typer
 from rich.console import Console
 from rich.text import Text
 
-from ...clidisplay import OutputFormat
+from ...clidisplay import OutputFormat, echo_json
 from ...clidisplay.invocation import Invocation
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...cliwiring.credentials import prompt_passphrase
@@ -16,7 +16,11 @@ from ...remote.endpoints import NetworkType, ResolvedEndpoints
 from ..lifecycle import MountResult, mount_volumes
 from ..models import MountFailureReason
 from ..observation import build_mount_observations
-from ..output import mount_failure_detail
+from ..output import (
+    build_mount_status_json,
+    mount_failure_detail,
+    mount_result_json,
+)
 from ..plan import plan_lifecycle
 from . import app
 from .helpers import (
@@ -149,8 +153,45 @@ def _show_results(
     names: list[str] | None,
     output: OutputFormat,
 ) -> None:
-    """Status table: observed volumes, unreachable ones, unmanaged ones."""
+    """Status table: observed volumes, unreachable ones, unmanaged ones.
+
+    The JSON entries are built from the results themselves, so that they
+    carry why a mount failed, not only the state it left.
+    """
     display_names = mount_display_names(cfg)
+    match output:
+        case OutputFormat.JSON:
+            echo_json(
+                [
+                    *(
+                        _mount_result_entry(
+                            display_names.get(r.volume_slug, r.volume_slug), r
+                        )
+                        for r in results
+                    ),
+                    *build_mount_status_json(_unmanaged_statuses(cfg, names)),
+                ]
+            )
+        case OutputFormat.HUMAN:
+            _show_human_results(cfg, results, names, display_names)
+
+
+def _mount_result_entry(name: str, result: MountResult) -> dict[str, object]:
+    return {
+        "volume": name,
+        "device_present": result.device_present,
+        "luks_unlocked": result.luks_unlocked,
+        "mounted": result.mounted,
+        **mount_result_json(result),
+    }
+
+
+def _show_human_results(
+    cfg: Config,
+    results: list[MountResult],
+    names: list[str] | None,
+    display_names: dict[str, str],
+) -> None:
     observations = build_mount_observations(results)
     _show_status_table(
         [
@@ -171,7 +212,7 @@ def _show_results(
             ),
             *_unmanaged_statuses(cfg, names),
         ],
-        output,
+        OutputFormat.HUMAN,
     )
 
 

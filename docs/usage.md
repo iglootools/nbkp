@@ -200,6 +200,8 @@ nbkp disks umount --name seagate8tb
 nbkp preflight troubleshoot
 ```
 
+With `-o json`, `disks mount` and `disks umount` print one entry per volume with its state (`device_present`, `luks_unlocked`, `mounted`). The entry of a volume that failed also has a `failure_reason` (e.g. `unlock_failed`, `not_authorized`, `lock_failed`), a one-line `detail`, a `failure` object with the facts behind it (the failed `step`, its `exit_code` and `message`, a failed probe `command`, …) and, for `umount`, a `warning` saying what was left mounted or unlocked.
+
 ### Example 4: Sami's Personal Config
 
 A real-world example of a complex multi-volume, multi-snapshot backup setup.
