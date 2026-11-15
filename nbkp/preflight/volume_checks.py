@@ -32,7 +32,7 @@ from ..fsprotocol import VOLUME_SENTINEL
 from ..remote import run_remote_command
 from ..remote.dispatch import check_command_available
 from ..remote.endpoints import ResolvedEndpoints
-from ..remote.errors import SSH_CONNECTION_ERRORS, describe_error, is_auth_error
+from ..remote.errors import describe_error, is_auth_error, ssh_connection_errors
 from .probes import check_rsync_version
 from .snapshot_checks import (
     check_btrfs_mount_option,
@@ -102,7 +102,7 @@ def _observe_ssh_endpoint_remote(
                 else None
             ),
         )
-    except SSH_CONNECTION_ERRORS as e:
+    except ssh_connection_errors() as e:
         return unreachable_diagnostics(e)
 
 

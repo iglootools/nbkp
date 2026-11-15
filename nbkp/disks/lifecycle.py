@@ -15,7 +15,7 @@ from ..config import (
 from ..credentials import CredentialError
 from ..remote.dispatch import run_on_volume
 from ..remote.endpoints import ResolvedEndpoints, location_excluded
-from ..remote.errors import SSH_CONNECTION_ERRORS, describe_error
+from ..remote.errors import describe_error, ssh_connection_errors
 from ..remote.fabricssh import StdinClosedProcess
 from .detection import (
     DeviceProbeError,
@@ -269,7 +269,7 @@ def mount_volume(
             failure=_probe_failure(e),
             device_present=True,
         )
-    except SSH_CONNECTION_ERRORS as e:
+    except ssh_connection_errors() as e:
         tool_missing, failure = _connection_failure(volume, e)
         return MountResult(
             volume_slug=volume.slug,
@@ -452,7 +452,7 @@ def umount_volume(
             failure_reason=UmountFailureReason.PROBE_FAILED,
             failure=_probe_failure(e),
         )
-    except SSH_CONNECTION_ERRORS as e:
+    except ssh_connection_errors() as e:
         tool_missing, failure = _connection_failure(volume, e)
         return UmountResult(
             volume_slug=volume.slug,

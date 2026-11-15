@@ -8,7 +8,7 @@ from ...config import Config, SyncConfig
 from ...fsprotocol import Snapshot
 from ...remote.dispatch import VolumeCommandRunner, run_on_volume
 from ...remote.endpoints import ResolvedEndpoints
-from ...remote.errors import SSH_CONNECTION_ERRORS
+from ...remote.errors import ssh_connection_errors
 from ...snapshots.common import update_latest_symlink
 from ...snapshots.errors import SnapshotOperationError
 from ..results import SyncFailureKind, SyncResult, SyncWarning, SyncWarningKind
@@ -74,7 +74,7 @@ def rsync_step(
     # A transport-level failure (SSH, spawn, DNS) becomes a failed SyncResult so
     # the caller reports per-sync status instead of aborting the whole run.
     # Programming errors still propagate.
-    except SSH_CONNECTION_ERRORS as e:
+    except ssh_connection_errors() as e:
         return SyncResult.failed(sync.slug, ctx.dry_run, SyncFailureKind.RSYNC, str(e))
     if proc.returncode != 0:
         return SyncResult.failed(

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from ..config import Config, MountConfig, Volume
 from ..remote.endpoints import ResolvedEndpoints
-from ..remote.errors import SSH_CONNECTION_ERRORS, describe_error
+from ..remote.errors import describe_error, ssh_connection_errors
 from .lifecycle import lifecycle_volumes
 from .models import MountCapabilities
 from .mount_checks import check_mount_status
@@ -83,7 +83,7 @@ def _plan_one(
 ) -> VolumePlan:
     try:
         caps = probe(volume, mount, resolved)
-    except SSH_CONNECTION_ERRORS as e:
+    except ssh_connection_errors() as e:
         return VolumePlan(
             volume.slug, (), f"unreachable: {describe_error(e)}", probe_failed=True
         )

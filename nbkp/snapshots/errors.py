@@ -14,7 +14,7 @@ from collections.abc import Callable
 from ..config import Volume
 from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
-from ..remote.errors import SSH_CONNECTION_ERRORS
+from ..remote.errors import ssh_connection_errors
 
 
 class SnapshotOp(str, enum.Enum):
@@ -58,7 +58,7 @@ def run_snapshot_command(
     """
     try:
         return run(cmd, volume, resolved_endpoints)
-    except SSH_CONNECTION_ERRORS as e:
+    except ssh_connection_errors() as e:
         raise SnapshotOperationError(op, path, str(e)) from e
 
 

@@ -33,7 +33,7 @@ from ..config import (
 )
 from ..disks import MountObservation
 from ..remote.endpoints import ResolvedEndpoints, location_excluded
-from ..remote.errors import SSH_CONNECTION_ERRORS
+from ..remote.errors import ssh_connection_errors
 from ..remote.resolution import (
     endpoint_location_excluded,
     enrich_from_ssh_config,
@@ -477,7 +477,7 @@ def _check_volume(
             if observable and host_tools is not None
             else None
         )
-    except SSH_CONNECTION_ERRORS as e:
+    except ssh_connection_errors() as e:
         return _disconnected_volume_status(vol, ssh_status, e)
     return VolumeStatus.from_diagnostics(
         slug=vol.slug,
@@ -569,7 +569,7 @@ def _check_source_endpoint(
             if probe is not None
             else None
         )
-    except SSH_CONNECTION_ERRORS as e:
+    except ssh_connection_errors() as e:
         return SourceEndpointStatus.from_diagnostics(
             endpoint=ep,
             volume_status=_disconnected_volume_status(
@@ -600,7 +600,7 @@ def _check_destination_endpoint(
             if probe is not None
             else None
         )
-    except SSH_CONNECTION_ERRORS as e:
+    except ssh_connection_errors() as e:
         return DestinationEndpointStatus.from_diagnostics(
             endpoint=ep,
             volume_status=_disconnected_volume_status(

@@ -12,29 +12,34 @@ the transient "drive/host not around right now" condition that ``UNREACHABLE``
 models, so preflight reports it as a separate, non-inactive error.
 """
 
+from functools import cache
+
 import invoke.exceptions  # type: ignore[import-untyped]
 import paramiko
 
-SSH_AUTH_ERRORS: tuple[type[BaseException], ...] = (
-    paramiko.AuthenticationException,
-    paramiko.BadHostKeyException,
-)
-"""The host was reached but refused the connection (bad key, unknown or
-changed host key).  Subclasses of ``paramiko.SSHException`` — catch these
-first."""
 
-SSH_CONNECTION_ERRORS: tuple[type[BaseException], ...] = (
-    OSError,  # socket timeouts, DNS (gaierror), refused, NoValidConnectionsError
-    EOFError,  # server closed the connection during the handshake
-    paramiko.SSHException,  # protocol errors, includes SSH_AUTH_ERRORS
-    invoke.exceptions.Failure,
-    invoke.exceptions.ThreadException,
-)
-"""Everything that means "the command could not be run on the host"."""
+@cache
+def ssh_auth_errors() -> tuple[type[BaseException], ...]:
+    """The host was reached but refused the connection (bad key, unknown or
+    changed host key).  Subclasses of ``paramiko.SSHException`` — catch these
+    first."""
+    return (paramiko.AuthenticationException, paramiko.BadHostKeyException)
+
+
+@cache
+def ssh_connection_errors() -> tuple[type[BaseException], ...]:
+    """Everything that means "the command could not be run on the host"."""
+    return (
+        OSError,  # socket timeouts, DNS (gaierror), refused, NoValidConnectionsError
+        EOFError,  # server closed the connection during the handshake
+        paramiko.SSHException,  # protocol errors, includes ssh_auth_errors()
+        invoke.exceptions.Failure,
+        invoke.exceptions.ThreadException,
+    )
 
 
 def is_auth_error(error: BaseException) -> bool:
-    return isinstance(error, SSH_AUTH_ERRORS)
+    return isinstance(error, ssh_auth_errors())
 
 
 def describe_error(error: BaseException) -> str:
