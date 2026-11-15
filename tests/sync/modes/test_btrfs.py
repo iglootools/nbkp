@@ -1,151 +1,122 @@
 """Tests for nbkp.sync.modes.btrfs: snapshot after rsync into staging, pruning."""
 
-from unittest.mock import MagicMock, patch
-
-from nbkp.snapshots.errors import SnapshotOp, SnapshotOperationError
+from nbkp.config import BtrfsSnapshotConfig, Config
 from nbkp.sync.results import SyncFailureKind, SyncOutcome
+from tests.fakes import FakeCommandRunner, FakeRsync, completed
 from tests.sync.runner_helpers import (
-    FIXED_NOW,
+    NEW_SNAPSHOT_NAME,
     active_statuses,
-    make_btrfs_config,
-    make_btrfs_config_with_max,
     make_remote_same_server_btrfs_config,
+    make_snapshot_config,
     run_syncs,
 )
 
+_NEW_SNAPSHOT = f"/dst/snapshots/{NEW_SNAPSHOT_NAME}"
+
+
+def _btrfs_config(max_snapshots: int | None = None) -> Config:
+    return make_snapshot_config(
+        btrfs=BtrfsSnapshotConfig(enabled=True, max_snapshots=max_snapshots)
+    )
+
 
 class TestBtrfsSync:
-    @patch("nbkp.sync.modes.common.update_latest_symlink")
-    @patch("nbkp.sync.modes.btrfs.create_snapshot")
-    @patch("nbkp.sync.modes.common.run_rsync")
-    def test_btrfs_snapshot_after_sync(
-        self,
-        mock_rsync: MagicMock,
-        mock_snap: MagicMock,
-        mock_symlink: MagicMock,
-    ) -> None:
-        config = make_btrfs_config()
+    def test_btrfs_snapshot_after_sync(self) -> None:
+        config = _btrfs_config()
         _, sync_statuses = active_statuses(config)
-        mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
-        mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
+        rsync, runner = FakeRsync(), FakeCommandRunner()
 
-        results = run_syncs(config, sync_statuses)
+        results = run_syncs(config, sync_statuses, rsync=rsync, run_command=runner)
+
         assert results[0].success is True
-        assert results[0].snapshot_path == "/dst/snapshots/20240115T120000Z"
-        mock_snap.assert_called_once()
-        assert mock_snap.call_args.kwargs["now"] == FIXED_NOW
-        assert mock_snap.call_args.kwargs["platform"] == "linux"
-        mock_symlink.assert_called_once()
+        assert results[0].snapshot_path == _NEW_SNAPSHOT
+        assert rsync.last_kwargs["dest_suffix"] == "staging"
+        assert runner.commands == [
+            ["btrfs", "subvolume", "snapshot", "-r", "/dst/staging", _NEW_SNAPSHOT],
+            ["ln", "-sfn", f"snapshots/{NEW_SNAPSHOT_NAME}", "/dst/latest"],
+        ]
 
-    @patch("nbkp.sync.modes.common.run_rsync")
-    def test_btrfs_snapshot_skipped_on_dry_run(
-        self,
-        mock_rsync: MagicMock,
-    ) -> None:
-        config = make_btrfs_config()
+    def test_btrfs_snapshot_skipped_on_dry_run(self) -> None:
+        config = _btrfs_config()
         _, sync_statuses = active_statuses(config)
-        mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
+        runner = FakeCommandRunner()
 
-        results = run_syncs(config, sync_statuses, dry_run=True)
-        assert results[0].success is True
-        assert results[0].snapshot_path is None
-
-    @patch("nbkp.sync.modes.common.update_latest_symlink")
-    @patch("nbkp.sync.modes.btrfs.create_snapshot")
-    @patch("nbkp.sync.modes.common.run_rsync")
-    def test_btrfs_no_link_dest(
-        self,
-        mock_rsync: MagicMock,
-        mock_snap: MagicMock,
-        _mock_symlink: MagicMock,
-    ) -> None:
-        config = make_btrfs_config()
-        _, sync_statuses = active_statuses(config)
-        mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
-        mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
-
-        run_syncs(config, sync_statuses)
-
-        call_kwargs = mock_rsync.call_args
-        assert call_kwargs.kwargs.get("link_dest") is None
-
-    @patch("nbkp.sync.modes.common.update_latest_symlink")
-    @patch("nbkp.sync.modes.btrfs.create_snapshot")
-    @patch("nbkp.sync.modes.common.run_rsync")
-    def test_remote_same_server_with_btrfs(
-        self,
-        mock_rsync: MagicMock,
-        mock_snap: MagicMock,
-        mock_symlink: MagicMock,
-    ) -> None:
-        config = make_remote_same_server_btrfs_config()
-        _, sync_statuses = active_statuses(config)
-        mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
-        mock_snap.return_value = "/backup/snapshots/20240115T120000Z"
-
-        results = run_syncs(config, sync_statuses)
-        assert results[0].success is True
-        assert results[0].snapshot_path is not None
-        mock_snap.assert_called_once()
-        mock_symlink.assert_called_once()
-
-    @patch("nbkp.sync.modes.btrfs.create_snapshot")
-    @patch("nbkp.sync.modes.common.run_rsync")
-    def test_snapshot_failure(
-        self,
-        mock_rsync: MagicMock,
-        mock_snap: MagicMock,
-    ) -> None:
-        config = make_btrfs_config()
-        _, sync_statuses = active_statuses(config)
-        mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
-        mock_snap.side_effect = SnapshotOperationError(
-            SnapshotOp.CREATE, "/dst/snapshots/x", "btrfs failed"
+        results = run_syncs(
+            config, sync_statuses, dry_run=True, rsync=FakeRsync(), run_command=runner
         )
 
-        results = run_syncs(config, sync_statuses)
+        assert results[0].success is True
+        assert results[0].snapshot_path is None
+        assert runner.commands == []
+
+    def test_btrfs_no_link_dest(self) -> None:
+        config = _btrfs_config()
+        _, sync_statuses = active_statuses(config)
+        rsync = FakeRsync()
+
+        run_syncs(config, sync_statuses, rsync=rsync, run_command=FakeCommandRunner())
+
+        assert rsync.last_kwargs["link_dest"] is None
+
+    def test_remote_same_server_with_btrfs(self) -> None:
+        config = make_remote_same_server_btrfs_config()
+        _, sync_statuses = active_statuses(config)
+        runner = FakeCommandRunner()
+
+        results = run_syncs(
+            config, sync_statuses, rsync=FakeRsync(), run_command=runner
+        )
+
+        assert results[0].success is True
+        assert results[0].snapshot_path == f"/backup/snapshots/{NEW_SNAPSHOT_NAME}"
+        assert runner.commands_starting_with("ln") == [
+            ["ln", "-sfn", f"snapshots/{NEW_SNAPSHOT_NAME}", "/backup/latest"]
+        ]
+
+    def test_snapshot_failure(self) -> None:
+        config = _btrfs_config()
+        _, sync_statuses = active_statuses(config)
+        runner = FakeCommandRunner().on(
+            "btrfs", "subvolume", "snapshot", returns=completed(1, stderr="no space")
+        )
+
+        results = run_syncs(
+            config, sync_statuses, rsync=FakeRsync(), run_command=runner
+        )
+
         assert results[0].outcome == SyncOutcome.FAILED
         assert results[0].failure == SyncFailureKind.SNAPSHOT
+        assert runner.commands_starting_with("ln") == []
 
-    @patch("nbkp.sync.modes.common.update_latest_symlink")
-    @patch("nbkp.sync.modes.btrfs.btrfs_prune_snapshots")
-    @patch("nbkp.sync.modes.btrfs.create_snapshot")
-    @patch("nbkp.sync.modes.common.run_rsync")
-    def test_auto_prune_after_snapshot(
-        self,
-        mock_rsync: MagicMock,
-        mock_snap: MagicMock,
-        mock_prune: MagicMock,
-        _mock_symlink: MagicMock,
-    ) -> None:
-        config = make_btrfs_config_with_max()
+    def test_auto_prune_after_snapshot(self) -> None:
+        config = _btrfs_config(max_snapshots=1)
         _, sync_statuses = active_statuses(config)
-        mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
-        mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
-        mock_prune.return_value = ["/dst/snapshots/old"]
+        old = "2026-03-05T10:00:00.000Z"
+        runner = (
+            FakeCommandRunner()
+            .on("ls", returns=completed(0, f"{old}\n{NEW_SNAPSHOT_NAME}\n"))
+            .on("readlink", returns=completed(0, f"snapshots/{NEW_SNAPSHOT_NAME}\n"))
+        )
 
-        results = run_syncs(config, sync_statuses)
+        results = run_syncs(
+            config, sync_statuses, rsync=FakeRsync(), run_command=runner
+        )
+
         assert results[0].success is True
-        assert results[0].pruned_paths == ("/dst/snapshots/old",)
-        mock_prune.assert_called_once()
+        assert results[0].pruned_paths == (f"/dst/snapshots/{old}",)
+        assert runner.commands_starting_with("btrfs", "subvolume", "delete") == [
+            ["btrfs", "subvolume", "delete", f"/dst/snapshots/{old}"]
+        ]
 
-    @patch("nbkp.sync.modes.common.update_latest_symlink")
-    @patch("nbkp.sync.modes.btrfs.btrfs_prune_snapshots")
-    @patch("nbkp.sync.modes.btrfs.create_snapshot")
-    @patch("nbkp.sync.modes.common.run_rsync")
-    def test_no_auto_prune_without_max_snapshots(
-        self,
-        mock_rsync: MagicMock,
-        mock_snap: MagicMock,
-        mock_prune: MagicMock,
-        _mock_symlink: MagicMock,
-    ) -> None:
-        config = make_btrfs_config()
+    def test_no_auto_prune_without_max_snapshots(self) -> None:
+        config = _btrfs_config()
         _, sync_statuses = active_statuses(config)
-        mock_rsync.return_value = MagicMock(returncode=0, stdout="done\n", stderr="")
-        mock_snap.return_value = "/dst/snapshots/20240115T120000Z"
+        runner = FakeCommandRunner()
 
-        results = run_syncs(config, sync_statuses)
+        results = run_syncs(
+            config, sync_statuses, rsync=FakeRsync(), run_command=runner
+        )
+
         assert results[0].success is True
         assert results[0].pruned_paths is None
-        mock_prune.assert_not_called()
+        assert runner.commands_starting_with("ls") == []

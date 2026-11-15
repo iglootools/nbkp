@@ -41,7 +41,10 @@ def _cleanup_orphans(sync: SyncConfig, ctx: RunContext) -> tuple[SyncWarning, ..
     """Remove snapshots left by failed syncs (best-effort: a warning)."""
     try:
         cleanup_orphaned_snapshots(
-            sync, ctx.config, resolved_endpoints=ctx.resolved_endpoints
+            sync,
+            ctx.config,
+            resolved_endpoints=ctx.resolved_endpoints,
+            run=ctx.run_command,
         )
         return ()
     except SnapshotOperationError as e:
@@ -65,6 +68,7 @@ def _prepare_snapshot_dir(sync: SyncConfig, ctx: RunContext) -> str | SyncResult
             now=now,
             platform=ctx.platform,
             resolved_endpoints=ctx.resolved_endpoints,
+            run=ctx.run_command,
         )
     except SnapshotOperationError as e:
         return SyncResult.failed(
@@ -115,6 +119,7 @@ def _discard_snapshot_dir(
             snapshot_path,
             destination_volume(sync, ctx.config),
             ctx.resolved_endpoints,
+            run=ctx.run_command,
         )
         return ()
     except SnapshotOperationError as e:

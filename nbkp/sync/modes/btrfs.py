@@ -36,6 +36,7 @@ def _btrfs_post_rsync(
             now=ctx.clock(),
             platform=ctx.platform,
             resolved_endpoints=ctx.resolved_endpoints,
+            run=ctx.run_command,
         )
     except SnapshotOperationError as e:
         return failed_after_rsync(
