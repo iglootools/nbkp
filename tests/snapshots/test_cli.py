@@ -332,7 +332,7 @@ class TestShowCommand:
         assert data[0]["error"] is None
 
     def test_human_output_renders(self) -> None:
-        """Smoke test of the human table (the content is asserted via JSON)."""
+        """The command prints the table; its cells are tested in test_output."""
         with (
             patch("nbkp.cliwiring.config.load_config") as mock_load,
             patch("nbkp.cliwiring.preflight.check_all_syncs") as mock_checks,
@@ -350,6 +350,8 @@ class TestShowCommand:
             result = runner.invoke(app, ["snapshots", "show", "-c", "/fake.yaml"])
 
         assert result.exit_code == 0
+        assert "Snapshots:" in result.output
+        assert _SNAP_1.name in result.output
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
     @patch("nbkp.cliwiring.config.load_config")
