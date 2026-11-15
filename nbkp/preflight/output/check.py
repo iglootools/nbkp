@@ -11,10 +11,10 @@ from ...config import (
     RemoteVolume,
 )
 from ...config.output import (
-    _sync_endpoint_display,
-    _sync_options,
     format_mount_summary,
     format_volume_display,
+    sync_endpoint_display,
+    sync_options_summary,
 )
 from ...fsprotocol import DEVNULL_TARGET
 from ...policy import Severity, Strictness
@@ -320,9 +320,9 @@ def _build_syncs_section(
     for ss in sync_statuses.values():
         table.add_row(
             ss.slug,
-            Text(_sync_endpoint_display(config.source_endpoint(ss.config))),
-            Text(_sync_endpoint_display(config.destination_endpoint(ss.config))),
-            _sync_options(ss.config, config),
+            Text(sync_endpoint_display(config.source_endpoint(ss.config))),
+            Text(sync_endpoint_display(config.destination_endpoint(ss.config))),
+            sync_options_summary(ss.config, config),
             _format_source_diagnostics(ss, strictness),
             _format_destination_diagnostics(ss, strictness),
             status_text(ss.active, ss.errors, strictness),
