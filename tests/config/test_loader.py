@@ -1076,6 +1076,32 @@ class TestLoadConfig:
         )
         assert ConfigValidationCode.SHARED_DESTINATION in _validation_error_types(p)
 
+    def test_cyclic_sync_dependency(self, tmp_path: Path) -> None:
+        p = tmp_path / "cycle.yaml"
+        p.write_text(
+            dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep-x:
+                volume: v
+                subdir: x
+              ep-y:
+                volume: v
+                subdir: y
+            syncs:
+              a:
+                source: ep-x
+                destination: ep-y
+              b:
+                source: ep-y
+                destination: ep-x
+        """)
+        )
+        assert ConfigValidationCode.CYCLIC_DEPENDENCY in _validation_error_types(p)
+
     def test_duplicate_volume_subdir_in_endpoints(self, tmp_path: Path) -> None:
         p = tmp_path / "dup_loc.yaml"
         p.write_text(

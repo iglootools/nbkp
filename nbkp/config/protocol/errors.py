@@ -21,6 +21,7 @@ class ConfigValidationCode(StrEnum):
     DUPLICATE_ENDPOINT_LOCATION = "duplicate-endpoint-location"
     NESTED_ENDPOINT = "nested-endpoint"
     SHARED_DESTINATION = "shared-destination"
+    CYCLIC_DEPENDENCY = "cyclic-dependency"
     CROSS_SERVER_SYNC = "cross-server-sync"
     CREDENTIAL_COMMAND_REQUIRED = "credential-command-required"
     CREDENTIAL_COMMAND_PLACEHOLDER = "credential-command-placeholder"
