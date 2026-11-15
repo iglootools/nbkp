@@ -96,6 +96,8 @@ def run_remote_command(
     )
     with _build_connection(server, proxy_chain) as conn:
         if server.connection_options.server_alive_interval is not None:
+            # Fabric connects lazily: the transport only exists once open.
+            conn.open()
             conn.transport.set_keepalive(  # pyright: ignore[reportOptionalMemberAccess]
                 server.connection_options.server_alive_interval
             )

@@ -511,10 +511,14 @@ class TestRunRemoteCommand:
         mock_conn = mock_conn_cls.return_value.__enter__.return_value
         mock_result = MagicMock(exited=0, stdout="ok\n", stderr="")
         mock_conn.run.return_value = mock_result
+        # Like Fabric, no transport until the connection is opened.
+        transport = MagicMock()
+        mock_conn.transport = None
+        mock_conn.open.side_effect = lambda: setattr(mock_conn, "transport", transport)
 
         run_remote_command(server, ["echo", "ok"])
 
-        mock_conn.transport.set_keepalive.assert_called_once_with(60)
+        transport.set_keepalive.assert_called_once_with(60)
 
     @patch("nbkp.remote.fabricssh.paramiko")
     @patch("nbkp.remote.fabricssh.Connection")
