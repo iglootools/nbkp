@@ -34,6 +34,7 @@ from ..config import (
 )
 from ..disks import MountObservation
 from ..remote.endpoints import ResolvedEndpoints
+from ..remote.errors import SSH_CONNECTION_ERRORS
 from ..remote.resolution import enrich_from_ssh_config, resolve_proxy_chain
 from .endpoint_checks import observe_destination_endpoint, observe_source_endpoint
 from .severity import PreflightError
@@ -43,7 +44,11 @@ from .status.result import PreflightResult
 from .status.ssh import HostToolCapabilities, SshEndpointStatus, SshEndpointToolNeeds
 from .status.sync import SyncStatus
 from .status.volume import VolumeCapabilities, VolumeStatus
-from .volume_checks import observe_ssh_endpoint, observe_volume
+from .volume_checks import (
+    observe_ssh_endpoint,
+    observe_volume,
+    unreachable_diagnostics,
+)
 
 
 @dataclass(frozen=True)
@@ -290,11 +295,8 @@ def _check_volume(
     """Observe one volume unless its (remote) SSH endpoint is inactive."""
     host_tools = ssh_status.diagnostics.host_tools
     observable = ssh_status.active or isinstance(vol, LocalVolume)
-    return VolumeStatus.from_diagnostics(
-        slug=vol.slug,
-        config=vol,
-        ssh_endpoint_status=ssh_status,
-        diagnostics=(
+    try:
+        diagnostics = (
             observe_volume(
                 vol,
                 host_tools=host_tools,
@@ -304,8 +306,40 @@ def _check_volume(
             )
             if observable and host_tools is not None
             else None
-        ),
+        )
+    except SSH_CONNECTION_ERRORS as e:
+        return _disconnected_volume_status(vol, ssh_status, e)
+    return VolumeStatus.from_diagnostics(
+        slug=vol.slug,
+        config=vol,
+        ssh_endpoint_status=ssh_status,
+        diagnostics=diagnostics,
     )
+
+
+def _disconnected_volume_status(
+    vol: Volume, ssh_status: SshEndpointStatus, error: BaseException
+) -> VolumeStatus:
+    """A remote volume whose host dropped after answering the first probes.
+
+    Every remote command opens a new connection, so a host can go away
+    (a NAS falling asleep, Wi-Fi dropping) half-way through preflight.  That
+    host is then unreachable for this volume — inactive, with the cause
+    recorded — rather than a traceback that stops every other sync too.
+    For a local volume the error is not a connection failure: it propagates.
+    """
+    match vol:
+        case RemoteVolume():
+            return VolumeStatus.from_diagnostics(
+                slug=vol.slug,
+                config=vol,
+                ssh_endpoint_status=SshEndpointStatus.from_diagnostics(
+                    slug=ssh_status.slug, diagnostics=unreachable_diagnostics(error)
+                ),
+                diagnostics=None,
+            )
+        case LocalVolume():
+            raise error
 
 
 def _check_sync_endpoints(
@@ -360,14 +394,22 @@ def _check_source_endpoint(
     probe: _EndpointProbe | None,
     resolved_endpoints: ResolvedEndpoints,
 ) -> SourceEndpointStatus:
-    return SourceEndpointStatus.from_diagnostics(
-        endpoint=ep,
-        volume_status=volume_status,
-        diagnostics=(
+    try:
+        diagnostics = (
             observe_source_endpoint(ep, probe.volume, resolved_endpoints)
             if probe is not None
             else None
-        ),
+        )
+    except SSH_CONNECTION_ERRORS as e:
+        return SourceEndpointStatus.from_diagnostics(
+            endpoint=ep,
+            volume_status=_disconnected_volume_status(
+                volume_status.config, volume_status.ssh_endpoint_status, e
+            ),
+            diagnostics=None,
+        )
+    return SourceEndpointStatus.from_diagnostics(
+        endpoint=ep, volume_status=volume_status, diagnostics=diagnostics
     )
 
 
@@ -377,10 +419,8 @@ def _check_destination_endpoint(
     probe: _EndpointProbe | None,
     resolved_endpoints: ResolvedEndpoints,
 ) -> DestinationEndpointStatus:
-    return DestinationEndpointStatus.from_diagnostics(
-        endpoint=ep,
-        volume_status=volume_status,
-        diagnostics=(
+    try:
+        diagnostics = (
             observe_destination_endpoint(
                 ep,
                 probe.volume,
@@ -390,7 +430,17 @@ def _check_destination_endpoint(
             )
             if probe is not None
             else None
-        ),
+        )
+    except SSH_CONNECTION_ERRORS as e:
+        return DestinationEndpointStatus.from_diagnostics(
+            endpoint=ep,
+            volume_status=_disconnected_volume_status(
+                volume_status.config, volume_status.ssh_endpoint_status, e
+            ),
+            diagnostics=None,
+        )
+    return DestinationEndpointStatus.from_diagnostics(
+        endpoint=ep, volume_status=volume_status, diagnostics=diagnostics
     )
 
 
