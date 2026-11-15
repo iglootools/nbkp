@@ -406,3 +406,54 @@ class TestIgnoreAll:
 
         assert results[0].failure == SyncFailureKind.PREFLIGHT
         assert rsync.calls == []
+
+
+def _pending_middle_statuses(config: Config) -> dict[str, SyncStatus]:
+    """``a → b → c`` in a dry run where ``b`` reads a snapshot ``a`` would
+    create: preflight observed every sentinel but flags ``b`` pending.
+    """
+    _, statuses = active_statuses(config)
+    pending = statuses["b"].model_copy(
+        update={"errors": [SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING]}
+    )
+    return {**statuses, "b": pending}
+
+
+class TestDryRunPending:
+    def test_pending_is_skipped_without_cancelling_downstream(self) -> None:
+        """A real run would give ``b`` its snapshot, so ``c`` still runs."""
+        config = _three_chain_config()
+        rsync = FakeRsync()
+
+        results = {
+            r.sync_slug: r
+            for r in run_syncs(
+                config, _pending_middle_statuses(config), dry_run=True, rsync=rsync
+            )
+        }
+
+        assert results["a"].outcome == SyncOutcome.SUCCESS
+        assert results["b"].outcome == SyncOutcome.SKIPPED
+        assert results["b"].failure == SyncFailureKind.DRY_RUN_PENDING
+        assert results["c"].outcome == SyncOutcome.SUCCESS
+        assert rsync.synced == ["a", "c"]
+
+    def test_pending_is_never_attempted_under_ignore_all(self) -> None:
+        """Its sentinels were observed, but there is no snapshot to read yet."""
+        config = _three_chain_config()
+        rsync = FakeRsync()
+
+        results = {
+            r.sync_slug: r
+            for r in run_syncs(
+                config,
+                _pending_middle_statuses(config),
+                dry_run=True,
+                strictness=Strictness.IGNORE_ALL,
+                rsync=rsync,
+            )
+        }
+
+        assert results["b"].failure == SyncFailureKind.DRY_RUN_PENDING
+        assert results["c"].outcome == SyncOutcome.SUCCESS
+        assert rsync.synced == ["a", "c"]
