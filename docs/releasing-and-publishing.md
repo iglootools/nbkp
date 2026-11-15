@@ -22,6 +22,9 @@ The following GitHub workflows are set up to automate the release and publishing
    - This workflow uses the [pypa/gh-action-pypi-publish](https://github.com/pypa/gh-action-pypi-publish) action
    - It is triggered automatically when the `release` workflow completes, but it can
      also be re-triggered manually if needed using `gh workflow run publish.yml --ref <tag>`
+3. The `demo` workflow records the demo for the new tag and keeps it as a workflow artifact.
+   Publishing it to asciinema.org is a manual step on major releases: see the
+   [Release Process](./building-and-testing.md#release-process).
 
 ## PyPI Config
 
