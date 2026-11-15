@@ -1,6 +1,5 @@
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -13,7 +12,6 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.fsprotocol import Snapshot
 from nbkp.remote.endpoints import ResolvedEndpoint
 from nbkp.snapshots.common import create_snapshot_timestamp
 from nbkp.snapshots.errors import SnapshotOp, SnapshotOperationError
@@ -23,6 +21,7 @@ from nbkp.snapshots.hardlinks import (
     delete_snapshot,
     prune_snapshots,
 )
+from tests.fakes import FakeCommandRunner, completed
 
 _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
 _LOCAL_VOL = LocalVolume(slug="dummy", path="/dummy")
@@ -85,34 +84,32 @@ def _remote_config() -> tuple[SyncConfig, Config, dict[str, ResolvedEndpoint]]:
 
 
 class TestCreateSnapshotDir:
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_local(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stderr="")
+    def test_local(self) -> None:
         sync, config = _local_config()
+        runner = FakeCommandRunner()
 
-        path = create_snapshot_dir(sync, config, now=_NOW, platform="linux")
+        path = create_snapshot_dir(sync, config, now=_NOW, platform="linux", run=runner)
 
         assert path == f"/dst/snapshots/{_TS_LOCAL.name}"
-        mock_run.assert_called_once()
-        cmd = mock_run.call_args[0][0]
-        assert cmd == ["mkdir", "-p", f"/dst/snapshots/{_TS_LOCAL.name}"]
+        assert runner.commands == [["mkdir", "-p", path]]
 
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_remote(self, mock_remote: MagicMock) -> None:
-        mock_remote.return_value = MagicMock(returncode=0, stderr="")
+    def test_remote(self) -> None:
         sync, config, re = _remote_config()
+        runner = FakeCommandRunner()
 
         path = create_snapshot_dir(
-            sync, config, now=_NOW, platform="linux", resolved_endpoints=re
+            sync, config, now=_NOW, platform="linux", resolved_endpoints=re, run=runner
         )
 
         assert path == f"/backup/snapshots/{_TS_REMOTE.name}"
-        mock_remote.assert_called_once()
+        assert runner.commands == [["mkdir", "-p", path]]
+        assert runner.calls[0].volume == config.volumes["dst"]
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_failure_raises(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=1, stderr="permission denied")
+    def test_failure_raises(self) -> None:
         sync, config = _local_config()
+        runner = FakeCommandRunner().on(
+            "mkdir", returns=completed(1, stderr="permission denied")
+        )
 
         with pytest.raises(
             SnapshotOperationError,
@@ -120,12 +117,11 @@ class TestCreateSnapshotDir:
                 e.op is SnapshotOp.MKDIR and e.stderr == "permission denied"
             ),
         ):
-            create_snapshot_dir(sync, config, now=_NOW, platform="linux")
+            create_snapshot_dir(sync, config, now=_NOW, platform="linux", run=runner)
 
 
 class TestCleanupOrphanedSnapshots:
-    @patch("nbkp.snapshots.hardlinks.list_snapshots")
-    def test_deletes_orphans(self, mock_list: MagicMock, tmp_path: Path) -> None:
+    def test_deletes_orphans(self, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
@@ -153,18 +149,12 @@ class TestCleanupOrphanedSnapshots:
         latest = tmp_path / "latest"
         latest.symlink_to("snapshots/2024-01-01T00:00:00.000Z")
 
-        mock_list.return_value = [
-            Snapshot.from_name("2024-01-01T00:00:00.000Z"),
-            Snapshot.from_name("2024-01-02T00:00:00.000Z"),
-        ]
-
         deleted = cleanup_orphaned_snapshots(sync, config)
         assert len(deleted) == 1
         assert "2024-01-02T00:00:00.000Z" in deleted[0]
         assert not (snaps / "2024-01-02T00:00:00.000Z").exists()
 
-    @patch("nbkp.snapshots.hardlinks.list_snapshots")
-    def test_no_orphans(self, mock_list: MagicMock, tmp_path: Path) -> None:
+    def test_no_orphans(self, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
@@ -187,16 +177,10 @@ class TestCleanupOrphanedSnapshots:
         latest = tmp_path / "latest"
         latest.symlink_to("snapshots/2024-01-02T00:00:00.000Z")
 
-        mock_list.return_value = [
-            Snapshot.from_name("2024-01-01T00:00:00.000Z"),
-            Snapshot.from_name("2024-01-02T00:00:00.000Z"),
-        ]
-
         deleted = cleanup_orphaned_snapshots(sync, config)
         assert deleted == []
 
-    @patch("nbkp.snapshots.hardlinks.list_snapshots")
-    def test_no_latest_symlink(self, mock_list: MagicMock, tmp_path: Path) -> None:
+    def test_no_latest_symlink(self, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
@@ -217,9 +201,11 @@ class TestCleanupOrphanedSnapshots:
             syncs={"s1": sync},
         )
 
-        deleted = cleanup_orphaned_snapshots(sync, config)
+        runner = FakeCommandRunner()
+
+        deleted = cleanup_orphaned_snapshots(sync, config, run=runner)
         assert deleted == []
-        mock_list.assert_not_called()
+        assert runner.commands == []
 
 
 class TestDeleteSnapshot:
@@ -232,17 +218,13 @@ class TestDeleteSnapshot:
         delete_snapshot(str(snap), vol, {})
         assert not snap.exists()
 
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_remote(self, mock_remote: MagicMock) -> None:
-        mock_remote.return_value = MagicMock(returncode=0, stderr="")
-        server = SshEndpoint(slug="nas", host="nas.local", user="backup")
+    def test_remote(self) -> None:
         vol = RemoteVolume(slug="dst", ssh_endpoint="nas", path="/backup")
-        re = {"dst": ResolvedEndpoint(server=server)}
+        runner = FakeCommandRunner()
 
-        delete_snapshot("/backup/snapshots/T1", vol, re)
-        mock_remote.assert_called_once()
-        cmd = mock_remote.call_args[0][1]
-        assert cmd == ["rm", "-rf", "/backup/snapshots/T1"]
+        delete_snapshot("/backup/snapshots/T1", vol, {}, run=runner)
+
+        assert runner.commands == [["rm", "-rf", "/backup/snapshots/T1"]]
 
 
 _S1 = "2024-01-01T00:00:00.000Z"
@@ -251,8 +233,7 @@ _S3 = "2024-01-03T00:00:00.000Z"
 
 
 class TestPruneSnapshots:
-    @patch("nbkp.snapshots.common.list_snapshots")
-    def test_prune_excess(self, mock_list: MagicMock, tmp_path: Path) -> None:
+    def test_prune_excess(self, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
@@ -282,18 +263,11 @@ class TestPruneSnapshots:
         latest = tmp_path / "latest"
         latest.symlink_to(f"snapshots/{_S3}")
 
-        mock_list.return_value = [
-            Snapshot.from_name(_S1),
-            Snapshot.from_name(_S2),
-            Snapshot.from_name(_S3),
-        ]
-
         deleted = prune_snapshots(sync, config, 2)
         assert len(deleted) == 1
         assert _S1 in deleted[0]
 
-    @patch("nbkp.snapshots.common.list_snapshots")
-    def test_never_prunes_latest(self, mock_list: MagicMock, tmp_path: Path) -> None:
+    def test_never_prunes_latest(self, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
@@ -323,19 +297,13 @@ class TestPruneSnapshots:
         latest = tmp_path / "latest"
         latest.symlink_to(f"snapshots/{_S1}")
 
-        mock_list.return_value = [
-            Snapshot.from_name(_S1),
-            Snapshot.from_name(_S2),
-        ]
-
         # max_snapshots=1, but _S1 is latest so only _S2 pruned
         deleted = prune_snapshots(sync, config, 1)
         assert len(deleted) == 1
         assert _S2 in deleted[0]
         assert (snaps / _S1).exists()
 
-    @patch("nbkp.snapshots.common.list_snapshots")
-    def test_dry_run(self, mock_list: MagicMock, tmp_path: Path) -> None:
+    def test_dry_run(self, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
@@ -363,19 +331,12 @@ class TestPruneSnapshots:
         latest = tmp_path / "latest"
         latest.symlink_to(f"snapshots/{_S3}")
 
-        mock_list.return_value = [
-            Snapshot.from_name(_S1),
-            Snapshot.from_name(_S2),
-            Snapshot.from_name(_S3),
-        ]
-
         deleted = prune_snapshots(sync, config, 1, dry_run=True)
         assert len(deleted) == 2
         assert (snaps / _S1).exists()
         assert (snaps / _S2).exists()
 
-    @patch("nbkp.snapshots.common.list_snapshots")
-    def test_no_excess(self, mock_list: MagicMock, tmp_path: Path) -> None:
+    def test_no_excess(self, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
@@ -395,10 +356,7 @@ class TestPruneSnapshots:
             },
             syncs={"s1": sync},
         )
-
-        mock_list.return_value = [
-            Snapshot.from_name(_S1),
-        ]
+        (tmp_path / "snapshots" / _S1).mkdir(parents=True)
 
         deleted = prune_snapshots(sync, config, 5)
         assert deleted == []
