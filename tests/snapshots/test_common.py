@@ -539,9 +539,18 @@ class TestListSnapshotsFailures:
         result = list_snapshots(sync, config)
         assert [s.name for s in result] == ["2026-03-01T10:00:00.000Z"]
 
+    @pytest.mark.parametrize(
+        "transport_error",
+        [
+            paramiko.SSHException("connection reset"),
+            EOFError("connection reset during handshake"),
+        ],
+    )
     @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_transport_error_is_translated(self, mock_remote: MagicMock) -> None:
-        mock_remote.side_effect = paramiko.SSHException("connection reset")
+    def test_transport_error_is_translated(
+        self, mock_remote: MagicMock, transport_error: Exception
+    ) -> None:
+        mock_remote.side_effect = transport_error
         config, sync = _remote_config()
         resolved = resolve_all_endpoints(config)
 
