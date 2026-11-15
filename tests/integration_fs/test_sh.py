@@ -410,6 +410,23 @@ class TestGeneratedScriptExecution:
         assert "snapshots/ directory not found" in result.stderr
         assert "Starting sync" not in result.stderr
 
+    def test_latest_outside_snapshots_dir_aborts(self, tmp_path: Path) -> None:
+        """Like ``nbkp run``: a timestamp-named target elsewhere is invalid."""
+        config = _seeded_chain(tmp_path)
+        assert _run_script(config, tmp_path).returncode == 0
+        [snapshot] = _snapshot_names(tmp_path)
+        lookalike = _stage(tmp_path) / "elsewhere" / snapshot
+        lookalike.mkdir(parents=True)
+        latest = _stage(tmp_path) / LATEST_LINK
+        latest.unlink()
+        latest.symlink_to(f"elsewhere/{snapshot}")
+
+        result = _run_script(config, tmp_path)
+
+        assert result.returncode == 1
+        assert "latest symlink target is invalid" in result.stderr
+        assert "Starting sync" not in result.stderr
+
     def test_prune_never_keeps_extra_over_latest(self, tmp_path: Path) -> None:
         """Prune drops latest from the candidates before taking the oldest.
 

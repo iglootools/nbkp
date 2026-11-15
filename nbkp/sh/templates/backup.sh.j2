@@ -138,6 +138,16 @@ nbkp_matches() {
 nbkp_snapshot_names() {
     { grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.Z-]+$' || true; } | sort
 }
+# Whether latest target $1 names a snapshot in the snapshots dir $2, as nbkp
+# writes it: a timestamp-named entry directly under it, not a lookalike
+# elsewhere (../other/snapshots/<timestamp>).
+nbkp_is_snapshot_target() {
+    case "$1" in
+        "$2"/*/*) return 1;;
+        "$2"/?*) [ -n "$(printf '%s\n' "${1#"$2"/}" | nbkp_snapshot_names)" ];;
+        *) return 1;;
+    esac
+}
 <% if portable %>
 NBKP_FAILED=" "
 NBKP_NOT_RUN=" "
