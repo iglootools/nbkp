@@ -39,7 +39,8 @@ ${{ config_line }}
 #     infrastructure errors abort it before any sync starts; ignore-all attempts
 #     syncs with infrastructure errors once their sentinels are all present
 #   - Failure propagation: syncs downstream of a failed or skipped sync are
-#     cancelled; a cancellation caused by a skipped (inactive) upstream does not
+#     cancelled, a disabled sync counting as skipped as in nbkp run; a
+#     cancellation caused by a skipped (inactive) upstream does not
 #     fail the run unless ignore-none, one caused by a failed upstream does
 #   - Best-effort steps (orphan cleanup, pruning, removal of a failed snapshot
 #     directory) log a warning and never fail the sync
@@ -273,6 +274,8 @@ nbkp_run_sync ${{ sync.slug }} ${{ sync.fn_name }} "$NBKP_PF_${{ sync.fn_name }}
 
 <% else %>
 # ${{ sync.fn_name }}  # disabled
+nbkp_log "SKIPPED ${{ sync.slug }}: disabled"
+nbkp_mark_not_run ${{ sync.fn_name }}
 <% endif %>
 <% endfor %>
 
