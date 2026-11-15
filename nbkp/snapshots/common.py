@@ -7,6 +7,7 @@ from ..config import (
     RemoteVolume,
     SyncConfig,
     Volume,
+    resolve_endpoint_path,
 )
 from ..fsprotocol import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR, Snapshot
 from ..remote.endpoints import ResolvedEndpoints
@@ -30,14 +31,7 @@ def create_snapshot_timestamp(
 
 def resolve_dest_path(sync: SyncConfig, config: Config) -> str:
     dst = config.destination_endpoint(sync)
-    vol = config.volumes[dst.volume]
-    if vol.path is None:
-        msg = f"volume '{vol.slug}': mount path not resolved"
-        raise ValueError(msg)
-    if dst.subdir:
-        return f"{vol.path}/{dst.subdir}"
-    else:
-        return vol.path
+    return resolve_endpoint_path(config.volumes[dst.volume], dst.subdir)
 
 
 def destination_volume(sync: SyncConfig, config: Config) -> Volume:

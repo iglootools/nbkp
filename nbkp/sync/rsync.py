@@ -8,6 +8,7 @@ from ..config import (
     RemoteVolume,
     SyncConfig,
     SyncEndpoint,
+    resolve_endpoint_path,
 )
 from ..fsprotocol import LATEST_LINK
 from ..remote import (
@@ -37,20 +38,6 @@ _DEFAULT_RSYNC_OPTIONS: list[str] = [
 ]
 
 
-def resolve_path(volume: LocalVolume | RemoteVolume, subdir: str | None) -> str:
-    """The volume's ``path`` must be resolved by this point (declared in config,
-    or filled from the discovered mountpoint after mounting); raises
-    ``ValueError`` otherwise.
-    """
-    if volume.path is None:
-        msg = f"volume '{volume.slug}': mount path not resolved"
-        raise ValueError(msg)
-    if subdir:
-        return f"{volume.path}/{subdir}"
-    else:
-        return volume.path
-
-
 def resolve_source_path(
     volume: LocalVolume | RemoteVolume,
     source: SyncEndpoint,
@@ -61,7 +48,7 @@ def resolve_source_path(
     ``latest`` is a symlink — rsync's trailing slash causes it
     to follow the symlink and copy the target's contents.
     """
-    base = resolve_path(volume, source.subdir)
+    base = resolve_endpoint_path(volume, source.subdir)
     if source.snapshot_mode != "none":
         return f"{base}/{LATEST_LINK}"
     else:
@@ -137,7 +124,7 @@ def build_rsync_command(
     src_vol = config.volumes[src_ep.volume]
     dst_vol = config.volumes[dst_ep.volume]
     src_path = resolve_source_path(src_vol, src_ep)
-    dst_path = resolve_path(dst_vol, dst_ep.subdir)
+    dst_path = resolve_endpoint_path(dst_vol, dst_ep.subdir)
     rsync_args = [
         *_base_rsync_args(sync, dry_run, link_dest, progress),
         *_filter_args(sync),

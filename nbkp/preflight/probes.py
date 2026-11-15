@@ -5,6 +5,7 @@ from ..config import (
     LocalVolume,
     RemoteVolume,
     Volume,
+    resolve_endpoint_path,
 )
 from ..remote.dispatch import run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
@@ -16,7 +17,7 @@ def check_endpoint_sentinel(
     sentinel_name: str,
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
-    base = resolve_endpoint(volume, subdir)
+    base = resolve_endpoint_path(volume, subdir)
     rel_path = f"{base}/{sentinel_name}"
     match volume:
         case LocalVolume():
@@ -28,17 +29,6 @@ def check_endpoint_sentinel(
                 ).returncode
                 == 0
             )
-
-
-def resolve_endpoint(volume: Volume, subdir: str | None) -> str:
-    """The volume's ``path`` must be resolved by this point — either declared in
-    config, or filled in from the discovered mountpoint after mounting (see
-    ``disks.observation.apply_effective_paths``); ``ValueError`` otherwise.
-    """
-    if volume.path is None:
-        msg = f"volume '{volume.slug}': mount path not resolved"
-        raise ValueError(msg)
-    return f"{volume.path}/{subdir}" if subdir else volume.path
 
 
 def check_directory_writable(

@@ -16,6 +16,7 @@ from . import (
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
+    join_subdir,
 )
 from .protocol.volume import MountConfig
 
@@ -76,11 +77,7 @@ def endpoint_path(
     vol: LocalVolume | RemoteVolume,
     subdir: str | None,
 ) -> str:
-    path = _display_path(vol)
-    if subdir:
-        return f"{path}/{subdir}"
-    else:
-        return path
+    return join_subdir(_display_path(vol), subdir)
 
 
 def format_mount_summary(mount: MountConfig | None) -> str:

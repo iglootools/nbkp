@@ -9,6 +9,7 @@ wasteful remote commands.
 from ..config import (
     SyncEndpoint,
     Volume,
+    resolve_endpoint_path,
 )
 from ..fsprotocol import (
     DESTINATION_SENTINEL,
@@ -26,7 +27,6 @@ from .probes import (
     check_endpoint_sentinel,
     check_symlink_exists,
     read_symlink_target,
-    resolve_endpoint,
 )
 from .snapshot_checks import check_btrfs_subvolume
 from .status.endpoint import (
@@ -48,7 +48,7 @@ def observe_source_endpoint(
     sentinel_exists = check_endpoint_sentinel(
         volume, endpoint.subdir, SOURCE_SENTINEL, resolved_endpoints
     )
-    src_ep = resolve_endpoint(volume, endpoint.subdir)
+    src_ep = resolve_endpoint_path(volume, endpoint.subdir)
 
     return SourceEndpointDiagnostics(
         endpoint_slug=endpoint.slug,
@@ -77,7 +77,7 @@ def observe_destination_endpoint(
     sentinel_exists = check_endpoint_sentinel(
         volume, endpoint.subdir, DESTINATION_SENTINEL, resolved_endpoints
     )
-    dst_ep = resolve_endpoint(volume, endpoint.subdir)
+    dst_ep = resolve_endpoint_path(volume, endpoint.subdir)
 
     return DestinationEndpointDiagnostics(
         endpoint_slug=endpoint.slug,

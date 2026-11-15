@@ -18,6 +18,8 @@ from .protocol import (
     SyncConfig,
     SyncEndpoint,
     Volume,
+    join_subdir,
+    resolve_endpoint_path,
 )
 
 __all__ = [
@@ -42,5 +44,7 @@ __all__ = [
     "SyncEndpoint",
     "Volume",
     "find_config_file",
+    "join_subdir",
     "load_config",
+    "resolve_endpoint_path",
 ]
