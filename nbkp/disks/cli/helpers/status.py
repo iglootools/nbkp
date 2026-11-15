@@ -16,7 +16,7 @@ from ....config import Config, LocalVolume, RemoteVolume
 from ....policy import Severity
 from ....remote.endpoints import ResolvedEndpoints
 from ....remote.errors import SSH_CONNECTION_ERRORS, describe_error
-from ...lifecycle import UmountResult, unknown_volume_names
+from ...lifecycle import UmountResult, lifecycle_volumes, unknown_volume_names
 from ...models import MountFailureReason, display_name
 from ...mount_checks import check_mount_status
 from ...output import (
@@ -131,11 +131,7 @@ def _probe_and_show_status(
     *umount_results* are the umounts just attempted: under ``-o json`` the
     entry of a volume whose umount failed also says why (``disks umount``).
     """
-    managed = [
-        (slug, vol)
-        for slug, vol in cfg.volumes.items()
-        if vol.mount is not None and (names is None or slug in names)
-    ]
+    managed = [(slug, vol) for slug, vol, _mount in lifecycle_volumes(cfg, names)]
 
     bar = (
         StepProgressBar(len(managed))

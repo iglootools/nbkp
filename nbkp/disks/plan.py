@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from ..config import Config, MountConfig, Volume
 from ..remote.endpoints import ResolvedEndpoints
 from ..remote.errors import SSH_CONNECTION_ERRORS, describe_error
+from .lifecycle import lifecycle_volumes
 from .models import MountCapabilities
 from .mount_checks import check_mount_status
 
@@ -93,18 +94,10 @@ def plan_lifecycle(
     mounting: bool,
     names: list[str] | None = None,
 ) -> list[VolumePlan]:
-    """Plan mount (``mounting=True``) or umount steps for mount-managed volumes.
-
-    Umount is planned in reverse order, matching :func:`lifecycle.umount_volumes`.
-    """
-    volumes = [
-        (vol, vol.mount)
-        for slug, vol in config.volumes.items()
-        if vol.mount is not None and (names is None or slug in names)
-    ]
-    ordered = volumes if mounting else list(reversed(volumes))
+    """Plan mount (``mounting=True``) or umount steps for mount-managed volumes."""
     return [
-        _plan_one(vol, mount, resolved, mounting=mounting) for vol, mount in ordered
+        _plan_one(vol, mount, resolved, mounting=mounting)
+        for _slug, vol, mount in lifecycle_volumes(config, names, mounting=mounting)
     ]
 
 

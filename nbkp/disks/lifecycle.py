@@ -200,15 +200,23 @@ class UmountResult:
     failure: LifecycleFailure | None = None
 
 
-def _volumes_with_mount_config(
+def lifecycle_volumes(
     config: Config,
     names: list[str] | None = None,
+    *,
+    mounting: bool = True,
 ) -> list[tuple[str, Volume, MountConfig]]:
-    return [
+    """The mount-managed volumes a mount (or umount) acts on, in that order.
+
+    Umount walks the mount order backwards. The one selection shared by the
+    lifecycle, its dry-run plan and ``disks status``, so they cannot drift.
+    """
+    volumes = [
         (slug, vol, vol.mount)
         for slug, vol in config.volumes.items()
         if vol.mount is not None and (names is None or slug in names)
     ]
+    return volumes if mounting else list(reversed(volumes))
 
 
 def unknown_volume_names(config: Config, names: list[str] | None) -> list[str]:
@@ -224,7 +232,7 @@ def mount_count(
     config: Config,
     names: list[str] | None = None,
 ) -> int:
-    return len(_volumes_with_mount_config(config, names))
+    return len(lifecycle_volumes(config, names))
 
 
 def mount_volume(
@@ -516,7 +524,7 @@ def mount_volumes(
 
     return [
         _mount_one(slug, vol, mount_cfg)
-        for slug, vol, mount_cfg in _volumes_with_mount_config(config, names)
+        for slug, vol, mount_cfg in lifecycle_volumes(config, names)
     ]
 
 
@@ -548,5 +556,5 @@ def umount_volumes(
 
     return [
         _umount_one(slug, vol, mount_cfg)
-        for slug, vol, mount_cfg in reversed(_volumes_with_mount_config(config, names))
+        for slug, vol, mount_cfg in lifecycle_volumes(config, names, mounting=False)
     ]
