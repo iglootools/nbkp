@@ -75,6 +75,13 @@ class SshConnectionOptions(_BaseModel):
         default=None, description="Custom known hosts file path"
     )
 
+    @field_validator("known_hosts_file", mode="before")
+    @classmethod
+    def normalize_known_hosts_file(cls, v: Any) -> Any:
+        # OpenSSH expands ``~`` in UserKnownHostsFile, Paramiko's
+        # load_host_keys does not: expand it once here for both.
+        return _expand_user(v)
+
     # SSH: ForwardAgent | Fabric: forward_agent
     forward_agent: bool = Field(
         default=False, description="Enable SSH agent forwarding"

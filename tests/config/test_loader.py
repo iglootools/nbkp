@@ -1425,6 +1425,17 @@ class TestPathNormalization:
         ep = SshEndpoint(slug="s", host="example.com")
         assert ep.key is None
 
+    def test_known_hosts_file_tilde_expansion(self) -> None:
+        """Paramiko's load_host_keys does not expand ``~`` the way ssh does."""
+        opts = SshConnectionOptions(known_hosts_file="~/.ssh/nbkp_known_hosts")
+        assert opts.known_hosts_file == str(
+            Path("~/.ssh/nbkp_known_hosts").expanduser()
+        )
+
+    def test_known_hosts_file_dev_null_unchanged(self) -> None:
+        opts = SshConnectionOptions(known_hosts_file="/dev/null")
+        assert opts.known_hosts_file == "/dev/null"
+
 
 class TestNoSilentCoercion:
     """Wrongly-typed values are rejected, not silently replaced by a default."""
