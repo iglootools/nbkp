@@ -43,8 +43,8 @@ Remote volumes are accessed over SSH. Endpoints are defined once and shared acro
 
 A single remote volume can declare multiple SSH endpoints for different network contexts (home network access vs WAN). At runtime, nbkp selects the best reachable endpoint based on location tags or network type, so the same config works whether you're on the home LAN or on the road.
 
-- **Location-aware endpoints**: tag endpoints with a `location` (e.g. `home`, `travel`) and select at runtime with `--locations`
-- **Network-aware selection**: `--private` prefers LAN endpoints, `--public` prefers WAN endpoints
+- **Location-aware endpoints**: tag endpoints with a `location` (e.g. `home`, `travel`) and select at runtime with `--location` (prefer) or `--exclude-location` (skip)
+- **Network-aware selection**: `--network private` prefers LAN endpoints, `--network public` prefers WAN endpoints
 - **Multiple endpoints per volume**: declare candidate endpoints and let the tool pick the best reachable one
 - **DNS-based filtering**: unreachable endpoints (failed DNS resolution) are automatically excluded
 
@@ -67,7 +67,7 @@ nbkp does not encrypt anything itself: LUKS provides encryption at rest, SSH pro
 - **Hybrid mount-point model**: declare `path` (backed by an `/etc/fstab` entry) to mount at a fixed path, or omit it to let udisks mount at `/run/media/<user>/<label>`, which nbkp discovers at runtime
 - **Credential providers**: retrieve LUKS passphrases from keyring, interactive prompt, environment variable, or external command (e.g. `pass`, 1Password CLI). The keyring provider delegates to the [keyring](https://github.com/jaraco/keyring) library, which supports macOS Keychain, GNOME Keyring / libsecret, KDE Wallet, and Windows Credential Locker. The `keyring` package is an optional dependency (`pip install nbkp[keyring]`)
 - **Idempotent**: skips already-unlocked and already-mounted volumes
-- **Integrated into `run`, `preflight check`, and `preflight troubleshoot`**: mount before running, umount in `finally` block (even on failure). Controllable via `--mount/--no-mount` and `--umount/--no-umount`
+- **Integrated into `run`, `preflight check`, `preflight troubleshoot`, `snapshots show` and `snapshots prune`**: mount before running, umount in `finally` block (even on failure). Controllable via `--mount/--no-mount` and `--umount/--no-umount`
 - **Standalone commands**: `disks mount` and `disks umount` for manual lifecycle management
 - **Polkit-only authorization**: `disks setup-auth` generates a single polkit rule (`/etc/polkit-1/rules.d/50-nbkp.rules`) granting the backup user the udisks actions for passwordless mount/umount — required because nbkp runs over SSH / in inactive sessions
 - **Pre-flight validation**: checks `udisksctl` availability and a running `udisksd`, the polkit rule, fstab mapping for declared paths, and (for btrfs volumes) the `udisks2-btrfs` module, with actionable troubleshoot output
@@ -81,13 +81,13 @@ Before running any sync, nbkp validates that all required infrastructure is in p
 - **Btrfs readiness**: filesystem type, subvolume existence, mount options (`user_subvol_rm_allowed`), required directories
 - **Hard-link readiness**: filesystem hard-link support, required directory structure
 - **Orphan detection**: warns about SSH endpoints, volumes, and sync endpoints that are defined but not referenced by anything
-- **Strictness control**: three modes (`ignore-none`, `ignore-inactive`, `ignore-all`) to control how preflight errors affect the run and its exit code, for `run`, `snapshots show` and `snapshots prune`
+- **Strictness control**: three modes (`ignore-none`, `ignore-inactive`, `ignore-all`) to control how preflight errors affect the run and its exit code, for `run`, `preflight check`, `preflight troubleshoot`, `snapshots show` and `snapshots prune`
 
 ## Configuration
 
 Backup configuration is expressed in a single YAML file that defines SSH endpoints, volumes, sync endpoints, and syncs. The config is validated at load time with detailed error messages.
 
-- **YAML config** with standard search order: explicit path, `$XDG_CONFIG_HOME/nbkp/config.yaml`, `/etc/nbkp/config.yaml`
+- **YAML config** with standard search order: explicit path, `$XDG_CONFIG_HOME/nbkp/config.yaml`, then the platform user and site config directories (see [Config File Location](./config-reference.md#config-file-location))
 - **Reusable sync endpoints**: define (volume, subdir, snapshot config) once, reference by slug from syncs — prevents duplication and conflicting configurations
 - **Pydantic validation**: structured errors with context for invalid configs
 - **Config display**: `config show` renders parsed config as tables or JSON
@@ -106,12 +106,10 @@ The `sh` command compiles a config into a self-contained bash script that reprod
 
 ## Outputs
 
-Every command supports both human-friendly and machine-readable output, making nbkp suitable for interactive use and scripting alike.
-
-All commands provide:
+Commands support both human-friendly and machine-readable output, making nbkp suitable for interactive use and scripting alike:
 
 - **Human-readable output**: Rich-formatted tables, spinners, and progress bars
-- **JSON output**: machine-readable format for scripting and automation
+- **JSON output** (`--output json`): machine-readable format for scripting and automation, on every command except `sh` (which writes a script) and the `demo` helpers
 
 ## Testing and QA
 
