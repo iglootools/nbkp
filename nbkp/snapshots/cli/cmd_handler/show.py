@@ -4,7 +4,7 @@ from ....preflight import SyncStatus
 from ....remote.endpoints import ResolvedEndpoints
 from ...common import list_snapshots, read_latest_symlink
 from ...errors import SnapshotOperationError
-from ...models import ShowResult, SnapshotSkipReason
+from ...models import ShowResult, SnapshotResultError, SnapshotSkipReason
 from .common import max_snapshots, preflight_disposition
 
 
@@ -12,7 +12,7 @@ def _disposition(
     status: SyncStatus,
     config: Config,
     strictness: Strictness,
-) -> tuple[SnapshotSkipReason | None, str | None]:
+) -> tuple[SnapshotSkipReason | None, SnapshotResultError | None]:
     """``(skip_reason, error)``; snapshot-less syncs skip before preflight."""
     match config.destination_endpoint(status.config).snapshot_mode:
         case "none":
@@ -43,7 +43,7 @@ def _read_snapshots(
             snapshots=(),
             latest=None,
             max_snapshots=max_snapshots(dst_ep),
-            error=str(e),
+            error=SnapshotResultError.from_operation(e),
         )
 
 

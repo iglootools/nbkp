@@ -2,7 +2,8 @@
 
 from ...config import Config
 from ...fsprotocol import SNAPSHOTS_DIR
-from ...snapshots.models import PruneResult
+from ...snapshots.errors import SnapshotOp
+from ...snapshots.models import PruneResult, SnapshotErrorKind, SnapshotResultError
 from ..results import (
     SyncFailureKind,
     SyncOutcome,
@@ -106,10 +107,11 @@ def prune_results(config: Config) -> list[PruneResult]:
             deleted=(),
             kept=0,
             dry_run=False,
-            error=(
-                "delete snapshot failed for"
-                f" {_snap_base(config, 'docs-to-nas')}/2026-01-01T00:00:00.000Z:"
-                " Permission denied"
+            error=SnapshotResultError(
+                kind=SnapshotErrorKind.OPERATION_FAILED,
+                operation=SnapshotOp.DELETE,
+                path=f"{_snap_base(config, 'docs-to-nas')}/2026-01-01T00:00:00.000Z",
+                message="Permission denied",
             ),
         ),
     ]

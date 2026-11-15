@@ -9,7 +9,7 @@ from ...btrfs import prune_snapshots as btrfs_prune_snapshots
 from ...common import list_snapshots
 from ...errors import SnapshotOperationError
 from ...hardlinks import prune_snapshots as hl_prune_snapshots
-from ...models import PruneResult, SnapshotSkipReason
+from ...models import PruneResult, SnapshotResultError, SnapshotSkipReason
 from .common import max_snapshots, preflight_disposition
 
 type _PruneFn = Callable[..., list[str]]
@@ -38,12 +38,12 @@ def _prune_backend(dst_ep: SyncEndpoint) -> _PruneFn | None:
 
 def _count_snapshots(
     sync: SyncConfig, config: Config, re: ResolvedEndpoints
-) -> tuple[int, str | None]:
+) -> tuple[int, SnapshotResultError | None]:
     """``(count, None)``, or ``(0, error)`` when the listing fails."""
     try:
         return (len(list_snapshots(sync, config, re)), None)
     except SnapshotOperationError as e:
-        return (0, str(e))
+        return (0, SnapshotResultError.from_operation(e))
 
 
 def _skipped(
@@ -53,7 +53,7 @@ def _skipped(
     re: ResolvedEndpoints,
     dry_run: bool,
     skip_reason: SnapshotSkipReason | None,
-    error: str | None,
+    error: SnapshotResultError | None,
 ) -> PruneResult:
     """A result for a sync that is not pruned.
 
@@ -99,7 +99,11 @@ def _execute_prune(
         )
     except SnapshotOperationError as e:
         return PruneResult(
-            sync_slug=slug, deleted=(), kept=0, dry_run=dry_run, error=str(e)
+            sync_slug=slug,
+            deleted=(),
+            kept=0,
+            dry_run=dry_run,
+            error=SnapshotResultError.from_operation(e),
         )
 
 

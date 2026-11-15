@@ -36,7 +36,7 @@ Both snapshot backends follow the same directory layout and lifecycle. Snapshot 
 
 **Listing** — Only entries of `snapshots/` named as snapshot timestamps count as snapshots. Anything else (`lost+found` at the root of a dedicated filesystem, `.DS_Store`, a stray file) is ignored: it is neither listed nor pruned. An absent `snapshots/` directory lists as empty; any other listing failure is an error, so pruning never acts on a partial listing.
 
-**Errors** — Every failing snapshot operation (a non-zero exit status, a local `OSError`, an SSH transport error) is reported as one structured error naming the operation (create, mkdir, delete, list, read/update `latest`, …), the path, and the underlying message. `run` turns it into a failed sync (`failure`: `snapshot`, `mkdir` or `symlink`) or a warning; `snapshots show` / `prune` report it in the result's `error` field.
+**Errors** — Every failing snapshot operation (a non-zero exit status, a local `OSError`, an SSH transport error) is reported as one structured error naming the operation (create, mkdir, delete, list, read/update `latest`, …), the path, and the underlying message. `run` turns it into a failed sync (`failure`: `snapshot`, `mkdir` or `symlink`) or a warning; `snapshots show` / `prune` report it in the result's `error` object (`kind`: `operation-failed`, with `operation`, `path` and `message`); a sync failed by preflight carries `kind` `inactive` or `preflight-errors` and the `preflight_errors` codes instead.
 
 ### The `latest` Symlink
 

@@ -231,7 +231,13 @@ class TestPruneCommand:
 
         assert exit_code == 1
         assert data[0]["skip_reason"] is None
-        assert "Permission denied" in str(data[0]["error"])
+        assert data[0]["error"] == {
+            "kind": "operation-failed",
+            "preflight_errors": [],
+            "operation": "DELETE",
+            "path": "/dst/snapshots/old1",
+            "message": "Permission denied",
+        }
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
     @patch("nbkp.cliwiring.config.load_config")
@@ -248,7 +254,8 @@ class TestPruneCommand:
 
         assert exit_code == 1
         assert data[0]["skip_reason"] is None
-        assert str(data[0]["error"]).startswith("preflight errors:")
+        assert data[0]["error"]["kind"] == "preflight-errors"
+        assert data[0]["error"]["preflight_errors"] == ["DESTINATION_ENDPOINT_INACTIVE"]
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
     @patch("nbkp.cliwiring.config.load_config")
@@ -416,7 +423,8 @@ class TestShowCommand:
         exit_code, data = _invoke_json("show", "-S", "ignore-none")
 
         assert exit_code == 1
-        assert str(data[0]["error"]).startswith("inactive:")
+        assert data[0]["error"]["kind"] == "inactive"
+        assert data[0]["error"]["preflight_errors"] == ["SOURCE_ENDPOINT_INACTIVE"]
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
     @patch("nbkp.cliwiring.config.load_config")
@@ -434,7 +442,8 @@ class TestShowCommand:
 
         assert exit_code == 1
         assert data[0]["skip_reason"] is None
-        assert data[0]["error"] == "preflight errors: destination endpoint inactive"
+        assert data[0]["error"]["kind"] == "preflight-errors"
+        assert data[0]["error"]["preflight_errors"] == ["DESTINATION_ENDPOINT_INACTIVE"]
 
     @patch(
         "nbkp.snapshots.cli.cmd_handler.show.list_snapshots",
@@ -457,7 +466,9 @@ class TestShowCommand:
         exit_code, data = _invoke_json("show")
 
         assert exit_code == 1
-        assert "connection failed" in str(data[0]["error"])
+        assert data[0]["error"]["kind"] == "operation-failed"
+        assert data[0]["error"]["operation"] == "LIST"
+        assert data[0]["error"]["message"] == "connection failed"
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
     @patch("nbkp.cliwiring.config.load_config")

@@ -1,8 +1,10 @@
 import enum
 
-from pydantic import BaseModel, ConfigDict, computed_field
+from pydantic import BaseModel, ConfigDict, computed_field, field_serializer
 
 from ..fsprotocol import Snapshot
+from ..preflight import SyncError
+from .errors import SnapshotOp, SnapshotOperationError
 
 
 class SnapshotSkipReason(str, enum.Enum):
@@ -18,6 +20,48 @@ class SnapshotSkipReason(str, enum.Enum):
     """Infrastructure errors under ``--strictness ignore-all``."""
 
 
+class SnapshotErrorKind(str, enum.Enum):
+    INACTIVE = "inactive"
+    """Expected inactivity, fatal under ``--strictness ignore-none``."""
+    PREFLIGHT_ERRORS = "preflight-errors"
+    OPERATION_FAILED = "operation-failed"
+    """Listing, reading ``latest`` or deleting a snapshot failed."""
+
+
+class SnapshotResultError(BaseModel):
+    """Why a sync failed in ``snapshots show`` / ``snapshots prune``.
+
+    The preflight errors and the snapshot operation serialize as their
+    stable codes (enum member names); the output layer renders the text.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: SnapshotErrorKind
+    preflight_errors: tuple[SyncError, ...] = ()
+    operation: SnapshotOp | None = None
+    path: str | None = None
+    message: str | None = None
+    """The failed operation's stderr or error message."""
+
+    @staticmethod
+    def from_operation(error: SnapshotOperationError) -> SnapshotResultError:
+        return SnapshotResultError(
+            kind=SnapshotErrorKind.OPERATION_FAILED,
+            operation=error.op,
+            path=error.path,
+            message=error.stderr.strip(),
+        )
+
+    @field_serializer("preflight_errors")
+    def _serialize_codes(self, errors: tuple[SyncError, ...]) -> list[str]:
+        return [e.name for e in errors]
+
+    @field_serializer("operation")
+    def _serialize_operation(self, op: SnapshotOp | None) -> str | None:
+        return op.name if op is not None else None
+
+
 class PruneResult(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -26,7 +70,7 @@ class PruneResult(BaseModel):
     kept: int
     dry_run: bool
     skip_reason: SnapshotSkipReason | None = None
-    error: str | None = None
+    error: SnapshotResultError | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -43,7 +87,7 @@ class ShowResult(BaseModel):
     latest: Snapshot | None
     max_snapshots: int | None
     skip_reason: SnapshotSkipReason | None = None
-    error: str | None = None
+    error: SnapshotResultError | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
