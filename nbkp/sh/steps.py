@@ -159,12 +159,20 @@ def _after_latest_guard(spec: SyncSpec) -> str:
 
 
 def _mkdir_block(spec: SyncSpec) -> str:
-    mkdir = _on_dst(spec, ["mkdir", "-p", f"{spec.snapshots_dir}/{SNAPSHOT_TS}"])
+    """Create the new snapshot dir, which must not exist yet (as in run).
+
+    Plain ``mkdir``: names have one-second resolution here, and reusing an
+    existing snapshot would have rsync write into it, and a failed rsync
+    then remove it.
+    """
+    mkdir_parent = _on_dst(spec, ["mkdir", "-p", spec.snapshots_dir])
+    mkdir = _on_dst(spec, ["mkdir", f"{spec.snapshots_dir}/{SNAPSHOT_TS}"])
     return "\n".join(
         [
             _timestamp_line(spec),
             'if [ "$NBKP_DRY_RUN" = false ]; then',
             _indent(_after_latest_guard(spec), 1),
+            _indent(mkdir_parent, 1),
             _indent(mkdir, 1),
             "fi",
         ]

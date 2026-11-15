@@ -371,7 +371,8 @@ This section documents every external command nbkp invokes on local or remote ho
 
 | Command | Purpose |
 |---|---|
-| `mkdir -p <snapshots/timestamp>` | Create snapshot directory |
+| `mkdir -p <snapshots>` | Create the snapshots directory if missing |
+| `mkdir <snapshots/timestamp>` | Create snapshot directory (fails if it already exists) |
 | `rm -rf <snapshot>` | Delete snapshot directory (remote only; local uses Python `shutil.rmtree`) |
 | `ls <snapshots/>` | List snapshots for pruning/ordering |
 

@@ -5,6 +5,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from nbkp.config import (
     Config,
     HardLinkSnapshotConfig,
@@ -18,6 +20,7 @@ from nbkp.snapshots.common import (
     list_snapshots,
     update_latest_symlink,
 )
+from nbkp.snapshots.errors import SnapshotOp, SnapshotOperationError
 from nbkp.snapshots.hardlinks import (
     cleanup_orphaned_snapshots,
     create_snapshot_dir,
@@ -120,6 +123,22 @@ class TestCreateSnapshotDir:
         snapshots_dir = Path(snapshot_path).parent
         assert snapshots_dir.name == "snapshots"
         assert snapshots_dir.is_dir()
+
+    def test_existing_snapshot_dir_is_not_reused(self, tmp_path: Path) -> None:
+        """A name collision fails instead of writing into a snapshot."""
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        (src / "data.txt").write_text("first")
+        now = datetime(2026, 2, 1, tzinfo=UTC)
+        sync, config, name = _do_sync(src, dst, now=now)
+
+        with pytest.raises(SnapshotOperationError) as exc:
+            create_snapshot_dir(sync, config, now=now, platform=sys.platform)
+
+        assert exc.value.op is SnapshotOp.MKDIR
+        assert (dst / "snapshots" / name / "data.txt").read_text() == "first"
 
 
 class TestCleanupOrphanedSnapshots:

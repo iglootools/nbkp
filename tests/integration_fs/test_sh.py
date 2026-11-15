@@ -526,3 +526,27 @@ class TestGeneratedScriptExecution:
         assert "is the clock behind?" in result.stderr
         assert _snapshot_names(tmp_path) == [future]
         assert os.readlink(latest) == f"{SNAPSHOTS_DIR}/{future}"
+
+    def test_existing_snapshot_dir_is_not_reused(self, tmp_path: Path) -> None:
+        """mkdir without -p: a name collision fails the sync, so a failed
+        rsync never removes a snapshot it did not create.
+        """
+        config = _seeded_chain(tmp_path)
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        # `date` always answers the same second, so every run collides.
+        fixed = "2026-02-21T12:00:00.000Z"
+        if sys.platform == "darwin":
+            fixed = fixed.replace(":", "-")
+        fake_date = fake_bin / "date"
+        fake_date.write_text(f"#!/bin/sh\necho '{fixed}'\n")
+        fake_date.chmod(0o755)
+        existing = _stage(tmp_path) / SNAPSHOTS_DIR / fixed
+        existing.mkdir()
+        (existing / "keep.txt").write_text("keep")
+        env = {**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}"}
+
+        result = _run_script(config, tmp_path, env=env)
+
+        assert result.returncode == 1
+        assert (existing / "keep.txt").read_text() == "keep"

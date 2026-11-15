@@ -87,7 +87,8 @@ class TestHardLinkSync:
         assert rsync.last_kwargs["dest_suffix"] == f"snapshots/{NEW_SNAPSHOT_NAME}"
         assert runner.commands == [
             ["readlink", "/dst/latest"],
-            ["mkdir", "-p", _NEW_SNAPSHOT],
+            ["mkdir", "-p", "/dst/snapshots"],
+            ["mkdir", _NEW_SNAPSHOT],
             ["ln", "-sfn", f"snapshots/{NEW_SNAPSHOT_NAME}", "/dst/latest"],
         ]
 
