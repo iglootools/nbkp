@@ -1,6 +1,7 @@
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+from textwrap import dedent, indent
 
 from nbkp.config import (
     BtrfsSnapshotConfig,
@@ -953,10 +954,36 @@ class TestHardLink:
         )
 
     def test_orphan_cleanup(self) -> None:
+        """The whole step: other steps also emit readlink/latest/"/dev/null"."""
         config = self._hl_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert "readlink" in script
-        assert "latest" in script
+        step = dedent("""\
+            # Cleanup orphaned snapshots
+            if [ "$NBKP_DRY_RUN" = false ]; then
+                NBKP_LATEST_LINK=$(readlink /mnt/dst/latest 2>/dev/null || true)
+                if [ -n "$NBKP_LATEST_LINK" ] && [ "$NBKP_LATEST_LINK" != "/dev/null" ]; then
+                    NBKP_LATEST_NAME="${NBKP_LATEST_LINK##*/}"
+                    for snap in $(ls /mnt/dst/snapshots 2>/dev/null | nbkp_snapshot_names); do
+                        if [ "$snap" \\> "$NBKP_LATEST_NAME" ]; then
+                            nbkp_log "Removing orphaned snapshot: $snap"
+                            rm -rf "/mnt/dst/snapshots/${snap}" || nbkp_log "WARN: failed to remove orphaned snapshot: $snap"
+                        fi
+                    done
+                fi
+            fi
+        """)
+        assert indent(step, "    ") in script
+
+    def test_rejects_filesystems_without_hard_links(self) -> None:
+        config = self._hl_config()
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        guard = (
+            """! nbkp_matches "$(stat -f -c %T /mnt/dst 2>/dev/null || true)" """
+            "'vfat|msdos|exfat'"
+            " || { nbkp_log 'ERROR: destination volume /mnt/dst does not support"
+            " hard links'; return 1; }"
+        )
+        assert guard in script
 
     def test_link_dest_resolution(self) -> None:
         config = self._hl_config()
@@ -1009,11 +1036,6 @@ class TestHardLink:
         config = self._hl_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert "snapshots/ directory not found" in script
-
-    def test_devnull_guard_in_orphan_cleanup(self) -> None:
-        config = self._hl_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
-        assert '!= "/dev/null"' in script
 
     def test_devnull_guard_in_prune(self) -> None:
         config = self._hl_config()
