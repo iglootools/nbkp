@@ -359,6 +359,7 @@ This section documents every external command nbkp invokes on local or remote ho
 | `lsblk -rno NAME,TYPE <dev>` | Discover the unlocked cleartext device (LUKS unlocked check) |
 | `findmnt --source <dev> -n -o TARGET` | Check if a device is mounted and discover its mountpoint |
 | `findmnt --fstab --target <path> -n -P -o SOURCE,TARGET` | fstab entry for a declared mountpoint, and the device it names |
+| `sh -c 'ls <udisks2-modules-dir>/libudisks2_btrfs.so … 2>/dev/null \| grep -q .'` | Detect the udisks2 btrfs module (`udisks2-btrfs` package) in the usual module directories |
 
 ### Rsync synchronization
 
@@ -396,10 +397,11 @@ This section documents every external command nbkp invokes on local or remote ho
 
 ### Mount management (udisks)
 
-All mount operations go through `udisksctl`, authorized by polkit (no `sudo`):
+All mount operations go through `udisksctl`, authorized by polkit (no `sudo`); `udevadm settle` only waits for udev to catch up with device changes:
 
 | Command | Purpose |
 |---|---|
+| `udevadm settle --timeout=10` | Wait for pending udev events before looking for a device, and between `udisksctl` retries (best effort: failures are ignored) |
 | `udisksctl unlock -b /dev/disk/by-uuid/<luks-uuid> --key-file /dev/stdin --no-user-interaction` | Unlock LUKS container (passphrase piped via stdin, without a trailing newline) |
 | `lsblk -rno NAME,TYPE /dev/disk/by-uuid/<luks-uuid>` | Discover the unlocked cleartext device (`crypt` child → `/dev/mapper/<name>`) |
 | `udisksctl mount -b <device> --no-user-interaction` | Mount volume (`<device>` = discovered cleartext mapper for encrypted, or `/dev/disk/by-uuid/<fs-uuid>` for unencrypted) |
