@@ -399,9 +399,15 @@ def _endpoints_on(
     vol_slugs: list[str],
     syncs: dict[str, SyncConfig],
 ) -> list[SyncEndpoint]:
+    """Endpoints of the enabled syncs on *vol_slugs*.
+
+    A disabled sync never runs, so its tools must not be required: that
+    would make the enabled syncs sharing the host fatal.
+    """
     return [
         ep
         for sync in syncs.values()
+        if sync.enabled
         for ep in (config.source_endpoint(sync), config.destination_endpoint(sync))
         if ep.volume in vol_slugs
     ]

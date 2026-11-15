@@ -1252,6 +1252,61 @@ class TestCheckSync:
 
     @patch(
         "nbkp.preflight.checks.observe_ssh_endpoint",
+        return_value=_ssh_diag(host_tools=_BTRFS_NO_BTRFS_CMD_HOST_TOOLS),
+    )
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
+    def test_disabled_sync_does_not_add_tool_needs(
+        self, _mock_caps: MagicMock, _mock_ssh: MagicMock, tmp_path: Path
+    ) -> None:
+        """A disabled btrfs sync must not make the host's missing btrfs fatal
+        for the enabled syncs sharing it."""
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_active_sentinels(src, dst)
+        config = Config(
+            volumes={
+                "src": LocalVolume(slug="src", path=str(src)),
+                "dst": LocalVolume(slug="dst", path=str(dst)),
+            },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="data"),
+                "ep-plain": SyncEndpoint(
+                    slug="ep-plain", volume="dst", subdir="backup"
+                ),
+                "ep-old-src": SyncEndpoint(
+                    slug="ep-old-src", volume="src", subdir="old"
+                ),
+                "ep-btrfs": SyncEndpoint(
+                    slug="ep-btrfs",
+                    volume="dst",
+                    subdir="btrfs",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
+            syncs={
+                "plain": SyncConfig(
+                    slug="plain", source="ep-src", destination="ep-plain"
+                ),
+                "old-btrfs": SyncConfig(
+                    slug="old-btrfs",
+                    source="ep-old-src",
+                    destination="ep-btrfs",
+                    enabled=False,
+                ),
+            },
+        )
+
+        result = check_all_syncs(config)
+        assert result.ssh_endpoint_statuses["localhost"].errors == []
+        assert result.sync_statuses["plain"].active is True
+
+    @patch(
+        "nbkp.preflight.checks.observe_ssh_endpoint",
         return_value=_ssh_diag(host_tools=_BTRFS_NO_STAT_HOST_TOOLS),
     )
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
