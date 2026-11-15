@@ -577,6 +577,18 @@ class TestReadLatestSymlinkFailures:
             read_latest_symlink(sync, config, resolved_endpoints=re)
 
     @patch("nbkp.remote.dispatch.run_remote_command")
+    def test_non_snapshot_target_raises(self, mock_remote: MagicMock) -> None:
+        """A target that is not a snapshot name is a failed read, not a crash."""
+        mock_remote.return_value = MagicMock(returncode=0, stdout="snapshots/foo\n")
+        sync, config, re = _hl_remote_config()
+
+        with pytest.raises(
+            SnapshotOperationError,
+            check=lambda e: e.op is SnapshotOp.READ_LATEST and "foo" in e.stderr,
+        ):
+            read_latest_symlink(sync, config, resolved_endpoints=re)
+
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_prune_does_not_delete_when_latest_unknown(
         self, mock_remote: MagicMock
     ) -> None:

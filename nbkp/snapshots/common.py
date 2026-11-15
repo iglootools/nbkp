@@ -192,7 +192,12 @@ def read_latest_symlink(
         return None
     else:
         name = target.rsplit("/", 1)[-1] if "/" in target else target
-        return Snapshot.from_name(name)
+        try:
+            return Snapshot.from_name(name)
+        except ValueError as e:
+            raise SnapshotOperationError(
+                SnapshotOp.READ_LATEST, latest_path, f"not a snapshot: {target}"
+            ) from e
 
 
 def _replace_local_symlink(latest_path: str, target: str) -> None:
