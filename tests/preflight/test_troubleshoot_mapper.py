@@ -12,6 +12,7 @@ Discovery is a live probe, done while *gathering* facts
 
 from io import StringIO
 
+import paramiko
 import pytest
 from rich.console import Console
 
@@ -151,6 +152,23 @@ class TestCleartextDeviceGathering:
             raise FileNotFoundError(2, "No such file or directory", "lsblk")
 
         monkeypatch.setattr(ts, "discover_cleartext_device", _boom)
+        vol = _volume()
+        facts = ts.gather_remediation_facts(
+            _issues(vol, VolumeError.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol)
+        )
+        assert facts.cleartext_devices == {}
+
+    @pytest.mark.parametrize(
+        "error",
+        [paramiko.SSHException("channel closed"), EOFError("connection closed")],
+    )
+    def test_survives_a_failed_connection(
+        self, monkeypatch: pytest.MonkeyPatch, error: Exception
+    ) -> None:
+        def _drop(*_: object) -> str | None:
+            raise error
+
+        monkeypatch.setattr(ts, "discover_cleartext_device", _drop)
         vol = _volume()
         facts = ts.gather_remediation_facts(
             _issues(vol, VolumeError.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol)
