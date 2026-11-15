@@ -182,3 +182,21 @@ class TestHardLinkSync:
         assert results[0].snapshot_path == _NEW_SNAPSHOT
         assert results[0].pruned_paths is None
         assert [w.kind for w in results[0].warnings] == [SyncWarningKind.PRUNE]
+
+    def test_no_prune_keeps_snapshots_beyond_max(self) -> None:
+        """``run --no-prune``: retention is not applied even when exceeded."""
+        config = _make_hard_link_config(max_snapshots=1)
+        _, statuses = active_statuses(config)
+        runner = (
+            FakeCommandRunner()
+            .on("readlink", returns=completed(0, "/dev/null\n"))
+            .on("ls", returns=completed(0, f"{_PREVIOUS.name}\n{NEW_SNAPSHOT_NAME}\n"))
+        )
+
+        results = run_syncs(
+            config, statuses, prune=False, rsync=FakeRsync(), run_command=runner
+        )
+
+        assert results[0].outcome == SyncOutcome.SUCCESS
+        assert results[0].pruned_paths is None
+        assert runner.commands_starting_with("rm") == []

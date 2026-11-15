@@ -120,3 +120,23 @@ class TestBtrfsSync:
         assert results[0].success is True
         assert results[0].pruned_paths is None
         assert runner.commands_starting_with("ls") == []
+
+    def test_no_prune_keeps_snapshots_beyond_max(self) -> None:
+        """``run --no-prune``: retention is not applied even when exceeded."""
+        config = _btrfs_config(max_snapshots=1)
+        _, sync_statuses = active_statuses(config)
+        old = "2026-03-05T10:00:00.000Z"
+        runner = (
+            FakeCommandRunner()
+            .on("ls", returns=completed(0, f"{old}\n{NEW_SNAPSHOT_NAME}\n"))
+            .on("readlink", returns=completed(0, f"snapshots/{NEW_SNAPSHOT_NAME}\n"))
+        )
+
+        results = run_syncs(
+            config, sync_statuses, prune=False, rsync=FakeRsync(), run_command=runner
+        )
+
+        assert results[0].success is True
+        assert results[0].pruned_paths is None
+        assert runner.commands_starting_with("ls") == []
+        assert runner.commands_starting_with("btrfs", "subvolume", "delete") == []
