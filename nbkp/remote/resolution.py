@@ -3,7 +3,7 @@
 import ipaddress
 import socket
 from collections.abc import Callable, Collection
-from functools import partial, reduce
+from functools import cache, partial, reduce
 from pathlib import Path
 
 import paramiko
@@ -148,8 +148,9 @@ def resolve_endpoint_for_volume(
         # No filter can change a single candidate: skip its DNS lookup.
         return eps[candidates[0]]
     else:
-        is_private = partial(
-            is_private_host, ssh_config=_or_default(ssh_config), lookup=lookup
+        # The DNS and --network filters both classify each candidate's host.
+        is_private = cache(
+            partial(is_private_host, ssh_config=_or_default(ssh_config), lookup=lookup)
         )
         result = _apply_soft_filters(
             candidates, eps, endpoint_filter or EndpointFilter(), is_private
@@ -244,8 +245,11 @@ def resolve_all_endpoints(
     for the DNS and network filters.
     """
     loaded = _or_default(ssh_config)
+    # Volumes share hosts (one server, several drives), and an unresolvable
+    # name pays its DNS timeout on every lookup: resolve each name once.
+    cached_lookup = cache(lookup)
     return {
-        vol.slug: _resolve_volume(config, vol, endpoint_filter, loaded, lookup)
+        vol.slug: _resolve_volume(config, vol, endpoint_filter, loaded, cached_lookup)
         for vol in config.volumes.values()
         if isinstance(vol, RemoteVolume)
         and not _is_volume_excluded(config, vol, endpoint_filter)
