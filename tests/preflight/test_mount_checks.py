@@ -490,6 +490,10 @@ class TestFstabSourceMatches:
             ("/dev/mapper/other", "/dev/mapper/seagate-luks", False),
             (f"/dev/mapper/luks-{_ENC_UUID}", None, True),
             ("/dev/mapper/other", None, False),
+            # Right after an unlock udisks reports the kernel name, which
+            # cannot be compared with a mapper name without a probe: accept.
+            (f"/dev/mapper/luks-{_ENC_UUID}", "/dev/dm-0", True),
+            ("/dev/mapper/seagate-luks", "/dev/dm-0", True),
             # The LUKS container itself cannot be mounted.
             (f"UUID={_ENC_UUID}", None, False),
             (f"/dev/disk/by-uuid/{_ENC_UUID}", None, False),
