@@ -13,7 +13,11 @@ from textwrap import dedent
 
 from ..config import LocalVolume, RemoteVolume
 from ..fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
-from ..sync.rsync import build_rsync_command
+from ..sync.rsync import (
+    build_rsync_command,
+    hard_link_dest_suffix,
+    hard_link_link_dest,
+)
 from .commands import snapshot_date_format, vol_cmd
 from .quoting import INDENT, SNAP, SNAPSHOT_TS, format_command, quote
 from .spec import SyncSpec
@@ -36,7 +40,7 @@ def build_steps(spec: SyncSpec) -> tuple[Step, ...]:
                     _link_dest_block(spec),
                 ),
                 Step("Create snapshot directory", _mkdir_block(spec)),
-                Step("Rsync", _rsync_block(spec, f"{SNAPSHOTS_DIR}/{SNAPSHOT_TS}")),
+                Step("Rsync", _rsync_block(spec, hard_link_dest_suffix(SNAPSHOT_TS))),
                 Step("Update latest symlink (skip if dry-run)", _symlink_block(spec)),
                 *prune,
             )
@@ -111,13 +115,17 @@ def _orphan_cleanup_block(spec: SyncSpec) -> str:
         fi""")
 
 
+# The snapshot name `latest` designates, read at runtime by _link_dest_block.
+_LATEST_NAME = "${NBKP_LATEST_LINK##*/}"
+
+
 def _link_dest_block(spec: SyncSpec) -> str:
     """``--link-dest`` to the snapshot ``latest`` designates, as in run."""
     return dedent(f"""\
         NBKP_LATEST_LINK={_readlink_latest(spec)}
         RSYNC_LINK_DEST=""
         if [ -n "$NBKP_LATEST_LINK" ] && [ "$NBKP_LATEST_LINK" != "/dev/null" ]; then
-            RSYNC_LINK_DEST="--link-dest=../${{NBKP_LATEST_LINK##*/}}"
+            RSYNC_LINK_DEST="--link-dest={hard_link_link_dest(_LATEST_NAME)}"
         fi""")
 
 

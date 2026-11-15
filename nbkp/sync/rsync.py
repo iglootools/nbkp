@@ -10,7 +10,7 @@ from ..config import (
     SyncEndpoint,
     resolve_endpoint_path,
 )
-from ..fsprotocol import LATEST_LINK
+from ..fsprotocol import LATEST_LINK, SNAPSHOTS_DIR
 from ..remote import (
     build_ssh_base_args,
     build_ssh_e_option,
@@ -102,6 +102,19 @@ def _filter_args(sync: SyncConfig) -> list[str]:
         *[f"--filter={rule}" for rule in sync.filters],
         *([f"--filter=merge {sync.filter_file}"] if sync.filter_file else []),
     ]
+
+
+def hard_link_dest_suffix(snapshot_name: str) -> str:
+    """Hard-link syncs rsync straight into the new snapshot directory."""
+    return f"{SNAPSHOTS_DIR}/{snapshot_name}"
+
+
+def hard_link_link_dest(latest_name: str | None) -> str | None:
+    """``--link-dest`` to the snapshot ``latest`` designates, or ``None`` before
+    the first one.  rsync resolves a relative ``--link-dest`` against the
+    destination directory, which is the new snapshot's sibling.
+    """
+    return f"../{latest_name}" if latest_name else None
 
 
 def _dest_target(base: str, dest_suffix: str | None) -> str:
