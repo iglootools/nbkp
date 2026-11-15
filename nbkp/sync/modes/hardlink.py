@@ -3,8 +3,8 @@
 from ...config import SyncConfig, SyncEndpoint
 from ...fsprotocol import Snapshot
 from ...preflight.status.sync import SyncStatus
-from ...snapshots.common import destination_volume
-from ...snapshots.errors import SnapshotOperationError
+from ...snapshots.common import destination_volume, ensure_after_latest
+from ...snapshots.errors import SnapshotOp, SnapshotOperationError
 from ...snapshots.hardlinks import (
     cleanup_orphaned_snapshots,
     create_snapshot_dir,
@@ -28,7 +28,7 @@ def run_hard_link_sync(
     warnings = () if ctx.dry_run else _cleanup_orphans(sync, ctx)
     latest = status.destination_latest_snapshot
     link_dest = hard_link_link_dest(latest.name if latest else None)
-    match _prepare_snapshot_dir(sync, ctx):
+    match _prepare_snapshot_dir(sync, latest, ctx):
         case SyncResult() as failure:
             return failure.with_warnings(warnings)
         case snapshot_path:
@@ -56,12 +56,26 @@ def _cleanup_orphans(sync: SyncConfig, ctx: RunContext) -> tuple[SyncWarning, ..
         )
 
 
-def _prepare_snapshot_dir(sync: SyncConfig, ctx: RunContext) -> str | SyncResult:
-    """The new snapshot's path; created on disk unless dry-running."""
+def _prepare_snapshot_dir(
+    sync: SyncConfig, latest: Snapshot | None, ctx: RunContext
+) -> str | SyncResult:
+    """The new snapshot's path; created on disk unless dry-running.
+
+    A snapshot that would not come after *latest* is refused (see
+    :func:`~nbkp.snapshots.common.ensure_after_latest`).
+    """
     now = ctx.clock()
     if ctx.dry_run:
         return snapshot_path_for(sync, ctx.config, now=now, platform=ctx.platform)
     try:
+        ensure_after_latest(
+            sync,
+            ctx.config,
+            now=now,
+            platform=ctx.platform,
+            latest=latest,
+            op=SnapshotOp.MKDIR,
+        )
         return create_snapshot_dir(
             sync,
             ctx.config,

@@ -510,3 +510,19 @@ class TestGeneratedScriptExecution:
         assert "Pruning snapshot: 2020-01-01T00-00-00.000Z" in result.stderr
         for name in lookalikes:
             assert (snapshots / name).is_dir()
+
+    def test_refuses_snapshot_not_after_latest(self, tmp_path: Path) -> None:
+        """With the clock behind latest, latest is not moved back in time."""
+        config = _seeded_chain(tmp_path)
+        future = "2099-01-01T00-00-00.000Z"
+        (_stage(tmp_path) / SNAPSHOTS_DIR / future).mkdir()
+        latest = _stage(tmp_path) / LATEST_LINK
+        latest.unlink()
+        latest.symlink_to(f"{SNAPSHOTS_DIR}/{future}")
+
+        result = _run_script(config, tmp_path)
+
+        assert result.returncode == 1
+        assert "is the clock behind?" in result.stderr
+        assert _snapshot_names(tmp_path) == [future]
+        assert os.readlink(latest) == f"{SNAPSHOTS_DIR}/{future}"

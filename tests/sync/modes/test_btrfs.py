@@ -1,6 +1,7 @@
 """Tests for nbkp.sync.modes.btrfs: snapshot after rsync into staging, pruning."""
 
 from nbkp.config import BtrfsSnapshotConfig, Config
+from nbkp.fsprotocol import Snapshot
 from nbkp.sync.results import SyncFailureKind, SyncOutcome
 from tests.fakes import FakeCommandRunner, FakeRsync, completed
 from tests.sync.runner_helpers import (
@@ -86,6 +87,26 @@ class TestBtrfsSync:
 
         assert results[0].outcome == SyncOutcome.FAILED
         assert results[0].failure == SyncFailureKind.SNAPSHOT
+        assert runner.commands_starting_with("ln") == []
+
+    def test_refuses_snapshot_not_after_latest(self) -> None:
+        """A clock behind latest must not move latest back in time."""
+        config = _btrfs_config()
+        _, sync_statuses = active_statuses(config)
+        later = Snapshot.from_name("2026-03-06T14:30:00.001Z")  # the clock + 1ms
+        sync_statuses = {
+            k: v.model_copy(update={"destination_latest_snapshot": later})
+            for k, v in sync_statuses.items()
+        }
+        runner = FakeCommandRunner()
+
+        results = run_syncs(
+            config, sync_statuses, rsync=FakeRsync(), run_command=runner
+        )
+
+        assert results[0].failure == SyncFailureKind.SNAPSHOT
+        assert "is the clock behind?" in (results[0].detail or "")
+        assert runner.commands_starting_with("btrfs", "subvolume", "snapshot") == []
         assert runner.commands_starting_with("ln") == []
 
     def test_auto_prune_after_snapshot(self) -> None:
