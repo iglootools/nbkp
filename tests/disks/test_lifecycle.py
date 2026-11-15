@@ -328,6 +328,38 @@ class TestMountVolume:
         assert not result.success
         assert result.failure_reason == MountFailureReason.UDISKS_NOT_AVAILABLE
 
+    def test_mount_udisks_not_available_under_dash(self) -> None:
+        # Verbatim dash output (`sh -c`, as on a Debian host) for a missing
+        # binary, captured with exit code 127.
+        vol = _unencrypted_vol()
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.find_mountpoint", return_value=None),
+            patch(
+                "nbkp.disks.lifecycle.run_on_volume",
+                return_value=_mock_run(127, stderr="sh: 1: udisksctl: not found"),
+            ),
+        ):
+            result = mount_volume(vol, vol.mount, {}, lambda x: "pass")  # type: ignore[arg-type]
+        assert result.failure_reason == MountFailureReason.UDISKS_NOT_AVAILABLE
+
+    def test_udisks_unknown_device_is_a_mount_failure(self) -> None:
+        """udisks failing to find a device does not mean udisks is missing."""
+        # Verbatim udisksctl 2.10.1 (Debian 13) output, exit code 1, for a
+        # device udisks has no object for.
+        vol = _unencrypted_vol()
+        stderr = f"Error looking up object for device /dev/disk/by-uuid/{_USB_UUID}"
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.find_mountpoint", return_value=None),
+            patch(
+                "nbkp.disks.lifecycle.run_on_volume",
+                return_value=_mock_run(1, stderr=stderr),
+            ),
+        ):
+            result = mount_volume(vol, vol.mount, {}, lambda x: "pass")  # type: ignore[arg-type]
+        assert result.failure_reason == MountFailureReason.MOUNT_FAILED
+
     def test_mount_volume_swallows_multiline_exception(self) -> None:
         vol = _encrypted_vol()
         multiline_msg = "first line\nsecond line\nthird line"

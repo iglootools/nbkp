@@ -40,9 +40,12 @@ _NOT_AUTHORIZED_SIGNATURES = (
     "notauthorized",
 )
 
+# Specific to a missing binary or daemon: udisks's own errors also say "not
+# found" (a missing object or device), and must not send the operator off to
+# install udisks.
 _UDISKS_UNAVAILABLE_SIGNATURES = (
-    "command not found",
-    "not found",
+    "command not found",  # bash: udisksctl: command not found
+    "udisksctl: not found",  # dash (sh -c): udisksctl: not found
     "error connecting to the system message bus",
     "org.freedesktop.dbus.error.serviceunknown",
 )
