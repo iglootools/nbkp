@@ -1,6 +1,6 @@
-from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from typing import Protocol
 
 from ..config import (
     Config,
@@ -11,6 +11,7 @@ from ..config import (
     resolve_endpoint_path,
 )
 from ..fsprotocol import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR, Snapshot
+from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 from .errors import (
     SnapshotOp,
@@ -68,11 +69,14 @@ def parse_snapshot_listing(stdout: str) -> list[Snapshot]:
 
 
 def _snapshots_dir_exists(
-    path: str, volume: Volume, resolved_endpoints: ResolvedEndpoints
+    path: str,
+    volume: Volume,
+    resolved_endpoints: ResolvedEndpoints,
+    run: VolumeCommandRunner,
 ) -> bool:
     """Whether *path* is a directory; raises when that cannot be determined."""
     result = run_snapshot_command(
-        SnapshotOp.LIST, path, ["test", "-d", path], volume, resolved_endpoints
+        SnapshotOp.LIST, path, ["test", "-d", path], volume, resolved_endpoints, run=run
     )
     match result.returncode:
         case 0:
@@ -87,6 +91,8 @@ def list_snapshots(
     sync: SyncConfig,
     config: Config,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> list[Snapshot]:
     """List all snapshots sorted oldest-first.
 
@@ -98,10 +104,12 @@ def list_snapshots(
     re = resolved_endpoints or {}
     path = snapshots_dir(sync, config)
     dst_vol = destination_volume(sync, config)
-    result = run_snapshot_command(SnapshotOp.LIST, path, ["ls", path], dst_vol, re)
+    result = run_snapshot_command(
+        SnapshotOp.LIST, path, ["ls", path], dst_vol, re, run=run
+    )
     if result.returncode == 0:
         return parse_snapshot_listing(result.stdout)
-    elif not _snapshots_dir_exists(path, dst_vol, re):
+    elif not _snapshots_dir_exists(path, dst_vol, re, run):
         return []
     else:
         raise SnapshotOperationError(SnapshotOp.LIST, path, result.stderr or "")
@@ -111,8 +119,10 @@ def get_latest_snapshot(
     sync: SyncConfig,
     config: Config,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> Snapshot | None:
-    snapshots = list_snapshots(sync, config, resolved_endpoints)
+    snapshots = list_snapshots(sync, config, resolved_endpoints, run=run)
     if snapshots:
         return snapshots[-1]
     else:
@@ -131,17 +141,23 @@ def _read_remote_symlink_target(
     volume: Volume,
     latest_path: str,
     resolved_endpoints: ResolvedEndpoints,
+    run: VolumeCommandRunner,
 ) -> str | None:
     """``readlink``; on failure, ``test -L`` tells "absent" from "broken"."""
     op = SnapshotOp.READ_LATEST
     result = run_snapshot_command(
-        op, latest_path, ["readlink", latest_path], volume, resolved_endpoints
+        op, latest_path, ["readlink", latest_path], volume, resolved_endpoints, run=run
     )
     if result.returncode == 0:
         return result.stdout.strip()
     else:
         probe = run_snapshot_command(
-            op, latest_path, ["test", "-L", latest_path], volume, resolved_endpoints
+            op,
+            latest_path,
+            ["test", "-L", latest_path],
+            volume,
+            resolved_endpoints,
+            run=run,
         )
         match probe.returncode:
             case 1:
@@ -154,6 +170,7 @@ def _read_raw_symlink_target(
     volume: Volume,
     latest_path: str,
     resolved_endpoints: ResolvedEndpoints,
+    run: VolumeCommandRunner,
 ) -> str | None:
     """Read the raw symlink target string, or None if there is no symlink.
 
@@ -165,7 +182,9 @@ def _read_raw_symlink_target(
         case LocalVolume():
             return _read_local_symlink_target(latest_path)
         case RemoteVolume():
-            return _read_remote_symlink_target(volume, latest_path, resolved_endpoints)
+            return _read_remote_symlink_target(
+                volume, latest_path, resolved_endpoints, run
+            )
 
 
 def read_latest_symlink(
@@ -173,6 +192,7 @@ def read_latest_symlink(
     config: Config,
     *,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> Snapshot | None:
     """Read the latest symlink target, returning a Snapshot.
 
@@ -181,7 +201,9 @@ def read_latest_symlink(
     """
     re = resolved_endpoints or {}
     latest_path = f"{resolve_dest_path(sync, config)}/{LATEST_LINK}"
-    target = _read_raw_symlink_target(destination_volume(sync, config), latest_path, re)
+    target = _read_raw_symlink_target(
+        destination_volume(sync, config), latest_path, re, run
+    )
 
     if target is None or target == DEVNULL_TARGET:
         return None
@@ -207,6 +229,7 @@ def update_latest_symlink(
     snapshot: Snapshot,
     *,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> None:
     re = resolved_endpoints or {}
     latest_path = f"{resolve_dest_path(sync, config)}/{LATEST_LINK}"
@@ -220,11 +243,26 @@ def update_latest_symlink(
             )
         case RemoteVolume() as dst_vol:
             run_checked(
-                op, latest_path, ["ln", "-sfn", target, latest_path], dst_vol, re
+                op,
+                latest_path,
+                ["ln", "-sfn", target, latest_path],
+                dst_vol,
+                re,
+                run=run,
             )
 
 
-DeleteSnapshotFn = Callable[[str, Volume, ResolvedEndpoints], None]
+class DeleteSnapshotFn(Protocol):
+    """A backend's snapshot deletion, run through *run*."""
+
+    def __call__(
+        self,
+        path: str,
+        volume: Volume,
+        resolved_endpoints: ResolvedEndpoints,
+        *,
+        run: VolumeCommandRunner = ...,
+    ) -> None: ...
 
 
 def prune_oldest_snapshots(
@@ -235,6 +273,7 @@ def prune_oldest_snapshots(
     *,
     dry_run: bool = False,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> list[str]:
     """Delete oldest snapshots exceeding max_snapshots with the backend's
     *delete_snapshot*.
@@ -243,12 +282,12 @@ def prune_oldest_snapshots(
     Returns list of deleted (or would-be-deleted) paths.
     """
     re = resolved_endpoints or {}
-    snapshots = list_snapshots(sync, config, re)
+    snapshots = list_snapshots(sync, config, re, run=run)
     excess = len(snapshots) - max_snapshots
     if excess <= 0:
         return []
     else:
-        latest = read_latest_symlink(sync, config, resolved_endpoints=re)
+        latest = read_latest_symlink(sync, config, resolved_endpoints=re, run=run)
         base = snapshots_dir(sync, config)
 
         # list_snapshots sorts oldest first, so the slice takes the oldest.
@@ -261,6 +300,6 @@ def prune_oldest_snapshots(
         if not dry_run:
             dst_vol = destination_volume(sync, config)
             for path in to_delete:
-                delete_snapshot(path, dst_vol, re)
+                delete_snapshot(path, dst_vol, re, run=run)
 
         return to_delete
