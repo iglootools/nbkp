@@ -6,7 +6,7 @@ from rich.console import Console
 from rich.text import Text
 
 from ...clidisplay import OutputFormat, echo_json
-from ...clidisplay.invocation import Invocation
+from ...clidisplay.invocation import Invocation, print_troubleshoot_hint
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...cliwiring.credentials import prompt_passphrase
 from ...cliwiring.mount_progress import LifecycleProgress, mount_display_names
@@ -101,12 +101,14 @@ def mount(
 
     results = _mount_with_progress(cfg, resolved, name, output)
     _show_results(cfg, resolved, results, name, output)
+    invocation = Invocation.of(
+        config, location, exclude_location, network.value if network else None
+    )
     if output is OutputFormat.HUMAN:
-        _print_auth_hint(
-            results,
-            Invocation.of(config, network=network.value if network else None),
-        )
+        _print_auth_hint(results, invocation)
     if any(not r.success for r in results):
+        if output is OutputFormat.HUMAN:
+            print_troubleshoot_hint(invocation)
         raise typer.Exit(1)
 
 

@@ -4,6 +4,7 @@ from typing import Annotated
 import typer
 
 from ...clidisplay import OutputFormat, echo_json
+from ...clidisplay.invocation import Invocation, print_troubleshoot_hint
 from ...cliwiring.config import (
     load_config_or_exit,
     require_known_syncs,
@@ -12,6 +13,7 @@ from ...cliwiring.config import (
 from ...cliwiring.mount import managed_mount
 from ...cliwiring.preflight import check_all_with_progress
 from ...policy import Strictness
+from ...preflight import SyncStatus
 from ...remote.endpoints import NetworkType
 from .. import prune_all_syncs
 from ..models import PruneResult
@@ -127,6 +129,17 @@ def prune(
         )
         _print_results(results, dry_run, output)
         if any(r.error is not None for r in results):
+            if output is OutputFormat.HUMAN and _preflight_failed(
+                results, preflight.sync_statuses
+            ):
+                print_troubleshoot_hint(
+                    Invocation.of(
+                        config,
+                        location,
+                        exclude_location,
+                        network.value if network else None,
+                    )
+                )
             raise typer.Exit(1)
 
 
@@ -138,3 +151,16 @@ def _print_results(
             echo_json(list(results))
         case OutputFormat.HUMAN:
             print_human_prune_results(results, dry_run)
+
+
+def _preflight_failed(
+    results: list[PruneResult], sync_statuses: dict[str, SyncStatus]
+) -> bool:
+    """Whether a sync errored because preflight found it inactive or broken.
+
+    Those are the errors ``preflight troubleshoot`` explains; a snapshot
+    operation failing on an active sync is not.
+    """
+    return any(
+        r.error is not None and not sync_statuses[r.sync_slug].active for r in results
+    )

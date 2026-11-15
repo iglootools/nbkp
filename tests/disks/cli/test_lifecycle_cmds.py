@@ -202,6 +202,65 @@ class TestFailureJson:
         assert entry["warning"] == "LUKS container still unlocked, manual lock needed"
 
 
+class TestTroubleshootHint:
+    """A failed mount or umount points at ``preflight troubleshoot``."""
+
+    @patch(
+        "nbkp.disks.cli.mount_cmd.mount_volumes",
+        return_value=[
+            MountResult(
+                volume_slug="enc",
+                success=False,
+                failure_reason=MountFailureReason.MOUNT_FAILED,
+                failure=LifecycleFailure(
+                    step=LifecycleStep.MOUNT, exit_code=1, message="mount failed"
+                ),
+                device_present=True,
+                luks_unlocked=True,
+            )
+        ],
+    )
+    @patch("nbkp.disks.cli.mount_cmd.prefetch_passphrases", return_value=[])
+    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
+    def test_mount_failure_suggests_troubleshoot(
+        self, _load: MagicMock, _prefetch: MagicMock, _mount: MagicMock
+    ) -> None:
+        result = runner.invoke(
+            app, ["disks", "mount", "-c", "/f.yaml", "-N", "private"]
+        )
+        assert result.exit_code == 1
+        assert "nbkp preflight troubleshoot -c /f.yaml -N private" in result.output
+
+    @patch(
+        "nbkp.disks.cli.helpers.status.check_mount_status",
+        return_value=MountCapabilities(
+            device_present=True, luks_unlocked=True, mounted=True
+        ),
+    )
+    @patch(
+        "nbkp.disks.cli.umount_cmd.umount_volumes",
+        return_value=[
+            UmountResult(
+                volume_slug="enc",
+                success=False,
+                failure_reason=UmountFailureReason.UNMOUNT_FAILED,
+                failure=LifecycleFailure(
+                    step=LifecycleStep.UNMOUNT, exit_code=1, message="target is busy"
+                ),
+            )
+        ],
+    )
+    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
+    def test_umount_failure_suggests_troubleshoot(
+        self, _load: MagicMock, _umount: MagicMock, _probe: MagicMock
+    ) -> None:
+        result = runner.invoke(
+            app, ["disks", "umount", "-c", "/f.yaml", "-N", "private"]
+        )
+        assert result.exit_code == 1
+        assert "nbkp preflight troubleshoot -c /f.yaml -N private" in result.output
+
+
 class TestSetupAuth:
     @patch("nbkp.cliwiring.config.load_config", return_value=_config())
     def test_json(self, _load: MagicMock) -> None:
