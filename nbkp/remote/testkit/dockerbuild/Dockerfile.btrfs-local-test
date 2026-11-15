@@ -1,4 +1,7 @@
-FROM python:3.15-slim
+# The Python patch release here and the uv tag below match mise.toml's [tools] pins, so the
+# btrfs tests run on the same interpreter and uv as local development and CI. Move them
+# together with mise.toml (for Python, see "Python versions" in docs/building-and-testing.md).
+FROM python:3.15.2-slim
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -10,7 +13,7 @@ RUN apt-get update && \
 # Pinned uv binary rather than pip-installing the build tool: no PyPI resolution at image
 # build time, and Renovate tracks this tag through its dockerfile manager. `git` above stays
 # needed — uv-dynamic-versioning shells out to it to resolve the editable install's version.
-COPY --from=ghcr.io/astral-sh/uv:0.13.8 /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /uvx /usr/local/bin/
 
 # /app is a rw bind mount of the host checkout, so every uv write has to be kept off it:
 #  - UV_PROJECT_ENVIRONMENT: the venv lands in /tmp instead of clobbering the host's macOS
