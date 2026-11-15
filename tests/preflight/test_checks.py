@@ -3259,6 +3259,96 @@ class TestStandaloneEndpointProbing:
 
         _run(self, tmp_path)
 
+    def _make_alternate_config(self, tmp_path: Path) -> Config:
+        """``remote`` (via ``target``, through ``bastion``) is synced by
+        ``s1``; ``other`` (via ``other-host``, or the ``home``-only
+        alternate ``other-lan``) by ``s2``."""
+        config = self._make_bastion_config(tmp_path)
+        return Config(
+            ssh_endpoints={
+                **config.ssh_endpoints,
+                "other-host": SshEndpoint(slug="other-host", host="other.example"),
+                "other-lan": SshEndpoint(
+                    slug="other-lan", host="other.lan", location="home"
+                ),
+            },
+            volumes={
+                **config.volumes,
+                "other": RemoteVolume(
+                    slug="other",
+                    ssh_endpoint="other-host",
+                    ssh_endpoints=["other-host", "other-lan"],
+                    path="/other",
+                ),
+            },
+            sync_endpoints={
+                **config.sync_endpoints,
+                "ep-other": SyncEndpoint(slug="ep-other", volume="other"),
+            },
+            syncs={
+                **config.syncs,
+                "s2": SyncConfig(slug="s2", source="ep-src", destination="ep-other"),
+            },
+        )
+
+    def _resolved(self, config: Config) -> ResolvedEndpoints:
+        return {
+            "remote": ResolvedEndpoint(
+                server=config.ssh_endpoints["target"],
+                proxy_chain=[config.ssh_endpoints["bastion"]],
+            ),
+            "other": ResolvedEndpoint(server=config.ssh_endpoints["other-host"]),
+        }
+
+    def test_endpoint_at_excluded_location_not_probed(self, tmp_path: Path) -> None:
+        @self._bastion_patches()
+        def _run(self_inner: TestStandaloneEndpointProbing, tmp_path: Path) -> None:
+            config = self_inner._make_alternate_config(tmp_path)
+            resolved = self_inner._resolved(config)
+            with patch(
+                "nbkp.preflight.checks.observe_standalone_endpoint",
+                return_value=_REACHABLE_SSH_DIAG,
+            ) as standalone:
+                result = check_all_syncs(
+                    config, resolved_endpoints=resolved, exclude_locations=["home"]
+                )
+            probed = {call.args[0].slug for call in standalone.call_args_list}
+            assert probed == {"bastion"}
+            assert "other-lan" not in result.ssh_endpoint_statuses
+            assert check_step_count(config, None, resolved, ["home"]) == (
+                len(result.ssh_endpoint_statuses)
+                + len(result.volume_statuses)
+                + len(result.source_endpoint_statuses)
+                + len(result.destination_endpoint_statuses)
+            )
+
+        _run(self, tmp_path)
+
+    def test_only_syncs_probes_only_endpoints_of_selected_volumes(
+        self, tmp_path: Path
+    ) -> None:
+        @self._bastion_patches()
+        def _run(self_inner: TestStandaloneEndpointProbing, tmp_path: Path) -> None:
+            config = self_inner._make_alternate_config(tmp_path)
+            with patch(
+                "nbkp.preflight.checks.observe_standalone_endpoint",
+                return_value=_REACHABLE_SSH_DIAG,
+            ) as standalone:
+                result = check_all_syncs(
+                    config,
+                    only_syncs=["s1"],
+                    resolved_endpoints=self_inner._resolved(config),
+                )
+            probed = {call.args[0].slug for call in standalone.call_args_list}
+            assert probed == {"bastion"}
+            assert set(result.ssh_endpoint_statuses) == {
+                "localhost",
+                "target",
+                "bastion",
+            }
+
+        _run(self, tmp_path)
+
 
 def _alternate_endpoint_config(archive: str, photos: str) -> Config:
     """``archive`` is only reachable from home (``nas-lan``); ``photos`` has

@@ -35,7 +35,11 @@ from ..config import (
 from ..disks import MountObservation
 from ..remote.endpoints import ResolvedEndpoints, location_excluded
 from ..remote.errors import SSH_CONNECTION_ERRORS
-from ..remote.resolution import enrich_from_ssh_config, resolve_proxy_chain
+from ..remote.resolution import (
+    endpoint_location_excluded,
+    enrich_from_ssh_config,
+    resolve_proxy_chain,
+)
 from .endpoint_checks import observe_destination_endpoint, observe_source_endpoint
 from .severity import PreflightError
 from .ssh_checks import observe_standalone_endpoint
@@ -87,6 +91,7 @@ def check_all_syncs(
     resolved_endpoints: ResolvedEndpoints | None = None,
     dry_run: bool = False,
     mount_observations: dict[str, MountObservation] | None = None,
+    exclude_locations: Collection[str] = (),
 ) -> PreflightResult:
     """Check SSH endpoints, volumes, and syncs in staged passes.
 
@@ -97,7 +102,8 @@ def check_all_syncs(
     4. Syncs → ``sync_statuses`` (pure computation)
 
     When *only_syncs* is given, only those syncs (and the
-    volumes/endpoints they reference) are checked.
+    volumes/endpoints they reference) are checked.  SSH endpoints at
+    *exclude_locations* are never contacted.
 
     Progress callbacks use labels like ``"ssh:localhost"``,
     ``"vol:usb-backup"``, ``"src:photos-local"``, ``"dst:photos-backup"``
@@ -108,7 +114,14 @@ def check_all_syncs(
     syncs = _selected_syncs(config, only_syncs)
     needed_volumes = _needed_volumes(config, syncs, only_syncs)
 
-    ssh_statuses = _check_ssh_endpoints(config, needed_volumes, syncs, re, progress)
+    ssh_statuses = _check_ssh_endpoints(
+        config,
+        needed_volumes,
+        syncs,
+        re,
+        _standalone_candidates(config, needed_volumes, only_syncs, exclude_locations),
+        progress,
+    )
     volume_statuses = _check_volumes(
         config, needed_volumes, ssh_statuses, re, mount_observations or {}, progress
     )
@@ -130,6 +143,7 @@ def check_step_count(
     config: Config,
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    exclude_locations: Collection[str] = (),
 ) -> int:
     """How many progress steps :func:`check_all_syncs` reports.
 
@@ -145,7 +159,14 @@ def check_step_count(
     }
     return (
         len(volume_endpoints)
-        + len(_standalone_endpoints(config, volume_endpoints))
+        + len(
+            _standalone_endpoints(
+                _standalone_candidates(
+                    config, needed_volumes, only_syncs, exclude_locations
+                ),
+                volume_endpoints,
+            )
+        )
         + len(needed_volumes)
         + len({config.source_endpoint(sc).slug for sc in syncs.values()})
         + len({config.destination_endpoint(sc).slug for sc in syncs.values()})
@@ -181,6 +202,7 @@ def _check_ssh_endpoints(
     needed_volumes: set[str],
     syncs: dict[str, SyncConfig],
     resolved_endpoints: ResolvedEndpoints,
+    standalone_candidates: set[str],
     progress: _Progress,
 ) -> dict[str, SshEndpointStatus]:
     """Each endpoint is probed once, through a representative volume.
@@ -189,7 +211,7 @@ def _check_ssh_endpoints(
     reached through an alternate is probed (and reported) under that
     alternate. A location-excluded volume is never probed: its primary
     endpoint is reported as excluded unless another volume reaches it.
-    Endpoints no needed volume uses (bastions, alternates, orphans) are
+    The other *standalone_candidates* (bastions, alternates, orphans) are
     probed for reachability only.
     """
     by_endpoint = _volumes_by_ssh_endpoint(config, needed_volumes, resolved_endpoints)
@@ -217,16 +239,60 @@ def _check_ssh_endpoints(
         slug: progress.track(
             f"ssh:{slug}", partial(_check_standalone_endpoint, config, slug)
         )
-        for slug in _standalone_endpoints(config, volume_endpoints.keys())
+        for slug in _standalone_endpoints(
+            standalone_candidates, volume_endpoints.keys()
+        )
     }
     return {**volume_endpoints, **standalone}
 
 
 def _standalone_endpoints(
-    config: Config, volume_endpoints: Collection[str]
+    candidates: set[str], volume_endpoints: Collection[str]
 ) -> list[str]:
     """SSH endpoints probed for reachability only (sorted)."""
-    return sorted(set(config.ssh_endpoints) - set(volume_endpoints))
+    return sorted(candidates - set(volume_endpoints))
+
+
+def _standalone_candidates(
+    config: Config,
+    needed_volumes: set[str],
+    only_syncs: list[str] | None,
+    exclude_locations: Collection[str],
+) -> set[str]:
+    """Endpoints worth a reachability probe of their own.
+
+    Every endpoint, or under *only_syncs* those the selected volumes may be
+    reached through (candidates and their proxy hops); never one at an
+    excluded location, which nothing is meant to contact.
+    """
+    scope = (
+        _endpoints_of_volumes(config, needed_volumes)
+        if only_syncs
+        else set(config.ssh_endpoints)
+    )
+    return {
+        slug
+        for slug in scope
+        if not endpoint_location_excluded(config.ssh_endpoints[slug], exclude_locations)
+    }
+
+
+def _endpoints_of_volumes(config: Config, volume_slugs: set[str]) -> set[str]:
+    candidates = {
+        slug
+        for vol in (config.volumes[v] for v in volume_slugs)
+        if isinstance(vol, RemoteVolume)
+        for slug in (vol.ssh_endpoints or [vol.ssh_endpoint])
+    }
+    return _with_proxy_hops(config, candidates)
+
+
+def _with_proxy_hops(config: Config, slugs: set[str]) -> set[str]:
+    """*slugs* plus every bastion they jump through, transitively."""
+    hops = {
+        hop for slug in slugs for hop in config.ssh_endpoints[slug].proxy_jump_chain
+    } - slugs
+    return slugs | _with_proxy_hops(config, hops) if hops else slugs
 
 
 def _volumes_by_ssh_endpoint(

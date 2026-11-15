@@ -2,7 +2,7 @@
 
 import ipaddress
 import socket
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from functools import partial, reduce
 from pathlib import Path
 
@@ -182,15 +182,23 @@ def resolve_proxy_chain(
     return [config.ssh_endpoints[slug] for slug in server.proxy_jump_chain]
 
 
+def endpoint_location_excluded(
+    endpoint: SshEndpoint, exclude_locations: Collection[str]
+) -> bool:
+    """Whether *endpoint* is tagged with one of *exclude_locations*."""
+    return not set(exclude_locations).isdisjoint(endpoint.location_list)
+
+
 def _is_volume_excluded(
     config: Config,
     vol: RemoteVolume,
     endpoint_filter: EndpointFilter | None,
 ) -> bool:
     candidates = list(vol.ssh_endpoints) if vol.ssh_endpoints else [vol.ssh_endpoint]
-    excl = set(endpoint_filter.exclude_locations) if endpoint_filter else set()
+    excl = endpoint_filter.exclude_locations if endpoint_filter else []
     return bool(excl) and all(
-        excl & set(config.ssh_endpoints[slug].location_list) for slug in candidates
+        endpoint_location_excluded(config.ssh_endpoints[slug], excl)
+        for slug in candidates
     )
 
 

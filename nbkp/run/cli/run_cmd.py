@@ -154,7 +154,15 @@ def run(
         umount_results=umount_results,
     ) as (cfg, mount_observations):
         display = (
-            _HumanProgress(cfg, resolved, sync, progress, strictness, invocation)
+            _HumanProgress(
+                cfg,
+                resolved,
+                exclude_location or [],
+                sync,
+                progress,
+                strictness,
+                invocation,
+            )
             if output is OutputFormat.HUMAN
             else None
         )
@@ -173,6 +181,7 @@ def run(
             callbacks=display.sync_callbacks() if display else None,
             resolved_endpoints=resolved,
             mount_observations=mount_observations,
+            exclude_locations=exclude_location or [],
         )
     _print_outcome(
         pipeline, cfg, resolved, output, strictness, dry_run, hint, umount_results
@@ -196,12 +205,13 @@ class _HumanProgress:
         self,
         cfg: Config,
         resolved: ResolvedEndpoints,
+        exclude_locations: list[str],
         only_syncs: list[str] | None,
         progress: ProgressMode | None,
         strictness: Strictness,
         invocation: Invocation,
     ) -> None:
-        total = check_step_count(cfg, only_syncs, resolved)
+        total = check_step_count(cfg, only_syncs, resolved, exclude_locations)
         self._cfg = cfg
         self._resolved = resolved
         self._strictness = strictness

@@ -111,6 +111,7 @@ def troubleshoot(
             resolved_endpoints=resolved,
             mount_observations=mount_observations,
             strictness=strictness,
+            exclude_locations=exclude_location or [],
         )
         ctx = TroubleshootContext(
             config=cfg,

@@ -275,7 +275,7 @@ Consolidating all conditional logic in the error interpretation layer was consid
 
 When a remote volume declares multiple SSH endpoints, nbkp selects the best reachable one at runtime. This enables nomadic usage where the same config works across different network contexts (e.g. home LAN vs public internet).
 
-**Volume-level exclusion** — When `--exclude-location` is set and *all* candidate endpoints for a volume have a matching location tag, the volume is skipped entirely (no SSH connection is attempted). Syncs referencing the skipped volume are marked inactive with a `LOCATION_EXCLUDED` reason. This is the only hard filter — it prevents slow SSH timeouts when a location is known to be unreachable.
+**Volume-level exclusion** — When `--exclude-location` is set and *all* candidate endpoints for a volume have a matching location tag, the volume is skipped entirely (no SSH connection is attempted). Syncs referencing the skipped volume are marked inactive with a `LOCATION_EXCLUDED` reason. This is the only hard filter — it prevents slow SSH timeouts when a location is known to be unreachable. Preflight's reachability-only probes of the other endpoints (bastions, unselected alternates, unused endpoints) likewise skip every endpoint tagged with an excluded location, and under `--sync` cover only the endpoints the selected syncs' volumes can be reached through.
 
 **Per-endpoint selection** — For volumes that are not excluded, the best endpoint is selected using a soft filter chain:
 

@@ -6,7 +6,7 @@ tests.  Display/output, mount lifecycle, and config loading are the
 caller's responsibility.
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -77,6 +77,7 @@ def check_and_run(
     callbacks: SyncCallbacks | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     mount_observations: dict[str, MountObservation] | None = None,
+    exclude_locations: Collection[str] = (),
 ) -> PipelineResult:
     """Run preflight checks, then execute syncs if no fatal errors.
 
@@ -104,6 +105,7 @@ def check_and_run(
         resolved_endpoints=resolved_endpoints,
         dry_run=dry_run,
         mount_observations=mount_observations,
+        exclude_locations=exclude_locations,
     )
     if on_checks_done is not None:
         on_checks_done(preflight)
