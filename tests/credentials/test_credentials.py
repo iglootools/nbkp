@@ -2,6 +2,7 @@ import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
+from keyring import errors as keyring_errors
 
 from nbkp.config import (
     Config,
@@ -40,6 +41,25 @@ class TestRetrievePassphraseKeyring:
         ):
             retrieve_passphrase("disk1", CredentialProvider.KEYRING)
         assert excinfo.value.reason == CredentialErrorReason.NOT_FOUND
+
+    @pytest.mark.parametrize(
+        "backend_error",
+        [
+            keyring_errors.NoKeyringError("no backend"),
+            keyring_errors.KeyringLocked("x"),
+        ],
+    )
+    def test_backend_error_becomes_credential_error(
+        self, backend_error: Exception
+    ) -> None:
+        mock_keyring = MagicMock()
+        mock_keyring.get_password.side_effect = backend_error
+        with (
+            patch.dict("sys.modules", {"keyring": mock_keyring}),
+            pytest.raises(CredentialError) as excinfo,
+        ):
+            retrieve_passphrase("disk1", CredentialProvider.KEYRING)
+        assert excinfo.value.reason == CredentialErrorReason.BACKEND_UNAVAILABLE
 
     def test_raises_when_keyring_not_installed(self) -> None:
         with (
