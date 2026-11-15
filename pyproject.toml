@@ -174,11 +174,18 @@ forbidden_modules = [
   "nbkp.*.cli",
 ]
 ignore_imports = [
-  # Each module's cli/ sub-app and output (rendering) code sit above the core.
+  # Each module's cli/ sub-app sits above the core.
   "nbkp.*.cli.** -> **",
   "nbkp.*.cli -> **",
-  "nbkp.**.output.** -> **",
-  "nbkp.**.output -> **",
+  # Output (rendering) modules may use Rich and the shared presentation
+  # helpers, but not Typer, the command wiring or the CLI. That core code
+  # does not import its output modules (and so never loads Rich) is checked
+  # by tests/test_core_imports.py: an ignored edge cannot be checked here.
+  "nbkp.**.output.** -> rich",
+  "nbkp.**.output -> rich",
+  "nbkp.**.output.** -> nbkp.clidisplay",
+  "nbkp.**.output.** -> nbkp.clidisplay.**",
+  "nbkp.**.output -> nbkp.clidisplay",
   # Test and demo fixtures, not runtime code.
   "nbkp.**.testkit.** -> **",
   "nbkp.**.testkit -> **",
