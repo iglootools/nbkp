@@ -7,6 +7,7 @@ import pytest
 
 from nbkp.config import (
     Config,
+    ConfigValidationCode,
     LocalVolume,
     RemoteVolume,
     RsyncOptions,
@@ -15,6 +16,10 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+
+
+def _error_types(error: pydantic.ValidationError) -> set[str]:
+    return {e["type"] for e in error.errors()}
 
 
 class TestLocalVolume:
@@ -180,7 +185,10 @@ class TestConfig:
 
 class TestCrossServerValidation:
     def test_cross_server_remote_to_remote_rejected(self) -> None:
-        with pytest.raises(pydantic.ValidationError):
+        with pytest.raises(
+            pydantic.ValidationError,
+            check=lambda e: _error_types(e) == {ConfigValidationCode.CROSS_SERVER_SYNC},
+        ):
             Config(
                 ssh_endpoints={
                     "a": SshEndpoint(slug="a", host="a.com"),
@@ -256,33 +264,24 @@ class TestSlugValidation:
         vol = LocalVolume(slug="nas2", path="/mnt")
         assert vol.slug == "nas2"
 
-    def test_invalid_uppercase(self) -> None:
-        with pytest.raises(pydantic.ValidationError):
-            LocalVolume(slug="MyDrive", path="/mnt")
-
-    def test_invalid_underscore(self) -> None:
-        with pytest.raises(pydantic.ValidationError):
-            LocalVolume(slug="my_drive", path="/mnt")
-
-    def test_invalid_spaces(self) -> None:
-        with pytest.raises(pydantic.ValidationError):
-            LocalVolume(slug="my drive", path="/mnt")
-
-    def test_invalid_trailing_hyphen(self) -> None:
-        with pytest.raises(pydantic.ValidationError):
-            LocalVolume(slug="drive-", path="/mnt")
-
-    def test_invalid_leading_hyphen(self) -> None:
-        with pytest.raises(pydantic.ValidationError):
-            LocalVolume(slug="-drive", path="/mnt")
-
-    def test_invalid_empty(self) -> None:
-        with pytest.raises(pydantic.ValidationError):
-            LocalVolume(slug="", path="/mnt")
-
-    def test_invalid_too_long(self) -> None:
-        with pytest.raises(pydantic.ValidationError):
-            LocalVolume(slug="a" * 51, path="/mnt")
+    @pytest.mark.parametrize(
+        ("slug", "error_type"),
+        [
+            ("MyDrive", "string_pattern_mismatch"),
+            ("my_drive", "string_pattern_mismatch"),
+            ("my drive", "string_pattern_mismatch"),
+            ("drive-", "string_pattern_mismatch"),
+            ("-drive", "string_pattern_mismatch"),
+            ("", "string_too_short"),
+            ("a" * 51, "string_too_long"),
+        ],
+    )
+    def test_invalid(self, slug: str, error_type: str) -> None:
+        with pytest.raises(pydantic.ValidationError) as excinfo:
+            LocalVolume(slug=slug, path="/mnt")
+        assert [(e["loc"], e["type"]) for e in excinfo.value.errors()] == [
+            (("slug",), error_type)
+        ]
 
     def test_valid_max_length(self) -> None:
         vol = LocalVolume(slug="a" * 50, path="/mnt")
