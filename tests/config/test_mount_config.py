@@ -117,6 +117,15 @@ class TestVolumePathRequirement:
             LocalVolume(slug="data")
         assert _error_types(excinfo.value) == {ConfigValidationCode.PATH_REQUIRED}
 
+    def test_local_path_must_be_absolute(self) -> None:
+        with pytest.raises(ValidationError) as excinfo:
+            LocalVolume(slug="data", path="backups")
+        assert _error_types(excinfo.value) == {ConfigValidationCode.RELATIVE_PATH}
+
+    def test_local_tilde_path_is_absolute_once_expanded(self) -> None:
+        vol = LocalVolume(slug="data", path="~/backups")
+        assert vol.path is not None and vol.path.startswith("/")
+
     def test_remote_path_optional_with_mount(self) -> None:
         vol = RemoteVolume(
             slug="nas-usb",

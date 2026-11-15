@@ -266,6 +266,7 @@ Checked when the config is loaded, before anything runs:
 - Each sync endpoint is the destination of at most one sync.
 - A remote-to-remote sync must stay on one server: both volumes must use the same primary `ssh-endpoint`.
 - A volume without a `mount` section must declare `path`.
+- A local volume's `path` must be absolute once `~` is expanded: a relative path would resolve against whichever directory nbkp is started from.
 - `credential-command` is required when `credential-provider` is `command`, and must contain the `{id}` placeholder.
 - Every field must have its documented type; nothing is silently coerced. An unquoted number where a string is expected (e.g. `subdir: 2024`) is rejected rather than ignored — quote it (`subdir: "2024"`). `filters` must be a list, even for a single rule (`filters: ["- *.tmp"]`, not `filters: "- *.tmp"`).
 

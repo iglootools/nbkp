@@ -25,6 +25,7 @@ class ConfigValidationCode(StrEnum):
     CREDENTIAL_COMMAND_REQUIRED = "credential-command-required"
     CREDENTIAL_COMMAND_PLACEHOLDER = "credential-command-placeholder"
     PATH_REQUIRED = "path-required"
+    RELATIVE_PATH = "relative-path"
     INVALID_FILTER = "invalid-filter"
     FILTERS_NOT_A_LIST = "filters-not-a-list"
     UNKNOWN_DIR_MERGE_OPTION = "unknown-dir-merge-option"

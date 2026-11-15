@@ -88,6 +88,18 @@ class LocalVolume(_BaseModel):
             return v
         return str(Path(v).expanduser())
 
+    @field_validator("path", mode="after")
+    @classmethod
+    def _require_absolute_path(cls, v: str | None) -> str | None:
+        # A relative path would resolve against whichever directory nbkp is
+        # started from, so the volume would move between a shell and a timer.
+        if v is not None and not Path(v).is_absolute():
+            raise config_error(
+                ConfigValidationCode.RELATIVE_PATH,
+                f"path must be absolute (or start with ~), got {v!r}",
+            )
+        return v
+
     @model_validator(mode="after")
     def _require_path_without_mount(self) -> LocalVolume:
         _validate_path_requirement(self)
