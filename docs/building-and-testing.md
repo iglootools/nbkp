@@ -7,7 +7,7 @@ Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/Q
 Run automated tests and checks (no external dependencies):
 ```bash
 # mise tasks
-mise run check              # Run all checks: format-check + lint + type-check + lock-check + lock-check-uv + clidocs-check + configdocs-check + depgraph-check + boundaries-check
+mise run check              # Run all checks: format-check + lint + lint-shell + type-check + lock-check + lock-check-uv + clidocs-check + configdocs-check + depgraph-check + boundaries-check
 mise run check-all          # Run all checks: regular checks + all tests
 
 mise run test-all           # All tests
@@ -18,13 +18,14 @@ mise run test-e2e                # End-to-end sync tests (Docker)
 mise run test-e2e-docker           # End-to-end sync tests (Docker only)
 
 mise run test-integration   # All integration tests (Docker + filesystem)
-mise run test-integration-docker  # All Docker-based tests (e2e + integration)
+mise run test-integration-docker  # Docker integration tests (tests/integration_docker/; not e2e)
 mise run test-integration-docker-btrfs   # Local btrfs tests inside Docker (privileged)
 mise run test-integration-fs     # Filesystem integration tests
 
 mise run format             # ruff format (rewrites files)
 mise run format-check       # ruff format --check (verifies only; what check runs)
 mise run lint               # ruff check
+mise run lint-shell         # shellcheck on the tracked shell scripts
 mise run type-check         # pyright
 mise run lock-check         # check mise.lock is up to date
 mise run lock-check-uv      # check uv.lock is consistent with pyproject.toml
@@ -47,9 +48,9 @@ uv run pytest tests/integration_fs/ -n auto -v                       # Filesyste
 uv run pytest tests/integration_docker/ -n auto -v                   # Docker integration tests
 uv run pytest tests/ -v                                              # All tests
 uv run ruff format .                                                 # formatting
-uv run ruff check nbkp/ tests/                                       # linting
-uv run pyright nbkp/                                                 # type-checking
-uv run pytest tests/test_ssh.py::TestBuildSshBaseArgs::test_full -v  # run a single test
+uv run ruff check nbkp/ tests/ build-scripts/                        # linting
+uv run pyright nbkp/ build-scripts/                                  # type-checking
+uv run pytest tests/remote/test_ssh.py::TestBuildSshBaseArgs::test_full -v  # run a single test
 ```
 
 `uv run` is the prefix to use rather than a bare `pytest`/`ruff`. It resolves the

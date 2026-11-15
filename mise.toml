@@ -185,7 +185,7 @@ run = [
 ]
 
 [tasks.test-integration-docker]
-description = "Run all Docker-based tests (e2e + integration)"
+description = "Run the Docker integration tests (tests/integration_docker/; e2e is test-e2e)"
 # -n auto: session-scoped container fixtures are instantiated once per xdist worker,
 # so each worker spins up its own privileged container. Those containers share the
 # host VM kernel's loop-device pool and device-mapper namespace, so the testkit is
