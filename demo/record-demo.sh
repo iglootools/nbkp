@@ -5,8 +5,8 @@
 #   ./demo/record-demo.sh [VERSION]
 #
 # Requirements:
-#   brew install asciinema agg pv   # macOS
-#   # or: pip install asciinema && cargo install agg
+#   mise install       # asciinema and agg, pinned in mise.toml [tools]
+#   brew install pv    # macOS, for simulated typing (not managed by mise)
 #
 # Output:
 #   demo/demo.cast  — asciinema recording
