@@ -13,5 +13,5 @@ docker build -t nbkp-btrfs-test -f nbkp/remote/testkit/dockerbuild/Dockerfile.bt
 # going through `mise deps`: there is no mise in the image, so neither python.uv_venv_auto
 # nor [deps.uv] exists there. Do not "harmonize" it with the host-side tasks.
 docker run --rm --privileged \
-  -v $(pwd):/app -v /app/.venv -w /app nbkp-btrfs-test \
+  -v "$(pwd):/app" -v /app/.venv -w /app nbkp-btrfs-test \
   uv run --frozen pytest tests/integration_docker/test_btrfs_local.py -v

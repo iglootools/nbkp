@@ -2,6 +2,6 @@
 #MISE description="Clean up build artifacts"
 set -euo pipefail
 
-rm -rf build/ dist/ *.egg-info/
+rm -rf build/ dist/ ./*.egg-info/
 find . -type d -name __pycache__ -delete
 find . -type f -name "*.pyc" -delete

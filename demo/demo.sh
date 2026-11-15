@@ -16,7 +16,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=demo-magic.sh
+# shellcheck source-path=SCRIPTDIR source=demo-magic.sh
 source "$SCRIPT_DIR/demo-magic.sh"
 
 # Auto-advance (no ENTER required) for scripted recording

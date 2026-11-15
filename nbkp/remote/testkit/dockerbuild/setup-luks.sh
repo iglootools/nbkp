@@ -107,7 +107,7 @@ if command -v cryptsetup >/dev/null 2>&1; then
         # `luks-<uuid>` (lowercase, no crypttab), so the fstab device must
         # reference that name.  x-udisks-auth + noauto/nofail mark it as a
         # udisks-managed, non-boot mount.
-        LUKS_UUID_LC=$(echo "$LUKS_UUID" | tr 'A-Z' 'a-z')
+        LUKS_UUID_LC=$(echo "$LUKS_UUID" | tr '[:upper:]' '[:lower:]')
         echo "/dev/mapper/luks-${LUKS_UUID_LC} $BTRFS_ENCRYPTED_PATH btrfs user_subvol_rm_allowed,noauto,nofail,x-udisks-auth 0 0" \
             >> /etc/fstab
 

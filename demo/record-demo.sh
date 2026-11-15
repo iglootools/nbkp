@@ -22,6 +22,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VERSION="${1:-$(uv run --no-sync python -c 'import nbkp; print(nbkp.__version__)' 2>/dev/null || echo "")}"
 TITLE="nbkp${VERSION:+ v$VERSION} demo"
 CAST="$SCRIPT_DIR/demo.cast"
+# shellcheck disable=SC2034  # for the GIF conversion below, commented out until re-enabled
 GIF="$SCRIPT_DIR/demo.gif"
 
 echo "Syncing dependencies..."
