@@ -1,3 +1,7 @@
+import codecs
+import io
+import locale
+import os
 import subprocess
 from collections.abc import Callable
 from enum import Enum
@@ -202,27 +206,46 @@ def run_rsync(
         return _run_streaming(cmd, on_output)
 
 
+# os.read returns as soon as any output is available, so progress updates still
+# show up immediately; the size only caps how much one forward call handles.
+# Reading one character per call cost a flushing echo per character: 10 MB of
+# --progress output took ~40 s to forward, while rsync stalled on the full pipe.
+_STREAM_CHUNK_SIZE = 64 * 1024
+
+
 def _run_streaming(
     cmd: list[str], on_output: Callable[[str], None]
 ) -> subprocess.CompletedProcess[str]:
     """Run *cmd*, forwarding its merged stdout/stderr to *on_output*."""
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-    )
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     assert proc.stdout is not None
-    stdout = proc.stdout
-    # Stream one character at a time so rsync progress updates that rely on
-    # carriage returns are visible immediately; read(1) returns "" at EOF.
-    output_chunks = [_forward(ch, on_output) for ch in iter(lambda: stdout.read(1), "")]
+    fd = proc.stdout.fileno()
+    decoder = _text_decoder()
+    raw_chunks = iter(lambda: os.read(fd, _STREAM_CHUNK_SIZE), b"")
+    output_chunks = [
+        *(_forward(decoder.decode(raw), on_output) for raw in raw_chunks),
+        _forward(decoder.decode(b"", final=True), on_output),
+    ]
+    proc.stdout.close()
     return subprocess.CompletedProcess(
         cmd, proc.wait(), stdout="".join(output_chunks), stderr=""
     )
 
 
+def _text_decoder() -> io.IncrementalNewlineDecoder:
+    """Decode bytes exactly as a ``text=True`` pipe would.
+
+    Same encoding and strictness as ``io.TextIOWrapper``'s defaults, and the
+    same universal-newline translation (``\\r\\n`` and ``\\r`` become ``\\n``),
+    including a multi-byte character or a ``\\r\\n`` split across two reads.
+    """
+    encoding = locale.getpreferredencoding(False)
+    return io.IncrementalNewlineDecoder(
+        codecs.getincrementaldecoder(encoding)(), translate=True
+    )
+
+
 def _forward(chunk: str, on_output: Callable[[str], None]) -> str:
-    on_output(chunk)
+    if chunk:
+        on_output(chunk)
     return chunk
