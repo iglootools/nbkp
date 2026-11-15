@@ -10,14 +10,14 @@ from ...common import list_snapshots
 from ...errors import SnapshotOperationError
 from ...hardlinks import prune_snapshots as hl_prune_snapshots
 from ...models import PruneResult, SnapshotResultError, SnapshotSkipReason
-from .common import max_snapshots, preflight_disposition
+from .common import preflight_disposition
 
 type _PruneFn = Callable[..., list[str]]
 
 
 def _config_skip_reason(dst_ep: SyncEndpoint) -> SnapshotSkipReason | None:
     """Skip reason that follows from the config alone, before preflight."""
-    match (dst_ep.snapshot_mode, max_snapshots(dst_ep)):
+    match (dst_ep.snapshot_mode, dst_ep.max_snapshots):
         case ("none", _):
             return SnapshotSkipReason.NO_SNAPSHOTS
         case (_, None):
@@ -122,7 +122,7 @@ def _process_candidate(
         if config_skip is not None
         else preflight_disposition(status, strictness)
     )
-    match (skip_reason, error, _prune_backend(dst_ep), max_snapshots(dst_ep)):
+    match (skip_reason, error, _prune_backend(dst_ep), dst_ep.max_snapshots):
         case (None, None, prune_fn, int() as limit) if prune_fn is not None:
             return _execute_prune(
                 slug, status.config, prune_fn, limit, config, re, dry_run

@@ -5,7 +5,7 @@ from ....remote.endpoints import ResolvedEndpoints
 from ...common import list_snapshots, read_latest_symlink
 from ...errors import SnapshotOperationError
 from ...models import ShowResult, SnapshotResultError, SnapshotSkipReason
-from .common import max_snapshots, preflight_disposition
+from .common import preflight_disposition
 
 
 def _disposition(
@@ -34,7 +34,7 @@ def _read_snapshots(
             snapshot_mode=dst_ep.snapshot_mode,
             snapshots=tuple(list_snapshots(status.config, config, re)),
             latest=read_latest_symlink(status.config, config, resolved_endpoints=re),
-            max_snapshots=max_snapshots(dst_ep),
+            max_snapshots=dst_ep.max_snapshots,
         )
     except SnapshotOperationError as e:
         return ShowResult(
@@ -42,7 +42,7 @@ def _read_snapshots(
             snapshot_mode=dst_ep.snapshot_mode,
             snapshots=(),
             latest=None,
-            max_snapshots=max_snapshots(dst_ep),
+            max_snapshots=dst_ep.max_snapshots,
             error=SnapshotResultError.from_operation(e),
         )
 
@@ -64,7 +64,7 @@ def _process_candidate(
                 snapshot_mode=dst_ep.snapshot_mode,
                 snapshots=(),
                 latest=None,
-                max_snapshots=max_snapshots(dst_ep),
+                max_snapshots=dst_ep.max_snapshots,
                 skip_reason=skip_reason,
                 error=error,
             )

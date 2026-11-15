@@ -89,3 +89,15 @@ class SyncEndpoint(_BaseModel):
             return "hard-link"
         else:
             return "none"
+
+    @property
+    def max_snapshots(self) -> int | None:
+        """Retention limit of the enabled snapshot mode (``None``: unlimited or no
+        snapshots)."""
+        match self.snapshot_mode:
+            case "btrfs":
+                return self.btrfs_snapshots.max_snapshots
+            case "hard-link":
+                return self.hard_link_snapshots.max_snapshots
+            case "none":
+                return None

@@ -1,20 +1,8 @@
 """Shared candidate classification for ``snapshots show`` and ``prune``."""
 
-from ....config.protocol.sync_endpoint import SyncEndpoint
 from ....policy import Strictness
 from ....preflight import SyncStatus
 from ...models import SnapshotErrorKind, SnapshotResultError, SnapshotSkipReason
-
-
-def max_snapshots(dst_ep: SyncEndpoint) -> int | None:
-    """The retention limit of a sync endpoint (``None``: unlimited / none)."""
-    match dst_ep.snapshot_mode:
-        case "btrfs":
-            return dst_ep.btrfs_snapshots.max_snapshots
-        case "hard-link":
-            return dst_ep.hard_link_snapshots.max_snapshots
-        case _:
-            return None
 
 
 def _preflight_error(

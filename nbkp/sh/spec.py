@@ -44,13 +44,7 @@ class SyncSpec:
 
     @property
     def max_snapshots(self) -> int | None:
-        match self.dst_ep.snapshot_mode:
-            case "btrfs":
-                return self.dst_ep.btrfs_snapshots.max_snapshots
-            case "hard-link":
-                return self.dst_ep.hard_link_snapshots.max_snapshots
-            case _:
-                return None
+        return self.dst_ep.max_snapshots
 
 
 def build_sync_spec(

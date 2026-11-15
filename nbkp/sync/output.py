@@ -44,7 +44,7 @@ def _snapshot_preview_commands(
             return (
                 "btrfs",
                 cmds,
-                _retention_display(dst_ep.btrfs_snapshots.max_snapshots),
+                _retention_display(dst_ep.max_snapshots),
             )
         case "hard-link":
             cmds = [
@@ -54,7 +54,7 @@ def _snapshot_preview_commands(
             return (
                 "hard-link",
                 cmds,
-                _retention_display(dst_ep.hard_link_snapshots.max_snapshots),
+                _retention_display(dst_ep.max_snapshots),
             )
         case "none":
             return None
