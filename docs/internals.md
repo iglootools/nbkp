@@ -70,7 +70,7 @@ Regardless of route, nbkp **verifies** the result rather than trusting the confi
 - **keyring** (default): `keyring.get_password("nbkp", passphrase_id)` — uses macOS Keychain or Linux SecretService. Store via `keyring set nbkp <passphrase-id>`.
 - **prompt**: interactive password prompt via Typer's hidden input.
 - **env**: reads `NBKP_PASSPHRASE_<ID>` environment variable (uppercased, hyphens replaced with underscores).
-- **command**: runs a configurable command template (e.g. `["pass", "show", "nbkp/{id}"]`) with `{id}` replaced by the passphrase-id.
+- **command**: runs a configurable command template (e.g. `["pass", "show", "nbkp/{id}"]`) with `{id}` replaced by the passphrase-id, and uses the first line of its output, without the line break, as the passphrase.
 
 Passphrases are cached in memory during a single run, so the user is only prompted once per unique passphrase-id even if multiple volumes share it.
 

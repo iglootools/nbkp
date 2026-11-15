@@ -101,7 +101,7 @@ Providers:
 - **keyring**: `keyring.get_password("nbkp", passphrase_id)` — uses macOS Keychain or Linux SecretService. Requires `pip install nbkp[keyring]`.
 - **prompt**: interactive hidden input prompt.
 - **env**: reads `NBKP_PASSPHRASE_<ID>` (uppercased, hyphens → underscores).
-- **command**: runs command template with `{id}` replaced by passphrase-id.
+- **command**: runs command template with `{id}` replaced by passphrase-id. The first line of its output, without the line break, is the passphrase (the `pass` convention: later lines hold metadata); spaces are kept.
 <!-- END CONFIGREF:VOLUMES -->
 
 ## SSH Endpoints
