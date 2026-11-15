@@ -26,8 +26,6 @@ from nbkp.config import (
 from nbkp.preflight.checks import (
     check_all_syncs,
     check_step_count,
-    check_sync,
-    check_volume,
 )
 from nbkp.preflight.probes import (
     check_endpoint_sentinel,
@@ -60,6 +58,7 @@ from nbkp.preflight.status.volume import (
     VolumeError,
     VolumeStatus,
 )
+from nbkp.preflight.testkit import check_sync, check_volume
 from nbkp.preflight.volume_checks import observe_ssh_endpoint
 from nbkp.remote.dispatch import check_command_available
 from nbkp.remote.endpoints import EndpointFilter, ResolvedEndpoint, ResolvedEndpoints

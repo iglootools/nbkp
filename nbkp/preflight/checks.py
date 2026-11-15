@@ -1,8 +1,7 @@
 """Sync check orchestration.
 
 Composes SSH endpoint diagnostics, volume diagnostics, endpoint
-diagnostics, and capabilities into the primary entry points:
-``check_sync`` and ``check_all_syncs``.
+diagnostics, and capabilities into the entry point ``check_all_syncs``.
 
 Four-phase check hierarchy (each level gates the next):
 
@@ -663,36 +662,3 @@ def _sync_statuses(
         )
         for slug, sync in syncs.items()
     }
-
-
-def check_sync(
-    sync: SyncConfig,
-    config: Config,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-    dry_run: bool = False,
-) -> SyncStatus:
-    """Thin wrapper around ``check_all_syncs`` for single-sync usage.
-
-    Runs the full pipeline (volume checks, diagnostics, status) for one sync.
-    Primarily used in tests to exercise the real code path.
-    """
-    result = check_all_syncs(
-        config,
-        only_syncs=[sync.slug],
-        resolved_endpoints=resolved_endpoints,
-        dry_run=dry_run,
-    )
-    return result.sync_statuses[sync.slug]
-
-
-def check_volume(
-    volume: Volume,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-) -> VolumeStatus:
-    """Kept for use in integration/docker tests that call it directly."""
-    re = resolved_endpoints or {}
-    ssh_status = SshEndpointStatus.from_diagnostics(
-        slug=_ssh_endpoint_slug(volume, re),
-        diagnostics=observe_ssh_endpoint(volume, re),
-    )
-    return _check_volume(volume, ssh_status, re, None)

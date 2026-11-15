@@ -26,7 +26,8 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.preflight import SshEndpointError, check_volume
+from nbkp.preflight import SshEndpointError
+from nbkp.preflight.testkit import check_volume
 from nbkp.remote.fabricssh import (
     run_remote_command as fabric_run_remote,
 )
