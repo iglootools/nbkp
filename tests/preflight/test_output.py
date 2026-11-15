@@ -30,6 +30,8 @@ from nbkp.preflight import (
     VolumeStatus,
 )
 from nbkp.preflight.output import print_human_troubleshoot
+from nbkp.preflight.output.check import _format_latest
+from nbkp.preflight.status.endpoint import LatestSymlinkState
 
 
 def _make_console() -> tuple[Console, StringIO]:
@@ -349,3 +351,27 @@ class TestTroubleshootLocationExcluded:
         output = buf.getvalue()
         assert SshEndpointError.LOCATION_EXCLUDED.value in output
         assert "--exclude-location" in output
+
+
+class TestCheckLatestColumn:
+    def test_invalid_target_shown_as_error(self) -> None:
+        text = _format_latest(
+            LatestSymlinkState(
+                exists=True, raw_target="snapshots/foo", target_valid=False
+            )
+        )
+        assert str(text) == "✗latest → snapshots/foo"
+
+    def test_valid_target_shown_as_ok(self) -> None:
+        target = "snapshots/2026-03-06T14:30:00.000Z"
+        text = _format_latest(
+            LatestSymlinkState(exists=True, raw_target=target, target_valid=True)
+        )
+        assert str(text) == f"✓latest → {target}"
+
+    def test_devnull_shown_as_ok(self) -> None:
+        text = _format_latest(LatestSymlinkState(exists=True, raw_target="/dev/null"))
+        assert str(text) == "✓latest → /dev/null"
+
+    def test_missing_shown_as_error(self) -> None:
+        assert str(_format_latest(LatestSymlinkState(exists=False))) == "✗latest"
