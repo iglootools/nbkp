@@ -290,13 +290,6 @@ run = "uv run --no-sync ruff check nbkp/ tests/ build-scripts/"
 description = "Run pyright type checking"
 run = "uv run --no-sync pyright nbkp/ build-scripts/"
 
-[tasks.lock-check]
-description = "Check that mise.lock is up to date"
-# The body lives in scripts/lock-check.sh: it needs `set -euo pipefail`, a trap, a subshell
-# and a scratch directory, and the reasoning behind each of those is worth more room than a
-# TOML string affords. See that file before changing anything here.
-run = "./scripts/lock-check.sh"
-
 # The uv.lock counterpart of lock-check, and the replacement for `poetry check --lock`:
 # asserts uv.lock is consistent with pyproject.toml. Distinct from UV_LOCKED in CI, which
 # asserts a sync would not *change* the lock. --check does not write.

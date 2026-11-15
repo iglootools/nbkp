@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Check that mise.lock is up to date with mise.toml.
+#MISE description="Check that mise.lock is up to date with mise.toml"
 #
 # Shared across iglootools projects. The canonical copy is scripts/lock-check.sh in
-# iglootools/common, alongside the guideline that explains it; project copies are
-# verbatim, so fix it there and re-copy rather than editing one in place.
+# iglootools/common, alongside the guideline that explains it. A project copies it verbatim to
+# mise-tasks/lock-check, executable, where mise picks it up as the lock-check task; fix it here
+# and re-copy rather than editing one copy in place.
 #
 # Unlike `uv lock --check`, mise has no read-only freshness check, so this regenerates the
 # lockfile and compares. Doing that naively is a trap; each guard below was earned by hitting
@@ -30,7 +31,7 @@
 #
 # Usage:
 #     mise run lock-check        # the usual entry point
-#     scripts/lock-check.sh      # equivalent, runs from any directory in the repo
+#     mise-tasks/lock-check      # equivalent, runs from any directory in the repo
 
 set -euo pipefail
 
