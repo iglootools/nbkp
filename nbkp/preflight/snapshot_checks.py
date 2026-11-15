@@ -1,4 +1,5 @@
 from ..config import Volume
+from ..fsprotocol import NO_HARDLINK_FILESYSTEMS
 from ..remote.dispatch import run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 from .probes import (
@@ -22,9 +23,6 @@ def check_btrfs_filesystem(
     return result.stdout.strip() == "btrfs" if result.returncode == 0 else None
 
 
-_NO_HARDLINK_FILESYSTEMS = {"vfat", "msdos", "exfat"}
-
-
 def check_hardlink_support(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
@@ -36,7 +34,7 @@ def check_hardlink_support(
     )
     return (
         result.returncode != 0  # Cannot determine; assume supported
-        or result.stdout.strip() not in _NO_HARDLINK_FILESYSTEMS
+        or result.stdout.strip() not in NO_HARDLINK_FILESYSTEMS
     )
 
 

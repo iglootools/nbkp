@@ -18,6 +18,7 @@ from ..config import LocalVolume, RemoteVolume
 from ..fsprotocol import (
     DESTINATION_SENTINEL,
     LATEST_LINK,
+    NO_HARDLINK_FILESYSTEMS,
     SNAPSHOTS_DIR,
     SOURCE_SENTINEL,
     STAGING_DIR,
@@ -34,8 +35,6 @@ from .commands import (
 )
 from .spec import SyncSpec
 
-# Mirrors nbkp.preflight.snapshot_checks._NO_HARDLINK_FILESYSTEMS
-_NO_HARDLINK_FILESYSTEMS = ("vfat", "msdos", "exfat")
 # Tools the snapshot steps run on the destination host.
 _BTRFS_TOOLS = ("btrfs", "stat", "findmnt", "readlink", "ls", "ln")
 _HARD_LINK_TOOLS = ("stat", "readlink", "ls", "ln", "mkdir", "rm")
@@ -236,7 +235,7 @@ def _hardlink_support_check(spec: SyncSpec) -> str:
         ["stat", "-f", "-c", "%T", spec.dst_vol_path],
         spec.resolved_endpoints,
     )
-    rejected = "|".join(_NO_HARDLINK_FILESYSTEMS)
+    rejected = "|".join(NO_HARDLINK_FILESYSTEMS)
     return guard(
         f"! nbkp_matches {fs_type} '{rejected}'",
         f"destination volume {spec.dst_vol_path} does not support hard links",
