@@ -44,8 +44,8 @@ git show :mise.toml > "$tmp/mise.toml"
 git show :mise.lock > "$tmp/staged.lock"
 cp "$tmp/staged.lock" "$tmp/mise.lock"
 
-# MISE_TRUSTED_CONFIG_PATHS rather than `mise trust`, so the scratch config is not added to
-# the user's persistent trust store on every run.
+# The scratch config is trusted through MISE_TRUSTED_CONFIG_PATHS rather than `mise trust`,
+# so it is not added to the user's persistent trust store on every run.
 (
     cd "$tmp"
     MISE_TRUSTED_CONFIG_PATHS="$tmp" env -u MISE_PYTHON_VERSION mise lock
