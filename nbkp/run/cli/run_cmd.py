@@ -35,6 +35,7 @@ from ...policy import Strictness
 from ...preflight import PreflightResult, SyncStatus, check_step_count
 from ...preflight.output import print_human_check
 from ...preflight.severity import PreflightError
+from ...preflight.strictness import is_fatal
 from ...remote.endpoints import NetworkType, ResolvedEndpoints
 from ...sync import ProgressMode, SyncResult, result_severity
 from ...sync.output import build_human_results_sections
@@ -320,8 +321,7 @@ def _fatal_sync_errors(
     return {
         slug: sorted(e.value for e in s.errors)
         for slug, s in sync_statuses.items()
-        if not s.active
-        and (strictness is Strictness.IGNORE_NONE or not s.is_expected_inactive())
+        if is_fatal(s, strictness)
     }
 
 
