@@ -5,10 +5,10 @@ from ..config.loader import ConfigErrorReason
 from ..config.protocol import SyncConfig
 
 
-def _build_graph(
+def sync_predecessors(
     syncs: dict[str, SyncConfig],
 ) -> dict[str, set[str]]:
-    """Build dependency graph: node -> set of upstream syncs.
+    """Direct upstream syncs for each sync slug.
 
     A sync B depends on sync A when A's destination endpoint
     slug matches B's source endpoint slug.
@@ -23,16 +23,9 @@ def _build_graph(
     }
 
 
-def sync_predecessors(
-    syncs: dict[str, SyncConfig],
-) -> dict[str, set[str]]:
-    """Direct upstream syncs for each sync slug."""
-    return _build_graph(syncs)
-
-
 def sort_syncs(syncs: dict[str, SyncConfig]) -> list[str]:
     """Raises ``ConfigError`` when a dependency cycle is detected."""
-    graph = _build_graph(syncs)
+    graph = sync_predecessors(syncs)
 
     ts = TopologicalSorter(graph)
     try:
