@@ -279,13 +279,13 @@ When a remote volume declares multiple SSH endpoints, nbkp selects the best reac
 
 **Per-endpoint selection** — For volumes that are not excluded, the best endpoint is selected using a soft filter chain:
 
-1. Gather candidate endpoints from the volume's endpoint list
+1. Gather candidate endpoints: the volume's `ssh-endpoints` list, in order, or its `ssh-endpoint` alone when no list is set
 2. Exclude endpoints whose host cannot be DNS-resolved
 3. If `--exclude-location` is set, remove endpoints with a matching location tag
 4. If `--location` is set, prefer endpoints with a matching location tag
 5. If `--network` is set, prefer endpoints with matching network type (`private` for LAN, `public` for WAN)
 
-Each filter step is a **soft filter**: if it would eliminate all remaining candidates, it is silently skipped and the previous candidate list is preserved. This means filters degrade gracefully — `--location office` has no effect if no endpoint is tagged `office`, rather than causing a failure.
+Each filter step is a **soft filter**: if it would eliminate all remaining candidates, it is silently skipped and the previous candidate list is preserved. This means filters degrade gracefully — `--location office` has no effect if no endpoint is tagged `office`, rather than causing a failure. The first remaining candidate is used. Step 2 applies even when no flag is given; a volume with a single candidate skips it, since no filter could change the choice.
 
 Preflight probes each remote volume through the endpoint selected for it and reports the result under that endpoint, so two volumes sharing a primary endpoint can be reached (and reported) through different routes.
 

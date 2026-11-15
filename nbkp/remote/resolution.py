@@ -132,21 +132,28 @@ def resolve_endpoint_for_volume(
     ssh_config: paramiko.SSHConfig | None = None,
     lookup: AddressLookup = dns_lookup,
 ) -> SshEndpoint:
-    """Uses ``endpoint_filter`` (location, network) to narrow
-    candidates.  Falls back to the primary ``ssh_endpoint``.
-    ``ssh_config`` and ``lookup`` resolve candidate hostnames for the DNS
-    and network filters.
+    """The first candidate left by the soft filters.
+
+    The candidates are ``ssh_endpoints`` in order when set, else the primary
+    ``ssh_endpoint`` alone. Unresolvable hostnames are always filtered out;
+    ``endpoint_filter`` (location, network) narrows further. Each filter is
+    skipped when it would leave no candidate, so the first candidate is the
+    fallback. ``ssh_config`` and ``lookup`` resolve candidate hostnames for
+    the DNS and network filters.
     """
     candidates = list(vol.ssh_endpoints) if vol.ssh_endpoints else [vol.ssh_endpoint]
     eps = config.ssh_endpoints
 
-    if endpoint_filter is None:
+    if len(candidates) == 1:
+        # No filter can change a single candidate: skip its DNS lookup.
         return eps[candidates[0]]
     else:
         is_private = partial(
             is_private_host, ssh_config=_or_default(ssh_config), lookup=lookup
         )
-        result = _apply_soft_filters(candidates, eps, endpoint_filter, is_private)
+        result = _apply_soft_filters(
+            candidates, eps, endpoint_filter or EndpointFilter(), is_private
+        )
         return eps[result[0]]
 
 
