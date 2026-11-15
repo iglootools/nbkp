@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import typer
@@ -15,7 +16,7 @@ from ....config import Config, LocalVolume, RemoteVolume
 from ....policy import Severity
 from ....remote.endpoints import ResolvedEndpoints
 from ....remote.errors import SSH_CONNECTION_ERRORS, describe_error
-from ...lifecycle import unknown_volume_names
+from ...lifecycle import UmountResult, unknown_volume_names
 from ...models import MountFailureReason, display_name
 from ...mount_checks import check_mount_status
 from ...output import (
@@ -23,6 +24,7 @@ from ...output import (
     MountStatusLabel,
     build_mount_status_json,
     build_mount_status_table,
+    umount_result_json,
 )
 
 
@@ -122,7 +124,13 @@ def _probe_and_show_status(
     resolved: ResolvedEndpoints,
     output_format: OutputFormat,
     names: list[str] | None = None,
+    umount_results: Sequence[UmountResult] = (),
 ) -> None:
+    """Probe and show the mount status of the managed volumes.
+
+    *umount_results* are the umounts just attempted: under ``-o json`` the
+    entry of a volume whose umount failed also says why (``disks umount``).
+    """
     managed = [
         (slug, vol)
         for slug, vol in cfg.volumes.items()
@@ -134,14 +142,29 @@ def _probe_and_show_status(
         if output_format is OutputFormat.HUMAN and managed
         else None
     )
-    statuses: list[tuple[MountStatusLabel, MountStatusData]] = [
-        *[_probe_volume_status(vol, resolved, bar) for _slug, vol in managed],
-        *_unmanaged_statuses(cfg, names),
-    ]
+    managed_statuses = [_probe_volume_status(vol, resolved, bar) for _, vol in managed]
+    unmanaged_statuses = _unmanaged_statuses(cfg, names)
     if bar is not None:
         bar.stop()
 
-    _show_status_table(statuses, output_format)
+    match output_format:
+        case OutputFormat.JSON:
+            failures = {r.volume_slug: umount_result_json(r) for r in umount_results}
+            echo_json(
+                [
+                    *(
+                        {**entry, **failures.get(slug, {})}
+                        for (slug, _), entry in zip(
+                            managed, build_mount_status_json(managed_statuses)
+                        )
+                    ),
+                    *build_mount_status_json(unmanaged_statuses),
+                ]
+            )
+        case OutputFormat.HUMAN:
+            _show_status_table(
+                [*managed_statuses, *unmanaged_statuses], OutputFormat.HUMAN
+            )
 
 
 def require_known_names(

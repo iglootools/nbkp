@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from dataclasses import asdict
 from typing import Protocol
 
 from rich.table import Table
@@ -6,7 +7,13 @@ from rich.text import Text
 
 from ..clidisplay import severity_icon
 from ..policy import Severity, Strictness
-from .models import MountFailureReason
+from .lifecycle import MountResult, UmountResult
+from .models import (
+    LifecycleFailure,
+    LifecycleStep,
+    MountFailureReason,
+    UmountFailureReason,
+)
 from .severity import device_fail_severity, luks_fail_severity, mounted_fail_severity
 
 # A row's display label.  ``Text`` when the label carries styling *and*
@@ -113,3 +120,130 @@ def build_mount_status_json(
         }
         for slug, status in statuses
     ]
+
+
+def _step(failure: LifecycleFailure) -> str:
+    return failure.step.value if failure.step is not None else "command"
+
+
+def _step_failed(failure: LifecycleFailure) -> str:
+    return (
+        f"{_step(failure)} failed (exit {failure.exit_code}): {failure.message or ''}"
+    ).rstrip()
+
+
+def _probe_failed(failure: LifecycleFailure) -> str:
+    return (
+        f"device state unknown: {failure.command} failed"
+        f" (exit {failure.exit_code}): {failure.message or ''}"
+    ).rstrip()
+
+
+def mount_failure_detail(result: MountResult) -> str | None:
+    """Why a mount failed, as one line; ``None`` when it did not."""
+    reason, failure = result.failure_reason, result.failure
+    return (
+        _mount_failure_detail(reason, failure)
+        if reason is not None and failure is not None
+        else None
+    )
+
+
+def _mount_failure_detail(reason: MountFailureReason, failure: LifecycleFailure) -> str:
+    match reason, failure:
+        case MountFailureReason.DEVICE_NOT_PRESENT, _:
+            return f"device not plugged in (UUID: {failure.device_uuid})"
+        case MountFailureReason.PASSPHRASE_NOT_AVAILABLE, _:
+            return (
+                f"passphrase '{failure.passphrase_id}' not available: {failure.message}"
+            )
+        case MountFailureReason.NOT_AUTHORIZED, _:
+            return f"{_step(failure)} not authorized — polkit rule not configured"
+        case MountFailureReason.UDISKS_NOT_AVAILABLE, LifecycleFailure(step=None):
+            return f"udisks2 not available: {failure.command} not found"
+        case MountFailureReason.UDISKS_NOT_AVAILABLE, _:
+            return f"{_step(failure)} failed — udisks2 not available: {failure.message}"
+        case MountFailureReason.PROBE_FAILED, _:
+            return _probe_failed(failure)
+        case MountFailureReason.UNREACHABLE, _:
+            return f"unreachable: {failure.message}"
+        case MountFailureReason.UNLOCK_FAILED, LifecycleFailure(exit_code=None):
+            return "unlocked device could not be resolved"
+        case _:
+            return _step_failed(failure)
+
+
+def umount_failure_detail(result: UmountResult) -> str | None:
+    """Why an umount failed, as one line; ``None`` when it did not."""
+    reason, failure = result.failure_reason, result.failure
+    return (
+        _umount_failure_detail(reason, failure)
+        if reason is not None and failure is not None
+        else None
+    )
+
+
+def _umount_failure_detail(
+    reason: UmountFailureReason, failure: LifecycleFailure
+) -> str:
+    match reason:
+        case UmountFailureReason.PROBE_FAILED:
+            return _probe_failed(failure)
+        case UmountFailureReason.UNREACHABLE:
+            return f"unreachable: {failure.message}"
+        case UmountFailureReason.UDISKS_NOT_AVAILABLE:
+            return f"udisks2 not available: {failure.command} not found"
+        case UmountFailureReason.UNMOUNT_FAILED | UmountFailureReason.LOCK_FAILED:
+            return _step_failed(failure)
+
+
+def umount_failure_warning(result: UmountResult) -> str | None:
+    """What a failed umount leaves behind for the operator to clean up."""
+    match result.failure_reason:
+        case None:
+            return None
+        case UmountFailureReason.UNMOUNT_FAILED:
+            return "device may still be mounted, manual umount needed"
+        case UmountFailureReason.LOCK_FAILED:
+            return "LUKS container still unlocked, manual lock needed"
+        case UmountFailureReason.PROBE_FAILED:
+            return "volume may still be mounted or unlocked, check manually"
+        case UmountFailureReason.UNREACHABLE | UmountFailureReason.UDISKS_NOT_AVAILABLE:
+            return "volume may still be mounted, manual umount needed"
+
+
+def _failure_json(failure: LifecycleFailure) -> dict[str, object]:
+    return {
+        key: value.value if isinstance(value, LifecycleStep) else value
+        for key, value in asdict(failure).items()
+        if value is not None
+    }
+
+
+def mount_result_json(result: MountResult) -> dict[str, object]:
+    """Why a mount failed, for ``-o json``: the reason, the rendered detail and
+    the facts behind it.  Empty for a successful mount.
+    """
+    return (
+        {
+            "failure_reason": result.failure_reason.value,
+            "detail": mount_failure_detail(result),
+            "failure": _failure_json(result.failure),
+        }
+        if result.failure_reason is not None and result.failure is not None
+        else {}
+    )
+
+
+def umount_result_json(result: UmountResult) -> dict[str, object]:
+    """Like :func:`mount_result_json`, plus what the failure leaves behind."""
+    return (
+        {
+            "failure_reason": result.failure_reason.value,
+            "detail": umount_failure_detail(result),
+            "warning": umount_failure_warning(result),
+            "failure": _failure_json(result.failure),
+        }
+        if result.failure_reason is not None and result.failure is not None
+        else {}
+    )

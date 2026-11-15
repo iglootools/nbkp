@@ -36,7 +36,7 @@ Both snapshot backends follow the same directory layout and lifecycle. Snapshot 
 
 **Listing** — Only entries of `snapshots/` named as snapshot timestamps count as snapshots. Anything else (`lost+found` at the root of a dedicated filesystem, `.DS_Store`, a stray file) is ignored: it is neither listed nor pruned. An absent `snapshots/` directory lists as empty; any other listing failure is an error, so pruning never acts on a partial listing.
 
-**Errors** — Every failing snapshot operation (a non-zero exit status, a local `OSError`, an SSH transport error) is reported as one structured error naming the operation (create, mkdir, delete, list, read/update `latest`, …), the path, and the underlying message. `run` turns it into a failed sync (`failure`: `snapshot`, `mkdir` or `symlink`) or a warning; `snapshots show` / `prune` report it in the result's `error` field.
+**Errors** — Every failing snapshot operation (a non-zero exit status, a local `OSError`, an SSH transport error) is reported as one structured error naming the operation (create, mkdir, delete, list, read/update `latest`, …), the path, and the underlying message. `run` turns it into a failed sync (`failure`: `snapshot`, `mkdir` or `symlink`) or a warning; `snapshots show` / `prune` report it in the result's `error` object (`kind`: `operation-failed`, with `operation`, `path` and `message`); a sync failed by preflight carries `kind` `inactive` or `preflight-errors` and the `preflight_errors` codes instead.
 
 ### The `latest` Symlink
 
@@ -76,7 +76,7 @@ Passphrases are cached in memory during a single run, so the user is only prompt
 
 **Passphrase prefetching** — Before the first device is touched, nbkp retrieves *every* passphrase-id the config declares — including the ones this run has no use for, because their drive is not plugged in or `--name` excluded them. All credential-store access therefore happens up front, in one burst. See [Why prefetch every passphrase](#why-prefetch-every-passphrase).
 
-**Lifecycle** — The `run`, `preflight check`, and `preflight troubleshoot` commands prefetch passphrases and mount volumes before running, and umount in a `finally` block (even on failure). Mount is idempotent: already-unlocked and already-mounted volumes are skipped. Umount always attempts to unmount and lock for all volumes with mount config, regardless of who mounted them — this avoids fragile action tracking across failed/restarted runs.
+**Lifecycle** — The `run`, `preflight check`, and `preflight troubleshoot` commands prefetch passphrases and mount volumes before running, and umount in a `finally` block (even on failure). Mount is idempotent: already-unlocked and already-mounted volumes are skipped. Umount always attempts to unmount and lock for all volumes with mount config, regardless of who mounted them — this avoids fragile action tracking across failed/restarted runs. A volume that cannot be unmounted or locked fails the command (exit 1), with a `Umount failed:` line on stderr, since the drive may have been left mounted or unlocked; `run -o json` also lists every umount under `umount`, each failure with its `failure_reason`, `detail` and `warning`.
 
 **Authorization** — Mount management is authorized by **polkit only** (no sudoers). The `disks setup-auth` command generates a single polkit rule at `/etc/polkit-1/rules.d/50-nbkp.rules` for review and manual installation. See [Why polkit-only](#why-polkit-only).
 
@@ -178,7 +178,7 @@ Before running any sync, nbkp validates that all required infrastructure is in p
 Checks include:
 
 - **Sentinel files** — `.nbkp-vol`, `.nbkp-src`, `.nbkp-dst` must exist at the expected paths
-- **SSH connectivity** — Remote endpoints must be reachable; DNS resolution must succeed. A connection failure is `UNREACHABLE` (inactive) and records its cause; a host that answers but refuses our key or fails host key verification is `AUTH_FAILED`, an infrastructure error. Any other exception during the probe is a bug and propagates instead of being reported as an unreachable host.
+- **SSH connectivity** — Remote endpoints must be reachable; DNS resolution must succeed. A connection failure is `UNREACHABLE` (inactive) and records its cause; a host that answers but refuses our key or fails host key verification is `AUTH_FAILED`, an infrastructure error. A connection lost later in preflight (each remote command connects anew, so a host can fall asleep half-way) makes the volume or sync endpoint being probed unreachable in the same way, with its cause, instead of aborting the checks of every other host. Any other exception during the probe is a bug and propagates instead of being reported as an unreachable host.
 - **Rsync availability** — rsync must be installed and version 3.0+ (macOS `openrsync` is rejected). Host tool errors apply to localhost too: a remote host's errors cascade to its volumes (`SSH_ENDPOINT_INACTIVE`), while the orchestrator's own errors — localhost is always "reachable" — mark every sync with a side on it `ENDPOINT_HOST_ERRORS`, so a missing local rsync fails preflight instead of failing every sync at run time.
 - **Btrfs readiness** — Correct filesystem type, subvolume existence, mount options, required directories
 - **Hard-link readiness** — Filesystem hard-link support, required directory structure

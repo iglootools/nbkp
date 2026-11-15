@@ -5,6 +5,7 @@ from functools import wraps
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import paramiko
 import pydantic
 import pytest
 
@@ -20,6 +21,7 @@ from nbkp.config import (
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
+    Volume,
 )
 from nbkp.preflight.checks import check_all_syncs, check_sync, check_volume
 from nbkp.preflight.probes import _check_rsync_version, parse_rsync_version
@@ -49,6 +51,7 @@ from nbkp.preflight.status.volume import (
     VolumeError,
     VolumeStatus,
 )
+from nbkp.preflight.volume_checks import observe_ssh_endpoint
 from nbkp.remote.dispatch import check_command_available
 from nbkp.remote.endpoints import ResolvedEndpoint, ResolvedEndpoints
 from nbkp.remote.resolution import resolve_proxy_chain
@@ -4337,3 +4340,136 @@ class TestCheckRsyncVersionRemote:
         vol, config = _remote_config()
         resolved = _make_resolved(config)
         assert _check_rsync_version(vol, resolved) is False
+
+
+def _nas_and_local_config() -> Config:
+    """``remote``: NAS → local ``a``; ``local``: local ``b`` → local ``c``."""
+    return Config(
+        ssh_endpoints={"nas": SshEndpoint(slug="nas", host="nas.example")},
+        volumes={
+            "nas": RemoteVolume(slug="nas", ssh_endpoint="nas", path="/data"),
+            "a": LocalVolume(slug="a", path="/mnt/a"),
+            "b": LocalVolume(slug="b", path="/mnt/b"),
+            "c": LocalVolume(slug="c", path="/mnt/c"),
+        },
+        sync_endpoints={
+            "ep-nas": SyncEndpoint(slug="ep-nas", volume="nas"),
+            "ep-a": SyncEndpoint(slug="ep-a", volume="a"),
+            "ep-b": SyncEndpoint(slug="ep-b", volume="b"),
+            "ep-c": SyncEndpoint(slug="ep-c", volume="c"),
+        },
+        syncs={
+            "remote": SyncConfig(slug="remote", source="ep-nas", destination="ep-a"),
+            "local": SyncConfig(slug="local", source="ep-b", destination="ep-c"),
+        },
+    )
+
+
+def _reachable(*_args: object, **_kwargs: object) -> SshEndpointDiagnostics:
+    return _ssh_diag(ssh_reachable=True)
+
+
+def _stub_volume(*_args: object, **_kwargs: object) -> VolumeDiagnostics:
+    return VolumeDiagnostics(capabilities=_STUB_CAPS)
+
+
+def _src_ok(ep: SyncEndpoint, *_args: object) -> SourceEndpointDiagnostics:
+    return SourceEndpointDiagnostics(endpoint_slug=ep.slug, sentinel_exists=True)
+
+
+def _dst_ok(
+    ep: SyncEndpoint, *_args: object, **_kwargs: object
+) -> DestinationEndpointDiagnostics:
+    return DestinationEndpointDiagnostics(
+        endpoint_slug=ep.slug, sentinel_exists=True, endpoint_writable=True
+    )
+
+
+class TestConnectionLostDuringPreflight:
+    """A host that drops after the first probe is unreachable for that host only.
+
+    Every remote command opens its own connection, so the NAS can answer the
+    host-tool probes and then go away (asleep, Wi-Fi dropped).
+    """
+
+    @patch("nbkp.preflight.checks.observe_destination_endpoint", side_effect=_dst_ok)
+    @patch("nbkp.preflight.checks.observe_source_endpoint", side_effect=_src_ok)
+    @patch("nbkp.preflight.checks.observe_volume")
+    @patch("nbkp.preflight.checks.observe_ssh_endpoint", side_effect=_reachable)
+    def test_during_volume_observation(
+        self, _ssh: MagicMock, mock_volume: MagicMock, *_mocks: MagicMock
+    ) -> None:
+        def observe(volume: Volume, **_kwargs: object) -> VolumeDiagnostics:
+            match volume:
+                case RemoteVolume():
+                    raise EOFError("connection closed by peer")
+                case _:
+                    return _stub_volume()
+
+        mock_volume.side_effect = observe
+        config = _nas_and_local_config()
+
+        result = check_all_syncs(config, resolved_endpoints=_make_resolved(config))
+
+        nas = result.volume_statuses["nas"]
+        assert nas.errors == [VolumeError.SSH_ENDPOINT_INACTIVE]
+        assert nas.ssh_endpoint_status.errors == [SshEndpointError.UNREACHABLE]
+        assert nas.ssh_endpoint_status.diagnostics.ssh_error == (
+            "connection closed by peer"
+        )
+        assert result.sync_statuses["remote"].is_expected_inactive()
+        assert result.sync_statuses["local"].active
+
+    @patch("nbkp.preflight.checks.observe_destination_endpoint", side_effect=_dst_ok)
+    @patch("nbkp.preflight.checks.observe_source_endpoint")
+    @patch("nbkp.preflight.checks.observe_volume", side_effect=_stub_volume)
+    @patch("nbkp.preflight.checks.observe_ssh_endpoint", side_effect=_reachable)
+    def test_during_endpoint_observation(
+        self, _ssh: MagicMock, _vol: MagicMock, mock_src: MagicMock, _dst: MagicMock
+    ) -> None:
+        def observe(
+            ep: SyncEndpoint, volume: Volume, *_args: object
+        ) -> SourceEndpointDiagnostics:
+            match volume:
+                case RemoteVolume():
+                    raise paramiko.SSHException("Error reading SSH protocol banner")
+                case _:
+                    return _src_ok(ep)
+
+        mock_src.side_effect = observe
+        config = _nas_and_local_config()
+
+        result = check_all_syncs(config, resolved_endpoints=_make_resolved(config))
+
+        src = result.source_endpoint_statuses["ep-nas"]
+        assert src.errors == [SourceEndpointError.VOLUME_INACTIVE]
+        assert src.volume_status.ssh_endpoint_status.errors == [
+            SshEndpointError.UNREACHABLE
+        ]
+        assert result.sync_statuses["remote"].is_expected_inactive()
+        assert result.sync_statuses["local"].active
+
+    @patch("nbkp.preflight.checks.observe_volume", side_effect=OSError("disk gone"))
+    @patch("nbkp.preflight.checks.observe_ssh_endpoint", side_effect=_reachable)
+    def test_local_errors_still_propagate(self, *_mocks: MagicMock) -> None:
+        config = _nas_and_local_config()
+        with pytest.raises(OSError, match="disk gone"):
+            check_all_syncs(config, resolved_endpoints=_make_resolved(config))
+
+    @patch(
+        "nbkp.preflight.volume_checks._probe_mount_tools",
+        side_effect=EOFError("connection closed by peer"),
+    )
+    @patch(
+        "nbkp.preflight.volume_checks._probe_host_tools",
+        return_value=_STUB_HOST_TOOLS,
+    )
+    def test_during_mount_tool_probe(self, *_mocks: MagicMock) -> None:
+        config = _nas_and_local_config()
+
+        diag = observe_ssh_endpoint(
+            config.volumes["nas"], _make_resolved(config), probe_mount_tools=True
+        )
+
+        assert diag.ssh_reachable is False
+        assert diag.ssh_error == "connection closed by peer"

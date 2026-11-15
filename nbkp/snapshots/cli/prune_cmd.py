@@ -4,7 +4,11 @@ from typing import Annotated
 import typer
 
 from ...clidisplay import OutputFormat, echo_json
-from ...cliwiring.config import load_config_or_exit, resolve_endpoints
+from ...cliwiring.config import (
+    load_config_or_exit,
+    require_known_syncs,
+    resolve_endpoints,
+)
 from ...cliwiring.mount import managed_mount
 from ...cliwiring.preflight import check_all_with_progress
 from ...policy import Strictness
@@ -94,6 +98,7 @@ def prune(
 ) -> None:
     """Remove snapshots beyond the `max-snapshots` limit. Normally handled automatically by `run`, but can be invoked manually."""
     cfg = load_config_or_exit(config, output)
+    require_known_syncs(cfg, sync, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
     with managed_mount(
         cfg,

@@ -84,25 +84,25 @@ def _observe_ssh_endpoint_remote(
     probe_mount_tools: bool,
 ) -> SshEndpointDiagnostics:
     """SSH reachability is tested implicitly via the first host tool probe
-    (``which rsync``).  A connection failure marks the host unreachable
-    (or auth-failed) and records the cause; any other exception is a bug
-    and propagates.
+    (``which rsync``).  A connection failure — then or during a later probe,
+    each of which connects anew — marks the host unreachable (or
+    auth-failed) and records the cause; any other exception is a bug and
+    propagates.
     """
     if volume.slug not in resolved_endpoints:
         return SshEndpointDiagnostics(location_excluded=True)
     try:
-        host_tools = _probe_host_tools(volume, resolved_endpoints)
+        return SshEndpointDiagnostics(
+            ssh_reachable=True,
+            host_tools=_probe_host_tools(volume, resolved_endpoints),
+            mount_tools=(
+                _probe_mount_tools(volume, resolved_endpoints)
+                if probe_mount_tools
+                else None
+            ),
+        )
     except SSH_CONNECTION_ERRORS as e:
         return unreachable_diagnostics(e)
-    return SshEndpointDiagnostics(
-        ssh_reachable=True,
-        host_tools=host_tools,
-        mount_tools=(
-            _probe_mount_tools(volume, resolved_endpoints)
-            if probe_mount_tools
-            else None
-        ),
-    )
 
 
 def unreachable_diagnostics(error: BaseException) -> SshEndpointDiagnostics:

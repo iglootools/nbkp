@@ -3,7 +3,7 @@
 from ....config.protocol.sync_endpoint import SyncEndpoint
 from ....policy import Strictness
 from ....preflight import SyncStatus
-from ...models import SnapshotSkipReason
+from ...models import SnapshotErrorKind, SnapshotResultError, SnapshotSkipReason
 
 
 def max_snapshots(dst_ep: SyncEndpoint) -> int | None:
@@ -17,14 +17,16 @@ def max_snapshots(dst_ep: SyncEndpoint) -> int | None:
             return None
 
 
-def _error_summary(status: SyncStatus) -> str:
-    return ", ".join(e.value for e in status.errors)
+def _preflight_error(
+    kind: SnapshotErrorKind, status: SyncStatus
+) -> SnapshotResultError:
+    return SnapshotResultError(kind=kind, preflight_errors=tuple(status.errors))
 
 
 def preflight_disposition(
     status: SyncStatus,
     strictness: Strictness,
-) -> tuple[SnapshotSkipReason | None, str | None]:
+) -> tuple[SnapshotSkipReason | None, SnapshotResultError | None]:
     """Decide from preflight whether a sync is processed, skipped or failed.
 
     Returns ``(skip_reason, error)``; ``(None, None)`` means "process it".
@@ -37,10 +39,13 @@ def preflight_disposition(
         case (True, _, _):
             return (None, None)
         case (False, True, Strictness.IGNORE_NONE):
-            return (None, f"inactive: {_error_summary(status)}")
+            return (None, _preflight_error(SnapshotErrorKind.INACTIVE, status))
         case (False, True, _):
             return (SnapshotSkipReason.INACTIVE, None)
         case (False, False, Strictness.IGNORE_ALL):
             return (SnapshotSkipReason.PREFLIGHT_ERRORS, None)
         case _:
-            return (None, f"preflight errors: {_error_summary(status)}")
+            return (
+                None,
+                _preflight_error(SnapshotErrorKind.PREFLIGHT_ERRORS, status),
+            )

@@ -13,6 +13,11 @@ from nbkp.demo.cli.cmd_handler import seed as seed_module
 from nbkp.demo.cli.cmd_handler.seed import SeedError, SeedResult, seed_demo, seed_plan
 from nbkp.demo.cli.seed_cmd import commands_script
 from nbkp.disks.lifecycle import UmountResult
+from nbkp.disks.models import (
+    LifecycleFailure,
+    LifecycleStep,
+    UmountFailureReason,
+)
 
 
 class TestDryRun:
@@ -50,10 +55,21 @@ class TestUmountFailure:
             patch.object(
                 seed_module,
                 "umount_volumes",
-                return_value=[UmountResult("enc", success=False, detail="busy")],
+                return_value=[
+                    UmountResult(
+                        "enc",
+                        success=False,
+                        failure_reason=UmountFailureReason.UNMOUNT_FAILED,
+                        failure=LifecycleFailure(
+                            step=LifecycleStep.UNMOUNT, exit_code=1, message="busy"
+                        ),
+                    )
+                ],
             ),
             patch.object(seed_module, "LUKS_PASSPHRASE", "x", create=True),
-            pytest.raises(SeedError, match="Umount failed: busy"),
+            pytest.raises(
+                SeedError, match=r"Umount failed: umount failed \(exit 1\): busy"
+            ),
             seed_module._encrypted_volume_mounted(
                 Config(),
                 {},

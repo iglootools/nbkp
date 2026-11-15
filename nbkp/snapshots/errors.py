@@ -11,11 +11,10 @@ import enum
 import subprocess
 from collections.abc import Callable
 
-import paramiko
-
 from ..config import Volume
 from ..remote.dispatch import run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
+from ..remote.errors import SSH_CONNECTION_ERRORS
 
 
 class SnapshotOp(str, enum.Enum):
@@ -43,13 +42,6 @@ class SnapshotOperationError(Exception):
         super().__init__(f"{op.value} failed for {path}: {stderr.strip()}")
 
 
-# Errors raised by the transport rather than by the command itself:
-# OSError covers local spawn failures, sockets, DNS (socket.gaierror) and
-# Paramiko's NoValidConnectionsError; SSHException covers authentication
-# and protocol failures.
-TRANSPORT_ERRORS: tuple[type[Exception], ...] = (OSError, paramiko.SSHException)
-
-
 def run_snapshot_command(
     op: SnapshotOp,
     path: str,
@@ -64,7 +56,7 @@ def run_snapshot_command(
     """
     try:
         return run_on_volume(cmd, volume, resolved_endpoints)
-    except TRANSPORT_ERRORS as e:
+    except SSH_CONNECTION_ERRORS as e:
         raise SnapshotOperationError(op, path, str(e)) from e
 
 

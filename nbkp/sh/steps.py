@@ -64,8 +64,14 @@ def _on_dst(spec: SyncSpec, args: list[str]) -> str:
     return vol_cmd(spec.dst_vol, args, spec.resolved_endpoints)
 
 
-def _readlink_latest(spec: SyncSpec) -> str:
-    return f"$({_on_dst(spec, ['readlink', spec.dst_latest])} 2>/dev/null || true)"
+def _readlink_latest(spec: SyncSpec, *, strict: bool = False) -> str:
+    """``latest``'s target; empty when it cannot be read, unless *strict*.
+
+    A strict read fails the enclosing ``set -e`` block instead, for callers
+    that would otherwise act on an empty target as "no latest".
+    """
+    readlink = _on_dst(spec, ["readlink", spec.dst_latest])
+    return f"$({readlink})" if strict else f"$({readlink} 2>/dev/null || true)"
 
 
 def _list_snapshots(spec: SyncSpec, *, quiet: bool = False) -> str:
@@ -251,13 +257,15 @@ def _prune_block(spec: SyncSpec, max_snapshots: int) -> str:
     """Delete the oldest snapshots beyond *max_snapshots*, never ``latest``.
 
     Same selection as ``prune_snapshots``: drop the latest target from the
-    candidates first, then take the oldest ``excess`` of the rest.
+    candidates first, then take the oldest ``excess`` of the rest. As there,
+    a ``latest`` that cannot be read, or a listing that fails, stops the
+    pruning (a warning) rather than pruning without that protection.
     """
     selection = dedent(f"""\
         NBKP_SNAPS={_list_snapshots(spec)}
         NBKP_COUNT=$(printf '%s\\n' "$NBKP_SNAPS" | grep -c . || true)
         NBKP_EXCESS=$((NBKP_COUNT - {max_snapshots}))
-        NBKP_LATEST_LINK={_readlink_latest(spec)}
+        NBKP_LATEST_LINK={_readlink_latest(spec, strict=True)}
         if [ "$NBKP_LATEST_LINK" = "/dev/null" ]; then
             NBKP_LATEST_NAME=""
         else

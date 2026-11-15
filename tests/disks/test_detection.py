@@ -181,6 +181,28 @@ class TestFindMountpoint:
         ):
             assert find_mountpoint(_local_vol(), "/dev/mapper/x", {}) is None
 
+    @pytest.mark.parametrize(
+        ("returncode", "stderr"),
+        [
+            (127, "findmnt: command not found"),
+            (1, "findmnt: cannot open /proc/self/mountinfo"),
+        ],
+    )
+    def test_findmnt_failure_raises(self, returncode: int, stderr: str) -> None:
+        """A failed findmnt is not "not mounted": umount would skip the unmount."""
+        with (
+            patch(
+                "nbkp.remote.dispatch.subprocess.run",
+                return_value=_mock_run(returncode, stderr=stderr),
+            ),
+            pytest.raises(DeviceProbeError) as exc_info,
+        ):
+            find_mountpoint(_local_vol(), "/dev/mapper/x", {})
+        assert (exc_info.value.command, exc_info.value.returncode) == (
+            "findmnt",
+            returncode,
+        )
+
 
 class TestResolveEffectivePath:
     def test_declared_path_is_authoritative(self) -> None:

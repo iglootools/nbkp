@@ -2,7 +2,13 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from .models import PruneResult, ShowResult, SnapshotSkipReason
+from .models import (
+    PruneResult,
+    ShowResult,
+    SnapshotErrorKind,
+    SnapshotResultError,
+    SnapshotSkipReason,
+)
 
 
 def retention_display(max_snapshots: int | None) -> str:
@@ -12,13 +18,27 @@ def retention_display(max_snapshots: int | None) -> str:
         return f"keep {max_snapshots}"
 
 
-def _status_text(skip_reason: SnapshotSkipReason | None, error: str | None) -> Text:
+def snapshot_error_text(error: SnapshotResultError) -> str:
+    errors = ", ".join(e.value for e in error.preflight_errors)
+    match error.kind:
+        case SnapshotErrorKind.INACTIVE:
+            return f"inactive: {errors}"
+        case SnapshotErrorKind.PREFLIGHT_ERRORS:
+            return f"preflight errors: {errors}"
+        case SnapshotErrorKind.OPERATION_FAILED:
+            operation = error.operation.value if error.operation else "operation"
+            return f"{operation} failed for {error.path}: {error.message}"
+
+
+def _status_text(
+    skip_reason: SnapshotSkipReason | None, error: SnapshotResultError | None
+) -> Text:
     """Text, not markup: the error carries remote stderr, which may contain
     square brackets.
     """
     match (skip_reason, error):
-        case (_, str() as message):
-            return Text(f"FAILED ({message})", style="red")
+        case (_, SnapshotResultError() as e):
+            return Text(f"FAILED ({snapshot_error_text(e)})", style="red")
         case (SnapshotSkipReason() as reason, None):
             return Text(f"SKIPPED ({reason.value})", style="dim")
         case _:

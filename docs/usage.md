@@ -93,7 +93,7 @@ nbkp run --network public
 # On the road — exclude home endpoints
 nbkp run --exclude-location home
 
-# Only backup photos
+# Only backup photos (an unknown sync name is an error, exit code 2)
 nbkp run --sync photos-to-nas
 
 # Preview what would happen
@@ -199,6 +199,8 @@ nbkp disks umount --name seagate8tb
 # Diagnose mount issues
 nbkp preflight troubleshoot
 ```
+
+With `-o json`, `disks mount` and `disks umount` print one entry per volume with its state (`device_present`, `luks_unlocked`, `mounted`). The entry of a volume that failed also has a `failure_reason` (e.g. `unlock_failed`, `not_authorized`, `lock_failed`), a one-line `detail`, a `failure` object with the facts behind it (the failed `step`, its `exit_code` and `message`, a failed probe `command`, …) and, for `umount`, a `warning` saying what was left mounted or unlocked.
 
 ### Example 4: Sami's Personal Config
 

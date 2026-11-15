@@ -1,5 +1,6 @@
 import enum
 from collections.abc import Iterable, Iterator, Mapping
+from graphlib import CycleError, TopologicalSorter
 from itertools import combinations
 from typing import Any
 
@@ -227,6 +228,7 @@ class Config(_BaseModel):
                 self._sync_endpoint_location_errors,
                 self._sync_reference_errors,
                 self._shared_destination_errors,
+                self._cyclic_dependency_errors,
                 self._cross_server_errors,
                 self._credential_errors,
             )
@@ -313,6 +315,25 @@ class Config(_BaseModel):
             )
             if sync_a.destination == sync_b.destination
         )
+
+    def _cyclic_dependency_errors(self) -> Iterator[ValueError]:
+        # Checked here, not only when the syncs are ordered, so that a cycle
+        # is a config error reported before anything is mounted or synced.
+        upstreams = {
+            slug: {
+                writer
+                for writer, upstream in self.syncs.items()
+                if upstream.destination == sync.source and writer != slug
+            }
+            for slug, sync in self.syncs.items()
+        }
+        try:
+            TopologicalSorter(upstreams).prepare()
+        except CycleError as e:
+            yield config_error(
+                ConfigValidationCode.CYCLIC_DEPENDENCY,
+                "Cyclic sync dependency: " + " -> ".join(e.args[1]),
+            )
 
     def _cross_server_errors(self) -> Iterator[ValueError]:
         volume_pairs = (

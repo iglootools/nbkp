@@ -2,6 +2,7 @@ import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
+from keyring import errors as keyring_errors
 
 from nbkp.config import (
     Config,
@@ -40,6 +41,25 @@ class TestRetrievePassphraseKeyring:
         ):
             retrieve_passphrase("disk1", CredentialProvider.KEYRING)
         assert excinfo.value.reason == CredentialErrorReason.NOT_FOUND
+
+    @pytest.mark.parametrize(
+        "backend_error",
+        [
+            keyring_errors.NoKeyringError("no backend"),
+            keyring_errors.KeyringLocked("x"),
+        ],
+    )
+    def test_backend_error_becomes_credential_error(
+        self, backend_error: Exception
+    ) -> None:
+        mock_keyring = MagicMock()
+        mock_keyring.get_password.side_effect = backend_error
+        with (
+            patch.dict("sys.modules", {"keyring": mock_keyring}),
+            pytest.raises(CredentialError) as excinfo,
+        ):
+            retrieve_passphrase("disk1", CredentialProvider.KEYRING)
+        assert excinfo.value.reason == CredentialErrorReason.BACKEND_UNAVAILABLE
 
     def test_raises_when_keyring_not_installed(self) -> None:
         with (
@@ -139,6 +159,16 @@ class TestRetrievePassphraseCommand:
                     command_template=["pass", "show", "nbkp/{id}"],
                 )
         assert excinfo.value.reason == CredentialErrorReason.COMMAND_FAILED
+
+    def test_raises_when_executable_missing(self) -> None:
+        with pytest.raises(CredentialError) as excinfo:
+            retrieve_passphrase(
+                "disk1",
+                CredentialProvider.COMMAND,
+                command_template=["nbkp-no-such-executable", "{id}"],
+            )
+        assert excinfo.value.reason == CredentialErrorReason.COMMAND_NOT_RUNNABLE
+        assert "nbkp-no-such-executable" in str(excinfo.value)
 
     def test_raises_when_no_command_template(self) -> None:
         with pytest.raises(CredentialError) as excinfo:

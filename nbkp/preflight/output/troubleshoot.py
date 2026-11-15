@@ -20,6 +20,7 @@ from ...config import Config, LocalVolume, MountConfig, RemoteVolume, SyncConfig
 from ...disks import DeviceProbeError, discover_cleartext_device, generate_auth_rules
 from ...policy import Severity, Strictness
 from ...remote.endpoints import ResolvedEndpoints
+from ...remote.errors import SSH_CONNECTION_ERRORS
 from ..severity import PreflightError, severity_for_error
 from ..status.endpoint import (
     DestinationEndpointError,
@@ -243,12 +244,13 @@ def _discover_cleartext_device(
     """Discovery runs ``lsblk``, which this code path cannot assume exists — it
     is the *error reporting* path, reached precisely when the host is not in
     the expected state, and it also runs on machines with no udisks at all
-    (e.g. ``nbkp demo output`` on macOS).  Any failure therefore degrades to
-    "not discovered" rather than propagating.
+    (e.g. ``nbkp demo output`` on macOS).  A failed probe, a missing tool or a
+    dropped connection therefore degrades to "not discovered" rather than
+    propagating.
     """
     try:
         return discover_cleartext_device(vol, mount.device_uuid, resolved_endpoints)
-    except OSError, DeviceProbeError:
+    except (*SSH_CONNECTION_ERRORS, DeviceProbeError):
         return None
 
 

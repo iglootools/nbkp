@@ -7,6 +7,7 @@ import pytest
 
 from nbkp.cli import app
 from nbkp.sync import ProgressMode, SyncFailureKind, SyncResult
+from tests.cliwiring.test_mount import LOCK_FAILED, fake_disks_managed_mount
 
 _DONE = subprocess.CompletedProcess(args=[], returncode=0, stdout="done", stderr="")
 
@@ -382,3 +383,65 @@ class TestRunAbortHint:
 
         assert result.exit_code == 1
         assert "nbkp preflight troubleshoot" in result.output
+
+
+class TestUnknownSyncFilter:
+    @patch("nbkp.run.pipeline.check_all_syncs")
+    @patch("nbkp.cliwiring.config.load_config")
+    def test_unknown_sync_is_an_error(
+        self, mock_load: MagicMock, mock_checks: MagicMock
+    ) -> None:
+        mock_load.return_value = sample_config()
+
+        result = runner.invoke(
+            app, ["run", "-c", "/fake.yaml", "-o", "json", "--sync", "nope"]
+        )
+
+        assert result.exit_code == 2
+        error = json.loads(result.output)["error"]
+        assert (error["reason"], error["names"]) == ("unknown-sync", ["nope"])
+        mock_checks.assert_not_called()
+
+    @patch("nbkp.cliwiring.config.load_config")
+    def test_unknown_sync_is_reported_on_stderr(self, mock_load: MagicMock) -> None:
+        mock_load.return_value = sample_config()
+
+        result = runner.invoke(app, ["run", "-c", "/fake.yaml", "--sync", "nope"])
+
+        assert result.exit_code == 2
+        assert "unknown sync name(s): nope" in result.stderr
+        assert "photos-to-nas" in result.stderr
+
+
+class TestUmountFailure:
+    @patch(
+        "nbkp.cliwiring.mount._disks_managed_mount",
+        fake_disks_managed_mount(LOCK_FAILED),
+    )
+    @patch("nbkp.run.pipeline.run_all_syncs")
+    @patch("nbkp.run.pipeline.check_all_syncs")
+    @patch("nbkp.cliwiring.config.load_config")
+    def test_failed_lock_fails_the_run(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+        mock_run: MagicMock,
+    ) -> None:
+        config = sample_config()
+        mock_load.return_value = config
+        vol_s = sample_all_active_vol_statuses(config)
+        mock_checks.return_value = preflight(
+            vol_s, sample_all_active_sync_statuses(config, vol_s)
+        )
+        mock_run.return_value = [_ok("photos-to-nas")]
+
+        result = runner.invoke(app, ["run", "-c", "/fake.yaml", "-o", "json"])
+
+        assert result.exit_code == 1
+        data = json.loads(result.stdout)
+        assert data["results"][0]["outcome"] == "success"
+        [umount] = data["umount"]
+        assert umount["volume"] == "enc"
+        assert umount["success"] is False
+        assert umount["failure_reason"] == "lock_failed"
+        assert umount["warning"] == "LUKS container still unlocked, manual lock needed"

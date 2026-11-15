@@ -18,6 +18,7 @@ _CONFIG_REFERENCE_URL = (
 
 class ConfigErrorReason(StrEnum):
     FILE_NOT_FOUND = "file-not-found"
+    UNREADABLE = "unreadable"
     NO_CONFIG_FOUND = "no-config-found"
     INVALID_YAML = "invalid-yaml"
     NOT_A_MAPPING = "not-a-mapping"
@@ -85,13 +86,18 @@ def load_config(
     config_path: str | Path | None = None,
     environ: Mapping[str, str] = os.environ,
 ) -> Config:
-    """Raises ``ConfigError`` when the file is missing, is not a YAML mapping,
-    or fails validation; ``reason`` says which.
+    """Raises ``ConfigError`` when the file is missing or unreadable, is not a
+    YAML mapping, or fails validation; ``reason`` says which.
     """
     path = find_config_file(config_path, environ)
     try:
         with open(path) as f:
             raw = yaml.safe_load(f)
+    except OSError as e:
+        raise ConfigError(
+            f"Cannot read config file {path}: {e.strerror or e}",
+            reason=ConfigErrorReason.UNREADABLE,
+        ) from e
     except yaml.YAMLError as e:
         raise ConfigError(
             f"Invalid YAML in {path}: {e}",

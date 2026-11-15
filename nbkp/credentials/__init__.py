@@ -15,9 +15,11 @@ from ..config import Config, CredentialProvider
 class CredentialErrorReason(StrEnum):
     NOT_INSTALLED = "not-installed"
     NOT_FOUND = "not-found"
+    BACKEND_UNAVAILABLE = "backend-unavailable"
     ENV_UNSET = "env-unset"
     COMMAND_MISSING = "command-missing"
     COMMAND_FAILED = "command-failed"
+    COMMAND_NOT_RUNNABLE = "command-not-runnable"
 
 
 class CredentialError(Exception):
@@ -29,6 +31,7 @@ class CredentialError(Exception):
 def _from_keyring(passphrase_id: str) -> str:
     try:
         import keyring  # type: ignore[import-untyped]
+        from keyring.errors import KeyringError  # type: ignore[import-untyped]
     except ImportError:
         raise CredentialError(
             "keyring package not installed."
@@ -38,7 +41,18 @@ def _from_keyring(passphrase_id: str) -> str:
             reason=CredentialErrorReason.NOT_INSTALLED,
         ) from None
 
-    password = keyring.get_password("nbkp", passphrase_id)
+    try:
+        password = keyring.get_password("nbkp", passphrase_id)
+    except KeyringError as e:
+        # No usable backend (headless host, timer session) or a locked
+        # store: a retrieval failure like any other, so prefetch reports it
+        # as a warning and unlock as PASSPHRASE_NOT_AVAILABLE.
+        raise CredentialError(
+            f"Keyring backend unavailable for id '{passphrase_id}': {e}."
+            " Unlock the keyring, configure a backend,"
+            " or switch to another credential-provider.",
+            reason=CredentialErrorReason.BACKEND_UNAVAILABLE,
+        ) from e
     if password is None:
         raise CredentialError(
             f"No passphrase found in keyring for id '{passphrase_id}'."
@@ -89,7 +103,15 @@ def _from_command(passphrase_id: str, command_template: list[str] | None) -> str
             reason=CredentialErrorReason.COMMAND_MISSING,
         )
     command = [arg.replace("{id}", passphrase_id) for arg in command_template]
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+    except OSError as e:
+        # Left uncaught, this would crash prefetch, or reach unlock as an
+        # OSError and be mislabelled an unreachable host.
+        raise CredentialError(
+            f"Credential command could not be started ({command[0]}): {e}",
+            reason=CredentialErrorReason.COMMAND_NOT_RUNNABLE,
+        ) from e
     if result.returncode != 0:
         raise CredentialError(
             f"Credential command failed (exit {result.returncode}):"

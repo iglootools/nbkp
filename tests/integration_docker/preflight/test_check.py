@@ -516,7 +516,7 @@ class TestMountCapabilities:
             resolved,
             lambda _: LUKS_PASSPHRASE,
         )
-        assert result.success, result.detail
+        assert result.success, result.failure
 
         try:
             create_sentinels(

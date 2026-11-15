@@ -24,6 +24,7 @@ from nbkp.disks.lifecycle import (
     umount_volume,
     umount_volumes,
 )
+from nbkp.disks.models import LifecycleFailure, LifecycleStep, UmountFailureReason
 from nbkp.remote.fabricssh import StdinClosedProcess
 
 _ENC_UUID = "5941f273-f73c-44c5-a3ef-fae7248db1b6"
@@ -139,7 +140,7 @@ class TestMountVolume:
         assert not result.success
         assert result.failure_reason == MountFailureReason.DEVICE_NOT_PRESENT
         assert result.device_present is False
-        assert "not plugged in" in (result.detail or "")
+        assert result.failure == LifecycleFailure(device_uuid=_ENC_UUID)
 
     def test_unencrypted_mount(self) -> None:
         vol = _unencrypted_vol()
@@ -250,7 +251,11 @@ class TestMountVolume:
         assert not result.success
         assert result.failure_reason == MountFailureReason.UNLOCK_FAILED
         assert result.luks_unlocked is False
-        assert "unlock failed" in (result.detail or "")
+        assert result.failure == LifecycleFailure(
+            step=LifecycleStep.UNLOCK,
+            exit_code=1,
+            message="Error unlocking: device busy",
+        )
 
     def test_unlock_polkit_denied_classified_as_not_authorized(self) -> None:
         """Polkit refusal under --no-user-interaction -> NOT_AUTHORIZED."""
@@ -268,7 +273,8 @@ class TestMountVolume:
             result = mount_volume(vol, vol.mount, {}, lambda x: "secret")  # type: ignore[arg-type]
         assert not result.success
         assert result.failure_reason == MountFailureReason.NOT_AUTHORIZED
-        assert "polkit" in (result.detail or "")
+        assert result.failure is not None
+        assert result.failure.step is LifecycleStep.UNLOCK
 
     def test_unlock_stdin_closed_classified_as_not_authorized(self) -> None:
         vol = _encrypted_vol()
@@ -298,7 +304,9 @@ class TestMountVolume:
         assert not result.success
         assert result.failure_reason == MountFailureReason.MOUNT_FAILED
         assert result.mounted is False
-        assert "mount failed" in (result.detail or "")
+        assert result.failure == LifecycleFailure(
+            step=LifecycleStep.MOUNT, exit_code=1, message="mount: unknown filesystem"
+        )
 
     def test_mount_polkit_denied_classified_as_not_authorized(self) -> None:
         vol = _unencrypted_vol()
@@ -328,6 +336,38 @@ class TestMountVolume:
         assert not result.success
         assert result.failure_reason == MountFailureReason.UDISKS_NOT_AVAILABLE
 
+    def test_mount_udisks_not_available_under_dash(self) -> None:
+        # Verbatim dash output (`sh -c`, as on a Debian host) for a missing
+        # binary, captured with exit code 127.
+        vol = _unencrypted_vol()
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.find_mountpoint", return_value=None),
+            patch(
+                "nbkp.disks.lifecycle.run_on_volume",
+                return_value=_mock_run(127, stderr="sh: 1: udisksctl: not found"),
+            ),
+        ):
+            result = mount_volume(vol, vol.mount, {}, lambda x: "pass")  # type: ignore[arg-type]
+        assert result.failure_reason == MountFailureReason.UDISKS_NOT_AVAILABLE
+
+    def test_udisks_unknown_device_is_a_mount_failure(self) -> None:
+        """udisks failing to find a device does not mean udisks is missing."""
+        # Verbatim udisksctl 2.10.1 (Debian 13) output, exit code 1, for a
+        # device udisks has no object for.
+        vol = _unencrypted_vol()
+        stderr = f"Error looking up object for device /dev/disk/by-uuid/{_USB_UUID}"
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.find_mountpoint", return_value=None),
+            patch(
+                "nbkp.disks.lifecycle.run_on_volume",
+                return_value=_mock_run(1, stderr=stderr),
+            ),
+        ):
+            result = mount_volume(vol, vol.mount, {}, lambda x: "pass")  # type: ignore[arg-type]
+        assert result.failure_reason == MountFailureReason.MOUNT_FAILED
+
     def test_mount_volume_swallows_multiline_exception(self) -> None:
         vol = _encrypted_vol()
         multiline_msg = "first line\nsecond line\nthird line"
@@ -338,9 +378,7 @@ class TestMountVolume:
             result = mount_volume(vol, vol.mount, {}, lambda x: "pass")  # type: ignore[arg-type]
         assert not result.success
         assert result.failure_reason == MountFailureReason.UNREACHABLE
-        assert "\n" not in (result.detail or "")
-        assert "first line" in (result.detail or "")
-        assert "second line" not in (result.detail or "")
+        assert result.failure == LifecycleFailure(message="first line")
 
     def test_programming_error_propagates(self) -> None:
         """Only connection failures become UNREACHABLE; a bug must surface."""
@@ -362,7 +400,7 @@ class TestMountVolume:
         ):
             result = mount_volume(vol, vol.mount, {}, lambda x: "pass")  # type: ignore[arg-type]
         assert result.failure_reason == MountFailureReason.UNREACHABLE
-        assert "Authentication failed." in (result.detail or "")
+        assert result.failure == LifecycleFailure(message="Authentication failed.")
 
     def test_missing_passphrase_on_plugged_in_drive(self) -> None:
         """A plugged-in drive whose passphrase cannot be retrieved fails loudly.
@@ -414,7 +452,21 @@ class TestMountVolume:
             result = mount_volume(vol, vol.mount, {}, lambda x: "pass")  # type: ignore[arg-type]
         assert not result.success
         assert result.failure_reason == MountFailureReason.UNREACHABLE
-        assert "timed out" in (result.detail or "")
+        assert result.failure == LifecycleFailure(message="timed out")
+
+    def test_missing_local_tool_is_udisks_not_available(self) -> None:
+        """Locally, FileNotFoundError is a missing tool, not an unreachable host."""
+        vol = _encrypted_vol()
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch(
+                "nbkp.disks.lifecycle.discover_cleartext_device",
+                side_effect=FileNotFoundError(2, "No such file", "lsblk"),
+            ),
+        ):
+            result = mount_volume(vol, vol.mount, {}, lambda x: "pass")  # type: ignore[arg-type]
+        assert result.failure_reason == MountFailureReason.UDISKS_NOT_AVAILABLE
+        assert result.failure == LifecycleFailure(command="lsblk")
 
     def test_connection_refused_returns_unreachable(self) -> None:
         vol = _encrypted_vol()
@@ -475,6 +527,41 @@ class TestUmountVolume:
         assert len(run_cmds) == 1
         assert run_cmds[0][:2] == ["udisksctl", "lock"]
 
+    def test_lock_failure_after_unmount_is_a_failure(self) -> None:
+        """The drive must end locked: a failed lock is not a successful umount."""
+        vol = _encrypted_vol()
+        mc = vol.mount
+        assert mc is not None
+        run_cmds: list[list[str]] = []
+
+        def mock_run(cmd, volume, resolved, **kwargs):
+            run_cmds.append(cmd)
+            match cmd[:2]:
+                case ["udisksctl", "lock"]:
+                    return _mock_run(1, stderr="Error locking: device busy")
+                case _:
+                    return _mock_run(0)
+
+        with (
+            patch(
+                "nbkp.disks.lifecycle.resolve_target_device", return_value=_CLEARTEXT
+            ),
+            patch(
+                "nbkp.disks.lifecycle.find_mountpoint", return_value="/mnt/encrypted"
+            ),
+            patch("nbkp.disks.lifecycle.run_on_volume", side_effect=mock_run),
+        ):
+            result = umount_volume(vol, mc, {})
+        assert [cmd[:2] for cmd in run_cmds] == [
+            ["udisksctl", "unmount"],
+            ["udisksctl", "lock"],
+        ]
+        assert not result.success
+        assert result.failure_reason == UmountFailureReason.LOCK_FAILED
+        assert result.failure == LifecycleFailure(
+            step=LifecycleStep.LOCK, exit_code=1, message="Error locking: device busy"
+        )
+
     def test_umount_failure(self) -> None:
         vol = _encrypted_vol()
         mc = vol.mount
@@ -489,11 +576,13 @@ class TestUmountVolume:
             patch(
                 "nbkp.disks.lifecycle.run_on_volume",
                 return_value=_mock_run(1, stderr="target is busy"),
-            ),
+            ) as mock_run,
         ):
             result = umount_volume(vol, mc, {})
         assert not result.success
-        assert result.warning is not None
+        assert result.failure_reason == UmountFailureReason.UNMOUNT_FAILED
+        # Locking a mounted container cannot succeed: it is not attempted.
+        assert mock_run.call_count == 1
 
     def test_ssh_timeout_returns_failed(self) -> None:
         vol = _encrypted_vol()
@@ -505,8 +594,21 @@ class TestUmountVolume:
         ):
             result = umount_volume(vol, mc, {})
         assert not result.success
-        assert "timed out" in (result.detail or "")
-        assert result.warning is not None
+        assert result.failure_reason == UmountFailureReason.UNREACHABLE
+        assert result.failure == LifecycleFailure(message="timed out")
+
+    def test_missing_local_tool_is_not_unreachable(self) -> None:
+        vol = _unencrypted_vol()
+        mc = vol.mount
+        assert mc is not None
+        with patch(
+            "nbkp.disks.lifecycle.find_mountpoint",
+            side_effect=FileNotFoundError(2, "No such file", "findmnt"),
+        ):
+            result = umount_volume(vol, mc, {})
+        assert not result.success
+        assert result.failure_reason == UmountFailureReason.UDISKS_NOT_AVAILABLE
+        assert result.failure == LifecycleFailure(command="findmnt")
 
     def test_failed_probe_is_reported_not_skipped(self) -> None:
         """A failed lsblk must not be read as "locked" and skip the lock."""
@@ -522,8 +624,31 @@ class TestUmountVolume:
         ):
             result = umount_volume(vol, mc, {})
         assert not result.success
-        assert "device state unknown" in (result.detail or "")
+        assert result.failure_reason == UmountFailureReason.PROBE_FAILED
+        assert result.failure == LifecycleFailure(
+            command="lsblk", exit_code=1, message="boom"
+        )
         mock_run.assert_not_called()
+
+    def test_failed_findmnt_is_reported_not_skipped(self) -> None:
+        """A failed findmnt must not be read as "not mounted" and skip unmount."""
+        vol = _unencrypted_vol()
+        mc = vol.mount
+        assert mc is not None
+        with (
+            patch(
+                "nbkp.disks.detection.run_on_volume",
+                return_value=_mock_run(127, stderr="findmnt: command not found"),
+            ),
+            patch("nbkp.disks.lifecycle.run_on_volume") as mock_udisks,
+        ):
+            result = umount_volume(vol, mc, {})
+        assert not result.success
+        assert result.failure_reason == UmountFailureReason.PROBE_FAILED
+        assert result.failure == LifecycleFailure(
+            command="findmnt", exit_code=127, message="findmnt: command not found"
+        )
+        mock_udisks.assert_not_called()  # no unmount on a guess
 
     def test_unencrypted_umount_no_lock(self) -> None:
         vol = _unencrypted_vol()

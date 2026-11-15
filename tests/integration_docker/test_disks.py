@@ -176,7 +176,7 @@ class TestLuksLifecycle:
             resolved,
             lambda _: LUKS_PASSPHRASE,
         )
-        assert result.success, result.detail
+        assert result.success, result.failure
         assert result.luks_unlocked is True
         assert result.mounted is True
 
@@ -194,7 +194,7 @@ class TestLuksLifecycle:
             umount_result = umount_volume(
                 remote_encrypted_volume, mount_config, resolved
             )
-            assert umount_result.success, umount_result.detail
+            assert umount_result.success, umount_result.failure
 
             ls_result = ssh_exec(
                 docker_ssh_endpoint,
@@ -223,7 +223,7 @@ class TestLuksLifecycle:
                 resolved,
                 lambda _: LUKS_PASSPHRASE,
             )
-            assert result.success, result.detail
+            assert result.success, result.failure
 
             ssh_exec(
                 docker_ssh_endpoint,
@@ -237,7 +237,7 @@ class TestLuksLifecycle:
                 resolved,
                 lambda _: LUKS_PASSPHRASE,
             )
-            assert result.success, result.detail
+            assert result.success, result.failure
 
             read_result = ssh_exec(
                 docker_ssh_endpoint,
@@ -296,7 +296,7 @@ class TestFindMountpoint:
             resolved,
             lambda _: LUKS_PASSPHRASE,
         )
-        assert result.success, result.detail
+        assert result.success, result.failure
         try:
             device = resolve_target_device(
                 remote_encrypted_volume, mount_config, resolved
@@ -561,7 +561,7 @@ class TestUnencryptedMount:
 
         try:
             result = mount_volume(volume, mount_config, resolved, lambda _: "")
-            assert result.success, result.detail
+            assert result.success, result.failure
 
             ssh_exec(
                 docker_ssh_endpoint,
@@ -574,7 +574,7 @@ class TestUnencryptedMount:
             assert read.stdout.strip() == "unencrypted-test"
 
             umount_result = umount_volume(volume, mount_config, resolved)
-            assert umount_result.success, umount_result.detail
+            assert umount_result.success, umount_result.failure
         finally:
             device = resolve_target_device(volume, mount_config, resolved)
             if device is not None:

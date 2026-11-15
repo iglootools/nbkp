@@ -264,8 +264,10 @@ Checked when the config is loaded, before anything runs:
 - Each sync endpoint targets a unique `(volume, subdir)` pair, and no endpoint may be nested inside another on the same volume (e.g. `subdir: photos` and `subdir: photos/2024`): sync dependencies cannot be detected between overlapping paths.
 - At most one of `btrfs-snapshots` and `hard-link-snapshots` is enabled per sync endpoint.
 - Each sync endpoint is the destination of at most one sync.
+- Syncs must not depend on each other in a cycle (e.g. `a: x → y` and `b: y → x`): the backup graph must have a topological order.
 - A remote-to-remote sync must stay on one server: both volumes must use the same primary `ssh-endpoint`.
 - A volume without a `mount` section must declare `path`.
+- A local volume's `path` must be absolute once `~` is expanded: a relative path would resolve against whichever directory nbkp is started from.
 - `credential-command` is required when `credential-provider` is `command`, and must contain the `{id}` placeholder.
 - Every field must have its documented type; nothing is silently coerced. An unquoted number where a string is expected (e.g. `subdir: 2024`) is rejected rather than ignored — quote it (`subdir: "2024"`). `filters` must be a list, even for a single rule (`filters: ["- *.tmp"]`, not `filters: "- *.tmp"`).
 

@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from textwrap import dedent
 
@@ -88,6 +89,15 @@ class TestLoadConfig:
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         assert excinfo.value.reason == ConfigErrorReason.INVALID_YAML
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root reads any file")
+    def test_unreadable_file(self, tmp_path: Path) -> None:
+        p = tmp_path / "config.yaml"
+        p.write_text("syncs: {}\n")
+        p.chmod(0)
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.UNREADABLE
 
     def test_not_a_mapping(self, tmp_path: Path) -> None:
         p = tmp_path / "list.yaml"
@@ -1065,6 +1075,32 @@ class TestLoadConfig:
         """)
         )
         assert ConfigValidationCode.SHARED_DESTINATION in _validation_error_types(p)
+
+    def test_cyclic_sync_dependency(self, tmp_path: Path) -> None:
+        p = tmp_path / "cycle.yaml"
+        p.write_text(
+            dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep-x:
+                volume: v
+                subdir: x
+              ep-y:
+                volume: v
+                subdir: y
+            syncs:
+              a:
+                source: ep-x
+                destination: ep-y
+              b:
+                source: ep-y
+                destination: ep-x
+        """)
+        )
+        assert ConfigValidationCode.CYCLIC_DEPENDENCY in _validation_error_types(p)
 
     def test_duplicate_volume_subdir_in_endpoints(self, tmp_path: Path) -> None:
         p = tmp_path / "dup_loc.yaml"

@@ -7,6 +7,7 @@ import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 
@@ -323,6 +324,39 @@ class TestGeneratedScriptExecution:
         assert "Completed sync: step-1" in result.stderr
         assert old.exists()
         assert (tmp_path / _DST_DIR / "sample.txt").exists()
+
+    def test_prune_keeps_snapshots_when_latest_cannot_be_read(
+        self, tmp_path: Path
+    ) -> None:
+        """As in `nbkp run`: an unreadable latest stops pruning, not its guard.
+
+        The fake readlink fails once latest names a snapshot, i.e. only in
+        the prune step. Without the guard, the new snapshot (sorting before
+        the future-dated one) would be pruned from under latest.
+        """
+        config = _seeded_chain(tmp_path, max_snapshots=1)
+        future = "2099-01-01T00-00-00.000Z"
+        (_stage(tmp_path) / SNAPSHOTS_DIR / future).mkdir()
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        flaky_readlink = bin_dir / "readlink"
+        flaky_readlink.write_text(
+            dedent(f"""\
+                #!/bin/sh
+                target=$({shutil.which("readlink")} "$@") || exit $?
+                case "$target" in {SNAPSHOTS_DIR}/*) exit 1 ;; esac
+                printf '%s\\n' "$target"
+            """),
+            encoding="utf-8",
+        )
+        flaky_readlink.chmod(0o755)
+        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+
+        result = _run_script(config, tmp_path, env=env)
+
+        assert result.returncode == 0, result.stderr
+        assert "WARN: pruning failed" in result.stderr
+        assert len(_snapshot_names(tmp_path)) == 2
 
     def test_strictness_ignore_none_aborts_on_inactive(self, tmp_path: Path) -> None:
         config = _seeded_chain(tmp_path)
