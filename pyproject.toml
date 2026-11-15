@@ -11,6 +11,10 @@ license-files = ["LICENSE"]
 authors = [{ name = "Sami Dalouche", email = "sami.dalouche@gmail.com" }]
 dependencies = [
   "fabric>=3.0,<4.0",
+  # Imported directly (exception types, SSH config parsing), not only through fabric, so
+  # their majors are bounded here rather than left to whatever fabric allows.
+  "invoke>=2.2,<3.0",
+  "paramiko>=5.0,<6.0",
   "jinja2>=3.0,<4.0",
   "pydantic>=2.14.1,<3.0.0",
   "pyyaml>=6.0,<7.0",
