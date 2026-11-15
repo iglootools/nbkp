@@ -16,6 +16,11 @@ from ..disks import (
     display_name,
     mount_count,
 )
+from ..disks.output import (
+    mount_failure_detail,
+    umount_failure_detail,
+    umount_failure_warning,
+)
 from ..policy import Severity, Strictness, classify_severity
 from .mount_progress_bar import (
     DisksProgressBar,
@@ -147,7 +152,7 @@ class LifecycleProgress:
             self.mount_bar.on_end(
                 self._name(slug),
                 mount_result_severity(result, self.strictness),
-                result.detail,
+                mount_failure_detail(result),
             )
 
     def on_umount_start(self, slug: str) -> None:
@@ -159,8 +164,8 @@ class LifecycleProgress:
             self.umount_bar.on_end(
                 self._name(slug),
                 Severity.OK if result.success else Severity.ERROR,
-                result.detail,
-                result.warning,
+                umount_failure_detail(result),
+                umount_failure_warning(result),
             )
 
     def stop_credentials(self) -> None:

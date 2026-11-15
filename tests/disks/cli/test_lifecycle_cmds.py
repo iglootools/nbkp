@@ -8,7 +8,12 @@ from typer.testing import CliRunner
 from nbkp.cli import app
 from nbkp.config import Config, LocalVolume, LuksEncryptionConfig, MountConfig
 from nbkp.disks.lifecycle import MountResult
-from nbkp.disks.models import MountCapabilities, MountFailureReason
+from nbkp.disks.models import (
+    LifecycleFailure,
+    LifecycleStep,
+    MountCapabilities,
+    MountFailureReason,
+)
 
 runner = CliRunner()
 
@@ -118,8 +123,8 @@ class TestMountAuthHint:
             MountResult(
                 volume_slug="enc",
                 success=False,
-                detail="unlock not authorized — polkit rule not configured",
                 failure_reason=MountFailureReason.NOT_AUTHORIZED,
+                failure=LifecycleFailure(step=LifecycleStep.UNLOCK, exit_code=1),
                 device_present=True,
                 luks_unlocked=False,
             )

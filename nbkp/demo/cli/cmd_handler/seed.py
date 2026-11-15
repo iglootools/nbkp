@@ -14,6 +14,7 @@ from ....config import (
     SshEndpoint,
 )
 from ....disks import mount_volumes, umount_volumes
+from ....disks.output import mount_failure_detail, umount_failure_detail
 from ....policy import Severity
 from ....remote.endpoints import ResolvedEndpoints
 from ....remote.resolution import resolve_all_endpoints
@@ -270,8 +271,9 @@ def _encrypted_volume_mounted(
         None,
     )
     if failed_mount is not None:
-        steps.end("mount encrypted volume", False, failed_mount.detail)
-        raise SeedError(f"Mount failed: {failed_mount.detail}")
+        detail = mount_failure_detail(failed_mount)
+        steps.end("mount encrypted volume", False, detail)
+        raise SeedError(f"Mount failed: {detail}")
     steps.end("mount encrypted volume", True)
     try:
         yield
@@ -290,7 +292,11 @@ def _umount_encrypted(
     """Umount + lock; returns the failure detail, if any."""
     steps.start("Unmounting encrypted volume...")
     failed = next((r for r in umount_volumes(config, resolved) if not r.success), None)
-    detail = (failed.detail or "unknown error") if failed is not None else None
+    detail = (
+        (umount_failure_detail(failed) or "unknown error")
+        if failed is not None
+        else None
+    )
     steps.end("umount encrypted volume", failed is None, detail)
     return detail
 

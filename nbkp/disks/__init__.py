@@ -34,7 +34,14 @@ from .lifecycle import (
     umount_volume,
     umount_volumes,
 )
-from .models import MountCapabilities, MountToolCapabilities, display_name
+from .models import (
+    LifecycleFailure,
+    LifecycleStep,
+    MountCapabilities,
+    MountToolCapabilities,
+    UmountFailureReason,
+    display_name,
+)
 from .mount_checks import (
     check_mount_capabilities,
     check_mount_status,
@@ -63,11 +70,14 @@ __all__ = [
     "AuthRuleBlock",
     "AuthRules",
     "DeviceProbeError",
+    "LifecycleFailure",
+    "LifecycleStep",
     "MountCapabilities",
     "MountFailureReason",
     "MountObservation",
     "MountResult",
     "MountToolCapabilities",
+    "UmountFailureReason",
     "UmountResult",
     "apply_effective_paths",
     "build_lock_command",

@@ -16,6 +16,7 @@ from ...remote.endpoints import NetworkType, ResolvedEndpoints
 from ..lifecycle import MountResult, mount_volumes
 from ..models import MountFailureReason
 from ..observation import build_mount_observations
+from ..output import mount_failure_detail
 from ..plan import plan_lifecycle
 from . import app
 from .helpers import (
@@ -160,7 +161,8 @@ def _show_results(
             *(
                 (
                     _error_label(
-                        display_names.get(r.volume_slug, r.volume_slug), r.detail
+                        display_names.get(r.volume_slug, r.volume_slug),
+                        mount_failure_detail(r),
                     ),
                     _ErrorStatus(),
                 )

@@ -1,4 +1,5 @@
 import enum
+from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict
 
@@ -21,6 +22,44 @@ class MountFailureReason(str, enum.Enum):
     """A read-only probe (e.g. ``lsblk``) failed, so the device state is
     unknown — distinct from "locked" or "not mounted"."""
     UNREACHABLE = "unreachable"
+
+
+class UmountFailureReason(str, enum.Enum):
+    UNMOUNT_FAILED = "unmount_failed"
+    LOCK_FAILED = "lock_failed"
+    """Unmounted (or not mounted) but the LUKS container is still unlocked."""
+    UDISKS_NOT_AVAILABLE = "udisks_not_available"
+    PROBE_FAILED = "probe_failed"
+    UNREACHABLE = "unreachable"
+
+
+class LifecycleStep(str, enum.Enum):
+    """A ``udisksctl`` step of the mount lifecycle."""
+
+    UNLOCK = "unlock"
+    MOUNT = "mount"
+    UNMOUNT = "umount"
+    LOCK = "lock"
+
+
+@dataclass(frozen=True)
+class LifecycleFailure:
+    """The facts behind a failed mount or umount; the reason is on the result.
+
+    Each field is set only when it applies, and holds data, not prose: the
+    message users see is rendered by ``nbkp.disks.output``.
+    """
+
+    step: LifecycleStep | None = None
+    """The udisks step that failed."""
+    exit_code: int | None = None
+    """Exit status of the failed command."""
+    message: str | None = None
+    """The failed command's stderr, or the error's first line."""
+    command: str | None = None
+    """A probe that failed (``lsblk``, ``findmnt``), or a tool not installed."""
+    device_uuid: str | None = None
+    passphrase_id: str | None = None
 
 
 class MountToolCapabilities(BaseModel):
