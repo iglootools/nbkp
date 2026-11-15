@@ -427,4 +427,4 @@ SSH arguments are constructed dynamically per endpoint. Common options:
 | `-o ForwardAgent=yes` | Forward SSH agent |
 | `-p PORT` | Custom SSH port |
 | `-i KEY_FILE` | SSH identity file |
-| `-o ProxyCommand=...` | Proxy jump chains |
+| `-o ProxyCommand=ssh [hop options] -W %h:%p <hop>` | Proxy jump chains: one nested `ProxyCommand` per hop rather than `-J`, so each hop carries its own port, key and connection options |

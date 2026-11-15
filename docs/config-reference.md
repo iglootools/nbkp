@@ -108,7 +108,7 @@ Providers:
 
 **`extends`** — An endpoint inherits every field of the endpoint it extends and overrides only the fields it sets. Setting one field of a mutually exclusive pair (`proxy-jump` / `proxy-jumps`, `location` / `locations`) drops the inherited other half. Circular `extends` chains are rejected at load time.
 
-**`proxy-jump` / `proxy-jumps`** — Reference other endpoints by slug to reach the host through one bastion (`proxy-jump`) or a multi-hop chain (`proxy-jumps`). Both map to SSH's `-J`. Circular chains are rejected at load time.
+**`proxy-jump` / `proxy-jumps`** — Reference other endpoints by slug to reach the host through one bastion (`proxy-jump`) or a multi-hop chain (`proxy-jumps`). Hops are traversed in order, like SSH's `-J`, but nbkp does not use `-J`: the rsync and generated-script SSH commands nest one `-o ProxyCommand=ssh … -W %h:%p <hop>` per hop, so each hop gets its own port, key and `connection-options` (with `-J`, a hop's options would come only from `~/.ssh/config`), and Fabric/Paramiko opens each hop as a gateway connection. See [SSH transport](./internals.md#ssh-transport). Circular chains are rejected at load time.
 
 **`location` / `locations`** — Network-context tags (e.g. `home`, `travel`) consumed by `--location` / `--exclude-location` at runtime. See [Endpoint Filtering](./internals.md#endpoint-filtering).
 
