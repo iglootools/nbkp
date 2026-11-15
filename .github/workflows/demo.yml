@@ -40,6 +40,11 @@ jobs:
   demo:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # workflow_run fires on both success and failure; skip if the release workflow failed.
+    # For all other triggers (push, workflow_dispatch, repository_dispatch), always run.
+    if: >-
+      github.event.workflow_run.conclusion == 'success'
+      || github.event_name != 'workflow_run'
     # Checkout only: upload-artifact authenticates with the runner's own token, not
     # GITHUB_TOKEN. Declared so the job does not inherit the repository's read-write default.
     permissions:

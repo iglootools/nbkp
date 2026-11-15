@@ -1,5 +1,6 @@
 from .checks import (
     check_all_syncs,
+    check_step_count,
     check_sync,
     check_volume,
 )
@@ -73,6 +74,7 @@ __all__ = [
     "VolumeError",
     "VolumeStatus",
     "check_all_syncs",
+    "check_step_count",
     "check_sync",
     "check_volume",
     "check_volume_capabilities",

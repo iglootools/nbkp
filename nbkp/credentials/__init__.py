@@ -118,7 +118,14 @@ def _from_command(passphrase_id: str, command_template: list[str] | None) -> str
             f" {shlex.join(command)}\nstderr: {result.stderr.strip()}",
             reason=CredentialErrorReason.COMMAND_FAILED,
         )
-    return result.stdout.strip()
+    return _first_line(result.stdout)
+
+
+def _first_line(output: str) -> str:
+    """The passphrase in a command's output: its first line, as ``pass``
+    stores it (later lines hold metadata), without the line break but with
+    any surrounding spaces, which may belong to the passphrase."""
+    return output.partition("\n")[0].removesuffix("\r")
 
 
 def retrieve_passphrase(

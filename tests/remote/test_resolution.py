@@ -210,7 +210,11 @@ class TestResolveAllEndpoints:
         )
 
     def test_enriches_with_given_ssh_config(self) -> None:
-        resolved = resolve_all_endpoints(self._config(), ssh_config=_NAS_SSH_CONFIG)
+        resolved = resolve_all_endpoints(
+            self._config(),
+            ssh_config=_NAS_SSH_CONFIG,
+            lookup=_fixed_lookup({"192.168.1.100": {"192.168.1.100"}}),
+        )
         assert set(resolved) == {"nas"}
         assert resolved["nas"].server.port == 5022
 
@@ -225,3 +229,56 @@ class TestResolveAllEndpoints:
             lookup=lookup,
         )
         assert resolved["nas"].server.slug == "nas-wan"
+
+    def test_unresolvable_first_candidate_skipped_without_filter(self) -> None:
+        """On the road, ``mynas`` does not resolve: ``nas-wan`` is used."""
+        resolved = resolve_all_endpoints(
+            self._config(),
+            ssh_config=_NO_SSH_CONFIG,
+            lookup=_fixed_lookup({"nas.example.com": {"8.8.8.8"}}),
+        )
+        assert resolved["nas"].server.slug == "nas-wan"
+
+    def test_unresolvable_first_candidate_skipped_with_filter(self) -> None:
+        resolved = resolve_all_endpoints(
+            self._config(),
+            EndpointFilter(exclude_locations=["office"]),
+            ssh_config=_NO_SSH_CONFIG,
+            lookup=_fixed_lookup({"nas.example.com": {"8.8.8.8"}}),
+        )
+        assert resolved["nas"].server.slug == "nas-wan"
+
+    def test_first_resolvable_candidate_kept(self) -> None:
+        resolved = resolve_all_endpoints(
+            self._config(),
+            ssh_config=_NO_SSH_CONFIG,
+            lookup=_fixed_lookup(
+                {"mynas": {"192.168.1.100"}, "nas.example.com": {"8.8.8.8"}}
+            ),
+        )
+        assert resolved["nas"].server.slug == "nas-lan"
+
+    def test_no_candidate_resolves_falls_back_to_first(self) -> None:
+        resolved = resolve_all_endpoints(
+            self._config(), ssh_config=_NO_SSH_CONFIG, lookup=_unresolvable
+        )
+        assert resolved["nas"].server.slug == "nas-lan"
+
+    def test_single_candidate_not_looked_up(self) -> None:
+        looked_up: list[str] = []
+
+        def lookup(host: str) -> set[str] | None:
+            looked_up.append(host)
+            return None
+
+        config = Config(
+            ssh_endpoints={"nas-lan": SshEndpoint(slug="nas-lan", host="mynas")},
+            volumes={
+                "nas": RemoteVolume(slug="nas", ssh_endpoint="nas-lan", path="/b"),
+            },
+        )
+        resolved = resolve_all_endpoints(
+            config, ssh_config=_NO_SSH_CONFIG, lookup=lookup
+        )
+        assert resolved["nas"].server.slug == "nas-lan"
+        assert looked_up == []

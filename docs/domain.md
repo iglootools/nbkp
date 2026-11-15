@@ -63,7 +63,7 @@ A volume can also be **mount-managed**: it declares the device's UUID (and, for 
 
 Sync endpoints are the nodes of the backup graph. Two invariants keep that graph unambiguous:
 
-- **One endpoint per location.** No two sync endpoints may point at the same `(volume, subdir)`, nor may one be nested inside another on the same volume. Otherwise two endpoints could disagree about the snapshot layout of one directory, and nbkp could not tell that a sync writing into one feeds a sync reading from the other.
+- **One endpoint per location.** No two sync endpoints may point at the same `(volume, subdir)`, nor may one be nested inside another on the same volume. (Only within a volume: two volumes whose paths overlap are not detected, so keep volumes disjoint.) Otherwise two endpoints could disagree about the snapshot layout of one directory, and nbkp could not tell that a sync writing into one feeds a sync reading from the other.
 - **Snapshot mode belongs to the location.** It describes how the directory is laid out on disk, so it is configured on the endpoint, and its meaning depends on the role: as a destination, it means "take a snapshot after each successful sync"; as a source, it means "read from the latest snapshot, not from the live directory".
 
 ### Sync

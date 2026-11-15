@@ -1,5 +1,4 @@
 import io
-import shlex
 import subprocess
 from functools import reduce
 
@@ -8,6 +7,7 @@ import paramiko
 from fabric import Connection  # type: ignore[import-untyped]
 
 from ..config import SshEndpoint
+from .ssh import shell_join
 
 
 class StdinClosedProcess(subprocess.CompletedProcess[str]):
@@ -88,7 +88,7 @@ def run_remote_command(
     proxy_chain: list[SshEndpoint] | None = None,
     input: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    cmd_string = shlex.join(command)
+    cmd_string = shell_join(command)
     # in_stream=False disables stdin; Fabric's default would forward this
     # process's own stdin to the remote command.
     in_stream: io.BytesIO | bool = (

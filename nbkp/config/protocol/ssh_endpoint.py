@@ -7,6 +7,19 @@ from .base import Slug, _BaseModel
 from .errors import ConfigValidationCode, config_error
 
 
+def _expand_user(v: Any) -> Any:
+    """``~``-expand a path given as a string.
+
+    Non-strings pass through so pydantic rejects them rather than silently
+    dropping the value.
+    """
+    match v:
+        case str():
+            return str(Path(v).expanduser())
+        case _:
+            return v
+
+
 class SshConnectionOptions(_BaseModel):
     """These fields map to parameters across three layers:
     - SSH client: ssh(1) -o options
@@ -62,6 +75,13 @@ class SshConnectionOptions(_BaseModel):
         default=None, description="Custom known hosts file path"
     )
 
+    @field_validator("known_hosts_file", mode="before")
+    @classmethod
+    def normalize_known_hosts_file(cls, v: Any) -> Any:
+        # OpenSSH expands ``~`` in UserKnownHostsFile, Paramiko's
+        # load_host_keys does not: expand it once here for both.
+        return _expand_user(v)
+
     # SSH: ForwardAgent | Fabric: forward_agent
     forward_agent: bool = Field(
         default=False, description="Enable SSH agent forwarding"
@@ -85,13 +105,7 @@ class SshEndpoint(_BaseModel):
     @field_validator("key", mode="before")
     @classmethod
     def normalize_key(cls, v: Any) -> Any:
-        # Non-strings pass through so pydantic rejects them rather than
-        # silently dropping the key.
-        match v:
-            case str():
-                return str(Path(v).expanduser())
-            case _:
-                return v
+        return _expand_user(v)
 
     connection_options: SshConnectionOptions = Field(
         default_factory=lambda: SshConnectionOptions(),

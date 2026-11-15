@@ -21,7 +21,9 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, VOLUME_SENTINEL
+from nbkp.run.pipeline import check_and_run
 from nbkp.sh import ScriptOptions, generate_script
+from nbkp.sync import SyncFailureKind
 from nbkp.sync.testkit.seed import (
     SEED_EXCLUDE_FILTERS,
     create_seed_sentinels,
@@ -282,6 +284,36 @@ class TestGeneratedScriptExecution:
         # Rooted in expected inactivity: not a failure, as in `nbkp run`.
         assert result.returncode == 0, result.stderr
 
+    def test_disabled_upstream_cancels_downstream_as_in_run(
+        self, tmp_path: Path
+    ) -> None:
+        """Script and ``nbkp run`` agree: a disabled sync's downstream is
+        cancelled, not run against a stale or missing source."""
+        chain = _seeded_chain(tmp_path)
+        # A first run gives step-2 a valid source snapshot to read from.
+        assert _run_script(chain, tmp_path).returncode == 0
+        (tmp_path / _DST_DIR / "sample.txt").unlink()
+        config = chain.model_copy(
+            update={
+                "syncs": {
+                    **chain.syncs,
+                    "step-1": chain.syncs["step-1"].model_copy(
+                        update={"enabled": False}
+                    ),
+                }
+            }
+        )
+
+        result = _run_script(config, tmp_path)
+        pipeline = check_and_run(config, clock=lambda: _NOW, platform=sys.platform)
+
+        assert "SKIPPED step-1: disabled" in result.stderr
+        assert "CANCELLED step-2: upstream sync was skipped" in result.stderr
+        assert result.returncode == 0, result.stderr
+        assert not (tmp_path / _DST_DIR / "sample.txt").exists()
+        run_step_2 = next(r for r in pipeline.results if r.sync_slug == "step-2")
+        assert run_step_2.failure is SyncFailureKind.UPSTREAM_SKIPPED
+
     def test_inactive_upstream_cancellation_fails_under_ignore_none(
         self, tmp_path: Path
     ) -> None:
@@ -376,6 +408,23 @@ class TestGeneratedScriptExecution:
 
         assert result.returncode == 1
         assert "snapshots/ directory not found" in result.stderr
+        assert "Starting sync" not in result.stderr
+
+    def test_latest_outside_snapshots_dir_aborts(self, tmp_path: Path) -> None:
+        """Like ``nbkp run``: a timestamp-named target elsewhere is invalid."""
+        config = _seeded_chain(tmp_path)
+        assert _run_script(config, tmp_path).returncode == 0
+        [snapshot] = _snapshot_names(tmp_path)
+        lookalike = _stage(tmp_path) / "elsewhere" / snapshot
+        lookalike.mkdir(parents=True)
+        latest = _stage(tmp_path) / LATEST_LINK
+        latest.unlink()
+        latest.symlink_to(f"elsewhere/{snapshot}")
+
+        result = _run_script(config, tmp_path)
+
+        assert result.returncode == 1
+        assert "latest symlink target is invalid" in result.stderr
         assert "Starting sync" not in result.stderr
 
     def test_prune_never_keeps_extra_over_latest(self, tmp_path: Path) -> None:

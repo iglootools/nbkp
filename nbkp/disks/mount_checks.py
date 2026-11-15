@@ -132,6 +132,9 @@ def fstab_source_matches(
     - Encrypted: the entry must not name the LUKS container itself (it
       cannot be mounted), and a ``/dev/mapper/<name>`` must be the cleartext
       device — the discovered one when unlocked, else udisks's default name.
+      A cleartext device known only by its kernel name (``/dev/dm-N``, what
+      udisks reports right after unlocking it) cannot be told apart from a
+      mapper name without a probe, so any mapper name is accepted then.
     """
     uuid = mount.device_uuid.lower()
     spec = source.strip()
@@ -142,12 +145,22 @@ def fstab_source_matches(
         case None:
             return not is_uuid_spec or names_uuid == uuid
         case _:
-            expected_mapper = cleartext_device or (
-                f"/dev/mapper/{cleartext_mapper_name(uuid)}"
-            )
             return not (is_uuid_spec and names_uuid == uuid) and (
-                not spec.startswith("/dev/mapper/") or spec == expected_mapper
+                not spec.startswith("/dev/mapper/")
+                or _matches_cleartext_mapper(spec, uuid, cleartext_device)
             )
+
+
+def _matches_cleartext_mapper(
+    spec: str, uuid: str, cleartext_device: str | None
+) -> bool:
+    match cleartext_device:
+        case None:
+            return spec == f"/dev/mapper/{cleartext_mapper_name(uuid)}"
+        case device if device.startswith("/dev/mapper/"):
+            return spec == device
+        case _:
+            return True
 
 
 @dataclass(frozen=True)

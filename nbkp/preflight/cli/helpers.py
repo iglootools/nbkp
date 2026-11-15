@@ -1,3 +1,5 @@
+from collections.abc import Collection
+
 from ...clidisplay import OutputFormat
 from ...clidisplay.invocation import Invocation
 from ...cliwiring.preflight import check_all_with_progress
@@ -19,6 +21,7 @@ def check_and_display(
     dry_run: bool = False,
     mount_observations: dict[str, MountObservation] | None = None,
     invocation: Invocation | None = None,
+    exclude_locations: Collection[str] = (),
 ) -> tuple[PreflightResult, bool]:
     """Compute statuses, display human output, and check for errors.
 
@@ -34,6 +37,7 @@ def check_and_display(
         dry_run=dry_run,
         mount_observations=mount_observations,
         strictness=strictness,
+        exclude_locations=exclude_locations,
     )
 
     if output_format is OutputFormat.HUMAN:

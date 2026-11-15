@@ -105,6 +105,7 @@ def check(
             resolved_endpoints=resolved,
             mount_observations=mount_observations,
             invocation=invocation,
+            exclude_locations=exclude_location or [],
         )
         if output is OutputFormat.JSON:
             echo_json(check_json(preflight))

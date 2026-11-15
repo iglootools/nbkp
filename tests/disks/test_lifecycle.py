@@ -11,6 +11,8 @@ from nbkp.config import (
     LocalVolume,
     LuksEncryptionConfig,
     MountConfig,
+    RemoteVolume,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
 )
@@ -18,14 +20,23 @@ from nbkp.credentials import CredentialError, CredentialErrorReason
 from nbkp.disks.detection import DeviceProbeError
 from nbkp.disks.lifecycle import (
     MountFailureReason,
+    mount_count,
     mount_volume,
     mount_volumes,
     run_udisks,
     umount_volume,
     umount_volumes,
 )
-from nbkp.disks.models import LifecycleFailure, LifecycleStep, UmountFailureReason
+from nbkp.disks.models import (
+    LifecycleFailure,
+    LifecycleStep,
+    MountCapabilities,
+    UmountFailureReason,
+)
+from nbkp.disks.plan import plan_lifecycle
+from nbkp.remote.endpoints import EndpointFilter, ResolvedEndpoints
 from nbkp.remote.fabricssh import StdinClosedProcess
+from nbkp.remote.resolution import resolve_all_endpoints
 
 _ENC_UUID = "5941f273-f73c-44c5-a3ef-fae7248db1b6"
 _USB_UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
@@ -751,3 +762,65 @@ class TestUmountVolumes:
             results = umount_volumes(cfg, {})
         assert isinstance(results, list)
         assert len(results) == 2
+
+
+def _config_with_excluded_remote_mount() -> tuple[Config, ResolvedEndpoints]:
+    """``usb`` (local) and ``nas-drive`` (remote, only reachable from home),
+    resolved under ``--exclude-location home``."""
+    cfg = Config(
+        ssh_endpoints={
+            "nas": SshEndpoint(slug="nas", host="nas.lan", location="home"),
+        },
+        volumes={
+            "nas-drive": RemoteVolume(
+                slug="nas-drive",
+                ssh_endpoint="nas",
+                path="/mnt/nas-drive",
+                mount=MountConfig(device_uuid=_ENC_UUID),
+            ),
+            "usb": _unencrypted_vol(),
+        },
+    )
+    resolved = resolve_all_endpoints(
+        cfg,
+        EndpointFilter(exclude_locations=["home"]),
+        ssh_config=paramiko.SSHConfig(),
+        lookup=lambda _host: {"192.168.1.10"},
+    )
+    return cfg, resolved
+
+
+class TestLocationExcludedVolumes:
+    """A volume excluded by location has no endpoint: nothing may reach it."""
+
+    def test_mount_skips_excluded_volume(self) -> None:
+        cfg, resolved = _config_with_excluded_remote_mount()
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.find_mountpoint", return_value="/mnt/usb"),
+        ):
+            results = mount_volumes(cfg, resolved, lambda x: "pass")
+        assert [r.volume_slug for r in results] == ["usb"]
+
+    def test_umount_skips_excluded_volume(self) -> None:
+        cfg, resolved = _config_with_excluded_remote_mount()
+        with (
+            patch("nbkp.disks.lifecycle.resolve_target_device", return_value=None),
+            patch("nbkp.disks.lifecycle.find_mountpoint", return_value=None),
+        ):
+            results = umount_volumes(cfg, resolved)
+        assert [r.volume_slug for r in results] == ["usb"]
+
+    def test_mount_count_leaves_out_excluded_volume(self) -> None:
+        cfg, resolved = _config_with_excluded_remote_mount()
+        assert mount_count(cfg, resolved) == 1
+
+    @pytest.mark.parametrize("mounting", [True, False])
+    def test_plan_skips_excluded_volume(self, mounting: bool) -> None:
+        cfg, resolved = _config_with_excluded_remote_mount()
+        with patch(
+            "nbkp.disks.plan.check_mount_status",
+            return_value=MountCapabilities(device_present=False),
+        ):
+            plans = plan_lifecycle(cfg, resolved, mounting=mounting)
+        assert [p.volume_slug for p in plans] == ["usb"]

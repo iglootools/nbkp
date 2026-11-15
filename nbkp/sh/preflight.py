@@ -111,7 +111,8 @@ def _tool_checks(tools: tuple[str, ...], spec: SyncSpec) -> list[str]:
 def _latest_checks(
     vol: LocalVolume | RemoteVolume, path: str, role: str, var: str, spec: SyncSpec
 ) -> list[str]:
-    """``latest`` must be a symlink to ``/dev/null`` or to a snapshot dir.
+    """``latest`` must be a symlink to ``/dev/null`` or to a snapshot dir
+    (``snapshots/<timestamp>``, as in ``nbkp run``'s preflight).
 
     Leaves the raw target in ``$var`` for the caller's further checks.
     """
@@ -125,7 +126,8 @@ def _latest_checks(
         ),
         f"{var}={target}",
         guard(
-            f'[ "${var}" = /dev/null ] || {_test(vol, ["-d", f"{latest}/"], spec)}',
+            f'[ "${var}" = /dev/null ] || {{ nbkp_is_snapshot_target "${var}"'
+            f" {SNAPSHOTS_DIR} && {_test(vol, ['-d', f'{latest}/'], spec)}; }}",
             f"{role} {LATEST_LINK} symlink target is invalid ({latest})",
             BROKEN,
         ),

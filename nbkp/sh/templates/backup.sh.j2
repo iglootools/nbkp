@@ -39,7 +39,8 @@ ${{ config_line }}
 #     infrastructure errors abort it before any sync starts; ignore-all attempts
 #     syncs with infrastructure errors once their sentinels are all present
 #   - Failure propagation: syncs downstream of a failed or skipped sync are
-#     cancelled; a cancellation caused by a skipped (inactive) upstream does not
+#     cancelled, a disabled sync counting as skipped as in nbkp run; a
+#     cancellation caused by a skipped (inactive) upstream does not
 #     fail the run unless ignore-none, one caused by a failed upstream does
 #   - Best-effort steps (orphan cleanup, pruning, removal of a failed snapshot
 #     directory) log a warning and never fail the sync
@@ -136,6 +137,16 @@ nbkp_matches() {
 # ignored, which also makes the names safe to splice into remote commands.
 nbkp_snapshot_names() {
     { grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.Z-]+$' || true; } | sort
+}
+# Whether latest target $1 names a snapshot in the snapshots dir $2, as nbkp
+# writes it: a timestamp-named entry directly under it, not a lookalike
+# elsewhere (../other/snapshots/<timestamp>).
+nbkp_is_snapshot_target() {
+    case "$1" in
+        "$2"/*/*) return 1;;
+        "$2"/?*) [ -n "$(printf '%s\n' "${1#"$2"/}" | nbkp_snapshot_names)" ];;
+        *) return 1;;
+    esac
 }
 <% if portable %>
 NBKP_FAILED=" "
@@ -273,6 +284,8 @@ nbkp_run_sync ${{ sync.slug }} ${{ sync.fn_name }} "$NBKP_PF_${{ sync.fn_name }}
 
 <% else %>
 # ${{ sync.fn_name }}  # disabled
+nbkp_log "SKIPPED ${{ sync.slug }}: disabled"
+nbkp_mark_not_run ${{ sync.fn_name }}
 <% endif %>
 <% endfor %>
 

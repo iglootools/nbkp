@@ -111,6 +111,7 @@ def show(
             resolved_endpoints=resolved,
             mount_observations=mount_observations,
             strictness=strictness,
+            exclude_locations=exclude_location or [],
         )
         results = show_all_syncs(
             cfg,

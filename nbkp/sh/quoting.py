@@ -13,6 +13,8 @@ import re
 import shlex
 import textwrap
 
+from ..remote import shell_join
+
 _MARK = "\x00"
 _DQ_SPECIAL = re.compile(r'([\\"$`])')
 
@@ -59,12 +61,14 @@ def quote_args(args: list[str]) -> str:
 def remote_command(args: list[str]) -> str:
     """Join *args* into one command string for the remote shell.
 
-    Each argument is single-quoted for the remote side; placeholders stay
+    Each argument is single-quoted for the remote side, except a leading
+    ``~`` / ``~/``, which the remote shell must expand to the remote user's
+    home (see :func:`nbkp.remote.ssh.shell_join`); placeholders stay
     inside those quotes and are expanded locally when the whole string is
     later passed through :func:`quote`.  Placeholder values must therefore
     be free of single quotes (timestamps and validated snapshot names).
     """
-    return shlex.join(args)
+    return shell_join(args)
 
 
 def format_command(cmd: list[str]) -> str:

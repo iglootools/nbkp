@@ -171,7 +171,7 @@ def _observe_local(
     # A mount-managed volume with no declared path that is not yet mounted
     # has no knowable location — treat as sentinel-missing (inactive).
     sentinel_exists = (
-        volume.path is not None and (Path(volume.path) / VOLUME_SENTINEL).exists()
+        volume.path is not None and (Path(volume.path) / VOLUME_SENTINEL).is_file()
     )
     caps = (
         check_volume_capabilities(

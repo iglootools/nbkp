@@ -26,13 +26,12 @@ from ...cliwiring.config import (
 )
 from ...cliwiring.mount import managed_mount, print_umount_failures
 from ...cliwiring.mount_progress import mount_display_names
-from ...cliwiring.preflight import check_total
 from ...config import Config
 from ...disks import UmountResult
 from ...disks.output import umount_result_json
 from ...ordering.output import build_rich_tree_sections
 from ...policy import Strictness
-from ...preflight import PreflightResult, SyncStatus
+from ...preflight import PreflightResult, SyncStatus, check_step_count
 from ...preflight.output import print_human_check
 from ...preflight.severity import PreflightError, severity_for_errors
 from ...remote.endpoints import NetworkType, ResolvedEndpoints
@@ -155,7 +154,15 @@ def run(
         umount_results=umount_results,
     ) as (cfg, mount_observations):
         display = (
-            _HumanProgress(cfg, resolved, sync, progress, strictness, invocation)
+            _HumanProgress(
+                cfg,
+                resolved,
+                exclude_location or [],
+                sync,
+                progress,
+                strictness,
+                invocation,
+            )
             if output is OutputFormat.HUMAN
             else None
         )
@@ -174,6 +181,7 @@ def run(
             callbacks=display.sync_callbacks() if display else None,
             resolved_endpoints=resolved,
             mount_observations=mount_observations,
+            exclude_locations=exclude_location or [],
         )
     _print_outcome(
         pipeline, cfg, resolved, output, strictness, dry_run, hint, umount_results
@@ -197,12 +205,13 @@ class _HumanProgress:
         self,
         cfg: Config,
         resolved: ResolvedEndpoints,
+        exclude_locations: list[str],
         only_syncs: list[str] | None,
         progress: ProgressMode | None,
         strictness: Strictness,
         invocation: Invocation,
     ) -> None:
-        total = check_total(cfg, only_syncs)
+        total = check_step_count(cfg, only_syncs, resolved, exclude_locations)
         self._cfg = cfg
         self._resolved = resolved
         self._strictness = strictness

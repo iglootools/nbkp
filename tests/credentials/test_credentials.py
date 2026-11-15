@@ -130,6 +130,29 @@ class TestRetrievePassphraseCommand:
             check=False,
         )
 
+    @pytest.mark.parametrize(
+        ("stdout", "passphrase"),
+        [
+            ("secret\nlogin: me\nurl: example.com\n", "secret"),
+            ("  spaced secret \n", "  spaced secret "),
+            ("crlf-secret\r\n", "crlf-secret"),
+            ("no-newline", "no-newline"),
+        ],
+    )
+    def test_passphrase_is_first_line_of_output(
+        self, stdout: str, passphrase: str
+    ) -> None:
+        with patch("nbkp.credentials.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=stdout, stderr=""
+            )
+            result = retrieve_passphrase(
+                "disk1",
+                CredentialProvider.COMMAND,
+                command_template=["pass", "show", "nbkp/{id}"],
+            )
+        assert result == passphrase
+
     def test_replaces_id_in_template(self) -> None:
         with patch("nbkp.credentials.subprocess.run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(

@@ -23,8 +23,17 @@ from nbkp.config import (
     SyncEndpoint,
     Volume,
 )
-from nbkp.preflight.checks import check_all_syncs, check_sync, check_volume
-from nbkp.preflight.probes import _check_rsync_version, parse_rsync_version
+from nbkp.preflight.checks import (
+    check_all_syncs,
+    check_step_count,
+    check_sync,
+    check_volume,
+)
+from nbkp.preflight.probes import (
+    _check_endpoint_sentinel,
+    _check_rsync_version,
+    parse_rsync_version,
+)
 from nbkp.preflight.snapshot_checks import (
     check_btrfs_filesystem,
     check_btrfs_mount_option,
@@ -53,8 +62,8 @@ from nbkp.preflight.status.volume import (
 )
 from nbkp.preflight.volume_checks import observe_ssh_endpoint
 from nbkp.remote.dispatch import check_command_available
-from nbkp.remote.endpoints import ResolvedEndpoint, ResolvedEndpoints
-from nbkp.remote.resolution import resolve_proxy_chain
+from nbkp.remote.endpoints import EndpointFilter, ResolvedEndpoint, ResolvedEndpoints
+from nbkp.remote.resolution import resolve_all_endpoints, resolve_proxy_chain
 from nbkp.snapshots.common import create_snapshot_timestamp
 from nbkp.sync import SyncFailureKind, SyncOutcome, SyncResult
 
@@ -707,6 +716,22 @@ class TestCheckLocalVolume:
         assert status.active is False
         assert status.errors == [VolumeError.SENTINEL_NOT_FOUND]
 
+    def test_sentinel_directory_is_not_a_sentinel(self, tmp_path: Path) -> None:
+        """Like the remote ``test -f``: only a regular file counts."""
+        (tmp_path / ".nbkp-vol").mkdir()
+        status = check_volume(LocalVolume(slug="data", path=str(tmp_path)))
+        assert status.errors == [VolumeError.SENTINEL_NOT_FOUND]
+
+    def test_endpoint_sentinel_directory_is_not_a_sentinel(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "photos" / ".nbkp-src").mkdir(parents=True)
+        vol = LocalVolume(slug="data", path=str(tmp_path))
+        assert _check_endpoint_sentinel(vol, "photos", ".nbkp-src", {}) is False
+        (tmp_path / "photos" / ".nbkp-src").rmdir()
+        (tmp_path / "photos" / ".nbkp-src").touch()
+        assert _check_endpoint_sentinel(vol, "photos", ".nbkp-src", {}) is True
+
 
 class TestCheckRemoteVolume:
     @patch(
@@ -1244,6 +1269,61 @@ class TestCheckSync:
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
         assert SshEndpointError.BTRFS_NOT_FOUND in ssh_errors
+
+    @patch(
+        "nbkp.preflight.checks.observe_ssh_endpoint",
+        return_value=_ssh_diag(host_tools=_BTRFS_NO_BTRFS_CMD_HOST_TOOLS),
+    )
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
+    def test_disabled_sync_does_not_add_tool_needs(
+        self, _mock_caps: MagicMock, _mock_ssh: MagicMock, tmp_path: Path
+    ) -> None:
+        """A disabled btrfs sync must not make the host's missing btrfs fatal
+        for the enabled syncs sharing it."""
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_active_sentinels(src, dst)
+        config = Config(
+            volumes={
+                "src": LocalVolume(slug="src", path=str(src)),
+                "dst": LocalVolume(slug="dst", path=str(dst)),
+            },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="data"),
+                "ep-plain": SyncEndpoint(
+                    slug="ep-plain", volume="dst", subdir="backup"
+                ),
+                "ep-old-src": SyncEndpoint(
+                    slug="ep-old-src", volume="src", subdir="old"
+                ),
+                "ep-btrfs": SyncEndpoint(
+                    slug="ep-btrfs",
+                    volume="dst",
+                    subdir="btrfs",
+                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                ),
+            },
+            syncs={
+                "plain": SyncConfig(
+                    slug="plain", source="ep-src", destination="ep-plain"
+                ),
+                "old-btrfs": SyncConfig(
+                    slug="old-btrfs",
+                    source="ep-old-src",
+                    destination="ep-btrfs",
+                    enabled=False,
+                ),
+            },
+        )
+
+        result = check_all_syncs(config)
+        assert result.ssh_endpoint_statuses["localhost"].errors == []
+        assert result.sync_statuses["plain"].active is True
 
     @patch(
         "nbkp.preflight.checks.observe_ssh_endpoint",
@@ -2914,6 +2994,43 @@ class TestCheckAllSyncs:
         assert set(result.volume_statuses.keys()) == {"src1", "dst1"}
         assert result.sync_statuses["s1"].active is True
 
+    @pytest.mark.parametrize("only_syncs", [None, ["s1"]])
+    @patch("nbkp.preflight.checks.observe_standalone_endpoint")
+    @patch("nbkp.preflight.checks.observe_ssh_endpoint", return_value=_ssh_diag())
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
+    def test_step_count_matches_reported_steps(
+        self,
+        _mock_caps: MagicMock,
+        _mock_ssh: MagicMock,
+        mock_standalone: MagicMock,
+        only_syncs: list[str] | None,
+        tmp_path: Path,
+    ) -> None:
+        mock_standalone.return_value = _REACHABLE_SSH_DIAG
+        config = Config(
+            ssh_endpoints={"orphan": SshEndpoint(slug="orphan", host="orphan")},
+            volumes={
+                "a": LocalVolume(slug="a", path=str(tmp_path / "a")),
+                "b": LocalVolume(slug="b", path=str(tmp_path / "b")),
+                "c": LocalVolume(slug="c", path=str(tmp_path / "c")),
+            },
+            sync_endpoints={
+                "ep-a": SyncEndpoint(slug="ep-a", volume="a"),
+                "ep-b": SyncEndpoint(slug="ep-b", volume="b"),
+                "ep-c": SyncEndpoint(slug="ep-c", volume="c"),
+            },
+            syncs={
+                "s1": SyncConfig(slug="s1", source="ep-a", destination="ep-b"),
+                "s2": SyncConfig(slug="s2", source="ep-b", destination="ep-c"),
+            },
+        )
+        started: list[str] = []
+        check_all_syncs(config, on_check_start=started.append, only_syncs=only_syncs)
+        assert check_step_count(config, only_syncs) == len(started)
+
 
 class TestStandaloneEndpointProbing:
     """Tests for standalone SSH endpoint probing (bastions, orphans) in Phase 1."""
@@ -3216,6 +3333,203 @@ class TestStandaloneEndpointProbing:
             assert result.ssh_endpoint_statuses["orphan"].diagnostics.host_tools is None
 
         _run(self, tmp_path)
+
+    def _make_alternate_config(self, tmp_path: Path) -> Config:
+        """``remote`` (via ``target``, through ``bastion``) is synced by
+        ``s1``; ``other`` (via ``other-host``, or the ``home``-only
+        alternate ``other-lan``) by ``s2``."""
+        config = self._make_bastion_config(tmp_path)
+        return Config(
+            ssh_endpoints={
+                **config.ssh_endpoints,
+                "other-host": SshEndpoint(slug="other-host", host="other.example"),
+                "other-lan": SshEndpoint(
+                    slug="other-lan", host="other.lan", location="home"
+                ),
+            },
+            volumes={
+                **config.volumes,
+                "other": RemoteVolume(
+                    slug="other",
+                    ssh_endpoint="other-host",
+                    ssh_endpoints=["other-host", "other-lan"],
+                    path="/other",
+                ),
+            },
+            sync_endpoints={
+                **config.sync_endpoints,
+                "ep-other": SyncEndpoint(slug="ep-other", volume="other"),
+            },
+            syncs={
+                **config.syncs,
+                "s2": SyncConfig(slug="s2", source="ep-src", destination="ep-other"),
+            },
+        )
+
+    def _resolved(self, config: Config) -> ResolvedEndpoints:
+        return {
+            "remote": ResolvedEndpoint(
+                server=config.ssh_endpoints["target"],
+                proxy_chain=[config.ssh_endpoints["bastion"]],
+            ),
+            "other": ResolvedEndpoint(server=config.ssh_endpoints["other-host"]),
+        }
+
+    def test_endpoint_at_excluded_location_not_probed(self, tmp_path: Path) -> None:
+        @self._bastion_patches()
+        def _run(self_inner: TestStandaloneEndpointProbing, tmp_path: Path) -> None:
+            config = self_inner._make_alternate_config(tmp_path)
+            resolved = self_inner._resolved(config)
+            with patch(
+                "nbkp.preflight.checks.observe_standalone_endpoint",
+                return_value=_REACHABLE_SSH_DIAG,
+            ) as standalone:
+                result = check_all_syncs(
+                    config, resolved_endpoints=resolved, exclude_locations=["home"]
+                )
+            probed = {call.args[0].slug for call in standalone.call_args_list}
+            assert probed == {"bastion"}
+            assert "other-lan" not in result.ssh_endpoint_statuses
+            assert check_step_count(config, None, resolved, ["home"]) == (
+                len(result.ssh_endpoint_statuses)
+                + len(result.volume_statuses)
+                + len(result.source_endpoint_statuses)
+                + len(result.destination_endpoint_statuses)
+            )
+
+        _run(self, tmp_path)
+
+    def test_only_syncs_probes_only_endpoints_of_selected_volumes(
+        self, tmp_path: Path
+    ) -> None:
+        @self._bastion_patches()
+        def _run(self_inner: TestStandaloneEndpointProbing, tmp_path: Path) -> None:
+            config = self_inner._make_alternate_config(tmp_path)
+            with patch(
+                "nbkp.preflight.checks.observe_standalone_endpoint",
+                return_value=_REACHABLE_SSH_DIAG,
+            ) as standalone:
+                result = check_all_syncs(
+                    config,
+                    only_syncs=["s1"],
+                    resolved_endpoints=self_inner._resolved(config),
+                )
+            probed = {call.args[0].slug for call in standalone.call_args_list}
+            assert probed == {"bastion"}
+            assert set(result.ssh_endpoint_statuses) == {
+                "localhost",
+                "target",
+                "bastion",
+            }
+
+        _run(self, tmp_path)
+
+
+def _alternate_endpoint_config(archive: str, photos: str) -> Config:
+    """``archive`` is only reachable from home (``nas-lan``); ``photos`` has
+    the same primary but also ``nas-wan``, reachable while travelling."""
+    return Config(
+        ssh_endpoints={
+            "nas-lan": SshEndpoint(slug="nas-lan", host="nas.lan", location="home"),
+            "nas-wan": SshEndpoint(
+                slug="nas-wan", host="nas.example.com", location="travel"
+            ),
+        },
+        volumes={
+            "laptop": LocalVolume(slug="laptop", path="/home/me"),
+            archive: RemoteVolume(slug=archive, ssh_endpoint="nas-lan", path="/a"),
+            photos: RemoteVolume(
+                slug=photos,
+                ssh_endpoint="nas-lan",
+                ssh_endpoints=["nas-lan", "nas-wan"],
+                path="/p",
+            ),
+        },
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="laptop"),
+            "ep-archive": SyncEndpoint(slug="ep-archive", volume=archive),
+            "ep-photos": SyncEndpoint(slug="ep-photos", volume=photos),
+        },
+        syncs={
+            "to-archive": SyncConfig(
+                slug="to-archive", source="ep-src", destination="ep-archive"
+            ),
+        },
+    )
+
+
+class TestAlternateEndpointUnderLocationExclusion:
+    """Volumes sharing a primary endpoint but resolved to different ones."""
+
+    @pytest.mark.parametrize(
+        ("archive", "photos"),
+        [("a-archive", "b-photos"), ("z-archive", "b-photos")],
+    )
+    def test_each_volume_is_checked_through_its_resolved_endpoint(
+        self, archive: str, photos: str
+    ) -> None:
+        config = _alternate_endpoint_config(archive, photos)
+        resolved = resolve_all_endpoints(
+            config,
+            EndpointFilter(exclude_locations=["home"]),
+            ssh_config=paramiko.SSHConfig(),
+            lookup=lambda _host: {"203.0.113.7"},
+        )
+        probed: list[str] = []
+        observed: list[str] = []
+
+        def observe_ssh(vol: Volume, **_kwargs: object) -> SshEndpointDiagnostics:
+            probed.append(vol.slug)
+            return _ssh_diag(ssh_reachable=True)
+
+        def observe_vol(vol: Volume, **_kwargs: object) -> VolumeDiagnostics:
+            observed.append(vol.slug)
+            return VolumeDiagnostics(capabilities=_STUB_CAPS)
+
+        with (
+            patch(
+                "nbkp.preflight.checks.observe_ssh_endpoint", side_effect=observe_ssh
+            ),
+            patch("nbkp.preflight.checks.observe_volume", side_effect=observe_vol),
+            patch(
+                "nbkp.preflight.checks.observe_standalone_endpoint",
+                return_value=_REACHABLE_SSH_DIAG,
+            ),
+            patch(
+                "nbkp.preflight.checks.enrich_from_ssh_config",
+                side_effect=lambda ep: ep,
+            ),
+            patch(
+                "nbkp.preflight.checks.observe_source_endpoint",
+                return_value=SourceEndpointDiagnostics(
+                    endpoint_slug="ep-src", sentinel_exists=True
+                ),
+            ),
+            patch(
+                "nbkp.preflight.checks.observe_destination_endpoint",
+                return_value=DestinationEndpointDiagnostics(
+                    endpoint_slug="ep-archive",
+                    sentinel_exists=True,
+                    endpoint_writable=True,
+                ),
+            ),
+        ):
+            result = check_all_syncs(config, resolved_endpoints=resolved)
+
+        assert archive not in probed and archive not in observed
+        assert result.volume_statuses[photos].active is True
+        assert result.volume_statuses[photos].ssh_endpoint_status.slug == "nas-wan"
+        assert result.ssh_endpoint_statuses["nas-wan"].active is True
+        assert result.volume_statuses[archive].active is False
+        assert result.ssh_endpoint_statuses["nas-lan"].errors == [
+            SshEndpointError.LOCATION_EXCLUDED
+        ]
+        assert check_step_count(config, None, resolved) == (
+            len(result.ssh_endpoint_statuses)
+            + len(result.volume_statuses)
+            + len(result.source_endpoint_statuses)
+            + len(result.destination_endpoint_statuses)
+        )
 
 
 class TestCheckHardLinkDest:

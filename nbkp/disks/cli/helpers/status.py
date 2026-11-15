@@ -14,9 +14,9 @@ from ....clidisplay import (
 )
 from ....config import Config, LocalVolume, RemoteVolume
 from ....policy import Severity
-from ....remote.endpoints import ResolvedEndpoints
+from ....remote.endpoints import ResolvedEndpoints, location_excluded
 from ....remote.errors import SSH_CONNECTION_ERRORS, describe_error
-from ...lifecycle import UmountResult, unknown_volume_names
+from ...lifecycle import UmountResult, lifecycle_volumes, unknown_volume_names
 from ...models import MountFailureReason, display_name
 from ...mount_checks import check_mount_status
 from ...output import (
@@ -42,17 +42,34 @@ class _ErrorStatus:
     mount_failure_reason: MountFailureReason | None = None
 
 
-def _unmanaged_statuses(
+def _unprobed_note(vol: LocalVolume | RemoteVolume, resolved: ResolvedEndpoints) -> str:
+    match vol.mount:
+        case None:
+            return "not managed"
+        case _ if location_excluded(vol, resolved):
+            return "location excluded"
+        case _:
+            return ""
+
+
+def _unprobed_statuses(
     cfg: Config,
+    resolved: ResolvedEndpoints,
     names: list[str] | None = None,
 ) -> list[tuple[Text, MountStatusData]]:
+    """Volumes listed without a probe: unmanaged, or excluded by location."""
+    notes = {
+        slug: _unprobed_note(vol, resolved)
+        for slug, vol in cfg.volumes.items()
+        if names is None or slug in names
+    }
     return [
         (
-            Text.assemble(display_name(vol), " ", ("(not managed)", "dim")),
+            Text.assemble(display_name(cfg.volumes[slug]), " ", (f"({note})", "dim")),
             _ErrorStatus(),
         )
-        for slug, vol in cfg.volumes.items()
-        if vol.mount is None and (names is None or slug in names)
+        for slug, note in notes.items()
+        if note
     ]
 
 
@@ -132,9 +149,7 @@ def _probe_and_show_status(
     entry of a volume whose umount failed also says why (``disks umount``).
     """
     managed = [
-        (slug, vol)
-        for slug, vol in cfg.volumes.items()
-        if vol.mount is not None and (names is None or slug in names)
+        (slug, vol) for slug, vol, _mount in lifecycle_volumes(cfg, resolved, names)
     ]
 
     bar = (
@@ -143,7 +158,7 @@ def _probe_and_show_status(
         else None
     )
     managed_statuses = [_probe_volume_status(vol, resolved, bar) for _, vol in managed]
-    unmanaged_statuses = _unmanaged_statuses(cfg, names)
+    unmanaged_statuses = _unprobed_statuses(cfg, resolved, names)
     if bar is not None:
         bar.stop()
 

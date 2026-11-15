@@ -70,13 +70,13 @@ Regardless of route, nbkp **verifies** the result rather than trusting the confi
 - **keyring** (default): `keyring.get_password("nbkp", passphrase_id)` — uses macOS Keychain or Linux SecretService. Store via `keyring set nbkp <passphrase-id>`.
 - **prompt**: interactive password prompt via Typer's hidden input.
 - **env**: reads `NBKP_PASSPHRASE_<ID>` environment variable (uppercased, hyphens replaced with underscores).
-- **command**: runs a configurable command template (e.g. `["pass", "show", "nbkp/{id}"]`) with `{id}` replaced by the passphrase-id.
+- **command**: runs a configurable command template (e.g. `["pass", "show", "nbkp/{id}"]`) with `{id}` replaced by the passphrase-id, and uses the first line of its output, without the line break, as the passphrase.
 
 Passphrases are cached in memory during a single run, so the user is only prompted once per unique passphrase-id even if multiple volumes share it.
 
 **Passphrase prefetching** — Before the first device is touched, nbkp retrieves *every* passphrase-id the config declares — including the ones this run has no use for, because their drive is not plugged in or `--name` excluded them. All credential-store access therefore happens up front, in one burst. See [Why prefetch every passphrase](#why-prefetch-every-passphrase).
 
-**Lifecycle** — The `run`, `preflight check`, and `preflight troubleshoot` commands prefetch passphrases and mount volumes before running, and umount in a `finally` block (even on failure). Mount is idempotent: already-unlocked and already-mounted volumes are skipped. Umount always attempts to unmount and lock for all volumes with mount config, regardless of who mounted them — this avoids fragile action tracking across failed/restarted runs. A volume that cannot be unmounted or locked fails the command (exit 1), with a `Umount failed:` line on stderr, since the drive may have been left mounted or unlocked; `run -o json` also lists every umount under `umount`, each failure with its `failure_reason`, `detail` and `warning`.
+**Lifecycle** — The `run`, `preflight check`, and `preflight troubleshoot` commands prefetch passphrases and mount volumes before running, and umount in a `finally` block (even on failure). Mount is idempotent: already-unlocked and already-mounted volumes are skipped. A remote volume excluded by `--exclude-location` (see [Endpoint Filtering](#endpoint-filtering)) is left out of mount, umount and their dry runs, and `disks status` lists it as excluded without probing it. Umount always attempts to unmount and lock for all volumes with mount config, regardless of who mounted them — this avoids fragile action tracking across failed/restarted runs. A volume that cannot be unmounted or locked fails the command (exit 1), with a `Umount failed:` line on stderr, since the drive may have been left mounted or unlocked; `run -o json` also lists every umount under `umount`, each failure with its `failure_reason`, `detail` and `warning`.
 
 **Authorization** — Mount management is authorized by **polkit only** (no sudoers). The `disks setup-auth` command generates a single polkit rule at `/etc/polkit-1/rules.d/50-nbkp.rules` for review and manual installation. See [Why polkit-only](#why-polkit-only).
 
@@ -182,7 +182,7 @@ Checks include:
 - **Rsync availability** — rsync must be installed and version 3.0+ (macOS `openrsync` is rejected). Host tool errors apply to localhost too: a remote host's errors cascade to its volumes (`SSH_ENDPOINT_INACTIVE`), while the orchestrator's own errors — localhost is always "reachable" — mark every sync with a side on it `ENDPOINT_HOST_ERRORS`, so a missing local rsync fails preflight instead of failing every sync at run time.
 - **Btrfs readiness** — Correct filesystem type, subvolume existence, mount options, required directories
 - **Hard-link readiness** — Filesystem hard-link support, required directory structure
-- **`latest` symlink validity** — Must exist and point to `/dev/null` or an existing snapshot (see [The `latest` Symlink](#the-latest-symlink))
+- **`latest` symlink validity** — Must exist and point to `/dev/null` or to an existing snapshot of the endpoint, written `snapshots/<timestamp>` (see [The `latest` Symlink](#the-latest-symlink))
 - **Mount infrastructure** — For volumes with mount config: `udisksctl` availability and a running `udisksd` daemon, `lsblk` and `findmnt`, the `50-nbkp.rules` polkit rule, and (for volumes with a declared `path`) an `/etc/fstab` entry whose mountpoint is that path *and* whose device spec designates the volume's device (`UUID=<device-uuid>` / `/dev/disk/by-uuid/…`, or for encrypted volumes the cleartext mapper — never the LUKS container itself). Specs that cannot be resolved without extra probes (`LABEL=`, `/dev/sdX`, an encrypted volume's inner-filesystem `UUID=`) are accepted. A drive that is plugged in but whose passphrase cannot be retrieved is `PASSPHRASE_NOT_AVAILABLE`, an infrastructure error. For btrfs volumes, a missing `udisks2-btrfs` module is a **warning**: it is shown by `check` and `troubleshoot` but never makes anything inactive or fatal.
 - **Strictness mode** — See below
 
@@ -275,17 +275,19 @@ Consolidating all conditional logic in the error interpretation layer was consid
 
 When a remote volume declares multiple SSH endpoints, nbkp selects the best reachable one at runtime. This enables nomadic usage where the same config works across different network contexts (e.g. home LAN vs public internet).
 
-**Volume-level exclusion** — When `--exclude-location` is set and *all* candidate endpoints for a volume have a matching location tag, the volume is skipped entirely (no SSH connection is attempted). Syncs referencing the skipped volume are marked inactive with a `LOCATION_EXCLUDED` reason. This is the only hard filter — it prevents slow SSH timeouts when a location is known to be unreachable.
+**Volume-level exclusion** — When `--exclude-location` is set and *all* candidate endpoints for a volume have a matching location tag, the volume is skipped entirely (no SSH connection is attempted). Syncs referencing the skipped volume are marked inactive with a `LOCATION_EXCLUDED` reason. This is the only hard filter — it prevents slow SSH timeouts when a location is known to be unreachable. Preflight's reachability-only probes of the other endpoints (bastions, unselected alternates, unused endpoints) likewise skip every endpoint tagged with an excluded location, and under `--sync` cover only the endpoints the selected syncs' volumes can be reached through.
 
 **Per-endpoint selection** — For volumes that are not excluded, the best endpoint is selected using a soft filter chain:
 
-1. Gather candidate endpoints from the volume's endpoint list
+1. Gather candidate endpoints: the volume's `ssh-endpoints` list, in order, or its `ssh-endpoint` alone when no list is set
 2. Exclude endpoints whose host cannot be DNS-resolved
 3. If `--exclude-location` is set, remove endpoints with a matching location tag
 4. If `--location` is set, prefer endpoints with a matching location tag
 5. If `--network` is set, prefer endpoints with matching network type (`private` for LAN, `public` for WAN)
 
-Each filter step is a **soft filter**: if it would eliminate all remaining candidates, it is silently skipped and the previous candidate list is preserved. This means filters degrade gracefully — `--location office` has no effect if no endpoint is tagged `office`, rather than causing a failure.
+Each filter step is a **soft filter**: if it would eliminate all remaining candidates, it is silently skipped and the previous candidate list is preserved. This means filters degrade gracefully — `--location office` has no effect if no endpoint is tagged `office`, rather than causing a failure. The first remaining candidate is used. Step 2 applies even when no flag is given; a volume with a single candidate skips it, since no filter could change the choice.
+
+Preflight probes each remote volume through the endpoint selected for it and reports the result under that endpoint, so two volumes sharing a primary endpoint can be reached (and reported) through different routes.
 
 Both `--location` and `--exclude-location` can be used together. Exclude is applied first, then include narrows further. This is useful when most endpoints lack location tags — instead of listing every location to include, you can exclude the ones you want to skip (e.g. `--exclude-location home`).
 
@@ -297,7 +299,7 @@ It follows the same run structure as `nbkp run`:
 
 1. **Preflight, for every sync, before any sync starts.** Each sync has a generated `<sync>_preflight` function that classifies it as *active*, *inactive* (missing `.nbkp-vol` / `.nbkp-src` / `.nbkp-dst`, unreachable host — checked first), *broken* (rsync missing or older than 3.0 / openrsync, missing snapshot tools, wrong filesystem, missing `user_subvol_rm_allowed`, staging not a subvolume, FAT/exFAT under hard links, missing or invalid `latest`, unwritable directories), or *pending* (a dry-run whose source snapshot only an upstream sync would create).
 2. **Strictness.** `--strictness` (default `ignore-inactive`) decides whether those results abort the run, with the same matrix as [Strictness](#strictness).
-3. **Syncs in dependency order.** Inactive syncs are skipped without counting as failures; syncs downstream of a failed or skipped sync are cancelled. Each sync function runs in a `set -e` subshell, so any failing step — not only rsync — stops that sync before `latest` moves. (Calling a bash function in a `||` or `if` context silently disables `set -e` inside it, which is why the script never does.)
+3. **Syncs in dependency order.** Inactive syncs are skipped without counting as failures; syncs downstream of a failed or skipped sync — a disabled one included, as in `run` — are cancelled. Each sync function runs in a `set -e` subshell, so any failing step — not only rsync — stops that sync before `latest` moves. (Calling a bash function in a `||` or `if` context silently disables `set -e` inside it, which is why the script never does.)
 
 Paths are quoted for each shell that interprets them: locally, and once more inside the command string sent over SSH. Only the snapshot timestamp and the snapshot-name loop variable are expanded at runtime, and snapshot names read back from the destination are filtered to timestamp-shaped names before use. What `sh` deliberately leaves out of `run` — mount management, endpoint re-selection, Rich and JSON output, Paramiko-only SSH options, the orchestrator's own coreutils checks — is listed with reasons in the header of every generated script.
 

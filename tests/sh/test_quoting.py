@@ -1,6 +1,13 @@
 import subprocess
 
-from nbkp.sh.quoting import SCRIPT_DIR, SNAPSHOT_TS, comment_out, quote, shell_var
+from nbkp.sh.quoting import (
+    SCRIPT_DIR,
+    SNAPSHOT_TS,
+    comment_out,
+    quote,
+    remote_command,
+    shell_var,
+)
 
 
 def _echo(word: str, env: dict[str, str] | None = None) -> str:
@@ -36,6 +43,23 @@ class TestQuote:
 
     def test_shell_var(self) -> None:
         assert quote(shell_var("snap")) == '"${snap}"'
+
+
+class TestRemoteCommand:
+    def test_leading_tilde_expanded_by_remote_shell(self) -> None:
+        """A remote volume path under ``~`` resolves in the remote user's home."""
+        command = remote_command(["printf", "%s", "~/my backups/.nbkp-vol"])
+        result = subprocess.run(
+            ["bash", "-c", command],
+            capture_output=True,
+            text=True,
+            check=True,
+            env={"HOME": "/home/backup"},
+        )
+        assert result.stdout == "/home/backup/my backups/.nbkp-vol"
+
+    def test_other_arguments_quoted(self) -> None:
+        assert remote_command(["test", "-f", "/a b/~x"]) == "test -f '/a b/~x'"
 
 
 class TestCommentOut:

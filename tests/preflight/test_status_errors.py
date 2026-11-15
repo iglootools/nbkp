@@ -300,6 +300,27 @@ class TestLatestSymlinkTarget:
         assert state.snapshot is not None
         assert state.snapshot.name == "2026-03-06T14:30:00.000Z"
 
+    @pytest.mark.parametrize(
+        "target",
+        [
+            "../other/snapshots/2026-03-06T14:30:00.000Z",
+            "elsewhere/2026-03-06T14:30:00.000Z",
+        ],
+    )
+    def test_snapshot_outside_snapshots_dir_is_invalid(
+        self, tmp_path: Path, target: str
+    ) -> None:
+        """Only ``snapshots/<name>`` is a snapshot of this endpoint."""
+        (tmp_path / "ep").mkdir()
+        (tmp_path / "ep" / "snapshots" / "2026-03-06T14:30:00.000Z").mkdir(parents=True)
+        (tmp_path / "other" / "snapshots" / "2026-03-06T14:30:00.000Z").mkdir(
+            parents=True
+        )
+        (tmp_path / "ep" / "elsewhere" / "2026-03-06T14:30:00.000Z").mkdir(parents=True)
+        state = self._state(tmp_path / "ep", target)
+        assert state.target_valid is False
+        assert state.snapshot is None
+
     def test_devnull(self, tmp_path: Path) -> None:
         state = self._state(tmp_path, "/dev/null")
         assert state.raw_target == "/dev/null"

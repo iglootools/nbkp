@@ -16,6 +16,7 @@ from ...config.output import (
     format_mount_summary,
     format_volume_display,
 )
+from ...fsprotocol import DEVNULL_TARGET
 from ...policy import Severity, Strictness
 from ...remote.endpoints import ResolvedEndpoints
 from ..severity import severity_for_errors
@@ -39,19 +40,27 @@ from .formatting import (
 
 def _format_latest(latest: LatestSymlinkState) -> Text:
     """A missing or invalid ``latest`` is always fatal under the standard
-    strictness modes (``LATEST_SYMLINK_NOT_FOUND`` is not in any
-    ``INACTIVE_*_ERRORS``), so this stays as an error icon.
+    strictness modes (``LATEST_SYMLINK_NOT_FOUND`` and
+    ``LATEST_SYMLINK_INVALID`` are not in any ``INACTIVE_*_ERRORS``), so
+    either shows as an error icon.
     """
-    if latest.exists and latest.raw_target:
-        return Text(
-            f"{OK_SYMBOL}latest → {latest.raw_target}",
-            style=severity_style(Severity.OK),
-        )
-    else:
-        return Text(
-            f"{severity_symbol(Severity.ERROR)}latest",
-            style=severity_style(Severity.ERROR),
-        )
+    match latest:
+        case LatestSymlinkState(exists=True, raw_target=str() as target) if (
+            target == DEVNULL_TARGET or latest.target_valid is True
+        ):
+            return Text(
+                f"{OK_SYMBOL}latest → {target}", style=severity_style(Severity.OK)
+            )
+        case LatestSymlinkState(exists=True, raw_target=str() as target):
+            return Text(
+                f"{severity_symbol(Severity.ERROR)}latest → {target}",
+                style=severity_style(Severity.ERROR),
+            )
+        case _:
+            return Text(
+                f"{severity_symbol(Severity.ERROR)}latest",
+                style=severity_style(Severity.ERROR),
+            )
 
 
 def _format_volume_issues(vol_status: VolumeStatus, strictness: Strictness) -> Text:
@@ -116,11 +125,19 @@ def _format_destination_diagnostics(ss: SyncStatus, strictness: Strictness) -> T
                 fail_error=DestinationEndpointError.SENTINEL_NOT_FOUND,
                 strictness=strictness,
             ),
-            check(
-                diag.endpoint_writable,
-                "writable",
-                fail_error=DestinationEndpointError.NOT_WRITABLE,
-                strictness=strictness,
+            # Without the sentinel the directory may not exist, and the status
+            # layer suppresses NOT_WRITABLE: so does this column.
+            *(
+                [
+                    check(
+                        diag.endpoint_writable,
+                        "writable",
+                        fail_error=DestinationEndpointError.NOT_WRITABLE,
+                        strictness=strictness,
+                    )
+                ]
+                if diag.sentinel_exists
+                else []
             ),
             *_destination_snapshot_items(diag, strictness),
         ]

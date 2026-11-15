@@ -183,7 +183,15 @@ def _read_latest_state(
 
 
 def _parse_snapshot(target: str) -> Snapshot | None:
+    """The snapshot *target* designates, if it is one of this endpoint's.
+
+    Only ``snapshots/<name>`` qualifies: a hand-edited target whose last
+    component merely looks like a timestamp (``../other/snapshots/<name>``)
+    would make downstream syncs read another tree, and pruning protect a
+    same-named snapshot here instead.
+    """
     try:
-        return Snapshot.from_path(target)
+        snapshot = Snapshot.from_path(target)
     except ValueError:
         return None
+    return snapshot if target == f"{SNAPSHOTS_DIR}/{snapshot.name}" else None
