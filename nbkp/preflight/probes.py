@@ -10,7 +10,7 @@ from ..remote.dispatch import run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 
 
-def _check_endpoint_sentinel(
+def check_endpoint_sentinel(
     volume: Volume,
     subdir: str | None,
     sentinel_name: str,
@@ -41,7 +41,7 @@ def resolve_endpoint(volume: Volume, subdir: str | None) -> str:
     return f"{volume.path}/{subdir}" if subdir else volume.path
 
 
-def _check_directory_writable(
+def check_directory_writable(
     volume: Volume,
     path: str,
     resolved_endpoints: ResolvedEndpoints,
@@ -68,7 +68,7 @@ def check_directory_exists(
             )
 
 
-def _check_symlink_exists(
+def check_symlink_exists(
     volume: Volume,
     path: str,
     resolved_endpoints: ResolvedEndpoints,
@@ -117,7 +117,7 @@ def parse_rsync_version(output: str) -> tuple[int, ...]:
     return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else (0, 0, 0)
 
 
-def _check_rsync_version(
+def check_rsync_version(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:

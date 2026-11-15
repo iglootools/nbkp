@@ -21,10 +21,10 @@ from ..fsprotocol import (
 )
 from ..remote.endpoints import ResolvedEndpoints
 from .probes import (
-    _check_directory_writable,
-    _check_endpoint_sentinel,
-    _check_symlink_exists,
     check_directory_exists,
+    check_directory_writable,
+    check_endpoint_sentinel,
+    check_symlink_exists,
     read_symlink_target,
     resolve_endpoint,
 )
@@ -45,7 +45,7 @@ def observe_source_endpoint(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
 ) -> SourceEndpointDiagnostics:
-    sentinel_exists = _check_endpoint_sentinel(
+    sentinel_exists = check_endpoint_sentinel(
         volume, endpoint.subdir, SOURCE_SENTINEL, resolved_endpoints
     )
     src_ep = resolve_endpoint(volume, endpoint.subdir)
@@ -74,7 +74,7 @@ def observe_destination_endpoint(
     *,
     host_tools: HostToolCapabilities,
 ) -> DestinationEndpointDiagnostics:
-    sentinel_exists = _check_endpoint_sentinel(
+    sentinel_exists = check_endpoint_sentinel(
         volume, endpoint.subdir, DESTINATION_SENTINEL, resolved_endpoints
     )
     dst_ep = resolve_endpoint(volume, endpoint.subdir)
@@ -82,7 +82,7 @@ def observe_destination_endpoint(
     return DestinationEndpointDiagnostics(
         endpoint_slug=endpoint.slug,
         sentinel_exists=sentinel_exists,
-        endpoint_writable=_check_directory_writable(volume, dst_ep, resolved_endpoints),
+        endpoint_writable=check_directory_writable(volume, dst_ep, resolved_endpoints),
         btrfs=_check_btrfs_diagnostics(
             endpoint, volume, capabilities, dst_ep, resolved_endpoints, host_tools
         ),
@@ -127,7 +127,7 @@ def _check_btrfs_diagnostics(
             else False
         ),
         staging_writable=(
-            _check_directory_writable(volume, staging_path, resolved_endpoints)
+            check_directory_writable(volume, staging_path, resolved_endpoints)
             if staging_exists
             else None
         ),
@@ -142,7 +142,7 @@ def _check_snapshot_dirs(
     snaps_path = f"{endpoint_path}/{SNAPSHOTS_DIR}"
     exists = check_directory_exists(volume, snaps_path, resolved_endpoints)
     writable = (
-        _check_directory_writable(volume, snaps_path, resolved_endpoints)
+        check_directory_writable(volume, snaps_path, resolved_endpoints)
         if exists
         else None
     )
@@ -155,7 +155,7 @@ def _read_latest_state(
     resolved_endpoints: ResolvedEndpoints,
 ) -> LatestSymlinkState:
     latest_path = f"{endpoint_path}/{LATEST_LINK}"
-    if not _check_symlink_exists(volume, latest_path, resolved_endpoints):
+    if not check_symlink_exists(volume, latest_path, resolved_endpoints):
         return LatestSymlinkState(exists=False)
 
     raw_target = read_symlink_target(volume, latest_path, resolved_endpoints)

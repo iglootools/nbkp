@@ -33,7 +33,7 @@ from ..remote import run_remote_command
 from ..remote.dispatch import check_command_available
 from ..remote.endpoints import ResolvedEndpoints
 from ..remote.errors import SSH_CONNECTION_ERRORS, describe_error, is_auth_error
-from .probes import _check_rsync_version
+from .probes import check_rsync_version
 from .snapshot_checks import (
     check_btrfs_filesystem,
     check_btrfs_mount_option,
@@ -123,7 +123,7 @@ def _probe_host_tools(
     """
     has_rsync = check_command_available(volume, "rsync", resolved_endpoints)
     rsync_version_ok = (
-        _check_rsync_version(volume, resolved_endpoints) if has_rsync else False
+        check_rsync_version(volume, resolved_endpoints) if has_rsync else False
     )
     has_btrfs = check_command_available(volume, "btrfs", resolved_endpoints)
     has_stat = check_command_available(volume, "stat", resolved_endpoints)
