@@ -19,7 +19,11 @@ from ...clidisplay import (
     severity_symbol,
 )
 from ...clidisplay.invocation import Invocation
-from ...cliwiring.config import load_config_or_exit, resolve_endpoints
+from ...cliwiring.config import (
+    load_config_or_exit,
+    require_known_syncs,
+    resolve_endpoints,
+)
 from ...cliwiring.mount import managed_mount
 from ...cliwiring.preflight import check_total
 from ...config import Config
@@ -129,6 +133,7 @@ def run(
 ) -> None:
     """Execute all active syncs in dependency order. Supports dry-run, progress display, snapshot creation, and automatic pruning."""
     cfg = load_config_or_exit(config, output)
+    require_known_syncs(cfg, sync, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
     invocation = Invocation.of(
         config, location, exclude_location, network.value if network else None

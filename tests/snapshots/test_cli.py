@@ -2,6 +2,8 @@ import json
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from nbkp.cli import app
 from nbkp.cliwiring.mount import managed_mount
 from nbkp.config import (
@@ -474,3 +476,23 @@ class TestShowCommand:
             _invoke_json("show", "-S", "ignore-all")
 
         assert spy.call_args.kwargs.get("strictness") is Strictness.IGNORE_ALL
+
+
+class TestUnknownSyncFilter:
+    @pytest.mark.parametrize("command", ["show", "prune"])
+    @patch("nbkp.cliwiring.preflight.check_all_syncs")
+    @patch("nbkp.cliwiring.config.load_config")
+    def test_unknown_sync_is_an_error(
+        self, mock_load: MagicMock, mock_checks: MagicMock, command: str
+    ) -> None:
+        mock_load.return_value = _prune_config()
+
+        result = runner.invoke(
+            app,
+            ["snapshots", command, "-c", "/fake.yaml", "-o", "json", "-s", "nope"],
+        )
+
+        assert result.exit_code == 2
+        error = json.loads(result.output)["error"]
+        assert (error["reason"], error["names"]) == ("unknown-sync", ["nope"])
+        mock_checks.assert_not_called()

@@ -36,6 +36,38 @@ def load_config_or_exit(
         raise typer.Exit(2)
 
 
+def require_known_syncs(
+    cfg: Config,
+    names: list[str] | None,
+    output_format: OutputFormat,
+) -> None:
+    """Exit 2 when a ``--sync`` value names no sync.
+
+    Without this, a typo (in a timer entry, say) filters every sync out and
+    the command reports success having done nothing.
+    """
+    unknown = [name for name in names or [] if name not in cfg.syncs]
+    if unknown:
+        known = ", ".join(sorted(cfg.syncs)) or "(none)"
+        message = (
+            f"Error: unknown sync name(s): {', '.join(unknown)}. Known syncs: {known}"
+        )
+        match output_format:
+            case OutputFormat.JSON:
+                echo_json(
+                    {
+                        "error": {
+                            "reason": "unknown-sync",
+                            "message": message,
+                            "names": unknown,
+                        }
+                    }
+                )
+            case OutputFormat.HUMAN:
+                typer.echo(message, err=True)
+        raise typer.Exit(2)
+
+
 def build_endpoint_filter(
     locations: list[str] | None,
     exclude_locations: list[str] | None,

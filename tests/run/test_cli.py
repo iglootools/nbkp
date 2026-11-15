@@ -382,3 +382,31 @@ class TestRunAbortHint:
 
         assert result.exit_code == 1
         assert "nbkp preflight troubleshoot" in result.output
+
+
+class TestUnknownSyncFilter:
+    @patch("nbkp.run.pipeline.check_all_syncs")
+    @patch("nbkp.cliwiring.config.load_config")
+    def test_unknown_sync_is_an_error(
+        self, mock_load: MagicMock, mock_checks: MagicMock
+    ) -> None:
+        mock_load.return_value = sample_config()
+
+        result = runner.invoke(
+            app, ["run", "-c", "/fake.yaml", "-o", "json", "--sync", "nope"]
+        )
+
+        assert result.exit_code == 2
+        error = json.loads(result.output)["error"]
+        assert (error["reason"], error["names"]) == ("unknown-sync", ["nope"])
+        mock_checks.assert_not_called()
+
+    @patch("nbkp.cliwiring.config.load_config")
+    def test_unknown_sync_is_reported_on_stderr(self, mock_load: MagicMock) -> None:
+        mock_load.return_value = sample_config()
+
+        result = runner.invoke(app, ["run", "-c", "/fake.yaml", "--sync", "nope"])
+
+        assert result.exit_code == 2
+        assert "unknown sync name(s): nope" in result.stderr
+        assert "photos-to-nas" in result.stderr

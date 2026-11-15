@@ -93,7 +93,7 @@ nbkp run --network public
 # On the road — exclude home endpoints
 nbkp run --exclude-location home
 
-# Only backup photos
+# Only backup photos (an unknown sync name is an error, exit code 2)
 nbkp run --sync photos-to-nas
 
 # Preview what would happen
