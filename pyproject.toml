@@ -16,7 +16,7 @@ dependencies = [
   "pyyaml>=6.0,<7.0",
   "typer>=0.27.0,<1.0.0",
   "platformdirs>=4.11.0,<5.0",
-  "mermaid-ascii-diagrams>=0.1.1",
+  "mermaid-ascii-diagrams>=0.1.1,<0.2",
 ]
 dynamic = ["version"]
 
@@ -37,7 +37,7 @@ dev = [
   "testcontainers>=4.15.0,<5.0",
   # The `python = ">=3.12,<4.0"` marker this carried under poetry is subsumed by
   # [project] requires-python, so it is dropped rather than translated.
-  "pydeps>=3.0.7",
+  "pydeps>=3.0.7,<4.0",
   # Also declared as the `keyring` extra above. The extra is the shipped contract
   # (`uv tool install 'nbkp[keyring]'`); this entry guarantees the test suite has it
   # regardless of which extras are synced. Identical constraints, so uv resolves both to
