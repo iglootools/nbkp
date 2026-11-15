@@ -20,7 +20,7 @@ Four-phase check hierarchy (each level gates the next):
    ``SyncStatus.from_diagnostics``)
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from functools import partial
 
@@ -121,6 +121,24 @@ def check_all_syncs(
     )
 
 
+def check_step_count(config: Config, only_syncs: list[str] | None = None) -> int:
+    """How many progress steps :func:`check_all_syncs` reports.
+
+    One per SSH endpoint, volume, source endpoint and destination endpoint,
+    so a progress bar can be sized before the checks start.
+    """
+    syncs = _selected_syncs(config, only_syncs)
+    needed_volumes = _needed_volumes(config, syncs, only_syncs)
+    volume_endpoints = _volumes_by_ssh_endpoint(config, needed_volumes).keys()
+    return (
+        len(volume_endpoints)
+        + len(_standalone_endpoints(config, volume_endpoints))
+        + len(needed_volumes)
+        + len({config.source_endpoint(sc).slug for sc in syncs.values()})
+        + len({config.destination_endpoint(sc).slug for sc in syncs.values()})
+    )
+
+
 def _selected_syncs(
     config: Config, only_syncs: list[str] | None
 ) -> dict[str, SyncConfig]:
@@ -176,9 +194,16 @@ def _check_ssh_endpoints(
         slug: progress.track(
             f"ssh:{slug}", partial(_check_standalone_endpoint, config, slug)
         )
-        for slug in sorted(set(config.ssh_endpoints) - volume_endpoints.keys())
+        for slug in _standalone_endpoints(config, volume_endpoints.keys())
     }
     return {**volume_endpoints, **standalone}
+
+
+def _standalone_endpoints(
+    config: Config, volume_endpoints: Collection[str]
+) -> list[str]:
+    """SSH endpoints probed for reachability only (sorted)."""
+    return sorted(set(config.ssh_endpoints) - set(volume_endpoints))
 
 
 def _volumes_by_ssh_endpoint(

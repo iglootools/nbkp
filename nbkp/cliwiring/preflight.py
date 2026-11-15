@@ -8,45 +8,12 @@ per-step severity icons here.
 from collections.abc import Sequence
 
 from ..clidisplay import StepProgressBar
-from ..config import Config, LocalVolume
+from ..config import Config
 from ..disks import MountObservation
 from ..policy import Strictness
-from ..preflight import PreflightResult, check_all_syncs
+from ..preflight import PreflightResult, check_all_syncs, check_step_count
 from ..preflight.severity import PreflightError, severity_for_errors
 from ..remote.endpoints import ResolvedEndpoints
-
-
-def check_total(cfg: Config, only_syncs: list[str] | None) -> int:
-    """Count progress steps: SSH endpoints + volumes + sync endpoints.
-
-    Matches the ``_track()`` calls in ``check_all_syncs``: one per SSH
-    endpoint (volume-referenced + all remaining defined endpoints), one
-    per volume, and one per source/destination sync endpoint.
-    """
-    syncs = (
-        {s: sc for s, sc in cfg.syncs.items() if s in only_syncs}
-        if only_syncs
-        else cfg.syncs
-    )
-    src_eps = {cfg.source_endpoint(sc).slug for sc in syncs.values()}
-    dst_eps = {cfg.destination_endpoint(sc).slug for sc in syncs.values()}
-    volumes = (
-        {cfg.source_endpoint(sc).volume for sc in syncs.values()}
-        | {cfg.destination_endpoint(sc).volume for sc in syncs.values()}
-        if only_syncs
-        else set(cfg.volumes.keys())
-    )
-
-    volume_ssh_slugs = {
-        "localhost"
-        if isinstance(cfg.volumes[v_slug], LocalVolume)
-        else cfg.volumes[v_slug].ssh_endpoint  # type: ignore[union-attr]
-        for v_slug in volumes
-    }
-    remaining_slugs = set(cfg.ssh_endpoints.keys()) - volume_ssh_slugs
-    ssh_count = len(volume_ssh_slugs) + len(remaining_slugs)
-
-    return ssh_count + len(volumes) + len(src_eps) + len(dst_eps)
 
 
 def check_all_with_progress(
@@ -63,7 +30,7 @@ def check_all_with_progress(
     (e.g. inactive volumes under ``IGNORE_INACTIVE``) show ``⚠``
     (orange).
     """
-    total = check_total(cfg, only_syncs)
+    total = check_step_count(cfg, only_syncs)
 
     if not use_progress or total == 0:
         return check_all_syncs(

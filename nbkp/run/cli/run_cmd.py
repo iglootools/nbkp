@@ -26,13 +26,12 @@ from ...cliwiring.config import (
 )
 from ...cliwiring.mount import managed_mount, print_umount_failures
 from ...cliwiring.mount_progress import mount_display_names
-from ...cliwiring.preflight import check_total
 from ...config import Config
 from ...disks import UmountResult
 from ...disks.output import umount_result_json
 from ...ordering.output import build_rich_tree_sections
 from ...policy import Strictness
-from ...preflight import PreflightResult, SyncStatus
+from ...preflight import PreflightResult, SyncStatus, check_step_count
 from ...preflight.output import print_human_check
 from ...preflight.severity import PreflightError, severity_for_errors
 from ...remote.endpoints import NetworkType, ResolvedEndpoints
@@ -202,7 +201,7 @@ class _HumanProgress:
         strictness: Strictness,
         invocation: Invocation,
     ) -> None:
-        total = check_total(cfg, only_syncs)
+        total = check_step_count(cfg, only_syncs)
         self._cfg = cfg
         self._resolved = resolved
         self._strictness = strictness

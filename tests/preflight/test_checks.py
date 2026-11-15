@@ -23,7 +23,12 @@ from nbkp.config import (
     SyncEndpoint,
     Volume,
 )
-from nbkp.preflight.checks import check_all_syncs, check_sync, check_volume
+from nbkp.preflight.checks import (
+    check_all_syncs,
+    check_step_count,
+    check_sync,
+    check_volume,
+)
 from nbkp.preflight.probes import _check_rsync_version, parse_rsync_version
 from nbkp.preflight.snapshot_checks import (
     check_btrfs_filesystem,
@@ -2913,6 +2918,43 @@ class TestCheckAllSyncs:
         assert set(result.sync_statuses.keys()) == {"s1"}
         assert set(result.volume_statuses.keys()) == {"src1", "dst1"}
         assert result.sync_statuses["s1"].active is True
+
+    @pytest.mark.parametrize("only_syncs", [None, ["s1"]])
+    @patch("nbkp.preflight.checks.observe_standalone_endpoint")
+    @patch("nbkp.preflight.checks.observe_ssh_endpoint", return_value=_ssh_diag())
+    @patch(
+        "nbkp.preflight.volume_checks.check_volume_capabilities",
+        return_value=_STUB_CAPS,
+    )
+    def test_step_count_matches_reported_steps(
+        self,
+        _mock_caps: MagicMock,
+        _mock_ssh: MagicMock,
+        mock_standalone: MagicMock,
+        only_syncs: list[str] | None,
+        tmp_path: Path,
+    ) -> None:
+        mock_standalone.return_value = _REACHABLE_SSH_DIAG
+        config = Config(
+            ssh_endpoints={"orphan": SshEndpoint(slug="orphan", host="orphan")},
+            volumes={
+                "a": LocalVolume(slug="a", path=str(tmp_path / "a")),
+                "b": LocalVolume(slug="b", path=str(tmp_path / "b")),
+                "c": LocalVolume(slug="c", path=str(tmp_path / "c")),
+            },
+            sync_endpoints={
+                "ep-a": SyncEndpoint(slug="ep-a", volume="a"),
+                "ep-b": SyncEndpoint(slug="ep-b", volume="b"),
+                "ep-c": SyncEndpoint(slug="ep-c", volume="c"),
+            },
+            syncs={
+                "s1": SyncConfig(slug="s1", source="ep-a", destination="ep-b"),
+                "s2": SyncConfig(slug="s2", source="ep-b", destination="ep-c"),
+            },
+        )
+        started: list[str] = []
+        check_all_syncs(config, on_check_start=started.append, only_syncs=only_syncs)
+        assert check_step_count(config, only_syncs) == len(started)
 
 
 class TestStandaloneEndpointProbing:
