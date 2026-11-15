@@ -448,6 +448,20 @@ class TestMountVolume:
         assert result.failure_reason == MountFailureReason.UNREACHABLE
         assert "timed out" in (result.detail or "")
 
+    def test_missing_local_tool_is_udisks_not_available(self) -> None:
+        """Locally, FileNotFoundError is a missing tool, not an unreachable host."""
+        vol = _encrypted_vol()
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch(
+                "nbkp.disks.lifecycle.discover_cleartext_device",
+                side_effect=FileNotFoundError(2, "No such file", "lsblk"),
+            ),
+        ):
+            result = mount_volume(vol, vol.mount, {}, lambda x: "pass")  # type: ignore[arg-type]
+        assert result.failure_reason == MountFailureReason.UDISKS_NOT_AVAILABLE
+        assert "lsblk" in (result.detail or "")
+
     def test_connection_refused_returns_unreachable(self) -> None:
         vol = _encrypted_vol()
         with patch(
@@ -575,6 +589,18 @@ class TestUmountVolume:
         assert not result.success
         assert "timed out" in (result.detail or "")
         assert result.warning is not None
+
+    def test_missing_local_tool_is_not_unreachable(self) -> None:
+        vol = _unencrypted_vol()
+        mc = vol.mount
+        assert mc is not None
+        with patch(
+            "nbkp.disks.lifecycle.find_mountpoint",
+            side_effect=FileNotFoundError(2, "No such file", "findmnt"),
+        ):
+            result = umount_volume(vol, mc, {})
+        assert not result.success
+        assert result.detail == "udisks2 not available: findmnt not found"
 
     def test_failed_probe_is_reported_not_skipped(self) -> None:
         """A failed lsblk must not be read as "locked" and skip the lock."""

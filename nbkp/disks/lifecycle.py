@@ -8,6 +8,7 @@ from functools import partial
 
 from ..config import (
     Config,
+    LocalVolume,
     MountConfig,
     Volume,
 )
@@ -223,12 +224,35 @@ def mount_volume(
             device_present=True,
         )
     except SSH_CONNECTION_ERRORS as e:
-        return MountResult(
-            volume_slug=volume.slug,
-            success=False,
-            detail=f"unreachable: {describe_error(e)}",
-            failure_reason=MountFailureReason.UNREACHABLE,
-        )
+        match _missing_local_tool(volume, e):
+            case str() as tool:
+                return MountResult(
+                    volume_slug=volume.slug,
+                    success=False,
+                    detail=f"udisks2 not available: {tool} not found",
+                    failure_reason=MountFailureReason.UDISKS_NOT_AVAILABLE,
+                )
+            case None:
+                return MountResult(
+                    volume_slug=volume.slug,
+                    success=False,
+                    detail=f"unreachable: {describe_error(e)}",
+                    failure_reason=MountFailureReason.UNREACHABLE,
+                )
+
+
+def _missing_local_tool(volume: Volume, error: BaseException) -> str | None:
+    """The command a local volume could not run, if that is what *error* is.
+
+    Locally, a ``FileNotFoundError`` means ``udisksctl``, ``lsblk`` or
+    ``findmnt`` is not installed; it is only a connection failure for a
+    remote volume.
+    """
+    match volume, error:
+        case LocalVolume(), FileNotFoundError(filename=str() as tool):
+            return tool
+        case _:
+            return None
 
 
 def _mount_volume_inner(
@@ -398,10 +422,15 @@ def umount_volume(
             warning="volume may still be mounted or unlocked, check manually",
         )
     except SSH_CONNECTION_ERRORS as e:
+        missing_tool = _missing_local_tool(volume, e)
         return UmountResult(
             volume_slug=volume.slug,
             success=False,
-            detail=f"unreachable: {describe_error(e)}",
+            detail=(
+                f"udisks2 not available: {missing_tool} not found"
+                if missing_tool is not None
+                else f"unreachable: {describe_error(e)}"
+            ),
             warning="volume may still be mounted, manual umount needed",
         )
 
