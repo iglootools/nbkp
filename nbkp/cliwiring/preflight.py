@@ -30,7 +30,7 @@ def check_all_with_progress(
     (e.g. inactive volumes under ``IGNORE_INACTIVE``) show ``⚠``
     (orange).
     """
-    total = check_step_count(cfg, only_syncs)
+    total = check_step_count(cfg, only_syncs, resolved_endpoints)
 
     if not use_progress or total == 0:
         return check_all_syncs(

@@ -58,8 +58,8 @@ from nbkp.preflight.status.volume import (
 )
 from nbkp.preflight.volume_checks import observe_ssh_endpoint
 from nbkp.remote.dispatch import check_command_available
-from nbkp.remote.endpoints import ResolvedEndpoint, ResolvedEndpoints
-from nbkp.remote.resolution import resolve_proxy_chain
+from nbkp.remote.endpoints import EndpointFilter, ResolvedEndpoint, ResolvedEndpoints
+from nbkp.remote.resolution import resolve_all_endpoints, resolve_proxy_chain
 from nbkp.snapshots.common import create_snapshot_timestamp
 from nbkp.sync import SyncFailureKind, SyncOutcome, SyncResult
 
@@ -3258,6 +3258,113 @@ class TestStandaloneEndpointProbing:
             assert result.ssh_endpoint_statuses["orphan"].diagnostics.host_tools is None
 
         _run(self, tmp_path)
+
+
+def _alternate_endpoint_config(archive: str, photos: str) -> Config:
+    """``archive`` is only reachable from home (``nas-lan``); ``photos`` has
+    the same primary but also ``nas-wan``, reachable while travelling."""
+    return Config(
+        ssh_endpoints={
+            "nas-lan": SshEndpoint(slug="nas-lan", host="nas.lan", location="home"),
+            "nas-wan": SshEndpoint(
+                slug="nas-wan", host="nas.example.com", location="travel"
+            ),
+        },
+        volumes={
+            "laptop": LocalVolume(slug="laptop", path="/home/me"),
+            archive: RemoteVolume(slug=archive, ssh_endpoint="nas-lan", path="/a"),
+            photos: RemoteVolume(
+                slug=photos,
+                ssh_endpoint="nas-lan",
+                ssh_endpoints=["nas-lan", "nas-wan"],
+                path="/p",
+            ),
+        },
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="laptop"),
+            "ep-archive": SyncEndpoint(slug="ep-archive", volume=archive),
+            "ep-photos": SyncEndpoint(slug="ep-photos", volume=photos),
+        },
+        syncs={
+            "to-archive": SyncConfig(
+                slug="to-archive", source="ep-src", destination="ep-archive"
+            ),
+        },
+    )
+
+
+class TestAlternateEndpointUnderLocationExclusion:
+    """Volumes sharing a primary endpoint but resolved to different ones."""
+
+    @pytest.mark.parametrize(
+        ("archive", "photos"),
+        [("a-archive", "b-photos"), ("z-archive", "b-photos")],
+    )
+    def test_each_volume_is_checked_through_its_resolved_endpoint(
+        self, archive: str, photos: str
+    ) -> None:
+        config = _alternate_endpoint_config(archive, photos)
+        resolved = resolve_all_endpoints(
+            config,
+            EndpointFilter(exclude_locations=["home"]),
+            ssh_config=paramiko.SSHConfig(),
+            lookup=lambda _host: {"203.0.113.7"},
+        )
+        probed: list[str] = []
+        observed: list[str] = []
+
+        def observe_ssh(vol: Volume, **_kwargs: object) -> SshEndpointDiagnostics:
+            probed.append(vol.slug)
+            return _ssh_diag(ssh_reachable=True)
+
+        def observe_vol(vol: Volume, **_kwargs: object) -> VolumeDiagnostics:
+            observed.append(vol.slug)
+            return VolumeDiagnostics(capabilities=_STUB_CAPS)
+
+        with (
+            patch(
+                "nbkp.preflight.checks.observe_ssh_endpoint", side_effect=observe_ssh
+            ),
+            patch("nbkp.preflight.checks.observe_volume", side_effect=observe_vol),
+            patch(
+                "nbkp.preflight.checks.observe_standalone_endpoint",
+                return_value=_REACHABLE_SSH_DIAG,
+            ),
+            patch(
+                "nbkp.preflight.checks.enrich_from_ssh_config",
+                side_effect=lambda ep: ep,
+            ),
+            patch(
+                "nbkp.preflight.checks.observe_source_endpoint",
+                return_value=SourceEndpointDiagnostics(
+                    endpoint_slug="ep-src", sentinel_exists=True
+                ),
+            ),
+            patch(
+                "nbkp.preflight.checks.observe_destination_endpoint",
+                return_value=DestinationEndpointDiagnostics(
+                    endpoint_slug="ep-archive",
+                    sentinel_exists=True,
+                    endpoint_writable=True,
+                ),
+            ),
+        ):
+            result = check_all_syncs(config, resolved_endpoints=resolved)
+
+        assert archive not in probed and archive not in observed
+        assert result.volume_statuses[photos].active is True
+        assert result.volume_statuses[photos].ssh_endpoint_status.slug == "nas-wan"
+        assert result.ssh_endpoint_statuses["nas-wan"].active is True
+        assert result.volume_statuses[archive].active is False
+        assert result.ssh_endpoint_statuses["nas-lan"].errors == [
+            SshEndpointError.LOCATION_EXCLUDED
+        ]
+        assert check_step_count(config, None, resolved) == (
+            len(result.ssh_endpoint_statuses)
+            + len(result.volume_statuses)
+            + len(result.source_endpoint_statuses)
+            + len(result.destination_endpoint_statuses)
+        )
 
 
 class TestCheckHardLinkDest:

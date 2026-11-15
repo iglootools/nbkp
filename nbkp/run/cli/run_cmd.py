@@ -201,7 +201,7 @@ class _HumanProgress:
         strictness: Strictness,
         invocation: Invocation,
     ) -> None:
-        total = check_step_count(cfg, only_syncs)
+        total = check_step_count(cfg, only_syncs, resolved)
         self._cfg = cfg
         self._resolved = resolved
         self._strictness = strictness

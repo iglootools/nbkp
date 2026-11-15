@@ -287,6 +287,8 @@ When a remote volume declares multiple SSH endpoints, nbkp selects the best reac
 
 Each filter step is a **soft filter**: if it would eliminate all remaining candidates, it is silently skipped and the previous candidate list is preserved. This means filters degrade gracefully — `--location office` has no effect if no endpoint is tagged `office`, rather than causing a failure.
 
+Preflight probes each remote volume through the endpoint selected for it and reports the result under that endpoint, so two volumes sharing a primary endpoint can be reached (and reported) through different routes.
+
 Both `--location` and `--exclude-location` can be used together. Exclude is applied first, then include narrows further. This is useful when most endpoints lack location tags — instead of listing every location to include, you can exclude the ones you want to skip (e.g. `--exclude-location home`).
 
 ### Shell Script Generation
