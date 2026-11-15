@@ -352,6 +352,25 @@ class TestListSnapshotsRemote:
         ]
 
 
+def _hl_local_config(dst_path: Path) -> tuple[SyncConfig, Config]:
+    config = Config(
+        volumes={
+            "src": LocalVolume(slug="src", path="/src"),
+            "dst": LocalVolume(slug="dst", path=str(dst_path)),
+        },
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+            ),
+        },
+        syncs={"s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst")},
+    )
+    return config.syncs["s1"], config
+
+
 class TestReadLatestSymlink:
     def test_local_exists(self, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
@@ -489,6 +508,35 @@ class TestUpdateLatestSymlink:
         link = tmp_path / "latest"
         assert link.is_symlink()
         assert str(link.readlink()) == f"snapshots/{_TS_LOCAL.name}"
+
+    def test_local_replaces_existing_without_leftovers(self, tmp_path: Path) -> None:
+        sync, config = _hl_local_config(tmp_path)
+        link = tmp_path / "latest"
+        link.symlink_to("/dev/null")
+
+        update_latest_symlink(sync, config, _TS_LOCAL)
+
+        assert str(link.readlink()) == f"snapshots/{_TS_LOCAL.name}"
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["latest"]
+
+    def test_local_failure_keeps_previous_latest(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """latest is never missing, even when creating the new link fails."""
+        sync, config = _hl_local_config(tmp_path)
+        link = tmp_path / "latest"
+        link.symlink_to("snapshots/previous")
+
+        def fail(self: Path, target: str) -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(Path, "symlink_to", fail)
+
+        with pytest.raises(
+            SnapshotOperationError, check=_is_op(SnapshotOp.UPDATE_LATEST)
+        ):
+            update_latest_symlink(sync, config, _TS_LOCAL)
+        assert str(link.readlink()) == "snapshots/previous"
 
     def test_remote(self) -> None:
         runner = FakeCommandRunner().on(returns=completed(returncode=0, stderr=""))

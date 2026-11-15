@@ -381,7 +381,7 @@ This section documents every external command nbkp invokes on local or remote ho
 | Command | Purpose |
 |---|---|
 | `readlink <latest>` | Read current latest snapshot |
-| `ln -sfn <target> <latest>` | Update latest symlink (remote only; local uses Python `pathlib`) |
+| `ln -sfn <target> <latest>` | Update latest symlink (remote only; local creates the link under a temporary name and renames it over `latest`, so `latest` is never missing) |
 
 ### Mount management (udisks)
 

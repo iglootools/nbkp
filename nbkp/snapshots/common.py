@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
@@ -258,9 +259,21 @@ def read_latest_symlink(
 
 
 def _replace_local_symlink(latest_path: str, target: str) -> None:
+    """Point *latest_path* at *target* in one atomic step.
+
+    The link is made under a temporary name next to it and renamed over
+    ``latest``, so an interruption leaves either the old or the new link,
+    never none (which preflight would report as a missing ``latest``).
+    """
     p = Path(latest_path)
-    p.unlink(missing_ok=True)
-    p.symlink_to(target)
+    tmp = p.with_name(f".{p.name}.nbkp-tmp-{os.getpid()}")
+    tmp.unlink(missing_ok=True)
+    tmp.symlink_to(target)
+    try:
+        tmp.replace(p)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def update_latest_symlink(
