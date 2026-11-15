@@ -408,7 +408,7 @@ class TestRunRemoteCommand:
         mock_paramiko: MagicMock,
         ssh_endpoint: SshEndpoint,
     ) -> None:
-        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_conn = mock_conn_cls.return_value
         mock_conn.run.return_value = MagicMock(exited=0, stdout="", stderr="")
 
         run_remote_command(ssh_endpoint, ["test", "-f", "~/my backups/.nbkp-vol"])
@@ -423,7 +423,7 @@ class TestRunRemoteCommand:
         mock_paramiko: MagicMock,
         ssh_endpoint: SshEndpoint,
     ) -> None:
-        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_conn = mock_conn_cls.return_value
         mock_result = MagicMock(exited=0, stdout="file1\nfile2\n", stderr="")
         mock_conn.run.return_value = mock_result
 
@@ -470,7 +470,7 @@ class TestRunRemoteCommand:
                 },
             ),
         )
-        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_conn = mock_conn_cls.return_value
         mock_result = MagicMock(exited=0, stdout="ok\n", stderr="")
         mock_conn.run.return_value = mock_result
 
@@ -508,7 +508,7 @@ class TestRunRemoteCommand:
                 server_alive_interval=60,
             ),
         )
-        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_conn = mock_conn_cls.return_value
         mock_result = MagicMock(exited=0, stdout="ok\n", stderr="")
         mock_conn.run.return_value = mock_result
         # Like Fabric, no transport until the connection is opened.
@@ -536,7 +536,7 @@ class TestRunRemoteCommand:
         invoke.exceptions.ThreadException.
         """
 
-        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_conn = mock_conn_cls.return_value
         mock_conn.run.side_effect = invoke.exceptions.ThreadException(
             [MagicMock(value=OSError("Socket is closed"))]
         )
@@ -574,7 +574,7 @@ class TestRunRemoteCommand:
             host="bastion.example.com",
             user="admin",
         )
-        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_conn = mock_conn_cls.return_value
         mock_result = MagicMock(exited=0, stdout="ok\n", stderr="")
         mock_conn.run.return_value = mock_result
 

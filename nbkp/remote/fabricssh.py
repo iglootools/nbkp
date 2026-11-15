@@ -82,37 +82,60 @@ def _build_connection(
     return _build_single_connection(server, gateway)
 
 
-def run_remote_command(
+def _open_connection(
     server: SshEndpoint,
-    command: list[str],
     proxy_chain: list[SshEndpoint] | None = None,
-    input: str | None = None,
+) -> Connection:
+    conn = _build_connection(server, proxy_chain)
+    try:
+        # Fabric connects lazily: the transport only exists once open.
+        conn.open()
+        if server.connection_options.server_alive_interval is not None:
+            conn.transport.set_keepalive(  # pyright: ignore[reportOptionalMemberAccess]
+                server.connection_options.server_alive_interval
+            )
+    except BaseException:
+        # A failed authentication leaves the transport connected.
+        conn.close()
+        raise
+    return conn
+
+
+def _run_on_connection(
+    conn: Connection,
+    cmd_string: str,
+    input: str | None,
 ) -> subprocess.CompletedProcess[str]:
-    cmd_string = shell_join(command)
     # in_stream=False disables stdin; Fabric's default would forward this
     # process's own stdin to the remote command.
     in_stream: io.BytesIO | bool = (
         io.BytesIO(input.encode()) if input is not None else False
     )
-    with _build_connection(server, proxy_chain) as conn:
-        if server.connection_options.server_alive_interval is not None:
-            # Fabric connects lazily: the transport only exists once open.
-            conn.open()
-            conn.transport.set_keepalive(  # pyright: ignore[reportOptionalMemberAccess]
-                server.connection_options.server_alive_interval
-            )
-        try:
-            result = conn.run(cmd_string, warn=True, hide=True, in_stream=in_stream)
-        except invoke.exceptions.ThreadException:
-            # Stdin/stdout/stderr worker raised — usually because the remote
-            # process exited before the stdin writer finished sending data
-            # (Paramiko then raises OSError("Socket is closed")). The actual
-            # remote stderr is lost with the channel, so we return a typed
-            # result and let callers classify based on context.
-            return StdinClosedProcess(args=cmd_string)
+    try:
+        result = conn.run(cmd_string, warn=True, hide=True, in_stream=in_stream)
+    except invoke.exceptions.ThreadException:
+        # Stdin/stdout/stderr worker raised — usually because the remote
+        # process exited before the stdin writer finished sending data
+        # (Paramiko then raises OSError("Socket is closed")). The actual
+        # remote stderr is lost with the channel, so we return a typed
+        # result and let callers classify based on context.
+        return StdinClosedProcess(args=cmd_string)
     return subprocess.CompletedProcess(
         args=cmd_string,
         returncode=result.exited,
         stdout=result.stdout,
         stderr=result.stderr,
     )
+
+
+def run_remote_command(
+    server: SshEndpoint,
+    command: list[str],
+    proxy_chain: list[SshEndpoint] | None = None,
+    input: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    conn = _open_connection(server, proxy_chain)
+    try:
+        return _run_on_connection(conn, shell_join(command), input)
+    finally:
+        conn.close()
