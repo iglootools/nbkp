@@ -18,6 +18,7 @@ Usage:
 """
 
 import sys
+import tomllib
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,8 +27,15 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-# Must stay in sync with [tool.uv-dynamic-versioning] fallback-version in pyproject.toml.
-FALLBACK_VERSION = "0.0.0"
+PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
+
+
+def _fallback_version(pyproject: Path) -> str:
+    with pyproject.open("rb") as f:
+        return tomllib.load(f)["tool"]["uv-dynamic-versioning"]["fallback-version"]
+
+
+FALLBACK_VERSION = _fallback_version(PYPROJECT)
 
 DIST_DIR = Path("dist")
 
