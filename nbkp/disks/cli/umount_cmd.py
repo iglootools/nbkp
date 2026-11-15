@@ -96,6 +96,7 @@ def _umount_with_progress(
     """Umount and lock, with a progress bar for humans."""
     progress = LifecycleProgress.create(
         cfg,
+        resolved,
         enabled=output is OutputFormat.HUMAN,
         names=names,
         credentials=False,

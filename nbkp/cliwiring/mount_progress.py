@@ -22,6 +22,7 @@ from ..disks.output import (
     umount_failure_warning,
 )
 from ..policy import Severity, Strictness, classify_severity
+from ..remote.endpoints import ResolvedEndpoints
 from .mount_progress_bar import (
     DisksProgressBar,
     format_credential_result,
@@ -90,6 +91,7 @@ class LifecycleProgress:
     @staticmethod
     def create(
         cfg: Config,
+        resolved: ResolvedEndpoints,
         *,
         enabled: bool,
         names: list[str] | None = None,
@@ -99,7 +101,7 @@ class LifecycleProgress:
         umounting: bool = True,
     ) -> LifecycleProgress:
         """Build the bars the requested phases need (none when not *enabled*)."""
-        total = mount_count(cfg, names)
+        total = mount_count(cfg, resolved, names)
         credentials_total = prefetch_count(cfg) if credentials else 0
         return LifecycleProgress(
             display_names=mount_display_names(cfg),

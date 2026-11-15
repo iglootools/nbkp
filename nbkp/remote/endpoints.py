@@ -9,7 +9,7 @@ from enum import Enum
 
 from pydantic import ConfigDict, Field
 
-from ..config.protocol import SshEndpoint, _BaseModel
+from ..config.protocol import RemoteVolume, SshEndpoint, Volume, _BaseModel
 
 
 class NetworkType(str, Enum):
@@ -33,3 +33,12 @@ class ResolvedEndpoint(_BaseModel):
 
 
 ResolvedEndpoints = dict[str, ResolvedEndpoint]
+
+
+def location_excluded(volume: Volume, resolved: ResolvedEndpoints) -> bool:
+    """Whether endpoint resolution skipped *volume* for its location.
+
+    Such a remote volume has no resolved endpoint, so nothing may try to
+    reach it.
+    """
+    return isinstance(volume, RemoteVolume) and volume.slug not in resolved

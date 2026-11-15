@@ -9,6 +9,8 @@ from nbkp.config import (
     LocalVolume,
     LuksEncryptionConfig,
     MountConfig,
+    RemoteVolume,
+    SshEndpoint,
 )
 from nbkp.preflight import MountCapabilities
 
@@ -142,3 +144,35 @@ class TestVolumesStatusCommand:
         assert len(data) == 1
         assert "plain" in data[0]["volume"]
         assert "not managed" in data[0]["volume"]
+
+    @patch("nbkp.disks.cli.helpers.status.check_mount_status")
+    @patch("nbkp.cliwiring.config.load_config")
+    def test_location_excluded_volume_not_probed(
+        self, mock_load: MagicMock, mock_check: MagicMock
+    ) -> None:
+        mock_load.return_value = Config(
+            ssh_endpoints={
+                "nas": SshEndpoint(slug="nas", host="nas.lan", location="home"),
+            },
+            volumes={
+                "nas-drive": RemoteVolume(
+                    slug="nas-drive",
+                    ssh_endpoint="nas",
+                    path="/mnt/nas-drive",
+                    mount=MountConfig(
+                        device_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+                    ),
+                ),
+            },
+        )
+
+        result = runner.invoke(
+            app,
+            ["disks", "status", "--config", "/f.yaml", "-o", "json", "-L", "home"],
+        )
+        assert result.exit_code == 0
+        mock_check.assert_not_called()
+        data = json.loads(result.output)
+        assert len(data) == 1
+        assert "location excluded" in data[0]["volume"]
+        assert data[0]["mounted"] is None

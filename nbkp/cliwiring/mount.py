@@ -86,7 +86,7 @@ def managed_mount(
     )
     use_progress = output_format is OutputFormat.HUMAN
     progress = LifecycleProgress.create(
-        cfg, enabled=use_progress, strictness=strictness
+        cfg, resolved, enabled=use_progress, strictness=strictness
     )
     collected = umount_results if umount_results is not None else []
 

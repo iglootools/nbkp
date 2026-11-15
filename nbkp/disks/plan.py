@@ -97,7 +97,9 @@ def plan_lifecycle(
     """Plan mount (``mounting=True``) or umount steps for mount-managed volumes."""
     return [
         _plan_one(vol, mount, resolved, mounting=mounting)
-        for _slug, vol, mount in lifecycle_volumes(config, names, mounting=mounting)
+        for _slug, vol, mount in lifecycle_volumes(
+            config, resolved, names, mounting=mounting
+        )
     ]
 
 

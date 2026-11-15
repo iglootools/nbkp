@@ -14,7 +14,7 @@ from ..config import (
 )
 from ..credentials import CredentialError
 from ..remote.dispatch import run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
+from ..remote.endpoints import ResolvedEndpoints, location_excluded
 from ..remote.errors import SSH_CONNECTION_ERRORS, describe_error
 from ..remote.fabricssh import StdinClosedProcess
 from .detection import (
@@ -202,6 +202,7 @@ class UmountResult:
 
 def lifecycle_volumes(
     config: Config,
+    resolved_endpoints: ResolvedEndpoints,
     names: list[str] | None = None,
     *,
     mounting: bool = True,
@@ -210,11 +211,15 @@ def lifecycle_volumes(
 
     Umount walks the mount order backwards. The one selection shared by the
     lifecycle, its dry-run plan and ``disks status``, so they cannot drift.
+    A remote volume excluded by location has no endpoint to reach it through,
+    so it is left out, as endpoint resolution promises.
     """
     volumes = [
         (slug, vol, vol.mount)
         for slug, vol in config.volumes.items()
-        if vol.mount is not None and (names is None or slug in names)
+        if vol.mount is not None
+        and (names is None or slug in names)
+        and not location_excluded(vol, resolved_endpoints)
     ]
     return volumes if mounting else list(reversed(volumes))
 
@@ -230,9 +235,10 @@ def unknown_volume_names(config: Config, names: list[str] | None) -> list[str]:
 
 def mount_count(
     config: Config,
+    resolved_endpoints: ResolvedEndpoints,
     names: list[str] | None = None,
 ) -> int:
-    return len(lifecycle_volumes(config, names))
+    return len(lifecycle_volumes(config, resolved_endpoints, names))
 
 
 def mount_volume(
@@ -524,7 +530,7 @@ def mount_volumes(
 
     return [
         _mount_one(slug, vol, mount_cfg)
-        for slug, vol, mount_cfg in lifecycle_volumes(config, names)
+        for slug, vol, mount_cfg in lifecycle_volumes(config, resolved_endpoints, names)
     ]
 
 
@@ -556,5 +562,7 @@ def umount_volumes(
 
     return [
         _umount_one(slug, vol, mount_cfg)
-        for slug, vol, mount_cfg in lifecycle_volumes(config, names, mounting=False)
+        for slug, vol, mount_cfg in lifecycle_volumes(
+            config, resolved_endpoints, names, mounting=False
+        )
     ]

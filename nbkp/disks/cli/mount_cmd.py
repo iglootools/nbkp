@@ -27,7 +27,7 @@ from .helpers import (
     _error_label,
     _ErrorStatus,
     _show_status_table,
-    _unmanaged_statuses,
+    _unprobed_statuses,
     require_known_names,
 )
 from .helpers.plan_output import show_plan
@@ -100,7 +100,7 @@ def mount(
         return
 
     results = _mount_with_progress(cfg, resolved, name, output)
-    _show_results(cfg, results, name, output)
+    _show_results(cfg, resolved, results, name, output)
     if output is OutputFormat.HUMAN:
         _print_auth_hint(
             results,
@@ -120,7 +120,11 @@ def _mount_with_progress(
         cfg.credential_provider, cfg.credential_command, prompt=prompt_passphrase
     )
     progress = LifecycleProgress.create(
-        cfg, enabled=output is OutputFormat.HUMAN, names=names, umounting=False
+        cfg,
+        resolved,
+        enabled=output is OutputFormat.HUMAN,
+        names=names,
+        umounting=False,
     )
     # try/finally instead of `with` because the bars are conditionally
     # created (None when output is JSON), and cache.clear() must also run.
@@ -149,11 +153,12 @@ def _mount_with_progress(
 
 def _show_results(
     cfg: Config,
+    resolved: ResolvedEndpoints,
     results: list[MountResult],
     names: list[str] | None,
     output: OutputFormat,
 ) -> None:
-    """Status table: observed volumes, unreachable ones, unmanaged ones.
+    """Status table: observed, unreachable, unmanaged and excluded volumes.
 
     The JSON entries are built from the results themselves, so that they
     carry why a mount failed, not only the state it left.
@@ -169,11 +174,11 @@ def _show_results(
                         )
                         for r in results
                     ),
-                    *build_mount_status_json(_unmanaged_statuses(cfg, names)),
+                    *build_mount_status_json(_unprobed_statuses(cfg, resolved, names)),
                 ]
             )
         case OutputFormat.HUMAN:
-            _show_human_results(cfg, results, names, display_names)
+            _show_human_results(cfg, resolved, results, names, display_names)
 
 
 def _mount_result_entry(name: str, result: MountResult) -> dict[str, object]:
@@ -188,6 +193,7 @@ def _mount_result_entry(name: str, result: MountResult) -> dict[str, object]:
 
 def _show_human_results(
     cfg: Config,
+    resolved: ResolvedEndpoints,
     results: list[MountResult],
     names: list[str] | None,
     display_names: dict[str, str],
@@ -210,7 +216,7 @@ def _show_human_results(
                 for r in results
                 if not r.success and r.volume_slug not in observations
             ),
-            *_unmanaged_statuses(cfg, names),
+            *_unprobed_statuses(cfg, resolved, names),
         ],
         OutputFormat.HUMAN,
     )
