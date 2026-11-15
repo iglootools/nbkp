@@ -3,5 +3,7 @@
 set -euo pipefail
 
 rm -rf build/ dist/ ./*.egg-info/
-find . -type d -name __pycache__ -delete
-find . -type f -name "*.pyc" -delete
+# -delete cannot remove a non-empty __pycache__ (it uses rmdir), and .venv's
+# bytecode belongs to the virtualenv, not to the build.
+find . -path ./.venv -prune -o -type d -name __pycache__ -prune -exec rm -rf {} +
+find . -path ./.venv -prune -o -type f -name "*.pyc" -exec rm -f {} +
