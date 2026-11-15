@@ -1,4 +1,4 @@
-from ...preflight.status.sync import SyncStatus
+from ...preflight import SyncStatus
 from ..results import SyncResult
 from .btrfs import run_btrfs_sync
 from .common import RsyncRunner, RunContext

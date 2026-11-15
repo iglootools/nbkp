@@ -32,10 +32,14 @@ from ...disks import UmountResult
 from ...disks.output import umount_result_json
 from ...ordering.output import build_rich_tree_sections
 from ...policy import Strictness
-from ...preflight import PreflightResult, SyncStatus, check_step_count
+from ...preflight import (
+    PreflightError,
+    PreflightResult,
+    SyncStatus,
+    check_step_count,
+    is_fatal,
+)
 from ...preflight.output import print_human_check
-from ...preflight.severity import PreflightError
-from ...preflight.strictness import is_fatal
 from ...remote.endpoints import NetworkType, ResolvedEndpoints
 from ...sync import ProgressMode, SyncResult, result_severity
 from ...sync.output import build_human_results_sections

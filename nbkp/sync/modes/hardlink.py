@@ -2,7 +2,7 @@
 
 from ...config import SyncConfig, SyncEndpoint
 from ...fsprotocol import Snapshot
-from ...preflight.status.sync import SyncStatus
+from ...preflight import SyncStatus
 from ...snapshots.common import destination_volume, ensure_after_latest
 from ...snapshots.errors import SnapshotOp, SnapshotOperationError
 from ...snapshots.hardlinks import (

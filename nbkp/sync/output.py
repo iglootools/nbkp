@@ -12,7 +12,7 @@ from ..config import (
 )
 from ..config.output import endpoint_path
 from ..fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
-from ..preflight.status import SyncStatus
+from ..preflight import SyncStatus
 from ..remote.endpoints import ResolvedEndpoints
 from ..snapshots.output import retention_display as _retention_display
 from .results import SyncOutcome, SyncResult

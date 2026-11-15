@@ -12,8 +12,13 @@ from ..clidisplay import StepProgressBar
 from ..config import Config
 from ..disks import MountObservation
 from ..policy import Strictness
-from ..preflight import PreflightResult, check_all_syncs, check_step_count
-from ..preflight.severity import PreflightError, severity_for_errors
+from ..preflight import (
+    PreflightError,
+    PreflightResult,
+    check_all_syncs,
+    check_step_count,
+    severity_for_errors,
+)
 from ..remote.endpoints import ResolvedEndpoints
 
 

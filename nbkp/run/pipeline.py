@@ -14,11 +14,11 @@ from ..config import Config
 from ..disks import MountObservation
 from ..policy import Severity, Strictness
 from ..preflight import (
+    PreflightError,
     PreflightResult,
     check_all_syncs,
+    has_fatal_errors,
 )
-from ..preflight.severity import PreflightError
-from ..preflight.strictness import has_fatal_errors
 from ..remote.endpoints import ResolvedEndpoints
 from ..sync.modes import RsyncRunner
 from ..sync.orchestration import run_all_syncs
