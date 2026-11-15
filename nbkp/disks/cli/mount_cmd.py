@@ -89,7 +89,7 @@ def mount(
     """Unlock LUKS and mount volumes. Mounts all volumes with mount config, or specific ones via --name."""
     cfg = load_config_or_exit(config, output)
     require_known_names(cfg, name, output)
-    resolved = resolve_endpoints(cfg, location, exclude_location, network)
+    resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
 
     if dry_run:
         show_plan(

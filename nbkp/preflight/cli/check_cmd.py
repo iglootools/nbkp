@@ -85,7 +85,7 @@ def check(
 ) -> None:
     """Verify that volumes are reachable, sentinel files exist, SSH connectivity works, and required tools are available. Use this before `run` to confirm everything is ready."""
     cfg = load_config_or_exit(config, output)
-    resolved = resolve_endpoints(cfg, location, exclude_location, network)
+    resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
     invocation = Invocation.of(
         config, location, exclude_location, network.value if network else None
     )

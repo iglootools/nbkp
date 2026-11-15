@@ -92,7 +92,7 @@ def troubleshoot(
 ) -> None:
     """Run the same checks as `check` but displays step-by-step fix instructions for every failure. Useful when `check` reports problems."""
     cfg = load_config_or_exit(config, output)
-    resolved = resolve_endpoints(cfg, location, exclude_location, network)
+    resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
     invocation = Invocation.of(
         config, location, exclude_location, network.value if network else None
     )

@@ -60,6 +60,32 @@ class TestLocationValidation:
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
     @patch("nbkp.cliwiring.config.load_config")
+    def test_unknown_location_json_error(
+        self, mock_load: MagicMock, mock_checks: MagicMock
+    ) -> None:
+        mock_load.return_value = config_with_locations()
+        result = runner.invoke(
+            app,
+            [
+                "preflight",
+                "check",
+                "--config",
+                "/f.yaml",
+                "--output",
+                "json",
+                "--location",
+                "office",
+            ],
+        )
+        assert result.exit_code == 2
+        error = json.loads(result.stdout)["error"]
+        assert error["reason"] == "unknown-location"
+        assert "unknown location 'office'" in error["message"]
+        assert "home" in error["message"]
+        mock_checks.assert_not_called()
+
+    @patch("nbkp.cliwiring.preflight.check_all_syncs")
+    @patch("nbkp.cliwiring.config.load_config")
     def test_known_location_accepted(
         self, mock_load: MagicMock, mock_checks: MagicMock
     ) -> None:
