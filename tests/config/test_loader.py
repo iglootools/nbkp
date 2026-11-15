@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from textwrap import dedent
 
@@ -88,6 +89,15 @@ class TestLoadConfig:
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
         assert excinfo.value.reason == ConfigErrorReason.INVALID_YAML
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root reads any file")
+    def test_unreadable_file(self, tmp_path: Path) -> None:
+        p = tmp_path / "config.yaml"
+        p.write_text("syncs: {}\n")
+        p.chmod(0)
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorReason.UNREADABLE
 
     def test_not_a_mapping(self, tmp_path: Path) -> None:
         p = tmp_path / "list.yaml"
