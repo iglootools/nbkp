@@ -224,3 +224,8 @@ demo/demo.gif
 # so they are valid only on the machine that created them. Ignoring them is a condition
 # of sharing .vscode/settings.json, which references them by path.
 .vscode/mise-tools/
+
+# Generated output of the iglootools plugin and tools, such as audit reports under
+# .iglootools/audits/. Never committed: see the .gitignore rule in
+# https://github.com/iglootools/common/blob/main/guidelines/project-setup/repository.md
+.iglootools/
