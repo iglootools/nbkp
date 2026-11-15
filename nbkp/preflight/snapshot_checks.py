@@ -4,35 +4,35 @@ from ..remote.dispatch import run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 
 
-def check_btrfs_filesystem(
+def probe_filesystem_type(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
-) -> bool | None:
-    """``None`` when ``stat`` fails: the filesystem type is unknown, which is
-    not the same as "not btrfs" (that would send the operator off to
-    reformat a volume that may be fine).
+) -> str | None:
+    """The type of the filesystem holding the volume root (``stat -f``'s
+    ``%T``), or ``None`` when ``stat`` fails.
+
+    Probed once per volume: both the btrfs check and the hard-link check
+    derive from it, and on a remote volume each probe is an SSH round-trip.
     """
     result = run_on_volume(
         ["stat", "-f", "-c", "%T", resolve_endpoint_path(volume, None)],
         volume,
         resolved_endpoints,
     )
-    return result.stdout.strip() == "btrfs" if result.returncode == 0 else None
+    return result.stdout.strip() if result.returncode == 0 else None
 
 
-def check_hardlink_support(
-    volume: Volume,
-    resolved_endpoints: ResolvedEndpoints,
-) -> bool:
-    result = run_on_volume(
-        ["stat", "-f", "-c", "%T", resolve_endpoint_path(volume, None)],
-        volume,
-        resolved_endpoints,
-    )
-    return (
-        result.returncode != 0  # Cannot determine; assume supported
-        or result.stdout.strip() not in NO_HARDLINK_FILESYSTEMS
-    )
+def is_btrfs_filesystem(fs_type: str | None) -> bool | None:
+    """``None`` when the filesystem type is unknown, which is not the same
+    as "not btrfs" (that would send the operator off to reformat a volume
+    that may be fine).
+    """
+    return fs_type == "btrfs" if fs_type is not None else None
+
+
+def supports_hard_links(fs_type: str | None) -> bool:
+    """An unknown filesystem type is assumed to support hard links."""
+    return fs_type not in NO_HARDLINK_FILESYSTEMS
 
 
 def check_btrfs_subvolume(

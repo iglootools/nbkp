@@ -35,9 +35,10 @@ from ..remote.endpoints import ResolvedEndpoints
 from ..remote.errors import SSH_CONNECTION_ERRORS, describe_error, is_auth_error
 from .probes import check_rsync_version
 from .snapshot_checks import (
-    check_btrfs_filesystem,
     check_btrfs_mount_option,
-    check_hardlink_support,
+    is_btrfs_filesystem,
+    probe_filesystem_type,
+    supports_hard_links,
 )
 from .status.ssh import HostToolCapabilities, SshEndpointDiagnostics
 from .status.volume import VolumeCapabilities, VolumeDiagnostics
@@ -229,10 +230,9 @@ def check_volume_capabilities(
     probes only volume-specific filesystem properties.
     """
     re = resolved_endpoints or {}
-    is_btrfs = check_btrfs_filesystem(volume, re) if host_tools.has_stat else False
-    hardlink_supported = (
-        check_hardlink_support(volume, re) if host_tools.has_stat else True
-    )
+    fs_type = probe_filesystem_type(volume, re) if host_tools.has_stat else None
+    is_btrfs = is_btrfs_filesystem(fs_type) if host_tools.has_stat else False
+    hardlink_supported = supports_hard_links(fs_type)
     btrfs_user_subvol_rm = (
         check_btrfs_mount_option(volume, "user_subvol_rm_allowed", re)
         if host_tools.has_findmnt and is_btrfs

@@ -21,8 +21,8 @@ from nbkp.preflight.endpoint_checks import (
     observe_source_endpoint,
 )
 from nbkp.preflight.snapshot_checks import (
-    check_btrfs_filesystem,
     check_btrfs_subvolume,
+    probe_filesystem_type,
 )
 from nbkp.preflight.testkit import check_sync, check_volume
 from nbkp.preflight.volume_checks import observe_ssh_endpoint, observe_volume
@@ -144,7 +144,7 @@ class TestBtrfsFilesystemCheck:
             volumes={"btrfs": remote_btrfs_volume},
         )
         resolved = resolve_all_endpoints(config)
-        assert check_btrfs_filesystem(remote_btrfs_volume, resolved) is True
+        assert probe_filesystem_type(remote_btrfs_volume, resolved) == "btrfs"
 
     def test_non_btrfs_path_detected(
         self,
@@ -156,7 +156,10 @@ class TestBtrfsFilesystemCheck:
             volumes={"data": docker_remote_volume},
         )
         resolved = resolve_all_endpoints(config)
-        assert check_btrfs_filesystem(docker_remote_volume, resolved) is False
+        assert probe_filesystem_type(docker_remote_volume, resolved) not in (
+            "btrfs",
+            None,
+        )
 
 
 class TestBtrfsSubvolumeCheck:
