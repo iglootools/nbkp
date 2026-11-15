@@ -296,7 +296,9 @@ When a remote volume declares multiple SSH endpoints, nbkp selects the best reac
 4. If `--location` is set, prefer endpoints with a matching location tag
 5. If `--network` is set, prefer endpoints with matching network type (`private` for LAN, `public` for WAN)
 
-Each filter step is a **soft filter**: if it would eliminate all remaining candidates, it is silently skipped and the previous candidate list is preserved. This means filters degrade gracefully — `--location office` has no effect if no endpoint is tagged `office`, rather than causing a failure. The first remaining candidate is used. Step 2 applies even when no flag is given; a volume with a single candidate skips it, since no filter could change the choice.
+Each filter step is a **soft filter**, applied per volume: if it would eliminate all of that volume's remaining candidates, it is silently skipped and the previous candidate list is preserved. This means filters degrade gracefully — `--location office` has no effect on a volume none of whose endpoints is tagged `office`, rather than causing a failure. The first remaining candidate is used. Step 2 applies even when no flag is given; a volume with a single candidate skips it, since no filter could change the choice.
+
+**Unknown locations are rejected** — The location *values* themselves are checked against the config before any selection: a `--location` or `--exclude-location` value that no SSH endpoint in the config declares (via `location` / `locations`) is treated as a typo, and the command exits with code 2 without running anything, with the error on stderr, or as a JSON `{"error": ...}` object (reason `unknown-location`) on stdout under `-o json`. So `--location office` is only accepted when at least one endpoint somewhere in the config is tagged `office`.
 
 Preflight probes each remote volume through the endpoint selected for it and reports the result under that endpoint, so two volumes sharing a primary endpoint can be reached (and reported) through different routes.
 

@@ -116,7 +116,7 @@ The split between volume and endpoint sentinels separates two questions: *is the
 
 ### Network Context: Choosing a Route
 
-A remote volume may list several candidate SSH endpoints. At each run, nbkp picks one: it discards endpoints whose hostname does not resolve, then narrows by the operator's hints — the current **location** (`--location home`, `--exclude-location travel`) and **network type** (`--network private` for LAN, `public` for WAN). Hints are soft: a filter that would leave no candidate is ignored rather than failing the run.
+A remote volume may list several candidate SSH endpoints. At each run, nbkp picks one: it discards endpoints whose hostname does not resolve, then narrows by the operator's hints — the current **location** (`--location home`, `--exclude-location travel`) and **network type** (`--network private` for LAN, `public` for WAN). Hints are soft: a filter that would leave a volume with no candidate is ignored for that volume rather than failing the run. A location no endpoint in the config declares, on the other hand, is rejected as a typo before anything runs.
 
 The one hard filter: when *every* candidate endpoint of a volume is in an excluded location, the volume is skipped outright, with no SSH attempt, and its syncs become inactive. This turns "I know the NAS is unreachable from here" into a fast, quiet skip instead of a connection timeout. The full selection algorithm: [Endpoint Filtering](./internals.md#endpoint-filtering).
 
