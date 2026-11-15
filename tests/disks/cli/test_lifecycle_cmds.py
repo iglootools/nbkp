@@ -113,6 +113,38 @@ class TestDryRun:
         assert "nothing to do for enc" in result.output
         assert "device not plugged in" in result.output
 
+    @patch(
+        "nbkp.disks.cli.mount_cmd.plan_lifecycle",
+        return_value=[
+            VolumePlan("enc", (), "unreachable: timed out", probe_failed=True)
+        ],
+    )
+    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
+    def test_failed_probe_fails_the_dry_run(
+        self, _load: MagicMock, _probe: MagicMock
+    ) -> None:
+        """A dry run that could not probe a volume must not report success."""
+        result = runner.invoke(app, ["disks", "mount", "-c", "/f.yaml", "--dry-run"])
+        assert result.exit_code == 1
+        assert "cannot plan enc" in result.output
+        assert "nothing to do" not in result.output
+
+    @patch(
+        "nbkp.disks.cli.umount_cmd.plan_lifecycle",
+        return_value=[
+            VolumePlan("enc", (), "unreachable: timed out", probe_failed=True)
+        ],
+    )
+    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
+    def test_failed_probe_fails_the_json_dry_run(
+        self, _load: MagicMock, _probe: MagicMock
+    ) -> None:
+        result = runner.invoke(
+            app, ["disks", "umount", "-c", "/f.yaml", "--dry-run", "-o", "json"]
+        )
+        assert result.exit_code == 1
+        assert json.loads(result.output)["volumes"][0]["probe_failed"] is True
+
 
 class TestMountAuthHint:
     @patch(
