@@ -13,6 +13,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.policy import Strictness
 from nbkp.preflight import (
     DestinationEndpointDiagnostics,
     DestinationEndpointError,
@@ -30,7 +31,10 @@ from nbkp.preflight import (
     VolumeStatus,
 )
 from nbkp.preflight.output import print_human_troubleshoot
-from nbkp.preflight.output.check import _format_latest
+from nbkp.preflight.output.check import (
+    _format_destination_diagnostics,
+    _format_latest,
+)
 from nbkp.preflight.status.endpoint import LatestSymlinkState
 
 
@@ -375,3 +379,36 @@ class TestCheckLatestColumn:
 
     def test_missing_shown_as_error(self) -> None:
         assert str(_format_latest(LatestSymlinkState(exists=False))) == "✗latest"
+
+
+class TestCheckDestinationColumn:
+    def _status(self, *, sentinel_exists: bool) -> SyncStatus:
+        config = _btrfs_config()
+        status = _make_sync_status(config, _make_vol_statuses(config))
+        dst = status.destination_endpoint_status
+        return status.model_copy(
+            update={
+                "destination_endpoint_status": dst.model_copy(
+                    update={
+                        "diagnostics": DestinationEndpointDiagnostics(
+                            endpoint_slug=dst.endpoint_slug,
+                            sentinel_exists=sentinel_exists,
+                            endpoint_writable=False,
+                        )
+                    }
+                )
+            }
+        )
+
+    def test_writable_hidden_when_sentinel_missing(self) -> None:
+        """The status layer suppresses NOT_WRITABLE then: no ✗writable."""
+        text = _format_destination_diagnostics(
+            self._status(sentinel_exists=False), Strictness.IGNORE_INACTIVE
+        )
+        assert "writable" not in str(text)
+
+    def test_writable_shown_when_sentinel_present(self) -> None:
+        text = _format_destination_diagnostics(
+            self._status(sentinel_exists=True), Strictness.IGNORE_INACTIVE
+        )
+        assert "✗writable" in str(text)

@@ -125,11 +125,19 @@ def _format_destination_diagnostics(ss: SyncStatus, strictness: Strictness) -> T
                 fail_error=DestinationEndpointError.SENTINEL_NOT_FOUND,
                 strictness=strictness,
             ),
-            check(
-                diag.endpoint_writable,
-                "writable",
-                fail_error=DestinationEndpointError.NOT_WRITABLE,
-                strictness=strictness,
+            # Without the sentinel the directory may not exist, and the status
+            # layer suppresses NOT_WRITABLE: so does this column.
+            *(
+                [
+                    check(
+                        diag.endpoint_writable,
+                        "writable",
+                        fail_error=DestinationEndpointError.NOT_WRITABLE,
+                        strictness=strictness,
+                    )
+                ]
+                if diag.sentinel_exists
+                else []
             ),
             *_destination_snapshot_items(diag, strictness),
         ]
