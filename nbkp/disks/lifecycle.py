@@ -437,14 +437,15 @@ def _umount_volume_inner(
             resolved_endpoints,
         )
         if result.returncode != 0:
+            # A failure, not a warning: the volume is left unlocked, which is
+            # what the lifecycle exists to prevent.
             return UmountResult(
                 volume_slug=slug,
-                success=True,
-                warning=(
-                    "umounted but lock-luks failed"
-                    f" (exit {result.returncode}):"
-                    f" {result.stderr.strip()}"
+                success=False,
+                detail=(
+                    f"lock failed (exit {result.returncode}): {result.stderr.strip()}"
                 ),
+                warning="LUKS container still unlocked, manual lock needed",
             )
 
     return UmountResult(volume_slug=slug, success=True)

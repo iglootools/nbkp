@@ -507,6 +507,40 @@ class TestUmountVolume:
         assert len(run_cmds) == 1
         assert run_cmds[0][:2] == ["udisksctl", "lock"]
 
+    def test_lock_failure_after_unmount_is_a_failure(self) -> None:
+        """The drive must end locked: a failed lock is not a successful umount."""
+        vol = _encrypted_vol()
+        mc = vol.mount
+        assert mc is not None
+        run_cmds: list[list[str]] = []
+
+        def mock_run(cmd, volume, resolved, **kwargs):
+            run_cmds.append(cmd)
+            match cmd[:2]:
+                case ["udisksctl", "lock"]:
+                    return _mock_run(1, stderr="Error locking: device busy")
+                case _:
+                    return _mock_run(0)
+
+        with (
+            patch(
+                "nbkp.disks.lifecycle.resolve_target_device", return_value=_CLEARTEXT
+            ),
+            patch(
+                "nbkp.disks.lifecycle.find_mountpoint", return_value="/mnt/encrypted"
+            ),
+            patch("nbkp.disks.lifecycle.run_on_volume", side_effect=mock_run),
+        ):
+            result = umount_volume(vol, mc, {})
+        assert [cmd[:2] for cmd in run_cmds] == [
+            ["udisksctl", "unmount"],
+            ["udisksctl", "lock"],
+        ]
+        assert not result.success
+        assert "lock failed (exit 1)" in (result.detail or "")
+        assert "device busy" in (result.detail or "")
+        assert "unlocked" in (result.warning or "")
+
     def test_umount_failure(self) -> None:
         vol = _encrypted_vol()
         mc = vol.mount
@@ -521,11 +555,13 @@ class TestUmountVolume:
             patch(
                 "nbkp.disks.lifecycle.run_on_volume",
                 return_value=_mock_run(1, stderr="target is busy"),
-            ),
+            ) as mock_run,
         ):
             result = umount_volume(vol, mc, {})
         assert not result.success
         assert result.warning is not None
+        # Locking a mounted container cannot succeed: it is not attempted.
+        assert mock_run.call_count == 1
 
     def test_ssh_timeout_returns_failed(self) -> None:
         vol = _encrypted_vol()
