@@ -24,9 +24,12 @@ from ...cliwiring.config import (
     require_known_syncs,
     resolve_endpoints,
 )
-from ...cliwiring.mount import managed_mount
+from ...cliwiring.mount import managed_mount, print_umount_failures
+from ...cliwiring.mount_progress import mount_display_names
 from ...cliwiring.preflight import check_total
 from ...config import Config
+from ...disks import UmountResult
+from ...disks.output import umount_result_json
 from ...ordering.output import build_rich_tree_sections
 from ...policy import Strictness
 from ...preflight import PreflightResult, SyncStatus
@@ -139,6 +142,9 @@ def run(
         config, location, exclude_location, network.value if network else None
     )
     hint = invocation.command("preflight", "troubleshoot")
+    # Filled when the volumes are unmounted, so the outcome is printed after
+    # the block: a drive left mounted or unlocked is part of the outcome.
+    umount_results: list[UmountResult] = []
     with managed_mount(
         cfg,
         resolved,
@@ -146,6 +152,7 @@ def run(
         umount=umount,
         output_format=output,
         strictness=strictness,
+        umount_results=umount_results,
     ) as (cfg, mount_observations):
         display = (
             _HumanProgress(cfg, resolved, sync, progress, strictness, invocation)
@@ -168,9 +175,15 @@ def run(
             resolved_endpoints=resolved,
             mount_observations=mount_observations,
         )
-        _print_outcome(pipeline, cfg, resolved, output, strictness, dry_run, hint)
-        if pipeline.has_preflight_errors or pipeline.has_sync_failures:
-            raise typer.Exit(1)
+    _print_outcome(
+        pipeline, cfg, resolved, output, strictness, dry_run, hint, umount_results
+    )
+    if (
+        pipeline.has_preflight_errors
+        or pipeline.has_sync_failures
+        or any(not r.success for r in umount_results)
+    ):
+        raise typer.Exit(1)
 
 
 class _HumanProgress:
@@ -258,23 +271,36 @@ def _print_outcome(
     strictness: Strictness,
     dry_run: bool,
     hint: str,
+    umount_results: list[UmountResult],
 ) -> None:
     match (output, pipeline.has_preflight_errors):
         case (OutputFormat.JSON, aborted):
-            echo_json(_json_payload(pipeline, hint if aborted else None))
+            echo_json(
+                _json_payload(pipeline, hint if aborted else None, umount_results)
+            )
         case (OutputFormat.HUMAN, True):
             Console(stderr=True).print(_abort_message(pipeline, strictness, hint))
         case (OutputFormat.HUMAN, False):
             Console().print(
                 _results_panel(pipeline, cfg, resolved, strictness, dry_run)
             )
+    if output is OutputFormat.HUMAN:
+        print_umount_failures(umount_results, mount_display_names(cfg))
 
 
-def _json_payload(pipeline: PipelineResult, hint: str | None) -> dict[str, object]:
+def _json_payload(
+    pipeline: PipelineResult,
+    hint: str | None,
+    umount_results: list[UmountResult],
+) -> dict[str, object]:
     return {
         "volumes": list(pipeline.preflight.volume_statuses.values()),
         "syncs": list(pipeline.preflight.sync_statuses.values()),
         "results": list(pipeline.results),
+        "umount": [
+            {"volume": r.volume_slug, "success": r.success, **umount_result_json(r)}
+            for r in umount_results
+        ],
         **({"hint": hint} if hint is not None else {}),
     }
 
