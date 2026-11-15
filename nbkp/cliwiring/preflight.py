@@ -6,6 +6,7 @@ per-step severity icons here.
 """
 
 from collections.abc import Collection, Sequence
+from functools import partial
 
 from ..clidisplay import StepProgressBar
 from ..config import Config
@@ -14,6 +15,23 @@ from ..policy import Strictness
 from ..preflight import PreflightResult, check_all_syncs, check_step_count
 from ..preflight.severity import PreflightError, severity_for_errors
 from ..remote.endpoints import ResolvedEndpoints
+
+
+def start_check_step(bar: StepProgressBar, label: str) -> None:
+    bar.on_start(f"Checking {label}...")
+
+
+def end_check_step(
+    bar: StepProgressBar,
+    label: str,
+    errors: Sequence[PreflightError],
+    strictness: Strictness,
+) -> None:
+    """Close a step with the icon its errors deserve under *strictness*."""
+    typed_errors = list(errors)
+    severity = severity_for_errors(typed_errors, strictness)
+    summary = ", ".join(e.value for e in typed_errors) if typed_errors else None
+    bar.on_end(f"check {label}", severity, summary)
 
 
 def check_all_with_progress(
@@ -44,20 +62,12 @@ def check_all_with_progress(
         )
 
     with StepProgressBar(total) as bar:
-
-        def _on_start(label: str) -> None:
-            bar.on_start(f"Checking {label}...")
-
-        def _on_end(label: str, errors: Sequence[PreflightError]) -> None:
-            typed_errors = list(errors)
-            severity = severity_for_errors(typed_errors, strictness)
-            summary = ", ".join(e.value for e in typed_errors) if typed_errors else None
-            bar.on_end(f"check {label}", severity, summary)
-
         return check_all_syncs(
             cfg,
-            on_check_start=_on_start,
-            on_check_end=_on_end,
+            on_check_start=partial(start_check_step, bar),
+            on_check_end=lambda label, errors: end_check_step(
+                bar, label, errors, strictness
+            ),
             only_syncs=only_syncs,
             resolved_endpoints=resolved_endpoints,
             dry_run=dry_run,
