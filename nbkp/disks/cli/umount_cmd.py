@@ -11,7 +11,7 @@ from ...remote.endpoints import NetworkType, ResolvedEndpoints
 from ..lifecycle import UmountResult, umount_volumes
 from ..plan import plan_lifecycle
 from . import app
-from .helpers import _probe_and_show_status, require_known_names
+from .helpers import probe_and_show_status, require_known_names
 from .helpers.plan_output import show_plan
 
 
@@ -82,7 +82,7 @@ def umount(
         return
 
     results = _umount_with_progress(cfg, resolved, name, output)
-    _probe_and_show_status(cfg, resolved, output, name, umount_results=results)
+    probe_and_show_status(cfg, resolved, output, name, umount_results=results)
     if any(not r.success for r in results):
         raise typer.Exit(1)
 

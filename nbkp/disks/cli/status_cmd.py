@@ -7,7 +7,7 @@ from ...clidisplay import OutputFormat
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...remote.endpoints import NetworkType
 from . import app
-from .helpers import _probe_and_show_status, require_known_names
+from .helpers import probe_and_show_status, require_known_names
 
 
 @app.command("status")
@@ -56,4 +56,4 @@ def status(
     cfg = load_config_or_exit(config, output)
     require_known_names(cfg, name, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
-    _probe_and_show_status(cfg, resolved, output, name)
+    probe_and_show_status(cfg, resolved, output, name)

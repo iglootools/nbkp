@@ -29,7 +29,7 @@ from ...output import (
 
 
 @dataclass(frozen=True)
-class _ErrorStatus:
+class ErrorStatus:
     """Synthetic, all-unknown mount status for unreachable/unmanaged volumes.
 
     The detail (error text, ``not managed``) is folded into the Name column
@@ -52,7 +52,7 @@ def _unprobed_note(vol: LocalVolume | RemoteVolume, resolved: ResolvedEndpoints)
             return ""
 
 
-def _unprobed_statuses(
+def unprobed_statuses(
     cfg: Config,
     resolved: ResolvedEndpoints,
     names: list[str] | None = None,
@@ -66,14 +66,14 @@ def _unprobed_statuses(
     return [
         (
             Text.assemble(display_name(cfg.volumes[slug]), " ", (f"({note})", "dim")),
-            _ErrorStatus(),
+            ErrorStatus(),
         )
         for slug, note in notes.items()
         if note
     ]
 
 
-def _error_label(name: str, detail: str | None) -> Text:
+def error_label(name: str, detail: str | None) -> Text:
     """Fold an error detail into the volume's display name (red).
 
     Assembled as ``Text`` rather than a markup string: *detail* is external
@@ -119,10 +119,10 @@ def _probe_volume_status(
     except SSH_CONNECTION_ERRORS as e:
         if bar is not None:
             bar.on_end(line, Severity.ERROR, describe_error(e))
-        return _error_label(label, f"unreachable: {describe_error(e)}"), _ErrorStatus()
+        return error_label(label, f"unreachable: {describe_error(e)}"), ErrorStatus()
 
 
-def _show_status_table(
+def show_status_table(
     statuses: list[tuple[MountStatusLabel, MountStatusData]],
     output_format: OutputFormat,
 ) -> None:
@@ -136,7 +136,7 @@ def _show_status_table(
                 typer.echo("No volumes found.")
 
 
-def _probe_and_show_status(
+def probe_and_show_status(
     cfg: Config,
     resolved: ResolvedEndpoints,
     output_format: OutputFormat,
@@ -158,7 +158,7 @@ def _probe_and_show_status(
         else None
     )
     managed_statuses = [_probe_volume_status(vol, resolved, bar) for _, vol in managed]
-    unmanaged_statuses = _unprobed_statuses(cfg, resolved, names)
+    unmanaged_statuses = unprobed_statuses(cfg, resolved, names)
     if bar is not None:
         bar.stop()
 
@@ -177,7 +177,7 @@ def _probe_and_show_status(
                 ]
             )
         case OutputFormat.HUMAN:
-            _show_status_table(
+            show_status_table(
                 [*managed_statuses, *unmanaged_statuses], OutputFormat.HUMAN
             )
 

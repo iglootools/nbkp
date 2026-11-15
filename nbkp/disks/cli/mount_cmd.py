@@ -24,11 +24,11 @@ from ..output import (
 from ..plan import plan_lifecycle
 from . import app
 from .helpers import (
-    _error_label,
-    _ErrorStatus,
-    _show_status_table,
-    _unprobed_statuses,
+    ErrorStatus,
+    error_label,
     require_known_names,
+    show_status_table,
+    unprobed_statuses,
 )
 from .helpers.plan_output import show_plan
 
@@ -174,7 +174,7 @@ def _show_results(
                         )
                         for r in results
                     ),
-                    *build_mount_status_json(_unprobed_statuses(cfg, resolved, names)),
+                    *build_mount_status_json(unprobed_statuses(cfg, resolved, names)),
                 ]
             )
         case OutputFormat.HUMAN:
@@ -199,7 +199,7 @@ def _show_human_results(
     display_names: dict[str, str],
 ) -> None:
     observations = build_mount_observations(results)
-    _show_status_table(
+    show_status_table(
         [
             *(
                 (display_names.get(slug, slug), obs)
@@ -207,16 +207,16 @@ def _show_human_results(
             ),
             *(
                 (
-                    _error_label(
+                    error_label(
                         display_names.get(r.volume_slug, r.volume_slug),
                         mount_failure_detail(r),
                     ),
-                    _ErrorStatus(),
+                    ErrorStatus(),
                 )
                 for r in results
                 if not r.success and r.volume_slug not in observations
             ),
-            *_unprobed_statuses(cfg, resolved, names),
+            *unprobed_statuses(cfg, resolved, names),
         ],
         OutputFormat.HUMAN,
     )
