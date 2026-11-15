@@ -26,12 +26,13 @@
     "customManagers": [
         {
             "customType": "regex",
-            "description": "[tool.uv] build-constraint-dependencies pins the PEP 517 build backend closure. uv.lock does not resolve build dependencies, so these are the only pin on hatchling/uv-dynamic-versioning/dunamai — and no built-in manager reads this field, so without this they rot silently. uv.lock does record the constraints in its [manifest], and Renovate does not re-lock for a regex manager's bump; the renovate-mise-lock workflow runs uv lock on the branch instead.",
+            "description": "[tool.uv] build-constraint-dependencies pins the PEP 517 build backend closure. uv.lock does not resolve build dependencies, so these are the only pin on hatchling/uv-dynamic-versioning/dunamai — and no built-in manager reads this field, so without this they rot silently. uv.lock does record the constraints in its [manifest], and Renovate does not re-lock for a regex manager's bump; the renovate-mise-lock workflow runs uv lock on the branch instead. The two matchStrings run under the recursive strategy: the first isolates the array, the second captures every pin inside it. A single regex anchored on the field name consumes that anchor on its first match, so it only ever extracted the first pin.",
             "managerFilePatterns": [
                 "/pyproject.toml/"
             ],
             "matchStrings": [
-                "build-constraint-dependencies = \\[(?:[^\\]]*?)\"(?<depName>[a-zA-Z0-9._-]+)==(?<currentValue>[^\"]+)\""
+                "build-constraint-dependencies = \\[[^\\]]*\\]",
+                "\"(?<depName>[a-zA-Z0-9._-]+)==(?<currentValue>[^\"]+)\""
             ],
             "matchStringsStrategy": "recursive",
             "datasourceTemplate": "pypi"
