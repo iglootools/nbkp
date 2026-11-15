@@ -73,7 +73,7 @@ def managed_mount(
         the provider is prefetchable and encrypted volumes are configured.
     strictness:
         Picks the per-mount severity icon when the operation fails.
-        See :func:`.mount_progress.mount_result_severity`.
+        See :func:`nbkp.disks.mount_result_severity`.
     umount_results:
         When given, the umount results are appended to it once the block
         exits, and the caller reports them (``run`` puts them in its

@@ -55,6 +55,7 @@ from .observation import (
 from .severity import (
     device_fail_severity,
     luks_fail_severity,
+    mount_result_severity,
     mounted_fail_severity,
 )
 from .udisks import (
@@ -98,6 +99,7 @@ __all__ = [
     "luks_fail_severity",
     "managed_mount",
     "mount_count",
+    "mount_result_severity",
     "mount_volume",
     "mount_volumes",
     "mounted_fail_severity",

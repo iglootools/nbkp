@@ -1,11 +1,12 @@
-"""Severity of the mount-state columns (device, LUKS, mounted).
+"""Severity of mount results and of the mount-state columns.
 
-Decisions, not display: shared by the disks status table and the preflight
-check display, which render the result with their own icons.
+Decisions, not display: shared by the mount progress bars, the disks status
+table and the preflight check display, which render the result with their own
+icons.
 """
 
 from ..policy import Severity, Strictness, classify_severity
-from .lifecycle import LUKS_STAGE_FAILURES, MOUNT_STAGE_FAILURES
+from .lifecycle import LUKS_STAGE_FAILURES, MOUNT_STAGE_FAILURES, MountResult
 from .models import MountFailureReason
 
 # Each helper answers "did the action for this column actually attempt and
@@ -57,3 +58,39 @@ def mounted_fail_severity(
     """
     is_real_failure = mount_failure_reason in MOUNT_STAGE_FAILURES
     return classify_severity(is_inactive=not is_real_failure, strictness=strictness)
+
+
+# Mount failure reasons that correspond to "expected inactive" preflight
+# states (e.g. drive not plugged in maps to VolumeError.DEVICE_NOT_PRESENT
+# in INACTIVE_VOLUME_ERRORS; UNREACHABLE maps to SshEndpointError.UNREACHABLE
+# in INACTIVE_SSH_ERRORS).  Everything else — PASSPHRASE_NOT_AVAILABLE on a
+# plugged-in drive included — is a real failure.
+_INACTIVE_MOUNT_REASONS: frozenset[MountFailureReason] = frozenset(
+    {
+        MountFailureReason.DEVICE_NOT_PRESENT,
+        MountFailureReason.UNREACHABLE,
+    }
+)
+
+
+def mount_result_severity(
+    result: MountResult,
+    strictness: Strictness = Strictness.IGNORE_INACTIVE,
+) -> Severity:
+    """Map a mount lifecycle result to display severity under *strictness*.
+
+    A drive not being plugged in is an expected condition (the user
+    backs up to removable media), so under the default
+    ``IGNORE_INACTIVE`` it renders as a warning.  Under ``IGNORE_NONE``
+    every mount failure is fatal, so it renders as an error to stay
+    consistent with the preflight abort that will follow.  Under
+    ``IGNORE_ALL`` every mount failure is non-fatal and renders as a
+    warning.
+    """
+    return (
+        Severity.OK
+        if result.success
+        else classify_severity(
+            result.failure_reason in _INACTIVE_MOUNT_REASONS, strictness
+        )
+    )

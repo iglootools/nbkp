@@ -1,7 +1,7 @@
 """Tests for mount lifecycle severity mapping."""
 
-from nbkp.cliwiring.mount_progress import mount_result_severity
 from nbkp.disks.lifecycle import MountFailureReason, MountResult
+from nbkp.disks.severity import mount_result_severity
 from nbkp.policy import Severity, Strictness
 
 
