@@ -19,6 +19,7 @@ class CredentialErrorReason(StrEnum):
     ENV_UNSET = "env-unset"
     COMMAND_MISSING = "command-missing"
     COMMAND_FAILED = "command-failed"
+    COMMAND_NOT_RUNNABLE = "command-not-runnable"
 
 
 class CredentialError(Exception):
@@ -102,7 +103,15 @@ def _from_command(passphrase_id: str, command_template: list[str] | None) -> str
             reason=CredentialErrorReason.COMMAND_MISSING,
         )
     command = [arg.replace("{id}", passphrase_id) for arg in command_template]
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+    except OSError as e:
+        # Left uncaught, this would crash prefetch, or reach unlock as an
+        # OSError and be mislabelled an unreachable host.
+        raise CredentialError(
+            f"Credential command could not be started ({command[0]}): {e}",
+            reason=CredentialErrorReason.COMMAND_NOT_RUNNABLE,
+        ) from e
     if result.returncode != 0:
         raise CredentialError(
             f"Credential command failed (exit {result.returncode}):"

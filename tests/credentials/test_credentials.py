@@ -160,6 +160,16 @@ class TestRetrievePassphraseCommand:
                 )
         assert excinfo.value.reason == CredentialErrorReason.COMMAND_FAILED
 
+    def test_raises_when_executable_missing(self) -> None:
+        with pytest.raises(CredentialError) as excinfo:
+            retrieve_passphrase(
+                "disk1",
+                CredentialProvider.COMMAND,
+                command_template=["nbkp-no-such-executable", "{id}"],
+            )
+        assert excinfo.value.reason == CredentialErrorReason.COMMAND_NOT_RUNNABLE
+        assert "nbkp-no-such-executable" in str(excinfo.value)
+
     def test_raises_when_no_command_template(self) -> None:
         with pytest.raises(CredentialError) as excinfo:
             retrieve_passphrase("disk1", CredentialProvider.COMMAND)
