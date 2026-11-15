@@ -4,6 +4,7 @@ uv = "0.13.6"
 github-cli = "2.103.3"
 "aqua:asciinema/asciinema" = "3.2.1"
 "aqua:asciinema/agg" = "1.9.0"
+shellcheck = "0.11.0"
 
 [env]
 # Pin uv to the interpreter mise installed, by absolute path. mise's own docs are explicit
@@ -89,10 +90,11 @@ run = "mise deps install uv"
 # install` into it by hand — still reads as fresh and no sync fires. Deleting the directory
 # is the way back to exactly what the lock describes.
 [tasks.check]
-description = "Run all checks (format-check, lint, type-check, lock-check, lock-check-uv, clidocs-check, configdocs-check, depgraph-check, boundaries-check)"
+description = "Run all checks (format-check, lint, lint-shell, type-check, lock-check, lock-check-uv, clidocs-check, configdocs-check, depgraph-check, boundaries-check)"
 run = [
   { task = "format-check" },
   { task = "lint" },
+  { task = "lint-shell" },
   { task = "type-check" },
   { task = "lock-check" },
   { task = "lock-check-uv" },

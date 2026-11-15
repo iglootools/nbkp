@@ -1,0 +1,3 @@
+# Vendored: the lint-shell task skips it, and GitHub leaves it out of diffs and language
+# statistics. See mise.md in iglootools/common.
+demo/demo-magic.sh linguist-vendored
