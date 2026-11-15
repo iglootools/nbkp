@@ -65,34 +65,6 @@ python.uv_venv_auto = "source"
 auto = true
 run = "uv sync --all-extras"
 
-[tasks.clean]
-description = "Clean up build artifacts"
-run = """
-rm -rf build/ dist/ *.egg-info/
-find . -type d -name __pycache__ -delete
-find . -type f -name "*.pyc" -delete
-"""
-
-[tasks.build]
-description = "Build the package"
-# rm -rf dist/ first: `uv build` does not clear the directory, and
-# pypa/gh-action-pypi-publish uploads *everything* it finds in dist/, so a leftover artifact
-# from an earlier build would be published alongside the current one.
-#
-# --sdist --wheel builds both directly from source. Plain `uv build` builds the wheel from
-# the sdist instead, which is also correct here — hatchling writes the resolved version into
-# the sdist's PKG-INFO and reads it back, verified by building a wheel from an extracted
-# sdist with no .git and still getting the right version. This is the mildly stricter option
-# (one fewer round-trip through generated metadata) at no cost, not a workaround.
-#
-# What does silently produce 0.0.0 is building from a *source tree* with no git history or
-# tags — a shallow checkout, an exported archive, or Renovate's build. That exits
-# successfully, which is why build-verify exists.
-run = """
-rm -rf dist/
-uv build --sdist --wheel
-"""
-
 [tasks.build-verify]
 description = "Fail if the built wheel carries the 0.0.0 fallback version"
 run = "uv run --no-sync python build-scripts/verifyversion.py"
@@ -116,13 +88,6 @@ run = "mise deps install uv"
 # pyproject.toml, so a venv that is *dirty* rather than *stale* — someone ran `uv pip
 # install` into it by hand — still reads as fresh and no sync fires. Deleting the directory
 # is the way back to exactly what the lock describes.
-[tasks.reinstall]
-description = "Delete .venv and reinstall dependencies from scratch"
-run = """
-rm -rf "$MISE_PROJECT_ROOT/.venv"
-mise deps install uv --force
-"""
-
 [tasks.check]
 description = "Run all checks (format-check, lint, type-check, lock-check, lock-check-uv, clidocs-check, configdocs-check, depgraph-check, boundaries-check)"
 run = [
@@ -235,24 +200,6 @@ description = "Run all Docker-based tests (e2e + integration)"
 # only stale (deleted-backing) loops. See entrypoint.sh / setup-luks.sh and the
 # luks_mapper_name fixture.
 run = "uv run --no-sync pytest tests/integration_docker/ -n auto -v"
-
-[tasks.test-integration-docker-btrfs]
-description = "Run local btrfs tests inside Docker (privileged)"
-run = """
-docker build -t nbkp-btrfs-test -f nbkp/remote/testkit/dockerbuild/Dockerfile.btrfs-local-test .
-# /app is a rw bind mount of the host checkout, so the container can see (and would
-# otherwise write to) the host's macOS .venv and uv.lock. UV_PROJECT_ENVIRONMENT and
-# UV_FROZEN in the image are what actually prevent that; the anonymous volume
-# (-v /app/.venv) additionally hides the macOS venv from the container entirely, and
-# bounds the damage to an ephemeral container venv if those vars are ever dropped.
-#
-# This is the one place that keeps an explicit `uv run` and syncs directly rather than
-# going through `mise deps`: there is no mise in the image, so neither python.uv_venv_auto
-# nor [deps.uv] exists there. Do not "harmonize" it with the host-side tasks.
-docker run --rm --privileged \
-  -v $(pwd):/app -v /app/.venv -w /app nbkp-btrfs-test \
-  uv run --frozen pytest tests/integration_docker/test_btrfs_local.py -v
-"""
 
 [tasks.test-integration-fs]
 description = "Run filesystem integration tests"

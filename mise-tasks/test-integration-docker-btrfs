@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+#MISE description="Run local btrfs tests inside Docker (privileged)"
+set -euo pipefail
+
+docker build -t nbkp-btrfs-test -f nbkp/remote/testkit/dockerbuild/Dockerfile.btrfs-local-test .
+# /app is a rw bind mount of the host checkout, so the container can see (and would
+# otherwise write to) the host's macOS .venv and uv.lock. UV_PROJECT_ENVIRONMENT and
+# UV_FROZEN in the image are what actually prevent that; the anonymous volume
+# (-v /app/.venv) additionally hides the macOS venv from the container entirely, and
+# bounds the damage to an ephemeral container venv if those vars are ever dropped.
+#
+# This is the one place that keeps an explicit `uv run` and syncs directly rather than
+# going through `mise deps`: there is no mise in the image, so neither python.uv_venv_auto
+# nor [deps.uv] exists there. Do not "harmonize" it with the host-side tasks.
+docker run --rm --privileged \
+  -v $(pwd):/app -v /app/.venv -w /app nbkp-btrfs-test \
+  uv run --frozen pytest tests/integration_docker/test_btrfs_local.py -v

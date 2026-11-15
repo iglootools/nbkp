@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Delete .venv and reinstall dependencies from scratch"
+set -euo pipefail
+
+rm -rf "$MISE_PROJECT_ROOT/.venv"
+mise deps install uv --force

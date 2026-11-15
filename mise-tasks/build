@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#MISE description="Build the package"
+set -euo pipefail
+
+# rm -rf dist/ first: `uv build` does not clear the directory, and
+# pypa/gh-action-pypi-publish uploads *everything* it finds in dist/, so a leftover artifact
+# from an earlier build would be published alongside the current one.
+#
+# --sdist --wheel builds both directly from source. Plain `uv build` builds the wheel from
+# the sdist instead, which is also correct here — hatchling writes the resolved version into
+# the sdist's PKG-INFO and reads it back, verified by building a wheel from an extracted
+# sdist with no .git and still getting the right version. This is the mildly stricter option
+# (one fewer round-trip through generated metadata) at no cost, not a workaround.
+#
+# What does silently produce 0.0.0 is building from a *source tree* with no git history or
+# tags — a shallow checkout, an exported archive, or Renovate's build. That exits
+# successfully, which is why build-verify exists.
+rm -rf dist/
+uv build --sdist --wheel
