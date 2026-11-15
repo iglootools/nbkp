@@ -175,4 +175,4 @@ Domain cores:
 - **`run/`** — the `nbkp run` pipeline (`pipeline.py`): prefetch, mount, preflight, sync, unmount.
 - **`sh/`** — standalone script generation: per-sync facts (`spec.py`), preflight and sync steps (`preflight.py`, `steps.py`), shell quoting (`quoting.py`), and the `backup.sh.j2` template.
 
-Outside the runtime layers, `demo/` implements `nbkp demo`, and the testkits (`remote/testkit/` for Docker and SSH fixtures, `sync/testkit/` for seeding and result helpers, `config/testkit.py`, `preflight/testkit.py`) supply test scenarios.
+Outside the runtime layers, `demo/` implements `nbkp demo`, and the testkits (`remote/testkit/` for Docker and SSH fixtures, `sync/testkit/` for seeding and result helpers, `config/testkit.py`, `preflight/testkit/`) supply test scenarios.

@@ -1,6 +1,6 @@
-"""Fake check/troubleshoot data for manual testing."""
+"""Fake ``preflight troubleshoot`` data covering every preflight error."""
 
-from ..config import (
+from ....config import (
     BtrfsSnapshotConfig,
     Config,
     HardLinkSnapshotConfig,
@@ -12,15 +12,12 @@ from ..config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ..config.testkit import (
+from ....config.testkit import (
     base_ssh_endpoints,
-    base_sync_endpoints,
-    base_syncs,
     base_volumes,
 )
-from ..disks import MountFailureReason
-from ..fsprotocol import Snapshot
-from . import (
+from ....disks import MountFailureReason
+from ... import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
     DestinationEndpointError,
@@ -43,472 +40,18 @@ from . import (
     VolumeError,
     VolumeStatus,
 )
-from .output.formatting import collect_ssh_endpoint_statuses
-from .status.result import PreflightResult
-
-
-def _demo_ssh_statuses(
-    vol_statuses: dict[str, VolumeStatus],
-    sync_statuses: dict[str, SyncStatus],
-) -> dict[str, SshEndpointStatus]:
-    """Every distinct SSH endpoint status embedded in the demo statuses.
-
-    Production has one status per endpoint, but the demo reuses ``localhost``
-    and ``nas`` across scenarios with different tool errors.  Keying by slug
-    alone would keep only one of them and hide the others' remediation, so
-    later variants of a slug get a numbered key (``localhost #2``).
-    """
-    embedded = [
-        *(vs.ssh_endpoint_status for vs in vol_statuses.values()),
-        *(
-            ep.volume_status.ssh_endpoint_status
-            for ss in sync_statuses.values()
-            for ep in (ss.source_endpoint_status, ss.destination_endpoint_status)
-        ),
-    ]
-    distinct = list({s.model_dump_json(): s for s in embedded}.values())
-    return {
-        key: status.model_copy(update={"slug": key})
-        for i, status in enumerate(distinct)
-        for n in [sum(1 for other in distinct[:i] if other.slug == status.slug)]
-        for key in [status.slug if n == 0 else f"{status.slug} #{n + 1}"]
-    }
-
-
-_LOCALHOST_SSH_STATUS = SshEndpointStatus.from_diagnostics(
-    slug="localhost",
-    diagnostics=SshEndpointDiagnostics(
-        host_tools=HostToolCapabilities(
-            has_rsync=True,
-            rsync_version_ok=True,
-            has_btrfs=False,
-            has_stat=True,
-            has_findmnt=True,
-        ),
-    ),
+from ...status.result import PreflightResult
+from ..common import (
+    LOCALHOST_SSH_STATUS,
+    LOCALHOST_SSH_STATUS_BTRFS,
+    SENTINEL_MISSING_CAPS,
+    active_dst_ep_status,
+    active_src_ep_status,
+    demo_ssh_statuses,
+    inactive_dst_ep_status,
+    inactive_src_ep_status,
+    standalone_ssh_status,
 )
-
-_LOCALHOST_SSH_STATUS_BTRFS = SshEndpointStatus.from_diagnostics(
-    slug="localhost",
-    diagnostics=SshEndpointDiagnostics(
-        host_tools=HostToolCapabilities(
-            has_rsync=True,
-            rsync_version_ok=True,
-            has_btrfs=True,
-            has_stat=True,
-            has_findmnt=True,
-        ),
-    ),
-)
-
-
-def _standalone_ssh_status(slug: str, *, reachable: bool = True) -> SshEndpointStatus:
-    return SshEndpointStatus.from_diagnostics(
-        slug=slug,
-        diagnostics=SshEndpointDiagnostics(ssh_reachable=reachable),
-    )
-
-
-_SENTINEL_MISSING_CAPS = VolumeCapabilities(
-    sentinel_exists=False,
-    is_btrfs_filesystem=False,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-
-def _active_src_ep_status(
-    endpoint_slug: str,
-    volume_status: VolumeStatus,
-    *,
-    snapshot_mode: bool = False,
-) -> SourceEndpointStatus:
-    return SourceEndpointStatus(
-        endpoint_slug=endpoint_slug,
-        volume_status=volume_status,
-        diagnostics=SourceEndpointDiagnostics(
-            endpoint_slug=endpoint_slug,
-            sentinel_exists=True,
-            **(
-                {
-                    "snapshot_dirs": SnapshotDirsDiagnostics(
-                        exists=True, writable=True
-                    ),
-                    "latest": LatestSymlinkState(
-                        exists=True,
-                        raw_target="snapshots/2026-03-06T14:30:00.000Z",
-                        target_valid=True,
-                        snapshot=Snapshot.from_name("2026-03-06T14:30:00.000Z"),
-                    ),
-                }
-                if snapshot_mode
-                else {}
-            ),
-        ),
-        errors=[],
-    )
-
-
-def _active_dst_ep_status(
-    endpoint_slug: str,
-    volume_status: VolumeStatus,
-    diagnostics: DestinationEndpointDiagnostics | None = None,
-) -> DestinationEndpointStatus:
-    diag = diagnostics or DestinationEndpointDiagnostics(
-        endpoint_slug=endpoint_slug,
-        sentinel_exists=True,
-        endpoint_writable=True,
-    )
-    return DestinationEndpointStatus(
-        endpoint_slug=endpoint_slug,
-        volume_status=volume_status,
-        diagnostics=diag,
-        errors=[],
-    )
-
-
-def _inactive_dst_ep_status(
-    endpoint_slug: str,
-    volume_status: VolumeStatus,
-) -> DestinationEndpointStatus:
-    return DestinationEndpointStatus(
-        endpoint_slug=endpoint_slug,
-        volume_status=volume_status,
-        diagnostics=None,
-        errors=(
-            [DestinationEndpointError.VOLUME_INACTIVE]
-            if not volume_status.active
-            else []
-        ),
-    )
-
-
-def _inactive_src_ep_status(
-    endpoint_slug: str,
-    volume_status: VolumeStatus,
-) -> SourceEndpointStatus:
-    return SourceEndpointStatus(
-        endpoint_slug=endpoint_slug,
-        volume_status=volume_status,
-        diagnostics=None,
-        errors=(
-            [SourceEndpointError.VOLUME_INACTIVE] if not volume_status.active else []
-        ),
-    )
-
-
-def check_config() -> Config:
-    """Config with local + remote volumes and varied syncs.
-
-    Includes orphan items to exercise the orphan-config warnings:
-    - SSH endpoint ``orphan-server`` (not referenced by any volume)
-    - Volume ``orphan-volume`` (not referenced by any sync endpoint)
-    - Sync endpoint ``orphan-sync-endpoint`` (not referenced by any sync)
-    """
-    ssh_endpoints = base_ssh_endpoints()
-    ssh_endpoints["orphan-server"] = SshEndpoint(
-        slug="orphan-server",
-        host="old.example.com",
-        user="backup",
-    )
-    volumes = base_volumes()
-    volumes["external-drive"] = LocalVolume(slug="external-drive", path="/mnt/external")
-    volumes["orphan-volume"] = LocalVolume(slug="orphan-volume", path="/mnt/archive")
-    volumes["mount-encrypted"] = LocalVolume(
-        slug="mount-encrypted",
-        path="/mnt/encrypted",
-        mount=MountConfig(
-            device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6",
-            encryption=LuksEncryptionConfig(
-                passphrase_id="encrypted",
-            ),
-        ),
-    )
-    volumes["mount-unencrypted"] = LocalVolume(
-        slug="mount-unencrypted",
-        path="/mnt/usb-backup-mount",
-        mount=MountConfig(
-            device_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-        ),
-    )
-    sync_endpoints = base_sync_endpoints()
-    sync_endpoints["external-root"] = SyncEndpoint(
-        slug="external-root",
-        volume="external-drive",
-    )
-    sync_endpoints["orphan-sync-endpoint"] = SyncEndpoint(
-        slug="orphan-sync-endpoint",
-        volume="usb-drive",
-        # Distinct subdir so it doesn't overlap usb-photos/usb-music (a root
-        # endpoint would be nested over every subdir endpoint on usb-drive).
-        # Its demo role is being orphaned (unreferenced by any sync), which a
-        # subdir does not change.
-        subdir="orphan-data",
-    )
-    sync_endpoints["mount-encrypted-dst"] = SyncEndpoint(
-        slug="mount-encrypted-dst",
-        volume="mount-encrypted",
-    )
-    sync_endpoints["mount-unencrypted-dst"] = SyncEndpoint(
-        slug="mount-unencrypted-dst",
-        volume="mount-unencrypted",
-    )
-    syncs = base_syncs()
-    syncs["disabled-backup"] = SyncConfig(
-        slug="disabled-backup",
-        source="laptop-root",
-        destination="external-root",
-        enabled=False,
-    )
-    syncs["backup-to-encrypted"] = SyncConfig(
-        slug="backup-to-encrypted",
-        source="laptop-root",
-        destination="mount-encrypted-dst",
-    )
-    syncs["backup-to-unencrypted"] = SyncConfig(
-        slug="backup-to-unencrypted",
-        source="laptop-root",
-        destination="mount-unencrypted-dst",
-    )
-    return Config(
-        ssh_endpoints=ssh_endpoints,
-        volumes=volumes,
-        sync_endpoints=sync_endpoints,
-        syncs=syncs,
-    )
-
-
-def check_data(
-    config: Config,
-) -> PreflightResult:
-    """Volume and sync statuses with mixed active/inactive."""
-    _local_caps = VolumeCapabilities(
-        sentinel_exists=True,
-        is_btrfs_filesystem=False,
-        hardlink_supported=True,
-        btrfs_user_subvol_rm=False,
-    )
-    _usb_caps = VolumeCapabilities(
-        sentinel_exists=True,
-        is_btrfs_filesystem=True,
-        hardlink_supported=True,
-        btrfs_user_subvol_rm=True,
-    )
-
-    localhost_ssh = _LOCALHOST_SSH_STATUS
-    localhost_ssh_btrfs = _LOCALHOST_SSH_STATUS_BTRFS
-
-    nas_ssh = SshEndpointStatus.from_diagnostics(
-        slug="nas",
-        diagnostics=SshEndpointDiagnostics(ssh_reachable=False),
-    )
-
-    laptop_vs = VolumeStatus(
-        slug="laptop",
-        config=config.volumes["laptop"],
-        ssh_endpoint_status=localhost_ssh,
-        diagnostics=VolumeDiagnostics(capabilities=_local_caps),
-        errors=[],
-    )
-    laptop_system_vs = VolumeStatus(
-        slug="laptop-system",
-        config=config.volumes["laptop-system"],
-        ssh_endpoint_status=localhost_ssh,
-        diagnostics=VolumeDiagnostics(capabilities=_local_caps),
-        errors=[],
-    )
-    usb_vs = VolumeStatus(
-        slug="usb-drive",
-        config=config.volumes["usb-drive"],
-        ssh_endpoint_status=localhost_ssh_btrfs,
-        diagnostics=VolumeDiagnostics(capabilities=_usb_caps),
-        errors=[],
-    )
-    nas_vs = VolumeStatus(
-        slug="nas-backup",
-        config=config.volumes["nas-backup"],
-        ssh_endpoint_status=nas_ssh,
-        diagnostics=None,
-        errors=[VolumeError.SSH_ENDPOINT_INACTIVE],
-    )
-    external_vs = VolumeStatus(
-        slug="external-drive",
-        config=config.volumes["external-drive"],
-        ssh_endpoint_status=localhost_ssh,
-        diagnostics=VolumeDiagnostics(capabilities=_SENTINEL_MISSING_CAPS),
-        errors=[VolumeError.SENTINEL_NOT_FOUND],
-    )
-    # Encrypted volume: device present, luks not unlocked, not mounted
-    mount_encrypted_vs = VolumeStatus(
-        slug="mount-encrypted",
-        config=config.volumes["mount-encrypted"],
-        ssh_endpoint_status=localhost_ssh,
-        diagnostics=VolumeDiagnostics(
-            capabilities=VolumeCapabilities(
-                sentinel_exists=False,
-                is_btrfs_filesystem=False,
-                hardlink_supported=True,
-                btrfs_user_subvol_rm=False,
-                mount=MountCapabilities(
-                    device_present=True,
-                    luks_unlocked=False,
-                    mounted=False,
-                ),
-            ),
-        ),
-        errors=[VolumeError.VOLUME_NOT_MOUNTED],
-    )
-    # Unencrypted volume: device present, mounted, active
-    mount_unencrypted_vs = VolumeStatus(
-        slug="mount-unencrypted",
-        config=config.volumes["mount-unencrypted"],
-        ssh_endpoint_status=localhost_ssh,
-        diagnostics=VolumeDiagnostics(
-            capabilities=VolumeCapabilities(
-                sentinel_exists=True,
-                is_btrfs_filesystem=False,
-                hardlink_supported=True,
-                btrfs_user_subvol_rm=False,
-                mount=MountCapabilities(
-                    has_fstab_entry=True,
-                    fstab_target="/mnt/usb-backup-mount",
-                    device_present=True,
-                    mounted=True,
-                ),
-            ),
-        ),
-        errors=[],
-    )
-
-    vol_statuses = {
-        "laptop": laptop_vs,
-        "laptop-system": laptop_system_vs,
-        "usb-drive": usb_vs,
-        "nas-backup": nas_vs,
-        "external-drive": external_vs,
-        "mount-encrypted": mount_encrypted_vs,
-        "mount-unencrypted": mount_unencrypted_vs,
-    }
-
-    photos_src_ep = _active_src_ep_status("laptop-photos", laptop_vs)
-    photos_dst_ep = _active_dst_ep_status(
-        "usb-photos",
-        usb_vs,
-        diagnostics=DestinationEndpointDiagnostics(
-            endpoint_slug="usb-photos",
-            sentinel_exists=True,
-            endpoint_writable=True,
-            btrfs=BtrfsStagingSubvolumeDiagnostics(
-                staging_exists=True,
-                staging_is_subvolume=True,
-                staging_writable=True,
-            ),
-            snapshot_dirs=SnapshotDirsDiagnostics(exists=True, writable=True),
-            latest=LatestSymlinkState(
-                exists=True,
-                raw_target="snapshots/2026-03-06T14:30:00.000Z",
-                target_valid=True,
-                snapshot=Snapshot.from_name("2026-03-06T14:30:00.000Z"),
-            ),
-        ),
-    )
-
-    music_src_ep = _active_src_ep_status("laptop-music", laptop_vs)
-    music_dst_ep = _active_dst_ep_status(
-        "usb-music",
-        usb_vs,
-        diagnostics=DestinationEndpointDiagnostics(
-            endpoint_slug="usb-music",
-            sentinel_exists=True,
-            endpoint_writable=True,
-            snapshot_dirs=SnapshotDirsDiagnostics(exists=True, writable=True),
-            latest=LatestSymlinkState(
-                exists=True,
-                raw_target="/dev/null",
-            ),
-        ),
-    )
-
-    laptop_root_src_ep = _active_src_ep_status("laptop-root", laptop_system_vs)
-
-    sync_statuses = {
-        "photos-to-usb": SyncStatus(
-            slug="photos-to-usb",
-            config=config.syncs["photos-to-usb"],
-            source_endpoint_status=photos_src_ep,
-            destination_endpoint_status=photos_dst_ep,
-            destination_latest_snapshot=Snapshot.from_name("2026-03-06T14:30:00.000Z"),
-            errors=[],
-        ),
-        "docs-to-nas": SyncStatus(
-            slug="docs-to-nas",
-            config=config.syncs["docs-to-nas"],
-            source_endpoint_status=_inactive_src_ep_status("laptop-docs", laptop_vs),
-            destination_endpoint_status=_inactive_dst_ep_status("nas-docs", nas_vs),
-            errors=[SyncError.DESTINATION_ENDPOINT_INACTIVE],
-        ),
-        "music-to-usb": SyncStatus(
-            slug="music-to-usb",
-            config=config.syncs["music-to-usb"],
-            source_endpoint_status=music_src_ep,
-            destination_endpoint_status=music_dst_ep,
-            errors=[],
-        ),
-        "disabled-backup": SyncStatus(
-            slug="disabled-backup",
-            config=config.syncs["disabled-backup"],
-            source_endpoint_status=_inactive_src_ep_status(
-                "laptop-root", laptop_system_vs
-            ),
-            destination_endpoint_status=_inactive_dst_ep_status(
-                "external-root", external_vs
-            ),
-            errors=[SyncError.DISABLED],
-        ),
-        "backup-to-encrypted": SyncStatus(
-            slug="backup-to-encrypted",
-            config=config.syncs["backup-to-encrypted"],
-            source_endpoint_status=_inactive_src_ep_status(
-                "laptop-root", laptop_system_vs
-            ),
-            destination_endpoint_status=_inactive_dst_ep_status(
-                "mount-encrypted-dst", mount_encrypted_vs
-            ),
-            errors=[SyncError.DESTINATION_ENDPOINT_INACTIVE],
-        ),
-        "backup-to-unencrypted": SyncStatus(
-            slug="backup-to-unencrypted",
-            config=config.syncs["backup-to-unencrypted"],
-            source_endpoint_status=laptop_root_src_ep,
-            destination_endpoint_status=_active_dst_ep_status(
-                "mount-unencrypted-dst",
-                mount_unencrypted_vs,
-            ),
-            errors=[],
-        ),
-    }
-
-    ssh_statuses = {
-        # Standalone endpoints: SSH reachable, no tool probing
-        "bastion": _standalone_ssh_status("bastion"),
-        "bastion2": _standalone_ssh_status("bastion2"),
-        "nas-public": _standalone_ssh_status("nas-public"),
-        "orphan-server": _standalone_ssh_status("orphan-server"),
-        **collect_ssh_endpoint_statuses(vol_statuses, sync_statuses),
-    }
-    src_ep_statuses = {
-        slug: ss.source_endpoint_status for slug, ss in sync_statuses.items()
-    }
-    dst_ep_statuses = {
-        slug: ss.destination_endpoint_status for slug, ss in sync_statuses.items()
-    }
-    return PreflightResult(
-        ssh_endpoint_statuses=ssh_statuses,
-        volume_statuses=vol_statuses,
-        source_endpoint_statuses=src_ep_statuses,
-        destination_endpoint_statuses=dst_ep_statuses,
-        sync_statuses=sync_statuses,
-    )
 
 
 def _troubleshoot_volumes() -> dict[str, LocalVolume]:
@@ -1425,15 +968,15 @@ def troubleshoot_data(
     # The troubleshoot output collects SSH statuses from volume statuses,
     # so we embed the appropriate SSH status in each volume.
 
-    localhost_ssh = _LOCALHOST_SSH_STATUS
-    localhost_ssh_btrfs = _LOCALHOST_SSH_STATUS_BTRFS
+    localhost_ssh = LOCALHOST_SSH_STATUS
+    localhost_ssh_btrfs = LOCALHOST_SSH_STATUS_BTRFS
 
     # laptop: sentinel missing (Layer 2 error)
     laptop_vs = VolumeStatus(
         slug="laptop",
         config=config.volumes["laptop"],
         ssh_endpoint_status=localhost_ssh,
-        diagnostics=VolumeDiagnostics(capabilities=_SENTINEL_MISSING_CAPS),
+        diagnostics=VolumeDiagnostics(capabilities=SENTINEL_MISSING_CAPS),
         errors=[VolumeError.SENTINEL_NOT_FOUND],
     )
 
@@ -1887,7 +1430,7 @@ def troubleshoot_data(
     }
 
     # laptop-src (shared by most syncs): volume sentinel missing → source EP inactive (no diag)
-    laptop_src_inactive = _inactive_src_ep_status("laptop-src", laptop_vs)
+    laptop_src_inactive = inactive_src_ep_status("laptop-src", laptop_vs)
 
     # laptop-src with active volume (for syncs where laptop is active)
     # We need a version of laptop that's active for some scenarios
@@ -1913,7 +1456,7 @@ def troubleshoot_data(
         slug="disabled-sync",
         config=config.syncs["disabled-sync"],
         source_endpoint_status=laptop_src_inactive,
-        destination_endpoint_status=_inactive_dst_ep_status("dst-disabled", usb_vs),
+        destination_endpoint_status=inactive_dst_ep_status("dst-disabled", usb_vs),
         errors=[SyncError.DISABLED],
     )
 
@@ -1923,7 +1466,7 @@ def troubleshoot_data(
         slug="unavailable-volumes",
         config=config.syncs["unavailable-volumes"],
         source_endpoint_status=laptop_src_inactive,
-        destination_endpoint_status=_inactive_dst_ep_status("dst-unavail", nas_vs),
+        destination_endpoint_status=inactive_dst_ep_status("dst-unavail", nas_vs),
         errors=[
             SyncError.SOURCE_ENDPOINT_INACTIVE,
             SyncError.DESTINATION_ENDPOINT_INACTIVE,
@@ -1965,7 +1508,7 @@ def troubleshoot_data(
         slug="rsync-missing",
         config=config.syncs["rsync-missing"],
         source_endpoint_status=laptop_src_inactive,
-        destination_endpoint_status=_inactive_dst_ep_status(
+        destination_endpoint_status=inactive_dst_ep_status(
             "dst-rsync-missing", nas_rsync_missing_vs
         ),
         errors=[SyncError.SOURCE_ENDPOINT_INACTIVE],
@@ -2041,7 +1584,7 @@ def troubleshoot_data(
         slug="tools-missing",
         config=config.syncs["tools-missing"],
         source_endpoint_status=laptop_src_inactive,
-        destination_endpoint_status=_inactive_dst_ep_status("dst-tools", usb4_vs),
+        destination_endpoint_status=inactive_dst_ep_status("dst-tools", usb4_vs),
         errors=[SyncError.SOURCE_ENDPOINT_INACTIVE],
     )
 
@@ -2078,7 +1621,7 @@ def troubleshoot_data(
         slug="rsync-too-old",
         config=config.syncs["rsync-too-old"],
         source_endpoint_status=laptop_src_inactive,
-        destination_endpoint_status=_inactive_dst_ep_status(
+        destination_endpoint_status=inactive_dst_ep_status(
             "dst-rsync-old", nas_rsync_old_vs
         ),
         errors=[SyncError.SOURCE_ENDPOINT_INACTIVE],
@@ -2103,7 +1646,7 @@ def troubleshoot_data(
                 SourceEndpointError.LATEST_SYMLINK_NOT_FOUND,
             ],
         ),
-        destination_endpoint_status=_inactive_dst_ep_status("dst-src-latest", nas_vs),
+        destination_endpoint_status=inactive_dst_ep_status("dst-src-latest", nas_vs),
         errors=[
             SyncError.SOURCE_ENDPOINT_INACTIVE,
             SyncError.DESTINATION_ENDPOINT_INACTIVE,
@@ -2115,7 +1658,7 @@ def troubleshoot_data(
         slug="dry-run-upstream",
         config=config.syncs["dry-run-upstream"],
         source_endpoint_status=laptop_src_inactive,
-        destination_endpoint_status=_active_dst_ep_status(
+        destination_endpoint_status=active_dst_ep_status(
             "hl-stage",
             usb_vs,
             diagnostics=DestinationEndpointDiagnostics(
@@ -2148,7 +1691,7 @@ def troubleshoot_data(
             ),
             errors=[],
         ),
-        destination_endpoint_status=_active_dst_ep_status(
+        destination_endpoint_status=active_dst_ep_status(
             "dst-dry-run-pending", nas_reachable_vs
         ),
         errors=[SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING],
@@ -2159,7 +1702,7 @@ def troubleshoot_data(
         slug="location-excluded",
         config=config.syncs["location-excluded"],
         source_endpoint_status=laptop_src_inactive,
-        destination_endpoint_status=_inactive_dst_ep_status(
+        destination_endpoint_status=inactive_dst_ep_status(
             "dst-loc-excluded", home_nas_vs
         ),
         errors=[
@@ -2255,7 +1798,7 @@ def troubleshoot_data(
         slug="mount-encrypted-errors",
         config=config.syncs["mount-encrypted-errors"],
         source_endpoint_status=laptop_src_inactive,
-        destination_endpoint_status=_inactive_dst_ep_status(
+        destination_endpoint_status=inactive_dst_ep_status(
             "mount-encrypted-dst", mount_encrypted_vs
         ),
         errors=[
@@ -2269,7 +1812,7 @@ def troubleshoot_data(
         slug="mount-unencrypted-errors",
         config=config.syncs["mount-unencrypted-errors"],
         source_endpoint_status=laptop_src_inactive,
-        destination_endpoint_status=_inactive_dst_ep_status(
+        destination_endpoint_status=inactive_dst_ep_status(
             "mount-unencrypted-dst", mount_unencrypted_vs
         ),
         errors=[
@@ -2316,7 +1859,7 @@ def troubleshoot_data(
         slug="mount-device-missing",
         config=config.syncs["mount-device-missing"],
         source_endpoint_status=laptop_src_inactive,
-        destination_endpoint_status=_inactive_dst_ep_status(
+        destination_endpoint_status=inactive_dst_ep_status(
             "mount-device-missing-dst", mount_device_missing_vs
         ),
         errors=[
@@ -2330,7 +1873,7 @@ def troubleshoot_data(
         slug="mount-fstab-mismatch",
         config=config.syncs["mount-fstab-mismatch"],
         source_endpoint_status=laptop_src_inactive,
-        destination_endpoint_status=_inactive_dst_ep_status(
+        destination_endpoint_status=inactive_dst_ep_status(
             "mount-fstab-mismatch-dst", mount_mismatch_vs
         ),
         errors=[
@@ -2344,7 +1887,7 @@ def troubleshoot_data(
         slug="mount-luks-failed",
         config=config.syncs["mount-luks-failed"],
         source_endpoint_status=laptop_src_inactive,
-        destination_endpoint_status=_inactive_dst_ep_status(
+        destination_endpoint_status=inactive_dst_ep_status(
             "mount-luks-failed-dst", mount_luks_failed_vs
         ),
         errors=[
@@ -2358,7 +1901,7 @@ def troubleshoot_data(
         slug="mount-mount-failed",
         config=config.syncs["mount-mount-failed"],
         source_endpoint_status=laptop_src_inactive,
-        destination_endpoint_status=_inactive_dst_ep_status(
+        destination_endpoint_status=inactive_dst_ep_status(
             "mount-mount-failed-dst", mount_mount_failed_vs
         ),
         errors=[
@@ -2372,7 +1915,7 @@ def troubleshoot_data(
         slug="mount-polkit-refused",
         config=config.syncs["mount-polkit-refused"],
         source_endpoint_status=laptop_src_inactive,
-        destination_endpoint_status=_inactive_dst_ep_status(
+        destination_endpoint_status=inactive_dst_ep_status(
             "mount-polkit-refused-dst", mount_polkit_refused_vs
         ),
         errors=[
@@ -2450,7 +1993,7 @@ def troubleshoot_data(
             ),
             errors=[SourceEndpointError.LATEST_SYMLINK_INVALID],
         ),
-        destination_endpoint_status=_active_dst_ep_status(
+        destination_endpoint_status=active_dst_ep_status(
             "dst-src-latest-invalid", usb13_vs
         ),
         errors=[SyncError.SOURCE_ENDPOINT_INACTIVE],
@@ -2475,7 +2018,7 @@ def troubleshoot_data(
             ),
             errors=[],
         ),
-        destination_endpoint_status=_active_dst_ep_status(
+        destination_endpoint_status=active_dst_ep_status(
             "dst-devnull-no-upstream", usb12_vs
         ),
         errors=[SyncError.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM],
@@ -2486,8 +2029,8 @@ def troubleshoot_data(
     sync_statuses["host-tool-errors"] = SyncStatus(
         slug="host-tool-errors",
         config=config.syncs["host-tool-errors"],
-        source_endpoint_status=_active_src_ep_status("laptop-src", laptop_active_vs),
-        destination_endpoint_status=_active_dst_ep_status("dst-host-errors", usb14_vs),
+        source_endpoint_status=active_src_ep_status("laptop-src", laptop_active_vs),
+        destination_endpoint_status=active_dst_ep_status("dst-host-errors", usb14_vs),
         errors=[SyncError.ENDPOINT_HOST_ERRORS],
     )
 
@@ -2496,7 +2039,7 @@ def troubleshoot_data(
         slug="mount-no-passphrase",
         config=config.syncs["mount-no-passphrase"],
         source_endpoint_status=laptop_src_inactive,
-        destination_endpoint_status=_inactive_dst_ep_status(
+        destination_endpoint_status=inactive_dst_ep_status(
             "mount-no-passphrase-dst", mount_no_passphrase_vs
         ),
         errors=[
@@ -2509,7 +2052,7 @@ def troubleshoot_data(
     sync_statuses["fs-type-unknown"] = SyncStatus(
         slug="fs-type-unknown",
         config=config.syncs["fs-type-unknown"],
-        source_endpoint_status=_active_src_ep_status("laptop-src", laptop_active_vs),
+        source_endpoint_status=active_src_ep_status("laptop-src", laptop_active_vs),
         destination_endpoint_status=DestinationEndpointStatus(
             endpoint_slug="dst-fs-unknown",
             volume_status=usb15_vs,
@@ -2526,11 +2069,11 @@ def troubleshoot_data(
     ssh_statuses = {
         # Standalone endpoints: bastion reachable, bastion2 unreachable,
         # auth-fail refuses our key
-        "bastion": _standalone_ssh_status("bastion"),
-        "bastion2": _standalone_ssh_status("bastion2", reachable=False),
-        "nas-public": _standalone_ssh_status("nas-public"),
+        "bastion": standalone_ssh_status("bastion"),
+        "bastion2": standalone_ssh_status("bastion2", reachable=False),
+        "nas-public": standalone_ssh_status("nas-public"),
         "auth-fail": _TROUBLESHOOT_AUTH_FAILED_SSH,
-        **_demo_ssh_statuses(vol_statuses, sync_statuses),
+        **demo_ssh_statuses(vol_statuses, sync_statuses),
     }
     src_ep_statuses = {
         slug: ss.source_endpoint_status for slug, ss in sync_statuses.items()
