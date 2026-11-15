@@ -1509,3 +1509,10 @@ class TestSyncSteps:
         options = ScriptOptions(platform="darwin", config_path="c.yaml")
         script = generate_script(_btrfs_config(), options, now=_NOW)
         assert "NBKP_TS=$(date -u +%Y-%m-%dT%H-%M-%S.000Z)" in script
+
+
+def test_config_path_cannot_inject_shell_lines() -> None:
+    options = ScriptOptions(platform="linux", config_path="/tmp/x\nrm -rf ~\n.yaml")
+    script = generate_script(_local_to_local_config(), options, now=_NOW)
+    assert "# Config: /tmp/x\\nrm -rf ~\\n.yaml\n" in script
+    assert "\nrm -rf ~" not in script

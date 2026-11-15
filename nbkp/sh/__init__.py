@@ -18,7 +18,7 @@ from ..config import Config, LocalVolume, RemoteVolume
 from ..ordering.graph import sort_syncs, sync_predecessors
 from ..remote.endpoints import ResolvedEndpoints
 from .preflight import build_preflight_block
-from .quoting import SCRIPT_DIR, comment_out, has_shell_var
+from .quoting import SCRIPT_DIR, comment_out, comment_text, has_shell_var
 from .spec import build_sync_spec
 from .steps import Step, build_steps
 
@@ -168,7 +168,7 @@ def _build_script_context(
     ]
     return {
         "timestamp": now.isoformat(timespec="seconds").replace("+00:00", "Z"),
-        "config_line": f"# Config: {options.config_path or '<stdin>'}",
+        "config_line": f"# Config: {comment_text(str(options.config_path or '<stdin>'))}",
         "has_script_dir": any(has_shell_var(p) for p in vol_paths.values()),
         "portable": options.portable,
         "syncs": syncs,

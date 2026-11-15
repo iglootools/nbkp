@@ -84,3 +84,12 @@ def format_command(cmd: list[str]) -> str:
 def comment_out(text: str) -> str:
     """Prefix every non-blank line with ``# ``."""
     return textwrap.indent(text, "# ")
+
+
+def comment_text(s: str) -> str:
+    """*s* made safe to embed in a ``#`` comment line.
+
+    Non-printable characters are written as Python escapes (``\\n``): a
+    newline would end the comment and run the rest of *s* as shell code.
+    """
+    return "".join(c if c.isprintable() else repr(c)[1:-1] for c in s)
