@@ -23,7 +23,18 @@ For general coding, Python, and tooling guidelines, see the [common guidelines](
       existing `disks mount -n <volume>` invocations into silent dry runs. Retire this
       exception in the next major release by moving `--name` to a long-only flag (or
       `-V`) and giving `-n` to `--dry-run` everywhere.
-  - Provide ability to pass a config file to all commands
+    - *Exception — `demo`:* `demo seed` and `demo output` take neither `--output` nor
+      `--config`. They are manual-QA helpers, not backup commands: `seed` *writes* a config
+      (to `<base-dir>/config.yaml`) rather than reading one, and `output` renders the human
+      formatters with built-in fake data, so human output is its whole purpose and there is no
+      config for it to load. `seed`'s report is a summary for the person running the demo,
+      and the one scripted caller, `demo/demo.sh`, already knows where the config lands
+      because it passes `--base-dir`. Retire this exception, by giving `seed` `--output json`
+      (the base directory, config path and container ports), once a script or workflow has
+      to read what `seed` created; drop it if `demo` leaves the user-facing `nbkp` app for a
+      development-only entry point, where these rules no longer apply.
+  - Provide ability to pass a config file to all commands (except `demo`, see its
+    exception above)
   - Provide a dry-run parameter for all data-mutating or long-running operations
 - **Rich output**
   - Rich parses `[...]` in a plain `str` as a style tag and drops it. Never interpolate
