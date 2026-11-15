@@ -292,22 +292,77 @@ def _print_ssh_unreachable(
 def _print_ssh_auth_failed(
     console: Console, status: SshEndpointStatus, ctx: TroubleshootContext
 ) -> None:
-    """The host answered but refused the key or its host key changed."""
+    """The host answered but refused the key, or its host key is unknown or
+    changed."""
     server = ctx.config.ssh_endpoints.get(status.slug)
     host = server.host if server is not None else status.slug
+    known_hosts_file = (
+        server.connection_options.known_hosts_file if server is not None else None
+    )
+    # known_hosts records a non-default port as "[host]:port".
+    known_hosts_name = (
+        host if server is None or server.port == 22 else f"[{host}]:{server.port}"
+    )
     cause = status.diagnostics.ssh_error
     say(console, FIX, "Server ", host, " refused the connection.")
     if cause is not None:
         say(console, FIX, "Cause: ", (cause, "italic"))
+    if server is not None:
+        _print_unknown_host_key_steps(console, server, _proxy_chain(ctx.config, server))
     say(
         console,
         FIX,
         "If the host key changed (reinstalled host), verify it out of band, then:",
     )
-    print_cmd(console, shlex.join(["ssh-keygen", "-R", host]), STEP)
+    print_cmd(
+        console,
+        shlex.join(
+            [
+                "ssh-keygen",
+                *(["-f", known_hosts_file] if known_hosts_file else []),
+                "-R",
+                known_hosts_name,
+            ]
+        ),
+        STEP,
+    )
     if server is not None:
         say(console, FIX, "If the key is not authorized:")
         _print_ssh_auth_steps(console, server, _proxy_chain(ctx.config, server))
+
+
+def _print_unknown_host_key_steps(
+    console: Console,
+    server: SshEndpoint,
+    proxy_chain: list[SshEndpoint] | None,
+) -> None:
+    """nbkp never trusts a host key on first use while
+    ``strict-host-key-checking`` is on: the operator adds it once, after
+    comparing the fingerprint OpenSSH shows with the host's own."""
+    known_hosts_file = server.connection_options.known_hosts_file
+    say(
+        console,
+        FIX,
+        "If the host key is not known yet, connect once with ssh, check the "
+        "fingerprint it shows against the host's, and accept it:",
+    )
+    ssh = ssh_prefix(server, proxy_chain)
+    print_cmd(
+        console,
+        shlex.join(
+            [
+                ssh[0],
+                *(
+                    ["-o", f"UserKnownHostsFile={known_hosts_file}"]
+                    if known_hosts_file
+                    else []
+                ),
+                *ssh[1:],
+                "true",
+            ]
+        ),
+        STEP,
+    )
 
 
 def print_ssh_endpoint_error_fix(

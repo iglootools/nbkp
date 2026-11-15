@@ -4,14 +4,16 @@ from collections.abc import Callable, Hashable
 from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial, reduce
+from pathlib import Path
 from typing import cast
 
 import invoke.exceptions  # type: ignore[import-untyped]
 import paramiko
 from fabric import Connection  # type: ignore[import-untyped]
 
-from ..config import SshEndpoint
+from ..config import SshConnectionOptions, SshEndpoint
 from .errors import ssh_connection_errors
+from .hostkeys import UnknownHostKeyError
 from .pool import ConnectionPool, active_pool
 from .ssh import shell_join
 
@@ -67,13 +69,43 @@ def _build_single_connection(
         gateway=gateway,
     )
 
-    if not opts.strict_host_key_checking:
-        conn.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # pyright: ignore[reportOptionalMemberAccess]
-
-    if opts.known_hosts_file is not None:
-        conn.client.load_host_keys(opts.known_hosts_file)  # pyright: ignore[reportOptionalMemberAccess]
-
+    _configure_host_key_verification(conn.client, opts)  # pyright: ignore[reportArgumentType]
     return conn
+
+
+class _RejectUnknownHostKey(paramiko.MissingHostKeyPolicy):
+    """Like ``paramiko.RejectPolicy``, but raises a dedicated exception so an
+    unknown host is classified as an authentication failure rather than as
+    an unreachable host (``RejectPolicy`` raises a bare ``SSHException``)."""
+
+    def missing_host_key(
+        self, client: paramiko.SSHClient, hostname: str, key: paramiko.PKey
+    ) -> None:
+        raise UnknownHostKeyError(hostname)
+
+
+def _configure_host_key_verification(
+    client: paramiko.SSHClient, opts: SshConnectionOptions
+) -> None:
+    """Mirror OpenSSH, which the rsync path uses: with strict checking, the
+    host key must already be in ``known-hosts-file`` (which replaces
+    ``~/.ssh/known_hosts``, like ``UserKnownHostsFile``). Fabric's own default
+    is to trust any host key without loading a known_hosts file at all.
+    """
+    if not opts.strict_host_key_checking:
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        if opts.known_hosts_file is not None:
+            client.load_host_keys(opts.known_hosts_file)
+        return
+
+    client.set_missing_host_key_policy(_RejectUnknownHostKey())
+    if opts.known_hosts_file is None:
+        client.load_system_host_keys()
+    else:
+        # A missing file is an empty one for OpenSSH: every host is unknown.
+        known_hosts = Path(opts.known_hosts_file).expanduser()
+        if known_hosts.exists():
+            client.load_system_host_keys(str(known_hosts))
 
 
 def _build_hops(
