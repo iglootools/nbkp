@@ -557,6 +557,23 @@ class TestUmountVolume:
         assert "device state unknown" in (result.detail or "")
         mock_run.assert_not_called()
 
+    def test_failed_findmnt_is_reported_not_skipped(self) -> None:
+        """A failed findmnt must not be read as "not mounted" and skip unmount."""
+        vol = _unencrypted_vol()
+        mc = vol.mount
+        assert mc is not None
+        with (
+            patch(
+                "nbkp.disks.detection.run_on_volume",
+                return_value=_mock_run(127, stderr="findmnt: command not found"),
+            ),
+            patch("nbkp.disks.lifecycle.run_on_volume") as mock_udisks,
+        ):
+            result = umount_volume(vol, mc, {})
+        assert not result.success
+        assert "device state unknown" in (result.detail or "")
+        mock_udisks.assert_not_called()  # no unmount on a guess
+
     def test_unencrypted_umount_no_lock(self) -> None:
         vol = _unencrypted_vol()
         mc = vol.mount

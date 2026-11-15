@@ -185,12 +185,12 @@ def _probe_runtime_state(
     target_device = (
         cleartext_device if encrypted else f"/dev/disk/by-uuid/{mount.device_uuid}"
     )
-    effective_path = (
-        find_mountpoint(volume, target_device, resolved_endpoints)
+    effective_path, mountpoint_known = (
+        _probe_mountpoint(volume, target_device, resolved_endpoints)
         if target_device is not None and device_present and can_findmnt
-        else None
+        else (None, True)
     )
-    mount_known = can_findmnt and luks_known
+    mount_known = can_findmnt and luks_known and mountpoint_known
     return _RuntimeState(
         device_present=device_present,
         luks_unlocked=(cleartext_device is not None)
@@ -213,6 +213,18 @@ def _probe_cleartext(
             discover_cleartext_device(volume, mount.device_uuid, resolved_endpoints),
             True,
         )
+    except DeviceProbeError:
+        return None, False
+
+
+def _probe_mountpoint(
+    volume: Volume,
+    device: str,
+    resolved_endpoints: ResolvedEndpoints,
+) -> tuple[str | None, bool]:
+    """``(mountpoint, known)`` — ``known`` is False when findmnt failed."""
+    try:
+        return find_mountpoint(volume, device, resolved_endpoints), True
     except DeviceProbeError:
         return None, False
 

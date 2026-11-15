@@ -137,7 +137,9 @@ def find_mountpoint(
 
     Runs ``findmnt --source <device> -n -o TARGET``.  Authoritative for both
     fstab-declared paths and udisks's ``/run/media`` defaults, and works for
-    the already-mounted idempotent case.
+    the already-mounted idempotent case.  Raises :class:`DeviceProbeError`
+    when ``findmnt`` itself fails, so that a failed probe is not mistaken for
+    "not mounted" (which would make umount skip the unmount).
     """
     # udisks2 could answer this via the Filesystem.MountPoints property
     # (``udisksctl info -b <device>``), but we use findmnt for every mount query:
@@ -151,10 +153,16 @@ def find_mountpoint(
         volume,
         resolved_endpoints,
     )
-    if result.returncode != 0:
-        return None
-    target = result.stdout.strip().splitlines()
-    return target[0].strip() if target and target[0].strip() else None
+    match result.returncode:
+        case 0:
+            target = result.stdout.strip().splitlines()
+            return target[0].strip() if target and target[0].strip() else None
+        case 1 if not result.stderr.strip():
+            # findmnt exits 1, silently, when nothing matches; it also exits 1
+            # on errors, but those print a message.
+            return None
+        case _:
+            raise DeviceProbeError("findmnt", result.returncode, result.stderr.strip())
 
 
 def resolve_effective_path(
@@ -167,7 +175,8 @@ def resolve_effective_path(
     When ``volume.path`` is declared it is authoritative (Option A — fstab
     mounts the device there).  When omitted (Option B), the mountpoint udisks
     chose is discovered via ``findmnt``; returns ``None`` if the device is not
-    currently mounted (or the LUKS container is still locked).
+    currently mounted (or the LUKS container is still locked).  Raises
+    :class:`DeviceProbeError` when the state cannot be determined.
     """
     if volume.path is not None:
         return volume.path

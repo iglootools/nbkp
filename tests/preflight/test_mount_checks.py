@@ -440,6 +440,19 @@ class TestToolGating:
         assert result.luks_unlocked is None
         assert result.mounted is None
 
+    @patch("nbkp.disks.mount_checks._check_fstab_entry", return_value=None)
+    @patch(
+        "nbkp.disks.mount_checks.find_mountpoint",
+        side_effect=DeviceProbeError("findmnt", 2, "boom"),
+    )
+    @patch("nbkp.disks.mount_checks.detect_device_present", return_value=True)
+    def test_failed_findmnt_is_unknown(self, *_mocks: object) -> None:
+        result = check_mount_capabilities(
+            _unencrypted_vol(), _unencrypted_mount(), _MOUNT_TOOLS, {}, None
+        )
+        assert result.mounted is None
+        assert result.effective_path is None
+
     @patch("nbkp.disks.mount_checks.probe_mount_tools")
     @patch("nbkp.disks.mount_checks._check_fstab_entry", return_value=None)
     @patch("nbkp.disks.mount_checks.find_mountpoint", return_value=None)
