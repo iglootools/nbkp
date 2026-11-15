@@ -14,8 +14,8 @@ models, so preflight reports it as a separate, non-inactive error.
 
 from functools import cache
 
-import invoke.exceptions  # type: ignore[import-untyped]
-import paramiko
+lazy import invoke.exceptions  # type: ignore[import-untyped]
+lazy import paramiko
 
 
 @cache

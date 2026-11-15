@@ -16,7 +16,6 @@ from ..credentials import CredentialError
 from ..remote.dispatch import run_on_volume
 from ..remote.endpoints import ResolvedEndpoints, location_excluded
 from ..remote.errors import describe_error, ssh_connection_errors
-from ..remote.fabricssh import StdinClosedProcess
 from .detection import (
     DeviceProbeError,
     detect_device_present,
@@ -38,6 +37,7 @@ from .udisks import (
     build_unmount_command,
     parse_unlocked_device,
 )
+lazy from ..remote.fabricssh import StdinClosedProcess
 
 # stderr fragments emitted by udisks/polkit when authorization is refused
 # under ``--no-user-interaction`` (no active session, no polkit rule).

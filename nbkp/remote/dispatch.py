@@ -4,7 +4,7 @@ from typing import Protocol
 
 from ..config import LocalVolume, RemoteVolume, Volume
 from .endpoints import ResolvedEndpoints
-from .fabricssh import run_remote_command
+lazy from .fabricssh import run_remote_command
 
 
 def run_on_volume(

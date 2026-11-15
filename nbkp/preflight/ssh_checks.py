@@ -9,10 +9,10 @@ volume involvement — there is no ``Volume`` to dispatch on.
 """
 
 from ..config import SshEndpoint
-from ..remote import run_remote_command
 from ..remote.errors import ssh_connection_errors
 from .status.ssh import SshEndpointDiagnostics
 from .volume_checks import unreachable_diagnostics
+lazy from ..remote import run_remote_command
 
 
 def observe_standalone_endpoint(

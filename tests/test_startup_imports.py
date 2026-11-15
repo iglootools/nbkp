@@ -12,19 +12,26 @@ imported everything.
 import json
 import subprocess
 import sys
+from textwrap import dedent
 
 import pytest
 
 DEFERRED_MODULES = [
     "docker",  # only `nbkp demo seed --docker`; also an optional extra
     "jinja2",  # only `nbkp sh`
+    # only when a config has a remote volume (SSH commands, ~/.ssh/config)
+    "nbkp.remote.fabricssh",
+    "fabric",
+    "invoke",
+    "paramiko",
+    "cryptography",
 ]
 
 
-def _loaded_after_import(entry_module: str) -> list[str]:
+def _loaded_after(setup: str) -> list[str]:
     code = (
         "import json, sys\n"
-        f"import {entry_module}\n"
+        f"{setup}\n"
         f"print(json.dumps([m for m in {DEFERRED_MODULES!r} if m in sys.modules]))\n"
     )
     result = subprocess.run(
@@ -35,4 +42,14 @@ def _loaded_after_import(entry_module: str) -> list[str]:
 
 @pytest.mark.parametrize("entry_module", ["nbkp.cli", "nbkp.demo"])
 def test_entry_point_defers_heavy_imports(entry_module: str) -> None:
-    assert _loaded_after_import(entry_module) == []
+    assert _loaded_after(f"import {entry_module}") == []
+
+
+def test_local_only_endpoint_resolution_defers_ssh_imports() -> None:
+    code = dedent("""\
+        from nbkp.config import Config, LocalVolume
+        from nbkp.remote.resolution import resolve_all_endpoints
+        volume = LocalVolume(slug="data", path="/data")
+        resolve_all_endpoints(Config(volumes={"data": volume}))
+        """)
+    assert _loaded_after(code) == []
