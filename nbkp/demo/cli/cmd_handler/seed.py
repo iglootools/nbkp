@@ -255,27 +255,29 @@ def _encrypted_volume_mounted(
 ) -> Generator[None]:
     """Mount the encrypted volume around seeding, and check the umount.
 
-    A failed umount leaves the demo LUKS volume unlocked: it is reported and,
+    The umount + lock also runs when mounting fails, as in
+    ``disks/context.py``: the volume may already be unlocked by then.  A
+    failed umount leaves the demo LUKS volume unlocked: it is reported and,
     when seeding itself succeeded, turned into a ``SeedError``.
     """
     if not enabled:
         yield
         return
     steps.start("Mounting encrypted volume...")
-    failed_mount = next(
-        (
-            r
-            for r in mount_volumes(config, resolved, lambda _: LUKS_PASSPHRASE)
-            if not r.success
-        ),
-        None,
-    )
-    if failed_mount is not None:
-        detail = mount_failure_detail(failed_mount)
-        steps.end("mount encrypted volume", False, detail)
-        raise SeedError(f"Mount failed: {detail}")
-    steps.end("mount encrypted volume", True)
     try:
+        failed_mount = next(
+            (
+                r
+                for r in mount_volumes(config, resolved, lambda _: LUKS_PASSPHRASE)
+                if not r.success
+            ),
+            None,
+        )
+        if failed_mount is not None:
+            detail = mount_failure_detail(failed_mount)
+            steps.end("mount encrypted volume", False, detail)
+            raise SeedError(f"Mount failed: {detail}")
+        steps.end("mount encrypted volume", True)
         yield
     finally:
         failed_umount = _umount_encrypted(config, resolved, steps)
