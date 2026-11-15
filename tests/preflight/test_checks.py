@@ -29,7 +29,11 @@ from nbkp.preflight.checks import (
     check_sync,
     check_volume,
 )
-from nbkp.preflight.probes import _check_rsync_version, parse_rsync_version
+from nbkp.preflight.probes import (
+    _check_endpoint_sentinel,
+    _check_rsync_version,
+    parse_rsync_version,
+)
 from nbkp.preflight.snapshot_checks import (
     check_btrfs_filesystem,
     check_btrfs_mount_option,
@@ -711,6 +715,22 @@ class TestCheckLocalVolume:
         status = check_volume(vol)
         assert status.active is False
         assert status.errors == [VolumeError.SENTINEL_NOT_FOUND]
+
+    def test_sentinel_directory_is_not_a_sentinel(self, tmp_path: Path) -> None:
+        """Like the remote ``test -f``: only a regular file counts."""
+        (tmp_path / ".nbkp-vol").mkdir()
+        status = check_volume(LocalVolume(slug="data", path=str(tmp_path)))
+        assert status.errors == [VolumeError.SENTINEL_NOT_FOUND]
+
+    def test_endpoint_sentinel_directory_is_not_a_sentinel(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "photos" / ".nbkp-src").mkdir(parents=True)
+        vol = LocalVolume(slug="data", path=str(tmp_path))
+        assert _check_endpoint_sentinel(vol, "photos", ".nbkp-src", {}) is False
+        (tmp_path / "photos" / ".nbkp-src").rmdir()
+        (tmp_path / "photos" / ".nbkp-src").touch()
+        assert _check_endpoint_sentinel(vol, "photos", ".nbkp-src", {}) is True
 
 
 class TestCheckRemoteVolume:

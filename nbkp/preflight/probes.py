@@ -20,7 +20,7 @@ def _check_endpoint_sentinel(
     rel_path = f"{base}/{sentinel_name}"
     match volume:
         case LocalVolume():
-            return Path(rel_path).exists()
+            return Path(rel_path).is_file()
         case RemoteVolume():
             return (
                 run_on_volume(
