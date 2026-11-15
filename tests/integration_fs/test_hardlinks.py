@@ -278,6 +278,43 @@ class TestPruneSnapshots:
         assert len(remaining) == 2
 
 
+class TestNonSnapshotEntries:
+    """Directories that only resemble snapshot names are left alone."""
+
+    _LOOKALIKES = ("2026-01-01T00", "2026-03-07T09:00:00")
+
+    def _setup(self, tmp_path: Path) -> tuple[SyncConfig, Config, list[str], Path]:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        (src / "data.txt").write_text("lookalikes")
+        names = [
+            _do_sync(src, dst, now=datetime(2026, 2, day, tzinfo=UTC))[2]
+            for day in (1, 2, 3)
+        ]
+        sync, config = _make_config(str(src), str(dst))
+        for name in self._LOOKALIKES:
+            (dst / "snapshots" / name).mkdir()
+        return sync, config, names, dst / "snapshots"
+
+    def test_prune_keeps_them(self, tmp_path: Path) -> None:
+        sync, config, names, snapshots = self._setup(tmp_path)
+
+        deleted = prune_snapshots(sync, config, 2)
+
+        assert [Path(p).name for p in deleted] == [names[0]]
+        for name in self._LOOKALIKES:
+            assert (snapshots / name).is_dir()
+
+    def test_orphan_cleanup_keeps_them(self, tmp_path: Path) -> None:
+        sync, config, _names, snapshots = self._setup(tmp_path)
+
+        assert cleanup_orphaned_snapshots(sync, config) == []
+        for name in self._LOOKALIKES:
+            assert (snapshots / name).is_dir()
+
+
 class TestHardLinkIncremental:
     def test_unchanged_files_share_inodes(self, tmp_path: Path) -> None:
         """Unchanged files should be hard-linked between snapshots."""

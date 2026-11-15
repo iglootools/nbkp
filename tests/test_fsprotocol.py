@@ -1,0 +1,40 @@
+"""Tests for nbkp.fsprotocol (snapshot name format)."""
+
+from datetime import UTC, datetime
+
+import pytest
+
+from nbkp.fsprotocol import format_snapshot_name, parse_snapshot_name
+
+_TS = datetime(2026, 3, 6, 14, 30, 5, 123000, tzinfo=UTC)
+
+
+class TestParseSnapshotName:
+    @pytest.mark.parametrize("macos_local", [False, True])
+    def test_round_trips_both_forms(self, macos_local: bool) -> None:
+        name = format_snapshot_name(_TS, macos_local=macos_local)
+
+        assert parse_snapshot_name(name) == _TS
+
+    def test_returns_aware_utc(self) -> None:
+        parsed = parse_snapshot_name("2026-03-06T14:30:05.123Z")
+
+        assert parsed.tzinfo is UTC
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "2026-01-01T00",
+            "2026-03-07T09:00:00",
+            "2026-03-07T09:00:00Z",
+            "2026-03-07T09:00:00.000",
+            "2026-03-07T09:00:00.000+01:00",
+            "2026-03-07T09:00-00.000Z",
+            "2026-03-07T09:00:00.000Z.bak",
+            "2026-13-07T09:00:00.000Z",
+            "lost+found",
+        ],
+    )
+    def test_rejects_other_names(self, name: str) -> None:
+        with pytest.raises(ValueError):
+            parse_snapshot_name(name)

@@ -139,7 +139,9 @@ def _remote_config_spaces() -> tuple[Config, SyncConfig]:
 
 _NOW = datetime(2024, 1, 15, 12, 0, 0, 0, tzinfo=UTC)
 _DENIED = completed(1, stderr="permission denied")
-_THREE = "20240101T000000Z\n20240102T000000Z\n20240103T000000Z\n"
+_THREE = (
+    "2024-01-01T00:00:00.000Z\n2024-01-02T00:00:00.000Z\n2024-01-03T00:00:00.000Z\n"
+)
 
 
 class TestCreateSnapshot:
@@ -230,7 +232,7 @@ class TestCreateSnapshot:
 
 
 class TestDeleteSnapshot:
-    _PATH = "/mnt/dst/backup/snapshots/20240101T000000Z"
+    _PATH = "/mnt/dst/backup/snapshots/2024-01-01T00:00:00.000Z"
 
     def test_makes_writable_then_deletes(self) -> None:
         config, _ = _local_config()
@@ -289,8 +291,8 @@ class TestPruneSnapshots:
         deleted = prune_snapshots(sync, config, max_snapshots=1, run=runner)
 
         assert deleted == [
-            "/backup/data/snapshots/20240101T000000Z",
-            "/backup/data/snapshots/20240102T000000Z",
+            "/backup/data/snapshots/2024-01-01T00:00:00.000Z",
+            "/backup/data/snapshots/2024-01-02T00:00:00.000Z",
         ]
         assert _deleted(runner) == deleted
 
@@ -312,29 +314,29 @@ class TestPruneSnapshots:
         )
 
         assert deleted == [
-            "/backup/data/snapshots/20240101T000000Z",
-            "/backup/data/snapshots/20240102T000000Z",
+            "/backup/data/snapshots/2024-01-01T00:00:00.000Z",
+            "/backup/data/snapshots/2024-01-02T00:00:00.000Z",
         ]
         assert runner.commands_starting_with("btrfs") == []
 
     def test_protects_latest_snapshot(self) -> None:
         """The snapshot that latest points to must not be pruned."""
         config, sync = _remote_config()
-        runner = _listing(_THREE, latest="20240102T000000Z")
+        runner = _listing(_THREE, latest="2024-01-02T00:00:00.000Z")
 
         deleted = prune_snapshots(sync, config, max_snapshots=1, run=runner)
 
         # excess=2: 20240102 (latest) is skipped, so the two others go.
         assert deleted == [
-            "/backup/data/snapshots/20240101T000000Z",
-            "/backup/data/snapshots/20240103T000000Z",
+            "/backup/data/snapshots/2024-01-01T00:00:00.000Z",
+            "/backup/data/snapshots/2024-01-03T00:00:00.000Z",
         ]
         assert _deleted(runner) == deleted
 
     def test_protects_latest_when_oldest(self) -> None:
         config, sync = _remote_config()
-        runner = _listing(_THREE, latest="20240101T000000Z")
+        runner = _listing(_THREE, latest="2024-01-01T00:00:00.000Z")
 
         deleted = prune_snapshots(sync, config, max_snapshots=2, run=runner)
 
-        assert deleted == ["/backup/data/snapshots/20240102T000000Z"]
+        assert deleted == ["/backup/data/snapshots/2024-01-02T00:00:00.000Z"]

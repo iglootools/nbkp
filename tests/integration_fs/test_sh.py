@@ -490,3 +490,23 @@ class TestGeneratedScriptExecution:
         assert os.readlink(_stage(tmp_path) / LATEST_LINK) == (
             f"{SNAPSHOTS_DIR}/{snapshot}"
         )
+
+    def test_ignores_lookalike_snapshot_names(self, tmp_path: Path) -> None:
+        """Only the exact names nbkp writes are pruned or removed as orphans."""
+        config = _seeded_chain(tmp_path, max_snapshots=1)
+        snapshots = _stage(tmp_path) / SNAPSHOTS_DIR
+        previous = "2020-01-01T00-00-00.000Z"
+        (snapshots / previous).mkdir()
+        latest = _stage(tmp_path) / LATEST_LINK
+        latest.unlink()
+        latest.symlink_to(f"{SNAPSHOTS_DIR}/{previous}")
+        lookalikes = ["2020-01-01T00", "2099-03-07T09:00:00"]
+        for name in lookalikes:
+            (snapshots / name).mkdir()
+
+        result = _run_script(config, tmp_path)
+
+        assert result.returncode == 0, result.stderr
+        assert "Pruning snapshot: 2020-01-01T00-00-00.000Z" in result.stderr
+        for name in lookalikes:
+            assert (snapshots / name).is_dir()

@@ -197,7 +197,10 @@ def read_latest_symlink(
     """Read the latest symlink target, returning a Snapshot.
 
     Returns ``None`` if the symlink does not exist or points to
-    ``/dev/null`` (the canonical "no snapshot yet" marker).
+    ``/dev/null`` (the canonical "no snapshot yet" marker).  A target that
+    is not a snapshot name raises
+    :class:`~nbkp.snapshots.errors.SnapshotOperationError`: callers use it
+    to protect the latest snapshot, so it must not be guessed at.
     """
     re = resolved_endpoints or {}
     latest_path = f"{resolve_dest_path(sync, config)}/{LATEST_LINK}"
