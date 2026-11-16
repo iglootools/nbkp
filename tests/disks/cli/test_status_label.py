@@ -4,7 +4,7 @@ from io import StringIO
 
 from rich.console import Console
 
-from nbkp.disks.cli.helpers import _error_label
+from nbkp.disks.cli.helpers import error_label
 
 # Real-world details that contain square brackets.  Rich reads "[...]" in a
 # markup string as a style tag, so these are the strings a markup-formatted
@@ -20,12 +20,12 @@ def _render(renderable: object) -> str:
 
 class TestErrorLabel:
     def test_detail_brackets_survive(self) -> None:
-        assert "nbkp[keyring]" in _render(_error_label("my-vol", KEYRING_HINT))
+        assert "nbkp[keyring]" in _render(error_label("my-vol", KEYRING_HINT))
 
     def test_plain_text_carries_no_markup(self) -> None:
         # The same label is reused as the JSON `volume` field, so its plain
         # form must be free of both markup and escapes.
-        assert _error_label("my-vol", KEYRING_HINT).plain == f"my-vol ✗ {KEYRING_HINT}"
+        assert error_label("my-vol", KEYRING_HINT).plain == f"my-vol ✗ {KEYRING_HINT}"
 
     def test_no_detail_is_bare_name(self) -> None:
-        assert _error_label("my-vol", None).plain == "my-vol"
+        assert error_label("my-vol", None).plain == "my-vol"

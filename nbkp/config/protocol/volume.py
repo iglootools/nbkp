@@ -166,3 +166,20 @@ def _validate_path_requirement(volume: LocalVolume | RemoteVolume) -> None:
 
 
 Volume = Annotated[LocalVolume | RemoteVolume, Field(discriminator="type")]
+
+
+def join_subdir(base: str, subdir: str | None) -> str:
+    return f"{base}/{subdir}" if subdir else base
+
+
+def resolve_endpoint_path(
+    volume: LocalVolume | RemoteVolume, subdir: str | None
+) -> str:
+    """The volume's ``path`` must be resolved by this point — either declared in
+    config, or filled in from the discovered mountpoint after mounting (see
+    ``disks.observation.apply_effective_paths``); ``ValueError`` otherwise.
+    """
+    if volume.path is None:
+        msg = f"volume '{volume.slug}': mount path not resolved"
+        raise ValueError(msg)
+    return join_subdir(volume.path, subdir)

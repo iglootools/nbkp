@@ -1,8 +1,6 @@
 from .checks import (
     check_all_syncs,
     check_step_count,
-    check_sync,
-    check_volume,
 )
 from .endpoint_checks import (
     observe_destination_endpoint,
@@ -75,8 +73,6 @@ __all__ = [
     "VolumeStatus",
     "check_all_syncs",
     "check_step_count",
-    "check_sync",
-    "check_volume",
     "check_volume_capabilities",
     "observe_destination_endpoint",
     "observe_source_endpoint",

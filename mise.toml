@@ -81,14 +81,6 @@ description = "Install dependencies"
 # experimental deps engine has to be abandoned, this is the single place to change.
 run = "mise deps install uv"
 
-# `uv sync` is exact by default (it removes packages that are in neither pyproject.toml nor
-# uv.lock), and [env] UV_PYTHON pins the interpreter, so a raised python pin recreates .venv
-# on its own. Both of the reasons this task used to exist under poetry are therefore gone.
-#
-# It survives for the one gap [deps.uv] leaves: freshness is a blake3 hash of uv.lock and
-# pyproject.toml, so a venv that is *dirty* rather than *stale* — someone ran `uv pip
-# install` into it by hand — still reads as fresh and no sync fires. Deleting the directory
-# is the way back to exactly what the lock describes.
 [tasks.check]
 description = "Run all checks (format-check, lint, lint-shell, type-check, lock-check, lock-check-uv, clidocs-check, configdocs-check, depgraph-check, boundaries-check)"
 run = [

@@ -8,8 +8,9 @@ from ..config import (
     RemoteVolume,
     SyncConfig,
     SyncEndpoint,
+    resolve_endpoint_path,
 )
-from ..fsprotocol import LATEST_LINK
+from ..fsprotocol import LATEST_LINK, SNAPSHOTS_DIR
 from ..remote import (
     build_ssh_base_args,
     build_ssh_e_option,
@@ -37,20 +38,6 @@ _DEFAULT_RSYNC_OPTIONS: list[str] = [
 ]
 
 
-def resolve_path(volume: LocalVolume | RemoteVolume, subdir: str | None) -> str:
-    """The volume's ``path`` must be resolved by this point (declared in config,
-    or filled from the discovered mountpoint after mounting); raises
-    ``ValueError`` otherwise.
-    """
-    if volume.path is None:
-        msg = f"volume '{volume.slug}': mount path not resolved"
-        raise ValueError(msg)
-    if subdir:
-        return f"{volume.path}/{subdir}"
-    else:
-        return volume.path
-
-
 def resolve_source_path(
     volume: LocalVolume | RemoteVolume,
     source: SyncEndpoint,
@@ -61,7 +48,7 @@ def resolve_source_path(
     ``latest`` is a symlink — rsync's trailing slash causes it
     to follow the symlink and copy the target's contents.
     """
-    base = resolve_path(volume, source.subdir)
+    base = resolve_endpoint_path(volume, source.subdir)
     if source.snapshot_mode != "none":
         return f"{base}/{LATEST_LINK}"
     else:
@@ -117,6 +104,19 @@ def _filter_args(sync: SyncConfig) -> list[str]:
     ]
 
 
+def hard_link_dest_suffix(snapshot_name: str) -> str:
+    """Hard-link syncs rsync straight into the new snapshot directory."""
+    return f"{SNAPSHOTS_DIR}/{snapshot_name}"
+
+
+def hard_link_link_dest(latest_name: str | None) -> str | None:
+    """``--link-dest`` to the snapshot ``latest`` designates, or ``None`` before
+    the first one.  rsync resolves a relative ``--link-dest`` against the
+    destination directory, which is the new snapshot's sibling.
+    """
+    return f"../{latest_name}" if latest_name else None
+
+
 def _dest_target(base: str, dest_suffix: str | None) -> str:
     return f"{base}/{dest_suffix}/" if dest_suffix else f"{base}/"
 
@@ -137,7 +137,7 @@ def build_rsync_command(
     src_vol = config.volumes[src_ep.volume]
     dst_vol = config.volumes[dst_ep.volume]
     src_path = resolve_source_path(src_vol, src_ep)
-    dst_path = resolve_path(dst_vol, dst_ep.subdir)
+    dst_path = resolve_endpoint_path(dst_vol, dst_ep.subdir)
     rsync_args = [
         *_base_rsync_args(sync, dry_run, link_dest, progress),
         *_filter_args(sync),

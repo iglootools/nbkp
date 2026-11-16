@@ -16,6 +16,7 @@ from . import (
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
+    join_subdir,
 )
 from .protocol.volume import MountConfig
 
@@ -76,11 +77,7 @@ def endpoint_path(
     vol: LocalVolume | RemoteVolume,
     subdir: str | None,
 ) -> str:
-    path = _display_path(vol)
-    if subdir:
-        return f"{path}/{subdir}"
-    else:
-        return path
+    return join_subdir(_display_path(vol), subdir)
 
 
 def format_mount_summary(mount: MountConfig | None) -> str:
@@ -126,14 +123,10 @@ def _sync_options(sync: SyncConfig, config: Config) -> str:
             f"src-snapshots:{src_ep.snapshot_mode}"
             if src_ep.snapshot_mode != "none"
             else "",
-            _snapshot_label("dst-snapshots:btrfs", dst_ep.btrfs_snapshots.max_snapshots)
-            if dst_ep.btrfs_snapshots.enabled
-            else "",
             _snapshot_label(
-                "dst-snapshots:hard-link",
-                dst_ep.hard_link_snapshots.max_snapshots,
+                f"dst-snapshots:{dst_ep.snapshot_mode}", dst_ep.max_snapshots
             )
-            if dst_ep.hard_link_snapshots.enabled
+            if dst_ep.snapshot_mode != "none"
             else "",
         ]
         if opt

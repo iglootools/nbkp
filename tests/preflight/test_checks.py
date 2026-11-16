@@ -26,12 +26,10 @@ from nbkp.config import (
 from nbkp.preflight.checks import (
     check_all_syncs,
     check_step_count,
-    check_sync,
-    check_volume,
 )
 from nbkp.preflight.probes import (
-    _check_endpoint_sentinel,
-    _check_rsync_version,
+    check_endpoint_sentinel,
+    check_rsync_version,
     parse_rsync_version,
 )
 from nbkp.preflight.snapshot_checks import (
@@ -60,6 +58,7 @@ from nbkp.preflight.status.volume import (
     VolumeError,
     VolumeStatus,
 )
+from nbkp.preflight.testkit import check_sync, check_volume
 from nbkp.preflight.volume_checks import observe_ssh_endpoint
 from nbkp.remote.dispatch import check_command_available
 from nbkp.remote.endpoints import EndpointFilter, ResolvedEndpoint, ResolvedEndpoints
@@ -78,10 +77,10 @@ def _no_real_host_commands(monkeypatch: pytest.MonkeyPatch) -> None:
     Tests exercising these probes patch them (or ``subprocess.run``) directly.
     """
     monkeypatch.setattr(
-        "nbkp.preflight.volume_checks._check_rsync_version", lambda *_: True
+        "nbkp.preflight.volume_checks.check_rsync_version", lambda *_: True
     )
     monkeypatch.setattr(
-        "nbkp.preflight.endpoint_checks._check_directory_writable",
+        "nbkp.preflight.endpoint_checks.check_directory_writable",
         lambda _vol, path, _re: os.access(path, os.W_OK),
     )
 
@@ -727,10 +726,10 @@ class TestCheckLocalVolume:
     ) -> None:
         (tmp_path / "photos" / ".nbkp-src").mkdir(parents=True)
         vol = LocalVolume(slug="data", path=str(tmp_path))
-        assert _check_endpoint_sentinel(vol, "photos", ".nbkp-src", {}) is False
+        assert check_endpoint_sentinel(vol, "photos", ".nbkp-src", {}) is False
         (tmp_path / "photos" / ".nbkp-src").rmdir()
         (tmp_path / "photos" / ".nbkp-src").touch()
-        assert _check_endpoint_sentinel(vol, "photos", ".nbkp-src", {}) is True
+        assert check_endpoint_sentinel(vol, "photos", ".nbkp-src", {}) is True
 
 
 class TestCheckRemoteVolume:
@@ -4598,7 +4597,7 @@ class TestCheckRsyncVersionLocal:
             stdout="rsync  version 3.2.7  protocol version 31\n",
         )
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert _check_rsync_version(vol, {}) is True
+        assert check_rsync_version(vol, {}) is True
 
     @patch("nbkp.remote.dispatch.subprocess.run")
     def test_too_old(self, mock_run: MagicMock) -> None:
@@ -4607,7 +4606,7 @@ class TestCheckRsyncVersionLocal:
             stdout="rsync  version 2.6.9  protocol version 29\n",
         )
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert _check_rsync_version(vol, {}) is False
+        assert check_rsync_version(vol, {}) is False
 
     @patch("nbkp.remote.dispatch.subprocess.run")
     def test_openrsync(self, mock_run: MagicMock) -> None:
@@ -4616,13 +4615,13 @@ class TestCheckRsyncVersionLocal:
             stdout=("openrsync: protocol version 29\nrsync version 2.6.9 compatible\n"),
         )
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert _check_rsync_version(vol, {}) is False
+        assert check_rsync_version(vol, {}) is False
 
     @patch("nbkp.remote.dispatch.subprocess.run")
     def test_command_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert _check_rsync_version(vol, {}) is False
+        assert check_rsync_version(vol, {}) is False
 
     @patch("nbkp.remote.dispatch.subprocess.run")
     def test_exactly_3_0_0(self, mock_run: MagicMock) -> None:
@@ -4631,7 +4630,7 @@ class TestCheckRsyncVersionLocal:
             stdout="rsync  version 3.0.0  protocol version 30\n",
         )
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert _check_rsync_version(vol, {}) is True
+        assert check_rsync_version(vol, {}) is True
 
 
 class TestCheckRsyncVersionRemote:
@@ -4643,7 +4642,7 @@ class TestCheckRsyncVersionRemote:
         )
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert _check_rsync_version(vol, resolved) is True
+        assert check_rsync_version(vol, resolved) is True
 
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_too_old(self, mock_run: MagicMock) -> None:
@@ -4653,7 +4652,7 @@ class TestCheckRsyncVersionRemote:
         )
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert _check_rsync_version(vol, resolved) is False
+        assert check_rsync_version(vol, resolved) is False
 
 
 def _nas_and_local_config() -> Config:

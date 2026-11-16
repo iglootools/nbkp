@@ -1,20 +1,9 @@
 """Shared candidate classification for ``snapshots show`` and ``prune``."""
 
-from ....config.protocol.sync_endpoint import SyncEndpoint
 from ....policy import Strictness
 from ....preflight import SyncStatus
+from ....preflight.strictness import is_fatal
 from ...models import SnapshotErrorKind, SnapshotResultError, SnapshotSkipReason
-
-
-def max_snapshots(dst_ep: SyncEndpoint) -> int | None:
-    """The retention limit of a sync endpoint (``None``: unlimited / none)."""
-    match dst_ep.snapshot_mode:
-        case "btrfs":
-            return dst_ep.btrfs_snapshots.max_snapshots
-        case "hard-link":
-            return dst_ep.hard_link_snapshots.max_snapshots
-        case _:
-            return None
 
 
 def _preflight_error(
@@ -30,22 +19,19 @@ def preflight_disposition(
     """Decide from preflight whether a sync is processed, skipped or failed.
 
     Returns ``(skip_reason, error)``; ``(None, None)`` means "process it".
-    Mirrors ``run``'s strictness table: expected inactivity is a skip
-    unless ``ignore-none``; infrastructure errors are a failure unless
-    ``ignore-all``, which skips the sync rather than reading or deleting
-    snapshots on a destination preflight could not vouch for.
+    A sync is a failure when it would abort ``run`` under *strictness*, and
+    skipped otherwise: under ``ignore-all`` a sync with infrastructure errors
+    is skipped rather than reading or deleting snapshots on a destination
+    preflight could not vouch for.
     """
-    match (status.active, status.is_expected_inactive(), strictness):
+    match (status.active, is_fatal(status, strictness), status.is_expected_inactive()):
         case (True, _, _):
             return (None, None)
-        case (False, True, Strictness.IGNORE_NONE):
+        case (False, True, True):
             return (None, _preflight_error(SnapshotErrorKind.INACTIVE, status))
-        case (False, True, _):
+        case (False, True, False):
+            return (None, _preflight_error(SnapshotErrorKind.PREFLIGHT_ERRORS, status))
+        case (False, False, True):
             return (SnapshotSkipReason.INACTIVE, None)
-        case (False, False, Strictness.IGNORE_ALL):
+        case (False, False, False):
             return (SnapshotSkipReason.PREFLIGHT_ERRORS, None)
-        case _:
-            return (
-                None,
-                _preflight_error(SnapshotErrorKind.PREFLIGHT_ERRORS, status),
-            )

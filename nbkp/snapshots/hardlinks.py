@@ -13,6 +13,7 @@ from .common import (
     create_snapshot_timestamp,
     destination_volume,
     list_snapshots,
+    prune_oldest_snapshots,
     read_latest_symlink,
     snapshots_dir,
 )
@@ -31,12 +32,13 @@ def create_snapshot_dir(
     macOS-safe name form; both come from the caller.  Returns the full
     snapshot path.
     """
-    re = resolved_endpoints or {}
-    dst_vol = destination_volume(sync, config)
-    snapshot = create_snapshot_timestamp(now, dst_vol, platform)
-    snapshot_path = f"{snapshots_dir(sync, config)}/{snapshot.name}"
+    snapshot_path = snapshot_path_for(sync, config, now=now, platform=platform)
     run_checked(
-        SnapshotOp.MKDIR, snapshot_path, ["mkdir", "-p", snapshot_path], dst_vol, re
+        SnapshotOp.MKDIR,
+        snapshot_path,
+        ["mkdir", "-p", snapshot_path],
+        destination_volume(sync, config),
+        resolved_endpoints or {},
     )
     return snapshot_path
 
@@ -107,30 +109,12 @@ def prune_snapshots(
     dry_run: bool = False,
     resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> list[str]:
-    """Delete oldest snapshots exceeding max_snapshots.
-
-    Never prunes the snapshot that the latest symlink points to.
-    Returns list of deleted (or would-be-deleted) paths.
-    """
-    re = resolved_endpoints or {}
-    snapshots = list_snapshots(sync, config, re)
-    excess = len(snapshots) - max_snapshots
-    if excess <= 0:
-        return []
-    else:
-        latest = read_latest_symlink(sync, config, resolved_endpoints=re)
-        base = snapshots_dir(sync, config)
-
-        # list_snapshots sorts oldest first, so the slice takes the oldest.
-        to_delete = [
-            f"{base}/{s.name}"
-            for s in snapshots
-            if latest is None or s.name != latest.name
-        ][:excess]
-
-        if not dry_run:
-            dst_vol = destination_volume(sync, config)
-            for path in to_delete:
-                delete_snapshot(path, dst_vol, re)
-
-        return to_delete
+    """See :func:`.common.prune_oldest_snapshots`."""
+    return prune_oldest_snapshots(
+        sync,
+        config,
+        max_snapshots,
+        delete_snapshot,
+        dry_run=dry_run,
+        resolved_endpoints=resolved_endpoints,
+    )

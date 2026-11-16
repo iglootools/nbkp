@@ -15,11 +15,7 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.disks.lifecycle import mount_volume, umount_volume
-from nbkp.preflight import (
-    DestinationEndpointError,
-    check_sync,
-    check_volume,
-)
+from nbkp.preflight import DestinationEndpointError
 from nbkp.preflight.endpoint_checks import (
     observe_destination_endpoint,
     observe_source_endpoint,
@@ -28,6 +24,7 @@ from nbkp.preflight.snapshot_checks import (
     check_btrfs_filesystem,
     check_btrfs_subvolume,
 )
+from nbkp.preflight.testkit import check_sync, check_volume
 from nbkp.preflight.volume_checks import observe_ssh_endpoint, observe_volume
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.testkit.docker import (

@@ -9,17 +9,13 @@ from .graph import build_adjacency
 
 
 def _endpoint_annotation(ep: SyncEndpoint) -> str:
-    match ep.snapshot_mode:
-        case "btrfs":
-            max_s = ep.btrfs_snapshots.max_snapshots
-            suffix = f", max: {max_s}" if max_s is not None else ""
-            return f"btrfs{suffix}"
-        case "hard-link":
-            max_s = ep.hard_link_snapshots.max_snapshots
-            suffix = f", max: {max_s}" if max_s is not None else ""
-            return f"hard-link{suffix}"
-        case _:
+    match (ep.snapshot_mode, ep.max_snapshots):
+        case ("none", _):
             return ""
+        case (mode, None):
+            return mode
+        case (mode, max_s):
+            return f"{mode}, max: {max_s}"
 
 
 def build_mermaid_graph(config: Config) -> str:

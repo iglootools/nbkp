@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -7,6 +8,7 @@ from ..config import (
     RemoteVolume,
     SyncConfig,
     Volume,
+    resolve_endpoint_path,
 )
 from ..fsprotocol import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR, Snapshot
 from ..remote.endpoints import ResolvedEndpoints
@@ -30,14 +32,7 @@ def create_snapshot_timestamp(
 
 def resolve_dest_path(sync: SyncConfig, config: Config) -> str:
     dst = config.destination_endpoint(sync)
-    vol = config.volumes[dst.volume]
-    if vol.path is None:
-        msg = f"volume '{vol.slug}': mount path not resolved"
-        raise ValueError(msg)
-    if dst.subdir:
-        return f"{vol.path}/{dst.subdir}"
-    else:
-        return vol.path
+    return resolve_endpoint_path(config.volumes[dst.volume], dst.subdir)
 
 
 def destination_volume(sync: SyncConfig, config: Config) -> Volume:
@@ -227,3 +222,45 @@ def update_latest_symlink(
             run_checked(
                 op, latest_path, ["ln", "-sfn", target, latest_path], dst_vol, re
             )
+
+
+DeleteSnapshotFn = Callable[[str, Volume, ResolvedEndpoints], None]
+
+
+def prune_oldest_snapshots(
+    sync: SyncConfig,
+    config: Config,
+    max_snapshots: int,
+    delete_snapshot: DeleteSnapshotFn,
+    *,
+    dry_run: bool = False,
+    resolved_endpoints: ResolvedEndpoints | None = None,
+) -> list[str]:
+    """Delete oldest snapshots exceeding max_snapshots with the backend's
+    *delete_snapshot*.
+
+    Never prunes the snapshot that the latest symlink points to.
+    Returns list of deleted (or would-be-deleted) paths.
+    """
+    re = resolved_endpoints or {}
+    snapshots = list_snapshots(sync, config, re)
+    excess = len(snapshots) - max_snapshots
+    if excess <= 0:
+        return []
+    else:
+        latest = read_latest_symlink(sync, config, resolved_endpoints=re)
+        base = snapshots_dir(sync, config)
+
+        # list_snapshots sorts oldest first, so the slice takes the oldest.
+        to_delete = [
+            f"{base}/{s.name}"
+            for s in snapshots
+            if latest is None or s.name != latest.name
+        ][:excess]
+
+        if not dry_run:
+            dst_vol = destination_volume(sync, config)
+            for path in to_delete:
+                delete_snapshot(path, dst_vol, re)
+
+        return to_delete

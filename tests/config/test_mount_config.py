@@ -13,6 +13,7 @@ from nbkp.config import (
     RemoteVolume,
     SyncConfig,
     SyncEndpoint,
+    resolve_endpoint_path,
 )
 
 
@@ -139,6 +140,24 @@ class TestVolumePathRequirement:
         with pytest.raises(ValidationError) as excinfo:
             RemoteVolume(slug="nas", ssh_endpoint="nas")
         assert _error_types(excinfo.value) == {ConfigValidationCode.PATH_REQUIRED}
+
+
+class TestResolveEndpointPath:
+    def test_joins_subdir(self) -> None:
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        assert resolve_endpoint_path(vol, "photos") == "/mnt/data/photos"
+
+    def test_volume_root_without_subdir(self) -> None:
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        assert resolve_endpoint_path(vol, None) == "/mnt/data"
+
+    def test_unresolved_mount_path_raises(self) -> None:
+        vol = LocalVolume(
+            slug="usb",
+            mount=MountConfig(device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6"),
+        )
+        with pytest.raises(ValueError, match="mount path not resolved"):
+            resolve_endpoint_path(vol, "photos")
 
 
 class TestCredentialProviderConfig:

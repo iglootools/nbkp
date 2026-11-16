@@ -2,5 +2,14 @@
 #MISE description="Delete .venv and reinstall dependencies from scratch"
 set -euo pipefail
 
+# `uv sync` is exact by default (it removes packages that are in neither pyproject.toml nor
+# uv.lock), and [env] UV_PYTHON pins the interpreter, so a raised python pin recreates .venv
+# on its own. Both of the reasons this task used to exist under poetry are therefore gone.
+#
+# It survives for the one gap [deps.uv] leaves: freshness is a blake3 hash of uv.lock and
+# pyproject.toml, so a venv that is *dirty* rather than *stale* — someone ran `uv pip
+# install` into it by hand — still reads as fresh and no sync fires. Deleting the directory
+# is the way back to exactly what the lock describes.
+
 rm -rf "$MISE_PROJECT_ROOT/.venv"
 mise deps install uv --force

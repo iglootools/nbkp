@@ -16,6 +16,7 @@ from ...config import (
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
+    resolve_endpoint_path,
 )
 from ...fsprotocol import (
     DESTINATION_SENTINEL,
@@ -31,7 +32,6 @@ from ...remote.testkit.constants import (
     REMOTE_BTRFS_ENCRYPTED_PATH,
     REMOTE_BTRFS_PATH,
 )
-from ..rsync import resolve_path
 
 _CHUNK_SIZE = 1024 * 1024
 
@@ -190,7 +190,7 @@ def create_seed_data(
     for s in config.syncs.values():
         src_ep = config.source_endpoint(s)
         src_vol = config.volumes[src_ep.volume]
-        key = resolve_path(src_vol, src_ep.subdir)
+        key = resolve_endpoint_path(src_vol, src_ep.subdir)
         if key not in unique_sources:
             unique_sources[key] = (src_vol, src_ep.subdir)
 

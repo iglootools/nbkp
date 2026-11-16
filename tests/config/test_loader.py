@@ -856,6 +856,27 @@ class TestLoadConfig:
         )
         assert ep.snapshot_mode == "hard-link"
 
+    def test_max_snapshots_follows_enabled_mode(self) -> None:
+        btrfs = SyncEndpoint(
+            slug="ep",
+            volume="v",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=3),
+            hard_link_snapshots=HardLinkSnapshotConfig(max_snapshots=7),
+        )
+        hard_link = SyncEndpoint(
+            slug="ep",
+            volume="v",
+            btrfs_snapshots=BtrfsSnapshotConfig(max_snapshots=3),
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True, max_snapshots=7),
+        )
+        disabled = SyncEndpoint(
+            slug="ep",
+            volume="v",
+            btrfs_snapshots=BtrfsSnapshotConfig(max_snapshots=3),
+        )
+        assert (btrfs.max_snapshots, hard_link.max_snapshots) == (3, 7)
+        assert disabled.max_snapshots is None
+
     def test_location_and_locations_mutual_exclusivity(self, tmp_path: Path) -> None:
         p = tmp_path / "exclusive_loc.yaml"
         p.write_text(

@@ -428,6 +428,29 @@ class TestShowCommand:
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
     @patch("nbkp.cliwiring.config.load_config")
+    def test_disabled_sync_skipped_under_ignore_none(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+    ) -> None:
+        """A disabled sync is never fatal, under any strictness."""
+        config = _prune_config()
+        mock_load.return_value = config
+        vol_s, sync_s = _prune_active_statuses(config)
+        disabled = {
+            name: status.model_copy(update={"errors": [SyncError.DISABLED]})
+            for name, status in sync_s.items()
+        }
+        mock_checks.return_value = preflight(vol_s, disabled)
+
+        exit_code, data = _invoke_json("show", "-S", "ignore-none")
+
+        assert exit_code == 0
+        assert data[0]["skip_reason"] == "inactive"
+        assert data[0]["error"] is None
+
+    @patch("nbkp.cliwiring.preflight.check_all_syncs")
+    @patch("nbkp.cliwiring.config.load_config")
     def test_infra_errors_fail(
         self,
         mock_load: MagicMock,

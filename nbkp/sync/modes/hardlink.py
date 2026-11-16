@@ -1,7 +1,7 @@
 """Hard-link snapshot sync: rsync into a new snapshot dir with ``--link-dest``."""
 
 from ...config import SyncConfig, SyncEndpoint
-from ...fsprotocol import SNAPSHOTS_DIR, Snapshot
+from ...fsprotocol import Snapshot
 from ...preflight.status.sync import SyncStatus
 from ...snapshots.common import destination_volume
 from ...snapshots.errors import SnapshotOperationError
@@ -13,6 +13,7 @@ from ...snapshots.hardlinks import (
     snapshot_path_for,
 )
 from ..results import SyncFailureKind, SyncResult, SyncWarning, SyncWarningKind
+from ..rsync import hard_link_dest_suffix, hard_link_link_dest
 from .common import RunContext, publish_snapshot, rsync_step
 
 
@@ -26,7 +27,7 @@ def run_hard_link_sync(
     sync = status.config
     warnings = () if ctx.dry_run else _cleanup_orphans(sync, ctx)
     latest = status.destination_latest_snapshot
-    link_dest = f"../{latest.name}" if latest else None
+    link_dest = hard_link_link_dest(latest.name if latest else None)
     match _prepare_snapshot_dir(sync, ctx):
         case SyncResult() as failure:
             return failure.with_warnings(warnings)
@@ -82,8 +83,7 @@ def _rsync_into_snapshot(
     warnings: tuple[SyncWarning, ...],
     ctx: RunContext,
 ) -> SyncResult:
-    snapshot = Snapshot.from_path(snapshot_path)
-    suffix = f"{SNAPSHOTS_DIR}/{snapshot.name}"
+    suffix = hard_link_dest_suffix(Snapshot.from_path(snapshot_path).name)
     match rsync_step(sync, ctx, dest_suffix=suffix, link_dest=link_dest):
         case SyncResult() as failure:
             discard = _discard_snapshot_dir(snapshot_path, sync, ctx)

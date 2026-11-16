@@ -26,6 +26,7 @@ from ...cliwiring.config import (
 )
 from ...cliwiring.mount import managed_mount, print_umount_failures
 from ...cliwiring.mount_progress import mount_display_names
+from ...cliwiring.preflight import end_check_step, start_check_step
 from ...config import Config
 from ...disks import UmountResult
 from ...disks.output import umount_result_json
@@ -33,7 +34,8 @@ from ...ordering.output import build_rich_tree_sections
 from ...policy import Strictness
 from ...preflight import PreflightResult, SyncStatus, check_step_count
 from ...preflight.output import print_human_check
-from ...preflight.severity import PreflightError, severity_for_errors
+from ...preflight.severity import PreflightError
+from ...preflight.strictness import is_fatal
 from ...remote.endpoints import NetworkType, ResolvedEndpoints
 from ...sync import ProgressMode, SyncResult, result_severity
 from ...sync.output import build_human_results_sections
@@ -223,13 +225,11 @@ class _HumanProgress:
 
     def on_check_start(self, label: str) -> None:
         if self._check_bar is not None:
-            self._check_bar.on_start(f"Checking {label}...")
+            start_check_step(self._check_bar, label)
 
     def on_check_end(self, label: str, errors: Sequence[PreflightError]) -> None:
         if self._check_bar is not None:
-            severity = severity_for_errors(list(errors), self._strictness)
-            summary = ", ".join(e.value for e in errors) if errors else None
-            self._check_bar.on_end(f"check {label}", severity, summary)
+            end_check_step(self._check_bar, label, errors, self._strictness)
 
     def on_checks_done(self, preflight: PreflightResult) -> None:
         if self._check_bar is not None:
@@ -321,8 +321,7 @@ def _fatal_sync_errors(
     return {
         slug: sorted(e.value for e in s.errors)
         for slug, s in sync_statuses.items()
-        if not s.active
-        and (strictness is Strictness.IGNORE_NONE or not s.is_expected_inactive())
+        if is_fatal(s, strictness)
     }
 
 

@@ -29,6 +29,10 @@ DEVNULL_TARGET = "/dev/null"
 #: Directory name used as the btrfs staging subvolume for rsync writes.
 STAGING_DIR = "staging"
 
+#: Filesystem types (as reported by ``stat -f -c %T``) that cannot hold hard links,
+#: so hard-link snapshots are rejected on them.
+NO_HARDLINK_FILESYSTEMS = ("vfat", "msdos", "exfat")
+
 
 def format_snapshot_name(now: datetime, *, macos_local: bool = False) -> str:
     """Format a UTC timestamp as a snapshot directory name.

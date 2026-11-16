@@ -339,7 +339,7 @@ class TestDeleteSnapshotRemote:
 
 class TestPruneSnapshotsLocal:
     @patch(
-        "nbkp.snapshots.btrfs.read_latest_symlink",
+        "nbkp.snapshots.common.read_latest_symlink",
         return_value=None,
     )
     @patch("nbkp.remote.dispatch.subprocess.run")
@@ -360,7 +360,7 @@ class TestPruneSnapshotsLocal:
         assert mock_run.call_count == 5
 
     @patch(
-        "nbkp.snapshots.btrfs.read_latest_symlink",
+        "nbkp.snapshots.common.read_latest_symlink",
         return_value=None,
     )
     @patch("nbkp.remote.dispatch.subprocess.run")
@@ -380,7 +380,7 @@ class TestPruneSnapshotsLocal:
         assert mock_run.call_count == 1
 
     @patch(
-        "nbkp.snapshots.btrfs.read_latest_symlink",
+        "nbkp.snapshots.common.read_latest_symlink",
         return_value=None,
     )
     @patch("nbkp.remote.dispatch.subprocess.run")
@@ -400,7 +400,7 @@ class TestPruneSnapshotsLocal:
         # Only the ls call, no delete calls
         assert mock_run.call_count == 1
 
-    @patch("nbkp.snapshots.btrfs.read_latest_symlink")
+    @patch("nbkp.snapshots.common.read_latest_symlink")
     @patch("nbkp.remote.dispatch.subprocess.run")
     def test_protects_latest_snapshot(
         self, mock_run: MagicMock, mock_latest: MagicMock
@@ -430,7 +430,7 @@ class TestPruneSnapshotsLocal:
 
 
 class TestPruneSnapshotsRemote:
-    @patch("nbkp.snapshots.btrfs.read_latest_symlink", return_value=None)
+    @patch("nbkp.snapshots.common.read_latest_symlink", return_value=None)
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_prunes_oldest(
         self,
@@ -454,7 +454,7 @@ class TestPruneSnapshotsRemote:
         # ls call (snapshots) + 1 × (property set + delete) calls (btrfs)
         assert mock_rrc.call_count == 3
 
-    @patch("nbkp.snapshots.btrfs.read_latest_symlink")
+    @patch("nbkp.snapshots.common.read_latest_symlink")
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_protects_latest_snapshot(
         self,

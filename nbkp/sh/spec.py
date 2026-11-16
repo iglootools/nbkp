@@ -2,7 +2,14 @@
 
 from dataclasses import dataclass
 
-from ..config import Config, LocalVolume, RemoteVolume, SyncConfig, SyncEndpoint
+from ..config import (
+    Config,
+    LocalVolume,
+    RemoteVolume,
+    SyncConfig,
+    SyncEndpoint,
+    join_subdir,
+)
 from ..fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
 from ..remote.endpoints import ResolvedEndpoints
 
@@ -44,13 +51,7 @@ class SyncSpec:
 
     @property
     def max_snapshots(self) -> int | None:
-        match self.dst_ep.snapshot_mode:
-            case "btrfs":
-                return self.dst_ep.btrfs_snapshots.max_snapshots
-            case "hard-link":
-                return self.dst_ep.hard_link_snapshots.max_snapshots
-            case _:
-                return None
+        return self.dst_ep.max_snapshots
 
 
 def build_sync_spec(
@@ -73,15 +74,11 @@ def build_sync_spec(
         dst_vol=config.volumes[dst_ep.volume],
         src_vol_path=vol_paths[src_ep.volume],
         dst_vol_path=vol_paths[dst_ep.volume],
-        src_path=_join(vol_paths[src_ep.volume], src_ep.subdir),
-        dst_path=_join(vol_paths[dst_ep.volume], dst_ep.subdir),
+        src_path=join_subdir(vol_paths[src_ep.volume], src_ep.subdir),
+        dst_path=join_subdir(vol_paths[dst_ep.volume], dst_ep.subdir),
         has_upstream=any(
             s.enabled and s.destination == sync.source for s in config.syncs.values()
         ),
         platform=platform,
         resolved_endpoints=resolved_endpoints,
     )
-
-
-def _join(base: str, subdir: str | None) -> str:
-    return f"{base}/{subdir}" if subdir else base

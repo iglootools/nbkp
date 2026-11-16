@@ -251,7 +251,7 @@ _S3 = "2024-01-03T00:00:00.000Z"
 
 
 class TestPruneSnapshots:
-    @patch("nbkp.snapshots.hardlinks.list_snapshots")
+    @patch("nbkp.snapshots.common.list_snapshots")
     def test_prune_excess(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
@@ -292,7 +292,7 @@ class TestPruneSnapshots:
         assert len(deleted) == 1
         assert _S1 in deleted[0]
 
-    @patch("nbkp.snapshots.hardlinks.list_snapshots")
+    @patch("nbkp.snapshots.common.list_snapshots")
     def test_never_prunes_latest(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
@@ -334,7 +334,7 @@ class TestPruneSnapshots:
         assert _S2 in deleted[0]
         assert (snaps / _S1).exists()
 
-    @patch("nbkp.snapshots.hardlinks.list_snapshots")
+    @patch("nbkp.snapshots.common.list_snapshots")
     def test_dry_run(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
@@ -374,7 +374,7 @@ class TestPruneSnapshots:
         assert (snaps / _S1).exists()
         assert (snaps / _S2).exists()
 
-    @patch("nbkp.snapshots.hardlinks.list_snapshots")
+    @patch("nbkp.snapshots.common.list_snapshots")
     def test_no_excess(self, mock_list: MagicMock, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")

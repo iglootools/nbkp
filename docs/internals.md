@@ -219,7 +219,7 @@ A cancellation inherits the severity of its root cause: a sync cancelled because
 
 **Aborted runs** — When preflight aborts a run, `run` lists the offending syncs and suggests the matching `nbkp preflight troubleshoot` command — same config file (relative to the current directory) and endpoint-selection flags — for step-by-step fixes. In JSON mode the command is the `hint` field.
 
-**`snapshots show` / `snapshots prune`** — accept the same `--strictness`. A sync without snapshots (or, for prune, without `max-snapshots`) is skipped. Otherwise an expected-inactive sync is skipped (an error under `ignore-none`), and a sync with infrastructure errors is an error, or a skip under `ignore-all` — these commands never read or delete snapshots on a destination preflight could not vouch for. Any error makes the command exit 1.
+**`snapshots show` / `snapshots prune`** — accept the same `--strictness`. A sync without snapshots (or, for prune, without `max-snapshots`) is skipped. A disabled sync is always skipped. Otherwise an expected-inactive sync is skipped (an error under `ignore-none`), and a sync with infrastructure errors is an error, or a skip under `ignore-all` — these commands never read or delete snapshots on a destination preflight could not vouch for. Any error makes the command exit 1.
 
 #### Probe real state, not proxies
 

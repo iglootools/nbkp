@@ -1,9 +1,7 @@
-from ..config import Volume
+from ..config import Volume, resolve_endpoint_path
+from ..fsprotocol import NO_HARDLINK_FILESYSTEMS
 from ..remote.dispatch import run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
-from .probes import (
-    resolve_endpoint,
-)
 
 
 def check_btrfs_filesystem(
@@ -15,14 +13,11 @@ def check_btrfs_filesystem(
     reformat a volume that may be fine).
     """
     result = run_on_volume(
-        ["stat", "-f", "-c", "%T", resolve_endpoint(volume, None)],
+        ["stat", "-f", "-c", "%T", resolve_endpoint_path(volume, None)],
         volume,
         resolved_endpoints,
     )
     return result.stdout.strip() == "btrfs" if result.returncode == 0 else None
-
-
-_NO_HARDLINK_FILESYSTEMS = {"vfat", "msdos", "exfat"}
 
 
 def check_hardlink_support(
@@ -30,13 +25,13 @@ def check_hardlink_support(
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
     result = run_on_volume(
-        ["stat", "-f", "-c", "%T", resolve_endpoint(volume, None)],
+        ["stat", "-f", "-c", "%T", resolve_endpoint_path(volume, None)],
         volume,
         resolved_endpoints,
     )
     return (
         result.returncode != 0  # Cannot determine; assume supported
-        or result.stdout.strip() not in _NO_HARDLINK_FILESYSTEMS
+        or result.stdout.strip() not in NO_HARDLINK_FILESYSTEMS
     )
 
 
@@ -46,7 +41,7 @@ def check_btrfs_subvolume(
     resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
     """On btrfs, subvolumes always have inode number 256."""
-    path = resolve_endpoint(volume, subdir)
+    path = resolve_endpoint_path(volume, subdir)
     result = run_on_volume(["stat", "-c", "%i", path], volume, resolved_endpoints)
     return result.returncode == 0 and result.stdout.strip() == "256"
 
@@ -79,7 +74,7 @@ def check_btrfs_mount_option(
     # option regardless of how it got applied. (See find_mountpoint and
     # _check_fstab_entry, which udisks *could* answer but use findmnt for symmetry.)
     result = run_on_volume(
-        ["findmnt", "-T", resolve_endpoint(volume, None), "-n", "-o", "OPTIONS"],
+        ["findmnt", "-T", resolve_endpoint_path(volume, None), "-n", "-o", "OPTIONS"],
         volume,
         resolved_endpoints,
     )

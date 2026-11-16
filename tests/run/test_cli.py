@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from nbkp.cli import app
+from nbkp.config import SyncConfig, SyncEndpoint
+from nbkp.preflight import SyncError
 from nbkp.sync import ProgressMode, SyncFailureKind, SyncResult
 from tests.cliwiring.test_mount import LOCK_FAILED, fake_disks_managed_mount
 
@@ -383,6 +385,50 @@ class TestRunAbortHint:
 
         assert result.exit_code == 1
         assert "nbkp preflight troubleshoot" in result.output
+
+    @patch("nbkp.run.pipeline.run_all_syncs")
+    @patch("nbkp.run.pipeline.check_all_syncs")
+    @patch("nbkp.cliwiring.config.load_config")
+    def test_abort_does_not_list_disabled_syncs(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+        mock_run: MagicMock,
+    ) -> None:
+        """Under ignore-none an inactive sync aborts the run, but a disabled
+        one is never fatal and must not be reported as offending."""
+        config = sample_config()
+        off = SyncConfig(
+            slug="off", source="ep-src", destination="ep-off", enabled=False
+        )
+        config = config.model_copy(
+            update={
+                "sync_endpoints": {
+                    **config.sync_endpoints,
+                    "ep-off": SyncEndpoint(slug="ep-off", volume="nas", subdir="off"),
+                },
+                "syncs": {**config.syncs, "off": off},
+            }
+        )
+        mock_load.return_value = config
+        vol_s = sample_all_active_vol_statuses(config)
+        sync_s = sample_sentinel_only_sync_statuses(config, vol_s)
+        inactive = sync_s["photos-to-nas"]
+        sync_s["off"] = inactive.model_copy(
+            update={"slug": "off", "config": off, "errors": [SyncError.DISABLED]}
+        )
+        mock_checks.return_value = preflight(vol_s, sync_s)
+
+        result = runner.invoke(
+            app,
+            ["run", "--config", "/fake.yaml", "--strictness", "ignore-none"],
+        )
+
+        assert result.exit_code == 1
+        assert "found errors in 1 sync:" in result.output
+        assert "photos-to-nas:" in result.output
+        assert "off:" not in result.output
+        mock_run.assert_not_called()
 
 
 class TestUnknownSyncFilter:

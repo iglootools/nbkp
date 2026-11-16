@@ -16,6 +16,8 @@ from .volume import (
     MountConfig,
     RemoteVolume,
     Volume,
+    join_subdir,
+    resolve_endpoint_path,
 )
 
 __all__ = [
@@ -38,4 +40,6 @@ __all__ = [
     "SyncEndpoint",
     "Volume",
     "_BaseModel",
+    "join_subdir",
+    "resolve_endpoint_path",
 ]

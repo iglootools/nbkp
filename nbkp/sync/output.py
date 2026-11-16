@@ -16,7 +16,7 @@ from ..preflight.status import SyncStatus
 from ..remote.endpoints import ResolvedEndpoints
 from ..snapshots.output import retention_display as _retention_display
 from .results import SyncOutcome, SyncResult
-from .rsync import build_rsync_command
+from .rsync import build_rsync_command, hard_link_dest_suffix, hard_link_link_dest
 
 
 def _resolve_dest_display_path(
@@ -44,7 +44,7 @@ def _snapshot_preview_commands(
             return (
                 "btrfs",
                 cmds,
-                _retention_display(dst_ep.btrfs_snapshots.max_snapshots),
+                _retention_display(dst_ep.max_snapshots),
             )
         case "hard-link":
             cmds = [
@@ -54,7 +54,7 @@ def _snapshot_preview_commands(
             return (
                 "hard-link",
                 cmds,
-                _retention_display(dst_ep.hard_link_snapshots.max_snapshots),
+                _retention_display(dst_ep.max_snapshots),
             )
         case "none":
             return None
@@ -70,8 +70,8 @@ def _preview_rsync_target(
         case "hard-link":
             latest = ss.destination_latest_snapshot
             return (
-                f"{SNAPSHOTS_DIR}/<timestamp>",
-                f"../{latest.name}" if latest else None,
+                hard_link_dest_suffix("<timestamp>"),
+                hard_link_link_dest(latest.name if latest else None),
             )
         case _:
             return (None, None)
