@@ -61,6 +61,8 @@ from nbkp.preflight.volume_checks import check_volume_capabilities, observe_ssh_
 from nbkp.remote.endpoints import EndpointFilter, ResolvedEndpoint, ResolvedEndpoints
 from nbkp.remote.resolution import resolve_all_endpoints, resolve_proxy_chain
 from nbkp.snapshots.common import create_snapshot_timestamp
+from tests.fakes import FakeCommandRunner, completed
+from tests.preflight.fake_hosts import FAILS
 
 
 @pytest.fixture(autouse=True)
@@ -494,40 +496,27 @@ class TestCheckRemoteVolumeLocationExcluded:
 
 
 class TestProbeFilesystemTypeLocal:
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_btrfs(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
+    def test_btrfs(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="btrfs\n"))
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert probe_filesystem_type(vol, {}) == "btrfs"
-        mock_run.assert_called_once_with(
-            ["stat", "-f", "-c", "%T", "/mnt/data"],
-            capture_output=True,
-            text=True,
-            input=None,
-            check=False,
-        )
+        assert probe_filesystem_type(vol, {}, run=run) == "btrfs"
+        assert run.commands == [["stat", "-f", "-c", "%T", "/mnt/data"]]
+        assert run.calls[0].volume == vol
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_stat_failure(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=1, stdout="")
+    def test_stat_failure(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=FAILS)
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert probe_filesystem_type(vol, {}) is None
+        assert probe_filesystem_type(vol, {}, run=run) is None
 
 
 class TestProbeFilesystemTypeRemote:
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_btrfs(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
+    def test_btrfs(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="btrfs\n"))
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert probe_filesystem_type(vol, resolved) == "btrfs"
-        server = config.ssh_endpoints["nas-server"]
-        mock_run.assert_called_once_with(
-            server,
-            ["stat", "-f", "-c", "%T", "/backup"],
-            [],
-            input=None,
-        )
+        assert probe_filesystem_type(vol, resolved, run=run) == "btrfs"
+        assert run.commands == [["stat", "-f", "-c", "%T", "/backup"]]
+        assert run.calls[0].endpoint == resolved["nas"]
 
 
 class TestFilesystemTypeInterpretation:
@@ -551,9 +540,8 @@ class TestFilesystemTypeInterpretation:
 
 
 class TestCheckVolumeCapabilitiesFilesystemProbe:
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_stat_runs_once_per_volume(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="msdos\n")
+    def test_stat_runs_once_per_volume(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="msdos\n"))
         vol, config = _remote_config()
         resolved = _make_resolved(config)
         tools = HostToolCapabilities(
@@ -563,144 +551,114 @@ class TestCheckVolumeCapabilitiesFilesystemProbe:
             has_stat=True,
             has_findmnt=False,
         )
-        caps = check_volume_capabilities(vol, tools, resolved_endpoints=resolved)
+        caps = check_volume_capabilities(
+            vol, tools, resolved_endpoints=resolved, run=run
+        )
         assert caps.is_btrfs_filesystem is False
         assert caps.hardlink_supported is False
-        mock_run.assert_called_once()
+        assert run.commands == [["stat", "-f", "-c", "%T", "/backup"]]
 
 
 class TestCheckBtrfsSubvolumeLocal:
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_is_subvolume(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
+    def test_is_subvolume(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="256\n"))
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_subvolume(vol, None, {}) is True
-        mock_run.assert_called_once_with(
-            ["stat", "-c", "%i", "/mnt/data"],
-            capture_output=True,
-            text=True,
-            input=None,
-            check=False,
-        )
+        assert check_btrfs_subvolume(vol, None, {}, run=run) is True
+        assert run.commands == [["stat", "-c", "%i", "/mnt/data"]]
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_is_subvolume_with_subdir(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
+    def test_is_subvolume_with_subdir(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="256\n"))
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_subvolume(vol, "backup", {}) is True
-        mock_run.assert_called_once_with(
-            ["stat", "-c", "%i", "/mnt/data/backup"],
-            capture_output=True,
-            text=True,
-            input=None,
-            check=False,
-        )
+        assert check_btrfs_subvolume(vol, "backup", {}, run=run) is True
+        assert run.commands == [["stat", "-c", "%i", "/mnt/data/backup"]]
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_not_subvolume(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
+    def test_not_subvolume(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="1234\n"))
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_subvolume(vol, None, {}) is False
+        assert check_btrfs_subvolume(vol, None, {}, run=run) is False
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_stat_failure(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=1, stdout="")
+    def test_stat_failure(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=FAILS)
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_subvolume(vol, None, {}) is False
+        assert check_btrfs_subvolume(vol, None, {}, run=run) is False
 
 
 class TestCheckBtrfsSubvolumeRemote:
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_is_subvolume(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
+    def test_is_subvolume(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="256\n"))
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert check_btrfs_subvolume(vol, None, resolved) is True
-        server = config.ssh_endpoints["nas-server"]
-        mock_run.assert_called_once_with(
-            server,
-            ["stat", "-c", "%i", "/backup"],
-            [],
-            input=None,
-        )
+        assert check_btrfs_subvolume(vol, None, resolved, run=run) is True
+        assert run.commands == [["stat", "-c", "%i", "/backup"]]
+        assert run.calls[0].endpoint == resolved["nas"]
 
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_is_subvolume_with_subdir(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
+    def test_is_subvolume_with_subdir(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="256\n"))
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert check_btrfs_subvolume(vol, "data", resolved) is True
-        server = config.ssh_endpoints["nas-server"]
-        mock_run.assert_called_once_with(
-            server,
-            ["stat", "-c", "%i", "/backup/data"],
-            [],
-            input=None,
-        )
+        assert check_btrfs_subvolume(vol, "data", resolved, run=run) is True
+        assert run.commands == [["stat", "-c", "%i", "/backup/data"]]
 
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_not_subvolume(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
+    def test_not_subvolume(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="1234\n"))
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert check_btrfs_subvolume(vol, None, resolved) is False
+        assert check_btrfs_subvolume(vol, None, resolved, run=run) is False
 
 
 class TestCheckBtrfsMountOptionLocal:
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_option_present(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="rw,relatime,user_subvol_rm_allowed\n",
+    def test_option_present(self) -> None:
+        run = FakeCommandRunner().on(
+            "findmnt", returns=completed(stdout="rw,relatime,user_subvol_rm_allowed\n")
         )
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}) is True
-        mock_run.assert_called_once_with(
-            ["findmnt", "-T", "/mnt/data", "-n", "-o", "OPTIONS"],
-            capture_output=True,
-            text=True,
-            input=None,
-            check=False,
+        assert (
+            check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}, run=run) is True
+        )
+        assert run.commands == [["findmnt", "-T", "/mnt/data", "-n", "-o", "OPTIONS"]]
+
+    def test_option_missing(self) -> None:
+        run = FakeCommandRunner().on(
+            "findmnt", returns=completed(stdout="rw,relatime\n")
+        )
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        assert (
+            check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}, run=run)
+            is False
         )
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_option_missing(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="rw,relatime\n")
+    def test_findmnt_failure(self) -> None:
+        run = FakeCommandRunner().on("findmnt", returns=FAILS)
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}) is False
-
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_findmnt_failure(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=1, stdout="")
-        vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}) is False
+        assert (
+            check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}, run=run)
+            is False
+        )
 
 
 class TestCheckBtrfsMountOptionRemote:
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_option_present(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="rw,relatime,user_subvol_rm_allowed\n",
+    def test_option_present(self) -> None:
+        run = FakeCommandRunner().on(
+            "findmnt", returns=completed(stdout="rw,relatime,user_subvol_rm_allowed\n")
         )
-        vol, config = _remote_config()
-        resolved = _make_resolved(config)
-        assert check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved) is True
-        server = config.ssh_endpoints["nas-server"]
-        mock_run.assert_called_once_with(
-            server,
-            ["findmnt", "-T", "/backup", "-n", "-o", "OPTIONS"],
-            [],
-            input=None,
-        )
-
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_option_missing(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="rw,relatime\n")
         vol, config = _remote_config()
         resolved = _make_resolved(config)
         assert (
-            check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved) is False
+            check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved, run=run)
+            is True
+        )
+        assert run.commands == [["findmnt", "-T", "/backup", "-n", "-o", "OPTIONS"]]
+        assert run.calls[0].endpoint == resolved["nas"]
+
+    def test_option_missing(self) -> None:
+        run = FakeCommandRunner().on(
+            "findmnt", returns=completed(stdout="rw,relatime\n")
+        )
+        vol, config = _remote_config()
+        resolved = _make_resolved(config)
+        assert (
+            check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved, run=run)
+            is False
         )
 
 
@@ -4237,70 +4195,55 @@ class TestParseRsyncVersion:
         assert parse_rsync_version("not rsync\n") == (0, 0, 0)
 
 
+def _rsync_answers(stdout: str, returncode: int = 0) -> FakeCommandRunner:
+    return FakeCommandRunner().on(
+        "rsync", "--version", returns=completed(returncode, stdout)
+    )
+
+
 class TestCheckRsyncVersionLocal:
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_new_enough(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="rsync  version 3.2.7  protocol version 31\n",
+    def test_new_enough(self) -> None:
+        run = _rsync_answers("rsync  version 3.2.7  protocol version 31\n")
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        assert check_rsync_version(vol, {}, run=run) is True
+        assert run.commands == [["rsync", "--version"]]
+
+    def test_too_old(self) -> None:
+        run = _rsync_answers("rsync  version 2.6.9  protocol version 29\n")
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        assert check_rsync_version(vol, {}, run=run) is False
+
+    def test_openrsync(self) -> None:
+        run = _rsync_answers(
+            "openrsync: protocol version 29\nrsync version 2.6.9 compatible\n"
         )
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_rsync_version(vol, {}) is True
+        assert check_rsync_version(vol, {}, run=run) is False
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_too_old(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="rsync  version 2.6.9  protocol version 29\n",
-        )
+    def test_command_failure(self) -> None:
+        run = _rsync_answers("", returncode=1)
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_rsync_version(vol, {}) is False
+        assert check_rsync_version(vol, {}, run=run) is False
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_openrsync(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout=("openrsync: protocol version 29\nrsync version 2.6.9 compatible\n"),
-        )
+    def test_exactly_3_0_0(self) -> None:
+        run = _rsync_answers("rsync  version 3.0.0  protocol version 30\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_rsync_version(vol, {}) is False
-
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_command_failure(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=1, stdout="")
-        vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_rsync_version(vol, {}) is False
-
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_exactly_3_0_0(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="rsync  version 3.0.0  protocol version 30\n",
-        )
-        vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_rsync_version(vol, {}) is True
+        assert check_rsync_version(vol, {}, run=run) is True
 
 
 class TestCheckRsyncVersionRemote:
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_new_enough(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="rsync  version 3.2.7  protocol version 31\n",
-        )
+    def test_new_enough(self) -> None:
+        run = _rsync_answers("rsync  version 3.2.7  protocol version 31\n")
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert check_rsync_version(vol, resolved) is True
+        assert check_rsync_version(vol, resolved, run=run) is True
+        assert run.calls[0].endpoint == resolved["nas"]
 
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_too_old(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="rsync  version 2.6.9  protocol version 29\n",
-        )
+    def test_too_old(self) -> None:
+        run = _rsync_answers("rsync  version 2.6.9  protocol version 29\n")
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert check_rsync_version(vol, resolved) is False
+        assert check_rsync_version(vol, resolved, run=run) is False
 
 
 def _nas_and_local_config() -> Config:
