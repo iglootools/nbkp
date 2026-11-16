@@ -1,6 +1,4 @@
-import sys
 from collections.abc import Sequence
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -27,6 +25,7 @@ from ...cliwiring.config import (
 from ...cliwiring.mount import managed_mount, print_umount_failures
 from ...cliwiring.mount_progress import mount_display_names
 from ...cliwiring.preflight import end_check_step, start_check_step
+from ...cliwiring.runtime import runtime_of
 from ...config import Config
 from ...disks import UmountResult
 from ...disks.output import umount_result_json
@@ -35,20 +34,25 @@ from ...policy import Strictness
 from ...preflight import (
     PreflightError,
     PreflightResult,
-    SyncStatus,
     check_step_count,
-    is_fatal,
 )
 from ...preflight.output import print_human_check
 from ...remote.endpoints import NetworkType, ResolvedEndpoints
 from ...sync import ProgressMode, SyncResult, result_severity
 from ...sync.output import build_human_results_sections
-from ..pipeline import PipelineResult, SyncCallbacks, check_and_run
+from ..pipeline import (
+    PipelineResult,
+    SyncCallbacks,
+    check_and_run,
+    fatal_sync_errors,
+    run_failed,
+)
 
 _ABORT_DETAIL_INDENT = 2
 
 
 def run(
+    ctx: typer.Context,
     config: Annotated[
         Path | None,
         typer.Option(
@@ -140,6 +144,7 @@ def run(
     ] = True,
 ) -> None:
     """Execute all active syncs in dependency order. Supports dry-run, progress display, snapshot creation, and automatic pruning."""
+    runtime = runtime_of(ctx)
     cfg = load_config_or_exit(config, output)
     require_known_syncs(cfg, sync, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
@@ -153,6 +158,7 @@ def run(
     with managed_mount(
         cfg,
         resolved,
+        runtime=runtime,
         mount=mount,
         umount=umount,
         output_format=output,
@@ -174,8 +180,8 @@ def run(
         )
         pipeline = check_and_run(
             cfg,
-            clock=lambda: datetime.now(UTC),
-            platform=sys.platform,
+            clock=runtime.clock,
+            platform=runtime.platform,
             strictness=strictness,
             dry_run=dry_run,
             only_syncs=sync,
@@ -188,15 +194,14 @@ def run(
             resolved_endpoints=resolved,
             mount_observations=mount_observations,
             exclude_locations=exclude_location or [],
+            rsync=runtime.rsync,
+            run=runtime.run,
+            which=runtime.which,
         )
     _print_outcome(
         pipeline, cfg, resolved, output, strictness, dry_run, hint, umount_results
     )
-    if (
-        pipeline.has_preflight_errors
-        or pipeline.has_sync_failures
-        or any(not r.success for r in umount_results)
-    ):
+    if run_failed(pipeline, umount_results):
         raise typer.Exit(1)
 
 
@@ -288,11 +293,9 @@ def _print_outcome(
 ) -> None:
     match (output, pipeline.has_preflight_errors):
         case (OutputFormat.JSON, aborted):
-            echo_json(
-                _json_payload(pipeline, hint if aborted else None, umount_results)
-            )
+            echo_json(run_json(pipeline, hint if aborted else None, umount_results))
         case (OutputFormat.HUMAN, True):
-            Console(stderr=True).print(_abort_message(pipeline, strictness, hint))
+            Console(stderr=True).print(abort_message(pipeline, strictness, hint))
         case (OutputFormat.HUMAN, False):
             Console().print(
                 _results_panel(pipeline, cfg, resolved, strictness, dry_run)
@@ -301,11 +304,14 @@ def _print_outcome(
         print_umount_failures(umount_results, mount_display_names(cfg))
 
 
-def _json_payload(
+def run_json(
     pipeline: PipelineResult,
     hint: str | None,
     umount_results: list[UmountResult],
 ) -> dict[str, object]:
+    """``run -o json``: the preflight statuses, the sync results, the umount
+    outcome of each mount-managed volume, and, when preflight aborted the
+    run, the troubleshoot command (*hint*)."""
     return {
         "volumes": list(pipeline.preflight.volume_statuses.values()),
         "syncs": list(pipeline.preflight.sync_statuses.values()),
@@ -318,21 +324,12 @@ def _json_payload(
     }
 
 
-def _fatal_sync_errors(
-    sync_statuses: dict[str, SyncStatus], strictness: Strictness
-) -> dict[str, list[str]]:
-    """Errors of the syncs that made preflight abort under *strictness*."""
-    return {
-        slug: sorted(e.value for e in s.errors)
-        for slug, s in sync_statuses.items()
-        if is_fatal(s, strictness)
-    }
-
-
-def _abort_message(
+def abort_message(
     pipeline: PipelineResult, strictness: Strictness, hint: str
 ) -> RenderableType:
-    errored = _fatal_sync_errors(pipeline.preflight.sync_statuses, strictness)
+    """Why preflight aborted the run: each sync whose errors are fatal under
+    *strictness*, and the troubleshoot command (*hint*) that explains them."""
+    errored = fatal_sync_errors(pipeline.preflight.sync_statuses, strictness)
     plural = "s" if len(errored) != 1 else ""
     # Text, not markup: slugs and error values are not nbkp-authored markup.
     return Group(

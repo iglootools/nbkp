@@ -17,6 +17,7 @@ from nbkp.config import Config
 from nbkp.config.testkit import config_show_config
 from nbkp.demo.cli import app
 from nbkp.preflight.testkit import check_config, troubleshoot_config
+from tests.fakes import FakeCommandRunner, fake_runtime
 
 
 @pytest.mark.parametrize(
@@ -35,16 +36,14 @@ def test_demo_config_builder_validates(builder) -> None:
     assert isinstance(config, Config)
 
 
-def test_demo_output_renders_all_sections(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_demo_output_renders_all_sections() -> None:
     """`nbkp demo output` renders every human-output function without error."""
     # Gathering troubleshoot facts discovers the unlocked LUKS mapper with lsblk;
     # no real host commands in unit tests (see test_troubleshoot_mapper.py).
-    monkeypatch.setattr(
-        "nbkp.preflight.output.troubleshoot.discover_cleartext_device",
-        lambda *_, **__: None,
-    )
-    result = CliRunner().invoke(app, ["output"])
+    run = FakeCommandRunner()
+    result = CliRunner().invoke(app, ["output"], obj=fake_runtime(run=run))
     assert result.exit_code == 0, result.output
+    assert run.commands_starting_with("lsblk")
     # Sanity: the command renders panels named after the output functions.
     assert "print_human_config" in result.output
     assert "print_human_troubleshoot" in result.output

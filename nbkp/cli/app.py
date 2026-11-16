@@ -3,6 +3,7 @@ from typing import Annotated
 
 import typer
 
+from ..cliwiring.runtime import runtime_of
 from ..config.cli import app as config_app
 from ..credentials.cli import app as credentials_app
 from ..demo import app as demo_app
@@ -42,6 +43,9 @@ def _main(
         ),
     ] = None,
 ) -> None:
+    # The subcommand runs with the real host I/O, unless the caller passed its
+    # own Runtime as the context object (tests do, with fakes).
+    runtime_of(ctx)
     # Every remote command of the invoked subcommand shares one SSH connection
     # per host, closed when the subcommand returns or fails, after its own
     # cleanup (unmounting included).

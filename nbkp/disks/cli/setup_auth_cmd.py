@@ -1,4 +1,3 @@
-import getpass
 from pathlib import Path
 from typing import Annotated
 
@@ -6,12 +5,14 @@ import typer
 
 from ...clidisplay import OutputFormat, echo_json
 from ...cliwiring.config import load_config_or_exit
+from ...cliwiring.runtime import runtime_of
 from ..auth import AuthRuleBlock, generate_auth_rules
 from . import app
 
 
 @app.command("setup-auth")
 def setup_auth(
+    ctx: typer.Context,
     config: Annotated[
         Path | None,
         typer.Option(
@@ -42,7 +43,9 @@ def setup_auth(
 ) -> None:
     """Generate the polkit rule for udisks-based mount management."""
     cfg = load_config_or_exit(config, output)
-    rules = generate_auth_rules(cfg, user if user is not None else getpass.getuser())
+    rules = generate_auth_rules(
+        cfg, user if user is not None else runtime_of(ctx).local_user()
+    )
     blocks = list(rules.blocks())
     match output:
         case OutputFormat.JSON:

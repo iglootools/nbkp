@@ -1,8 +1,14 @@
-"""Tests for the credentials keyring-status command."""
+"""Tests for the credentials keyring-status command.
+
+The command reads passphrases through the runtime's environment (``env``
+provider) and credential command runner (``command`` provider), which the
+tests fake; the JSON view is also tested from prefetch results.
+"""
 
 import json
+import subprocess
+from collections.abc import Mapping
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 from typer.testing import Result
 
@@ -15,12 +21,14 @@ from nbkp.config import (
     MountConfig,
 )
 from nbkp.config.testkit import write_config
-from nbkp.credentials import CredentialError, CredentialErrorReason
+from nbkp.credentials import CommandFn, CredentialErrorReason, PassphrasePrefetch
+from nbkp.credentials.cli.keyring_status_cmd import keyring_status_json
 from tests.clidisplay import runner
+from tests.fakes import completed, fake_runtime
 
 
 def _config(
-    provider: CredentialProvider = CredentialProvider.KEYRING,
+    provider: CredentialProvider = CredentialProvider.ENV,
     passphrase_id: str | None = "disk[1]",
 ) -> Config:
     mount = (
@@ -33,37 +41,39 @@ def _config(
     )
     return Config(
         credential_provider=provider,
+        credential_command=(
+            ["pass", "show", "{id}"] if provider is CredentialProvider.COMMAND else None
+        ),
         volumes={"usb": LocalVolume(slug="usb", path="/mnt/usb", mount=mount)},
     )
 
 
-def _invoke(config_path: Path, *args: str) -> Result:
+def _invoke(
+    config_path: Path,
+    *args: str,
+    environ: Mapping[str, str] | None = None,
+    run_credential_command: CommandFn | None = None,
+) -> Result:
     return runner.invoke(
-        app, ["credentials", "keyring-status", "--config", str(config_path), *args]
+        app,
+        ["credentials", "keyring-status", "--config", str(config_path), *args],
+        obj=fake_runtime(
+            environ=environ, run_credential_command=run_credential_command
+        ),
     )
 
 
-class TestKeyringStatus:
-    @patch("nbkp.credentials.cli.keyring_status_cmd.retrieve_passphrase")
-    def test_human_keeps_brackets_in_passphrase_id(
-        self, mock_retrieve: MagicMock, tmp_path: Path
-    ) -> None:
-        config_path = write_config(tmp_path, _config())
-        mock_retrieve.return_value = "secret"
-        result = _invoke(config_path)
-        assert result.exit_code == 0
-        assert "disk[1]" in result.output
-
-    @patch("nbkp.credentials.cli.keyring_status_cmd.retrieve_passphrase")
-    def test_json_reports_reason(
-        self, mock_retrieve: MagicMock, tmp_path: Path
-    ) -> None:
-        config_path = write_config(tmp_path, _config())
-        mock_retrieve.side_effect = CredentialError(
-            "missing", reason=CredentialErrorReason.NOT_FOUND
+class TestKeyringStatusJson:
+    def test_reports_availability_and_reason(self) -> None:
+        missing = PassphrasePrefetch(
+            "disk[1]",
+            ("usb",),
+            success=False,
+            detail="missing",
+            reason=CredentialErrorReason.NOT_FOUND,
         )
-        result = _invoke(config_path, "-o", "json")
-        assert json.loads(result.stdout) == {
+
+        assert keyring_status_json(_config(CredentialProvider.KEYRING), [missing]) == {
             "provider": "keyring",
             "checked": True,
             "passphrases": {
@@ -76,15 +86,47 @@ class TestKeyringStatus:
             },
         }
 
-    @patch("nbkp.credentials.cli.keyring_status_cmd.retrieve_passphrase")
-    def test_prompt_provider_never_prompts(
-        self, mock_retrieve: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_unchecked_provider_lists_ids_only(self) -> None:
+        assert keyring_status_json(_config(CredentialProvider.PROMPT), []) == {
+            "provider": "prompt",
+            "checked": False,
+            "passphrases": {"disk[1]": {"volumes": ["usb"]}},
+        }
+
+
+class TestKeyringStatus:
+    def test_human_keeps_brackets_in_passphrase_id(self, tmp_path: Path) -> None:
+        config_path = write_config(tmp_path, _config())
+
+        result = _invoke(config_path, environ={"NBKP_PASSPHRASE_DISK[1]": "secret"})
+
+        assert result.exit_code == 0
+        assert "disk[1]" in result.output
+        assert "✓ available" in result.output
+
+    def test_json_reports_why_a_passphrase_is_missing(self, tmp_path: Path) -> None:
+        config_path = write_config(tmp_path, _config(CredentialProvider.COMMAND))
+        commands: list[list[str]] = []
+
+        def pass_show(command: list[str]) -> subprocess.CompletedProcess[str]:
+            commands.append(command)
+            return completed(1, stderr="not in the password store")
+
+        result = _invoke(config_path, "-o", "json", run_credential_command=pass_show)
+
+        assert commands == [["pass", "show", "disk[1]"]]
+        [entry] = json.loads(result.stdout)["passphrases"].values()
+        assert (entry["available"], entry["reason"]) == (False, "command-failed")
+        assert "not in the password store" in entry["error"]
+
+    def test_prompt_provider_never_prompts(self, tmp_path: Path) -> None:
         config_path = write_config(
             tmp_path, _config(provider=CredentialProvider.PROMPT)
         )
+
         result = _invoke(config_path, "-o", "json")
-        mock_retrieve.assert_not_called()
+
+        assert result.exit_code == 0
         data = json.loads(result.stdout)
         assert data["checked"] is False
         assert data["passphrases"] == {"disk[1]": {"volumes": ["usb"]}}

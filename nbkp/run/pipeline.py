@@ -6,19 +6,23 @@ tests.  Display/output, mount lifecycle, and config loading are the
 caller's responsibility.
 """
 
+import shutil
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
 from ..config import Config
-from ..disks import MountObservation
+from ..disks import MountObservation, UmountResult, any_failed
 from ..policy import Severity, Strictness
 from ..preflight import (
     PreflightError,
     PreflightResult,
+    SyncStatus,
     check_all_syncs,
     has_fatal_errors,
+    is_fatal,
 )
+from ..remote.dispatch import CommandLocator, VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 from ..sync.modes import RsyncRunner
 from ..sync.orchestration import run_all_syncs
@@ -30,6 +34,9 @@ __all__ = [
     "Strictness",
     "SyncCallbacks",
     "check_and_run",
+    "fatal_sync_errors",
+    "run_checked",
+    "run_failed",
     "sync_failed",
 ]
 
@@ -80,6 +87,8 @@ def check_and_run(
     mount_observations: dict[str, MountObservation] | None = None,
     exclude_locations: Collection[str] = (),
     rsync: RsyncRunner = run_rsync,
+    run: VolumeCommandRunner = run_on_volume,
+    which: CommandLocator = shutil.which,
 ) -> PipelineResult:
     """Run preflight checks, then execute syncs if no fatal errors.
 
@@ -98,6 +107,9 @@ def check_and_run(
         Called after preflight completes but before syncs start, whether
         or not there are fatal errors, so the CLI can print the check
         table in both cases.
+    rsync, run, which:
+        Run the transfers, run commands on volume hosts (probes and
+        snapshots), and find tools on the orchestrator.
     """
     preflight = check_all_syncs(
         config,
@@ -108,10 +120,48 @@ def check_and_run(
         dry_run=dry_run,
         mount_observations=mount_observations,
         exclude_locations=exclude_locations,
+        run=run,
+        which=which,
     )
     if on_checks_done is not None:
         on_checks_done(preflight)
+    return run_checked(
+        config,
+        preflight,
+        clock=clock,
+        platform=platform,
+        strictness=strictness,
+        dry_run=dry_run,
+        only_syncs=only_syncs,
+        progress=progress,
+        prune=prune,
+        callbacks=callbacks,
+        resolved_endpoints=resolved_endpoints,
+        rsync=rsync,
+        run=run,
+    )
 
+
+def run_checked(
+    config: Config,
+    preflight: PreflightResult,
+    *,
+    clock: Callable[[], datetime],
+    platform: str,
+    strictness: Strictness = Strictness.IGNORE_INACTIVE,
+    dry_run: bool = False,
+    only_syncs: list[str] | None = None,
+    progress: ProgressMode | None = None,
+    prune: bool = True,
+    callbacks: SyncCallbacks | None = None,
+    resolved_endpoints: ResolvedEndpoints | None = None,
+    rsync: RsyncRunner = run_rsync,
+    run: VolumeCommandRunner = run_on_volume,
+) -> PipelineResult:
+    """The second half of :func:`check_and_run`: abort when *preflight*
+    found errors fatal under *strictness*, else run the syncs and judge
+    their results.
+    """
     if has_fatal_errors(preflight.sync_statuses, strictness=strictness):
         return PipelineResult(
             preflight=preflight,
@@ -136,6 +186,7 @@ def check_and_run(
             on_sync_end=cb.on_sync_end,
             resolved_endpoints=resolved_endpoints,
             rsync=rsync,
+            run_command=run,
         )
         return PipelineResult(
             preflight=preflight,
@@ -143,3 +194,25 @@ def check_and_run(
             has_preflight_errors=False,
             has_sync_failures=any(sync_failed(r, strictness) for r in results),
         )
+
+
+def fatal_sync_errors(
+    sync_statuses: dict[str, SyncStatus], strictness: Strictness
+) -> dict[str, list[str]]:
+    """Errors of the syncs that made preflight abort under *strictness*."""
+    return {
+        slug: sorted(e.value for e in s.errors)
+        for slug, s in sync_statuses.items()
+        if is_fatal(s, strictness)
+    }
+
+
+def run_failed(pipeline: PipelineResult, umount_results: list[UmountResult]) -> bool:
+    """Whether a run exits non-zero: preflight aborted it, a sync failed
+    under its strictness, or a volume could not be unmounted or locked
+    afterwards (a drive possibly left mounted or unlocked)."""
+    return (
+        pipeline.has_preflight_errors
+        or pipeline.has_sync_failures
+        or any_failed(umount_results)
+    )

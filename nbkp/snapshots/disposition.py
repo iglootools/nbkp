@@ -1,8 +1,17 @@
-"""Shared candidate classification for ``snapshots show`` and ``prune``."""
+"""Shared candidate classification for ``snapshots show`` and ``prune``,
+and what their results mean for the command's outcome."""
+
+from collections.abc import Sequence
 
 from ..policy import Strictness
 from ..preflight import SyncStatus, is_fatal
-from .models import SnapshotErrorKind, SnapshotResultError, SnapshotSkipReason
+from .models import (
+    PruneResult,
+    ShowResult,
+    SnapshotErrorKind,
+    SnapshotResultError,
+    SnapshotSkipReason,
+)
 
 
 def _preflight_error(
@@ -34,3 +43,22 @@ def preflight_disposition(
             return (SnapshotSkipReason.INACTIVE, None)
         case (False, False, False):
             return (SnapshotSkipReason.PREFLIGHT_ERRORS, None)
+
+
+def has_errors(results: Sequence[ShowResult | PruneResult]) -> bool:
+    """Whether ``snapshots show`` / ``prune`` exits non-zero."""
+    return any(r.error is not None for r in results)
+
+
+def failed_in_preflight(
+    results: Sequence[ShowResult | PruneResult],
+    sync_statuses: dict[str, SyncStatus],
+) -> bool:
+    """Whether a sync errored because preflight found it inactive or broken.
+
+    Those are the errors ``preflight troubleshoot`` explains; a snapshot
+    operation failing on an active sync is not.
+    """
+    return any(
+        r.error is not None and not sync_statuses[r.sync_slug].active for r in results
+    )

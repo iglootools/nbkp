@@ -2,7 +2,7 @@
 
 import subprocess
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
 
@@ -202,6 +202,18 @@ class UmountResult:
     success: bool
     failure_reason: UmountFailureReason | None = None
     failure: LifecycleFailure | None = None
+
+
+def any_failed(results: Sequence[MountResult | UmountResult]) -> bool:
+    """Whether a mount or umount pass left a volume short of the state it
+    was asked for, which fails the command that ran it."""
+    return any(not r.success for r in results)
+
+
+def refused_by_polkit(results: Sequence[MountResult]) -> bool:
+    """Whether udisks refused an unlock or mount for want of a polkit rule,
+    the failure ``disks setup-auth`` fixes."""
+    return any(r.failure_reason is MountFailureReason.NOT_AUTHORIZED for r in results)
 
 
 def lifecycle_volumes(

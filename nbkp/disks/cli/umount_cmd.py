@@ -1,3 +1,4 @@
+from functools import partial
 from pathlib import Path
 from typing import Annotated
 
@@ -7,9 +8,11 @@ from ...clidisplay import OutputFormat
 from ...clidisplay.invocation import Invocation, print_troubleshoot_hint
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...cliwiring.mount_progress import LifecycleProgress, mount_display_names
+from ...cliwiring.runtime import Runtime, runtime_of
 from ...config import Config
 from ...remote.endpoints import NetworkType, ResolvedEndpoints
-from ..lifecycle import UmountResult, umount_volumes
+from ..lifecycle import UmountResult, any_failed, umount_volumes
+from ..mount_checks import check_mount_status
 from ..plan import plan_lifecycle
 from . import app
 from .helpers import probe_and_show_status, require_known_names
@@ -18,6 +21,7 @@ from .helpers.plan_output import show_plan
 
 @app.command("umount")
 def umount(
+    ctx: typer.Context,
     config: Annotated[
         Path | None,
         typer.Option(
@@ -70,21 +74,30 @@ def umount(
     ] = False,
 ) -> None:
     """Umount volumes and lock LUKS. Umounts all volumes with mount config, or specific ones via --name."""
+    runtime = runtime_of(ctx)
     cfg = load_config_or_exit(config, output)
     require_known_names(cfg, name, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
 
     if dry_run:
         show_plan(
-            plan_lifecycle(cfg, resolved, mounting=False, names=name),
+            plan_lifecycle(
+                cfg,
+                resolved,
+                mounting=False,
+                names=name,
+                probe=partial(check_mount_status, run=runtime.run),
+            ),
             mount_display_names(cfg),
             output,
         )
         return
 
-    results = _umount_with_progress(cfg, resolved, name, output)
-    probe_and_show_status(cfg, resolved, output, name, umount_results=results)
-    if any(not r.success for r in results):
+    results = _umount_with_progress(cfg, resolved, name, output, runtime)
+    probe_and_show_status(
+        cfg, resolved, output, name, umount_results=results, run=runtime.run
+    )
+    if any_failed(results):
         if output is OutputFormat.HUMAN:
             print_troubleshoot_hint(
                 Invocation.of(
@@ -102,6 +115,7 @@ def _umount_with_progress(
     resolved: ResolvedEndpoints,
     names: list[str] | None,
     output: OutputFormat,
+    runtime: Runtime,
 ) -> list[UmountResult]:
     """Umount and lock, with a progress bar for humans."""
     progress = LifecycleProgress.create(
@@ -119,6 +133,7 @@ def _umount_with_progress(
             names=names,
             on_umount_start=progress.on_umount_start,
             on_umount_end=progress.on_umount_end,
+            run=runtime.run,
         )
     finally:
         progress.stop_all()

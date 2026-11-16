@@ -4,10 +4,10 @@ from rich.text import Text
 
 from ....clidisplay import OutputFormat, echo_json, severity_style, severity_symbol
 from ....policy import Severity
-from ...plan import VolumePlan, plan_json
+from ...plan import VolumePlan, plan_incomplete, plan_json
 
 
-def _plan_line(plan: VolumePlan, name: str) -> Text:
+def plan_line(plan: VolumePlan, name: str) -> Text:
     """One human line: ``would unlock, mount <name>``, ``nothing to do``, or
     ``cannot plan`` when the state could not be probed."""
     severity = Severity.ERROR if plan.probe_failed else Severity.OK
@@ -32,9 +32,7 @@ def show_plan(
 ) -> None:
     """Print a dry-run plan as lines (human) or ``{"dry_run": …}`` (JSON).
 
-    Exits 1 when a volume's state could not be probed: the real run would
-    fail on it too, and a dry run that cannot tell what it would do must not
-    report success.
+    Exits 1 when the plan is incomplete (:func:`plan_incomplete`).
     """
     match output_format:
         case OutputFormat.JSON:
@@ -44,9 +42,9 @@ def show_plan(
             console.print(Text("Dry run — no udisksctl changes made.", style="bold"))
             for plan in plans:
                 console.print(
-                    _plan_line(
+                    plan_line(
                         plan, display_names.get(plan.volume_slug, plan.volume_slug)
                     )
                 )
-    if any(plan.probe_failed for plan in plans):
+    if plan_incomplete(plans):
         raise typer.Exit(1)

@@ -1,8 +1,8 @@
 """Tests for `nbkp demo seed` helpers that need no Docker."""
 
 import shlex
+import subprocess
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
@@ -12,13 +12,8 @@ from nbkp.demo.cli import app
 from nbkp.demo.cli.cmd_handler import seed as seed_module
 from nbkp.demo.cli.cmd_handler.seed import SeedError, SeedResult, seed_demo, seed_plan
 from nbkp.demo.cli.seed_cmd import commands_script
-from nbkp.disks.lifecycle import MountResult, UmountResult
-from nbkp.disks.models import (
-    LifecycleFailure,
-    LifecycleStep,
-    MountFailureReason,
-    UmountFailureReason,
-)
+from tests.cliwiring.test_mount import UUID, encrypted_volume
+from tests.fakes import FakeCommandRunner, completed
 
 
 class TestDryRun:
@@ -47,37 +42,52 @@ class TestDockerExtra:
             seed_demo(tmp_path, docker=True)
 
 
+_ENC = Config(volumes={"enc": encrypted_volume()})
+
+
+def _drive(
+    *, mounts: bool = True, **udisks: subprocess.CompletedProcess[str]
+) -> FakeCommandRunner:
+    """``enc`` plugged in and locked, unlocked once unlocked, and mounted once
+    mounted if it *mounts*; the ``udisksctl`` subcommands in *udisks* answer
+    as given."""
+    run = FakeCommandRunner()
+    for step, answer in udisks.items():
+        run.on("udisksctl", step, returns=answer)
+    return run.on(
+        "lsblk",
+        returns=[
+            completed(stdout="sdb part\n"),
+            completed(stdout=f"sdb part\nluks-{UUID} crypt\n"),
+        ],
+    ).on(
+        "findmnt",
+        "--source",
+        returns=[
+            completed(1),
+            completed(stdout="/mnt/enc\n") if mounts else completed(1),
+        ],
+    )
+
+
 class TestUmountFailure:
-    def test_failed_umount_is_reported(self, tmp_path: Path) -> None:
+    def test_failed_umount_is_reported(self) -> None:
         """Regression: the umount result was ignored, leaving LUKS unlocked."""
         ends: list[tuple[str, str]] = []
+        run = _drive(unmount=completed(1, stderr="busy"))
         with (
-            patch.object(seed_module, "mount_volumes", return_value=[]),
-            patch.object(
-                seed_module,
-                "umount_volumes",
-                return_value=[
-                    UmountResult(
-                        "enc",
-                        success=False,
-                        failure_reason=UmountFailureReason.UNMOUNT_FAILED,
-                        failure=LifecycleFailure(
-                            step=LifecycleStep.UNMOUNT, exit_code=1, message="busy"
-                        ),
-                    )
-                ],
-            ),
-            patch.object(seed_module, "LUKS_PASSPHRASE", "x", create=True),
             pytest.raises(
                 SeedError, match=r"Umount failed: umount failed \(exit 1\): busy"
             ),
             seed_module._encrypted_volume_mounted(
-                Config(),
+                _ENC,
                 {},
                 True,
                 seed_module._Steps(
                     None, lambda label, sev, _d: ends.append((label, sev))
                 ),
+                passphrase_fn=lambda _: "x",
+                run=run,
             ),
         ):
             pass
@@ -85,30 +95,24 @@ class TestUmountFailure:
 
     def test_failed_mount_still_locks(self) -> None:
         """A mount that fails after unlocking must not leave LUKS unlocked."""
+        run = _drive(mounts=False, mount=completed(1, stderr="no fs"))
         with (
-            patch.object(
-                seed_module,
-                "mount_volumes",
-                return_value=[
-                    MountResult(
-                        "enc",
-                        success=False,
-                        failure_reason=MountFailureReason.MOUNT_FAILED,
-                        failure=LifecycleFailure(
-                            step=LifecycleStep.MOUNT, exit_code=1, message="no fs"
-                        ),
-                    )
-                ],
-            ),
-            patch.object(seed_module, "umount_volumes", return_value=[]) as umount,
-            patch.object(seed_module, "LUKS_PASSPHRASE", "x", create=True),
             pytest.raises(SeedError, match="Mount failed: .*no fs"),
             seed_module._encrypted_volume_mounted(
-                Config(), {}, True, seed_module._Steps(None, None)
+                _ENC,
+                {},
+                True,
+                seed_module._Steps(None, None),
+                passphrase_fn=lambda _: "x",
+                run=run,
             ),
         ):
             pass
-        umount.assert_called_once()
+        assert [c[1] for c in run.commands_starting_with("udisksctl")] == [
+            "unlock",
+            "mount",
+            "lock",
+        ]
 
 
 class TestCommandsScript:

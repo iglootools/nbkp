@@ -302,12 +302,16 @@ def gather_remediation_facts(
 
 
 def with_remediation_facts(
-    issues: list[TroubleshootIssue], ctx: TroubleshootContext
+    issues: list[TroubleshootIssue],
+    ctx: TroubleshootContext,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> TroubleshootContext:
+    """*ctx* with its facts gathered through *run*, unless it has them."""
     return (
         ctx
         if ctx.facts is not None
-        else replace(ctx, facts=gather_remediation_facts(issues, ctx))
+        else replace(ctx, facts=gather_remediation_facts(issues, ctx, run=run))
     )
 
 
@@ -398,9 +402,10 @@ def print_human_troubleshoot(
     resolved_endpoints: ResolvedEndpoints | None = None,
     context: TroubleshootContext | None = None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> None:
     """*context* carries the invocation flags and local user used in
-    suggested commands.
+    suggested commands; facts it lacks are gathered through *run*.
     """
     con = console if console is not None else Console()
     ctx = context or TroubleshootContext(
@@ -408,7 +413,7 @@ def print_human_troubleshoot(
     )
     issues = collect_issues(ssh_statuses, vol_statuses, sync_statuses, strictness)
     if issues:
-        print_issues(con, issues, with_remediation_facts(issues, ctx))
+        print_issues(con, issues, with_remediation_facts(issues, ctx, run=run))
     else:
         con.print("No issues found. All volumes and syncs are active.")
 
@@ -424,11 +429,13 @@ def troubleshoot_json(
     ctx: TroubleshootContext,
     *,
     has_fatal_errors: bool,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> dict[str, object]:
     """``code`` is the stable enum member name (``RSYNC_NOT_FOUND``) and the
     identifier to branch on; ``remediation`` is the human fix as plain text.
+    Facts *ctx* lacks are gathered through *run*.
     """
-    ctx = with_remediation_facts(issues, ctx)
+    ctx = with_remediation_facts(issues, ctx, run=run)
     return {
         "has_fatal_errors": has_fatal_errors,
         "issues": [

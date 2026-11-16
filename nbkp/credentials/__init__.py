@@ -100,7 +100,7 @@ type CommandFn = Callable[[list[str]], subprocess.CompletedProcess[str]]
 """Runs the ``command`` provider's command, capturing its output as text."""
 
 
-def _run_captured(command: list[str]) -> subprocess.CompletedProcess[str]:
+def run_captured(command: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, capture_output=True, text=True, check=False)
 
 
@@ -144,7 +144,7 @@ def retrieve_passphrase(
     command_template: list[str] | None = None,
     environ: Mapping[str, str] = os.environ,
     prompt: PromptFn | None = None,
-    run: CommandFn = _run_captured,
+    run: CommandFn = run_captured,
 ) -> str:
     """``environ`` is where the ``env`` provider looks the passphrase up;
     ``prompt`` is how the ``prompt`` provider asks for it; ``run`` is how the
@@ -188,10 +188,13 @@ def build_passphrase_fn(
     command_template: list[str] | None,
     *,
     prompt: PromptFn,
+    environ: Mapping[str, str] = os.environ,
+    run: CommandFn = run_captured,
 ) -> tuple[Callable[[str], str], PassphraseCache]:
     """Build a passphrase retrieval function backed by a per-run cache.
 
-    *prompt* is used only by the ``prompt`` provider.
+    *prompt*, *environ* and *run* are handed to :func:`retrieve_passphrase`:
+    each is used only by its own provider.
     """
     cache = PassphraseCache()
 
@@ -199,7 +202,7 @@ def build_passphrase_fn(
         return cache.get_or_retrieve(
             passphrase_id,
             lambda pid: retrieve_passphrase(
-                pid, provider, command_template, prompt=prompt
+                pid, provider, command_template, environ, prompt, run
             ),
         )
 

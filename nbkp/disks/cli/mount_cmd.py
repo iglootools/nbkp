@@ -1,3 +1,4 @@
+from functools import partial
 from pathlib import Path
 from typing import Annotated
 
@@ -10,11 +11,12 @@ from ...clidisplay.invocation import Invocation, print_troubleshoot_hint
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...cliwiring.credentials import prompt_passphrase
 from ...cliwiring.mount_progress import LifecycleProgress, mount_display_names
+from ...cliwiring.runtime import Runtime, runtime_of
 from ...config import Config
 from ...credentials import build_passphrase_fn, prefetch_passphrases
 from ...remote.endpoints import NetworkType, ResolvedEndpoints
-from ..lifecycle import MountResult, mount_volumes
-from ..models import MountFailureReason
+from ..lifecycle import MountResult, any_failed, mount_volumes, refused_by_polkit
+from ..mount_checks import check_mount_status
 from ..observation import build_mount_observations
 from ..output import (
     build_mount_status_json,
@@ -35,6 +37,7 @@ from .helpers.plan_output import show_plan
 
 @app.command("mount")
 def mount(
+    ctx: typer.Context,
     config: Annotated[
         Path | None,
         typer.Option(
@@ -87,26 +90,33 @@ def mount(
     ] = False,
 ) -> None:
     """Unlock LUKS and mount volumes. Mounts all volumes with mount config, or specific ones via --name."""
+    runtime = runtime_of(ctx)
     cfg = load_config_or_exit(config, output)
     require_known_names(cfg, name, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
 
     if dry_run:
         show_plan(
-            plan_lifecycle(cfg, resolved, mounting=True, names=name),
+            plan_lifecycle(
+                cfg,
+                resolved,
+                mounting=True,
+                names=name,
+                probe=partial(check_mount_status, run=runtime.run),
+            ),
             mount_display_names(cfg),
             output,
         )
         return
 
-    results = _mount_with_progress(cfg, resolved, name, output)
+    results = _mount_with_progress(cfg, resolved, name, output, runtime)
     _show_results(cfg, resolved, results, name, output)
     invocation = Invocation.of(
         config, location, exclude_location, network.value if network else None
     )
     if output is OutputFormat.HUMAN:
         _print_auth_hint(results, invocation)
-    if any(not r.success for r in results):
+    if any_failed(results):
         if output is OutputFormat.HUMAN:
             print_troubleshoot_hint(invocation)
         raise typer.Exit(1)
@@ -117,9 +127,14 @@ def _mount_with_progress(
     resolved: ResolvedEndpoints,
     names: list[str] | None,
     output: OutputFormat,
+    runtime: Runtime,
 ) -> list[MountResult]:
     passphrase_fn, cache = build_passphrase_fn(
-        cfg.credential_provider, cfg.credential_command, prompt=prompt_passphrase
+        cfg.credential_provider,
+        cfg.credential_command,
+        prompt=prompt_passphrase,
+        environ=runtime.environ,
+        run=runtime.run_credential_command,
     )
     progress = LifecycleProgress.create(
         cfg,
@@ -147,6 +162,7 @@ def _mount_with_progress(
             names=names,
             on_mount_start=progress.on_mount_start,
             on_mount_end=progress.on_mount_end,
+            run=runtime.run,
         )
     finally:
         progress.stop_all()
@@ -171,7 +187,7 @@ def _show_results(
             echo_json(
                 [
                     *(
-                        _mount_result_entry(
+                        mount_result_entry(
                             display_names.get(r.volume_slug, r.volume_slug), r
                         )
                         for r in results
@@ -183,7 +199,9 @@ def _show_results(
             _show_human_results(cfg, resolved, results, names, display_names)
 
 
-def _mount_result_entry(name: str, result: MountResult) -> dict[str, object]:
+def mount_result_entry(name: str, result: MountResult) -> dict[str, object]:
+    """The ``-o json`` entry of a volume *disks mount* acted on: the state it
+    left and, on failure, why."""
     return {
         "volume": name,
         "device_present": result.device_present,
@@ -226,7 +244,7 @@ def _show_human_results(
 
 def _print_auth_hint(results: list[MountResult], invocation: Invocation) -> None:
     """Point at ``disks setup-auth`` when polkit refused an unlock or mount."""
-    if any(r.failure_reason is MountFailureReason.NOT_AUTHORIZED for r in results):
+    if refused_by_polkit(results):
         console = Console()
         console.print(
             "udisks refused the operation (no polkit rule). Generate one with:"

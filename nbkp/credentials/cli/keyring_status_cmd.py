@@ -8,6 +8,7 @@ from rich.text import Text
 
 from ...clidisplay import OutputFormat, echo_json
 from ...cliwiring.config import load_config_or_exit
+from ...cliwiring.runtime import runtime_of
 from ...config import Config
 from .. import (
     PassphrasePrefetch,
@@ -21,6 +22,7 @@ from . import app
 
 @app.command("keyring-status")
 def keyring_status(
+    ctx: typer.Context,
     config: Annotated[
         Path | None,
         typer.Option(
@@ -38,6 +40,7 @@ def keyring_status(
     ] = OutputFormat.HUMAN,
 ) -> None:
     """Check whether LUKS passphrases are available in the credential store."""
+    runtime = runtime_of(ctx)
     cfg = load_config_or_exit(config, output)
     # Same sweep as the one run/mount perform before touching any device, so
     # this command triggers exactly the approval prompts a run would — and,
@@ -45,17 +48,26 @@ def keyring_status(
     results = prefetch_passphrases(
         cfg,
         lambda pid: retrieve_passphrase(
-            pid, cfg.credential_provider, cfg.credential_command
+            pid,
+            cfg.credential_provider,
+            cfg.credential_command,
+            runtime.environ,
+            run=runtime.run_credential_command,
         ),
     )
     match output:
         case OutputFormat.JSON:
-            echo_json(_status_json(cfg, results))
+            echo_json(keyring_status_json(cfg, results))
         case OutputFormat.HUMAN:
             _print_human_status(cfg, results)
 
 
-def _status_json(cfg: Config, results: list[PassphrasePrefetch]) -> dict[str, Any]:
+def keyring_status_json(
+    cfg: Config, results: list[PassphrasePrefetch]
+) -> dict[str, Any]:
+    """``credentials keyring-status -o json``: every configured passphrase id with
+    its volumes, and, when the provider can be checked ahead of a run, whether
+    it was available (and why not)."""
     checked = is_prefetchable(cfg.credential_provider)
     by_id = {r.passphrase_id: r for r in results}
     return {

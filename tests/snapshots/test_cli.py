@@ -1,40 +1,29 @@
+"""Tests for `snapshots show` / `snapshots prune` against a fake NAS.
+
+What the commands decide from preflight and from the snapshot operations is
+tested in test_show_prune.py; these check that a command wires preflight,
+the operations, the mount lifecycle and the hint together.
+"""
+
 import json
-from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from nbkp.cli import app
-from nbkp.cliwiring.mount import managed_mount
-from nbkp.config import (
-    BtrfsSnapshotConfig,
-    Config,
-    LocalVolume,
-    SyncConfig,
-    SyncEndpoint,
-)
+from nbkp.config import Config
 from nbkp.config.testkit import write_config
-from nbkp.fsprotocol import Snapshot
-from nbkp.policy import Strictness
-from nbkp.preflight import (
-    DestinationEndpointError,
-    SyncError,
-    SyncStatus,
-    VolumeStatus,
-)
-from nbkp.snapshots.errors import SnapshotOp, SnapshotOperationError
-from tests.clidisplay import (
-    dst_ep_status,
-    localhost_ssh_status,
-    preflight,
-    runner,
-    sample_all_active_sync_statuses,
-    sample_all_active_vol_statuses,
-    sample_config,
-    src_ep_status,
-    vol_status,
-)
+from tests.clidisplay import runner
+from tests.cliwiring.test_mount import encrypted_volume
+from tests.fakes import FakeCommandRunner, completed, fake_runtime
+from tests.nas import healthy_nas, nas_config
+from tests.preflight.fake_hosts import FAILS
+
+OLD = "2026-03-01T10:00:00.000Z"
+MID = "2026-03-04T10:00:00.000Z"
+NEW = "2026-03-06T14:30:00.000Z"
+SNAPSHOTS = "/backup/photos/snapshots"
+_HINT = "nbkp preflight troubleshoot -c config.yaml -N private"
 
 
 @pytest.fixture(autouse=True)
@@ -47,127 +36,69 @@ def _in_tmp_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
 
 
-def _prune_config() -> Config:
-    src = LocalVolume(slug="src", path="/src")
-    dst = LocalVolume(slug="dst", path="/dst")
-    ep_src = SyncEndpoint(slug="ep-src", volume="src")
-    ep_dst = SyncEndpoint(
-        slug="ep-dst",
-        volume="dst",
-        btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=3),
-    )
-    sync = SyncConfig(
-        slug="s1",
-        source="ep-src",
-        destination="ep-dst",
-    )
-    return Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
-        syncs={"s1": sync},
-    )
+def _write(tmp_path: Path, config: Config | None = None) -> None:
+    write_config(tmp_path, config or nas_config(snapshots="btrfs", max_snapshots=2))
 
 
-def _prune_active_statuses(
-    config: Config,
-) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
-    local_ssh = localhost_ssh_status()
-    vol_statuses = {
-        name: vol_status(name, config, local_ssh) for name in config.volumes
-    }
-    sync_statuses = {
-        name: SyncStatus(
-            slug=name,
-            config=sync,
-            source_endpoint_status=src_ep_status(
-                sync.source,
-                vol_statuses[config.sync_endpoints[sync.source].volume],
-            ),
-            destination_endpoint_status=dst_ep_status(
-                sync.destination,
-                vol_statuses[config.sync_endpoints[sync.destination].volume],
-            ),
-            errors=[],
+def _nas(*listings: tuple[str, ...]) -> FakeCommandRunner:
+    """A healthy NAS whose snapshot listing answers each of *listings* in
+    turn, with ``latest`` on the newest snapshot."""
+    return healthy_nas(
+        FakeCommandRunner()
+        .on(
+            "ls",
+            SNAPSHOTS,
+            returns=[completed(stdout="\n".join(names) + "\n") for names in listings],
         )
-        for name, sync in config.syncs.items()
-    }
-    return vol_statuses, sync_statuses
-
-
-def _infra_error_statuses(
-    config: Config,
-) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
-    """Destination snapshots/ missing: an infrastructure error, not inactivity."""
-    vol_statuses, sync_statuses = _prune_active_statuses(config)
-    return vol_statuses, {
-        name: ss.model_copy(
-            update={
-                "destination_endpoint_status": ss.destination_endpoint_status.model_copy(
-                    update={
-                        "errors": [DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND]
-                    }
-                ),
-                "errors": [SyncError.DESTINATION_ENDPOINT_INACTIVE],
-            }
+        .on(
+            "readlink",
+            "/backup/photos/latest",
+            returns=completed(stdout=f"snapshots/{NEW}\n"),
         )
-        for name, ss in sync_statuses.items()
-    }
+    )
 
 
-def _inactive_statuses(
-    config: Config,
-) -> tuple[dict[str, VolumeStatus], dict[str, SyncStatus]]:
-    """Source sentinel missing: expected inactivity."""
-    local_ssh = localhost_ssh_status()
-    vol_s = {name: vol_status(name, config, local_ssh) for name in config.volumes}
-    return vol_s, {
-        name: SyncStatus(
-            slug=name,
-            config=sync,
-            source_endpoint_status=src_ep_status(
-                sync.source,
-                vol_s[config.sync_endpoints[sync.source].volume],
-                sentinel_exists=False,
-            ),
-            destination_endpoint_status=dst_ep_status(
-                sync.destination,
-                vol_s[config.sync_endpoints[sync.destination].volume],
-            ),
-            errors=[SyncError.SOURCE_ENDPOINT_INACTIVE],
-        )
-        for name, sync in config.syncs.items()
-    }
+def _invoke(run: FakeCommandRunner, *args: str) -> tuple[int, str]:
+    result = runner.invoke(
+        app, ["snapshots", *args, "-c", "config.yaml"], obj=fake_runtime(run=run)
+    )
+    return result.exit_code, result.output
 
 
-def _invoke_json(*args: str) -> tuple[int, list[dict[str, object]]]:
-    result = runner.invoke(app, ["snapshots", *args, "-c", "config.yaml", "-o", "json"])
-    return result.exit_code, json.loads(result.output)
+class TestShowCommand:
+    def test_json(self, tmp_path: Path) -> None:
+        _write(tmp_path)
+
+        exit_code, output = _invoke(_nas((OLD, NEW)), "show", "-o", "json")
+
+        assert exit_code == 0
+        [data] = json.loads(output)
+        assert [s["name"] for s in data["snapshots"]] == [OLD, NEW]
+        assert data["latest"]["name"] == NEW
+
+    def test_human_output_renders(self, tmp_path: Path) -> None:
+        """The command prints the table; its cells are tested in test_output."""
+        _write(tmp_path)
+
+        exit_code, output = _invoke(_nas((NEW,)), "show")
+
+        assert exit_code == 0
+        assert "Snapshots:" in output
+        assert NEW in output
 
 
 class TestPruneCommand:
-    @patch("nbkp.snapshots.prune.list_snapshots")
-    @patch("nbkp.snapshots.prune.btrfs_prune_snapshots")
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_successful_prune(
-        self,
-        mock_checks: MagicMock,
-        mock_prune: MagicMock,
-        mock_list: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        config = _prune_config()
-        write_config(tmp_path, config)
-        mock_checks.return_value = preflight(*_prune_active_statuses(config))
-        mock_prune.return_value = ["/dst/snapshots/old1"]
-        mock_list.return_value = [_SNAP_1, _SNAP_2]
+    def test_json(self, tmp_path: Path) -> None:
+        _write(tmp_path)
+        run = _nas((OLD, MID, NEW), (MID, NEW))
 
-        exit_code, data = _invoke_json("prune")
+        exit_code, output = _invoke(run, "prune", "-o", "json")
 
         assert exit_code == 0
-        assert data == [
+        assert json.loads(output) == [
             {
-                "sync_slug": "s1",
-                "deleted": ["/dst/snapshots/old1"],
+                "sync_slug": "photos",
+                "deleted": [f"{SNAPSHOTS}/{OLD}"],
                 "kept": 2,
                 "dry_run": False,
                 "skip_reason": None,
@@ -175,417 +106,115 @@ class TestPruneCommand:
                 "skipped": False,
             }
         ]
-        mock_prune.assert_called_once()
+        assert ["btrfs", "subvolume", "delete", f"{SNAPSHOTS}/{OLD}"] in run.commands
 
-    @patch("nbkp.snapshots.prune.list_snapshots")
-    @patch("nbkp.snapshots.prune.btrfs_prune_snapshots")
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_dry_run(
-        self,
-        mock_checks: MagicMock,
-        mock_prune: MagicMock,
-        mock_list: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        config = _prune_config()
-        write_config(tmp_path, config)
-        mock_checks.return_value = preflight(*_prune_active_statuses(config))
-        mock_prune.return_value = ["/dst/snapshots/old1"]
-        mock_list.return_value = [_SNAP_1, _SNAP_2]
+    def test_dry_run(self, tmp_path: Path) -> None:
+        _write(tmp_path)
+        run = _nas((OLD, MID, NEW))
 
-        exit_code, data = _invoke_json("prune", "--dry-run")
+        exit_code, output = _invoke(run, "prune", "--dry-run", "-o", "json")
 
         assert exit_code == 0
-        assert data[0]["dry_run"] is True
-        # Dry run: nothing deleted yet, so the would-be-deleted count is kept.
-        assert data[0]["kept"] == 3
-        assert mock_prune.call_args.kwargs.get("dry_run") is True
+        [data] = json.loads(output)
+        assert (data["deleted"], data["dry_run"]) == ([f"{SNAPSHOTS}/{OLD}"], True)
+        assert run.commands_starting_with("btrfs", "subvolume") == []
 
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_no_syncs_to_prune(
-        self,
-        mock_checks: MagicMock,
-        tmp_path: Path,
+    def test_failed_delete_fails_without_troubleshoot_hint(
+        self, tmp_path: Path
     ) -> None:
-        config = sample_config()  # no snapshots
-        write_config(tmp_path, config)
-        vol_s = sample_all_active_vol_statuses(config)
-        sync_s = sample_all_active_sync_statuses(config, vol_s)
-        mock_checks.return_value = preflight(vol_s, sync_s)
+        """Troubleshoot explains preflight findings, not a failed delete."""
+        _write(tmp_path)
+        run = _nas((OLD, MID, NEW)).on(
+            "btrfs", "subvolume", "delete", returns=completed(1, stderr="denied")
+        )
 
-        exit_code, data = _invoke_json("prune")
+        exit_code, output = _invoke(run, "prune", "-N", "private")
+
+        assert exit_code == 1
+        assert "preflight troubleshoot" not in output
+
+
+class TestPreflightFailure:
+    """A preflight failure points at ``preflight troubleshoot``, like ``run``."""
+
+    @pytest.mark.parametrize("command", ["show", "prune"])
+    def test_suggests_troubleshoot(self, command: str, tmp_path: Path) -> None:
+        _write(tmp_path)
+        no_snapshots_dir = healthy_nas(
+            FakeCommandRunner().on("test", "-d", SNAPSHOTS, returns=FAILS)
+        )
+
+        exit_code, output = _invoke(no_snapshots_dir, command, "-N", "private")
+
+        assert exit_code == 1
+        assert _HINT in output
+
+    @pytest.mark.parametrize("command", ["show", "prune"])
+    def test_skipped_under_ignore_all(self, command: str, tmp_path: Path) -> None:
+        _write(tmp_path)
+        no_snapshots_dir = healthy_nas(
+            FakeCommandRunner().on("test", "-d", SNAPSHOTS, returns=FAILS)
+        )
+
+        exit_code, output = _invoke(
+            no_snapshots_dir, command, "-S", "ignore-all", "-o", "json"
+        )
 
         assert exit_code == 0
-        assert {r["skip_reason"] for r in data} == {"no snapshots configured"}
+        assert json.loads(output)[0]["skip_reason"] == "preflight errors ignored"
 
-    @patch(
-        "nbkp.snapshots.prune.btrfs_prune_snapshots",
-        side_effect=SnapshotOperationError(
-            SnapshotOp.DELETE, "/dst/snapshots/old1", "Permission denied"
-        ),
+
+class TestMountStrictness:
+    @pytest.mark.parametrize(
+        ("strictness", "icon"), [("ignore-inactive", "⚠"), ("ignore-none", "✗")]
     )
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_snapshot_error_is_reported(
-        self,
-        mock_checks: MagicMock,
-        _mock_prune: MagicMock,
-        tmp_path: Path,
+    def test_absent_drive_is_reported_under_the_strictness(
+        self, strictness: str, icon: str, tmp_path: Path
     ) -> None:
-        config = _prune_config()
-        write_config(tmp_path, config)
-        mock_checks.return_value = preflight(*_prune_active_statuses(config))
+        config = nas_config(snapshots="btrfs", max_snapshots=2)
+        _write(
+            tmp_path,
+            config.model_copy(
+                update={"volumes": {**config.volumes, "enc": encrypted_volume()}}
+            ),
+        )
+        absent = healthy_nas(
+            FakeCommandRunner().on("test", "-e", returns=FAILS, volume="enc")
+        )
 
-        exit_code, data = _invoke_json("prune")
+        _, output = _invoke(absent, "show", "-S", strictness)
 
-        assert exit_code == 1
-        assert data[0]["skip_reason"] is None
-        assert data[0]["error"] == {
-            "kind": "operation-failed",
-            "preflight_errors": [],
-            "operation": "DELETE",
-            "path": "/dst/snapshots/old1",
-            "message": "Permission denied",
-        }
-
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_infra_errors_fail_by_default(
-        self,
-        mock_checks: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        config = _prune_config()
-        write_config(tmp_path, config)
-        mock_checks.return_value = preflight(*_infra_error_statuses(config))
-
-        exit_code, data = _invoke_json("prune")
-
-        assert exit_code == 1
-        assert data[0]["skip_reason"] is None
-        assert data[0]["error"]["kind"] == "preflight-errors"
-        assert data[0]["error"]["preflight_errors"] == ["DESTINATION_ENDPOINT_INACTIVE"]
-
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_infra_errors_skipped_under_ignore_all(
-        self,
-        mock_checks: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        config = _prune_config()
-        write_config(tmp_path, config)
-        mock_checks.return_value = preflight(*_infra_error_statuses(config))
-
-        exit_code, data = _invoke_json("prune", "--strictness", "ignore-all")
-
-        assert exit_code == 0
-        assert data[0]["skip_reason"] == "preflight errors ignored"
-        assert data[0]["error"] is None
-
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_sync_filter_limits_preflight(
-        self,
-        mock_checks: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        config = _prune_config()
-        write_config(tmp_path, config)
-        mock_checks.return_value = preflight(*_inactive_statuses(config))
-
-        exit_code, _ = _invoke_json("prune", "--sync", "s1")
-
-        assert exit_code == 0
-        assert mock_checks.call_args.kwargs.get("only_syncs") == ["s1"]
-
-
-_SNAP_1 = Snapshot(
-    name="2026-03-01T10:00:00.000Z",
-    timestamp=datetime(2026, 3, 1, 10, 0, 0, tzinfo=UTC),
-)
-_SNAP_2 = Snapshot(
-    name="2026-03-06T14:30:00.000Z",
-    timestamp=datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC),
-)
-
-
-class TestShowCommand:
-    @patch("nbkp.snapshots.show.read_latest_symlink")
-    @patch("nbkp.snapshots.show.list_snapshots")
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_successful_show(
-        self,
-        mock_checks: MagicMock,
-        mock_list: MagicMock,
-        mock_latest: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        config = _prune_config()
-        write_config(tmp_path, config)
-        mock_checks.return_value = preflight(*_prune_active_statuses(config))
-        mock_list.return_value = [_SNAP_1, _SNAP_2]
-        mock_latest.return_value = _SNAP_2
-
-        exit_code, data = _invoke_json("show")
-
-        assert exit_code == 0
-        assert len(data) == 1
-        assert data[0]["sync_slug"] == "s1"
-        assert data[0]["snapshot_mode"] == "btrfs"
-        assert len(data[0]["snapshots"]) == 2  # type: ignore[arg-type]
-        assert data[0]["latest"]["name"] == "2026-03-06T14:30:00.000Z"  # type: ignore[index]
-        assert data[0]["max_snapshots"] == 3
-        assert data[0]["skip_reason"] is None
-        assert data[0]["error"] is None
-
-    def test_human_output_renders(self, tmp_path: Path) -> None:
-        """The command prints the table; its cells are tested in test_output."""
-        with (
-            patch("nbkp.cliwiring.preflight.check_all_syncs") as mock_checks,
-            patch("nbkp.snapshots.show.list_snapshots") as mock_list,
-            patch("nbkp.snapshots.show.read_latest_symlink") as mock_latest,
-        ):
-            config = _prune_config()
-            write_config(tmp_path, config)
-            mock_checks.return_value = preflight(*_prune_active_statuses(config))
-            mock_list.return_value = [_SNAP_1]
-            mock_latest.return_value = _SNAP_1
-
-            result = runner.invoke(app, ["snapshots", "show", "-c", "config.yaml"])
-
-        assert result.exit_code == 0
-        assert "Snapshots:" in result.output
-        assert _SNAP_1.name in result.output
-
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_no_snapshots_configured(
-        self,
-        mock_checks: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        config = sample_config()  # no snapshots
-        write_config(tmp_path, config)
-        vol_s = sample_all_active_vol_statuses(config)
-        sync_s = sample_all_active_sync_statuses(config, vol_s)
-        mock_checks.return_value = preflight(vol_s, sync_s)
-
-        exit_code, data = _invoke_json("show")
-
-        assert exit_code == 0
-        assert {r["skip_reason"] for r in data} == {"no snapshots configured"}
-
-    @patch("nbkp.snapshots.show.read_latest_symlink")
-    @patch("nbkp.snapshots.show.list_snapshots")
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_sync_filter(
-        self,
-        mock_checks: MagicMock,
-        mock_list: MagicMock,
-        mock_latest: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        config = _prune_config()
-        write_config(tmp_path, config)
-        mock_checks.return_value = preflight(*_prune_active_statuses(config))
-        mock_list.return_value = [_SNAP_1]
-        mock_latest.return_value = _SNAP_1
-
-        exit_code, data = _invoke_json("show", "--sync", "s1")
-
-        assert exit_code == 0
-        assert [r["sync_slug"] for r in data] == ["s1"]
-        assert mock_checks.call_args.kwargs.get("only_syncs") == ["s1"]
-
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_inactive_sync(
-        self,
-        mock_checks: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        config = _prune_config()
-        write_config(tmp_path, config)
-        mock_checks.return_value = preflight(*_inactive_statuses(config))
-
-        exit_code, data = _invoke_json("show")
-
-        assert exit_code == 0
-        assert data[0]["skip_reason"] == "inactive"
-        assert data[0]["skipped"] is True
-
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_inactive_sync_fails_under_ignore_none(
-        self,
-        mock_checks: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        config = _prune_config()
-        write_config(tmp_path, config)
-        mock_checks.return_value = preflight(*_inactive_statuses(config))
-
-        exit_code, data = _invoke_json("show", "-S", "ignore-none")
-
-        assert exit_code == 1
-        assert data[0]["error"]["kind"] == "inactive"
-        assert data[0]["error"]["preflight_errors"] == ["SOURCE_ENDPOINT_INACTIVE"]
-
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_disabled_sync_skipped_under_ignore_none(
-        self,
-        mock_checks: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        """A disabled sync is never fatal, under any strictness."""
-        config = _prune_config()
-        write_config(tmp_path, config)
-        vol_s, sync_s = _prune_active_statuses(config)
-        disabled = {
-            name: status.model_copy(update={"errors": [SyncError.DISABLED]})
-            for name, status in sync_s.items()
-        }
-        mock_checks.return_value = preflight(vol_s, disabled)
-
-        exit_code, data = _invoke_json("show", "-S", "ignore-none")
-
-        assert exit_code == 0
-        assert data[0]["skip_reason"] == "inactive"
-        assert data[0]["error"] is None
-
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_infra_errors_fail(
-        self,
-        mock_checks: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        """A sync broken by infrastructure errors is not silently skipped."""
-        config = _prune_config()
-        write_config(tmp_path, config)
-        mock_checks.return_value = preflight(*_infra_error_statuses(config))
-
-        exit_code, data = _invoke_json("show")
-
-        assert exit_code == 1
-        assert data[0]["skip_reason"] is None
-        assert data[0]["error"]["kind"] == "preflight-errors"
-        assert data[0]["error"]["preflight_errors"] == ["DESTINATION_ENDPOINT_INACTIVE"]
-
-    @patch(
-        "nbkp.snapshots.show.list_snapshots",
-        side_effect=SnapshotOperationError(
-            SnapshotOp.LIST, "/dst/snapshots", "connection failed"
-        ),
-    )
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_snapshot_error(
-        self,
-        mock_checks: MagicMock,
-        _mock_list: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        config = _prune_config()
-        write_config(tmp_path, config)
-        mock_checks.return_value = preflight(*_prune_active_statuses(config))
-
-        exit_code, data = _invoke_json("show")
-
-        assert exit_code == 1
-        assert data[0]["error"]["kind"] == "operation-failed"
-        assert data[0]["error"]["operation"] == "LIST"
-        assert data[0]["error"]["message"] == "connection failed"
-
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_strictness_forwarded_to_managed_mount(
-        self,
-        mock_checks: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        config = _prune_config()
-        write_config(tmp_path, config)
-        mock_checks.return_value = preflight(*_inactive_statuses(config))
-
-        with patch(
-            "nbkp.snapshots.cli.show_cmd.managed_mount", wraps=managed_mount
-        ) as spy:
-            _invoke_json("show", "-S", "ignore-all")
-
-        assert spy.call_args.kwargs.get("strictness") is Strictness.IGNORE_ALL
+        assert f"{icon} mount enc" in output
 
 
 class TestUnknownSyncFilter:
     @pytest.mark.parametrize("command", ["show", "prune"])
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_unknown_sync_is_an_error(
-        self, mock_checks: MagicMock, command: str, tmp_path: Path
-    ) -> None:
-        write_config(tmp_path, _prune_config())
+    def test_unknown_sync_is_an_error(self, command: str, tmp_path: Path) -> None:
+        _write(tmp_path)
+        run = healthy_nas()
 
-        result = runner.invoke(
-            app,
-            ["snapshots", command, "-c", "config.yaml", "-o", "json", "-s", "nope"],
-        )
+        exit_code, output = _invoke(run, command, "-o", "json", "-s", "nope")
 
-        assert result.exit_code == 2
-        error = json.loads(result.output)["error"]
+        assert exit_code == 2
+        error = json.loads(output)["error"]
         assert (error["reason"], error["names"]) == ("unknown-sync", ["nope"])
-        mock_checks.assert_not_called()
+        assert run.calls == []
 
 
-class TestTroubleshootHint:
-    """A preflight failure points at ``preflight troubleshoot``, like ``run``."""
-
-    _HINT = "nbkp preflight troubleshoot -c config.yaml -N private"
-
-    def _invoke_human(self, *args: str) -> tuple[int, str]:
-        result = runner.invoke(
-            app, ["snapshots", *args, "-c", "config.yaml", "-N", "private"]
+class TestSyncFilter:
+    @pytest.mark.parametrize("command", ["show", "prune"])
+    def test_only_the_selected_sync_is_checked_and_reported(
+        self, command: str, tmp_path: Path
+    ) -> None:
+        _write(
+            tmp_path, nas_config(snapshots="btrfs", max_snapshots=2, syncs=("a", "b"))
         )
-        return result.exit_code, result.output
+        run = healthy_nas()
 
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_show_preflight_error_suggests_troubleshoot(
-        self,
-        mock_checks: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        config = _prune_config()
-        write_config(tmp_path, config)
-        mock_checks.return_value = preflight(*_infra_error_statuses(config))
+        exit_code, output = _invoke(run, command, "-s", "b", "-o", "json")
 
-        exit_code, output = self._invoke_human("show")
-
-        assert exit_code == 1
-        assert self._HINT in output
-
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_prune_preflight_error_suggests_troubleshoot(
-        self,
-        mock_checks: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        config = _prune_config()
-        write_config(tmp_path, config)
-        mock_checks.return_value = preflight(*_infra_error_statuses(config))
-
-        exit_code, output = self._invoke_human("prune")
-
-        assert exit_code == 1
-        assert self._HINT in output
-
-    @patch(
-        "nbkp.snapshots.prune.btrfs_prune_snapshots",
-        side_effect=SnapshotOperationError(
-            SnapshotOp.DELETE, "/dst/snapshots/old1", "Permission denied"
-        ),
-    )
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_snapshot_operation_error_has_no_hint(
-        self,
-        mock_checks: MagicMock,
-        _mock_prune: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        """Troubleshoot explains preflight findings, not a failed delete."""
-        config = _prune_config()
-        write_config(tmp_path, config)
-        mock_checks.return_value = preflight(*_prune_active_statuses(config))
-
-        exit_code, output = self._invoke_human("prune")
-
-        assert exit_code == 1
-        assert "preflight troubleshoot" not in output
+        assert exit_code == 0
+        assert [r["sync_slug"] for r in json.loads(output)] == ["b"]
+        sync_a = ("/data/a", "/backup/a")
+        assert [c for c in run.commands if any(a.startswith(sync_a) for a in c)] == []
+        assert any(a.startswith("/backup/b") for c in run.commands for a in c)

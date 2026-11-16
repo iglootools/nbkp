@@ -14,6 +14,7 @@ from ....clidisplay import (
 )
 from ....config import Config, LocalVolume, RemoteVolume
 from ....policy import Severity
+from ....remote.dispatch import VolumeCommandRunner
 from ....remote.endpoints import ResolvedEndpoints, location_excluded
 from ....remote.errors import describe_error, ssh_connection_errors
 from ...lifecycle import UmountResult, lifecycle_volumes, unknown_volume_names
@@ -98,6 +99,7 @@ def _probe_volume_status(
     vol: LocalVolume | RemoteVolume,
     resolved: ResolvedEndpoints,
     bar: StepProgressBar | None,
+    run: VolumeCommandRunner,
 ) -> tuple[MountStatusLabel, MountStatusData]:
     """Probe a single volume's mount status with progress bar updates.
 
@@ -112,7 +114,7 @@ def _probe_volume_status(
     if bar is not None:
         bar.on_start(line)
     try:
-        status: MountStatusData = check_mount_status(vol, vol.mount, resolved)
+        status: MountStatusData = check_mount_status(vol, vol.mount, resolved, run=run)
         if bar is not None:
             bar.on_end(line, Severity.OK)
         return label, status
@@ -142,8 +144,10 @@ def probe_and_show_status(
     output_format: OutputFormat,
     names: list[str] | None = None,
     umount_results: Sequence[UmountResult] = (),
+    *,
+    run: VolumeCommandRunner,
 ) -> None:
-    """Probe and show the mount status of the managed volumes.
+    """Probe and show the mount status of the managed volumes, through *run*.
 
     *umount_results* are the umounts just attempted: under ``-o json`` the
     entry of a volume whose umount failed also says why (``disks umount``).
@@ -157,7 +161,9 @@ def probe_and_show_status(
         if output_format is OutputFormat.HUMAN and managed
         else None
     )
-    managed_statuses = [_probe_volume_status(vol, resolved, bar) for _, vol in managed]
+    managed_statuses = [
+        _probe_volume_status(vol, resolved, bar, run) for _, vol in managed
+    ]
     unmanaged_statuses = unprobed_statuses(cfg, resolved, names)
     if bar is not None:
         bar.stop()
