@@ -4,7 +4,7 @@ import subprocess
 
 from ...config import SyncConfig, SyncEndpoint
 from ...fsprotocol import STAGING_DIR, Snapshot
-from ...preflight.status.sync import SyncStatus
+from ...preflight import SyncStatus
 from ...snapshots.btrfs import (
     create_snapshot,
     prune_snapshots as btrfs_prune_snapshots,

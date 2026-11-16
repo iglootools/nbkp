@@ -91,14 +91,14 @@ def format_mount_summary(mount: MountConfig | None) -> str:
     )
 
 
-def _sync_endpoint_display(endpoint: SyncEndpoint) -> str:
+def sync_endpoint_display(endpoint: SyncEndpoint) -> str:
     if endpoint.subdir:
         return f"{endpoint.volume}:/{endpoint.subdir}"
     else:
         return endpoint.volume
 
 
-def _sync_options(sync: SyncConfig, config: Config) -> str:
+def sync_options_summary(sync: SyncConfig, config: Config) -> str:
     """Build a comma-separated summary of notable sync options.
 
     Shown:
@@ -223,9 +223,9 @@ def _syncs_table(config: Config) -> Table:
         )
         table.add_row(
             sync.slug,
-            Text(_sync_endpoint_display(config.source_endpoint(sync))),
-            Text(_sync_endpoint_display(config.destination_endpoint(sync))),
-            _sync_options(sync, config),
+            Text(sync_endpoint_display(config.source_endpoint(sync))),
+            Text(sync_endpoint_display(config.destination_endpoint(sync))),
+            sync_options_summary(sync, config),
             enabled,
         )
     return table

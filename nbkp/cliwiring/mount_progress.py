@@ -10,18 +10,18 @@ from dataclasses import dataclass
 from ..config import Config
 from ..credentials import PassphrasePrefetch, prefetch_count
 from ..disks import (
-    MountFailureReason,
     MountResult,
     UmountResult,
     display_name,
     mount_count,
+    mount_result_severity,
 )
 from ..disks.output import (
     mount_failure_detail,
     umount_failure_detail,
     umount_failure_warning,
 )
-from ..policy import Severity, Strictness, classify_severity
+from ..policy import Severity, Strictness
 from ..remote.endpoints import ResolvedEndpoints
 from .mount_progress_bar import (
     DisksProgressBar,
@@ -29,41 +29,6 @@ from .mount_progress_bar import (
     format_mount_result,
     format_umount_result,
 )
-
-# Mount failure reasons that correspond to "expected inactive" preflight
-# states (e.g. drive not plugged in maps to VolumeError.DEVICE_NOT_PRESENT
-# in INACTIVE_VOLUME_ERRORS; UNREACHABLE maps to SshEndpointError.UNREACHABLE
-# in INACTIVE_SSH_ERRORS).  Everything else — PASSPHRASE_NOT_AVAILABLE on a
-# plugged-in drive included — is a real failure.
-_INACTIVE_MOUNT_REASONS: frozenset[MountFailureReason] = frozenset(
-    {
-        MountFailureReason.DEVICE_NOT_PRESENT,
-        MountFailureReason.UNREACHABLE,
-    }
-)
-
-
-def mount_result_severity(
-    result: MountResult,
-    strictness: Strictness = Strictness.IGNORE_INACTIVE,
-) -> Severity:
-    """Map a mount lifecycle result to display severity under *strictness*.
-
-    A drive not being plugged in is an expected condition (the user
-    backs up to removable media), so under the default
-    ``IGNORE_INACTIVE`` it renders as a warning.  Under ``IGNORE_NONE``
-    every mount failure is fatal, so it renders as an error to stay
-    consistent with the preflight abort that will follow.  Under
-    ``IGNORE_ALL`` every mount failure is non-fatal and renders as a
-    warning.
-    """
-    return (
-        Severity.OK
-        if result.success
-        else classify_severity(
-            result.failure_reason in _INACTIVE_MOUNT_REASONS, strictness
-        )
-    )
 
 
 def mount_display_names(cfg: Config) -> dict[str, str]:

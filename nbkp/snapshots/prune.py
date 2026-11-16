@@ -1,16 +1,16 @@
 from collections.abc import Callable
 
-from ....config import Config, SyncConfig
-from ....config.protocol.sync_endpoint import SyncEndpoint
-from ....policy import Strictness
-from ....preflight import SyncStatus
-from ....remote.endpoints import ResolvedEndpoints
-from ...btrfs import prune_snapshots as btrfs_prune_snapshots
-from ...common import list_snapshots
-from ...errors import SnapshotOperationError
-from ...hardlinks import prune_snapshots as hl_prune_snapshots
-from ...models import PruneResult, SnapshotResultError, SnapshotSkipReason
-from .common import preflight_disposition
+from ..config import Config, SyncConfig
+from ..config.protocol.sync_endpoint import SyncEndpoint
+from ..policy import Strictness
+from ..preflight import SyncStatus
+from ..remote.endpoints import ResolvedEndpoints
+from .btrfs import prune_snapshots as btrfs_prune_snapshots
+from .common import list_snapshots
+from .disposition import preflight_disposition
+from .errors import SnapshotOperationError
+from .hardlinks import prune_snapshots as hl_prune_snapshots
+from .models import PruneResult, SnapshotResultError, SnapshotSkipReason
 
 type _PruneFn = Callable[..., list[str]]
 

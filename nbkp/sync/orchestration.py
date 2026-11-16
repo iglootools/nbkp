@@ -11,7 +11,7 @@ from datetime import datetime
 from ..config import Config
 from ..ordering.graph import sort_syncs, sync_predecessors
 from ..policy import Strictness
-from ..preflight.status.sync import SyncError, SyncStatus
+from ..preflight import SyncError, SyncStatus
 from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 from .modes import RsyncRunner, RunContext, run_single_sync

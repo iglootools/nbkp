@@ -1,3 +1,13 @@
+"""Preflight checks: observe volumes, endpoints and syncs, then interpret them.
+
+This package's public interface: other modules (``run``, ``sync``,
+``cliwiring``, ``snapshots``) import from ``nbkp.preflight`` rather than from
+its submodules (``status``, ``severity``, ``strictness``, ``probes``, …),
+which are implementation details. Presentation is not re-exported here, so
+importing ``nbkp.preflight`` never loads Rich: display code imports
+``nbkp.preflight.output`` explicitly.
+"""
+
 from .checks import (
     check_all_syncs,
     check_step_count,
@@ -6,6 +16,7 @@ from .endpoint_checks import (
     observe_destination_endpoint,
     observe_source_endpoint,
 )
+from .severity import PreflightError, severity_for_error, severity_for_errors
 from .status import (
     INACTIVE_DST_ENDPOINT_ERRORS,
     INACTIVE_SRC_ENDPOINT_ERRORS,
@@ -36,6 +47,7 @@ from .status import (
     VolumeError,
     VolumeStatus,
 )
+from .strictness import has_fatal_errors, is_fatal
 from .volume_checks import (
     check_volume_capabilities,
     observe_ssh_endpoint,
@@ -56,6 +68,7 @@ __all__ = [
     "LatestSymlinkState",
     "MountCapabilities",
     "MountToolCapabilities",
+    "PreflightError",
     "PreflightResult",
     "SnapshotDirsDiagnostics",
     "SourceEndpointDiagnostics",
@@ -74,8 +87,12 @@ __all__ = [
     "check_all_syncs",
     "check_step_count",
     "check_volume_capabilities",
+    "has_fatal_errors",
+    "is_fatal",
     "observe_destination_endpoint",
     "observe_source_endpoint",
     "observe_ssh_endpoint",
     "observe_volume",
+    "severity_for_error",
+    "severity_for_errors",
 ]
