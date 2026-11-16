@@ -306,6 +306,14 @@ class TestCheckRemoteVolumeLocationExcluded:
         assert SshEndpointError.LOCATION_EXCLUDED in status.ssh_endpoint_status.errors
         assert run.commands == []
 
+    def test_unresolved_endpoint_is_not_contacted(self) -> None:
+        """Observed directly, a volume without a resolved endpoint is excluded."""
+        run = FakeCommandRunner()
+        vol, _config = _remote_config()
+        diag = observe_ssh_endpoint(vol, {}, run=run)
+        assert diag.location_excluded is True
+        assert run.commands == []
+
 
 class TestProbeFilesystemTypeLocal:
     def test_btrfs(self) -> None:
@@ -702,7 +710,11 @@ class TestCheckSync:
         (dst / "backup" / "snapshots").mkdir()
         config, sync = _local_sync(src, dst, dst_btrfs=True)
 
-        status = _check(sync, config, fs_type="btrfs", missing_tools={"findmnt"})
+        run = FakeCommandRunner()
+        status = _check(
+            sync, config, run=run, fs_type="btrfs", missing_tools={"findmnt"}
+        )
+        assert run.commands_starting_with("findmnt") == []
         assert status.active is False
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
@@ -1678,7 +1690,9 @@ class TestCheckHardLinkDest:
         config, sync = self._make_hl_config(src, dst)
 
         # Were stat probed, vfat would report VOL_NO_HARDLINK_SUPPORT.
-        status = _check(sync, config, fs_type="vfat", missing_tools={"stat"})
+        run = FakeCommandRunner()
+        status = _check(sync, config, run=run, fs_type="vfat", missing_tools={"stat"})
+        assert run.commands_starting_with("stat") == []
         assert status.active is False
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
@@ -1947,6 +1961,9 @@ class TestCheckSourceLatest:
             SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
             not in status.source_endpoint_status.errors
         )
+        # A source without snapshots has no layout to observe.
+        assert status.source_endpoint_status.diagnostics is not None
+        assert status.source_endpoint_status.diagnostics.latest is None
 
 
 class TestCheckSourceSnapshots:
@@ -2090,6 +2107,8 @@ class TestCheckSourceSnapshots:
             SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND
             not in status.source_endpoint_status.errors
         )
+        assert status.source_endpoint_status.diagnostics is not None
+        assert status.source_endpoint_status.diagnostics.snapshot_dirs is None
 
 
 class TestCheckDevnullLatest:
