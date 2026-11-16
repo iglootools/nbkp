@@ -1,5 +1,6 @@
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,6 +14,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.config.testkit import write_config
 from nbkp.fsprotocol import Snapshot
 from nbkp.policy import Strictness
 from nbkp.preflight import (
@@ -33,6 +35,16 @@ from tests.clidisplay import (
     src_ep_status,
     vol_status,
 )
+
+
+@pytest.fixture(autouse=True)
+def _in_tmp_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run every test from ``tmp_path``, where it writes ``config.yaml``.
+
+    Commands get ``-c config.yaml``, and the troubleshoot hints they print
+    show that same short relative path.
+    """
+    monkeypatch.chdir(tmp_path)
 
 
 def _prune_config() -> Config:
@@ -128,7 +140,7 @@ def _inactive_statuses(
 
 
 def _invoke_json(*args: str) -> tuple[int, list[dict[str, object]]]:
-    result = runner.invoke(app, ["snapshots", *args, "-c", "/fake.yaml", "-o", "json"])
+    result = runner.invoke(app, ["snapshots", *args, "-c", "config.yaml", "-o", "json"])
     return result.exit_code, json.loads(result.output)
 
 
@@ -136,16 +148,15 @@ class TestPruneCommand:
     @patch("nbkp.snapshots.prune.list_snapshots")
     @patch("nbkp.snapshots.prune.btrfs_prune_snapshots")
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_successful_prune(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_prune: MagicMock,
         mock_list: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = _prune_config()
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         mock_checks.return_value = preflight(*_prune_active_statuses(config))
         mock_prune.return_value = ["/dst/snapshots/old1"]
         mock_list.return_value = [_SNAP_1, _SNAP_2]
@@ -169,16 +180,15 @@ class TestPruneCommand:
     @patch("nbkp.snapshots.prune.list_snapshots")
     @patch("nbkp.snapshots.prune.btrfs_prune_snapshots")
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_dry_run(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_prune: MagicMock,
         mock_list: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = _prune_config()
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         mock_checks.return_value = preflight(*_prune_active_statuses(config))
         mock_prune.return_value = ["/dst/snapshots/old1"]
         mock_list.return_value = [_SNAP_1, _SNAP_2]
@@ -192,14 +202,13 @@ class TestPruneCommand:
         assert mock_prune.call_args.kwargs.get("dry_run") is True
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_no_syncs_to_prune(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = sample_config()  # no snapshots
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
@@ -216,15 +225,14 @@ class TestPruneCommand:
         ),
     )
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_snapshot_error_is_reported(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         _mock_prune: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = _prune_config()
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         mock_checks.return_value = preflight(*_prune_active_statuses(config))
 
         exit_code, data = _invoke_json("prune")
@@ -240,14 +248,13 @@ class TestPruneCommand:
         }
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_infra_errors_fail_by_default(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = _prune_config()
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         mock_checks.return_value = preflight(*_infra_error_statuses(config))
 
         exit_code, data = _invoke_json("prune")
@@ -258,14 +265,13 @@ class TestPruneCommand:
         assert data[0]["error"]["preflight_errors"] == ["DESTINATION_ENDPOINT_INACTIVE"]
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_infra_errors_skipped_under_ignore_all(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = _prune_config()
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         mock_checks.return_value = preflight(*_infra_error_statuses(config))
 
         exit_code, data = _invoke_json("prune", "--strictness", "ignore-all")
@@ -275,14 +281,13 @@ class TestPruneCommand:
         assert data[0]["error"] is None
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_sync_filter_limits_preflight(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = _prune_config()
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         mock_checks.return_value = preflight(*_inactive_statuses(config))
 
         exit_code, _ = _invoke_json("prune", "--sync", "s1")
@@ -305,16 +310,15 @@ class TestShowCommand:
     @patch("nbkp.snapshots.show.read_latest_symlink")
     @patch("nbkp.snapshots.show.list_snapshots")
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_successful_show(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_list: MagicMock,
         mock_latest: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = _prune_config()
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         mock_checks.return_value = preflight(*_prune_active_statuses(config))
         mock_list.return_value = [_SNAP_1, _SNAP_2]
         mock_latest.return_value = _SNAP_2
@@ -331,35 +335,33 @@ class TestShowCommand:
         assert data[0]["skip_reason"] is None
         assert data[0]["error"] is None
 
-    def test_human_output_renders(self) -> None:
+    def test_human_output_renders(self, tmp_path: Path) -> None:
         """The command prints the table; its cells are tested in test_output."""
         with (
-            patch("nbkp.cliwiring.config.load_config") as mock_load,
             patch("nbkp.cliwiring.preflight.check_all_syncs") as mock_checks,
             patch("nbkp.snapshots.show.list_snapshots") as mock_list,
             patch("nbkp.snapshots.show.read_latest_symlink") as mock_latest,
         ):
             config = _prune_config()
-            mock_load.return_value = config
+            write_config(tmp_path, config)
             mock_checks.return_value = preflight(*_prune_active_statuses(config))
             mock_list.return_value = [_SNAP_1]
             mock_latest.return_value = _SNAP_1
 
-            result = runner.invoke(app, ["snapshots", "show", "-c", "/fake.yaml"])
+            result = runner.invoke(app, ["snapshots", "show", "-c", "config.yaml"])
 
         assert result.exit_code == 0
         assert "Snapshots:" in result.output
         assert _SNAP_1.name in result.output
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_no_snapshots_configured(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = sample_config()  # no snapshots
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
@@ -372,16 +374,15 @@ class TestShowCommand:
     @patch("nbkp.snapshots.show.read_latest_symlink")
     @patch("nbkp.snapshots.show.list_snapshots")
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_sync_filter(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_list: MagicMock,
         mock_latest: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = _prune_config()
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         mock_checks.return_value = preflight(*_prune_active_statuses(config))
         mock_list.return_value = [_SNAP_1]
         mock_latest.return_value = _SNAP_1
@@ -393,14 +394,13 @@ class TestShowCommand:
         assert mock_checks.call_args.kwargs.get("only_syncs") == ["s1"]
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_inactive_sync(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = _prune_config()
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         mock_checks.return_value = preflight(*_inactive_statuses(config))
 
         exit_code, data = _invoke_json("show")
@@ -410,14 +410,13 @@ class TestShowCommand:
         assert data[0]["skipped"] is True
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_inactive_sync_fails_under_ignore_none(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = _prune_config()
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         mock_checks.return_value = preflight(*_inactive_statuses(config))
 
         exit_code, data = _invoke_json("show", "-S", "ignore-none")
@@ -427,15 +426,14 @@ class TestShowCommand:
         assert data[0]["error"]["preflight_errors"] == ["SOURCE_ENDPOINT_INACTIVE"]
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_disabled_sync_skipped_under_ignore_none(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
+        tmp_path: Path,
     ) -> None:
         """A disabled sync is never fatal, under any strictness."""
         config = _prune_config()
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         vol_s, sync_s = _prune_active_statuses(config)
         disabled = {
             name: status.model_copy(update={"errors": [SyncError.DISABLED]})
@@ -450,15 +448,14 @@ class TestShowCommand:
         assert data[0]["error"] is None
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_infra_errors_fail(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
+        tmp_path: Path,
     ) -> None:
         """A sync broken by infrastructure errors is not silently skipped."""
         config = _prune_config()
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         mock_checks.return_value = preflight(*_infra_error_statuses(config))
 
         exit_code, data = _invoke_json("show")
@@ -475,15 +472,14 @@ class TestShowCommand:
         ),
     )
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_snapshot_error(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         _mock_list: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = _prune_config()
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         mock_checks.return_value = preflight(*_prune_active_statuses(config))
 
         exit_code, data = _invoke_json("show")
@@ -494,14 +490,13 @@ class TestShowCommand:
         assert data[0]["error"]["message"] == "connection failed"
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_strictness_forwarded_to_managed_mount(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = _prune_config()
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         mock_checks.return_value = preflight(*_inactive_statuses(config))
 
         with patch(
@@ -515,15 +510,14 @@ class TestShowCommand:
 class TestUnknownSyncFilter:
     @pytest.mark.parametrize("command", ["show", "prune"])
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_unknown_sync_is_an_error(
-        self, mock_load: MagicMock, mock_checks: MagicMock, command: str
+        self, mock_checks: MagicMock, command: str, tmp_path: Path
     ) -> None:
-        mock_load.return_value = _prune_config()
+        write_config(tmp_path, _prune_config())
 
         result = runner.invoke(
             app,
-            ["snapshots", command, "-c", "/fake.yaml", "-o", "json", "-s", "nope"],
+            ["snapshots", command, "-c", "config.yaml", "-o", "json", "-s", "nope"],
         )
 
         assert result.exit_code == 2
@@ -535,23 +529,22 @@ class TestUnknownSyncFilter:
 class TestTroubleshootHint:
     """A preflight failure points at ``preflight troubleshoot``, like ``run``."""
 
-    _HINT = "nbkp preflight troubleshoot -c /fake.yaml -N private"
+    _HINT = "nbkp preflight troubleshoot -c config.yaml -N private"
 
     def _invoke_human(self, *args: str) -> tuple[int, str]:
         result = runner.invoke(
-            app, ["snapshots", *args, "-c", "/fake.yaml", "-N", "private"]
+            app, ["snapshots", *args, "-c", "config.yaml", "-N", "private"]
         )
         return result.exit_code, result.output
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_show_preflight_error_suggests_troubleshoot(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = _prune_config()
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         mock_checks.return_value = preflight(*_infra_error_statuses(config))
 
         exit_code, output = self._invoke_human("show")
@@ -560,14 +553,13 @@ class TestTroubleshootHint:
         assert self._HINT in output
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_prune_preflight_error_suggests_troubleshoot(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = _prune_config()
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         mock_checks.return_value = preflight(*_infra_error_statuses(config))
 
         exit_code, output = self._invoke_human("prune")
@@ -582,16 +574,15 @@ class TestTroubleshootHint:
         ),
     )
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_snapshot_operation_error_has_no_hint(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         _mock_prune: MagicMock,
+        tmp_path: Path,
     ) -> None:
         """Troubleshoot explains preflight findings, not a failed delete."""
         config = _prune_config()
-        mock_load.return_value = config
+        write_config(tmp_path, config)
         mock_checks.return_value = preflight(*_prune_active_statuses(config))
 
         exit_code, output = self._invoke_human("prune")
