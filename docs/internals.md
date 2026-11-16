@@ -78,7 +78,7 @@ Passphrases are cached in memory during a single run, so the user is only prompt
 
 **Passphrase prefetching** — Before the first device is touched, nbkp retrieves *every* passphrase-id the config declares — including the ones this run has no use for, because their drive is not plugged in or `--name` excluded them. All credential-store access therefore happens up front, in one burst. See [Why prefetch every passphrase](#why-prefetch-every-passphrase).
 
-**Lifecycle** — The `run`, `preflight check`, and `preflight troubleshoot` commands prefetch passphrases and mount volumes before running, and umount in a `finally` block (even on failure). Mount is idempotent: already-unlocked and already-mounted volumes are skipped. A remote volume excluded by `--exclude-location` (see [Endpoint Filtering](#endpoint-filtering)) is left out of mount, umount and their dry runs, and `disks status` lists it as excluded without probing it. Umount always attempts to unmount and lock for all volumes with mount config, regardless of who mounted them — this avoids fragile action tracking across failed/restarted runs. A volume that cannot be unmounted or locked fails the command (exit 1), with a `Umount failed:` line on stderr, since the drive may have been left mounted or unlocked; `run -o json` also lists every umount under `umount`, each failure with its `failure_reason`, `detail` and `warning`.
+**Lifecycle** — The `run`, `preflight check`, `preflight troubleshoot`, `snapshots show` and `snapshots prune` commands prefetch passphrases and mount volumes before running, and umount in a `finally` block (even on failure). Mount is idempotent: already-unlocked and already-mounted volumes are skipped. A remote volume excluded by `--exclude-location` (see [Endpoint Filtering](#endpoint-filtering)) is left out of mount, umount and their dry runs, and `disks status` lists it as excluded without probing it. Umount always attempts to unmount and lock for all volumes with mount config, regardless of who mounted them — this avoids fragile action tracking across failed/restarted runs. A volume that cannot be unmounted or locked fails the command (exit 1), with a `Umount failed:` line on stderr, since the drive may have been left mounted or unlocked; `run -o json` also lists every umount under `umount`, each failure with its `failure_reason`, `detail` and `warning`.
 
 **Authorization** — Mount management is authorized by **polkit only** (no sudoers). The `disks setup-auth` command generates a single polkit rule at `/etc/polkit-1/rules.d/50-nbkp.rules` for review and manual installation. See [Why polkit-only](#why-polkit-only).
 
@@ -296,7 +296,9 @@ When a remote volume declares multiple SSH endpoints, nbkp selects the best reac
 4. If `--location` is set, prefer endpoints with a matching location tag
 5. If `--network` is set, prefer endpoints with matching network type (`private` for LAN, `public` for WAN)
 
-Each filter step is a **soft filter**: if it would eliminate all remaining candidates, it is silently skipped and the previous candidate list is preserved. This means filters degrade gracefully — `--location office` has no effect if no endpoint is tagged `office`, rather than causing a failure. The first remaining candidate is used. Step 2 applies even when no flag is given; a volume with a single candidate skips it, since no filter could change the choice.
+Each filter step is a **soft filter**, applied per volume: if it would eliminate all of that volume's remaining candidates, it is silently skipped and the previous candidate list is preserved. This means filters degrade gracefully — `--location office` has no effect on a volume none of whose endpoints is tagged `office`, rather than causing a failure. The first remaining candidate is used. Step 2 applies even when no flag is given; a volume with a single candidate skips it, since no filter could change the choice.
+
+**Unknown locations are rejected** — The location *values* themselves are checked against the config before any selection: a `--location` or `--exclude-location` value that no SSH endpoint in the config declares (via `location` / `locations`) is treated as a typo, and the command exits with code 2 without running anything, with the error on stderr, or as a JSON `{"error": ...}` object (reason `unknown-location`) on stdout under `-o json`. So `--location office` is only accepted when at least one endpoint somewhere in the config is tagged `office`.
 
 Preflight probes each remote volume through the endpoint selected for it and reports the result under that endpoint, so two volumes sharing a primary endpoint can be reached (and reported) through different routes.
 
@@ -357,6 +359,7 @@ This section documents every external command nbkp invokes on local or remote ho
 | `lsblk -rno NAME,TYPE <dev>` | Discover the unlocked cleartext device (LUKS unlocked check) |
 | `findmnt --source <dev> -n -o TARGET` | Check if a device is mounted and discover its mountpoint |
 | `findmnt --fstab --target <path> -n -P -o SOURCE,TARGET` | fstab entry for a declared mountpoint, and the device it names |
+| `sh -c 'ls <udisks2-modules-dir>/libudisks2_btrfs.so … 2>/dev/null \| grep -q .'` | Detect the udisks2 btrfs module (`udisks2-btrfs` package) in the usual module directories |
 
 ### Rsync synchronization
 
@@ -394,10 +397,11 @@ This section documents every external command nbkp invokes on local or remote ho
 
 ### Mount management (udisks)
 
-All mount operations go through `udisksctl`, authorized by polkit (no `sudo`):
+All mount operations go through `udisksctl`, authorized by polkit (no `sudo`); `udevadm settle` only waits for udev to catch up with device changes:
 
 | Command | Purpose |
 |---|---|
+| `udevadm settle --timeout=10` | Wait for pending udev events before looking for a device, and between `udisksctl` retries (best effort: failures are ignored) |
 | `udisksctl unlock -b /dev/disk/by-uuid/<luks-uuid> --key-file /dev/stdin --no-user-interaction` | Unlock LUKS container (passphrase piped via stdin, without a trailing newline) |
 | `lsblk -rno NAME,TYPE /dev/disk/by-uuid/<luks-uuid>` | Discover the unlocked cleartext device (`crypt` child → `/dev/mapper/<name>`) |
 | `udisksctl mount -b <device> --no-user-interaction` | Mount volume (`<device>` = discovered cleartext mapper for encrypted, or `/dev/disk/by-uuid/<fs-uuid>` for unencrypted) |
@@ -423,4 +427,4 @@ SSH arguments are constructed dynamically per endpoint. Common options:
 | `-o ForwardAgent=yes` | Forward SSH agent |
 | `-p PORT` | Custom SSH port |
 | `-i KEY_FILE` | SSH identity file |
-| `-o ProxyCommand=...` | Proxy jump chains |
+| `-o ProxyCommand=ssh [hop options] -W %h:%p <hop>` | Proxy jump chains: one nested `ProxyCommand` per hop rather than `-J`, so each hop carries its own port, key and connection options |

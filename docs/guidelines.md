@@ -76,7 +76,7 @@ In general, keep the documentation in sync with the codebase. In particular:
   - The `cli` CLI app to support the new functionality, and update the formatting logic in `output.py` if necessary.
 - When making changes to the `run` command and/or `sync` logic, make sure to update **all** of the following:
   - Either mirror the behavior in the `sh` command, or explicitly add comments in the codebase to describe the reasons for dropping the original functionality
-  - When adding a dependency on an external tool (e.g. `stat`, `findfmt`), add a preflight check
+  - When adding a dependency on an external tool (e.g. `stat`, `findmnt`), add a preflight check
 
 ### Tests
 - Ensure that all new functionality is covered by tests according to the [testing strategy](building-and-testing.md#testing-strategy).
