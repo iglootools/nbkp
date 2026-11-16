@@ -1,12 +1,14 @@
 from ..config import Volume, resolve_endpoint_path
 from ..fsprotocol import NO_HARDLINK_FILESYSTEMS
-from ..remote.dispatch import run_on_volume
+from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 
 
 def probe_filesystem_type(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> str | None:
     """The type of the filesystem holding the volume root (``stat -f``'s
     ``%T``), or ``None`` when ``stat`` fails.
@@ -14,7 +16,7 @@ def probe_filesystem_type(
     Probed once per volume: both the btrfs check and the hard-link check
     derive from it, and on a remote volume each probe is an SSH round-trip.
     """
-    result = run_on_volume(
+    result = run(
         ["stat", "-f", "-c", "%T", resolve_endpoint_path(volume, None)],
         volume,
         resolved_endpoints,
@@ -39,10 +41,12 @@ def check_btrfs_subvolume(
     volume: Volume,
     subdir: str | None,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> bool:
     """On btrfs, subvolumes always have inode number 256."""
     path = resolve_endpoint_path(volume, subdir)
-    result = run_on_volume(["stat", "-c", "%i", path], volume, resolved_endpoints)
+    result = run(["stat", "-c", "%i", path], volume, resolved_endpoints)
     return result.returncode == 0 and result.stdout.strip() == "256"
 
 
@@ -50,10 +54,10 @@ def check_btrfs_readonly(
     volume: Volume,
     path: str,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> bool:
-    result = run_on_volume(
-        ["btrfs", "property", "get", path, "ro"], volume, resolved_endpoints
-    )
+    result = run(["btrfs", "property", "get", path, "ro"], volume, resolved_endpoints)
     return result.returncode == 0 and "ro=true" in result.stdout
 
 
@@ -61,6 +65,8 @@ def check_btrfs_mount_option(
     volume: Volume,
     option: str,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> bool:
     # This is the one mount query udisks2 cannot answer, which is why findmnt
     # stays the tool for all of them. udisks exposes mountpoints
@@ -73,7 +79,7 @@ def check_btrfs_mount_option(
     # findmnt reads /proc/self/mountinfo (the kernel's live truth), so it sees the
     # option regardless of how it got applied. (See find_mountpoint and
     # _check_fstab_entry, which udisks *could* answer but use findmnt for symmetry.)
-    result = run_on_volume(
+    result = run(
         ["findmnt", "-T", resolve_endpoint_path(volume, None), "-n", "-o", "OPTIONS"],
         volume,
         resolved_endpoints,

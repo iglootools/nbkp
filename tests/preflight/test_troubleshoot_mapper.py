@@ -5,9 +5,9 @@ LUKS2 header label or an ``/etc/crypttab`` entry renames the mapper.  An fstab
 line built from the container UUID therefore never matches on such a host, so
 the fix prefers the device udisks actually created.
 
-Discovery is a live probe, done while *gathering* facts
-(:func:`gather_remediation_facts`); rendering only reads the gathered
-:class:`RemediationFacts`, so the rendering tests below need no patching.
+Discovery is a live probe (``lsblk``), done while *gathering* facts
+(:func:`gather_remediation_facts`, on a fake host here); rendering only reads
+the gathered :class:`RemediationFacts`.
 """
 
 from io import StringIO
@@ -17,10 +17,10 @@ import pytest
 from rich.console import Console
 
 from nbkp.config import Config, LocalVolume, LuksEncryptionConfig, MountConfig
-from nbkp.disks import DeviceProbeError
 from nbkp.preflight.output import remediation as rem, troubleshoot as ts
 from nbkp.preflight.status.ssh import SshEndpointDiagnostics, SshEndpointStatus
 from nbkp.preflight.status.volume import VolumeDiagnostics, VolumeError, VolumeStatus
+from tests.fakes import FakeCommandRunner, completed
 
 _UUID = "5941f273-f73c-44c5-a3ef-fae7248db1b6"
 _LABELLED = "/dev/mapper/seagate8tb-luks"
@@ -107,54 +107,51 @@ class TestCleartextDeviceRendering:
 
 
 class TestCleartextDeviceGathering:
-    def test_gathers_the_discovered_mapper(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(ts, "discover_cleartext_device", lambda *_: _LABELLED)
+    def test_gathers_the_discovered_mapper(self) -> None:
         vol = _volume()
+        run = FakeCommandRunner().on(
+            "lsblk", returns=completed(stdout="sdb1 part\nseagate8tb-luks crypt\n")
+        )
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeError.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol)
+            _issues(vol, VolumeError.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol), run=run
         )
         assert facts.cleartext_devices == {vol.slug: _LABELLED}
+        assert run.commands == [
+            ["lsblk", "-rno", "NAME,TYPE", f"/dev/disk/by-uuid/{_UUID}"]
+        ]
 
-    def test_locked_container_is_not_discovered(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(ts, "discover_cleartext_device", lambda *_: None)
+    def test_locked_container_is_not_discovered(self) -> None:
         vol = _volume()
+        # A locked container has no crypt child.
+        run = FakeCommandRunner().on("lsblk", returns=completed(stdout="sdb1 part\n"))
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeError.MOUNT_FAILED), _ctx(vol)
+            _issues(vol, VolumeError.MOUNT_FAILED), _ctx(vol), run=run
         )
         assert facts.cleartext_devices == {}
+        assert len(run.commands) == 1
 
-    def test_only_probes_for_fixes_that_print_a_device(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        def _unexpected(*_: object) -> str | None:
-            raise AssertionError("discovery should not run")
-
-        monkeypatch.setattr(ts, "discover_cleartext_device", _unexpected)
+    def test_only_probes_for_fixes_that_print_a_device(self) -> None:
         vol = _volume()
+        run = FakeCommandRunner()
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeError.UNLOCK_FAILED), _ctx(vol)
+            _issues(vol, VolumeError.UNLOCK_FAILED), _ctx(vol), run=run
         )
         assert facts.cleartext_devices == {}
+        assert run.commands == []
 
-    def test_survives_a_missing_lsblk(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_survives_a_missing_lsblk(self) -> None:
         """Troubleshoot output must never raise — it is the error path itself.
 
         `nbkp demo output` renders these fixes on machines with no udisks and no
         lsblk at all, so a discovery that explodes has to degrade to the derived
         name instead of propagating.
         """
-
-        def _boom(*_: object) -> str | None:
-            raise FileNotFoundError(2, "No such file or directory", "lsblk")
-
-        monkeypatch.setattr(ts, "discover_cleartext_device", _boom)
         vol = _volume()
+        run = FakeCommandRunner().on(
+            "lsblk", returns=FileNotFoundError(2, "No such file or directory", "lsblk")
+        )
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeError.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol)
+            _issues(vol, VolumeError.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol), run=run
         )
         assert facts.cleartext_devices == {}
 
@@ -162,27 +159,21 @@ class TestCleartextDeviceGathering:
         "error",
         [paramiko.SSHException("channel closed"), EOFError("connection closed")],
     )
-    def test_survives_a_failed_connection(
-        self, monkeypatch: pytest.MonkeyPatch, error: Exception
-    ) -> None:
-        def _drop(*_: object) -> str | None:
-            raise error
-
-        monkeypatch.setattr(ts, "discover_cleartext_device", _drop)
+    def test_survives_a_failed_connection(self, error: Exception) -> None:
         vol = _volume()
+        run = FakeCommandRunner().on("lsblk", returns=error)
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeError.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol)
+            _issues(vol, VolumeError.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol), run=run
         )
         assert facts.cleartext_devices == {}
 
-    def test_survives_a_failed_lsblk(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        def _fail(*_: object) -> str | None:
-            raise DeviceProbeError("lsblk", 1, "permission denied")
-
-        monkeypatch.setattr(ts, "discover_cleartext_device", _fail)
+    def test_survives_a_failed_lsblk(self) -> None:
         vol = _volume()
+        run = FakeCommandRunner().on(
+            "lsblk", returns=completed(1, stderr="permission denied")
+        )
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeError.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol)
+            _issues(vol, VolumeError.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol), run=run
         )
         assert facts.cleartext_devices == {}
 

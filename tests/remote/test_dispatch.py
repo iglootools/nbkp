@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 from nbkp.config import LocalVolume, RemoteVolume, SshEndpoint
 from nbkp.remote.dispatch import check_command_available, run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoint, ResolvedEndpoints
+from tests.fakes import FakeCommandRunner, completed
 
 _NAS = SshEndpoint(slug="nas", host="nas.local")
 _BASTION = SshEndpoint(slug="bastion", host="bastion.example.com")
@@ -48,39 +49,45 @@ class TestRunOnVolume:
         )
 
 
-def _remote_volume() -> tuple[RemoteVolume, ResolvedEndpoints, SshEndpoint]:
+def _remote_volume() -> tuple[RemoteVolume, ResolvedEndpoints]:
     server = SshEndpoint(slug="nas-server", host="nas.local")
     vol = RemoteVolume(slug="nas", ssh_endpoint="nas-server", path="/backup")
-    return vol, {"nas": ResolvedEndpoint(server=server)}, server
+    return vol, {"nas": ResolvedEndpoint(server=server)}
 
 
 class TestCheckCommandAvailableLocal:
-    @patch("nbkp.remote.dispatch.shutil.which")
-    def test_command_found(self, mock_which: MagicMock) -> None:
-        mock_which.return_value = "/usr/bin/rsync"
-        vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_command_available(vol, "rsync", {}) is True
-        mock_which.assert_called_once_with("rsync")
+    """The orchestrator looks tools up in-process: no ``which`` subprocess."""
 
-    @patch("nbkp.remote.dispatch.shutil.which")
-    def test_command_not_found(self, mock_which: MagicMock) -> None:
-        mock_which.return_value = None
+    def test_command_found(self) -> None:
+        looked_up: list[str] = []
+        run = FakeCommandRunner()
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_command_available(vol, "rsync", {}) is False
-        mock_which.assert_called_once_with("rsync")
+
+        def which(tool: str) -> str | None:
+            looked_up.append(tool)
+            return f"/usr/bin/{tool}"
+
+        assert check_command_available(vol, "rsync", {}, run=run, which=which)
+        assert looked_up == ["rsync"]
+        assert run.commands == []
+
+    def test_command_not_found(self) -> None:
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        assert (
+            check_command_available(vol, "rsync", {}, which=lambda _tool: None) is False
+        )
 
 
 class TestCheckCommandAvailableRemote:
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_command_found(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0)
-        vol, resolved, server = _remote_volume()
-        assert check_command_available(vol, "rsync", resolved) is True
-        mock_run.assert_called_once_with(server, ["which", "rsync"], [], input=None)
+    def test_command_found(self) -> None:
+        run = FakeCommandRunner().on("which", returns=completed(0))
+        vol, resolved = _remote_volume()
+        assert check_command_available(vol, "rsync", resolved, run=run) is True
+        assert run.commands == [["which", "rsync"]]
+        assert run.calls[0].volume == vol
 
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_command_not_found(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=1)
-        vol, resolved, server = _remote_volume()
-        assert check_command_available(vol, "btrfs", resolved) is False
-        mock_run.assert_called_once_with(server, ["which", "btrfs"], [], input=None)
+    def test_command_not_found(self) -> None:
+        run = FakeCommandRunner().on("which", returns=completed(1))
+        vol, resolved = _remote_volume()
+        assert check_command_available(vol, "btrfs", resolved, run=run) is False
+        assert run.commands == [["which", "btrfs"]]

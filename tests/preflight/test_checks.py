@@ -1,9 +1,7 @@
-import os
-from contextlib import ExitStack
+from collections.abc import Collection
 from datetime import UTC, datetime
-from functools import wraps
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from typing import Any
 
 import paramiko
 import pytest
@@ -17,7 +15,6 @@ from nbkp.config import (
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
-    Volume,
 )
 from nbkp.preflight.checks import (
     check_all_syncs,
@@ -36,13 +33,12 @@ from nbkp.preflight.snapshot_checks import (
     supports_hard_links,
 )
 from nbkp.preflight.status.endpoint import (
-    DestinationEndpointDiagnostics,
     DestinationEndpointError,
     DestinationEndpointStatus,
-    SourceEndpointDiagnostics,
     SourceEndpointError,
     SourceEndpointStatus,
 )
+from nbkp.preflight.status.result import PreflightResult
 from nbkp.preflight.status.ssh import (
     HostToolCapabilities,
     SshEndpointDiagnostics,
@@ -61,198 +57,21 @@ from nbkp.preflight.volume_checks import check_volume_capabilities, observe_ssh_
 from nbkp.remote.endpoints import EndpointFilter, ResolvedEndpoint, ResolvedEndpoints
 from nbkp.remote.resolution import resolve_all_endpoints, resolve_proxy_chain
 from nbkp.snapshots.common import create_snapshot_timestamp
+from tests.fakes import FakeCommandRunner, completed
+from tests.preflight.fake_hosts import FAILS, healthy_host, local_tools
 
-
-@pytest.fixture(autouse=True)
-def _no_real_host_commands(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep the check pipeline from spawning real ``rsync`` / ``test -w``.
-
-    Unit tests must not depend on the developer's rsync (project rule): the
-    version probe reports a good rsync, and writability is answered by
-    ``os.access`` — the same question ``test -w`` asks, without a process.
-    Tests exercising these probes patch them (or ``subprocess.run``) directly.
-    """
-    monkeypatch.setattr(
-        "nbkp.preflight.volume_checks.check_rsync_version", lambda *_: True
-    )
-    monkeypatch.setattr(
-        "nbkp.preflight.endpoint_checks.check_directory_writable",
-        lambda _vol, path, _re: os.access(path, os.W_OK),
-    )
-
-
-_STUB_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=False,
-    has_stat=True,
-    has_findmnt=True,
-)
-
-_NO_RSYNC_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=False,
-    rsync_version_ok=False,
-    has_btrfs=False,
-    has_stat=False,
-    has_findmnt=False,
-)
-
-_BTRFS_FULL_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=True,
-    has_stat=True,
-    has_findmnt=True,
-)
-
-_BTRFS_NO_BTRFS_CMD_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=False,
-    has_stat=True,
-    has_findmnt=True,
-)
-
-_BTRFS_NO_STAT_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=True,
-    has_stat=False,
-    has_findmnt=True,
-)
-
-_BTRFS_NO_FINDMNT_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=True,
-    has_stat=True,
-    has_findmnt=False,
-)
-
-_BTRFS_NO_STAT_NO_FINDMNT_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=True,
-    has_stat=False,
-    has_findmnt=False,
-)
-
-_BTRFS_NOT_BTRFS_FS_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=True,
-    has_stat=True,
-    has_findmnt=True,
-)
-
-_HL_NO_STAT_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=False,
-    has_stat=False,
-    has_findmnt=False,
-)
-
-_HL_NO_HARDLINK_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=False,
-    has_stat=True,
-    has_findmnt=False,
-)
-
-_REACHABLE_SSH_DIAG = SshEndpointDiagnostics(ssh_reachable=True)
-"""Shared default bastion diagnostics; safe to share because the model is frozen."""
-
-
-def _make_localhost_ssh(
-    host_tools: HostToolCapabilities = _STUB_HOST_TOOLS,
-) -> SshEndpointStatus:
-    return SshEndpointStatus(
-        slug="localhost",
-        diagnostics=SshEndpointDiagnostics(host_tools=host_tools),
-        errors=[],
-    )
-
-
-_ACTIVE_LOCALHOST_SSH = _make_localhost_ssh()
-
-
-_STUB_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_NO_RSYNC_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_BTRFS_FULL_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=True,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=True,
-)
-
-_BTRFS_NO_SUBVOL_RM_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=True,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_BTRFS_NO_BTRFS_CMD_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_BTRFS_NO_STAT_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_BTRFS_NO_FINDMNT_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=True,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_BTRFS_NO_STAT_NO_FINDMNT_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_BTRFS_NOT_BTRFS_FS_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_HL_NO_STAT_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_HL_NO_HARDLINK_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=False,
-    btrfs_user_subvol_rm=False,
+_ACTIVE_LOCALHOST_SSH = SshEndpointStatus(
+    slug="localhost",
+    diagnostics=SshEndpointDiagnostics(
+        host_tools=HostToolCapabilities(
+            has_rsync=True,
+            rsync_version_ok=True,
+            has_btrfs=False,
+            has_stat=True,
+            has_findmnt=True,
+        )
+    ),
+    errors=[],
 )
 
 
@@ -388,29 +207,38 @@ def _make_resolved(config: Config) -> ResolvedEndpoints:
 
 
 class TestCheckLocalVolume:
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_active(self, mock_caps: MagicMock, tmp_path: Path) -> None:
+    def test_active(self, tmp_path: Path) -> None:
         vol = LocalVolume(slug="data", path=str(tmp_path))
         (tmp_path / ".nbkp-vol").touch()
-        status = check_volume(vol)
+        run = healthy_host()
+        status = check_volume(vol, run=run, which=local_tools())
         assert status.active is True
         assert status.errors == []
-        assert status.diagnostics.capabilities is _STUB_CAPS
-        mock_caps.assert_called_once()
+        assert status.diagnostics is not None
+        assert status.diagnostics.capabilities is not None
+        assert status.diagnostics.capabilities.sentinel_exists is True
+        # The capabilities were probed, on the volume itself.
+        assert run.commands_starting_with("stat", "-f") == [
+            ["stat", "-f", "-c", "%T", str(tmp_path)]
+        ]
 
     def test_inactive(self, tmp_path: Path) -> None:
         vol = LocalVolume(slug="data", path=str(tmp_path))
-        status = check_volume(vol)
+        run = healthy_host()
+        status = check_volume(vol, run=run, which=local_tools())
         assert status.active is False
         assert status.errors == [VolumeError.SENTINEL_NOT_FOUND]
+        # Without its sentinel, a volume's filesystem is not probed.
+        assert run.commands_starting_with("stat") == []
 
     def test_sentinel_directory_is_not_a_sentinel(self, tmp_path: Path) -> None:
         """Like the remote ``test -f``: only a regular file counts."""
         (tmp_path / ".nbkp-vol").mkdir()
-        status = check_volume(LocalVolume(slug="data", path=str(tmp_path)))
+        status = check_volume(
+            LocalVolume(slug="data", path=str(tmp_path)),
+            run=healthy_host(),
+            which=local_tools(),
+        )
         assert status.errors == [VolumeError.SENTINEL_NOT_FOUND]
 
     def test_endpoint_sentinel_directory_is_not_a_sentinel(
@@ -425,42 +253,27 @@ class TestCheckLocalVolume:
 
 
 class TestCheckRemoteVolume:
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
-    def test_active(
-        self, mock_run: MagicMock, mock_ssh_ep: MagicMock, mock_caps: MagicMock
-    ) -> None:
-        mock_run.return_value = MagicMock(returncode=0)
-        mock_ssh_ep.return_value = SshEndpointDiagnostics(
-            ssh_reachable=True,
-            host_tools=_STUB_HOST_TOOLS,
-        )
+    def test_active(self) -> None:
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        status = check_volume(vol, resolved)
+        run = healthy_host()
+        status = check_volume(vol, resolved, run=run)
         assert status.active is True
         assert status.errors == []
         assert status.diagnostics is not None
-        assert status.diagnostics.capabilities is _STUB_CAPS
+        assert status.diagnostics.capabilities is not None
+        assert status.diagnostics.capabilities.sentinel_exists is True
+        assert ["test", "-f", "/backup/.nbkp-vol"] in run.commands
+        assert ["stat", "-f", "-c", "%T", "/backup"] in run.commands
 
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
-    def test_sentinel_missing(
-        self, mock_run: MagicMock, mock_ssh_ep: MagicMock
-    ) -> None:
+    def test_sentinel_missing(self) -> None:
         """SSH succeeds but sentinel file is absent."""
-        mock_run.return_value = MagicMock(returncode=1)
-        mock_ssh_ep.return_value = SshEndpointDiagnostics(
-            ssh_reachable=True,
-            host_tools=_STUB_HOST_TOOLS,
+        run = healthy_host(
+            FakeCommandRunner().on("test", "-f", "/backup/.nbkp-vol", returns=FAILS)
         )
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        status = check_volume(vol, resolved)
+        status = check_volume(vol, resolved, run=run)
         assert status.active is False
         assert status.errors == [VolumeError.SENTINEL_NOT_FOUND]
         assert status.ssh_endpoint_status.diagnostics.ssh_reachable is True
@@ -468,66 +281,62 @@ class TestCheckRemoteVolume:
         assert status.diagnostics.capabilities is not None
         assert status.diagnostics.capabilities.sentinel_exists is False
 
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    def test_ssh_unreachable(self, mock_ssh_ep: MagicMock) -> None:
+    def test_ssh_unreachable(self) -> None:
         """SSH connection fails entirely."""
-        mock_ssh_ep.return_value = SshEndpointDiagnostics(ssh_reachable=False)
+        run = FakeCommandRunner().on("which", returns=TimeoutError("timed out"))
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        status = check_volume(vol, resolved)
+        status = check_volume(vol, resolved, run=run)
         assert status.active is False
         assert SshEndpointError.UNREACHABLE in status.ssh_endpoint_status.errors
         assert status.ssh_endpoint_status.diagnostics.ssh_reachable is False
         assert status.diagnostics is None
+        # The first failed probe settles it: nothing else is tried.
+        assert run.commands == [["which", "rsync"]]
 
 
 class TestCheckRemoteVolumeLocationExcluded:
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    def test_excluded_volume_no_ssh(self, mock_ssh_ep: MagicMock) -> None:
+    def test_excluded_volume_no_ssh(self) -> None:
         """Volume excluded by location is marked without SSH."""
-        mock_ssh_ep.return_value = SshEndpointDiagnostics(location_excluded=True)
+        run = FakeCommandRunner()
         vol, _config = _remote_config()
         # Empty resolved_endpoints means volume was excluded
-        status = check_volume(vol, {})
+        status = check_volume(vol, {}, run=run)
         assert status.active is False
         assert SshEndpointError.LOCATION_EXCLUDED in status.ssh_endpoint_status.errors
+        assert run.commands == []
+
+    def test_unresolved_endpoint_is_not_contacted(self) -> None:
+        """Observed directly, a volume without a resolved endpoint is excluded."""
+        run = FakeCommandRunner()
+        vol, _config = _remote_config()
+        diag = observe_ssh_endpoint(vol, {}, run=run)
+        assert diag.location_excluded is True
+        assert run.commands == []
 
 
 class TestProbeFilesystemTypeLocal:
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_btrfs(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
+    def test_btrfs(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="btrfs\n"))
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert probe_filesystem_type(vol, {}) == "btrfs"
-        mock_run.assert_called_once_with(
-            ["stat", "-f", "-c", "%T", "/mnt/data"],
-            capture_output=True,
-            text=True,
-            input=None,
-            check=False,
-        )
+        assert probe_filesystem_type(vol, {}, run=run) == "btrfs"
+        assert run.commands == [["stat", "-f", "-c", "%T", "/mnt/data"]]
+        assert run.calls[0].volume == vol
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_stat_failure(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=1, stdout="")
+    def test_stat_failure(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=FAILS)
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert probe_filesystem_type(vol, {}) is None
+        assert probe_filesystem_type(vol, {}, run=run) is None
 
 
 class TestProbeFilesystemTypeRemote:
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_btrfs(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
+    def test_btrfs(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="btrfs\n"))
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert probe_filesystem_type(vol, resolved) == "btrfs"
-        server = config.ssh_endpoints["nas-server"]
-        mock_run.assert_called_once_with(
-            server,
-            ["stat", "-f", "-c", "%T", "/backup"],
-            [],
-            input=None,
-        )
+        assert probe_filesystem_type(vol, resolved, run=run) == "btrfs"
+        assert run.commands == [["stat", "-f", "-c", "%T", "/backup"]]
+        assert run.calls[0].endpoint == resolved["nas"]
 
 
 class TestFilesystemTypeInterpretation:
@@ -551,9 +360,8 @@ class TestFilesystemTypeInterpretation:
 
 
 class TestCheckVolumeCapabilitiesFilesystemProbe:
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_stat_runs_once_per_volume(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="msdos\n")
+    def test_stat_runs_once_per_volume(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="msdos\n"))
         vol, config = _remote_config()
         resolved = _make_resolved(config)
         tools = HostToolCapabilities(
@@ -563,330 +371,237 @@ class TestCheckVolumeCapabilitiesFilesystemProbe:
             has_stat=True,
             has_findmnt=False,
         )
-        caps = check_volume_capabilities(vol, tools, resolved_endpoints=resolved)
+        caps = check_volume_capabilities(
+            vol, tools, resolved_endpoints=resolved, run=run
+        )
         assert caps.is_btrfs_filesystem is False
         assert caps.hardlink_supported is False
-        mock_run.assert_called_once()
+        assert run.commands == [["stat", "-f", "-c", "%T", "/backup"]]
 
 
 class TestCheckBtrfsSubvolumeLocal:
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_is_subvolume(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
+    def test_is_subvolume(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="256\n"))
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_subvolume(vol, None, {}) is True
-        mock_run.assert_called_once_with(
-            ["stat", "-c", "%i", "/mnt/data"],
-            capture_output=True,
-            text=True,
-            input=None,
-            check=False,
-        )
+        assert check_btrfs_subvolume(vol, None, {}, run=run) is True
+        assert run.commands == [["stat", "-c", "%i", "/mnt/data"]]
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_is_subvolume_with_subdir(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
+    def test_is_subvolume_with_subdir(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="256\n"))
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_subvolume(vol, "backup", {}) is True
-        mock_run.assert_called_once_with(
-            ["stat", "-c", "%i", "/mnt/data/backup"],
-            capture_output=True,
-            text=True,
-            input=None,
-            check=False,
-        )
+        assert check_btrfs_subvolume(vol, "backup", {}, run=run) is True
+        assert run.commands == [["stat", "-c", "%i", "/mnt/data/backup"]]
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_not_subvolume(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
+    def test_not_subvolume(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="1234\n"))
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_subvolume(vol, None, {}) is False
+        assert check_btrfs_subvolume(vol, None, {}, run=run) is False
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_stat_failure(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=1, stdout="")
+    def test_stat_failure(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=FAILS)
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_subvolume(vol, None, {}) is False
+        assert check_btrfs_subvolume(vol, None, {}, run=run) is False
 
 
 class TestCheckBtrfsSubvolumeRemote:
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_is_subvolume(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
+    def test_is_subvolume(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="256\n"))
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert check_btrfs_subvolume(vol, None, resolved) is True
-        server = config.ssh_endpoints["nas-server"]
-        mock_run.assert_called_once_with(
-            server,
-            ["stat", "-c", "%i", "/backup"],
-            [],
-            input=None,
-        )
+        assert check_btrfs_subvolume(vol, None, resolved, run=run) is True
+        assert run.commands == [["stat", "-c", "%i", "/backup"]]
+        assert run.calls[0].endpoint == resolved["nas"]
 
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_is_subvolume_with_subdir(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="256\n")
+    def test_is_subvolume_with_subdir(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="256\n"))
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert check_btrfs_subvolume(vol, "data", resolved) is True
-        server = config.ssh_endpoints["nas-server"]
-        mock_run.assert_called_once_with(
-            server,
-            ["stat", "-c", "%i", "/backup/data"],
-            [],
-            input=None,
-        )
+        assert check_btrfs_subvolume(vol, "data", resolved, run=run) is True
+        assert run.commands == [["stat", "-c", "%i", "/backup/data"]]
 
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_not_subvolume(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="1234\n")
+    def test_not_subvolume(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="1234\n"))
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert check_btrfs_subvolume(vol, None, resolved) is False
+        assert check_btrfs_subvolume(vol, None, resolved, run=run) is False
 
 
 class TestCheckBtrfsMountOptionLocal:
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_option_present(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="rw,relatime,user_subvol_rm_allowed\n",
+    def test_option_present(self) -> None:
+        run = FakeCommandRunner().on(
+            "findmnt", returns=completed(stdout="rw,relatime,user_subvol_rm_allowed\n")
         )
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}) is True
-        mock_run.assert_called_once_with(
-            ["findmnt", "-T", "/mnt/data", "-n", "-o", "OPTIONS"],
-            capture_output=True,
-            text=True,
-            input=None,
-            check=False,
+        assert (
+            check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}, run=run) is True
+        )
+        assert run.commands == [["findmnt", "-T", "/mnt/data", "-n", "-o", "OPTIONS"]]
+
+    def test_option_missing(self) -> None:
+        run = FakeCommandRunner().on(
+            "findmnt", returns=completed(stdout="rw,relatime\n")
+        )
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        assert (
+            check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}, run=run)
+            is False
         )
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_option_missing(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="rw,relatime\n")
+    def test_findmnt_failure(self) -> None:
+        run = FakeCommandRunner().on("findmnt", returns=FAILS)
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}) is False
-
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_findmnt_failure(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=1, stdout="")
-        vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}) is False
+        assert (
+            check_btrfs_mount_option(vol, "user_subvol_rm_allowed", {}, run=run)
+            is False
+        )
 
 
 class TestCheckBtrfsMountOptionRemote:
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_option_present(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="rw,relatime,user_subvol_rm_allowed\n",
+    def test_option_present(self) -> None:
+        run = FakeCommandRunner().on(
+            "findmnt", returns=completed(stdout="rw,relatime,user_subvol_rm_allowed\n")
         )
-        vol, config = _remote_config()
-        resolved = _make_resolved(config)
-        assert check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved) is True
-        server = config.ssh_endpoints["nas-server"]
-        mock_run.assert_called_once_with(
-            server,
-            ["findmnt", "-T", "/backup", "-n", "-o", "OPTIONS"],
-            [],
-            input=None,
-        )
-
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_option_missing(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="rw,relatime\n")
         vol, config = _remote_config()
         resolved = _make_resolved(config)
         assert (
-            check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved) is False
+            check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved, run=run)
+            is True
+        )
+        assert run.commands == [["findmnt", "-T", "/backup", "-n", "-o", "OPTIONS"]]
+        assert run.calls[0].endpoint == resolved["nas"]
+
+    def test_option_missing(self) -> None:
+        run = FakeCommandRunner().on(
+            "findmnt", returns=completed(stdout="rw,relatime\n")
+        )
+        vol, config = _remote_config()
+        resolved = _make_resolved(config)
+        assert (
+            check_btrfs_mount_option(vol, "user_subvol_rm_allowed", resolved, run=run)
+            is False
         )
 
 
-def _ssh_diag(
-    host_tools: HostToolCapabilities = _STUB_HOST_TOOLS,
-    ssh_reachable: bool | None = None,
-    location_excluded: bool = False,
-) -> SshEndpointDiagnostics:
-    return SshEndpointDiagnostics(
-        ssh_reachable=ssh_reachable,
-        location_excluded=location_excluded,
-        host_tools=host_tools,
+def _check(
+    sync: SyncConfig,
+    config: Config,
+    *,
+    resolved: ResolvedEndpoints | None = None,
+    run: FakeCommandRunner | None = None,
+    fs_type: str = "ext2/ext3",
+    missing_tools: Collection[str] = (),
+    dry_run: bool = False,
+) -> SyncStatus:
+    """Preflight *sync* with every host healthy but for *run*'s own answers,
+    and *missing_tools* missing from the orchestrator's ``PATH``."""
+    return check_sync(
+        sync,
+        config,
+        resolved,
+        dry_run=dry_run,
+        run=healthy_host(run, fs_type=fs_type),
+        which=local_tools(missing=missing_tools),
     )
+
+
+@pytest.fixture
+def src_dst(tmp_path: Path) -> tuple[Path, Path]:
+    """Two empty local volume roots."""
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+    return src, dst
+
+
+def _setup_active_sentinels(src: Path, dst: Path) -> None:
+    """Volume sentinels on both roots, endpoint sentinels in ``data`` (source)
+    and ``backup`` (destination)."""
+    (src / ".nbkp-vol").touch()
+    (dst / ".nbkp-vol").touch()
+    (src / "data").mkdir(exist_ok=True)
+    (src / "data" / ".nbkp-src").touch()
+    (dst / "backup").mkdir(exist_ok=True)
+    (dst / "backup" / ".nbkp-dst").touch()
+
+
+def _local_sync(
+    src: Path,
+    dst: Path,
+    *,
+    dst_btrfs: bool = False,
+    enabled: bool = True,
+) -> tuple[Config, SyncConfig]:
+    """``s1``: ``src/data`` → ``dst/backup``, btrfs snapshots at the
+    destination when *dst_btrfs*."""
+    sync = SyncConfig(slug="s1", source="ep-src", destination="ep-dst", enabled=enabled)
+    config = Config(
+        volumes={
+            "src": LocalVolume(slug="src", path=str(src)),
+            "dst": LocalVolume(slug="dst", path=str(dst)),
+        },
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="data"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                subdir="backup",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=dst_btrfs),
+            ),
+        },
+        syncs={"s1": sync},
+    )
+    return config, sync
 
 
 class TestCheckSync:
-    def _make_config(self, tmp_src: Path, tmp_dst: Path) -> tuple[Config, SyncConfig]:
-        src_vol = LocalVolume(slug="src", path=str(tmp_src))
-        dst_vol = LocalVolume(slug="dst", path=str(tmp_dst))
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="data"),
-                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst", subdir="backup"),
-            },
-            syncs={"s1": sync},
-        )
-        return config, sync
+    def test_active_sync(self, src_dst: tuple[Path, Path]) -> None:
+        _setup_active_sentinels(*src_dst)
+        config, sync = _local_sync(*src_dst)
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_active_sync(
-        self,
-        _mock_caps: MagicMock,
-        _mock_ssh: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
-
-        (src / ".nbkp-vol").touch()
-        (dst / ".nbkp-vol").touch()
-        (src / "data").mkdir()
-        (src / "data" / ".nbkp-src").touch()
-        (dst / "backup").mkdir()
-        (dst / "backup" / ".nbkp-dst").touch()
-
-        config, sync = self._make_config(src, dst)
-
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert status.active is True
         assert status.errors == []
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_disabled_sync(
-        self, _mock_caps: MagicMock, _mock_ssh: MagicMock, tmp_path: Path
-    ) -> None:
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
+    def test_disabled_sync(self, src_dst: tuple[Path, Path]) -> None:
+        config, sync = _local_sync(*src_dst, enabled=False)
 
-        config, _ = self._make_config(src, dst)
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-            enabled=False,
-        )
-        config = Config(
-            volumes=config.volumes,
-            sync_endpoints=config.sync_endpoints,
-            syncs={"s1": sync},
-        )
-
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert status.active is False
         assert status.errors == [SyncError.DISABLED]
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_source_unavailable(
-        self, _mock_caps: MagicMock, _mock_ssh: MagicMock, tmp_path: Path
-    ) -> None:
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
+    def test_source_unavailable(self, src_dst: tuple[Path, Path]) -> None:
+        src, dst = src_dst
         # No .nbkp-vol on src, so it becomes inactive
         (dst / ".nbkp-vol").touch()
         (dst / "backup").mkdir()
         (dst / "backup" / ".nbkp-dst").touch()
+        config, sync = _local_sync(src, dst)
 
-        config, sync = self._make_config(src, dst)
-
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert status.active is False
         src_vol_errors = status.source_endpoint_status.volume_status.errors
         assert VolumeError.SENTINEL_NOT_FOUND in src_vol_errors
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_missing_src_sentinel(
-        self, _mock_caps: MagicMock, _mock_ssh: MagicMock, tmp_path: Path
-    ) -> None:
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
-        (src / ".nbkp-vol").touch()
-        (dst / ".nbkp-vol").touch()
-        (src / "data").mkdir()
-        (dst / "backup").mkdir()
-        (dst / "backup" / ".nbkp-dst").touch()
+    def test_missing_src_sentinel(self, src_dst: tuple[Path, Path]) -> None:
+        src, dst = src_dst
+        _setup_active_sentinels(src, dst)
+        (src / "data" / ".nbkp-src").unlink()
+        config, sync = _local_sync(src, dst)
 
-        config, sync = self._make_config(src, dst)
-
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert status.active is False
         assert (
             SourceEndpointError.SENTINEL_NOT_FOUND
             in status.source_endpoint_status.errors
         )
 
-    def _setup_active_sentinels(self, src: Path, dst: Path) -> None:
-        (src / ".nbkp-vol").touch()
-        (dst / ".nbkp-vol").touch()
-        (src / "data").mkdir(exist_ok=True)
-        (src / "data" / ".nbkp-src").touch()
-        (dst / "backup").mkdir(exist_ok=True)
-        (dst / "backup" / ".nbkp-dst").touch()
-
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_NO_RSYNC_HOST_TOOLS),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_NO_RSYNC_CAPS,
-    )
-    def test_rsync_not_found_on_source(
-        self, _mock_caps: MagicMock, _mock_ssh: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_rsync_not_found_on_source(self, src_dst: tuple[Path, Path]) -> None:
         """Rsync missing on a local volume: reported at SSH endpoint level,
         but local volumes are still probed (no SSH_ENDPOINT_INACTIVE cascade)."""
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
-        self._setup_active_sentinels(src, dst)
+        _setup_active_sentinels(*src_dst)
+        config, sync = _local_sync(*src_dst)
 
-        config, sync = self._make_config(src, dst)
-
-        status = check_sync(sync, config)
+        status = _check(sync, config, missing_tools={"rsync"})
         # rsync errors are at the SSH endpoint level (shared by both volumes)
         ssh_errors = (
             status.source_endpoint_status.volume_status.ssh_endpoint_status.errors
@@ -899,75 +614,42 @@ class TestCheckSync:
         assert SyncError.ENDPOINT_HOST_ERRORS in status.errors
         assert status.is_expected_inactive() is False
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_BTRFS_NO_BTRFS_CMD_HOST_TOOLS),
-    )
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    def test_rsync_found_btrfs_not_found_on_destination(
-        self, mock_caps: MagicMock, _mock_ssh: MagicMock, tmp_path: Path
+    def test_openrsync_on_the_orchestrator_is_too_old(
+        self, src_dst: tuple[Path, Path]
     ) -> None:
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
-        self._setup_active_sentinels(src, dst)
-
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = LocalVolume(slug="dst", path=str(dst))
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-btrfs-src",
-            destination="ep-btrfs-dst",
-        )
-        config = Config(
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-btrfs-src": SyncEndpoint(
-                    slug="ep-btrfs-src",
-                    volume="src",
-                    subdir="data",
-                ),
-                "ep-btrfs-dst": SyncEndpoint(
-                    slug="ep-btrfs-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
+        _setup_active_sentinels(*src_dst)
+        config, sync = _local_sync(*src_dst)
+        run = FakeCommandRunner().on(
+            "rsync", "--version", returns=completed(stdout="openrsync: protocol 29\n")
         )
 
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_NO_BTRFS_CMD_CAPS if volume.slug == "dst" else _STUB_CAPS
+        status = _check(sync, config, run=run)
+        ssh_errors = (
+            status.source_endpoint_status.volume_status.ssh_endpoint_status.errors
+        )
+        assert ssh_errors == [SshEndpointError.RSYNC_TOO_OLD]
+        assert SyncError.ENDPOINT_HOST_ERRORS in status.errors
 
-        mock_caps.side_effect = caps_side_effect
+    def test_rsync_found_btrfs_not_found_on_destination(
+        self, src_dst: tuple[Path, Path]
+    ) -> None:
+        _setup_active_sentinels(*src_dst)
+        config, sync = _local_sync(*src_dst, dst_btrfs=True)
 
-        status = check_sync(sync, config)
+        status = _check(sync, config, fs_type="btrfs", missing_tools={"btrfs"})
         assert status.active is False
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
         assert SshEndpointError.BTRFS_NOT_FOUND in ssh_errors
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_BTRFS_NO_BTRFS_CMD_HOST_TOOLS),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_disabled_sync_does_not_add_tool_needs(
-        self, _mock_caps: MagicMock, _mock_ssh: MagicMock, tmp_path: Path
+        self, src_dst: tuple[Path, Path]
     ) -> None:
         """A disabled btrfs sync must not make the host's missing btrfs fatal
         for the enabled syncs sharing it."""
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
-        self._setup_active_sentinels(src, dst)
+        src, dst = src_dst
+        _setup_active_sentinels(src, dst)
         config = Config(
             volumes={
                 "src": LocalVolume(slug="src", path=str(src)),
@@ -1001,55 +683,17 @@ class TestCheckSync:
             },
         )
 
-        result = check_all_syncs(config)
+        result = check_all_syncs(
+            config, run=healthy_host(), which=local_tools(missing={"btrfs"})
+        )
         assert result.ssh_endpoint_statuses["localhost"].errors == []
         assert result.sync_statuses["plain"].active is True
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_BTRFS_NO_STAT_HOST_TOOLS),
-    )
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    def test_stat_not_found_on_destination(
-        self, mock_caps: MagicMock, _mock_ssh: MagicMock, tmp_path: Path
-    ) -> None:
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
-        self._setup_active_sentinels(src, dst)
+    def test_stat_not_found_on_destination(self, src_dst: tuple[Path, Path]) -> None:
+        _setup_active_sentinels(*src_dst)
+        config, sync = _local_sync(*src_dst, dst_btrfs=True)
 
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = LocalVolume(slug="dst", path=str(dst))
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-stat-src",
-            destination="ep-stat-dst",
-        )
-        config = Config(
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-stat-src": SyncEndpoint(
-                    slug="ep-stat-src",
-                    volume="src",
-                    subdir="data",
-                ),
-                "ep-stat-dst": SyncEndpoint(
-                    slug="ep-stat-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
-        )
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_NO_STAT_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        status = check_sync(sync, config)
+        status = _check(sync, config, fs_type="btrfs", missing_tools={"stat"})
         assert status.active is False
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
@@ -1059,65 +703,18 @@ class TestCheckSync:
         assert DestinationEndpointError.VOL_NOT_BTRFS not in dst_ep_errors
         assert DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME not in dst_ep_errors
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_BTRFS_NO_FINDMNT_HOST_TOOLS),
-    )
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_findmnt_not_found_on_destination(
-        self,
-        mock_subprocess: MagicMock,
-        mock_caps: MagicMock,
-        _mock_ssh: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
-        self._setup_active_sentinels(src, dst)
+    def test_findmnt_not_found_on_destination(self, src_dst: tuple[Path, Path]) -> None:
+        src, dst = src_dst
+        _setup_active_sentinels(src, dst)
         (dst / "backup" / "staging").mkdir()
         (dst / "backup" / "snapshots").mkdir()
+        config, sync = _local_sync(src, dst, dst_btrfs=True)
 
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = LocalVolume(slug="dst", path=str(dst))
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-findmnt-src",
-            destination="ep-findmnt-dst",
+        run = FakeCommandRunner()
+        status = _check(
+            sync, config, run=run, fs_type="btrfs", missing_tools={"findmnt"}
         )
-        config = Config(
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-findmnt-src": SyncEndpoint(
-                    slug="ep-findmnt-src",
-                    volume="src",
-                    subdir="data",
-                ),
-                "ep-findmnt-dst": SyncEndpoint(
-                    slug="ep-findmnt-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
-        )
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_NO_FINDMNT_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
-            if cmd[:3] == ["stat", "-c", "%i"]:
-                return MagicMock(returncode=0, stdout="256\n")
-            return MagicMock(returncode=0)
-
-        mock_subprocess.side_effect = subprocess_side_effect
-
-        status = check_sync(sync, config)
+        assert run.commands_starting_with("findmnt") == []
         assert status.active is False
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
@@ -1128,53 +725,13 @@ class TestCheckSync:
             DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM not in dst_ep_errors
         )
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_BTRFS_NO_STAT_NO_FINDMNT_HOST_TOOLS),
-    )
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    def test_stat_and_findmnt_both_missing(
-        self, mock_caps: MagicMock, _mock_ssh: MagicMock, tmp_path: Path
-    ) -> None:
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
-        self._setup_active_sentinels(src, dst)
+    def test_stat_and_findmnt_both_missing(self, src_dst: tuple[Path, Path]) -> None:
+        _setup_active_sentinels(*src_dst)
+        config, sync = _local_sync(*src_dst, dst_btrfs=True)
 
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = LocalVolume(slug="dst", path=str(dst))
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-statfm-src",
-            destination="ep-statfm-dst",
+        status = _check(
+            sync, config, fs_type="btrfs", missing_tools={"stat", "findmnt"}
         )
-        config = Config(
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-statfm-src": SyncEndpoint(
-                    slug="ep-statfm-src",
-                    volume="src",
-                    subdir="data",
-                ),
-                "ep-statfm-dst": SyncEndpoint(
-                    slug="ep-statfm-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
-        )
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return (
-                _BTRFS_NO_STAT_NO_FINDMNT_CAPS if volume.slug == "dst" else _STUB_CAPS
-            )
-
-        mock_caps.side_effect = caps_side_effect
-
-        status = check_sync(sync, config)
         assert status.active is False
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
@@ -1182,436 +739,121 @@ class TestCheckSync:
         assert SshEndpointError.STAT_NOT_FOUND in ssh_errors
         assert SshEndpointError.FINDMNT_NOT_FOUND in ssh_errors
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_BTRFS_NOT_BTRFS_FS_HOST_TOOLS),
-    )
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    def test_destination_not_btrfs_filesystem(
-        self,
-        mock_caps: MagicMock,
-        _mock_ssh: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
-        self._setup_active_sentinels(src, dst)
+    def test_destination_not_btrfs_filesystem(self, src_dst: tuple[Path, Path]) -> None:
+        _setup_active_sentinels(*src_dst)
+        config, sync = _local_sync(*src_dst, dst_btrfs=True)
 
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = LocalVolume(slug="dst", path=str(dst))
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-notbtrfs-src",
-            destination="ep-notbtrfs-dst",
-        )
-        config = Config(
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-notbtrfs-src": SyncEndpoint(
-                    slug="ep-notbtrfs-src",
-                    volume="src",
-                    subdir="data",
-                ),
-                "ep-notbtrfs-dst": SyncEndpoint(
-                    slug="ep-notbtrfs-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
-        )
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_NOT_BTRFS_FS_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        status = check_sync(sync, config)
+        status = _check(sync, config, fs_type="ext2/ext3")
         assert status.active is False
         assert (
             DestinationEndpointError.VOL_NOT_BTRFS
             in status.destination_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_BTRFS_FULL_HOST_TOOLS),
-    )
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_destination_not_btrfs_subvolume(
-        self,
-        mock_subprocess: MagicMock,
-        mock_caps: MagicMock,
-        _mock_ssh: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
-        self._setup_active_sentinels(src, dst)
+    def test_destination_not_btrfs_subvolume(self, src_dst: tuple[Path, Path]) -> None:
+        src, dst = src_dst
+        _setup_active_sentinels(src, dst)
         # staging/ must exist for the subvolume check to run
         (dst / "backup" / "staging").mkdir(parents=True)
-
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = LocalVolume(slug="dst", path=str(dst))
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-notsub-src",
-            destination="ep-notsub-dst",
-        )
-        config = Config(
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-notsub-src": SyncEndpoint(
-                    slug="ep-notsub-src",
-                    volume="src",
-                    subdir="data",
-                ),
-                "ep-notsub-dst": SyncEndpoint(
-                    slug="ep-notsub-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
+        config, sync = _local_sync(src, dst, dst_btrfs=True)
+        run = FakeCommandRunner().on(
+            "stat", "-c", "%i", returns=completed(stdout="1234\n")
         )
 
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
-            if cmd[:3] == ["stat", "-c", "%i"]:
-                return MagicMock(returncode=0, stdout="1234\n")
-            return MagicMock(returncode=0)
-
-        mock_subprocess.side_effect = subprocess_side_effect
-
-        status = check_sync(sync, config)
+        status = _check(sync, config, run=run, fs_type="btrfs")
         assert status.active is False
         assert (
             DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME
             in status.destination_endpoint_status.errors
         )
+        assert run.commands_starting_with("stat", "-c") == [
+            ["stat", "-c", "%i", f"{dst}/backup/staging"]
+        ]
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_BTRFS_FULL_HOST_TOOLS),
-    )
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_destination_not_mounted_user_subvol_rm(
-        self,
-        mock_subprocess: MagicMock,
-        mock_caps: MagicMock,
-        _mock_ssh: MagicMock,
-        tmp_path: Path,
+        self, src_dst: tuple[Path, Path]
     ) -> None:
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
-        self._setup_active_sentinels(src, dst)
+        src, dst = src_dst
+        _setup_active_sentinels(src, dst)
         (dst / "backup" / "staging").mkdir()
         (dst / "backup" / "snapshots").mkdir()
-
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = LocalVolume(slug="dst", path=str(dst))
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-mount-src",
-            destination="ep-mount-dst",
-        )
-        config = Config(
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-mount-src": SyncEndpoint(
-                    slug="ep-mount-src",
-                    volume="src",
-                    subdir="data",
-                ),
-                "ep-mount-dst": SyncEndpoint(
-                    slug="ep-mount-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
+        config, sync = _local_sync(src, dst, dst_btrfs=True)
+        run = FakeCommandRunner().on(
+            "findmnt", "-T", str(dst), returns=completed(stdout="rw,relatime\n")
         )
 
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_NO_SUBVOL_RM_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
-            if cmd[:3] == ["stat", "-c", "%i"]:
-                return MagicMock(returncode=0, stdout="256\n")
-            return MagicMock(returncode=0)
-
-        mock_subprocess.side_effect = subprocess_side_effect
-
-        status = check_sync(sync, config)
+        status = _check(sync, config, run=run, fs_type="btrfs")
         assert status.active is False
         assert (
             DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM
             in status.destination_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_BTRFS_FULL_HOST_TOOLS),
-    )
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_destination_latest_not_found(
-        self,
-        mock_subprocess: MagicMock,
-        mock_caps: MagicMock,
-        _mock_ssh: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
-        self._setup_active_sentinels(src, dst)
-        # snapshots exists but latest does not
+    def test_destination_latest_not_found(self, src_dst: tuple[Path, Path]) -> None:
+        src, dst = src_dst
+        _setup_active_sentinels(src, dst)
+        # snapshots exists but staging does not
         (dst / "backup" / "snapshots").mkdir()
+        config, sync = _local_sync(src, dst, dst_btrfs=True)
 
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = LocalVolume(slug="dst", path=str(dst))
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-latest-src",
-            destination="ep-latest-dst",
-        )
-        config = Config(
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-latest-src": SyncEndpoint(
-                    slug="ep-latest-src",
-                    volume="src",
-                    subdir="data",
-                ),
-                "ep-latest-dst": SyncEndpoint(
-                    slug="ep-latest-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
-        )
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
-            if cmd[:3] == ["stat", "-c", "%i"]:
-                return MagicMock(returncode=0, stdout="256\n")
-            return MagicMock(returncode=0)
-
-        mock_subprocess.side_effect = subprocess_side_effect
-
-        status = check_sync(sync, config)
+        status = _check(sync, config, fs_type="btrfs")
         assert status.active is False
         dst_ep_errors = status.destination_endpoint_status.errors
         assert DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND in dst_ep_errors
         assert DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND not in dst_ep_errors
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_BTRFS_FULL_HOST_TOOLS),
-    )
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_destination_snapshots_dir_not_found(
-        self,
-        mock_subprocess: MagicMock,
-        mock_caps: MagicMock,
-        _mock_ssh: MagicMock,
-        tmp_path: Path,
+        self, src_dst: tuple[Path, Path]
     ) -> None:
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
-        self._setup_active_sentinels(src, dst)
+        src, dst = src_dst
+        _setup_active_sentinels(src, dst)
         # staging/ exists but snapshots/ does not
         (dst / "backup" / "staging").mkdir()
+        config, sync = _local_sync(src, dst, dst_btrfs=True)
 
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = LocalVolume(slug="dst", path=str(dst))
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-snapdir-src",
-            destination="ep-snapdir-dst",
-        )
-        config = Config(
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-snapdir-src": SyncEndpoint(
-                    slug="ep-snapdir-src",
-                    volume="src",
-                    subdir="data",
-                ),
-                "ep-snapdir-dst": SyncEndpoint(
-                    slug="ep-snapdir-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
-        )
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
-            if cmd[:3] == ["stat", "-c", "%i"]:
-                return MagicMock(returncode=0, stdout="256\n")
-            return MagicMock(returncode=0)
-
-        mock_subprocess.side_effect = subprocess_side_effect
-
-        status = check_sync(sync, config)
+        status = _check(sync, config, fs_type="btrfs")
         assert status.active is False
         dst_ep_errors = status.destination_endpoint_status.errors
         assert DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND in dst_ep_errors
         assert DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND not in dst_ep_errors
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_BTRFS_FULL_HOST_TOOLS),
-    )
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_destination_latest_and_snapshots_both_missing(
-        self,
-        mock_subprocess: MagicMock,
-        mock_caps: MagicMock,
-        _mock_ssh: MagicMock,
-        tmp_path: Path,
+        self, src_dst: tuple[Path, Path]
     ) -> None:
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
-        self._setup_active_sentinels(src, dst)
-        # neither latest nor snapshots exist
+        _setup_active_sentinels(*src_dst)
+        # neither staging nor snapshots exist
+        config, sync = _local_sync(*src_dst, dst_btrfs=True)
 
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = LocalVolume(slug="dst", path=str(dst))
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-both-src",
-            destination="ep-both-dst",
-        )
-        config = Config(
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-both-src": SyncEndpoint(
-                    slug="ep-both-src",
-                    volume="src",
-                    subdir="data",
-                ),
-                "ep-both-dst": SyncEndpoint(
-                    slug="ep-both-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
-        )
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def subprocess_side_effect(cmd: list[str], **kwargs: object) -> MagicMock:
-            if cmd[:3] == ["stat", "-c", "%i"]:
-                return MagicMock(returncode=0, stdout="256\n")
-            return MagicMock(returncode=0)
-
-        mock_subprocess.side_effect = subprocess_side_effect
-
-        status = check_sync(sync, config)
+        status = _check(sync, config, fs_type="btrfs")
         assert status.active is False
         dst_ep_errors = status.destination_endpoint_status.errors
         assert DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND in dst_ep_errors
         assert DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND in dst_ep_errors
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_btrfs_check_skipped_when_not_enabled(
-        self,
-        _mock_caps: MagicMock,
-        _mock_ssh: MagicMock,
-        tmp_path: Path,
+        self, src_dst: tuple[Path, Path]
     ) -> None:
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
-        self._setup_active_sentinels(src, dst)
+        _setup_active_sentinels(*src_dst)
+        config, sync = _local_sync(*src_dst)
+        run = FakeCommandRunner()
 
-        config, sync = self._make_config(src, dst)
-
-        status = check_sync(sync, config)
+        status = _check(sync, config, run=run, fs_type="btrfs")
         assert status.active is True
         assert status.errors == []
+        # No staging subvolume is probed.
+        assert run.commands_starting_with("stat", "-c") == []
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_NO_RSYNC_HOST_TOOLS),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_NO_RSYNC_CAPS,
-    )
-    def test_multiple_failures_accumulated(
-        self, _mock_caps: MagicMock, _mock_ssh: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_multiple_failures_accumulated(self, src_dst: tuple[Path, Path]) -> None:
         """Rsync missing on local volume: SSH endpoint reports the error,
         but the volume is still probed (local volumes don't cascade
         SSH_ENDPOINT_INACTIVE).  The sync is inactive because the source
         endpoint sentinel is missing."""
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
-        (src / ".nbkp-vol").touch()
-        (dst / ".nbkp-vol").touch()
-        (src / "data").mkdir()
-        # No .nbkp-src sentinel
-        (dst / "backup").mkdir()
-        (dst / "backup" / ".nbkp-dst").touch()
+        src, dst = src_dst
+        _setup_active_sentinels(src, dst)
+        (src / "data" / ".nbkp-src").unlink()
+        config, sync = _local_sync(src, dst)
 
-        config, sync = self._make_config(src, dst)
-
-        status = check_sync(sync, config)
+        status = _check(sync, config, missing_tools={"rsync"})
         assert status.active is False
         ssh_errors = (
             status.source_endpoint_status.volume_status.ssh_endpoint_status.errors
@@ -1625,23 +867,12 @@ class TestCheckSync:
             status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(),
-    )
-    def test_both_volumes_unavailable(
-        self, _mock_ssh: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_both_volumes_unavailable(self, src_dst: tuple[Path, Path]) -> None:
         """Both source and destination unavailable."""
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        src.mkdir()
-        dst.mkdir()
         # No .nbkp-vol sentinel files, so volumes are inactive
+        config, sync = _local_sync(*src_dst)
 
-        config, sync = self._make_config(src, dst)
-
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert status.active is False
         src_vol_errors = status.source_endpoint_status.volume_status.errors
         dst_vol_errors = status.destination_endpoint_status.volume_status.errors
@@ -1649,597 +880,144 @@ class TestCheckSync:
         assert VolumeError.SENTINEL_NOT_FOUND in dst_vol_errors
 
 
-class TestCheckSyncRemoteCommands:
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
+def _sync_with_remote(
+    local_root: Path, remote: str, *, dst_btrfs: bool = False
+) -> tuple[Config, SyncConfig]:
+    """``s1`` between a local volume at *local_root* and the remote volume
+    *remote* (``"src"`` at ``src-server:/data``, or ``"dst"`` at
+    ``dst-server:/backup``); endpoints in ``data`` (source) and ``backup``
+    (destination), with active local sentinels."""
+    server = f"{remote}-server"
+    remote_vol = RemoteVolume(
+        slug=remote,
+        ssh_endpoint=server,
+        path="/data" if remote == "src" else "/backup",
     )
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_rsync_not_found_on_remote_source(
-        self,
-        mock_run: MagicMock,
-        mock_vol_run: MagicMock,
-        mock_caps: MagicMock,
-        mock_ssh_ep: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        dst = tmp_path / "dst"
-        dst.mkdir()
-        (dst / ".nbkp-vol").touch()
-        (dst / "backup").mkdir()
-        (dst / "backup" / ".nbkp-dst").touch()
+    local = "dst" if remote == "src" else "src"
+    (local_root / ".nbkp-vol").touch()
+    local_subdir, sentinel = (
+        ("backup", ".nbkp-dst") if local == "dst" else ("data", ".nbkp-src")
+    )
+    (local_root / local_subdir).mkdir()
+    (local_root / local_subdir / sentinel).touch()
+    sync = SyncConfig(slug="s1", source="ep-src", destination="ep-dst")
+    config = Config(
+        ssh_endpoints={server: SshEndpoint(slug=server, host=f"{remote}.local")},
+        volumes={
+            remote: remote_vol,
+            local: LocalVolume(slug=local, path=str(local_root)),
+        },
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="data"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                subdir="backup",
+                btrfs_snapshots=BtrfsSnapshotConfig(enabled=dst_btrfs),
+            ),
+        },
+        syncs={"s1": sync},
+    )
+    return config, sync
 
-        src_server = SshEndpoint(slug="src-server", host="src.local")
-        src_vol = RemoteVolume(
-            slug="src",
-            ssh_endpoint="src-server",
-            path="/data",
-        )
-        dst_vol = LocalVolume(slug="dst", path=str(dst))
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-rsrc",
-            destination="ep-rdst",
-        )
-        config = Config(
-            ssh_endpoints={"src-server": src_server},
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-rsrc": SyncEndpoint(slug="ep-rsrc", volume="src", subdir="data"),
-                "ep-rdst": SyncEndpoint(slug="ep-rdst", volume="dst", subdir="backup"),
-            },
-            syncs={"s1": sync},
-        )
 
-        mock_vol_run.return_value = MagicMock(returncode=0)
+class TestCheckSyncRemoteCommands:
+    """A remote host answers every probe over SSH, ``which`` included."""
 
-        def ssh_ep_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            if isinstance(volume, RemoteVolume):
-                return _ssh_diag(host_tools=_NO_RSYNC_HOST_TOOLS, ssh_reachable=True)
-            return _ssh_diag()
+    def test_rsync_not_found_on_remote_source(self, tmp_path: Path) -> None:
+        config, sync = _sync_with_remote(tmp_path, "src")
+        run = FakeCommandRunner().on("which", "rsync", returns=FAILS, volume="src")
 
-        mock_ssh_ep.side_effect = ssh_ep_side_effect
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _NO_RSYNC_CAPS if volume.slug == "src" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def remote_side_effect(
-            server: SshEndpoint,
-            cmd: list[str],
-            proxy_chain: list[SshEndpoint] | None = None,
-            input: str | None = None,
-        ) -> MagicMock:
-            if cmd == ["test", "-f", "/data/data/.nbkp-src"]:
-                return MagicMock(returncode=0)
-            return MagicMock(returncode=0)
-
-        mock_run.side_effect = remote_side_effect
-
-        status = check_sync(sync, config, _make_resolved(config))
+        status = _check(sync, config, resolved=_make_resolved(config), run=run)
         assert status.active is False
         ssh_errors = (
             status.source_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
         assert SshEndpointError.RSYNC_NOT_FOUND in ssh_errors
 
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_rsync_not_found_on_remote_destination(
-        self,
-        mock_run: MagicMock,
-        mock_vol_run: MagicMock,
-        mock_caps: MagicMock,
-        mock_ssh_ep: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        src = tmp_path / "src"
-        src.mkdir()
-        (src / ".nbkp-vol").touch()
-        (src / "data").mkdir()
-        (src / "data" / ".nbkp-src").touch()
+    def test_rsync_not_found_on_remote_destination(self, tmp_path: Path) -> None:
+        config, sync = _sync_with_remote(tmp_path, "dst")
+        run = FakeCommandRunner().on("which", "rsync", returns=FAILS, volume="dst")
 
-        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/backup",
-        )
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-rdsrc",
-            destination="ep-rddst",
-        )
-        config = Config(
-            ssh_endpoints={"dst-server": dst_server},
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-rdsrc": SyncEndpoint(slug="ep-rdsrc", volume="src", subdir="data"),
-                "ep-rddst": SyncEndpoint(
-                    slug="ep-rddst", volume="dst", subdir="backup"
-                ),
-            },
-            syncs={"s1": sync},
-        )
-
-        def ssh_ep_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            if isinstance(volume, RemoteVolume):
-                return _ssh_diag(host_tools=_NO_RSYNC_HOST_TOOLS, ssh_reachable=True)
-            return _ssh_diag()
-
-        mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _NO_RSYNC_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def remote_side_effect(
-            server: SshEndpoint,
-            cmd: list[str],
-            proxy_chain: list[SshEndpoint] | None = None,
-            input: str | None = None,
-        ) -> MagicMock:
-            if cmd == [
-                "test",
-                "-f",
-                "/backup/backup/.nbkp-dst",
-            ]:
-                return MagicMock(returncode=0)
-            return MagicMock(returncode=0)
-
-        mock_run.side_effect = remote_side_effect
-
-        status = check_sync(sync, config, _make_resolved(config))
+        status = _check(sync, config, resolved=_make_resolved(config), run=run)
         assert status.active is False
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
         assert SshEndpointError.RSYNC_NOT_FOUND in ssh_errors
 
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_btrfs_not_found_on_remote_destination(
-        self,
-        mock_run: MagicMock,
-        mock_vol_run: MagicMock,
-        mock_caps: MagicMock,
-        mock_ssh_ep: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        src = tmp_path / "src"
-        src.mkdir()
-        (src / ".nbkp-vol").touch()
-        (src / "data").mkdir()
-        (src / "data" / ".nbkp-src").touch()
+    def test_btrfs_not_found_on_remote_destination(self, tmp_path: Path) -> None:
+        config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
+        run = FakeCommandRunner().on("which", "btrfs", returns=FAILS, volume="dst")
 
-        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/backup",
+        status = _check(
+            sync, config, resolved=_make_resolved(config), run=run, fs_type="btrfs"
         )
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-rbtrfs-src",
-            destination="ep-rbtrfs-dst",
-        )
-        config = Config(
-            ssh_endpoints={"dst-server": dst_server},
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-rbtrfs-src": SyncEndpoint(
-                    slug="ep-rbtrfs-src",
-                    volume="src",
-                    subdir="data",
-                ),
-                "ep-rbtrfs-dst": SyncEndpoint(
-                    slug="ep-rbtrfs-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
-        )
-
-        def ssh_ep_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            if isinstance(volume, RemoteVolume):
-                return _ssh_diag(
-                    host_tools=_BTRFS_NO_BTRFS_CMD_HOST_TOOLS, ssh_reachable=True
-                )
-            return _ssh_diag()
-
-        mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_NO_BTRFS_CMD_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def remote_side_effect(
-            server: SshEndpoint,
-            cmd: list[str],
-            proxy_chain: list[SshEndpoint] | None = None,
-            input: str | None = None,
-        ) -> MagicMock:
-            if cmd == [
-                "test",
-                "-f",
-                "/backup/backup/.nbkp-dst",
-            ]:
-                return MagicMock(returncode=0)
-            return MagicMock(returncode=0, stdout="/dev/null\n")
-
-        mock_run.side_effect = remote_side_effect
-
-        status = check_sync(sync, config, _make_resolved(config))
         assert status.active is False
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
         assert SshEndpointError.BTRFS_NOT_FOUND in ssh_errors
 
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_destination_not_btrfs_on_remote(
-        self,
-        mock_run: MagicMock,
-        mock_vol_run: MagicMock,
-        mock_caps: MagicMock,
-        mock_ssh_ep: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        src = tmp_path / "src"
-        src.mkdir()
-        (src / ".nbkp-vol").touch()
-        (src / "data").mkdir()
-        (src / "data" / ".nbkp-src").touch()
-
-        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/backup",
-        )
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-rnotbtrfs-src",
-            destination="ep-rnotbtrfs-dst",
-        )
-        config = Config(
-            ssh_endpoints={"dst-server": dst_server},
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-rnotbtrfs-src": SyncEndpoint(
-                    slug="ep-rnotbtrfs-src",
-                    volume="src",
-                    subdir="data",
-                ),
-                "ep-rnotbtrfs-dst": SyncEndpoint(
-                    slug="ep-rnotbtrfs-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
+    def test_destination_not_btrfs_on_remote(self, tmp_path: Path) -> None:
+        config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
+        run = FakeCommandRunner().on(
+            "stat", "-f", "-c", "%T", "/backup", returns=completed(stdout="ext4\n")
         )
 
-        def ssh_ep_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            if isinstance(volume, RemoteVolume):
-                return _ssh_diag(host_tools=_BTRFS_FULL_HOST_TOOLS, ssh_reachable=True)
-            return _ssh_diag()
-
-        mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_NOT_BTRFS_FS_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def remote_side_effect(
-            server: SshEndpoint,
-            cmd: list[str],
-            proxy_chain: list[SshEndpoint] | None = None,
-            input: str | None = None,
-        ) -> MagicMock:
-            if cmd == [
-                "test",
-                "-f",
-                "/backup/backup/.nbkp-dst",
-            ]:
-                return MagicMock(returncode=0)
-            return MagicMock(returncode=0, stdout="/dev/null\n")
-
-        mock_run.side_effect = remote_side_effect
-
-        status = check_sync(sync, config, _make_resolved(config))
+        status = _check(
+            sync, config, resolved=_make_resolved(config), run=run, fs_type="btrfs"
+        )
         assert status.active is False
         assert (
             DestinationEndpointError.VOL_NOT_BTRFS
             in status.destination_endpoint_status.errors
         )
 
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_destination_not_subvolume_on_remote(
-        self,
-        mock_run: MagicMock,
-        mock_vol_run: MagicMock,
-        mock_caps: MagicMock,
-        mock_ssh_ep: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        src = tmp_path / "src"
-        src.mkdir()
-        (src / ".nbkp-vol").touch()
-        (src / "data").mkdir()
-        (src / "data" / ".nbkp-src").touch()
-
-        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/backup",
-        )
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-rnotsub-src",
-            destination="ep-rnotsub-dst",
-        )
-        config = Config(
-            ssh_endpoints={"dst-server": dst_server},
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-rnotsub-src": SyncEndpoint(
-                    slug="ep-rnotsub-src",
-                    volume="src",
-                    subdir="backup",
-                ),
-                "ep-rnotsub-dst": SyncEndpoint(
-                    slug="ep-rnotsub-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
+    def test_destination_not_subvolume_on_remote(self, tmp_path: Path) -> None:
+        config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
+        run = FakeCommandRunner().on(
+            "stat",
+            "-c",
+            "%i",
+            "/backup/backup/staging",
+            returns=completed(stdout="1234\n"),
         )
 
-        def ssh_ep_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            if isinstance(volume, RemoteVolume):
-                return _ssh_diag(host_tools=_BTRFS_FULL_HOST_TOOLS, ssh_reachable=True)
-            return _ssh_diag()
-
-        mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def remote_side_effect(
-            server: SshEndpoint,
-            cmd: list[str],
-            proxy_chain: list[SshEndpoint] | None = None,
-            input: str | None = None,
-        ) -> MagicMock:
-            if cmd == [
-                "test",
-                "-f",
-                "/backup/backup/.nbkp-dst",
-            ]:
-                return MagicMock(returncode=0)
-            if cmd == [
-                "stat",
-                "-c",
-                "%i",
-                "/backup/backup",
-            ]:
-                return MagicMock(returncode=0, stdout="1234\n")
-            return MagicMock(returncode=0, stdout="/dev/null\n")
-
-        mock_run.side_effect = remote_side_effect
-
-        status = check_sync(sync, config, _make_resolved(config))
+        status = _check(
+            sync, config, resolved=_make_resolved(config), run=run, fs_type="btrfs"
+        )
         assert status.active is False
         assert (
             DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME
             in status.destination_endpoint_status.errors
         )
 
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_destination_not_mounted_user_subvol_rm_on_remote(
-        self,
-        mock_run: MagicMock,
-        mock_vol_run: MagicMock,
-        mock_caps: MagicMock,
-        mock_ssh_ep: MagicMock,
-        tmp_path: Path,
+        self, tmp_path: Path
     ) -> None:
-        src = tmp_path / "src"
-        src.mkdir()
-        (src / ".nbkp-vol").touch()
-        (src / "data").mkdir()
-        (src / "data" / ".nbkp-src").touch()
-
-        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/backup",
-        )
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-rmount-src",
-            destination="ep-rmount-dst",
-        )
-        config = Config(
-            ssh_endpoints={"dst-server": dst_server},
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-rmount-src": SyncEndpoint(
-                    slug="ep-rmount-src",
-                    volume="src",
-                    subdir="data",
-                ),
-                "ep-rmount-dst": SyncEndpoint(
-                    slug="ep-rmount-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
+        config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
+        run = FakeCommandRunner().on(
+            "findmnt", "-T", "/backup", returns=completed(stdout="rw,relatime\n")
         )
 
-        def ssh_ep_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            if isinstance(volume, RemoteVolume):
-                return _ssh_diag(host_tools=_BTRFS_FULL_HOST_TOOLS, ssh_reachable=True)
-            return _ssh_diag()
-
-        mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_NO_SUBVOL_RM_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def remote_side_effect(
-            server: SshEndpoint,
-            cmd: list[str],
-            proxy_chain: list[SshEndpoint] | None = None,
-            input: str | None = None,
-        ) -> MagicMock:
-            if cmd == [
-                "test",
-                "-f",
-                "/backup/backup/.nbkp-dst",
-            ]:
-                return MagicMock(returncode=0)
-            if cmd == [
-                "stat",
-                "-c",
-                "%i",
-                "/backup/backup",
-            ]:
-                return MagicMock(returncode=0, stdout="256\n")
-            return MagicMock(returncode=0, stdout="/dev/null\n")
-
-        mock_run.side_effect = remote_side_effect
-
-        status = check_sync(sync, config, _make_resolved(config))
+        status = _check(
+            sync, config, resolved=_make_resolved(config), run=run, fs_type="btrfs"
+        )
         assert status.active is False
         assert (
             DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM
             in status.destination_endpoint_status.errors
         )
 
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_stat_not_found_on_remote_destination(
-        self,
-        mock_run: MagicMock,
-        mock_vol_run: MagicMock,
-        mock_caps: MagicMock,
-        mock_ssh_ep: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        src = tmp_path / "src"
-        src.mkdir()
-        (src / ".nbkp-vol").touch()
-        (src / "data").mkdir()
-        (src / "data" / ".nbkp-src").touch()
+    def test_stat_not_found_on_remote_destination(self, tmp_path: Path) -> None:
+        config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
+        # Were stat probed, ext4 would report VOL_NOT_BTRFS.
+        run = FakeCommandRunner().on("which", "stat", returns=FAILS, volume="dst")
 
-        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/backup",
+        status = _check(
+            sync, config, resolved=_make_resolved(config), run=run, fs_type="ext4"
         )
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-rstat-src",
-            destination="ep-rstat-dst",
-        )
-        config = Config(
-            ssh_endpoints={"dst-server": dst_server},
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-rstat-src": SyncEndpoint(
-                    slug="ep-rstat-src",
-                    volume="src",
-                    subdir="data",
-                ),
-                "ep-rstat-dst": SyncEndpoint(
-                    slug="ep-rstat-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
-        )
-
-        def ssh_ep_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            if isinstance(volume, RemoteVolume):
-                return _ssh_diag(
-                    host_tools=_BTRFS_NO_STAT_HOST_TOOLS, ssh_reachable=True
-                )
-            return _ssh_diag()
-
-        mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_NO_STAT_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def remote_side_effect(
-            server: SshEndpoint,
-            cmd: list[str],
-            proxy_chain: list[SshEndpoint] | None = None,
-            input: str | None = None,
-        ) -> MagicMock:
-            if cmd == [
-                "test",
-                "-f",
-                "/backup/backup/.nbkp-dst",
-            ]:
-                return MagicMock(returncode=0)
-            return MagicMock(returncode=0, stdout="/dev/null\n")
-
-        mock_run.side_effect = remote_side_effect
-
-        status = check_sync(sync, config, _make_resolved(config))
         assert status.active is False
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
@@ -2250,98 +1028,18 @@ class TestCheckSyncRemoteCommands:
             not in status.destination_endpoint_status.errors
         )
 
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_findmnt_not_found_on_remote_destination(
-        self,
-        mock_run: MagicMock,
-        mock_vol_run: MagicMock,
-        mock_caps: MagicMock,
-        mock_ssh_ep: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        src = tmp_path / "src"
-        src.mkdir()
-        (src / ".nbkp-vol").touch()
-        (src / "data").mkdir()
-        (src / "data" / ".nbkp-src").touch()
-
-        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/backup",
-        )
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-rfindmnt-src",
-            destination="ep-rfindmnt-dst",
-        )
-        config = Config(
-            ssh_endpoints={"dst-server": dst_server},
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-rfindmnt-src": SyncEndpoint(
-                    slug="ep-rfindmnt-src",
-                    volume="src",
-                    subdir="data",
-                ),
-                "ep-rfindmnt-dst": SyncEndpoint(
-                    slug="ep-rfindmnt-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
+    def test_findmnt_not_found_on_remote_destination(self, tmp_path: Path) -> None:
+        config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
+        run = (
+            FakeCommandRunner()
+            .on("which", "findmnt", returns=FAILS, volume="dst")
+            # Were findmnt probed, its options would lack user_subvol_rm_allowed.
+            .on("findmnt", "-T", "/backup", returns=completed(stdout="rw\n"))
         )
 
-        def ssh_ep_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            if isinstance(volume, RemoteVolume):
-                return _ssh_diag(
-                    host_tools=_BTRFS_NO_FINDMNT_HOST_TOOLS, ssh_reachable=True
-                )
-            return _ssh_diag()
-
-        mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_NO_FINDMNT_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def remote_side_effect(
-            server: SshEndpoint,
-            cmd: list[str],
-            proxy_chain: list[SshEndpoint] | None = None,
-            input: str | None = None,
-        ) -> MagicMock:
-            if cmd == [
-                "test",
-                "-f",
-                "/backup/backup/.nbkp-dst",
-            ]:
-                return MagicMock(returncode=0)
-            if cmd == [
-                "stat",
-                "-c",
-                "%i",
-                "/backup/backup",
-            ]:
-                return MagicMock(returncode=0, stdout="256\n")
-            if cmd == ["test", "-d", "/backup/backup/staging"]:
-                return MagicMock(returncode=0)
-            if cmd == ["test", "-d", "/backup/backup/snapshots"]:
-                return MagicMock(returncode=0)
-            return MagicMock(returncode=0, stdout="/dev/null\n")
-
-        mock_run.side_effect = remote_side_effect
-
-        status = check_sync(sync, config, _make_resolved(config))
+        status = _check(
+            sync, config, resolved=_make_resolved(config), run=run, fs_type="btrfs"
+        )
         assert status.active is False
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
@@ -2352,104 +1050,15 @@ class TestCheckSyncRemoteCommands:
             not in status.destination_endpoint_status.errors
         )
 
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_destination_latest_not_found_on_remote(
-        self,
-        mock_run: MagicMock,
-        mock_vol_run: MagicMock,
-        mock_caps: MagicMock,
-        mock_ssh_ep: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        src = tmp_path / "src"
-        src.mkdir()
-        (src / ".nbkp-vol").touch()
-        (src / "data").mkdir()
-        (src / "data" / ".nbkp-src").touch()
-
-        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/backup",
-        )
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-rlatest-src",
-            destination="ep-rlatest-dst",
-        )
-        config = Config(
-            ssh_endpoints={"dst-server": dst_server},
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-rlatest-src": SyncEndpoint(
-                    slug="ep-rlatest-src",
-                    volume="src",
-                    subdir="data",
-                ),
-                "ep-rlatest-dst": SyncEndpoint(
-                    slug="ep-rlatest-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
+    def test_destination_latest_not_found_on_remote(self, tmp_path: Path) -> None:
+        config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
+        run = FakeCommandRunner().on(
+            "test", "-d", "/backup/backup/staging", returns=FAILS
         )
 
-        def ssh_ep_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            if isinstance(volume, RemoteVolume):
-                return _ssh_diag(host_tools=_BTRFS_FULL_HOST_TOOLS, ssh_reachable=True)
-            return _ssh_diag()
-
-        mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def remote_side_effect(
-            server: SshEndpoint,
-            cmd: list[str],
-            proxy_chain: list[SshEndpoint] | None = None,
-            input: str | None = None,
-        ) -> MagicMock:
-            if cmd == [
-                "test",
-                "-f",
-                "/backup/backup/.nbkp-dst",
-            ]:
-                return MagicMock(returncode=0)
-            if cmd == [
-                "stat",
-                "-c",
-                "%i",
-                "/backup/backup",
-            ]:
-                return MagicMock(returncode=0, stdout="256\n")
-            if cmd == [
-                "test",
-                "-d",
-                "/backup/backup/staging",
-            ]:
-                return MagicMock(returncode=1)
-            if cmd == [
-                "test",
-                "-d",
-                "/backup/backup/snapshots",
-            ]:
-                return MagicMock(returncode=0)
-            return MagicMock(returncode=0, stdout="/dev/null\n")
-
-        mock_run.side_effect = remote_side_effect
-
-        status = check_sync(sync, config, _make_resolved(config))
+        status = _check(
+            sync, config, resolved=_make_resolved(config), run=run, fs_type="btrfs"
+        )
         assert status.active is False
         assert (
             DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND
@@ -2460,104 +1069,17 @@ class TestCheckSyncRemoteCommands:
             not in status.destination_endpoint_status.errors
         )
 
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_destination_snapshots_dir_not_found_on_remote(
-        self,
-        mock_run: MagicMock,
-        mock_vol_run: MagicMock,
-        mock_caps: MagicMock,
-        mock_ssh_ep: MagicMock,
-        tmp_path: Path,
+        self, tmp_path: Path
     ) -> None:
-        src = tmp_path / "src"
-        src.mkdir()
-        (src / ".nbkp-vol").touch()
-        (src / "data").mkdir()
-        (src / "data" / ".nbkp-src").touch()
-
-        dst_server = SshEndpoint(slug="dst-server", host="dst.local")
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = RemoteVolume(
-            slug="dst",
-            ssh_endpoint="dst-server",
-            path="/backup",
-        )
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-rsnapdir-src",
-            destination="ep-rsnapdir-dst",
-        )
-        config = Config(
-            ssh_endpoints={"dst-server": dst_server},
-            volumes={"src": src_vol, "dst": dst_vol},
-            sync_endpoints={
-                "ep-rsnapdir-src": SyncEndpoint(
-                    slug="ep-rsnapdir-src",
-                    volume="src",
-                    subdir="data",
-                ),
-                "ep-rsnapdir-dst": SyncEndpoint(
-                    slug="ep-rsnapdir-dst",
-                    volume="dst",
-                    subdir="backup",
-                    btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
+        config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
+        run = FakeCommandRunner().on(
+            "test", "-d", "/backup/backup/snapshots", returns=FAILS
         )
 
-        def ssh_ep_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            if isinstance(volume, RemoteVolume):
-                return _ssh_diag(host_tools=_BTRFS_FULL_HOST_TOOLS, ssh_reachable=True)
-            return _ssh_diag()
-
-        mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def remote_side_effect(
-            server: SshEndpoint,
-            cmd: list[str],
-            proxy_chain: list[SshEndpoint] | None = None,
-            input: str | None = None,
-        ) -> MagicMock:
-            if cmd == [
-                "test",
-                "-f",
-                "/backup/backup/.nbkp-dst",
-            ]:
-                return MagicMock(returncode=0)
-            if cmd == [
-                "stat",
-                "-c",
-                "%i",
-                "/backup/backup",
-            ]:
-                return MagicMock(returncode=0, stdout="256\n")
-            if cmd == [
-                "test",
-                "-d",
-                "/backup/backup/staging",
-            ]:
-                return MagicMock(returncode=0)
-            if cmd == [
-                "test",
-                "-d",
-                "/backup/backup/snapshots",
-            ]:
-                return MagicMock(returncode=1)
-            return MagicMock(returncode=0, stdout="/dev/null\n")
-
-        mock_run.side_effect = remote_side_effect
-
-        status = check_sync(sync, config, _make_resolved(config))
+        status = _check(
+            sync, config, resolved=_make_resolved(config), run=run, fs_type="btrfs"
+        )
         assert status.active is False
         assert (
             DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND
@@ -2567,23 +1089,29 @@ class TestCheckSyncRemoteCommands:
             DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND
             not in status.destination_endpoint_status.errors
         )
+
+
+def _check_all(
+    config: Config, run: FakeCommandRunner | None = None, **kwargs: Any
+) -> PreflightResult:
+    """``check_all_syncs`` with every host healthy but for *run*'s own
+    answers, and no ``~/.ssh/config``."""
+    return check_all_syncs(
+        config,
+        run=healthy_host(run),
+        which=local_tools(),
+        ssh_config=paramiko.SSHConfig(),
+        **kwargs,
+    )
+
+
+def _standalone_probes(run: FakeCommandRunner) -> dict[str, ResolvedEndpoint | None]:
+    """Endpoints probed for reachability only (``true``), with their route."""
+    return {c.volume.slug: c.endpoint for c in run.calls if c.cmd == ["true"]}
 
 
 class TestCheckAllSyncs:
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_check_all(
-        self,
-        _mock_caps: MagicMock,
-        _mock_ssh: MagicMock,
-        tmp_path: Path,
-    ) -> None:
+    def test_check_all(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -2609,25 +1137,12 @@ class TestCheckAllSyncs:
             syncs={"s1": sync},
         )
 
-        result = check_all_syncs(config)
+        result = _check_all(config)
         assert result.volume_statuses["src"].active is True
         assert result.volume_statuses["dst"].active is True
         assert result.sync_statuses["s1"].active is True
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_only_syncs_filters_syncs_and_volumes(
-        self,
-        _mock_caps: MagicMock,
-        _mock_ssh: MagicMock,
-        tmp_path: Path,
-    ) -> None:
+    def test_only_syncs_filters_syncs_and_volumes(self, tmp_path: Path) -> None:
         """When only_syncs is given, only those syncs and their
         referenced volumes are checked."""
         src1 = tmp_path / "src1"
@@ -2669,27 +1184,18 @@ class TestCheckAllSyncs:
             },
         )
 
-        result = check_all_syncs(config, only_syncs=["s1"])
+        run = FakeCommandRunner()
+        result = _check_all(config, run, only_syncs=["s1"])
         assert set(result.sync_statuses.keys()) == {"s1"}
         assert set(result.volume_statuses.keys()) == {"src1", "dst1"}
         assert result.sync_statuses["s1"].active is True
+        # The other volumes are not probed at all.
+        assert {c.volume.slug for c in run.calls} <= {"src1", "dst1"}
 
     @pytest.mark.parametrize("only_syncs", [None, ["s1"]])
-    @patch("nbkp.preflight.checks.observe_standalone_endpoint")
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint", return_value=_ssh_diag())
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_step_count_matches_reported_steps(
-        self,
-        _mock_caps: MagicMock,
-        _mock_ssh: MagicMock,
-        mock_standalone: MagicMock,
-        only_syncs: list[str] | None,
-        tmp_path: Path,
+        self, only_syncs: list[str] | None, tmp_path: Path
     ) -> None:
-        mock_standalone.return_value = _REACHABLE_SSH_DIAG
         config = Config(
             ssh_endpoints={"orphan": SshEndpoint(slug="orphan", host="orphan")},
             volumes={
@@ -2708,7 +1214,7 @@ class TestCheckAllSyncs:
             },
         )
         started: list[str] = []
-        check_all_syncs(config, on_check_start=started.append, only_syncs=only_syncs)
+        _check_all(config, on_check_start=started.append, only_syncs=only_syncs)
         assert check_step_count(config, only_syncs) == len(started)
 
 
@@ -2718,7 +1224,7 @@ class TestStandaloneEndpointProbing:
     def _make_bastion_config(self, tmp_path: Path) -> Config:
         """Config with a remote volume that goes through a bastion."""
         src = tmp_path / "src"
-        src.mkdir()
+        src.mkdir(exist_ok=True)
         (src / ".nbkp-vol").touch()
         (src / ".nbkp-src").touch()
         (src / ".nbkp-dst").touch()
@@ -2753,194 +1259,109 @@ class TestStandaloneEndpointProbing:
             },
         )
 
-    def _bastion_patches(
-        self,
-        bastion_diag: SshEndpointDiagnostics = _REACHABLE_SSH_DIAG,
-    ):  # type: ignore[no-untyped-def]
-        """Stack of patches common to all bastion tests.
-
-        Mocks SSH endpoint observation, volume observation, endpoint
-        observations, and bastion-specific functions to avoid real
-        SSH/DNS calls.
-        """
-
-        def decorator(fn):  # type: ignore[no-untyped-def]
-            @wraps(fn)
-            def wrapper(self_inner, tmp_path, *args, **kwargs):  # type: ignore[no-untyped-def]
-                with ExitStack() as stack:
-                    stack.enter_context(
-                        patch(
-                            "nbkp.preflight.checks.observe_standalone_endpoint",
-                            return_value=bastion_diag,
-                        )
-                    )
-                    stack.enter_context(
-                        patch(
-                            "nbkp.preflight.checks.enrich_from_ssh_config",
-                            side_effect=lambda ep: ep,
-                        )
-                    )
-                    stack.enter_context(
-                        patch(
-                            "nbkp.preflight.checks.observe_ssh_endpoint",
-                            return_value=_ssh_diag(),
-                        )
-                    )
-                    stack.enter_context(
-                        patch(
-                            "nbkp.preflight.checks.observe_volume",
-                            return_value=VolumeDiagnostics(capabilities=_STUB_CAPS),
-                        )
-                    )
-                    stack.enter_context(
-                        patch(
-                            "nbkp.preflight.checks.observe_source_endpoint",
-                            return_value=SourceEndpointDiagnostics(
-                                endpoint_slug="ep-src", sentinel_exists=True
-                            ),
-                        )
-                    )
-                    stack.enter_context(
-                        patch(
-                            "nbkp.preflight.checks.observe_destination_endpoint",
-                            return_value=DestinationEndpointDiagnostics(
-                                endpoint_slug="ep-dst",
-                                sentinel_exists=True,
-                                endpoint_writable=True,
-                            ),
-                        )
-                    )
-                    fn(self_inner, tmp_path, *args, **kwargs)
-
-            return wrapper
-
-        return decorator
+    def _through_bastion(self, config: Config) -> ResolvedEndpoints:
+        return {
+            "remote": ResolvedEndpoint(
+                server=config.ssh_endpoints["target"],
+                proxy_chain=[config.ssh_endpoints["bastion"]],
+            ),
+        }
 
     def test_bastion_appears_in_ssh_statuses(self, tmp_path: Path) -> None:
         """Bastion endpoints appear in ssh_endpoint_statuses after check_all_syncs."""
-
-        @self._bastion_patches()
-        def _run(self_inner: TestStandaloneEndpointProbing, tmp_path: Path) -> None:
-            config = self_inner._make_bastion_config(tmp_path)
-            result = check_all_syncs(
-                config,
-                resolved_endpoints={
-                    "remote": ResolvedEndpoint(
-                        server=config.ssh_endpoints["target"],
-                        proxy_chain=[config.ssh_endpoints["bastion"]],
-                    ),
-                },
-            )
-            assert "bastion" in result.ssh_endpoint_statuses
-            assert result.ssh_endpoint_statuses["bastion"].active is True
-            # No tool errors — bastions have default (empty) tool needs
-            assert result.ssh_endpoint_statuses["bastion"].errors == []
-            # host_tools is None — no tool probing on bastions
-            assert (
-                result.ssh_endpoint_statuses["bastion"].diagnostics.host_tools is None
-            )
-
-        _run(self, tmp_path)
+        config = self._make_bastion_config(tmp_path)
+        run = FakeCommandRunner()
+        result = _check_all(
+            config, run, resolved_endpoints=self._through_bastion(config)
+        )
+        assert "bastion" in result.ssh_endpoint_statuses
+        assert result.ssh_endpoint_statuses["bastion"].active is True
+        # No tool errors — bastions have default (empty) tool needs
+        assert result.ssh_endpoint_statuses["bastion"].errors == []
+        # host_tools is None — no tool probing on bastions
+        assert result.ssh_endpoint_statuses["bastion"].diagnostics.host_tools is None
+        assert [c.cmd for c in run.calls if c.volume.slug == "bastion"] == [["true"]]
 
     def test_unreachable_bastion(self, tmp_path: Path) -> None:
         """Unreachable bastion gets UNREACHABLE error."""
-
-        @self._bastion_patches(bastion_diag=SshEndpointDiagnostics(ssh_reachable=False))
-        def _run(self_inner: TestStandaloneEndpointProbing, tmp_path: Path) -> None:
-            config = self_inner._make_bastion_config(tmp_path)
-            result = check_all_syncs(
-                config,
-                resolved_endpoints={
-                    "remote": ResolvedEndpoint(
-                        server=config.ssh_endpoints["target"],
-                        proxy_chain=[config.ssh_endpoints["bastion"]],
-                    ),
-                },
-            )
-            assert "bastion" in result.ssh_endpoint_statuses
-            bastion_status = result.ssh_endpoint_statuses["bastion"]
-            assert bastion_status.active is False
-            assert SshEndpointError.UNREACHABLE in bastion_status.errors
-
-        _run(self, tmp_path)
+        config = self._make_bastion_config(tmp_path)
+        run = FakeCommandRunner().on(
+            "true", returns=TimeoutError("timed out"), volume="bastion"
+        )
+        result = _check_all(
+            config, run, resolved_endpoints=self._through_bastion(config)
+        )
+        assert "bastion" in result.ssh_endpoint_statuses
+        bastion_status = result.ssh_endpoint_statuses["bastion"]
+        assert bastion_status.active is False
+        assert SshEndpointError.UNREACHABLE in bastion_status.errors
 
     def test_multi_hop_bastion_chain(self, tmp_path: Path) -> None:
         """All hops in a multi-hop bastion chain appear in statuses."""
+        src = tmp_path / "src"
+        src.mkdir(exist_ok=True)
+        (src / ".nbkp-vol").touch()
+        (src / ".nbkp-src").touch()
+        (src / ".nbkp-dst").touch()
 
-        @self._bastion_patches()
-        def _run(self_inner: TestStandaloneEndpointProbing, tmp_path: Path) -> None:
-            src = tmp_path / "src"
-            src.mkdir(exist_ok=True)
-            (src / ".nbkp-vol").touch()
-            (src / ".nbkp-src").touch()
-            (src / ".nbkp-dst").touch()
+        bastion1 = SshEndpoint(
+            slug="bastion1", host="bastion1.example.com", user="admin"
+        )
+        bastion2 = SshEndpoint(
+            slug="bastion2",
+            host="bastion2.internal",
+            user="admin",
+            proxy_jump="bastion1",
+        )
+        target = SshEndpoint(
+            slug="target",
+            host="target.internal",
+            user="backup",
+            proxy_jump="bastion2",
+        )
+        config = Config(
+            ssh_endpoints={
+                "bastion1": bastion1,
+                "bastion2": bastion2,
+                "target": target,
+            },
+            volumes={
+                "local": LocalVolume(slug="local", path=str(src)),
+                "remote": RemoteVolume(
+                    slug="remote", ssh_endpoint="target", path="/data"
+                ),
+            },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="local"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="remote"),
+            },
+            syncs={
+                "s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst"),
+            },
+        )
 
-            bastion1 = SshEndpoint(
-                slug="bastion1", host="bastion1.example.com", user="admin"
-            )
-            bastion2 = SshEndpoint(
-                slug="bastion2",
-                host="bastion2.internal",
-                user="admin",
-                proxy_jump="bastion1",
-            )
-            target = SshEndpoint(
-                slug="target",
-                host="target.internal",
-                user="backup",
-                proxy_jump="bastion2",
-            )
-            config = Config(
-                ssh_endpoints={
-                    "bastion1": bastion1,
-                    "bastion2": bastion2,
-                    "target": target,
-                },
-                volumes={
-                    "local": LocalVolume(slug="local", path=str(src)),
-                    "remote": RemoteVolume(
-                        slug="remote", ssh_endpoint="target", path="/data"
-                    ),
-                },
-                sync_endpoints={
-                    "ep-src": SyncEndpoint(slug="ep-src", volume="local"),
-                    "ep-dst": SyncEndpoint(slug="ep-dst", volume="remote"),
-                },
-                syncs={
-                    "s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst"),
-                },
-            )
+        run = FakeCommandRunner()
+        result = _check_all(
+            config,
+            run,
+            resolved_endpoints={
+                "remote": ResolvedEndpoint(
+                    server=target,
+                    proxy_chain=[bastion1, bastion2],
+                ),
+            },
+        )
+        assert "bastion1" in result.ssh_endpoint_statuses
+        assert "bastion2" in result.ssh_endpoint_statuses
+        assert result.ssh_endpoint_statuses["bastion1"].active is True
+        assert result.ssh_endpoint_statuses["bastion2"].active is True
+        # Each hop is reached through the hops before it.
+        assert _standalone_probes(run) == {
+            "bastion1": ResolvedEndpoint(server=bastion1, proxy_chain=[]),
+            "bastion2": ResolvedEndpoint(server=bastion2, proxy_chain=[bastion1]),
+        }
 
-            result = check_all_syncs(
-                config,
-                resolved_endpoints={
-                    "remote": ResolvedEndpoint(
-                        server=target,
-                        proxy_chain=[bastion1, bastion2],
-                    ),
-                },
-            )
-            assert "bastion1" in result.ssh_endpoint_statuses
-            assert "bastion2" in result.ssh_endpoint_statuses
-            assert result.ssh_endpoint_statuses["bastion1"].active is True
-            assert result.ssh_endpoint_statuses["bastion2"].active is True
-
-        _run(self, tmp_path)
-
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_no_bastions_when_no_proxy_jumps(
-        self,
-        _mock_caps: MagicMock,
-        _mock_ssh: MagicMock,
-        tmp_path: Path,
-    ) -> None:
+    def test_no_bastions_when_no_proxy_jumps(self, tmp_path: Path) -> None:
         """Config without proxy jumps has no bastion statuses."""
         src = tmp_path / "src"
         dst = tmp_path / "dst"
@@ -2964,55 +1385,57 @@ class TestStandaloneEndpointProbing:
                 "s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst"),
             },
         )
-        result = check_all_syncs(config)
+        run = FakeCommandRunner()
+        result = _check_all(config, run)
         # Only "localhost" — no standalone endpoints
         assert set(result.ssh_endpoint_statuses.keys()) == {"localhost"}
+        assert _standalone_probes(run) == {}
 
     def test_orphan_endpoint_probed(self, tmp_path: Path) -> None:
         """Orphan endpoints (defined but not referenced by volumes) are probed."""
+        src = tmp_path / "src"
+        src.mkdir(exist_ok=True)
+        (src / ".nbkp-vol").touch()
+        (src / ".nbkp-src").touch()
+        (src / ".nbkp-dst").touch()
 
-        @self._bastion_patches()
-        def _run(self_inner: TestStandaloneEndpointProbing, tmp_path: Path) -> None:
-            src = tmp_path / "src"
-            src.mkdir(exist_ok=True)
-            (src / ".nbkp-vol").touch()
-            (src / ".nbkp-src").touch()
-            (src / ".nbkp-dst").touch()
-
-            orphan = SshEndpoint(slug="orphan", host="orphan.example.com", user="admin")
-            target = SshEndpoint(slug="target", host="target.internal", user="backup")
-            config = Config(
-                ssh_endpoints={"orphan": orphan, "target": target},
-                volumes={
-                    "local": LocalVolume(slug="local", path=str(src)),
-                    "remote": RemoteVolume(
-                        slug="remote", ssh_endpoint="target", path="/data"
-                    ),
-                },
-                sync_endpoints={
-                    "ep-src": SyncEndpoint(slug="ep-src", volume="local"),
-                    "ep-dst": SyncEndpoint(slug="ep-dst", volume="remote"),
-                },
-                syncs={
-                    "s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst"),
-                },
-            )
-            result = check_all_syncs(
-                config,
-                resolved_endpoints={
-                    "remote": ResolvedEndpoint(
-                        server=target,
-                        proxy_chain=[],
-                    ),
-                },
-            )
-            assert "orphan" in result.ssh_endpoint_statuses
-            assert result.ssh_endpoint_statuses["orphan"].active is True
-            assert result.ssh_endpoint_statuses["orphan"].errors == []
-            # No tool probing on standalone endpoints
-            assert result.ssh_endpoint_statuses["orphan"].diagnostics.host_tools is None
-
-        _run(self, tmp_path)
+        orphan = SshEndpoint(slug="orphan", host="orphan.example.com", user="admin")
+        target = SshEndpoint(slug="target", host="target.internal", user="backup")
+        config = Config(
+            ssh_endpoints={"orphan": orphan, "target": target},
+            volumes={
+                "local": LocalVolume(slug="local", path=str(src)),
+                "remote": RemoteVolume(
+                    slug="remote", ssh_endpoint="target", path="/data"
+                ),
+            },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="local"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="remote"),
+            },
+            syncs={
+                "s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst"),
+            },
+        )
+        run = FakeCommandRunner()
+        result = _check_all(
+            config,
+            run,
+            resolved_endpoints={
+                "remote": ResolvedEndpoint(
+                    server=target,
+                    proxy_chain=[],
+                ),
+            },
+        )
+        assert "orphan" in result.ssh_endpoint_statuses
+        assert result.ssh_endpoint_statuses["orphan"].active is True
+        assert result.ssh_endpoint_statuses["orphan"].errors == []
+        # No tool probing on standalone endpoints
+        assert result.ssh_endpoint_statuses["orphan"].diagnostics.host_tools is None
+        assert _standalone_probes(run) == {
+            "orphan": ResolvedEndpoint(server=orphan, proxy_chain=[])
+        }
 
     def _make_alternate_config(self, tmp_path: Path) -> Config:
         """``remote`` (via ``target``, through ``bastion``) is synced by
@@ -3048,64 +1471,46 @@ class TestStandaloneEndpointProbing:
 
     def _resolved(self, config: Config) -> ResolvedEndpoints:
         return {
-            "remote": ResolvedEndpoint(
-                server=config.ssh_endpoints["target"],
-                proxy_chain=[config.ssh_endpoints["bastion"]],
-            ),
+            **self._through_bastion(config),
             "other": ResolvedEndpoint(server=config.ssh_endpoints["other-host"]),
         }
 
     def test_endpoint_at_excluded_location_not_probed(self, tmp_path: Path) -> None:
-        @self._bastion_patches()
-        def _run(self_inner: TestStandaloneEndpointProbing, tmp_path: Path) -> None:
-            config = self_inner._make_alternate_config(tmp_path)
-            resolved = self_inner._resolved(config)
-            with patch(
-                "nbkp.preflight.checks.observe_standalone_endpoint",
-                return_value=_REACHABLE_SSH_DIAG,
-            ) as standalone:
-                result = check_all_syncs(
-                    config, resolved_endpoints=resolved, exclude_locations=["home"]
-                )
-            probed = {call.args[0].slug for call in standalone.call_args_list}
-            assert probed == {"bastion"}
-            assert "other-lan" not in result.ssh_endpoint_statuses
-            assert check_step_count(config, None, resolved, ["home"]) == (
-                len(result.ssh_endpoint_statuses)
-                + len(result.volume_statuses)
-                + len(result.source_endpoint_statuses)
-                + len(result.destination_endpoint_statuses)
-            )
-
-        _run(self, tmp_path)
+        config = self._make_alternate_config(tmp_path)
+        resolved = self._resolved(config)
+        run = FakeCommandRunner()
+        result = _check_all(
+            config, run, resolved_endpoints=resolved, exclude_locations=["home"]
+        )
+        assert set(_standalone_probes(run)) == {"bastion"}
+        assert "other-lan" not in result.ssh_endpoint_statuses
+        assert check_step_count(config, None, resolved, ["home"]) == (
+            len(result.ssh_endpoint_statuses)
+            + len(result.volume_statuses)
+            + len(result.source_endpoint_statuses)
+            + len(result.destination_endpoint_statuses)
+        )
 
     def test_only_syncs_probes_only_endpoints_of_selected_volumes(
         self, tmp_path: Path
     ) -> None:
-        @self._bastion_patches()
-        def _run(self_inner: TestStandaloneEndpointProbing, tmp_path: Path) -> None:
-            config = self_inner._make_alternate_config(tmp_path)
-            with patch(
-                "nbkp.preflight.checks.observe_standalone_endpoint",
-                return_value=_REACHABLE_SSH_DIAG,
-            ) as standalone:
-                result = check_all_syncs(
-                    config,
-                    only_syncs=["s1"],
-                    resolved_endpoints=self_inner._resolved(config),
-                )
-            probed = {call.args[0].slug for call in standalone.call_args_list}
-            assert probed == {"bastion"}
-            assert set(result.ssh_endpoint_statuses) == {
-                "localhost",
-                "target",
-                "bastion",
-            }
-
-        _run(self, tmp_path)
+        config = self._make_alternate_config(tmp_path)
+        run = FakeCommandRunner()
+        result = _check_all(
+            config,
+            run,
+            only_syncs=["s1"],
+            resolved_endpoints=self._resolved(config),
+        )
+        assert set(_standalone_probes(run)) == {"bastion"}
+        assert set(result.ssh_endpoint_statuses) == {
+            "localhost",
+            "target",
+            "bastion",
+        }
 
 
-def _alternate_endpoint_config(archive: str, photos: str) -> Config:
+def _alternate_endpoint_config(laptop: Path, archive: str, photos: str) -> Config:
     """``archive`` is only reachable from home (``nas-lan``); ``photos`` has
     the same primary but also ``nas-wan``, reachable while travelling."""
     return Config(
@@ -3116,7 +1521,7 @@ def _alternate_endpoint_config(archive: str, photos: str) -> Config:
             ),
         },
         volumes={
-            "laptop": LocalVolume(slug="laptop", path="/home/me"),
+            "laptop": LocalVolume(slug="laptop", path=str(laptop)),
             archive: RemoteVolume(slug=archive, ssh_endpoint="nas-lan", path="/a"),
             photos: RemoteVolume(
                 slug=photos,
@@ -3146,57 +1551,27 @@ class TestAlternateEndpointUnderLocationExclusion:
         [("a-archive", "b-photos"), ("z-archive", "b-photos")],
     )
     def test_each_volume_is_checked_through_its_resolved_endpoint(
-        self, archive: str, photos: str
+        self, archive: str, photos: str, tmp_path: Path
     ) -> None:
-        config = _alternate_endpoint_config(archive, photos)
+        config = _alternate_endpoint_config(tmp_path, archive, photos)
         resolved = resolve_all_endpoints(
             config,
             EndpointFilter(exclude_locations=["home"]),
             ssh_config=paramiko.SSHConfig(),
             lookup=lambda _host: {"203.0.113.7"},
         )
-        probed: list[str] = []
-        observed: list[str] = []
+        run = FakeCommandRunner()
 
-        def observe_ssh(vol: Volume, **_kwargs: object) -> SshEndpointDiagnostics:
-            probed.append(vol.slug)
-            return _ssh_diag(ssh_reachable=True)
+        result = _check_all(config, run, resolved_endpoints=resolved)
 
-        def observe_vol(vol: Volume, **_kwargs: object) -> VolumeDiagnostics:
-            observed.append(vol.slug)
-            return VolumeDiagnostics(capabilities=_STUB_CAPS)
-
-        with (
-            patch(
-                "nbkp.preflight.checks.observe_ssh_endpoint", side_effect=observe_ssh
-            ),
-            patch("nbkp.preflight.checks.observe_volume", side_effect=observe_vol),
-            patch(
-                "nbkp.preflight.checks.observe_standalone_endpoint",
-                return_value=_REACHABLE_SSH_DIAG,
-            ),
-            patch(
-                "nbkp.preflight.checks.enrich_from_ssh_config",
-                side_effect=lambda ep: ep,
-            ),
-            patch(
-                "nbkp.preflight.checks.observe_source_endpoint",
-                return_value=SourceEndpointDiagnostics(
-                    endpoint_slug="ep-src", sentinel_exists=True
-                ),
-            ),
-            patch(
-                "nbkp.preflight.checks.observe_destination_endpoint",
-                return_value=DestinationEndpointDiagnostics(
-                    endpoint_slug="ep-archive",
-                    sentinel_exists=True,
-                    endpoint_writable=True,
-                ),
-            ),
-        ):
-            result = check_all_syncs(config, resolved_endpoints=resolved)
-
-        assert archive not in probed and archive not in observed
+        # Nothing reaches the excluded volume; the other one goes over the WAN.
+        assert archive not in {c.volume.slug for c in run.calls}
+        routes = {
+            c.endpoint.server.slug
+            for c in run.calls
+            if c.volume.slug == photos and c.endpoint is not None
+        }
+        assert routes == {"nas-wan"}
         assert result.volume_statuses[photos].active is True
         assert result.volume_statuses[photos].ssh_endpoint_status.slug == "nas-wan"
         assert result.ssh_endpoint_statuses["nas-wan"].active is True
@@ -3250,13 +1625,8 @@ class TestCheckHardLinkDest:
         (dst / "backup").mkdir(exist_ok=True)
         (dst / "backup" / ".nbkp-dst").touch()
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_snapshots_dir_not_found(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -3268,19 +1638,14 @@ class TestCheckHardLinkDest:
 
         config, sync = self._make_hl_config(src, dst)
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert status.active is False
         assert (
             DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND
             in status.destination_endpoint_status.errors
         )
 
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    def test_no_hardlink_support_fat(
-        self,
-        mock_caps: MagicMock,
-        tmp_path: Path,
-    ) -> None:
+    def test_no_hardlink_support_fat(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3290,25 +1655,15 @@ class TestCheckHardLinkDest:
 
         config, sync = self._make_hl_config(src, dst)
 
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _HL_NO_HARDLINK_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        status = check_sync(sync, config)
+        status = _check(sync, config, fs_type="vfat")
         assert status.active is False
         assert (
             DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT
             in status.destination_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_active_with_ext4(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -3321,21 +1676,11 @@ class TestCheckHardLinkDest:
 
         config, sync = self._make_hl_config(src, dst)
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert status.active is True
         assert status.errors == []
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_HL_NO_STAT_HOST_TOOLS),
-    )
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    def test_stat_not_found(
-        self,
-        mock_caps: MagicMock,
-        _mock_ssh: MagicMock,
-        tmp_path: Path,
-    ) -> None:
+    def test_stat_not_found(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3344,12 +1689,10 @@ class TestCheckHardLinkDest:
 
         config, sync = self._make_hl_config(src, dst)
 
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _HL_NO_STAT_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        status = check_sync(sync, config)
+        # Were stat probed, vfat would report VOL_NO_HARDLINK_SUPPORT.
+        run = FakeCommandRunner()
+        status = _check(sync, config, run=run, fs_type="vfat", missing_tools={"stat"})
+        assert run.commands_starting_with("stat") == []
         assert status.active is False
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
@@ -3361,13 +1704,8 @@ class TestCheckHardLinkDest:
             not in status.destination_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_no_btrfs_checks_for_hardlink(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Hard-link mode should not run any btrfs-specific checks."""
@@ -3380,7 +1718,7 @@ class TestCheckHardLinkDest:
 
         config, sync = self._make_hl_config(src, dst)
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
@@ -3398,18 +1736,7 @@ class TestCheckHardLinkDest:
             not in status.destination_endpoint_status.errors
         )
 
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_remote_no_hardlink_support(
-        self,
-        mock_run: MagicMock,
-        mock_vol_run: MagicMock,
-        mock_caps: MagicMock,
-        mock_ssh_ep: MagicMock,
-        tmp_path: Path,
-    ) -> None:
+    def test_remote_no_hardlink_support(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         src.mkdir()
         (src / ".nbkp-vol").touch()
@@ -3446,48 +1773,17 @@ class TestCheckHardLinkDest:
             },
             syncs={"s1": sync},
         )
+        run = FakeCommandRunner().on(
+            "stat", "-f", returns=completed(stdout="vfat\n"), volume="dst"
+        )
 
-        def ssh_ep_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            if isinstance(volume, RemoteVolume):
-                return _ssh_diag(host_tools=_STUB_HOST_TOOLS, ssh_reachable=True)
-            return _ssh_diag()
-
-        mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _HL_NO_HARDLINK_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def remote_side_effect(
-            server: SshEndpoint,
-            cmd: list[str],
-            proxy_chain: list[SshEndpoint] | None = None,
-            input: str | None = None,
-        ) -> MagicMock:
-            if cmd == [
-                "test",
-                "-f",
-                "/backup/backup/.nbkp-dst",
-            ]:
-                return MagicMock(returncode=0)
-            if cmd == [
-                "test",
-                "-d",
-                "/backup/backup/snapshots",
-            ]:
-                return MagicMock(returncode=0)
-            return MagicMock(returncode=0, stdout="/dev/null\n")
-
-        mock_run.side_effect = remote_side_effect
-
-        status = check_sync(sync, config, _make_resolved(config))
+        status = _check(sync, config, run=run, resolved=_make_resolved(config))
         assert status.active is False
         assert (
             DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT
             in status.destination_endpoint_status.errors
         )
+        assert ["stat", "-f", "-c", "%T", "/backup"] in run.commands
 
 
 class TestCheckSourceLatest:
@@ -3543,17 +1839,7 @@ class TestCheckSourceLatest:
         (dst / "backup").mkdir(exist_ok=True)
         (dst / "backup" / ".nbkp-dst").touch()
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_BTRFS_FULL_HOST_TOOLS),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_btrfs_source_latest_missing(
-        self, _mock_caps: MagicMock, _mock_ssh: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_btrfs_source_latest_missing(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3563,19 +1849,13 @@ class TestCheckSourceLatest:
 
         config, sync = self._make_config(src, dst, "btrfs")
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
             in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_hard_link_source_latest_missing(
-        self, _mock_caps: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_hard_link_source_latest_missing(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3585,19 +1865,13 @@ class TestCheckSourceLatest:
 
         config, sync = self._make_config(src, dst, "hard-link")
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
             in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_btrfs_source_latest_present(
-        self, _mock_caps: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_btrfs_source_latest_present(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3616,7 +1890,7 @@ class TestCheckSourceLatest:
 
         config, sync = self._make_config(src, dst, "btrfs")
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
             not in status.source_endpoint_status.errors
@@ -3626,13 +1900,7 @@ class TestCheckSourceLatest:
             not in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_hard_link_source_latest_symlink(
-        self, _mock_caps: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_hard_link_source_latest_symlink(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3650,19 +1918,13 @@ class TestCheckSourceLatest:
 
         config, sync = self._make_config(src, dst, "hard-link")
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
             not in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_no_snapshots_source_skips_check(
-        self, _mock_caps: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_no_snapshots_source_skips_check(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3694,11 +1956,14 @@ class TestCheckSourceLatest:
             syncs={"s1": sync},
         )
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
             not in status.source_endpoint_status.errors
         )
+        # A source without snapshots has no layout to observe.
+        assert status.source_endpoint_status.diagnostics is not None
+        assert status.source_endpoint_status.diagnostics.latest is None
 
 
 class TestCheckSourceSnapshots:
@@ -3754,17 +2019,7 @@ class TestCheckSourceSnapshots:
         (dst / "backup").mkdir(exist_ok=True)
         (dst / "backup" / ".nbkp-dst").touch()
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_BTRFS_FULL_HOST_TOOLS),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_btrfs_source_snapshots_missing(
-        self, _mock_caps: MagicMock, _mock_ssh: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_btrfs_source_snapshots_missing(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3775,19 +2030,13 @@ class TestCheckSourceSnapshots:
 
         config, sync = self._make_config(src, dst, "btrfs")
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND
             in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_hard_link_source_snapshots_missing(
-        self, _mock_caps: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_hard_link_source_snapshots_missing(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3798,19 +2047,13 @@ class TestCheckSourceSnapshots:
 
         config, sync = self._make_config(src, dst, "hard-link")
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND
             in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_btrfs_source_snapshots_present(
-        self, _mock_caps: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_btrfs_source_snapshots_present(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3821,19 +2064,13 @@ class TestCheckSourceSnapshots:
 
         config, sync = self._make_config(src, dst, "btrfs")
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND
             not in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_no_snapshots_source_skips_check(
-        self, _mock_caps: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_no_snapshots_source_skips_check(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3865,11 +2102,13 @@ class TestCheckSourceSnapshots:
             syncs={"s1": sync},
         )
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND
             not in status.source_endpoint_status.errors
         )
+        assert status.source_endpoint_status.diagnostics is not None
+        assert status.source_endpoint_status.diagnostics.snapshot_dirs is None
 
 
 class TestCheckDevnullLatest:
@@ -3926,13 +2165,8 @@ class TestCheckDevnullLatest:
         (dst / "backup").mkdir(exist_ok=True)
         (dst / "backup" / ".nbkp-dst").touch()
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_source_devnull_accepted_with_upstream(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Source latest → /dev/null is valid when an upstream
@@ -3988,7 +2222,7 @@ class TestCheckDevnullLatest:
             },
             syncs={"s1": sync, "upstream": upstream},
         )
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.LATEST_SYMLINK_INVALID
             not in status.source_endpoint_status.errors
@@ -3998,13 +2232,8 @@ class TestCheckDevnullLatest:
             not in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_source_devnull_inactive_in_dry_run_with_upstream(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Source latest → /dev/null with upstream sync is marked
@@ -4061,17 +2290,12 @@ class TestCheckDevnullLatest:
             },
             syncs={"s1": sync, "upstream": upstream},
         )
-        status = check_sync(sync, config, dry_run=True)
+        status = _check(sync, config, dry_run=True)
         assert SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING in status.errors
         assert not status.active
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_source_devnull_rejected_without_upstream(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Source latest → /dev/null is invalid when no upstream
@@ -4088,16 +2312,11 @@ class TestCheckDevnullLatest:
 
         config, sync = self._make_config(src, dst)
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert SyncError.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM in status.errors
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_source_dangling_symlink_invalid(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Source latest pointing to non-existent snapshot is
@@ -4120,19 +2339,14 @@ class TestCheckDevnullLatest:
 
         config, sync = self._make_config(src, dst)
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.LATEST_SYMLINK_INVALID
             in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_dest_devnull_accepted(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Destination latest → /dev/null is valid (no snapshot
@@ -4147,7 +2361,7 @@ class TestCheckDevnullLatest:
 
         config, sync = self._make_config(src, dst)
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND
             not in status.destination_endpoint_status.errors
@@ -4157,13 +2371,8 @@ class TestCheckDevnullLatest:
             not in status.destination_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_dest_latest_missing(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Missing destination latest symlink is detected."""
@@ -4177,19 +2386,14 @@ class TestCheckDevnullLatest:
 
         config, sync = self._make_config(src, dst)
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND
             in status.destination_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_dest_dangling_symlink_invalid(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Destination latest pointing to non-existent snapshot is
@@ -4210,7 +2414,7 @@ class TestCheckDevnullLatest:
 
         config, sync = self._make_config(src, dst)
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             DestinationEndpointError.LATEST_SYMLINK_INVALID
             in status.destination_endpoint_status.errors
@@ -4218,29 +2422,16 @@ class TestCheckDevnullLatest:
 
 
 class TestCheckRemoteVolumeSpaces:
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_STUB_HOST_TOOLS, ssh_reachable=True),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
-    def test_active(
-        self, mock_run: MagicMock, mock_caps: MagicMock, _mock_ssh: MagicMock
-    ) -> None:
-        mock_run.return_value = MagicMock(returncode=0)
+    def test_active(self) -> None:
         vol, config = _remote_config(path="/my backup")
         resolved = _make_resolved(config)
-        status = check_volume(vol, resolved)
+        run = healthy_host()
+        status = check_volume(vol, resolved, run=run)
         assert status.active is True
         assert status.diagnostics.capabilities is not None
-        mock_run.assert_called_once_with(
-            config.ssh_endpoints["nas-server"],
-            ["test", "-f", "/my backup/.nbkp-vol"],
-            [],
-        )
+        assert run.commands_starting_with("test", "-f") == [
+            ["test", "-f", "/my backup/.nbkp-vol"]
+        ]
 
 
 class TestParseRsyncVersion:
@@ -4270,81 +2461,73 @@ class TestParseRsyncVersion:
         assert parse_rsync_version("not rsync\n") == (0, 0, 0)
 
 
+def _rsync_answers(stdout: str, returncode: int = 0) -> FakeCommandRunner:
+    return FakeCommandRunner().on(
+        "rsync", "--version", returns=completed(returncode, stdout)
+    )
+
+
 class TestCheckRsyncVersionLocal:
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_new_enough(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="rsync  version 3.2.7  protocol version 31\n",
+    def test_new_enough(self) -> None:
+        run = _rsync_answers("rsync  version 3.2.7  protocol version 31\n")
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        assert check_rsync_version(vol, {}, run=run) is True
+        assert run.commands == [["rsync", "--version"]]
+
+    def test_too_old(self) -> None:
+        run = _rsync_answers("rsync  version 2.6.9  protocol version 29\n")
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        assert check_rsync_version(vol, {}, run=run) is False
+
+    def test_openrsync(self) -> None:
+        run = _rsync_answers(
+            "openrsync: protocol version 29\nrsync version 2.6.9 compatible\n"
         )
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_rsync_version(vol, {}) is True
+        assert check_rsync_version(vol, {}, run=run) is False
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_too_old(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="rsync  version 2.6.9  protocol version 29\n",
-        )
+    def test_command_failure(self) -> None:
+        run = _rsync_answers("", returncode=1)
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_rsync_version(vol, {}) is False
+        assert check_rsync_version(vol, {}, run=run) is False
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_openrsync(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout=("openrsync: protocol version 29\nrsync version 2.6.9 compatible\n"),
-        )
+    def test_exactly_3_0_0(self) -> None:
+        run = _rsync_answers("rsync  version 3.0.0  protocol version 30\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_rsync_version(vol, {}) is False
-
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_command_failure(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=1, stdout="")
-        vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_rsync_version(vol, {}) is False
-
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_exactly_3_0_0(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="rsync  version 3.0.0  protocol version 30\n",
-        )
-        vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_rsync_version(vol, {}) is True
+        assert check_rsync_version(vol, {}, run=run) is True
 
 
 class TestCheckRsyncVersionRemote:
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_new_enough(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="rsync  version 3.2.7  protocol version 31\n",
-        )
+    def test_new_enough(self) -> None:
+        run = _rsync_answers("rsync  version 3.2.7  protocol version 31\n")
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert check_rsync_version(vol, resolved) is True
+        assert check_rsync_version(vol, resolved, run=run) is True
+        assert run.calls[0].endpoint == resolved["nas"]
 
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_too_old(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="rsync  version 2.6.9  protocol version 29\n",
-        )
+    def test_too_old(self) -> None:
+        run = _rsync_answers("rsync  version 2.6.9  protocol version 29\n")
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert check_rsync_version(vol, resolved) is False
+        assert check_rsync_version(vol, resolved, run=run) is False
 
 
-def _nas_and_local_config() -> Config:
-    """``remote``: NAS → local ``a``; ``local``: local ``b`` → local ``c``."""
+def _nas_and_local_config(tmp_path: Path) -> Config:
+    """``remote``: NAS → local ``a``; ``local``: local ``b`` → local ``c``.
+
+    The local volumes carry their sentinels, so only the NAS can fail.
+    """
+    for name, sentinel in (("a", ".nbkp-dst"), ("b", ".nbkp-src"), ("c", ".nbkp-dst")):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / ".nbkp-vol").touch()
+        (tmp_path / name / sentinel).touch()
     return Config(
         ssh_endpoints={"nas": SshEndpoint(slug="nas", host="nas.example")},
         volumes={
             "nas": RemoteVolume(slug="nas", ssh_endpoint="nas", path="/data"),
-            "a": LocalVolume(slug="a", path="/mnt/a"),
-            "b": LocalVolume(slug="b", path="/mnt/b"),
-            "c": LocalVolume(slug="c", path="/mnt/c"),
+            "a": LocalVolume(slug="a", path=str(tmp_path / "a")),
+            "b": LocalVolume(slug="b", path=str(tmp_path / "b")),
+            "c": LocalVolume(slug="c", path=str(tmp_path / "c")),
         },
         sync_endpoints={
             "ep-nas": SyncEndpoint(slug="ep-nas", volume="nas"),
@@ -4359,26 +2542,6 @@ def _nas_and_local_config() -> Config:
     )
 
 
-def _reachable(*_args: object, **_kwargs: object) -> SshEndpointDiagnostics:
-    return _ssh_diag(ssh_reachable=True)
-
-
-def _stub_volume(*_args: object, **_kwargs: object) -> VolumeDiagnostics:
-    return VolumeDiagnostics(capabilities=_STUB_CAPS)
-
-
-def _src_ok(ep: SyncEndpoint, *_args: object) -> SourceEndpointDiagnostics:
-    return SourceEndpointDiagnostics(endpoint_slug=ep.slug, sentinel_exists=True)
-
-
-def _dst_ok(
-    ep: SyncEndpoint, *_args: object, **_kwargs: object
-) -> DestinationEndpointDiagnostics:
-    return DestinationEndpointDiagnostics(
-        endpoint_slug=ep.slug, sentinel_exists=True, endpoint_writable=True
-    )
-
-
 class TestConnectionLostDuringPreflight:
     """A host that drops after the first probe is unreachable for that host only.
 
@@ -4386,24 +2549,13 @@ class TestConnectionLostDuringPreflight:
     host-tool probes and then go away (asleep, Wi-Fi dropped).
     """
 
-    @patch("nbkp.preflight.checks.observe_destination_endpoint", side_effect=_dst_ok)
-    @patch("nbkp.preflight.checks.observe_source_endpoint", side_effect=_src_ok)
-    @patch("nbkp.preflight.checks.observe_volume")
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint", side_effect=_reachable)
-    def test_during_volume_observation(
-        self, _ssh: MagicMock, mock_volume: MagicMock, *_mocks: MagicMock
-    ) -> None:
-        def observe(volume: Volume, **_kwargs: object) -> VolumeDiagnostics:
-            match volume:
-                case RemoteVolume():
-                    raise EOFError("connection closed by peer")
-                case _:
-                    return _stub_volume()
+    def test_during_volume_observation(self, tmp_path: Path) -> None:
+        config = _nas_and_local_config(tmp_path)
+        run = FakeCommandRunner().on(
+            "test", "-f", returns=EOFError("connection closed by peer"), volume="nas"
+        )
 
-        mock_volume.side_effect = observe
-        config = _nas_and_local_config()
-
-        result = check_all_syncs(config, resolved_endpoints=_make_resolved(config))
+        result = _check_all(config, run, resolved_endpoints=_make_resolved(config))
 
         nas = result.volume_statuses["nas"]
         assert nas.errors == [VolumeError.SSH_ENDPOINT_INACTIVE]
@@ -4414,27 +2566,18 @@ class TestConnectionLostDuringPreflight:
         assert result.sync_statuses["remote"].is_expected_inactive()
         assert result.sync_statuses["local"].active
 
-    @patch("nbkp.preflight.checks.observe_destination_endpoint", side_effect=_dst_ok)
-    @patch("nbkp.preflight.checks.observe_source_endpoint")
-    @patch("nbkp.preflight.checks.observe_volume", side_effect=_stub_volume)
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint", side_effect=_reachable)
-    def test_during_endpoint_observation(
-        self, _ssh: MagicMock, _vol: MagicMock, mock_src: MagicMock, _dst: MagicMock
-    ) -> None:
-        def observe(
-            ep: SyncEndpoint, volume: Volume, *_args: object
-        ) -> SourceEndpointDiagnostics:
-            match volume:
-                case RemoteVolume():
-                    raise paramiko.SSHException("Error reading SSH protocol banner")
-                case _:
-                    return _src_ok(ep)
+    def test_during_endpoint_observation(self, tmp_path: Path) -> None:
+        config = _nas_and_local_config(tmp_path)
+        run = FakeCommandRunner().on(
+            "test",
+            "-f",
+            "/data/.nbkp-src",
+            returns=paramiko.SSHException("Error reading SSH protocol banner"),
+        )
 
-        mock_src.side_effect = observe
-        config = _nas_and_local_config()
+        result = _check_all(config, run, resolved_endpoints=_make_resolved(config))
 
-        result = check_all_syncs(config, resolved_endpoints=_make_resolved(config))
-
+        assert result.volume_statuses["nas"].active
         src = result.source_endpoint_statuses["ep-nas"]
         assert src.errors == [SourceEndpointError.VOLUME_INACTIVE]
         assert src.volume_status.ssh_endpoint_status.errors == [
@@ -4443,27 +2586,30 @@ class TestConnectionLostDuringPreflight:
         assert result.sync_statuses["remote"].is_expected_inactive()
         assert result.sync_statuses["local"].active
 
-    @patch("nbkp.preflight.checks.observe_volume", side_effect=OSError("disk gone"))
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint", side_effect=_reachable)
-    def test_local_errors_still_propagate(self, *_mocks: MagicMock) -> None:
-        config = _nas_and_local_config()
+    def test_local_errors_still_propagate(self, tmp_path: Path) -> None:
+        config = _nas_and_local_config(tmp_path)
+        run = FakeCommandRunner().on(
+            "stat", "-f", returns=OSError("disk gone"), volume="b"
+        )
         with pytest.raises(OSError, match="disk gone"):
-            check_all_syncs(config, resolved_endpoints=_make_resolved(config))
+            _check_all(config, run, resolved_endpoints=_make_resolved(config))
 
-    @patch(
-        "nbkp.preflight.volume_checks._probe_mount_tools",
-        side_effect=EOFError("connection closed by peer"),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks._probe_host_tools",
-        return_value=_STUB_HOST_TOOLS,
-    )
-    def test_during_mount_tool_probe(self, *_mocks: MagicMock) -> None:
-        config = _nas_and_local_config()
+    def test_during_mount_tool_probe(self, tmp_path: Path) -> None:
+        config = _nas_and_local_config(tmp_path)
+        # The host tools answer; the connection drops at the mount tools.
+        run = healthy_host(
+            FakeCommandRunner().on(
+                "which", "udisksctl", returns=EOFError("connection closed by peer")
+            )
+        )
 
         diag = observe_ssh_endpoint(
-            config.volumes["nas"], _make_resolved(config), probe_mount_tools=True
+            config.volumes["nas"],
+            _make_resolved(config),
+            probe_mount_tools=True,
+            run=run,
         )
 
         assert diag.ssh_reachable is False
         assert diag.ssh_error == "connection closed by peer"
+        assert ["which", "rsync"] in run.commands

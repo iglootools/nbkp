@@ -1,5 +1,6 @@
 import shutil
 import subprocess
+from collections.abc import Callable
 from typing import Protocol
 
 from ..config import LocalVolume, RemoteVolume, Volume
@@ -41,16 +42,27 @@ class VolumeCommandRunner(Protocol):
     ) -> subprocess.CompletedProcess[str]: ...
 
 
+type CommandLocator = Callable[[str], str | None]
+"""Finds a command on the orchestrator's ``PATH``: :func:`shutil.which` in
+production, a fake in tests."""
+
+
 def check_command_available(
     volume: Volume,
     command: str,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
+    which: CommandLocator = shutil.which,
 ) -> bool:
+    """Whether *command* is on the ``PATH`` of the host holding *volume*.
+
+    A remote host is asked over SSH (``which``); the orchestrator looks it up
+    in-process with *which*, so a local host needs no ``which`` binary (some
+    minimal distributions ship none).
+    """
     match volume:
         case LocalVolume():
-            return shutil.which(command) is not None
+            return which(command) is not None
         case RemoteVolume():
-            return (
-                run_on_volume(["which", command], volume, resolved_endpoints).returncode
-                == 0
-            )
+            return run(["which", command], volume, resolved_endpoints).returncode == 0
