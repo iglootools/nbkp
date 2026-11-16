@@ -231,14 +231,14 @@ class TestGetLatestSnapshotLocal:
         runner = FakeCommandRunner().on(
             returns=completed(
                 returncode=0,
-                stdout="20240101T000000Z\n20240115T120000Z\n",
+                stdout="2024-01-01T00:00:00.000Z\n2024-01-15T12:00:00.000Z\n",
             )
         )
         config, sync = _local_config()
 
         result = get_latest_snapshot(sync, config, run=runner)
         assert result is not None
-        assert result.name == "20240115T120000Z"
+        assert result.name == "2024-01-15T12:00:00.000Z"
 
     def test_empty(self) -> None:
         runner = FakeCommandRunner().on(returns=completed(returncode=0, stdout=""))
@@ -266,7 +266,7 @@ class TestGetLatestSnapshotRemote:
         runner = FakeCommandRunner().on(
             returns=completed(
                 returncode=0,
-                stdout="20240101T000000Z\n20240115T120000Z\n",
+                stdout="2024-01-01T00:00:00.000Z\n2024-01-15T12:00:00.000Z\n",
             )
         )
         config, sync = _remote_config()
@@ -274,7 +274,7 @@ class TestGetLatestSnapshotRemote:
 
         result = get_latest_snapshot(sync, config, resolved, run=runner)
         assert result is not None
-        assert result.name == "20240115T120000Z"
+        assert result.name == "2024-01-15T12:00:00.000Z"
         assert runner.commands == [["ls", "/backup/data/snapshots"]]
         assert runner.calls[0].volume == config.volumes["dst"]
 
@@ -284,7 +284,7 @@ class TestGetLatestSnapshotRemoteSpaces:
         runner = FakeCommandRunner().on(
             returns=completed(
                 returncode=0,
-                stdout="20240101T000000Z\n20240115T120000Z\n",
+                stdout="2024-01-01T00:00:00.000Z\n2024-01-15T12:00:00.000Z\n",
             )
         )
         config, sync = _remote_config_spaces()
@@ -292,7 +292,7 @@ class TestGetLatestSnapshotRemoteSpaces:
 
         result = get_latest_snapshot(sync, config, resolved, run=runner)
         assert result is not None
-        assert result.name == "20240115T120000Z"
+        assert result.name == "2024-01-15T12:00:00.000Z"
         assert runner.commands == [["ls", "/my backup/my data/snapshots"]]
         assert runner.calls[0].volume == config.volumes["dst"]
 
@@ -302,15 +302,15 @@ class TestListSnapshotsLocal:
         runner = FakeCommandRunner().on(
             returns=completed(
                 returncode=0,
-                stdout="20240101T000000Z\n20240115T120000Z\n",
+                stdout="2024-01-01T00:00:00.000Z\n2024-01-15T12:00:00.000Z\n",
             )
         )
         config, sync = _local_config()
 
         result = list_snapshots(sync, config, run=runner)
         assert [s.name for s in result] == [
-            "20240101T000000Z",
-            "20240115T120000Z",
+            "2024-01-01T00:00:00.000Z",
+            "2024-01-15T12:00:00.000Z",
         ]
 
     def test_empty(self) -> None:
@@ -339,7 +339,7 @@ class TestListSnapshotsRemote:
         runner = FakeCommandRunner().on(
             returns=completed(
                 returncode=0,
-                stdout="20240101T000000Z\n20240115T120000Z\n",
+                stdout="2024-01-01T00:00:00.000Z\n2024-01-15T12:00:00.000Z\n",
             )
         )
         config, sync = _remote_config()
@@ -347,9 +347,28 @@ class TestListSnapshotsRemote:
 
         result = list_snapshots(sync, config, resolved, run=runner)
         assert [s.name for s in result] == [
-            "20240101T000000Z",
-            "20240115T120000Z",
+            "2024-01-01T00:00:00.000Z",
+            "2024-01-15T12:00:00.000Z",
         ]
+
+
+def _hl_local_config(dst_path: Path) -> tuple[SyncConfig, Config]:
+    config = Config(
+        volumes={
+            "src": LocalVolume(slug="src", path="/src"),
+            "dst": LocalVolume(slug="dst", path=str(dst_path)),
+        },
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(
+                slug="ep-dst",
+                volume="dst",
+                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+            ),
+        },
+        syncs={"s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst")},
+    )
+    return config.syncs["s1"], config
 
 
 class TestReadLatestSymlink:
@@ -490,6 +509,35 @@ class TestUpdateLatestSymlink:
         assert link.is_symlink()
         assert str(link.readlink()) == f"snapshots/{_TS_LOCAL.name}"
 
+    def test_local_replaces_existing_without_leftovers(self, tmp_path: Path) -> None:
+        sync, config = _hl_local_config(tmp_path)
+        link = tmp_path / "latest"
+        link.symlink_to("/dev/null")
+
+        update_latest_symlink(sync, config, _TS_LOCAL)
+
+        assert str(link.readlink()) == f"snapshots/{_TS_LOCAL.name}"
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["latest"]
+
+    def test_local_failure_keeps_previous_latest(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """latest is never missing, even when creating the new link fails."""
+        sync, config = _hl_local_config(tmp_path)
+        link = tmp_path / "latest"
+        link.symlink_to("snapshots/previous")
+
+        def fail(self: Path, target: str) -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(Path, "symlink_to", fail)
+
+        with pytest.raises(
+            SnapshotOperationError, check=_is_op(SnapshotOp.UPDATE_LATEST)
+        ):
+            update_latest_symlink(sync, config, _TS_LOCAL)
+        assert str(link.readlink()) == "snapshots/previous"
+
     def test_remote(self) -> None:
         runner = FakeCommandRunner().on(returns=completed(returncode=0, stderr=""))
         sync, config, re = _hl_remote_config()
@@ -566,6 +614,18 @@ class TestReadLatestSymlinkFailures:
                 completed(returncode=1, stdout="", stderr="I/O error"),
                 completed(returncode=0, stdout="", stderr=""),  # test -L: exists
             ]
+        )
+        sync, config, re = _hl_remote_config()
+
+        with pytest.raises(
+            SnapshotOperationError, check=_is_op(SnapshotOp.READ_LATEST)
+        ):
+            read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
+
+    def test_target_not_a_snapshot_raises(self) -> None:
+        """A latest target nbkp did not write is an error, not a guess."""
+        runner = FakeCommandRunner().on(
+            "readlink", returns=completed(0, "snapshots/2026-03-07T09:00:00\n")
         )
         sync, config, re = _hl_remote_config()
 

@@ -134,13 +134,49 @@ def _timestamp_line(spec: SyncSpec) -> str:
     return f"NBKP_TS=$(date -u {quote(fmt)})"
 
 
-def _mkdir_block(spec: SyncSpec) -> str:
-    mkdir = _on_dst(spec, ["mkdir", "-p", f"{spec.snapshots_dir}/{SNAPSHOT_TS}"])
+def _after_latest_guard(spec: SyncSpec) -> str:
+    """Fail the sync unless ``$NBKP_TS`` sorts after ``latest``'s snapshot.
+
+    As ``ensure_after_latest`` in ``nbkp run``: a snapshot taken with the
+    clock behind would move ``latest`` back in time, and the next orphan
+    cleanup would remove every complete snapshot after it; an equal name
+    would reuse the latest snapshot.  Names are fixed-width timestamps, so
+    ``test``'s byte-wise ``>`` orders them by time.
+    """
+    error = (
+        "ERROR: new snapshot $NBKP_TS would not be after the latest"
+        " snapshot $NBKP_LATEST_NAME; is the clock behind?"
+    )
     return dedent(f"""\
-        {_timestamp_line(spec)}
-        if [ "$NBKP_DRY_RUN" = false ]; then
-            {mkdir}
+        NBKP_LATEST_LINK={_readlink_latest(spec)}
+        if [ -n "$NBKP_LATEST_LINK" ] && [ "$NBKP_LATEST_LINK" != "/dev/null" ]; then
+            NBKP_LATEST_NAME="${{NBKP_LATEST_LINK##*/}}"
+            if ! [ "$NBKP_TS" \\> "$NBKP_LATEST_NAME" ]; then
+                nbkp_log "{error}"
+                return 1
+            fi
         fi""")
+
+
+def _mkdir_block(spec: SyncSpec) -> str:
+    """Create the new snapshot dir, which must not exist yet (as in run).
+
+    Plain ``mkdir``: names have one-second resolution here, and reusing an
+    existing snapshot would have rsync write into it, and a failed rsync
+    then remove it.
+    """
+    mkdir_parent = _on_dst(spec, ["mkdir", "-p", spec.snapshots_dir])
+    mkdir = _on_dst(spec, ["mkdir", f"{spec.snapshots_dir}/{SNAPSHOT_TS}"])
+    return "\n".join(
+        [
+            _timestamp_line(spec),
+            'if [ "$NBKP_DRY_RUN" = false ]; then',
+            _indent(_after_latest_guard(spec), 1),
+            _indent(mkdir_parent, 1),
+            _indent(mkdir, 1),
+            "fi",
+        ]
+    )
 
 
 def _rsync_command(spec: SyncSpec, dest_suffix: str | None) -> list[str]:
@@ -232,11 +268,15 @@ def _btrfs_snapshot_block(spec: SyncSpec) -> str:
             f"{spec.snapshots_dir}/{SNAPSHOT_TS}",
         ],
     )
-    return dedent(f"""\
-        if [ "$NBKP_DRY_RUN" = false ]; then
-            {_timestamp_line(spec)}
-            {snap}
-        fi""")
+    return "\n".join(
+        [
+            'if [ "$NBKP_DRY_RUN" = false ]; then',
+            _indent(_timestamp_line(spec), 1),
+            _indent(_after_latest_guard(spec), 1),
+            _indent(snap, 1),
+            "fi",
+        ]
+    )
 
 
 def _symlink_block(spec: SyncSpec) -> str:

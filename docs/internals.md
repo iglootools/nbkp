@@ -30,11 +30,13 @@ Both snapshot backends follow the same directory layout and lifecycle. Snapshot 
 
 **Orphan cleanup** — Hard-link syncs detect and clean up orphaned snapshot directories before each run. An orphan is a `snapshots/{timestamp}/` directory newer than the snapshot `latest` points to: one left behind by a previously failed sync. After a failed rsync the new snapshot directory is also removed straight away. Btrfs snapshots do not need orphan cleanup because snapshots are created atomically from a complete sync to `staging/` — a failed sync leaves `staging/` in a partial state but never creates a snapshot directory.
 
+**Snapshots only move forward** — A new snapshot must be named after the one `latest` designates. When the clock is behind it (a host whose clock is not yet set by NTP, a manual change) or the name would equal it (two runs within the same name resolution), the sync fails before writing — `failure`: `mkdir` for hard-link, `snapshot` for btrfs — and `latest` stays where it was. Otherwise `latest` would move back in time, and the next orphan cleanup would remove every complete snapshot newer than it. The generated script applies the same rule.
+
 **Best-effort steps** — Orphan cleanup, pruning, and removal of the snapshot directory after a failed rsync never fail a sync: the snapshot that matters is either complete (pruning runs after `latest` moved) or absent, and a leftover directory is removed by the next run's orphan cleanup. A failure in one of these steps is recorded as a warning on the sync's result (`warnings` in JSON, a `Warning:` line in the results table) instead of being silently ignored, and the remaining syncs carry on.
 
 **Dry runs** — `--dry-run` never modifies a destination: no orphan cleanup, no snapshot directory, no `latest` update, no pruning. Hard-link rsync previews its transfer into the snapshot directory it would create (`snapshots/<timestamp>/`, with `--link-dest` to the current `latest`).
 
-**Listing** — Only entries of `snapshots/` named as snapshot timestamps count as snapshots. Anything else (`lost+found` at the root of a dedicated filesystem, `.DS_Store`, a stray file) is ignored: it is neither listed nor pruned. An absent `snapshots/` directory lists as empty; any other listing failure is an error, so pruning never acts on a partial listing.
+**Listing** — Only entries of `snapshots/` named exactly as nbkp names snapshots (`2026-03-06T14:30:00.000Z`, or `2026-03-06T14-30-00.000Z` on macOS local volumes) count as snapshots. Anything else (`lost+found` at the root of a dedicated filesystem, `.DS_Store`, a stray file, a directory named like a shorter timestamp such as `2026-01-01T00`) is ignored: it is neither listed, pruned, nor removed as an orphan. A `latest` symlink whose target is not such a name is an error rather than a guess. An absent `snapshots/` directory lists as empty; any other listing failure is an error, so pruning never acts on a partial listing.
 
 **Errors** — Every failing snapshot operation (a non-zero exit status, a local `OSError`, an SSH transport error) is reported as one structured error naming the operation (create, mkdir, delete, list, read/update `latest`, …), the path, and the underlying message. `run` turns it into a failed sync (`failure`: `snapshot`, `mkdir` or `symlink`) or a warning; `snapshots show` / `prune` report it in the result's `error` object (`kind`: `operation-failed`, with `operation`, `path` and `message`); a sync failed by preflight carries `kind` `inactive` or `preflight-errors` and the `preflight_errors` codes instead.
 
@@ -369,7 +371,8 @@ This section documents every external command nbkp invokes on local or remote ho
 
 | Command | Purpose |
 |---|---|
-| `mkdir -p <snapshots/timestamp>` | Create snapshot directory |
+| `mkdir -p <snapshots>` | Create the snapshots directory if missing |
+| `mkdir <snapshots/timestamp>` | Create snapshot directory (fails if it already exists) |
 | `rm -rf <snapshot>` | Delete snapshot directory (remote only; local uses Python `shutil.rmtree`) |
 | `ls <snapshots/>` | List snapshots for pruning/ordering |
 
@@ -378,7 +381,7 @@ This section documents every external command nbkp invokes on local or remote ho
 | Command | Purpose |
 |---|---|
 | `readlink <latest>` | Read current latest snapshot |
-| `ln -sfn <target> <latest>` | Update latest symlink (remote only; local uses Python `pathlib`) |
+| `ln -sfn <target> <latest>` | Update latest symlink (remote only; local creates the link under a temporary name and renames it over `latest`, so `latest` is never missing) |
 
 ### Mount management (udisks)
 

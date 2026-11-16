@@ -101,9 +101,9 @@ class TestBuildRsyncCommandLocalToLocal:
         cmd = build_rsync_command(
             sync,
             config,
-            link_dest="../../snapshots/20240101T000000Z",
+            link_dest="../../snapshots/2024-01-01T00:00:00.000Z",
         )
-        assert "--link-dest=../../snapshots/20240101T000000Z" in cmd
+        assert "--link-dest=../../snapshots/2024-01-01T00:00:00.000Z" in cmd
 
 
 class TestBuildRsyncCommandLocalToRemote:
@@ -297,11 +297,11 @@ class TestBuildRsyncCommandRemoteToRemoteSameServer:
         cmd = build_rsync_command(
             sync,
             config,
-            link_dest="../../snapshots/20240101T000000Z",
+            link_dest="../../snapshots/2024-01-01T00:00:00.000Z",
             resolved_endpoints=resolved,
         )
         inner = cmd[-1]
-        assert "--link-dest=../../snapshots/20240101T000000Z" in inner
+        assert "--link-dest=../../snapshots/2024-01-01T00:00:00.000Z" in inner
 
     def test_custom_dest_suffix(self) -> None:
         sync, config = self._simple_config()

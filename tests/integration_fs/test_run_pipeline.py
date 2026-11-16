@@ -53,10 +53,12 @@ def _snapshots(tmp_path: Path) -> list[str]:
     return sorted(p.name for p in (tmp_path / "dst" / SNAPSHOTS_DIR).iterdir())
 
 
-def _run(config: Config, *, dry_run: bool = False) -> list[SyncResult]:
+def _run(
+    config: Config, *, dry_run: bool = False, now: datetime = _NOW
+) -> list[SyncResult]:
     pipeline = check_and_run(
         config,
-        clock=lambda: _NOW,
+        clock=lambda: now,
         platform=sys.platform,
         strictness=Strictness.IGNORE_INACTIVE,
         dry_run=dry_run,
@@ -134,3 +136,39 @@ class TestRsyncFailure:
         assert results[0].failure == SyncFailureKind.RSYNC
         assert results[0].warnings == ()
         assert _snapshots(tmp_path) == []
+
+
+class TestClockBehindLatest:
+    def test_complete_snapshots_survive(self, tmp_path: Path) -> None:
+        """A run with the clock behind latest fails instead of moving latest
+        back, so the next run does not remove the newer complete snapshots
+        as orphans.
+        """
+        config = _config(tmp_path)
+        _run(config)
+        [complete] = _snapshots(tmp_path)
+
+        behind = _run(config, now=datetime(2025, 1, 1, tzinfo=UTC))
+
+        assert behind[0].failure == SyncFailureKind.MKDIR
+        assert _snapshots(tmp_path) == [complete]
+        assert os.readlink(tmp_path / "dst" / LATEST_LINK) == (
+            f"{SNAPSHOTS_DIR}/{complete}"
+        )
+
+        later = _run(config, now=datetime(2026, 3, 7, tzinfo=UTC))
+
+        assert later[0].outcome == SyncOutcome.SUCCESS
+        assert complete in _snapshots(tmp_path)
+
+    def test_same_name_as_latest_is_refused(self, tmp_path: Path) -> None:
+        config = _config(tmp_path)
+        _run(config)
+        [complete] = _snapshots(tmp_path)
+        (tmp_path / "src" / "data.txt").write_text("changed")
+
+        again = _run(config)
+
+        assert again[0].failure == SyncFailureKind.MKDIR
+        latest = tmp_path / "dst" / SNAPSHOTS_DIR / complete
+        assert (latest / "data.txt").read_text() == "hello"

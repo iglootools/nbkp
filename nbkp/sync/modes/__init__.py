@@ -15,6 +15,6 @@ def run_single_sync(status: SyncStatus, ctx: RunContext) -> SyncResult:
         case "hard-link":
             return run_hard_link_sync(status, dst, ctx)
         case "btrfs":
-            return run_btrfs_sync(sync, dst, ctx)
+            return run_btrfs_sync(status, dst, ctx)
         case _:
             return run_plain_sync(sync, ctx)

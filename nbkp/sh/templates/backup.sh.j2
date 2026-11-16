@@ -134,10 +134,12 @@ nbkp_matches() {
     done
     return 1
 }
-# Filter stdin to snapshot names (timestamps), oldest first. Other entries are
-# ignored, which also makes the names safe to splice into remote commands.
+# Filter stdin to snapshot names, oldest first: exactly the two timestamp forms
+# nbkp writes, as parse_snapshot_name accepts them. Other entries are ignored
+# (never pruned or removed), which also makes the names safe to splice into
+# remote commands.
 nbkp_snapshot_names() {
-    { grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.Z-]+$' || true; } | sort
+    { grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}T([0-9]{2}:[0-9]{2}:[0-9]{2}|[0-9]{2}-[0-9]{2}-[0-9]{2})[.][0-9]{3}Z$' || true; } | sort
 }
 # Whether latest target $1 names a snapshot in the snapshots dir $2, as nbkp
 # writes it: a timestamp-named entry directly under it, not a lookalike

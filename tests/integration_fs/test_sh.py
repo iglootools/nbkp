@@ -490,3 +490,63 @@ class TestGeneratedScriptExecution:
         assert os.readlink(_stage(tmp_path) / LATEST_LINK) == (
             f"{SNAPSHOTS_DIR}/{snapshot}"
         )
+
+    def test_ignores_lookalike_snapshot_names(self, tmp_path: Path) -> None:
+        """Only the exact names nbkp writes are pruned or removed as orphans."""
+        config = _seeded_chain(tmp_path, max_snapshots=1)
+        snapshots = _stage(tmp_path) / SNAPSHOTS_DIR
+        previous = "2020-01-01T00-00-00.000Z"
+        (snapshots / previous).mkdir()
+        latest = _stage(tmp_path) / LATEST_LINK
+        latest.unlink()
+        latest.symlink_to(f"{SNAPSHOTS_DIR}/{previous}")
+        lookalikes = ["2020-01-01T00", "2099-03-07T09:00:00"]
+        for name in lookalikes:
+            (snapshots / name).mkdir()
+
+        result = _run_script(config, tmp_path)
+
+        assert result.returncode == 0, result.stderr
+        assert "Pruning snapshot: 2020-01-01T00-00-00.000Z" in result.stderr
+        for name in lookalikes:
+            assert (snapshots / name).is_dir()
+
+    def test_refuses_snapshot_not_after_latest(self, tmp_path: Path) -> None:
+        """With the clock behind latest, latest is not moved back in time."""
+        config = _seeded_chain(tmp_path)
+        future = "2099-01-01T00-00-00.000Z"
+        (_stage(tmp_path) / SNAPSHOTS_DIR / future).mkdir()
+        latest = _stage(tmp_path) / LATEST_LINK
+        latest.unlink()
+        latest.symlink_to(f"{SNAPSHOTS_DIR}/{future}")
+
+        result = _run_script(config, tmp_path)
+
+        assert result.returncode == 1
+        assert "is the clock behind?" in result.stderr
+        assert _snapshot_names(tmp_path) == [future]
+        assert os.readlink(latest) == f"{SNAPSHOTS_DIR}/{future}"
+
+    def test_existing_snapshot_dir_is_not_reused(self, tmp_path: Path) -> None:
+        """mkdir without -p: a name collision fails the sync, so a failed
+        rsync never removes a snapshot it did not create.
+        """
+        config = _seeded_chain(tmp_path)
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        # `date` always answers the same second, so every run collides.
+        fixed = "2026-02-21T12:00:00.000Z"
+        if sys.platform == "darwin":
+            fixed = fixed.replace(":", "-")
+        fake_date = fake_bin / "date"
+        fake_date.write_text(f"#!/bin/sh\necho '{fixed}'\n")
+        fake_date.chmod(0o755)
+        existing = _stage(tmp_path) / SNAPSHOTS_DIR / fixed
+        existing.mkdir()
+        (existing / "keep.txt").write_text("keep")
+        env = {**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}"}
+
+        result = _run_script(config, tmp_path, env=env)
+
+        assert result.returncode == 1
+        assert (existing / "keep.txt").read_text() == "keep"

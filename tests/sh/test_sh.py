@@ -994,9 +994,9 @@ class TestHardLink:
     def test_mkdir_snapshot_dir(self) -> None:
         config = self._hl_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert "mkdir -p" in script
-        assert "NBKP_TS" in script
-        assert "/mnt/dst/snapshots/" in script
+        assert "mkdir -p /mnt/dst/snapshots\n" in script
+        # Plain mkdir: an existing snapshot dir must fail the sync.
+        assert 'mkdir "/mnt/dst/snapshots/${NBKP_TS}"' in script
 
     def test_rsync_to_snapshot(self) -> None:
         config = self._hl_config()
@@ -1388,7 +1388,7 @@ class TestRemoteCommandQuoting:
 
     def test_hard_link_remote_commands(self) -> None:
         script = _remote_script("hard-link")
-        assert "\"mkdir -p '/srv/back ups/hl/snapshots/${NBKP_TS}'\"" in script
+        assert "\"mkdir '/srv/back ups/hl/snapshots/${NBKP_TS}'\"" in script
         assert "\"rm -rf '/srv/back ups/hl/snapshots/${snap}'\"" in script
         assert "\"ln -sfn 'snapshots/${NBKP_TS}' '/srv/back ups/hl/latest'\"" in script
         _bash_n(script)

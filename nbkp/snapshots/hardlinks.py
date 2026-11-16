@@ -33,15 +33,19 @@ def create_snapshot_dir(
     """*now* names the snapshot and *platform* (``sys.platform``) decides the
     macOS-safe name form; both come from the caller.  Returns the full
     snapshot path.
+
+    The snapshot directory must not exist yet: reusing one (two runs that
+    get the same name) would have rsync write into a complete snapshot,
+    possibly the one ``latest`` points to, and a failed rsync would then
+    delete it.  Only ``snapshots/`` itself is created when missing.
     """
+    re = resolved_endpoints or {}
+    dst_vol = destination_volume(sync, config)
     snapshot_path = snapshot_path_for(sync, config, now=now, platform=platform)
+    parent = snapshots_dir(sync, config)
+    run_checked(SnapshotOp.MKDIR, parent, ["mkdir", "-p", parent], dst_vol, re, run=run)
     run_checked(
-        SnapshotOp.MKDIR,
-        snapshot_path,
-        ["mkdir", "-p", snapshot_path],
-        destination_volume(sync, config),
-        resolved_endpoints or {},
-        run=run,
+        SnapshotOp.MKDIR, snapshot_path, ["mkdir", snapshot_path], dst_vol, re, run=run
     )
     return snapshot_path
 

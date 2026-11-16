@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
@@ -10,7 +11,13 @@ from ..config import (
     Volume,
     resolve_endpoint_path,
 )
-from ..fsprotocol import DEVNULL_TARGET, LATEST_LINK, SNAPSHOTS_DIR, Snapshot
+from ..fsprotocol import (
+    DEVNULL_TARGET,
+    LATEST_LINK,
+    SNAPSHOTS_DIR,
+    Snapshot,
+    parse_snapshot_name,
+)
 from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 from .errors import (
@@ -42,6 +49,37 @@ def destination_volume(sync: SyncConfig, config: Config) -> Volume:
 
 def snapshots_dir(sync: SyncConfig, config: Config) -> str:
     return f"{resolve_dest_path(sync, config)}/{SNAPSHOTS_DIR}"
+
+
+def ensure_after_latest(
+    sync: SyncConfig,
+    config: Config,
+    *,
+    now: datetime,
+    platform: str,
+    latest: Snapshot | None,
+    op: SnapshotOp,
+) -> None:
+    """Refuse to name a new snapshot that would not sort after *latest*.
+
+    Snapshot names are timestamps, and orphan cleanup treats every
+    snapshot newer than ``latest`` as a leftover of a failed sync.  A
+    snapshot taken while the clock is behind (a host without NTP yet, a
+    manual change) would move ``latest`` back in time, and the next run
+    would delete every complete snapshot taken before as an orphan.  A
+    name equal to ``latest``'s would reuse the latest complete snapshot.
+    Either way the sync must fail instead.
+    """
+    snapshot = create_snapshot_timestamp(
+        now, destination_volume(sync, config), platform
+    )
+    if latest is not None and parse_snapshot_name(snapshot.name) <= latest.timestamp:
+        path = f"{snapshots_dir(sync, config)}/{snapshot.name}"
+        msg = (
+            f"new snapshot {snapshot.name} would not be after the latest "
+            f"snapshot {latest.name}; is the clock behind?"
+        )
+        raise SnapshotOperationError(op, path, msg)
 
 
 def _parse_snapshot_name(name: str) -> Snapshot | None:
@@ -197,7 +235,10 @@ def read_latest_symlink(
     """Read the latest symlink target, returning a Snapshot.
 
     Returns ``None`` if the symlink does not exist or points to
-    ``/dev/null`` (the canonical "no snapshot yet" marker).
+    ``/dev/null`` (the canonical "no snapshot yet" marker).  A target that
+    is not a snapshot name raises
+    :class:`~nbkp.snapshots.errors.SnapshotOperationError`: callers use it
+    to protect the latest snapshot, so it must not be guessed at.
     """
     re = resolved_endpoints or {}
     latest_path = f"{resolve_dest_path(sync, config)}/{LATEST_LINK}"
@@ -218,9 +259,21 @@ def read_latest_symlink(
 
 
 def _replace_local_symlink(latest_path: str, target: str) -> None:
+    """Point *latest_path* at *target* in one atomic step.
+
+    The link is made under a temporary name next to it and renamed over
+    ``latest``, so an interruption leaves either the old or the new link,
+    never none (which preflight would report as a missing ``latest``).
+    """
     p = Path(latest_path)
-    p.unlink(missing_ok=True)
-    p.symlink_to(target)
+    tmp = p.with_name(f".{p.name}.nbkp-tmp-{os.getpid()}")
+    tmp.unlink(missing_ok=True)
+    tmp.symlink_to(target)
+    try:
+        tmp.replace(p)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def update_latest_symlink(

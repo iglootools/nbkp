@@ -12,10 +12,11 @@ from nbkp.demo.cli import app
 from nbkp.demo.cli.cmd_handler import seed as seed_module
 from nbkp.demo.cli.cmd_handler.seed import SeedError, SeedResult, seed_demo, seed_plan
 from nbkp.demo.cli.seed_cmd import commands_script
-from nbkp.disks.lifecycle import UmountResult
+from nbkp.disks.lifecycle import MountResult, UmountResult
 from nbkp.disks.models import (
     LifecycleFailure,
     LifecycleStep,
+    MountFailureReason,
     UmountFailureReason,
 )
 
@@ -81,6 +82,33 @@ class TestUmountFailure:
         ):
             pass
         assert ends[-1] == ("umount encrypted volume", "error")
+
+    def test_failed_mount_still_locks(self) -> None:
+        """A mount that fails after unlocking must not leave LUKS unlocked."""
+        with (
+            patch.object(
+                seed_module,
+                "mount_volumes",
+                return_value=[
+                    MountResult(
+                        "enc",
+                        success=False,
+                        failure_reason=MountFailureReason.MOUNT_FAILED,
+                        failure=LifecycleFailure(
+                            step=LifecycleStep.MOUNT, exit_code=1, message="no fs"
+                        ),
+                    )
+                ],
+            ),
+            patch.object(seed_module, "umount_volumes", return_value=[]) as umount,
+            patch.object(seed_module, "LUKS_PASSPHRASE", "x", create=True),
+            pytest.raises(SeedError, match="Mount failed: .*no fs"),
+            seed_module._encrypted_volume_mounted(
+                Config(), {}, True, seed_module._Steps(None, None)
+            ),
+        ):
+            pass
+        umount.assert_called_once()
 
 
 class TestCommandsScript:

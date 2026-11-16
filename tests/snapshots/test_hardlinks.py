@@ -91,7 +91,7 @@ class TestCreateSnapshotDir:
         path = create_snapshot_dir(sync, config, now=_NOW, platform="linux", run=runner)
 
         assert path == f"/dst/snapshots/{_TS_LOCAL.name}"
-        assert runner.commands == [["mkdir", "-p", path]]
+        assert runner.commands == [["mkdir", "-p", "/dst/snapshots"], ["mkdir", path]]
 
     def test_remote(self) -> None:
         sync, config, re = _remote_config()
@@ -102,8 +102,11 @@ class TestCreateSnapshotDir:
         )
 
         assert path == f"/backup/snapshots/{_TS_REMOTE.name}"
-        assert runner.commands == [["mkdir", "-p", path]]
-        assert runner.calls[0].volume == config.volumes["dst"]
+        assert runner.commands == [
+            ["mkdir", "-p", "/backup/snapshots"],
+            ["mkdir", path],
+        ]
+        assert {c.volume for c in runner.calls} == {config.volumes["dst"]}
 
     def test_failure_raises(self) -> None:
         sync, config = _local_config()
