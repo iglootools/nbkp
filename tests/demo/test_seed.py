@@ -34,12 +34,9 @@ class TestDryRun:
 
 
 class TestDockerExtra:
-    def test_missing_extra_is_a_clear_error(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        monkeypatch.setattr(seed_module, "_HAS_DOCKER", False)
+    def test_missing_extra_is_a_clear_error(self, tmp_path: Path) -> None:
         with pytest.raises(SeedError, match=r"nbkp\[docker\]"):
-            seed_demo(tmp_path, docker=True)
+            seed_demo(tmp_path, docker=True, has_docker=False)
 
 
 _ENC = Config(volumes={"enc": encrypted_volume()})
