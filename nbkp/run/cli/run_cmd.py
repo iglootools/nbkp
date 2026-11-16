@@ -1,6 +1,4 @@
-import sys
 from collections.abc import Sequence
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -27,6 +25,7 @@ from ...cliwiring.config import (
 from ...cliwiring.mount import managed_mount, print_umount_failures
 from ...cliwiring.mount_progress import mount_display_names
 from ...cliwiring.preflight import end_check_step, start_check_step
+from ...cliwiring.runtime import runtime_of
 from ...config import Config
 from ...disks import UmountResult
 from ...disks.output import umount_result_json
@@ -49,6 +48,7 @@ _ABORT_DETAIL_INDENT = 2
 
 
 def run(
+    ctx: typer.Context,
     config: Annotated[
         Path | None,
         typer.Option(
@@ -140,6 +140,7 @@ def run(
     ] = True,
 ) -> None:
     """Execute all active syncs in dependency order. Supports dry-run, progress display, snapshot creation, and automatic pruning."""
+    runtime = runtime_of(ctx)
     cfg = load_config_or_exit(config, output)
     require_known_syncs(cfg, sync, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
@@ -153,6 +154,7 @@ def run(
     with managed_mount(
         cfg,
         resolved,
+        runtime=runtime,
         mount=mount,
         umount=umount,
         output_format=output,
@@ -174,8 +176,8 @@ def run(
         )
         pipeline = check_and_run(
             cfg,
-            clock=lambda: datetime.now(UTC),
-            platform=sys.platform,
+            clock=runtime.clock,
+            platform=runtime.platform,
             strictness=strictness,
             dry_run=dry_run,
             only_syncs=sync,
@@ -188,6 +190,9 @@ def run(
             resolved_endpoints=resolved,
             mount_observations=mount_observations,
             exclude_locations=exclude_location or [],
+            rsync=runtime.rsync,
+            run=runtime.run,
+            which=runtime.which,
         )
     _print_outcome(
         pipeline, cfg, resolved, output, strictness, dry_run, hint, umount_results

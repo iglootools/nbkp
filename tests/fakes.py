@@ -1,16 +1,23 @@
 """Fake command and rsync runners, injected where production passes the real ones.
 
-Tests hand these to the ``run`` / ``run_command`` / ``rsync`` parameters
-instead of patching ``subprocess`` or the SSH transport by import path, so
-moving a helper between modules does not break them.
+Tests hand these to the ``run`` / ``run_command`` / ``rsync`` parameters, or
+to a whole command through :func:`fake_runtime`, instead of patching
+``subprocess`` or the SSH transport by import path, so moving a helper
+between modules does not break them.
 """
 
 import subprocess
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
+from nbkp.cliwiring.runtime import Runtime
 from nbkp.config import Config, SyncConfig, Volume
+from nbkp.credentials import CommandFn
+from nbkp.remote.dispatch import CommandLocator, VolumeCommandRunner
 from nbkp.remote.endpoints import ResolvedEndpoint, ResolvedEndpoints
+from nbkp.sync.modes import RsyncRunner
 
 type Response = subprocess.CompletedProcess[str] | Exception
 
@@ -131,3 +138,40 @@ class FakeRsync:
     @property
     def last_kwargs(self) -> dict[str, Any]:
         return self.calls[-1][1]
+
+
+FIXED_NOW = datetime(2026, 3, 6, 14, 30, tzinfo=UTC)
+"""The time a :func:`fake_runtime` clock reads, which names snapshots."""
+
+
+def _no_credential_command(command: list[str]) -> subprocess.CompletedProcess[str]:
+    raise AssertionError(f"unexpected credential command: {command}")
+
+
+def fake_runtime(
+    *,
+    run: VolumeCommandRunner | None = None,
+    which: CommandLocator | None = None,
+    rsync: RsyncRunner | None = None,
+    environ: Mapping[str, str] | None = None,
+    run_credential_command: CommandFn = _no_credential_command,
+    local_user: str = "backup",
+) -> Runtime:
+    """A :class:`~nbkp.cliwiring.runtime.Runtime` touching nothing real.
+
+    Unless given: hosts answered by an empty :class:`FakeCommandRunner`
+    (every command succeeds with no output), every tool on the
+    orchestrator's ``PATH``, a :class:`FakeRsync`, a clock stopped at
+    :data:`FIXED_NOW` on Linux, and an empty environment.  Pass it to
+    ``CliRunner().invoke(app, args, obj=...)``.
+    """
+    return Runtime(
+        run=run if run is not None else FakeCommandRunner(),
+        which=which if which is not None else (lambda tool: f"/usr/bin/{tool}"),
+        rsync=rsync if rsync is not None else FakeRsync(),
+        clock=lambda: FIXED_NOW,
+        platform="linux",
+        environ=environ if environ is not None else {},
+        run_credential_command=run_credential_command,
+        local_user=lambda: local_user,
+    )

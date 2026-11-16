@@ -7,6 +7,7 @@ from ...clidisplay import OutputFormat, echo_json
 from ...clidisplay.invocation import Invocation
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...cliwiring.mount import managed_mount
+from ...cliwiring.runtime import runtime_of
 from ...policy import Strictness
 from ...remote.endpoints import NetworkType
 from ..status.result import PreflightResult
@@ -16,6 +17,7 @@ from .helpers import check_and_display
 
 @app.command()
 def check(
+    ctx: typer.Context,
     config: Annotated[
         Path | None,
         typer.Option(
@@ -84,6 +86,7 @@ def check(
     ] = True,
 ) -> None:
     """Verify that volumes are reachable, sentinel files exist, SSH connectivity works, and required tools are available. Use this before `run` to confirm everything is ready."""
+    runtime = runtime_of(ctx)
     cfg = load_config_or_exit(config, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
     invocation = Invocation.of(
@@ -93,6 +96,7 @@ def check(
     with managed_mount(
         cfg,
         resolved,
+        runtime=runtime,
         mount=mount,
         umount=umount,
         output_format=output,
@@ -106,6 +110,7 @@ def check(
             mount_observations=mount_observations,
             invocation=invocation,
             exclude_locations=exclude_location or [],
+            runtime=runtime,
         )
         if output is OutputFormat.JSON:
             echo_json(check_json(preflight))

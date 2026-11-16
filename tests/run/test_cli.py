@@ -10,7 +10,8 @@ from nbkp.config import SyncConfig, SyncEndpoint
 from nbkp.config.testkit import write_config
 from nbkp.preflight import SyncError
 from nbkp.sync import ProgressMode, SyncFailureKind, SyncResult
-from tests.cliwiring.test_mount import LOCK_FAILED, fake_disks_managed_mount
+from tests.cliwiring.test_mount import BUSY, encrypted_volume, mounted_drive_host
+from tests.fakes import fake_runtime
 
 _DONE = subprocess.CompletedProcess(args=[], returncode=0, stdout="done", stderr="")
 
@@ -442,10 +443,6 @@ class TestUnknownSyncFilter:
 
 
 class TestUmountFailure:
-    @patch(
-        "nbkp.cliwiring.mount._disks_managed_mount",
-        fake_disks_managed_mount(LOCK_FAILED),
-    )
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
     def test_failed_lock_fails_the_run(
@@ -455,6 +452,9 @@ class TestUmountFailure:
         tmp_path: Path,
     ) -> None:
         config = sample_config()
+        config = config.model_copy(
+            update={"volumes": {**config.volumes, "enc": encrypted_volume()}}
+        )
         config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         mock_checks.return_value = preflight(
@@ -462,7 +462,11 @@ class TestUmountFailure:
         )
         mock_run.return_value = [_ok("photos-to-nas")]
 
-        result = runner.invoke(app, ["run", "-c", str(config_path), "-o", "json"])
+        result = runner.invoke(
+            app,
+            ["run", "-c", str(config_path), "-o", "json"],
+            obj=fake_runtime(run=mounted_drive_host(BUSY)),
+        )
 
         assert result.exit_code == 1
         data = json.loads(result.stdout)

@@ -1,3 +1,4 @@
+from functools import partial
 from pathlib import Path
 from typing import Annotated
 
@@ -10,11 +11,13 @@ from ...clidisplay.invocation import Invocation, print_troubleshoot_hint
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...cliwiring.credentials import prompt_passphrase
 from ...cliwiring.mount_progress import LifecycleProgress, mount_display_names
+from ...cliwiring.runtime import Runtime, runtime_of
 from ...config import Config
 from ...credentials import build_passphrase_fn, prefetch_passphrases
 from ...remote.endpoints import NetworkType, ResolvedEndpoints
 from ..lifecycle import MountResult, mount_volumes
 from ..models import MountFailureReason
+from ..mount_checks import check_mount_status
 from ..observation import build_mount_observations
 from ..output import (
     build_mount_status_json,
@@ -35,6 +38,7 @@ from .helpers.plan_output import show_plan
 
 @app.command("mount")
 def mount(
+    ctx: typer.Context,
     config: Annotated[
         Path | None,
         typer.Option(
@@ -87,19 +91,26 @@ def mount(
     ] = False,
 ) -> None:
     """Unlock LUKS and mount volumes. Mounts all volumes with mount config, or specific ones via --name."""
+    runtime = runtime_of(ctx)
     cfg = load_config_or_exit(config, output)
     require_known_names(cfg, name, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
 
     if dry_run:
         show_plan(
-            plan_lifecycle(cfg, resolved, mounting=True, names=name),
+            plan_lifecycle(
+                cfg,
+                resolved,
+                mounting=True,
+                names=name,
+                probe=partial(check_mount_status, run=runtime.run),
+            ),
             mount_display_names(cfg),
             output,
         )
         return
 
-    results = _mount_with_progress(cfg, resolved, name, output)
+    results = _mount_with_progress(cfg, resolved, name, output, runtime)
     _show_results(cfg, resolved, results, name, output)
     invocation = Invocation.of(
         config, location, exclude_location, network.value if network else None
@@ -117,9 +128,14 @@ def _mount_with_progress(
     resolved: ResolvedEndpoints,
     names: list[str] | None,
     output: OutputFormat,
+    runtime: Runtime,
 ) -> list[MountResult]:
     passphrase_fn, cache = build_passphrase_fn(
-        cfg.credential_provider, cfg.credential_command, prompt=prompt_passphrase
+        cfg.credential_provider,
+        cfg.credential_command,
+        prompt=prompt_passphrase,
+        environ=runtime.environ,
+        run=runtime.run_credential_command,
     )
     progress = LifecycleProgress.create(
         cfg,
@@ -147,6 +163,7 @@ def _mount_with_progress(
             names=names,
             on_mount_start=progress.on_mount_start,
             on_mount_end=progress.on_mount_end,
+            run=runtime.run,
         )
     finally:
         progress.stop_all()

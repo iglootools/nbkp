@@ -22,6 +22,7 @@ from ..policy import Strictness
 from ..remote.endpoints import ResolvedEndpoints
 from .credentials import prompt_passphrase
 from .mount_progress import LifecycleProgress
+from .runtime import Runtime
 
 
 def _print_mount_status(
@@ -45,6 +46,7 @@ def managed_mount(
     cfg: Config,
     resolved: ResolvedEndpoints,
     *,
+    runtime: Runtime,
     mount: bool = True,
     umount: bool = True,
     output_format: OutputFormat = OutputFormat.HUMAN,
@@ -61,6 +63,9 @@ def managed_mount(
 
     Parameters
     ----------
+    runtime:
+        Runs the udisks commands and the probes on the volumes' hosts, and
+        supplies the credential providers' environment and command runner.
     mount:
         When ``False`` (or no volumes have mount config), mounting and
         umounting are both skipped.
@@ -82,7 +87,11 @@ def managed_mount(
         have succeeded (exit 1).
     """
     passphrase_fn, cache = build_passphrase_fn(
-        cfg.credential_provider, cfg.credential_command, prompt=prompt_passphrase
+        cfg.credential_provider,
+        cfg.credential_command,
+        prompt=prompt_passphrase,
+        environ=runtime.environ,
+        run=runtime.run_credential_command,
     )
     use_progress = output_format is OutputFormat.HUMAN
     progress = LifecycleProgress.create(
@@ -109,6 +118,7 @@ def managed_mount(
             on_mount_end=progress.on_mount_end,
             on_umount_start=progress.on_umount_start,
             on_umount_end=on_umount_end,
+            run=runtime.run,
         ) as result:
             progress.stop_mounting()
             _resolved_config, mount_observations = result

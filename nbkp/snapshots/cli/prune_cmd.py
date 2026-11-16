@@ -12,6 +12,7 @@ from ...cliwiring.config import (
 )
 from ...cliwiring.mount import managed_mount
 from ...cliwiring.preflight import check_all_with_progress
+from ...cliwiring.runtime import runtime_of
 from ...policy import Strictness
 from ...preflight import SyncStatus
 from ...remote.endpoints import NetworkType
@@ -23,6 +24,7 @@ from . import app
 
 @app.command()
 def prune(
+    ctx: typer.Context,
     config: Annotated[
         Path | None,
         typer.Option(
@@ -99,12 +101,14 @@ def prune(
     ] = True,
 ) -> None:
     """Remove snapshots beyond the `max-snapshots` limit. Normally handled automatically by `run`, but can be invoked manually."""
+    runtime = runtime_of(ctx)
     cfg = load_config_or_exit(config, output)
     require_known_syncs(cfg, sync, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
     with managed_mount(
         cfg,
         resolved,
+        runtime=runtime,
         mount=mount,
         umount=umount,
         output_format=output,
@@ -118,6 +122,7 @@ def prune(
             mount_observations=mount_observations,
             strictness=strictness,
             exclude_locations=exclude_location or [],
+            runtime=runtime,
         )
         results = prune_all_syncs(
             cfg,
@@ -126,6 +131,7 @@ def prune(
             only_syncs=sync,
             resolved_endpoints=resolved,
             strictness=strictness,
+            run=runtime.run,
         )
         _print_results(results, dry_run, output)
         if any(r.error is not None for r in results):

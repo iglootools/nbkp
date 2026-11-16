@@ -1,11 +1,13 @@
 from io import StringIO
 
+import typer
 import yaml
 from pydantic import ValidationError
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
+from ...cliwiring.runtime import Runtime, runtime_of
 from ...config import (
     Config,
     ConfigError,
@@ -63,7 +65,7 @@ def _print_panel(title: str, buf: StringIO) -> None:
 
 
 @app.command()
-def output() -> None:
+def output(ctx: typer.Context) -> None:
     """Render all human output functions with fake data."""
     _show_config_show()
     _show_config_graph()
@@ -71,7 +73,7 @@ def output() -> None:
     _show_run_preview()
     _show_results()
     _show_prune()
-    _show_troubleshoot()
+    _show_troubleshoot(runtime_of(ctx))
     _show_config_errors()
 
 
@@ -159,7 +161,7 @@ def _show_prune() -> None:
     _print_panel("print_human_prune_results (dry run)", buf)
 
 
-def _show_troubleshoot() -> None:
+def _show_troubleshoot(runtime: Runtime) -> None:
     console, buf = _capture_console()
     config = troubleshoot_config()
     re = resolve_all_endpoints(config)
@@ -171,6 +173,7 @@ def _show_troubleshoot() -> None:
         config,
         console=console,
         resolved_endpoints=re,
+        run=runtime.run,
     )
     _print_panel("print_human_troubleshoot", buf)
 

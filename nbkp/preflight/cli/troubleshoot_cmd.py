@@ -1,4 +1,3 @@
-import getpass
 from pathlib import Path
 from typing import Annotated
 
@@ -9,6 +8,7 @@ from ...clidisplay.invocation import Invocation
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...cliwiring.mount import managed_mount
 from ...cliwiring.preflight import check_all_with_progress
+from ...cliwiring.runtime import Runtime, runtime_of
 from ...policy import Strictness
 from ...remote.endpoints import NetworkType
 from ..output import (
@@ -24,6 +24,7 @@ from . import app
 
 @app.command()
 def troubleshoot(
+    ctx: typer.Context,
     config: Annotated[
         Path | None,
         typer.Option(
@@ -91,6 +92,7 @@ def troubleshoot(
     ] = True,
 ) -> None:
     """Run the same checks as `check` but displays step-by-step fix instructions for every failure. Useful when `check` reports problems."""
+    runtime = runtime_of(ctx)
     cfg = load_config_or_exit(config, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
     invocation = Invocation.of(
@@ -100,6 +102,7 @@ def troubleshoot(
     with managed_mount(
         cfg,
         resolved,
+        runtime=runtime,
         mount=mount,
         umount=umount,
         output_format=output,
@@ -112,15 +115,16 @@ def troubleshoot(
             mount_observations=mount_observations,
             strictness=strictness,
             exclude_locations=exclude_location or [],
+            runtime=runtime,
         )
-        ctx = TroubleshootContext(
+        context = TroubleshootContext(
             config=cfg,
             resolved_endpoints=resolved,
             invocation=invocation,
-            local_user=getpass.getuser(),
+            local_user=runtime.local_user(),
         )
         fatal = has_fatal_errors(preflight.sync_statuses, strictness=strictness)
-        _report(preflight, ctx, output, strictness, fatal=fatal)
+        _report(preflight, context, output, strictness, fatal=fatal, runtime=runtime)
         if fatal:
             raise typer.Exit(1)
 
@@ -132,6 +136,7 @@ def _report(
     strictness: Strictness,
     *,
     fatal: bool,
+    runtime: Runtime,
 ) -> None:
     match output:
         case OutputFormat.JSON:
@@ -141,7 +146,9 @@ def _report(
                 preflight.sync_statuses,
                 strictness,
             )
-            echo_json(troubleshoot_json(issues, ctx, has_fatal_errors=fatal))
+            echo_json(
+                troubleshoot_json(issues, ctx, has_fatal_errors=fatal, run=runtime.run)
+            )
         case OutputFormat.HUMAN:
             print_human_troubleshoot(
                 preflight.ssh_endpoint_statuses,
@@ -150,4 +157,5 @@ def _report(
                 ctx.config,
                 context=ctx,
                 strictness=strictness,
+                run=runtime.run,
             )

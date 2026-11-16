@@ -19,6 +19,7 @@ from nbkp.disks.models import (
     UmountFailureReason,
 )
 from nbkp.disks.plan import MountAction, VolumePlan
+from tests.fakes import fake_runtime
 
 runner = CliRunner()
 
@@ -308,7 +309,10 @@ class TestSetupAuth:
         assert rule["path"] == "/etc/polkit-1/rules.d/50-nbkp.rules"
         assert 'subject.user == "backup"' in rule["content"]
 
-    @patch("nbkp.disks.cli.setup_auth_cmd.getpass.getuser", return_value="alice")
-    def test_defaults_to_current_user(self, _user: MagicMock) -> None:
-        result = runner.invoke(app, ["disks", "setup-auth", "-c", "config.yaml"])
+    def test_defaults_to_current_user(self) -> None:
+        result = runner.invoke(
+            app,
+            ["disks", "setup-auth", "-c", "config.yaml"],
+            obj=fake_runtime(local_user="alice"),
+        )
         assert 'subject.user == "alice"' in result.output
