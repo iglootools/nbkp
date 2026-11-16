@@ -1,23 +1,40 @@
-from unittest.mock import patch
+import subprocess
+from pathlib import Path
 
-import typer
 from typer.testing import CliRunner
 
 from nbkp.cli import app
+from nbkp.config import Config, Volume
+from nbkp.config.testkit import write_config
+from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.remote.pool import ConnectionPool, active_pool
+from tests.cliwiring.test_mount import encrypted_volume
+from tests.fakes import completed, fake_runtime
 
 
-def test_subcommands_run_in_one_ssh_connection_scope() -> None:
+def test_subcommands_run_in_one_ssh_connection_scope(tmp_path: Path) -> None:
     seen: list[ConnectionPool | None] = []
 
-    def record_pool(*args: object) -> None:
+    def record_pool(
+        cmd: list[str],
+        volume: Volume,
+        resolved_endpoints: ResolvedEndpoints,
+        *,
+        input: str | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         seen.append(active_pool())
-        raise typer.Exit(0)
+        return completed()
 
-    with patch("nbkp.config.cli.show_cmd.load_config_or_exit", side_effect=record_pool):
-        result = CliRunner().invoke(app, ["config", "show"])
+    config_path = write_config(tmp_path, Config(volumes={"enc": encrypted_volume()}))
+
+    result = CliRunner().invoke(
+        app,
+        ["disks", "status", "-c", str(config_path), "-o", "json"],
+        obj=fake_runtime(run=record_pool),
+    )
 
     assert result.exit_code == 0, result.output
-    assert len(seen) == 1
+    assert seen
     assert isinstance(seen[0], ConnectionPool)
+    assert all(pool is seen[0] for pool in seen)
     assert active_pool() is None
