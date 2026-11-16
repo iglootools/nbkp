@@ -41,7 +41,7 @@ def test_demo_output_renders_all_sections(monkeypatch: pytest.MonkeyPatch) -> No
     # no real host commands in unit tests (see test_troubleshoot_mapper.py).
     monkeypatch.setattr(
         "nbkp.preflight.output.troubleshoot.discover_cleartext_device",
-        lambda *_: None,
+        lambda *_, **__: None,
     )
     result = CliRunner().invoke(app, ["output"])
     assert result.exit_code == 0, result.output

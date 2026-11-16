@@ -19,6 +19,7 @@ from rich.console import Console
 from ...config import Config, LocalVolume, MountConfig, RemoteVolume, SyncConfig
 from ...disks import DeviceProbeError, discover_cleartext_device, generate_auth_rules
 from ...policy import Severity, Strictness
+from ...remote.dispatch import VolumeCommandRunner, run_on_volume
 from ...remote.endpoints import ResolvedEndpoints
 from ...remote.errors import ssh_connection_errors
 from ..severity import PreflightError, severity_for_error
@@ -240,6 +241,8 @@ def _discover_cleartext_device(
     vol: LocalVolume | RemoteVolume,
     mount: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
 ) -> str | None:
     """Discovery runs ``lsblk``, which this code path cannot assume exists — it
     is the *error reporting* path, reached precisely when the host is not in
@@ -249,16 +252,24 @@ def _discover_cleartext_device(
     propagating.
     """
     try:
-        return discover_cleartext_device(vol, mount.device_uuid, resolved_endpoints)
+        return discover_cleartext_device(
+            vol, mount.device_uuid, resolved_endpoints, run=run
+        )
     except (*ssh_connection_errors(), DeviceProbeError):
         return None
 
 
 def gather_remediation_facts(
-    issues: list[TroubleshootIssue], ctx: TroubleshootContext
+    issues: list[TroubleshootIssue],
+    ctx: TroubleshootContext,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> RemediationFacts:
     """Only issues that print a cleartext device trigger a discovery, once per
     encrypted volume; only a missing polkit rule triggers rule generation.
+
+    Discovery runs ``lsblk`` on the volume's host through *run*
+    (:func:`remote.dispatch.run_on_volume` unless a test injects a fake).
     """
     encrypted = {
         vol.slug: (vol, vol.mount)
@@ -270,7 +281,7 @@ def gather_remediation_facts(
         and vol.mount.encryption is not None
     }
     discovered = {
-        slug: _discover_cleartext_device(vol, mount, ctx.resolved_endpoints)
+        slug: _discover_cleartext_device(vol, mount, ctx.resolved_endpoints, run=run)
         for slug, (vol, mount) in encrypted.items()
     }
     users = {
