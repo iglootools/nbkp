@@ -34,6 +34,9 @@ concurrency:
 
 env:
   MISE_EXPERIMENTAL: true
+  # Fail on a stale uv.lock instead of silently re-resolving on the runner, as in the
+  # test and publish workflows.
+  UV_LOCKED: 1
   HAS_ASCIINEMA_INSTALL_ID: ${{ secrets.ASCIINEMA_INSTALL_ID != '' }}
 
 jobs:

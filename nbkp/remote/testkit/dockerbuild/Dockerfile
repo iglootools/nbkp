@@ -1,4 +1,8 @@
-FROM debian:latest
+# Pinned to a point release and its digest, not `latest`: udisks2, polkitd, rsync,
+# cryptsetup and openssh all come from this release, so a new Debian major would change the
+# software under test with no diff in the repository. Renovate's dockerfile manager bumps
+# both the tag and the digest.
+FROM debian:13.7@sha256:9c6e381421d0f48d1b8133e573f33c185ee16cbf505eda9c4a8a4791b25ea8a6
 
 # udisks2 + udisks2-btrfs provide the production mount backend; dbus and
 # policykit-1 provide the system bus and polkitd that udisksd authorizes
