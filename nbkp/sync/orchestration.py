@@ -14,7 +14,7 @@ from ..policy import Strictness
 from ..preflight.status.sync import SyncError, SyncStatus
 from ..remote.endpoints import ResolvedEndpoints
 from .modes import RunContext, run_single_sync
-from .results import RUNTIME_FAILURES, SyncFailureKind, SyncResult
+from .results import DISABLED_FAILURES, RUNTIME_FAILURES, SyncFailureKind, SyncResult
 from .rsync import ProgressMode
 
 
@@ -59,7 +59,9 @@ def _should_attempt(status: SyncStatus, strictness: Strictness) -> bool:
 
 
 def _skip_kind(status: SyncStatus) -> SyncFailureKind:
-    if SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING in status.errors:
+    if SyncError.DISABLED in status.errors:
+        return SyncFailureKind.DISABLED
+    elif SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING in status.errors:
         return SyncFailureKind.DRY_RUN_PENDING
     elif status.is_expected_inactive():
         return SyncFailureKind.INACTIVE
@@ -80,22 +82,31 @@ def _cancellation(
 ) -> SyncResult | None:
     """A cancelled result when an upstream did not succeed, else ``None``.
 
-    A failed upstream takes precedence over a skipped one, so the
-    cancellation is fatal whenever any root cause is a runtime failure.
+    A failed upstream takes precedence over a skipped one, and a skipped one
+    over a disabled one, so the cancellation is as severe as its most severe
+    root cause: fatal whenever one is a runtime failure, never fatal when
+    every one is a disabled sync.
     """
     blocking = [
         results[u] for u in upstreams if u in results and _blocks_downstream(results[u])
     ]
     failed = sorted(r.sync_slug for r in blocking if r.failure in RUNTIME_FAILURES)
-    skipped = sorted(r.sync_slug for r in blocking)
-    match (failed, skipped):
-        case ([first, *_], _):
+    skipped = sorted(
+        r.sync_slug for r in blocking if r.failure not in DISABLED_FAILURES
+    )
+    disabled = sorted(r.sync_slug for r in blocking)
+    match (failed, skipped, disabled):
+        case ([first, *_], _, _):
             return SyncResult.cancelled(
                 slug, dry_run, SyncFailureKind.UPSTREAM_FAILED, first
             )
-        case ([], [first, *_]):
+        case ([], [first, *_], _):
             return SyncResult.cancelled(
                 slug, dry_run, SyncFailureKind.UPSTREAM_SKIPPED, first
+            )
+        case ([], [], [first, *_]):
+            return SyncResult.cancelled(
+                slug, dry_run, SyncFailureKind.UPSTREAM_DISABLED, first
             )
         case _:
             return None

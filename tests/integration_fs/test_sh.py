@@ -21,6 +21,7 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, VOLUME_SENTINEL
+from nbkp.policy import Strictness
 from nbkp.run.pipeline import check_and_run
 from nbkp.sh import ScriptOptions, generate_script
 from nbkp.sync import SyncFailureKind
@@ -284,16 +285,14 @@ class TestGeneratedScriptExecution:
         # Rooted in expected inactivity: not a failure, as in `nbkp run`.
         assert result.returncode == 0, result.stderr
 
-    def test_disabled_upstream_cancels_downstream_as_in_run(
-        self, tmp_path: Path
-    ) -> None:
-        """Script and ``nbkp run`` agree: a disabled sync's downstream is
-        cancelled, not run against a stale or missing source."""
+    @staticmethod
+    def _with_step_1_disabled(tmp_path: Path) -> Config:
+        """The chain, run once (step-2 then has a source snapshot), with
+        step-1 disabled and the downstream copy removed."""
         chain = _seeded_chain(tmp_path)
-        # A first run gives step-2 a valid source snapshot to read from.
         assert _run_script(chain, tmp_path).returncode == 0
         (tmp_path / _DST_DIR / "sample.txt").unlink()
-        config = chain.model_copy(
+        return chain.model_copy(
             update={
                 "syncs": {
                     **chain.syncs,
@@ -304,15 +303,43 @@ class TestGeneratedScriptExecution:
             }
         )
 
+    def test_disabled_upstream_cancels_downstream_as_in_run(
+        self, tmp_path: Path
+    ) -> None:
+        """Script and ``nbkp run`` agree: a disabled sync's downstream is
+        cancelled, not run against a stale or missing source."""
+        config = self._with_step_1_disabled(tmp_path)
+
         result = _run_script(config, tmp_path)
         pipeline = check_and_run(config, clock=lambda: _NOW, platform=sys.platform)
 
         assert "SKIPPED step-1: disabled" in result.stderr
-        assert "CANCELLED step-2: upstream sync was skipped" in result.stderr
+        assert "CANCELLED step-2: upstream sync is disabled" in result.stderr
         assert result.returncode == 0, result.stderr
         assert not (tmp_path / _DST_DIR / "sample.txt").exists()
-        run_step_2 = next(r for r in pipeline.results if r.sync_slug == "step-2")
-        assert run_step_2.failure is SyncFailureKind.UPSTREAM_SKIPPED
+        failures = {r.sync_slug: r.failure for r in pipeline.results}
+        assert failures == {
+            "step-1": SyncFailureKind.DISABLED,
+            "step-2": SyncFailureKind.UPSTREAM_DISABLED,
+        }
+
+    def test_disabled_upstream_never_fails_the_run(self, tmp_path: Path) -> None:
+        """Under ignore-none too: a disabled sync is never fatal, and neither
+        is the cancellation it causes (a cancellation is as severe as its
+        cause), in the script as in ``nbkp run``."""
+        config = self._with_step_1_disabled(tmp_path)
+
+        result = _run_script(config, tmp_path, "--strictness", "ignore-none")
+        pipeline = check_and_run(
+            config,
+            clock=lambda: _NOW,
+            platform=sys.platform,
+            strictness=Strictness.IGNORE_NONE,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert not pipeline.has_preflight_errors
+        assert not pipeline.has_sync_failures
 
     def test_inactive_upstream_cancellation_fails_under_ignore_none(
         self, tmp_path: Path

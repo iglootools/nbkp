@@ -326,6 +326,25 @@ class TestCancellationCause:
         mock_rsync.assert_not_called()
 
     @patch("nbkp.sync.modes.common.run_rsync")
+    def test_disabled_upstream_cancels_as_disabled(self, mock_rsync: MagicMock) -> None:
+        config = _three_chain_config()
+        _, statuses = active_statuses(config)
+        _, inactive = inactive_statuses(config)
+        disabled = inactive["a"].model_copy(update={"errors": [SyncError.DISABLED]})
+        statuses = {**statuses, "a": disabled}
+
+        results = {r.sync_slug: r for r in run_syncs(config, statuses)}
+
+        assert results["a"].failure == SyncFailureKind.DISABLED
+        assert results["b"].failure == SyncFailureKind.UPSTREAM_DISABLED
+        assert results["b"].cancelled_by == "a"
+        assert results["b"].detail == "Cancelled: upstream sync 'a' is disabled"
+        # Transitive: c is cancelled by b, whose root cause is the disabled a.
+        assert results["c"].failure == SyncFailureKind.UPSTREAM_DISABLED
+        assert results["c"].cancelled_by == "b"
+        mock_rsync.assert_not_called()
+
+    @patch("nbkp.sync.modes.common.run_rsync")
     def test_failed_upstream_cancels_as_failed_transitively(
         self, mock_rsync: MagicMock
     ) -> None:

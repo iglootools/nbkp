@@ -72,6 +72,22 @@ class TestInactiveRootedOutcomes:
         assert result_severity(result, strictness) is expected
 
 
+class TestDisabledRootedOutcomes:
+    """A disabled sync, and what it cancels: never fatal (docs: a disabled
+    sync is never fatal, and a cancellation is as severe as its cause)."""
+
+    @pytest.mark.parametrize(
+        "result",
+        [
+            _skipped(SyncFailureKind.DISABLED),
+            _cancelled(SyncFailureKind.UPSTREAM_DISABLED),
+        ],
+    )
+    @pytest.mark.parametrize("strictness", ALL_STRICTNESS)
+    def test_never_an_error(self, result: SyncResult, strictness: Strictness) -> None:
+        assert result_severity(result, strictness) is Severity.WARNING
+
+
 class TestPreflightSkip:
     """Skipped for infrastructure errors: only ignore-all tolerates it."""
 

@@ -68,7 +68,7 @@ Sync endpoints are the nodes of the backup graph. Two invariants keep that graph
 
 ### Sync
 
-*A one-way rsync transfer* from a source sync endpoint to a destination sync endpoint, with its own rsync flags and filter rules (which files to include or exclude). A sync can be disabled without being deleted.
+*A one-way rsync transfer* from a source sync endpoint to a destination sync endpoint, with its own rsync flags and filter rules (which files to include or exclude). A sync can be disabled without being deleted: it then never runs, and never fails a run, whatever the [strictness](#inactive-vs-broken).
 
 **One writer per destination.** Each sync endpoint is the destination of at most one sync. A destination is a mirror of exactly one source (`rsync --delete`), so two writers would keep erasing each other's data.
 
@@ -92,7 +92,7 @@ Syncs connect sync endpoints into a directed graph. When the destination endpoin
 Dependencies are derived from the shared endpoint slug; they are never declared. Two rules follow:
 
 - **Execution order** — syncs run in topological order, so an upstream sync always finishes before its downstream syncs start.
-- **Failure propagation** — if a sync fails, or is skipped because it is inactive, every sync downstream of it (directly or transitively) is **cancelled** rather than run on stale or partial data. Syncs with no dependency on it continue normally.
+- **Failure propagation** — if a sync fails, is skipped because it is inactive, or is disabled, every sync downstream of it (directly or transitively) is **cancelled** rather than run on stale or partial data. Syncs with no dependency on it continue normally.
 
 For example, with chain `A → B → C` and an unrelated sync `D`: if A fails, B and C are cancelled and D still runs.
 
@@ -193,7 +193,7 @@ Preflight findings fall into two categories, mirroring the problem space:
 - **Inactive** — the situation is expected and transient: a sentinel is missing, a drive is not plugged in, a host is unreachable or excluded by location. The sync is not ready *now*.
 - **Infrastructure** (broken) — something is misconfigured and will not fix itself: rsync missing or too old, wrong filesystem for the snapshot mode, broken `latest` symlink, missing mount authorization.
 
-**Strictness** decides what each category does to the run. By default (`ignore-inactive`) inactive syncs are skipped silently and infrastructure problems are fatal — the right setting for configs containing drives that are only sometimes attached. `ignore-none` also treats inactivity as fatal, for scheduled runs where everything is expected to be present; `ignore-all` attempts syncs despite infrastructure errors — but never one whose sentinels are not all present, since presence must still be proven. The exit-code matrix: [Strictness](./internals.md#strictness).
+**Strictness** decides what each category does to the run. By default (`ignore-inactive`) inactive syncs are skipped silently and infrastructure problems are fatal — the right setting for configs containing drives that are only sometimes attached. `ignore-none` also treats inactivity as fatal, for scheduled runs where everything is expected to be present; `ignore-all` attempts syncs despite infrastructure errors — but never one whose sentinels are not all present, since presence must still be proven. A disabled sync is fatal under none of them: nobody asked for it to run. The exit-code matrix: [Strictness](./internals.md#strictness).
 
 ### Sync Outcomes
 
@@ -203,10 +203,10 @@ Each sync ends a run in one of four states:
 |---|---|
 | **success** | rsync completed (and the snapshot, if any, was taken) |
 | **failed** | the sync ran and rsync or the snapshot step failed |
-| **skipped** | inactive at preflight; never started |
-| **cancelled** | an upstream sync failed or was skipped |
+| **skipped** | inactive at preflight, or disabled; never started |
+| **cancelled** | an upstream sync failed, was skipped or is disabled |
 
-A cancellation is as serious as its cause: cancelled behind a skipped (inactive) sync, it is an expected non-run that does not fail the run under the default strictness; cancelled behind a failed sync, it is part of that failure.
+A cancellation is as serious as its cause: cancelled behind a skipped (inactive) sync, it is an expected non-run that does not fail the run under the default strictness; cancelled behind a disabled sync, it never fails the run, as the disabled sync does not; cancelled behind a failed sync, it is part of that failure.
 
 Best-effort steps — orphan cleanup, pruning, removing a half-written snapshot directory — never change the outcome: when they fail, the sync's result carries a warning instead.
 
