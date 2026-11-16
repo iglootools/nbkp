@@ -11,7 +11,11 @@ from ..config import (
     MountConfig,
     Volume,
 )
-from ..remote.dispatch import check_command_available, run_on_volume
+from ..remote.dispatch import (
+    VolumeCommandRunner,
+    check_command_available,
+    run_on_volume,
+)
 from ..remote.endpoints import ResolvedEndpoints
 from .detection import (
     DeviceProbeError,
@@ -36,6 +40,8 @@ _BTRFS_MODULE_PROBE = (
 def probe_mount_tools(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> MountToolCapabilities:
     """Probe mount management tool availability on the host.
 
@@ -47,15 +53,12 @@ def probe_mount_tools(
     has_findmnt = check_command_available(volume, "findmnt", resolved_endpoints)
     has_lsblk = check_command_available(volume, "lsblk", resolved_endpoints)
     udisksd_running = (
-        run_on_volume(["udisksctl", "status"], volume, resolved_endpoints).returncode
-        == 0
+        run(["udisksctl", "status"], volume, resolved_endpoints).returncode == 0
         if has_udisksctl
         else False
     )
     has_btrfs_module = (
-        run_on_volume(
-            ["sh", "-c", _BTRFS_MODULE_PROBE], volume, resolved_endpoints
-        ).returncode
+        run(["sh", "-c", _BTRFS_MODULE_PROBE], volume, resolved_endpoints).returncode
         == 0
     )
     return MountToolCapabilities(
@@ -80,6 +83,8 @@ def _check_fstab_entry(
     volume: Volume,
     path: str,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
 ) -> FstabEntry | None:
     """Return the fstab entry whose TARGET is *path*, or None when there is none.
 
@@ -92,7 +97,7 @@ def _check_fstab_entry(
     # detection.find_mountpoint). The query that rules out dropping findmnt
     # entirely — the live mount option string — has no udisks equivalent; see
     # preflight.snapshot_checks.check_btrfs_mount_option.
-    result = run_on_volume(
+    result = run(
         ["findmnt", "--fstab", "--target", path, "-n", "-P", "-o", "SOURCE,TARGET"],
         volume,
         resolved_endpoints,
@@ -177,6 +182,8 @@ def _probe_runtime_state(
     mount: MountConfig,
     mount_tools: MountToolCapabilities | None,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
 ) -> _RuntimeState:
     """Probe device presence, LUKS unlock and mount state over the wire.
 
@@ -188,10 +195,10 @@ def _probe_runtime_state(
     can_lsblk = mount_tools is None or mount_tools.has_lsblk is not False
     can_findmnt = mount_tools is None or mount_tools.has_findmnt is not False
     device_present = detect_device_present(
-        volume, mount.device_uuid, resolved_endpoints
+        volume, mount.device_uuid, resolved_endpoints, run=run
     )
     cleartext_device, luks_known = (
-        _probe_cleartext(volume, mount, resolved_endpoints)
+        _probe_cleartext(volume, mount, resolved_endpoints, run=run)
         if encrypted and device_present and can_lsblk
         else (None, not encrypted or not device_present)
     )
@@ -199,7 +206,7 @@ def _probe_runtime_state(
         cleartext_device if encrypted else f"/dev/disk/by-uuid/{mount.device_uuid}"
     )
     effective_path, mountpoint_known = (
-        _probe_mountpoint(volume, target_device, resolved_endpoints)
+        _probe_mountpoint(volume, target_device, resolved_endpoints, run=run)
         if target_device is not None and device_present and can_findmnt
         else (None, True)
     )
@@ -219,11 +226,15 @@ def _probe_cleartext(
     volume: Volume,
     mount: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
 ) -> tuple[str | None, bool]:
     """``(cleartext_device, known)`` — ``known`` is False when lsblk failed."""
     try:
         return (
-            discover_cleartext_device(volume, mount.device_uuid, resolved_endpoints),
+            discover_cleartext_device(
+                volume, mount.device_uuid, resolved_endpoints, run=run
+            ),
             True,
         )
     except DeviceProbeError:
@@ -234,10 +245,12 @@ def _probe_mountpoint(
     volume: Volume,
     device: str,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
 ) -> tuple[str | None, bool]:
     """``(mountpoint, known)`` — ``known`` is False when findmnt failed."""
     try:
-        return find_mountpoint(volume, device, resolved_endpoints), True
+        return find_mountpoint(volume, device, resolved_endpoints, run=run), True
     except DeviceProbeError:
         return None, False
 
@@ -258,6 +271,8 @@ def check_mount_capabilities(
     mount_tools: MountToolCapabilities | None,
     resolved_endpoints: ResolvedEndpoints,
     mount_observation: MountObservation | None = None,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> MountCapabilities:
     """Probe volume-specific mount config and runtime state.
 
@@ -270,9 +285,11 @@ def check_mount_capabilities(
     state = (
         _observed_state(mount_observation)
         if mount_observation is not None
-        else _probe_runtime_state(volume, mount, mount_tools, resolved_endpoints)
+        else _probe_runtime_state(
+            volume, mount, mount_tools, resolved_endpoints, run=run
+        )
     )
-    fstab = _fstab_check(volume, mount, mount_tools, state, resolved_endpoints)
+    fstab = _fstab_check(volume, mount, mount_tools, state, resolved_endpoints, run=run)
     return MountCapabilities(
         has_fstab_entry=fstab[0],
         fstab_target=fstab[1].target if fstab[1] is not None else None,
@@ -294,6 +311,8 @@ def _fstab_check(
     mount_tools: MountToolCapabilities | None,
     state: _RuntimeState,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
 ) -> tuple[bool | None, FstabEntry | None]:
     """``(has_matching_entry, entry)`` for the fixed-path (Option A) model.
 
@@ -305,7 +324,7 @@ def _fstab_check(
     if volume.path is None or (mount_tools is not None and not mount_tools.has_findmnt):
         return None, None
     else:
-        entry = _check_fstab_entry(volume, volume.path, resolved_endpoints)
+        entry = _check_fstab_entry(volume, volume.path, resolved_endpoints, run=run)
         return (
             entry is not None
             and fstab_source_matches(entry.source, mount, state.cleartext_device),
@@ -318,6 +337,8 @@ def check_mount_status(
     mount: MountConfig,
     resolved_endpoints: ResolvedEndpoints | None = None,
     mount_tools: MountToolCapabilities | None = None,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> MountCapabilities:
     """Probe mount capabilities and runtime state for a single volume.
 
@@ -327,5 +348,5 @@ def check_mount_status(
     attempted and a missing tool surfaces as an unknown state.
     """
     return check_mount_capabilities(
-        volume, mount, mount_tools, resolved_endpoints or {}
+        volume, mount, mount_tools, resolved_endpoints or {}, run=run
     )

@@ -1,7 +1,6 @@
 """Tests for nbkp.disks.context (mount lifecycle context manager)."""
 
 from collections.abc import Callable
-from unittest.mock import patch
 
 import pytest
 
@@ -13,6 +12,7 @@ from nbkp.config import (
 )
 from nbkp.credentials import CredentialError, CredentialErrorReason
 from nbkp.disks.context import managed_mount
+from tests.fakes import FakeCommandRunner, completed
 
 _ONLINE_UUID = "5941f273-f73c-44c5-a3ef-fae7248db1b6"
 _OFFLINE_UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
@@ -42,6 +42,28 @@ def _config() -> Config:
     )
 
 
+def _online_drive() -> FakeCommandRunner:
+    """Only ``online``'s drive is plugged in; it is unlocked and mounted."""
+    return (
+        FakeCommandRunner()
+        .on("test", "-e", f"/dev/disk/by-uuid/{_ONLINE_UUID}", returns=completed(0))
+        .on("test", "-e", returns=completed(1))
+        .on(
+            "lsblk",
+            "-rno",
+            "NAME,TYPE",
+            f"/dev/disk/by-uuid/{_ONLINE_UUID}",
+            returns=completed(0, "sdb part\nluks-online crypt\n"),
+        )
+        .on("lsblk", returns=completed(32))
+        .on("findmnt", returns=completed(0, "/mnt/online\n"))
+    )
+
+
+def _udisks_steps(run: FakeCommandRunner) -> list[str]:
+    return [cmd[1] for cmd in run.commands_starting_with("udisksctl")]
+
+
 def _recorder(calls: list[str]) -> Callable[[str], str]:
     """A ``passphrase_fn`` that records the ids it is asked for."""
 
@@ -60,46 +82,32 @@ class TestPassphrasePrefetch:
         so reading only the online drive's passphrase would leave the offline
         one un-approved and block the next run.
         """
-        events: list[str] = []
+        run = _online_drive()
+        # Each retrieval records how many host commands had run by then.
+        retrievals: list[tuple[str, int]] = []
 
         def passphrase_fn(passphrase_id: str) -> str:
-            events.append(f"passphrase:{passphrase_id}")
+            retrievals.append((passphrase_id, len(run.calls)))
             return "secret"
 
-        def detect(_vol: object, uuid: str, _re: object) -> bool:
-            events.append(f"probe:{uuid}")
-            return uuid == _ONLINE_UUID
-
-        with (
-            patch("nbkp.disks.lifecycle.detect_device_present", side_effect=detect),
-            patch(
-                "nbkp.disks.lifecycle.discover_cleartext_device",
-                return_value="/dev/mapper/luks-online",
-            ),
-            patch("nbkp.disks.lifecycle.find_mountpoint", return_value="/mnt/online"),
-            patch("nbkp.disks.lifecycle.run_on_volume"),
-            managed_mount(_config(), {}, passphrase_fn, umount=False),
-        ):
+        with managed_mount(_config(), {}, passphrase_fn, umount=False, run=run):
             pass
 
         # Both ids retrieved, in id order, before the first device is probed.
         # The already-unlocked online volume needs no passphrase of its own,
         # so every retrieval here comes from the prefetch pass.
-        assert events[:2] == ["passphrase:offline-luks", "passphrase:online-luks"]
-        assert [e for e in events if e.startswith("probe:")] == [
-            f"probe:{_ONLINE_UUID}",
-            f"probe:{_OFFLINE_UUID}",
+        assert retrievals == [("offline-luks", 0), ("online-luks", 0)]
+        assert [cmd[2] for cmd in run.commands_starting_with("test", "-e")] == [
+            f"/dev/disk/by-uuid/{_ONLINE_UUID}",
+            f"/dev/disk/by-uuid/{_OFFLINE_UUID}",
         ]
 
     def test_prefetch_ignores_the_names_filter(self) -> None:
         calls: list[str] = []
+        run = FakeCommandRunner().on("test", "-e", returns=completed(1))
 
-        with (
-            patch("nbkp.disks.lifecycle.detect_device_present", return_value=False),
-            patch("nbkp.disks.lifecycle.run_on_volume"),
-            managed_mount(
-                _config(), {}, _recorder(calls), names=["online"], umount=False
-            ),
+        with managed_mount(
+            _config(), {}, _recorder(calls), names=["online"], umount=False, run=run
         ):
             pass
 
@@ -107,11 +115,13 @@ class TestPassphrasePrefetch:
 
     def test_no_prefetch_when_mounting_is_disabled(self) -> None:
         calls: list[str] = []
+        run = FakeCommandRunner()
 
-        with managed_mount(_config(), {}, _recorder(calls), mount=False):
+        with managed_mount(_config(), {}, _recorder(calls), mount=False, run=run):
             pass
 
         assert calls == []
+        assert run.commands == []
 
     def test_prefetch_failure_does_not_abort_the_mount_phase(self) -> None:
         def passphrase_fn(pid: str) -> str:
@@ -120,13 +130,10 @@ class TestPassphrasePrefetch:
                 reason=CredentialErrorReason.NOT_FOUND,
             )
 
-        with (
-            patch("nbkp.disks.lifecycle.detect_device_present", return_value=False),
-            patch("nbkp.disks.lifecycle.run_on_volume"),
-            managed_mount(_config(), {}, passphrase_fn, umount=False) as (
-                resolved_config,
-                observations,
-            ),
+        run = FakeCommandRunner().on("test", "-e", returns=completed(1))
+        with managed_mount(_config(), {}, passphrase_fn, umount=False, run=run) as (
+            resolved_config,
+            observations,
         ):
             assert resolved_config is not None
             assert set(observations) == {"online", "offline"}
@@ -136,48 +143,48 @@ class TestUmountOnInterruption:
     """Regression: an interruption during mounting left drives unlocked."""
 
     def _interrupted(self, interrupt: BaseException) -> list[str]:
-        umounted: list[str] = []
+        """The udisks steps run when *interrupt* stops the mount phase."""
+        run = _online_drive()
 
         def on_mount_end(slug: str, _result: object) -> None:
             raise interrupt
 
         with (
-            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
-            patch(
-                "nbkp.disks.lifecycle.discover_cleartext_device",
-                return_value="/dev/mapper/luks-online",
-            ),
-            patch("nbkp.disks.lifecycle.find_mountpoint", return_value="/mnt/online"),
-            patch("nbkp.disks.lifecycle.run_on_volume"),
-            patch(
-                "nbkp.disks.context.umount_volumes",
-                side_effect=lambda *_a, **_k: umounted.append("umount") or [],
-            ),
             pytest.raises(type(interrupt)),
-            managed_mount(_config(), {}, _recorder([]), on_mount_end=on_mount_end),
+            managed_mount(
+                _config(), {}, _recorder([]), on_mount_end=on_mount_end, run=run
+            ),
         ):
             pass
-        return umounted
+        return _udisks_steps(run)
 
     def test_ctrl_c_during_mount_still_umounts(self) -> None:
-        assert self._interrupted(KeyboardInterrupt()) == ["umount"]
+        # The online drive was already mounted: nothing to mount, then the
+        # umount phase unmounts and locks it.
+        assert self._interrupted(KeyboardInterrupt()) == ["unmount", "lock"]
 
     def test_callback_exception_during_mount_still_umounts(self) -> None:
-        assert self._interrupted(RuntimeError("display crashed")) == ["umount"]
+        assert self._interrupted(RuntimeError("display crashed")) == [
+            "unmount",
+            "lock",
+        ]
 
     def test_umount_false_is_respected_even_on_interruption(self) -> None:
-        umounted: list[str] = []
+        run = _online_drive()
+
+        def interrupt_prefetch(_passphrase_id: str) -> None:
+            raise KeyboardInterrupt
+
         with (
-            patch(
-                "nbkp.disks.context.prefetch_passphrases",
-                side_effect=KeyboardInterrupt(),
-            ),
-            patch(
-                "nbkp.disks.context.umount_volumes",
-                side_effect=lambda *_a, **_k: umounted.append("umount") or [],
-            ),
             pytest.raises(KeyboardInterrupt),
-            managed_mount(_config(), {}, _recorder([]), umount=False),
+            managed_mount(
+                _config(),
+                {},
+                _recorder([]),
+                umount=False,
+                on_prefetch_start=interrupt_prefetch,
+                run=run,
+            ),
         ):
             pass
-        assert umounted == []
+        assert run.commands == []

@@ -17,6 +17,7 @@ from nbkp.disks.detection import (
     resolve_target_device,
     settle_udev,
 )
+from tests.fakes import FakeCommandRunner, completed
 
 _UUID = "5941f273-f73c-44c5-a3ef-fae7248db1b6"
 
@@ -47,24 +48,19 @@ def _mock_run(returncode: int, stdout: str = "", stderr: str = ""):
 
 class TestSettleUdev:
     def test_runs_udevadm_settle_with_a_timeout(self) -> None:
-        with patch(
-            "nbkp.disks.detection.run_on_volume", return_value=_mock_run(0)
-        ) as mock_run:
-            settle_udev(_local_vol(), {})
-        [cmd] = mock_run.call_args.args[:1]
+        run = FakeCommandRunner()
+        settle_udev(_local_vol(), {}, run=run)
+        [cmd] = run.commands
         assert cmd[:2] == ["udevadm", "settle"]
         assert any(arg.startswith("--timeout=") for arg in cmd)
 
     def test_timeout_or_refusal_is_ignored(self) -> None:
-        with patch("nbkp.disks.detection.run_on_volume", return_value=_mock_run(1)):
-            settle_udev(_local_vol(), {})
+        run = FakeCommandRunner().on("udevadm", returns=completed(1))
+        settle_udev(_local_vol(), {}, run=run)
 
     def test_missing_udevadm_is_ignored(self) -> None:
-        with patch(
-            "nbkp.disks.detection.run_on_volume",
-            side_effect=FileNotFoundError("udevadm"),
-        ):
-            settle_udev(_local_vol(), {})
+        run = FakeCommandRunner().on("udevadm", returns=FileNotFoundError("udevadm"))
+        settle_udev(_local_vol(), {}, run=run)
 
 
 class TestDetectDevicePresent:

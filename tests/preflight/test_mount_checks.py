@@ -1,6 +1,5 @@
 """Tests for mount-related preflight checks (udisks2 backend)."""
 
-import subprocess
 from unittest.mock import patch
 
 import pytest
@@ -31,6 +30,7 @@ from nbkp.preflight.status.volume import (
     VolumeStatus,
     _volume_errors,
 )
+from tests.fakes import FakeCommandRunner, completed
 
 _ENC_UUID = "5941f273-f73c-44c5-a3ef-fae7248db1b6"
 _USB_UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
@@ -87,6 +87,15 @@ def _encrypted_vol() -> LocalVolume:
 
 def _unencrypted_vol() -> LocalVolume:
     return LocalVolume(slug="usb", path="/mnt/usb", mount=_unencrypted_mount())
+
+
+def _fstab_line(source: str, target: str) -> FakeCommandRunner:
+    """A host whose ``/etc/fstab`` maps *source* to *target*."""
+    return FakeCommandRunner().on(
+        "findmnt",
+        "--fstab",
+        returns=completed(0, f'SOURCE="{source}" TARGET="{target}"\n'),
+    )
 
 
 def _active_ssh_endpoint_status() -> SshEndpointStatus:
@@ -531,24 +540,19 @@ class TestFstabSourceMatches:
             VolumeDiagnostics(capabilities=caps), _unencrypted_mount()
         ) == [VolumeError.FSTAB_MOUNTPOINT_MISMATCH]
 
-    @patch("nbkp.disks.mount_checks.run_on_volume")
-    def test_parses_findmnt_pairs(self, mock_run: object) -> None:
-        mock_run.return_value = subprocess.CompletedProcess(  # type: ignore[attr-defined]
-            args=[],
-            returncode=0,
-            stdout=f'SOURCE="UUID={_USB_UUID}" TARGET="/mnt/my usb"\n',
-            stderr="",
-        )
-        entry = _check_fstab_entry(_unencrypted_vol(), "/mnt/my usb", {})
+    def test_parses_findmnt_pairs(self) -> None:
+        run = _fstab_line(f"UUID={_USB_UUID}", "/mnt/my usb")
+        entry = _check_fstab_entry(_unencrypted_vol(), "/mnt/my usb", {}, run=run)
         assert entry == FstabEntry(source=f"UUID={_USB_UUID}", target="/mnt/my usb")
-        cmd = mock_run.call_args[0][0]  # type: ignore[attr-defined]
-        assert cmd == [
-            "findmnt",
-            "--fstab",
-            "--target",
-            "/mnt/my usb",
-            "-n",
-            "-P",
-            "-o",
-            "SOURCE,TARGET",
+        assert run.commands == [
+            [
+                "findmnt",
+                "--fstab",
+                "--target",
+                "/mnt/my usb",
+                "-n",
+                "-P",
+                "-o",
+                "SOURCE,TARGET",
+            ]
         ]

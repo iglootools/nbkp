@@ -9,6 +9,7 @@ from contextlib import contextmanager
 
 from ..config import Config
 from ..credentials import PassphrasePrefetch, prefetch_passphrases
+from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 from .lifecycle import (
     MountResult,
@@ -38,6 +39,7 @@ def managed_mount(
     on_mount_end: Callable[[str, MountResult], None] | None = None,
     on_umount_start: Callable[[str], None] | None = None,
     on_umount_end: Callable[[str, UmountResult], None] | None = None,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> Generator[tuple[Config, dict[str, MountObservation]]]:
     """Context manager that mounts volumes on entry and umounts on exit.
 
@@ -68,6 +70,9 @@ def managed_mount(
         prefetching ignores this filter on purpose.
     on_prefetch_start / on_prefetch_end:
         Called around each passphrase retrieval in the prefetch phase.
+    run:
+        Runs the device probes and ``udisksctl`` commands on the volume's
+        host: :func:`remote.dispatch.run_on_volume` unless a test injects one.
     """
     do_mount = mount and any(v.mount is not None for v in config.volumes.values())
     do_umount = do_mount and umount
@@ -87,6 +92,7 @@ def managed_mount(
                 on_prefetch_end=on_prefetch_end,
                 on_mount_start=on_mount_start,
                 on_mount_end=on_mount_end,
+                run=run,
             )
             if do_mount
             else (config, {})
@@ -99,6 +105,7 @@ def managed_mount(
                 names=names,
                 on_umount_start=on_umount_start,
                 on_umount_end=on_umount_end,
+                run=run,
             )
 
 
@@ -112,6 +119,7 @@ def _mount_phase(
     on_prefetch_end: Callable[[str, PassphrasePrefetch], None] | None,
     on_mount_start: Callable[[str], None] | None,
     on_mount_end: Callable[[str, MountResult], None] | None,
+    run: VolumeCommandRunner,
 ) -> tuple[Config, dict[str, MountObservation]]:
     # Retrieve *every* configured passphrase before touching a device, not
     # just the ones this run needs.  Unfiltered by *names* on purpose: the
@@ -131,6 +139,7 @@ def _mount_phase(
         names=names,
         on_mount_start=on_mount_start,
         on_mount_end=on_mount_end,
+        run=run,
     )
     observations = build_mount_observations(mount_results)
     return apply_effective_paths(config, observations), observations
