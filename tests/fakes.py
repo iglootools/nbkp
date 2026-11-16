@@ -10,6 +10,7 @@ import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from nbkp.cliwiring.runtime import Runtime
@@ -148,6 +149,10 @@ def _no_credential_command(command: list[str]) -> subprocess.CompletedProcess[st
     raise AssertionError(f"unexpected credential command: {command}")
 
 
+_NOWHERE = Path("/nonexistent-nbkp-test")
+"""Under it, the paths a fake runtime searches for a config: none exists."""
+
+
 def fake_runtime(
     *,
     run: VolumeCommandRunner | None = None,
@@ -156,14 +161,16 @@ def fake_runtime(
     environ: Mapping[str, str] | None = None,
     run_credential_command: CommandFn | None = None,
     local_user: str = "backup",
+    home: Path = _NOWHERE / "home",
 ) -> Runtime:
     """A :class:`~nbkp.cliwiring.runtime.Runtime` touching nothing real.
 
     Unless given: hosts answered by an empty :class:`FakeCommandRunner`
     (every command succeeds with no output), every tool on the
     orchestrator's ``PATH``, a :class:`FakeRsync`, a clock stopped at
-    :data:`FIXED_NOW` on Linux, an empty environment, and no credential
-    command (calling it fails the test).  Pass it to
+    :data:`FIXED_NOW` on Linux, an empty environment, a home and platform
+    config directories that do not exist (so the config search never finds
+    the developer's), and no credential command (calling it fails the test).  Pass it to
     ``CliRunner().invoke(app, args, obj=...)``.
     """
     return Runtime(
@@ -173,6 +180,9 @@ def fake_runtime(
         clock=lambda: FIXED_NOW,
         platform="linux",
         environ=environ if environ is not None else {},
+        home=lambda: home,
+        user_config_dir=lambda app: str(_NOWHERE / "user-config" / app),
+        site_config_dir=lambda app: str(_NOWHERE / "site-config" / app),
         run_credential_command=run_credential_command or _no_credential_command,
         local_user=lambda: local_user,
     )

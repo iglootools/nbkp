@@ -55,7 +55,8 @@ def status(
     ] = None,
 ) -> None:
     """Show mount status for volumes with mount config."""
-    cfg = load_config_or_exit(config, output)
+    runtime = runtime_of(ctx)
+    cfg = load_config_or_exit(runtime, config, output)
     require_known_names(cfg, name, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
-    probe_and_show_status(cfg, resolved, output, name, run=runtime_of(ctx).run)
+    probe_and_show_status(cfg, resolved, output, name, run=runtime.run)

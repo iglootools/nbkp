@@ -165,7 +165,7 @@ Where each concern lives, ordered by the layers above, from the base up:
 | Shared leaves | `policy.py`, `fsprotocol.py` | `policy`: strictness and severity classification. `fsprotocol`: sentinel names, directory layout, snapshot types |
 | Transport | `remote/` | Endpoint models and selection (`endpoints.py`, `resolution.py`), SSH argument building (`ssh.py`), Fabric/Paramiko (`fabricssh.py`) and per-command connection reuse (`pool.py`), transport primitives (`dispatch.py`) |
 | Domain cores | `credentials/`, `ordering/`, `disks/`, `preflight/`, `snapshots/`, `sync/`, `run/`, `sh/` (from the base up) | The behavior of each command, described below |
-| CLI wiring | `cliwiring/` | Wiring shared by sub-apps: config loading, credential prompting, the mount lifecycle and its progress bars, preflight with progress, and the `Runtime` ports (`runtime.py`: host commands, local tools, rsync, clock, credential sources) that the root callback installs and tests replace |
+| CLI wiring | `cliwiring/` | Wiring shared by sub-apps: config loading, credential prompting, the mount lifecycle and its progress bars, preflight with progress, and the `Runtime` ports (`runtime.py`: host commands, local tools, rsync, clock, credential sources, and the environment, home and platform directories the config search reads) that the root callback installs and tests replace |
 | Presentation | `clidisplay/` | Output format, JSON, severity display, progress bars, `Invocation` |
 | Root app | `cli/` | The top-level Typer app (`app.py`), which mounts every sub-app |
 

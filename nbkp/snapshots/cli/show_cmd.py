@@ -98,7 +98,7 @@ def show(
 ) -> None:
     """Display snapshot information for each sync endpoint."""
     runtime = runtime_of(ctx)
-    cfg = load_config_or_exit(config, output)
+    cfg = load_config_or_exit(runtime, config, output)
     require_known_syncs(cfg, sync, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
     with managed_mount(

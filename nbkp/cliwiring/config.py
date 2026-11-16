@@ -5,7 +5,7 @@ from pathlib import Path
 import typer
 
 from ..clidisplay import OutputFormat, echo_json
-from ..config import Config, ConfigError, load_config
+from ..config import Config, ConfigError
 from ..config.output import config_error_json, print_config_error
 from ..remote.endpoints import (
     EndpointFilter,
@@ -13,20 +13,23 @@ from ..remote.endpoints import (
     ResolvedEndpoints,
 )
 from ..remote.resolution import resolve_all_endpoints
+from .runtime import Runtime
 
 
 def load_config_or_exit(
+    runtime: Runtime,
     config_path: str | Path | None,
     output_format: OutputFormat = OutputFormat.HUMAN,
 ) -> Config:
-    """Load config or exit with code 2 on error.
+    """Load config, searched for in *runtime*'s environment when no path is
+    given, or exit with code 2 on error.
 
     The error is rendered in the command's output format: a Rich panel on
     stderr, or a JSON ``{"error": ...}`` object on stdout for ``-o json`` so
     scripted callers can still parse the output.
     """
     try:
-        return load_config(config_path)
+        return runtime.load_config(config_path)
     except ConfigError as e:
         match output_format:
             case OutputFormat.JSON:

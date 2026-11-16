@@ -5,12 +5,14 @@ import typer
 
 from ...clidisplay import OutputFormat, echo_json
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
+from ...cliwiring.runtime import runtime_of
 from ..output import print_human_config
 from . import app
 
 
 @app.command()
 def show(
+    ctx: typer.Context,
     config: Annotated[
         Path | None,
         typer.Option(
@@ -28,7 +30,7 @@ def show(
     ] = OutputFormat.HUMAN,
 ) -> None:
     """Load, validate, and render the config as tables or JSON. Useful for verifying that inheritance, filters, and cross-references resolve correctly."""
-    cfg = load_config_or_exit(config, output)
+    cfg = load_config_or_exit(runtime_of(ctx), config, output)
     match output:
         case OutputFormat.JSON:
             echo_json(cfg.model_dump(by_alias=True, mode="json"))

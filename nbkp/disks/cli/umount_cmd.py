@@ -75,7 +75,7 @@ def umount(
 ) -> None:
     """Umount volumes and lock LUKS. Umounts all volumes with mount config, or specific ones via --name."""
     runtime = runtime_of(ctx)
-    cfg = load_config_or_exit(config, output)
+    cfg = load_config_or_exit(runtime, config, output)
     require_known_names(cfg, name, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
 

@@ -41,7 +41,7 @@ def keyring_status(
 ) -> None:
     """Check whether LUKS passphrases are available in the credential store."""
     runtime = runtime_of(ctx)
-    cfg = load_config_or_exit(config, output)
+    cfg = load_config_or_exit(runtime, config, output)
     # Same sweep as the one run/mount perform before touching any device, so
     # this command triggers exactly the approval prompts a run would — and,
     # like it, never prompts interactively for the ``prompt`` provider.

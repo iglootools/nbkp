@@ -48,6 +48,23 @@ def _validation_error_types(path: Path) -> set[str]:
     return {err["type"] for err in _validation_errors(path)}
 
 
+def _search_in(tmp_path: Path) -> dict[str, object]:
+    """Search arguments that keep the lookup under *tmp_path*: a home there,
+    and platform config directories there, none of which exists yet."""
+    return {
+        "home": tmp_path / "home",
+        "user_dir": lambda app: str(tmp_path / "user-config" / app),
+        "site_dir": lambda app: str(tmp_path / "site-config" / app),
+    }
+
+
+def _place_config(directory: Path) -> Path:
+    path = directory / "config.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(config_to_yaml(Config()))
+    return path
+
+
 class TestFindConfigFile:
     def test_explicit_path(self, sample_config_file: Path) -> None:
         result = find_config_file(str(sample_config_file))
@@ -60,16 +77,31 @@ class TestFindConfigFile:
 
     def test_xdg_config(self, tmp_path: Path) -> None:
         xdg = tmp_path / "xdg"
-        cfg = xdg / "nbkp" / "config.yaml"
-        cfg.parent.mkdir(parents=True)
-        cfg.write_text(config_to_yaml(Config()))
-        result = find_config_file(environ={"XDG_CONFIG_HOME": str(xdg)})
+        cfg = _place_config(xdg / "nbkp")
+        _place_config(tmp_path / "user-config" / "nbkp")
+        result = find_config_file(
+            environ={"XDG_CONFIG_HOME": str(xdg)}, **_search_in(tmp_path)
+        )
         assert result == cfg
+
+    def test_home_config_without_xdg(self, tmp_path: Path) -> None:
+        cfg = _place_config(tmp_path / "home" / ".config" / "nbkp")
+        assert find_config_file(environ={}, **_search_in(tmp_path)) == cfg
+
+    def test_platform_user_dir_before_site_dir(self, tmp_path: Path) -> None:
+        user = _place_config(tmp_path / "user-config" / "nbkp")
+        _place_config(tmp_path / "site-config" / "nbkp")
+        assert find_config_file(environ={}, **_search_in(tmp_path)) == user
+
+    def test_platform_site_dir(self, tmp_path: Path) -> None:
+        site = _place_config(tmp_path / "site-config" / "nbkp")
+        assert find_config_file(environ={}, **_search_in(tmp_path)) == site
 
     def test_no_config_found(self, tmp_path: Path) -> None:
         with pytest.raises(ConfigError) as excinfo:
-            find_config_file(environ={"XDG_CONFIG_HOME": str(tmp_path / "empty")})
+            find_config_file(environ={}, **_search_in(tmp_path))
         assert excinfo.value.reason == ConfigErrorReason.NO_CONFIG_FOUND
+        assert str(tmp_path / "home" / ".config" / "nbkp") in str(excinfo.value)
 
 
 class TestLoadConfig:
