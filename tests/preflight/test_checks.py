@@ -670,20 +670,22 @@ def _ssh_diag(
     )
 
 
-def _check_local(
+def _check(
     sync: SyncConfig,
     config: Config,
     *,
+    resolved: ResolvedEndpoints | None = None,
     run: FakeCommandRunner | None = None,
     fs_type: str = "ext2/ext3",
     missing_tools: Collection[str] = (),
     dry_run: bool = False,
 ) -> SyncStatus:
-    """Preflight *sync* on the orchestrator, a healthy host but for *run*'s
-    own answers and *missing_tools*."""
+    """Preflight *sync* with every host healthy but for *run*'s own answers,
+    and *missing_tools* missing from the orchestrator's ``PATH``."""
     return check_sync(
         sync,
         config,
+        resolved,
         dry_run=dry_run,
         run=healthy_host(run, fs_type=fs_type),
         which=local_tools(missing=missing_tools),
@@ -744,14 +746,14 @@ class TestCheckSync:
         _setup_active_sentinels(*src_dst)
         config, sync = _local_sync(*src_dst)
 
-        status = _check_local(sync, config)
+        status = _check(sync, config)
         assert status.active is True
         assert status.errors == []
 
     def test_disabled_sync(self, src_dst: tuple[Path, Path]) -> None:
         config, sync = _local_sync(*src_dst, enabled=False)
 
-        status = _check_local(sync, config)
+        status = _check(sync, config)
         assert status.active is False
         assert status.errors == [SyncError.DISABLED]
 
@@ -763,7 +765,7 @@ class TestCheckSync:
         (dst / "backup" / ".nbkp-dst").touch()
         config, sync = _local_sync(src, dst)
 
-        status = _check_local(sync, config)
+        status = _check(sync, config)
         assert status.active is False
         src_vol_errors = status.source_endpoint_status.volume_status.errors
         assert VolumeError.SENTINEL_NOT_FOUND in src_vol_errors
@@ -774,7 +776,7 @@ class TestCheckSync:
         (src / "data" / ".nbkp-src").unlink()
         config, sync = _local_sync(src, dst)
 
-        status = _check_local(sync, config)
+        status = _check(sync, config)
         assert status.active is False
         assert (
             SourceEndpointError.SENTINEL_NOT_FOUND
@@ -787,7 +789,7 @@ class TestCheckSync:
         _setup_active_sentinels(*src_dst)
         config, sync = _local_sync(*src_dst)
 
-        status = _check_local(sync, config, missing_tools={"rsync"})
+        status = _check(sync, config, missing_tools={"rsync"})
         # rsync errors are at the SSH endpoint level (shared by both volumes)
         ssh_errors = (
             status.source_endpoint_status.volume_status.ssh_endpoint_status.errors
@@ -806,7 +808,7 @@ class TestCheckSync:
         _setup_active_sentinels(*src_dst)
         config, sync = _local_sync(*src_dst, dst_btrfs=True)
 
-        status = _check_local(sync, config, fs_type="btrfs", missing_tools={"btrfs"})
+        status = _check(sync, config, fs_type="btrfs", missing_tools={"btrfs"})
         assert status.active is False
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
@@ -863,7 +865,7 @@ class TestCheckSync:
         _setup_active_sentinels(*src_dst)
         config, sync = _local_sync(*src_dst, dst_btrfs=True)
 
-        status = _check_local(sync, config, fs_type="btrfs", missing_tools={"stat"})
+        status = _check(sync, config, fs_type="btrfs", missing_tools={"stat"})
         assert status.active is False
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
@@ -880,7 +882,7 @@ class TestCheckSync:
         (dst / "backup" / "snapshots").mkdir()
         config, sync = _local_sync(src, dst, dst_btrfs=True)
 
-        status = _check_local(sync, config, fs_type="btrfs", missing_tools={"findmnt"})
+        status = _check(sync, config, fs_type="btrfs", missing_tools={"findmnt"})
         assert status.active is False
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
@@ -895,7 +897,7 @@ class TestCheckSync:
         _setup_active_sentinels(*src_dst)
         config, sync = _local_sync(*src_dst, dst_btrfs=True)
 
-        status = _check_local(
+        status = _check(
             sync, config, fs_type="btrfs", missing_tools={"stat", "findmnt"}
         )
         assert status.active is False
@@ -909,7 +911,7 @@ class TestCheckSync:
         _setup_active_sentinels(*src_dst)
         config, sync = _local_sync(*src_dst, dst_btrfs=True)
 
-        status = _check_local(sync, config, fs_type="ext2/ext3")
+        status = _check(sync, config, fs_type="ext2/ext3")
         assert status.active is False
         assert (
             DestinationEndpointError.VOL_NOT_BTRFS
@@ -926,7 +928,7 @@ class TestCheckSync:
             "stat", "-c", "%i", returns=completed(stdout="1234\n")
         )
 
-        status = _check_local(sync, config, run=run, fs_type="btrfs")
+        status = _check(sync, config, run=run, fs_type="btrfs")
         assert status.active is False
         assert (
             DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME
@@ -948,7 +950,7 @@ class TestCheckSync:
             "findmnt", "-T", str(dst), returns=completed(stdout="rw,relatime\n")
         )
 
-        status = _check_local(sync, config, run=run, fs_type="btrfs")
+        status = _check(sync, config, run=run, fs_type="btrfs")
         assert status.active is False
         assert (
             DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM
@@ -962,7 +964,7 @@ class TestCheckSync:
         (dst / "backup" / "snapshots").mkdir()
         config, sync = _local_sync(src, dst, dst_btrfs=True)
 
-        status = _check_local(sync, config, fs_type="btrfs")
+        status = _check(sync, config, fs_type="btrfs")
         assert status.active is False
         dst_ep_errors = status.destination_endpoint_status.errors
         assert DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND in dst_ep_errors
@@ -977,7 +979,7 @@ class TestCheckSync:
         (dst / "backup" / "staging").mkdir()
         config, sync = _local_sync(src, dst, dst_btrfs=True)
 
-        status = _check_local(sync, config, fs_type="btrfs")
+        status = _check(sync, config, fs_type="btrfs")
         assert status.active is False
         dst_ep_errors = status.destination_endpoint_status.errors
         assert DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND in dst_ep_errors
@@ -990,7 +992,7 @@ class TestCheckSync:
         # neither staging nor snapshots exist
         config, sync = _local_sync(*src_dst, dst_btrfs=True)
 
-        status = _check_local(sync, config, fs_type="btrfs")
+        status = _check(sync, config, fs_type="btrfs")
         assert status.active is False
         dst_ep_errors = status.destination_endpoint_status.errors
         assert DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND in dst_ep_errors
@@ -1003,7 +1005,7 @@ class TestCheckSync:
         config, sync = _local_sync(*src_dst)
         run = FakeCommandRunner()
 
-        status = _check_local(sync, config, run=run, fs_type="btrfs")
+        status = _check(sync, config, run=run, fs_type="btrfs")
         assert status.active is True
         assert status.errors == []
         # No staging subvolume is probed.
@@ -1019,7 +1021,7 @@ class TestCheckSync:
         (src / "data" / ".nbkp-src").unlink()
         config, sync = _local_sync(src, dst)
 
-        status = _check_local(sync, config, missing_tools={"rsync"})
+        status = _check(sync, config, missing_tools={"rsync"})
         assert status.active is False
         ssh_errors = (
             status.source_endpoint_status.volume_status.ssh_endpoint_status.errors
@@ -1038,7 +1040,7 @@ class TestCheckSync:
         # No .nbkp-vol sentinel files, so volumes are inactive
         config, sync = _local_sync(*src_dst)
 
-        status = _check_local(sync, config)
+        status = _check(sync, config)
         assert status.active is False
         src_vol_errors = status.source_endpoint_status.volume_status.errors
         dst_vol_errors = status.destination_endpoint_status.volume_status.errors
@@ -2616,13 +2618,8 @@ class TestCheckHardLinkDest:
         (dst / "backup").mkdir(exist_ok=True)
         (dst / "backup" / ".nbkp-dst").touch()
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_snapshots_dir_not_found(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -2634,19 +2631,14 @@ class TestCheckHardLinkDest:
 
         config, sync = self._make_hl_config(src, dst)
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert status.active is False
         assert (
             DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND
             in status.destination_endpoint_status.errors
         )
 
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    def test_no_hardlink_support_fat(
-        self,
-        mock_caps: MagicMock,
-        tmp_path: Path,
-    ) -> None:
+    def test_no_hardlink_support_fat(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -2656,25 +2648,15 @@ class TestCheckHardLinkDest:
 
         config, sync = self._make_hl_config(src, dst)
 
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _HL_NO_HARDLINK_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        status = check_sync(sync, config)
+        status = _check(sync, config, fs_type="vfat")
         assert status.active is False
         assert (
             DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT
             in status.destination_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_active_with_ext4(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         src = tmp_path / "src"
@@ -2687,21 +2669,11 @@ class TestCheckHardLinkDest:
 
         config, sync = self._make_hl_config(src, dst)
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert status.active is True
         assert status.errors == []
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_HL_NO_STAT_HOST_TOOLS),
-    )
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    def test_stat_not_found(
-        self,
-        mock_caps: MagicMock,
-        _mock_ssh: MagicMock,
-        tmp_path: Path,
-    ) -> None:
+    def test_stat_not_found(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -2710,12 +2682,8 @@ class TestCheckHardLinkDest:
 
         config, sync = self._make_hl_config(src, dst)
 
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _HL_NO_STAT_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        status = check_sync(sync, config)
+        # Were stat probed, vfat would report VOL_NO_HARDLINK_SUPPORT.
+        status = _check(sync, config, fs_type="vfat", missing_tools={"stat"})
         assert status.active is False
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
@@ -2727,13 +2695,8 @@ class TestCheckHardLinkDest:
             not in status.destination_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_no_btrfs_checks_for_hardlink(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Hard-link mode should not run any btrfs-specific checks."""
@@ -2746,7 +2709,7 @@ class TestCheckHardLinkDest:
 
         config, sync = self._make_hl_config(src, dst)
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
@@ -2764,16 +2727,7 @@ class TestCheckHardLinkDest:
             not in status.destination_endpoint_status.errors
         )
 
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_remote_no_hardlink_support(
-        self,
-        mock_run: MagicMock,
-        mock_caps: MagicMock,
-        mock_ssh_ep: MagicMock,
-        tmp_path: Path,
-    ) -> None:
+    def test_remote_no_hardlink_support(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         src.mkdir()
         (src / ".nbkp-vol").touch()
@@ -2810,47 +2764,17 @@ class TestCheckHardLinkDest:
             },
             syncs={"s1": sync},
         )
+        run = FakeCommandRunner().on(
+            "stat", "-f", returns=completed(stdout="vfat\n"), volume="dst"
+        )
 
-        def ssh_ep_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            if isinstance(volume, RemoteVolume):
-                return _ssh_diag(host_tools=_STUB_HOST_TOOLS, ssh_reachable=True)
-            return _ssh_diag()
-
-        mock_ssh_ep.side_effect = ssh_ep_side_effect
-
-        def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
-            return _HL_NO_HARDLINK_CAPS if volume.slug == "dst" else _STUB_CAPS
-
-        mock_caps.side_effect = caps_side_effect
-
-        def remote_side_effect(
-            server: SshEndpoint,
-            cmd: list[str],
-            proxy_chain: list[SshEndpoint] | None = None,
-            input: str | None = None,
-        ) -> MagicMock:
-            if cmd == [
-                "test",
-                "-f",
-                "/backup/backup/.nbkp-dst",
-            ]:
-                return MagicMock(returncode=0)
-            if cmd == [
-                "test",
-                "-d",
-                "/backup/backup/snapshots",
-            ]:
-                return MagicMock(returncode=0)
-            return MagicMock(returncode=0, stdout="/dev/null\n")
-
-        mock_run.side_effect = remote_side_effect
-
-        status = check_sync(sync, config, _make_resolved(config))
+        status = _check(sync, config, run=run, resolved=_make_resolved(config))
         assert status.active is False
         assert (
             DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT
             in status.destination_endpoint_status.errors
         )
+        assert ["stat", "-f", "-c", "%T", "/backup"] in run.commands
 
 
 class TestCheckSourceLatest:
@@ -2906,17 +2830,7 @@ class TestCheckSourceLatest:
         (dst / "backup").mkdir(exist_ok=True)
         (dst / "backup" / ".nbkp-dst").touch()
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_BTRFS_FULL_HOST_TOOLS),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_btrfs_source_latest_missing(
-        self, _mock_caps: MagicMock, _mock_ssh: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_btrfs_source_latest_missing(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -2926,19 +2840,13 @@ class TestCheckSourceLatest:
 
         config, sync = self._make_config(src, dst, "btrfs")
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
             in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_hard_link_source_latest_missing(
-        self, _mock_caps: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_hard_link_source_latest_missing(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -2948,19 +2856,13 @@ class TestCheckSourceLatest:
 
         config, sync = self._make_config(src, dst, "hard-link")
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
             in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_btrfs_source_latest_present(
-        self, _mock_caps: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_btrfs_source_latest_present(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -2979,7 +2881,7 @@ class TestCheckSourceLatest:
 
         config, sync = self._make_config(src, dst, "btrfs")
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
             not in status.source_endpoint_status.errors
@@ -2989,13 +2891,7 @@ class TestCheckSourceLatest:
             not in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_hard_link_source_latest_symlink(
-        self, _mock_caps: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_hard_link_source_latest_symlink(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3013,19 +2909,13 @@ class TestCheckSourceLatest:
 
         config, sync = self._make_config(src, dst, "hard-link")
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
             not in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_no_snapshots_source_skips_check(
-        self, _mock_caps: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_no_snapshots_source_skips_check(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3057,7 +2947,7 @@ class TestCheckSourceLatest:
             syncs={"s1": sync},
         )
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
             not in status.source_endpoint_status.errors
@@ -3117,17 +3007,7 @@ class TestCheckSourceSnapshots:
         (dst / "backup").mkdir(exist_ok=True)
         (dst / "backup" / ".nbkp-dst").touch()
 
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_BTRFS_FULL_HOST_TOOLS),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_btrfs_source_snapshots_missing(
-        self, _mock_caps: MagicMock, _mock_ssh: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_btrfs_source_snapshots_missing(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3138,19 +3018,13 @@ class TestCheckSourceSnapshots:
 
         config, sync = self._make_config(src, dst, "btrfs")
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND
             in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_hard_link_source_snapshots_missing(
-        self, _mock_caps: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_hard_link_source_snapshots_missing(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3161,19 +3035,13 @@ class TestCheckSourceSnapshots:
 
         config, sync = self._make_config(src, dst, "hard-link")
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND
             in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_btrfs_source_snapshots_present(
-        self, _mock_caps: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_btrfs_source_snapshots_present(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3184,19 +3052,13 @@ class TestCheckSourceSnapshots:
 
         config, sync = self._make_config(src, dst, "btrfs")
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND
             not in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_no_snapshots_source_skips_check(
-        self, _mock_caps: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_no_snapshots_source_skips_check(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -3228,7 +3090,7 @@ class TestCheckSourceSnapshots:
             syncs={"s1": sync},
         )
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND
             not in status.source_endpoint_status.errors
@@ -3289,13 +3151,8 @@ class TestCheckDevnullLatest:
         (dst / "backup").mkdir(exist_ok=True)
         (dst / "backup" / ".nbkp-dst").touch()
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_source_devnull_accepted_with_upstream(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Source latest → /dev/null is valid when an upstream
@@ -3351,7 +3208,7 @@ class TestCheckDevnullLatest:
             },
             syncs={"s1": sync, "upstream": upstream},
         )
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.LATEST_SYMLINK_INVALID
             not in status.source_endpoint_status.errors
@@ -3361,13 +3218,8 @@ class TestCheckDevnullLatest:
             not in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_source_devnull_inactive_in_dry_run_with_upstream(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Source latest → /dev/null with upstream sync is marked
@@ -3424,17 +3276,12 @@ class TestCheckDevnullLatest:
             },
             syncs={"s1": sync, "upstream": upstream},
         )
-        status = check_sync(sync, config, dry_run=True)
+        status = _check(sync, config, dry_run=True)
         assert SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING in status.errors
         assert not status.active
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_source_devnull_rejected_without_upstream(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Source latest → /dev/null is invalid when no upstream
@@ -3451,16 +3298,11 @@ class TestCheckDevnullLatest:
 
         config, sync = self._make_config(src, dst)
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert SyncError.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM in status.errors
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_source_dangling_symlink_invalid(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Source latest pointing to non-existent snapshot is
@@ -3483,19 +3325,14 @@ class TestCheckDevnullLatest:
 
         config, sync = self._make_config(src, dst)
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             SourceEndpointError.LATEST_SYMLINK_INVALID
             in status.source_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_dest_devnull_accepted(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Destination latest → /dev/null is valid (no snapshot
@@ -3510,7 +3347,7 @@ class TestCheckDevnullLatest:
 
         config, sync = self._make_config(src, dst)
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND
             not in status.destination_endpoint_status.errors
@@ -3520,13 +3357,8 @@ class TestCheckDevnullLatest:
             not in status.destination_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_dest_latest_missing(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Missing destination latest symlink is detected."""
@@ -3540,19 +3372,14 @@ class TestCheckDevnullLatest:
 
         config, sync = self._make_config(src, dst)
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND
             in status.destination_endpoint_status.errors
         )
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
     def test_dest_dangling_symlink_invalid(
         self,
-        _mock_caps: MagicMock,
         tmp_path: Path,
     ) -> None:
         """Destination latest pointing to non-existent snapshot is
@@ -3573,7 +3400,7 @@ class TestCheckDevnullLatest:
 
         config, sync = self._make_config(src, dst)
 
-        status = check_sync(sync, config)
+        status = _check(sync, config)
         assert (
             DestinationEndpointError.LATEST_SYMLINK_INVALID
             in status.destination_endpoint_status.errors
