@@ -24,8 +24,8 @@ from nbkp.config import (
     find_config_file,
     load_config,
 )
+from nbkp.config.testkit import config_to_yaml
 from nbkp.remote.resolution import resolve_proxy_chain
-from tests.conftest import config_to_yaml
 
 
 def _validation_errors(path: Path) -> list[ErrorDetails]:

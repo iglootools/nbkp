@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from importlib.util import find_spec
 from pathlib import Path
 
-import yaml
 from pydantic import BaseModel, ConfigDict
 
 from ....config import (
@@ -13,6 +12,7 @@ from ....config import (
     RsyncOptions,
     SshEndpoint,
 )
+from ....config.testkit import write_config
 from ....disks import mount_volumes, umount_volumes
 from ....disks.output import mount_failure_detail, umount_failure_detail
 from ....policy import Severity
@@ -154,7 +154,7 @@ def seed_demo(
     resolved = resolve_all_endpoints(config)
     with _encrypted_volume_mounted(config, resolved, luks_uuid is not None, steps):
         _seed_data(config, containers, big_file_size, steps)
-    config_path = _write_config(base_dir, config)
+    config_path = write_config(base_dir, config)
     return SeedResult(
         base_dir=base_dir,
         config_path=config_path,
@@ -324,15 +324,3 @@ def _seed_data(
         big_file_size_bytes=big_file_size * 1024 * 1024,
     )
     steps.end("seed volumes", True)
-
-
-def _write_config(base_dir: Path, config: Config) -> Path:
-    config_path = base_dir / "config.yaml"
-    config_path.write_text(
-        yaml.safe_dump(
-            config.model_dump(by_alias=True, mode="json"),
-            default_flow_style=False,
-            sort_keys=False,
-        )
-    )
-    return config_path

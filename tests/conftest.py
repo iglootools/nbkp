@@ -2,7 +2,6 @@ import os
 from pathlib import Path
 
 import pytest
-import yaml
 
 from nbkp.config import (
     Config,
@@ -12,6 +11,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.config.testkit import write_config
 
 
 def _raise_fd_soft_limit(target: int = 8192) -> None:
@@ -84,14 +84,6 @@ def _isolate_from_user_ssh_config(
     )
 
 
-def config_to_yaml(config: Config) -> str:
-    return yaml.safe_dump(
-        config.model_dump(by_alias=True, mode="json"),
-        default_flow_style=False,
-        sort_keys=False,
-    )
-
-
 def _sample_config() -> Config:
     return Config(
         ssh_endpoints={
@@ -158,16 +150,12 @@ def _sample_minimal_config() -> Config:
 
 @pytest.fixture()
 def sample_config_file(tmp_path: Path) -> Path:
-    p = tmp_path / "config.yaml"
-    p.write_text(config_to_yaml(_sample_config()))
-    return p
+    return write_config(tmp_path, _sample_config())
 
 
 @pytest.fixture()
 def sample_minimal_config_file(tmp_path: Path) -> Path:
-    p = tmp_path / "config.yaml"
-    p.write_text(config_to_yaml(_sample_minimal_config()))
-    return p
+    return write_config(tmp_path, _sample_minimal_config())
 
 
 @pytest.fixture()

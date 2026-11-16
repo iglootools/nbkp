@@ -1,4 +1,8 @@
-"""Fake config builders for manual testing."""
+"""Fake config builders for manual testing, and writing a config to a file."""
+
+from pathlib import Path
+
+import yaml
 
 from . import (
     BtrfsSnapshotConfig,
@@ -149,3 +153,23 @@ def config_show_config() -> Config:
         sync_endpoints=base_sync_endpoints(),
         syncs=base_syncs(),
     )
+
+
+def config_to_yaml(config: Config) -> str:
+    """Serialize ``config`` to the YAML the loader reads back as an equal config."""
+    return yaml.safe_dump(
+        config.model_dump(by_alias=True, mode="json"),
+        default_flow_style=False,
+        sort_keys=False,
+    )
+
+
+def write_config(directory: Path, config: Config, name: str = "config.yaml") -> Path:
+    """Write ``config`` as ``directory/name`` and return the file's path.
+
+    Lets a CLI test or the demo pass a real file to ``-c`` so the loader and
+    config file lookup run, instead of injecting a ``Config`` past them.
+    """
+    path = directory / name
+    path.write_text(config_to_yaml(config))
+    return path
