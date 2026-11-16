@@ -1,6 +1,7 @@
 """Tests for the credentials keyring-status command."""
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from typer.testing import Result
@@ -13,6 +14,7 @@ from nbkp.config import (
     LuksEncryptionConfig,
     MountConfig,
 )
+from nbkp.config.testkit import write_config
 from nbkp.credentials import CredentialError, CredentialErrorReason
 from tests.clidisplay import runner
 
@@ -35,34 +37,32 @@ def _config(
     )
 
 
-def _invoke(*args: str) -> Result:
+def _invoke(config_path: Path, *args: str) -> Result:
     return runner.invoke(
-        app, ["credentials", "keyring-status", "--config", "/fake.yaml", *args]
+        app, ["credentials", "keyring-status", "--config", str(config_path), *args]
     )
 
 
 class TestKeyringStatus:
     @patch("nbkp.credentials.cli.keyring_status_cmd.retrieve_passphrase")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_human_keeps_brackets_in_passphrase_id(
-        self, mock_load: MagicMock, mock_retrieve: MagicMock
+        self, mock_retrieve: MagicMock, tmp_path: Path
     ) -> None:
-        mock_load.return_value = _config()
+        config_path = write_config(tmp_path, _config())
         mock_retrieve.return_value = "secret"
-        result = _invoke()
+        result = _invoke(config_path)
         assert result.exit_code == 0
         assert "disk[1]" in result.output
 
     @patch("nbkp.credentials.cli.keyring_status_cmd.retrieve_passphrase")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_json_reports_reason(
-        self, mock_load: MagicMock, mock_retrieve: MagicMock
+        self, mock_retrieve: MagicMock, tmp_path: Path
     ) -> None:
-        mock_load.return_value = _config()
+        config_path = write_config(tmp_path, _config())
         mock_retrieve.side_effect = CredentialError(
             "missing", reason=CredentialErrorReason.NOT_FOUND
         )
-        result = _invoke("-o", "json")
+        result = _invoke(config_path, "-o", "json")
         assert json.loads(result.stdout) == {
             "provider": "keyring",
             "checked": True,
@@ -77,20 +77,20 @@ class TestKeyringStatus:
         }
 
     @patch("nbkp.credentials.cli.keyring_status_cmd.retrieve_passphrase")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_prompt_provider_never_prompts(
-        self, mock_load: MagicMock, mock_retrieve: MagicMock
+        self, mock_retrieve: MagicMock, tmp_path: Path
     ) -> None:
-        mock_load.return_value = _config(provider=CredentialProvider.PROMPT)
-        result = _invoke("-o", "json")
+        config_path = write_config(
+            tmp_path, _config(provider=CredentialProvider.PROMPT)
+        )
+        result = _invoke(config_path, "-o", "json")
         mock_retrieve.assert_not_called()
         data = json.loads(result.stdout)
         assert data["checked"] is False
         assert data["passphrases"] == {"disk[1]": {"volumes": ["usb"]}}
 
-    @patch("nbkp.cliwiring.config.load_config")
-    def test_no_encrypted_volumes_json_is_valid(self, mock_load: MagicMock) -> None:
-        mock_load.return_value = _config(passphrase_id=None)
-        result = _invoke("-o", "json")
+    def test_no_encrypted_volumes_json_is_valid(self, tmp_path: Path) -> None:
+        config_path = write_config(tmp_path, _config(passphrase_id=None))
+        result = _invoke(config_path, "-o", "json")
         assert result.exit_code == 0
         assert json.loads(result.stdout)["passphrases"] == {}

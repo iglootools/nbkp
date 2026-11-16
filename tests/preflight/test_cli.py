@@ -1,7 +1,9 @@
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from nbkp.cli import app
+from nbkp.config.testkit import write_config
 from nbkp.preflight import SyncStatus
 from tests.clidisplay import (
     config_with_locations,
@@ -24,13 +26,20 @@ from tests.clidisplay import (
 
 class TestLocationValidation:
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_unknown_location_rejected(
-        self, mock_load: MagicMock, mock_checks: MagicMock
+        self, mock_checks: MagicMock, tmp_path: Path
     ) -> None:
-        mock_load.return_value = config_with_locations()
+        config_path = write_config(tmp_path, config_with_locations())
         result = runner.invoke(
-            app, ["preflight", "check", "--config", "/f.yaml", "--location", "office"]
+            app,
+            [
+                "preflight",
+                "check",
+                "--config",
+                str(config_path),
+                "--location",
+                "office",
+            ],
         )
         assert result.exit_code == 2
         assert "unknown location 'office'" in result.output
@@ -38,18 +47,17 @@ class TestLocationValidation:
         assert "travel" in result.output
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_unknown_exclude_location_rejected(
-        self, mock_load: MagicMock, mock_checks: MagicMock
+        self, mock_checks: MagicMock, tmp_path: Path
     ) -> None:
-        mock_load.return_value = config_with_locations()
+        config_path = write_config(tmp_path, config_with_locations())
         result = runner.invoke(
             app,
             [
                 "preflight",
                 "check",
                 "--config",
-                "/f.yaml",
+                str(config_path),
                 "--exclude-location",
                 "office",
             ],
@@ -59,18 +67,17 @@ class TestLocationValidation:
         assert "--exclude-location" in result.output
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_unknown_location_json_error(
-        self, mock_load: MagicMock, mock_checks: MagicMock
+        self, mock_checks: MagicMock, tmp_path: Path
     ) -> None:
-        mock_load.return_value = config_with_locations()
+        config_path = write_config(tmp_path, config_with_locations())
         result = runner.invoke(
             app,
             [
                 "preflight",
                 "check",
                 "--config",
-                "/f.yaml",
+                str(config_path),
                 "--output",
                 "json",
                 "--location",
@@ -85,12 +92,11 @@ class TestLocationValidation:
         mock_checks.assert_not_called()
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_known_location_accepted(
-        self, mock_load: MagicMock, mock_checks: MagicMock
+        self, mock_checks: MagicMock, tmp_path: Path
     ) -> None:
         config = config_with_locations()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         local_ssh = localhost_ssh_status()
         nas_ssh = remote_ssh_status("nas-home")
         vol_s = {
@@ -111,15 +117,16 @@ class TestLocationValidation:
         }
         mock_checks.return_value = preflight(vol_s, sync_s)
         result = runner.invoke(
-            app, ["preflight", "check", "--config", "/f.yaml", "--location", "home"]
+            app,
+            ["preflight", "check", "--config", str(config_path), "--location", "home"],
         )
         assert result.exit_code == 0
 
-    @patch("nbkp.cliwiring.config.load_config")
-    def test_location_on_config_without_locations(self, mock_load: MagicMock) -> None:
-        mock_load.return_value = sample_config()
+    def test_location_on_config_without_locations(self, tmp_path: Path) -> None:
+        config_path = write_config(tmp_path, sample_config())
         result = runner.invoke(
-            app, ["preflight", "check", "--config", "/f.yaml", "--location", "home"]
+            app,
+            ["preflight", "check", "--config", str(config_path), "--location", "home"],
         )
         assert result.exit_code == 2
         assert "no locations are defined" in result.output
@@ -127,48 +134,47 @@ class TestLocationValidation:
 
 class TestCheckCommand:
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_human_output_inactive(
-        self, mock_load: MagicMock, mock_checks: MagicMock
+        self, mock_checks: MagicMock, tmp_path: Path
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_vol_statuses(config)
         sync_s = sample_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
 
-        result = runner.invoke(app, ["preflight", "check", "--config", "/fake.yaml"])
+        result = runner.invoke(
+            app, ["preflight", "check", "--config", str(config_path)]
+        )
         assert result.exit_code == 0
         assert "Preflight" in result.output
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_human_output_all_active(
-        self, mock_load: MagicMock, mock_checks: MagicMock
+        self, mock_checks: MagicMock, tmp_path: Path
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
 
-        result = runner.invoke(app, ["preflight", "check", "--config", "/fake.yaml"])
+        result = runner.invoke(
+            app, ["preflight", "check", "--config", str(config_path)]
+        )
         assert result.exit_code == 0
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
-    def test_json_output_inactive(
-        self, mock_load: MagicMock, mock_checks: MagicMock
-    ) -> None:
+    def test_json_output_inactive(self, mock_checks: MagicMock, tmp_path: Path) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_vol_statuses(config)
         sync_s = sample_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
 
         result = runner.invoke(
             app,
-            ["preflight", "check", "--config", "/fake.yaml", "--output", "json"],
+            ["preflight", "check", "--config", str(config_path), "--output", "json"],
         )
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -176,19 +182,18 @@ class TestCheckCommand:
         assert "syncs" in data
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_json_output_all_active(
-        self, mock_load: MagicMock, mock_checks: MagicMock
+        self, mock_checks: MagicMock, tmp_path: Path
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
 
         result = runner.invoke(
             app,
-            ["preflight", "check", "--config", "/fake.yaml", "--output", "json"],
+            ["preflight", "check", "--config", str(config_path), "--output", "json"],
         )
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -196,9 +201,8 @@ class TestCheckCommand:
         assert "syncs" in data
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_json_output_with_snapshot_timestamps(
-        self, mock_load: MagicMock, mock_checks: MagicMock
+        self, mock_checks: MagicMock, tmp_path: Path
     ) -> None:
         """A populated ``latest`` snapshot puts a datetime in the status tree.
 
@@ -208,14 +212,14 @@ class TestCheckCommand:
         fixtures leave every snapshot field unset.
         """
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_sync_statuses_with_snapshots(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
 
         result = runner.invoke(
             app,
-            ["preflight", "check", "--config", "/fake.yaml", "--output", "json"],
+            ["preflight", "check", "--config", str(config_path), "--output", "json"],
         )
 
         assert result.exit_code == 0
@@ -228,26 +232,26 @@ class TestCheckCommand:
         assert nested["snapshot"]["name"] == "2026-03-06T14:30:00.000Z"
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_sentinel_only_exit_0_by_default(
-        self, mock_load: MagicMock, mock_checks: MagicMock
+        self, mock_checks: MagicMock, tmp_path: Path
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_sentinel_only_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
 
-        result = runner.invoke(app, ["preflight", "check", "--config", "/fake.yaml"])
+        result = runner.invoke(
+            app, ["preflight", "check", "--config", str(config_path)]
+        )
         assert result.exit_code == 0
 
     @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_sentinel_only_exit_1_when_strict(
-        self, mock_load: MagicMock, mock_checks: MagicMock
+        self, mock_checks: MagicMock, tmp_path: Path
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_sentinel_only_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
@@ -258,7 +262,7 @@ class TestCheckCommand:
                 "preflight",
                 "check",
                 "--config",
-                "/fake.yaml",
+                str(config_path),
                 "--strictness",
                 "ignore-none",
             ],

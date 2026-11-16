@@ -1,11 +1,10 @@
-import pathlib
 import stat
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from nbkp.cli import app
+from nbkp.config.testkit import write_config
 from tests.clidisplay import (
     runner,
     sample_config,
@@ -13,36 +12,29 @@ from tests.clidisplay import (
 
 
 class TestShCommand:
-    @patch("nbkp.cliwiring.config.load_config")
-    def test_generates_script(self, mock_load: MagicMock) -> None:
-        config = sample_config()
-        mock_load.return_value = config
+    def test_generates_script(self, tmp_path: Path) -> None:
+        config_path = write_config(tmp_path, sample_config())
 
-        result = runner.invoke(app, ["sh", "--config", "/fake.yaml"])
+        result = runner.invoke(app, ["sh", "--config", str(config_path)])
         assert result.exit_code == 0
         assert "#!/bin/bash" in result.output
         assert "set -euo pipefail" in result.output
         assert "sync_photos_to_nas()" in result.output
 
-    @patch("nbkp.cliwiring.config.load_config")
-    def test_config_path_in_header(self, mock_load: MagicMock) -> None:
-        config = sample_config()
-        mock_load.return_value = config
+    def test_config_path_in_header(self, tmp_path: Path) -> None:
+        config_path = write_config(tmp_path, sample_config())
 
-        result = runner.invoke(app, ["sh", "--config", "/fake.yaml"])
+        result = runner.invoke(app, ["sh", "--config", str(config_path)])
         assert result.exit_code == 0
-        assert "# Config: /fake.yaml" in result.output
+        assert f"# Config: {config_path}" in result.output
 
-    @patch("nbkp.cliwiring.config.load_config")
-    def test_output_file(self, mock_load: MagicMock, tmp_path: object) -> None:
-        tp = pathlib.Path(str(tmp_path))
-        config = sample_config()
-        mock_load.return_value = config
-        out = tp / "backup.sh"
+    def test_output_file(self, tmp_path: Path) -> None:
+        config_path = write_config(tmp_path, sample_config())
+        out = tmp_path / "backup.sh"
 
         result = runner.invoke(
             app,
-            ["sh", "--config", "/fake.yaml", "-o", str(out)],
+            ["sh", "--config", str(config_path), "-o", str(out)],
         )
         assert result.exit_code == 0
         assert out.exists()
@@ -53,19 +45,17 @@ class TestShCommand:
         assert mode & stat.S_IXUSR
         assert mode & stat.S_IXGRP
 
-    @patch("nbkp.cliwiring.config.load_config")
     def test_output_file_reported_relative_to_cwd(
         self,
-        mock_load: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.chdir(tmp_path)
         (tmp_path / "out").mkdir()
-        mock_load.return_value = sample_config()
+        write_config(tmp_path, sample_config())
 
         result = runner.invoke(
-            app, ["sh", "--config", "/fake.yaml", "-o", "out/backup.sh"]
+            app, ["sh", "--config", "config.yaml", "-o", "out/backup.sh"]
         )
         assert result.exit_code == 0
         assert "Written to out/backup.sh" in result.output
@@ -77,24 +67,16 @@ class TestShCommand:
         )
         assert result.exit_code == 2
 
-    @patch("nbkp.cliwiring.config.load_config")
-    def test_relative_with_output_file(
-        self,
-        mock_load: MagicMock,
-        tmp_path: object,
-    ) -> None:
-
-        tp = pathlib.Path(str(tmp_path))
-        config = sample_config()
-        mock_load.return_value = config
-        out = tp / "backup.sh"
+    def test_relative_with_output_file(self, tmp_path: Path) -> None:
+        config_path = write_config(tmp_path, sample_config())
+        out = tmp_path / "backup.sh"
 
         result = runner.invoke(
             app,
             [
                 "sh",
                 "--config",
-                "/fake.yaml",
+                str(config_path),
                 "-o",
                 str(out),
                 "--relative-src",
@@ -105,15 +87,9 @@ class TestShCommand:
         content = out.read_text(encoding="utf-8")
         assert "NBKP_SCRIPT_DIR" in content
 
-    @patch(
-        "nbkp.cliwiring.config.load_config",
-        side_effect=__import__("nbkp.config", fromlist=["ConfigError"]).ConfigError(
-            "bad config",
-            reason=__import__(
-                "nbkp.config", fromlist=["ConfigErrorReason"]
-            ).ConfigErrorReason.VALIDATION,
-        ),
-    )
-    def test_config_error(self, mock_load: MagicMock) -> None:
-        result = runner.invoke(app, ["sh", "--config", "/bad.yaml"])
+    def test_config_error(self, tmp_path: Path) -> None:
+        bad = tmp_path / "config.yaml"
+        bad.write_text("volumes:\n  v:\n    type: ftp\n    path: /x\n")
+
+        result = runner.invoke(app, ["sh", "--config", str(bad)])
         assert result.exit_code == 2

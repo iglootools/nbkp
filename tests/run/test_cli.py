@@ -7,6 +7,7 @@ import pytest
 
 from nbkp.cli import app
 from nbkp.config import SyncConfig, SyncEndpoint
+from nbkp.config.testkit import write_config
 from nbkp.preflight import SyncError
 from nbkp.sync import ProgressMode, SyncFailureKind, SyncResult
 from tests.cliwiring.test_mount import LOCK_FAILED, fake_disks_managed_mount
@@ -34,21 +35,20 @@ from tests.clidisplay import (
 class TestRunCommand:
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_successful_run(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_run: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
         mock_run.return_value = [_ok("photos-to-nas", dry_run=False)]
 
-        result = runner.invoke(app, ["run", "--config", "/fake.yaml", "-o", "json"])
+        result = runner.invoke(app, ["run", "--config", str(config_path), "-o", "json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert [(r["sync_slug"], r["outcome"]) for r in data["results"]] == [
@@ -56,7 +56,7 @@ class TestRunCommand:
         ]
         assert "hint" not in data
 
-        result = runner.invoke(app, ["run", "--config", "/fake.yaml"])
+        result = runner.invoke(app, ["run", "--config", str(config_path)])
         assert result.exit_code == 0
         call_kwargs = mock_run.call_args
         assert call_kwargs.kwargs.get("on_rsync_output") is None
@@ -65,21 +65,20 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_displays_status_before_results(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_run: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
         mock_run.return_value = [_ok("photos-to-nas", dry_run=False)]
 
-        result = runner.invoke(app, ["run", "--config", "/fake.yaml"])
+        result = runner.invoke(app, ["run", "--config", str(config_path)])
         assert result.exit_code == 0
         assert "Volumes:" in result.output
         assert "Syncs:" in result.output
@@ -89,15 +88,14 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_failed_run(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_run: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
@@ -111,7 +109,7 @@ class TestRunCommand:
             )
         ]
 
-        result = runner.invoke(app, ["run", "--config", "/fake.yaml", "-o", "json"])
+        result = runner.invoke(app, ["run", "--config", str(config_path), "-o", "json"])
         assert result.exit_code == 1
         data = json.loads(result.output)
         assert data["results"][0]["outcome"] == "failed"
@@ -119,15 +117,14 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_dry_run(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_run: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
@@ -135,7 +132,7 @@ class TestRunCommand:
 
         result = runner.invoke(
             app,
-            ["run", "--config", "/fake.yaml", "--dry-run", "-o", "json"],
+            ["run", "--config", str(config_path), "--dry-run", "-o", "json"],
         )
         assert result.exit_code == 0
         assert json.loads(result.output)["results"][0]["dry_run"] is True
@@ -144,15 +141,14 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_json_output(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_run: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
@@ -160,7 +156,7 @@ class TestRunCommand:
 
         result = runner.invoke(
             app,
-            ["run", "--config", "/fake.yaml", "--output", "json"],
+            ["run", "--config", str(config_path), "--output", "json"],
         )
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -173,12 +169,11 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_json_output_with_snapshot_timestamps(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_run: MagicMock,
+        tmp_path: Path,
     ) -> None:
         """Regression: statuses carrying a snapshot broke JSON serialization.
 
@@ -187,7 +182,7 @@ class TestRunCommand:
         completed a sync has a populated ``latest``.
         """
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_sync_statuses_with_snapshots(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
@@ -195,7 +190,7 @@ class TestRunCommand:
 
         result = runner.invoke(
             app,
-            ["run", "--config", "/fake.yaml", "--output", "json"],
+            ["run", "--config", str(config_path), "--output", "json"],
         )
 
         assert result.exit_code == 0
@@ -207,15 +202,14 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_sync_filter(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_run: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
@@ -223,7 +217,7 @@ class TestRunCommand:
 
         result = runner.invoke(
             app,
-            ["run", "--config", "/fake.yaml", "--sync", "photos-to-nas"],
+            ["run", "--config", str(config_path), "--sync", "photos-to-nas"],
         )
         assert result.exit_code == 0
         check_kwargs = mock_checks.call_args
@@ -233,15 +227,14 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_progress(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_run: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_all_active_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
@@ -249,7 +242,7 @@ class TestRunCommand:
 
         result = runner.invoke(
             app,
-            ["run", "--config", "/fake.yaml", "--progress", "per-file"],
+            ["run", "--config", str(config_path), "--progress", "per-file"],
         )
         assert result.exit_code == 0
         call_kwargs = mock_run.call_args
@@ -257,61 +250,58 @@ class TestRunCommand:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_exits_before_syncs_on_status_error(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_run: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_vol_statuses(config)
         sync_s = sample_error_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
 
-        result = runner.invoke(app, ["run", "--config", "/fake.yaml"])
+        result = runner.invoke(app, ["run", "--config", str(config_path)])
         assert result.exit_code == 1
         mock_run.assert_not_called()
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_sentinel_only_proceeds_by_default(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_run: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_sentinel_only_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
         mock_run.return_value = [_ok("photos-to-nas", dry_run=False)]
 
-        result = runner.invoke(app, ["run", "--config", "/fake.yaml"])
+        result = runner.invoke(app, ["run", "--config", str(config_path)])
         assert result.exit_code == 0
         mock_run.assert_called_once()
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_sentinel_only_exits_when_strict(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_run: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_sentinel_only_sync_statuses(config, vol_s)
         mock_checks.return_value = preflight(vol_s, sync_s)
 
         result = runner.invoke(
             app,
-            ["run", "--config", "/fake.yaml", "--strictness", "ignore-none"],
+            ["run", "--config", str(config_path), "--strictness", "ignore-none"],
         )
         assert result.exit_code == 1
         mock_run.assert_not_called()
@@ -322,24 +312,20 @@ class TestRunAbortHint:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_json_hint_carries_config_and_network_flags(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        (tmp_path / "conf").mkdir()
+        config_file = write_config(tmp_path / "conf", config, name="nbkp.yaml")
         vol_s = sample_vol_statuses(config)
         mock_checks.return_value = preflight(
             vol_s, sample_error_sync_statuses(config, vol_s)
         )
-        config_file = tmp_path / "conf" / "nbkp.yaml"
-        config_file.parent.mkdir()
-        config_file.write_text("")  # existence is checked before load_config
         monkeypatch.chdir(tmp_path)
 
         result = runner.invoke(
@@ -367,33 +353,31 @@ class TestRunAbortHint:
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_human_abort_suggests_troubleshoot(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         _mock_run: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_vol_statuses(config)
         mock_checks.return_value = preflight(
             vol_s, sample_error_sync_statuses(config, vol_s)
         )
 
-        result = runner.invoke(app, ["run"])
+        result = runner.invoke(app, ["run", "-c", str(config_path)])
 
         assert result.exit_code == 1
         assert "nbkp preflight troubleshoot" in result.output
 
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_abort_does_not_list_disabled_syncs(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_run: MagicMock,
+        tmp_path: Path,
     ) -> None:
         """Under ignore-none an inactive sync aborts the run, but a disabled
         one is never fatal and must not be reported as offending."""
@@ -410,7 +394,7 @@ class TestRunAbortHint:
                 "syncs": {**config.syncs, "off": off},
             }
         )
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_sentinel_only_sync_statuses(config, vol_s)
         inactive = sync_s["photos-to-nas"]
@@ -421,7 +405,7 @@ class TestRunAbortHint:
 
         result = runner.invoke(
             app,
-            ["run", "--config", "/fake.yaml", "--strictness", "ignore-none"],
+            ["run", "--config", str(config_path), "--strictness", "ignore-none"],
         )
 
         assert result.exit_code == 1
@@ -433,14 +417,13 @@ class TestRunAbortHint:
 
 class TestUnknownSyncFilter:
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_unknown_sync_is_an_error(
-        self, mock_load: MagicMock, mock_checks: MagicMock
+        self, mock_checks: MagicMock, tmp_path: Path
     ) -> None:
-        mock_load.return_value = sample_config()
+        config_path = write_config(tmp_path, sample_config())
 
         result = runner.invoke(
-            app, ["run", "-c", "/fake.yaml", "-o", "json", "--sync", "nope"]
+            app, ["run", "-c", str(config_path), "-o", "json", "--sync", "nope"]
         )
 
         assert result.exit_code == 2
@@ -448,11 +431,10 @@ class TestUnknownSyncFilter:
         assert (error["reason"], error["names"]) == ("unknown-sync", ["nope"])
         mock_checks.assert_not_called()
 
-    @patch("nbkp.cliwiring.config.load_config")
-    def test_unknown_sync_is_reported_on_stderr(self, mock_load: MagicMock) -> None:
-        mock_load.return_value = sample_config()
+    def test_unknown_sync_is_reported_on_stderr(self, tmp_path: Path) -> None:
+        config_path = write_config(tmp_path, sample_config())
 
-        result = runner.invoke(app, ["run", "-c", "/fake.yaml", "--sync", "nope"])
+        result = runner.invoke(app, ["run", "-c", str(config_path), "--sync", "nope"])
 
         assert result.exit_code == 2
         assert "unknown sync name(s): nope" in result.stderr
@@ -466,22 +448,21 @@ class TestUmountFailure:
     )
     @patch("nbkp.run.pipeline.run_all_syncs")
     @patch("nbkp.run.pipeline.check_all_syncs")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_failed_lock_fails_the_run(
         self,
-        mock_load: MagicMock,
         mock_checks: MagicMock,
         mock_run: MagicMock,
+        tmp_path: Path,
     ) -> None:
         config = sample_config()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         vol_s = sample_all_active_vol_statuses(config)
         mock_checks.return_value = preflight(
             vol_s, sample_all_active_sync_statuses(config, vol_s)
         )
         mock_run.return_value = [_ok("photos-to-nas")]
 
-        result = runner.invoke(app, ["run", "-c", "/fake.yaml", "-o", "json"])
+        result = runner.invoke(app, ["run", "-c", str(config_path), "-o", "json"])
 
         assert result.exit_code == 1
         data = json.loads(result.stdout)

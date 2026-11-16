@@ -1,12 +1,15 @@
 """Tests for `disks mount` / `disks umount` / `disks setup-auth`."""
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from nbkp.cli import app
 from nbkp.config import Config, LocalVolume, LuksEncryptionConfig, MountConfig
+from nbkp.config.testkit import write_config
 from nbkp.disks.lifecycle import MountResult, UmountResult
 from nbkp.disks.models import (
     LifecycleFailure,
@@ -37,24 +40,31 @@ def _config() -> Config:
     )
 
 
+@pytest.fixture(autouse=True)
+def _config_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run every test from a directory holding ``_config()`` as ``config.yaml``.
+
+    Commands get ``-c config.yaml``, and the hints they print show that
+    same short relative path.
+    """
+    monkeypatch.chdir(tmp_path)
+    write_config(tmp_path, _config())
+
+
 class TestUnknownNames:
     @patch("nbkp.disks.cli.mount_cmd.mount_volumes")
-    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
-    def test_mount_rejects_unknown_name(
-        self, _load: MagicMock, mock_mount: MagicMock
-    ) -> None:
-        result = runner.invoke(app, ["disks", "mount", "-c", "/f.yaml", "-n", "typo"])
+    def test_mount_rejects_unknown_name(self, mock_mount: MagicMock) -> None:
+        result = runner.invoke(
+            app, ["disks", "mount", "-c", "config.yaml", "-n", "typo"]
+        )
         assert result.exit_code == 1
         assert "unknown volume name(s): typo" in result.output
         mock_mount.assert_not_called()
 
     @patch("nbkp.disks.cli.umount_cmd.umount_volumes")
-    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
-    def test_umount_rejects_unknown_name_as_json(
-        self, _load: MagicMock, mock_umount: MagicMock
-    ) -> None:
+    def test_umount_rejects_unknown_name_as_json(self, mock_umount: MagicMock) -> None:
         result = runner.invoke(
-            app, ["disks", "umount", "-c", "/f.yaml", "-n", "typo", "-o", "json"]
+            app, ["disks", "umount", "-c", "config.yaml", "-n", "typo", "-o", "json"]
         )
         assert result.exit_code == 1
         assert json.loads(result.output)["error"]["names"] == ["typo"]
@@ -67,12 +77,11 @@ class TestDryRun:
         "nbkp.disks.cli.mount_cmd.plan_lifecycle",
         return_value=[VolumePlan("enc", (MountAction.UNLOCK, MountAction.MOUNT))],
     )
-    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
     def test_mount_dry_run_plans_without_mounting(
-        self, _load: MagicMock, _probe: MagicMock, mock_mount: MagicMock
+        self, _probe: MagicMock, mock_mount: MagicMock
     ) -> None:
         result = runner.invoke(
-            app, ["disks", "mount", "-c", "/f.yaml", "--dry-run", "-o", "json"]
+            app, ["disks", "mount", "-c", "config.yaml", "--dry-run", "-o", "json"]
         )
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
@@ -92,11 +101,12 @@ class TestDryRun:
         "nbkp.disks.cli.umount_cmd.plan_lifecycle",
         return_value=[VolumePlan("enc", (MountAction.UNMOUNT, MountAction.LOCK))],
     )
-    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
     def test_umount_dry_run_plans_without_umounting(
-        self, _load: MagicMock, _probe: MagicMock, mock_umount: MagicMock
+        self, _probe: MagicMock, mock_umount: MagicMock
     ) -> None:
-        result = runner.invoke(app, ["disks", "umount", "-c", "/f.yaml", "--dry-run"])
+        result = runner.invoke(
+            app, ["disks", "umount", "-c", "config.yaml", "--dry-run"]
+        )
         assert result.exit_code == 0, result.output
         assert "would unmount, lock enc" in result.output
         mock_umount.assert_not_called()
@@ -105,11 +115,10 @@ class TestDryRun:
         "nbkp.disks.cli.mount_cmd.plan_lifecycle",
         return_value=[VolumePlan("enc", (), "device not plugged in")],
     )
-    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
-    def test_absent_drive_needs_nothing(
-        self, _load: MagicMock, _probe: MagicMock
-    ) -> None:
-        result = runner.invoke(app, ["disks", "mount", "-c", "/f.yaml", "--dry-run"])
+    def test_absent_drive_needs_nothing(self, _probe: MagicMock) -> None:
+        result = runner.invoke(
+            app, ["disks", "mount", "-c", "config.yaml", "--dry-run"]
+        )
         assert "nothing to do for enc" in result.output
         assert "device not plugged in" in result.output
 
@@ -119,12 +128,11 @@ class TestDryRun:
             VolumePlan("enc", (), "unreachable: timed out", probe_failed=True)
         ],
     )
-    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
-    def test_failed_probe_fails_the_dry_run(
-        self, _load: MagicMock, _probe: MagicMock
-    ) -> None:
+    def test_failed_probe_fails_the_dry_run(self, _probe: MagicMock) -> None:
         """A dry run that could not probe a volume must not report success."""
-        result = runner.invoke(app, ["disks", "mount", "-c", "/f.yaml", "--dry-run"])
+        result = runner.invoke(
+            app, ["disks", "mount", "-c", "config.yaml", "--dry-run"]
+        )
         assert result.exit_code == 1
         assert "cannot plan enc" in result.output
         assert "nothing to do" not in result.output
@@ -135,12 +143,9 @@ class TestDryRun:
             VolumePlan("enc", (), "unreachable: timed out", probe_failed=True)
         ],
     )
-    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
-    def test_failed_probe_fails_the_json_dry_run(
-        self, _load: MagicMock, _probe: MagicMock
-    ) -> None:
+    def test_failed_probe_fails_the_json_dry_run(self, _probe: MagicMock) -> None:
         result = runner.invoke(
-            app, ["disks", "umount", "-c", "/f.yaml", "--dry-run", "-o", "json"]
+            app, ["disks", "umount", "-c", "config.yaml", "--dry-run", "-o", "json"]
         )
         assert result.exit_code == 1
         assert json.loads(result.output)["volumes"][0]["probe_failed"] is True
@@ -161,13 +166,12 @@ class TestMountAuthHint:
         ],
     )
     @patch("nbkp.disks.cli.mount_cmd.prefetch_passphrases", return_value=[])
-    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
     def test_not_authorized_suggests_setup_auth(
-        self, _load: MagicMock, _prefetch: MagicMock, _mount: MagicMock
+        self, _prefetch: MagicMock, _mount: MagicMock
     ) -> None:
-        result = runner.invoke(app, ["disks", "mount", "-c", "/f.yaml"])
+        result = runner.invoke(app, ["disks", "mount", "-c", "config.yaml"])
         assert result.exit_code == 1
-        assert "nbkp disks setup-auth -c /f.yaml" in result.output
+        assert "nbkp disks setup-auth -c config.yaml" in result.output
 
 
 class TestFailureJson:
@@ -187,9 +191,10 @@ class TestFailureJson:
         ],
     )
     @patch("nbkp.disks.cli.mount_cmd.prefetch_passphrases", return_value=[])
-    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
     def test_mount_reports_why_it_failed(self, *_mocks: MagicMock) -> None:
-        result = runner.invoke(app, ["disks", "mount", "-c", "/f.yaml", "-o", "json"])
+        result = runner.invoke(
+            app, ["disks", "mount", "-c", "config.yaml", "-o", "json"]
+        )
 
         assert result.exit_code == 1
         [entry] = json.loads(result.output)
@@ -222,9 +227,10 @@ class TestFailureJson:
             )
         ],
     )
-    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
     def test_umount_reports_why_it_failed(self, *_mocks: MagicMock) -> None:
-        result = runner.invoke(app, ["disks", "umount", "-c", "/f.yaml", "-o", "json"])
+        result = runner.invoke(
+            app, ["disks", "umount", "-c", "config.yaml", "-o", "json"]
+        )
 
         assert result.exit_code == 1
         [entry] = json.loads(result.output)
@@ -253,15 +259,14 @@ class TestTroubleshootHint:
         ],
     )
     @patch("nbkp.disks.cli.mount_cmd.prefetch_passphrases", return_value=[])
-    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
     def test_mount_failure_suggests_troubleshoot(
-        self, _load: MagicMock, _prefetch: MagicMock, _mount: MagicMock
+        self, _prefetch: MagicMock, _mount: MagicMock
     ) -> None:
         result = runner.invoke(
-            app, ["disks", "mount", "-c", "/f.yaml", "-N", "private"]
+            app, ["disks", "mount", "-c", "config.yaml", "-N", "private"]
         )
         assert result.exit_code == 1
-        assert "nbkp preflight troubleshoot -c /f.yaml -N private" in result.output
+        assert "nbkp preflight troubleshoot -c config.yaml -N private" in result.output
 
     @patch(
         "nbkp.disks.cli.helpers.status.check_mount_status",
@@ -282,23 +287,21 @@ class TestTroubleshootHint:
             )
         ],
     )
-    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
     def test_umount_failure_suggests_troubleshoot(
-        self, _load: MagicMock, _umount: MagicMock, _probe: MagicMock
+        self, _umount: MagicMock, _probe: MagicMock
     ) -> None:
         result = runner.invoke(
-            app, ["disks", "umount", "-c", "/f.yaml", "-N", "private"]
+            app, ["disks", "umount", "-c", "config.yaml", "-N", "private"]
         )
         assert result.exit_code == 1
-        assert "nbkp preflight troubleshoot -c /f.yaml -N private" in result.output
+        assert "nbkp preflight troubleshoot -c config.yaml -N private" in result.output
 
 
 class TestSetupAuth:
-    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
-    def test_json(self, _load: MagicMock) -> None:
+    def test_json(self) -> None:
         result = runner.invoke(
             app,
-            ["disks", "setup-auth", "-c", "/f.yaml", "-u", "backup", "-o", "json"],
+            ["disks", "setup-auth", "-c", "config.yaml", "-u", "backup", "-o", "json"],
         )
         assert result.exit_code == 0, result.output
         [rule] = json.loads(result.output)["rules"]
@@ -306,7 +309,6 @@ class TestSetupAuth:
         assert 'subject.user == "backup"' in rule["content"]
 
     @patch("nbkp.disks.cli.setup_auth_cmd.getpass.getuser", return_value="alice")
-    @patch("nbkp.cliwiring.config.load_config", return_value=_config())
-    def test_defaults_to_current_user(self, _load: MagicMock, _user: MagicMock) -> None:
-        result = runner.invoke(app, ["disks", "setup-auth", "-c", "/f.yaml"])
+    def test_defaults_to_current_user(self, _user: MagicMock) -> None:
+        result = runner.invoke(app, ["disks", "setup-auth", "-c", "config.yaml"])
         assert 'subject.user == "alice"' in result.output
