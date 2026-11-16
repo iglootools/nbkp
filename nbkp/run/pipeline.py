@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from ..config import Config
-from ..disks import MountObservation, UmountResult
+from ..disks import MountObservation, UmountResult, any_failed
 from ..policy import Severity, Strictness
 from ..preflight import (
     PreflightError,
@@ -214,5 +214,5 @@ def run_failed(pipeline: PipelineResult, umount_results: list[UmountResult]) -> 
     return (
         pipeline.has_preflight_errors
         or pipeline.has_sync_failures
-        or any(not r.success for r in umount_results)
+        or any_failed(umount_results)
     )

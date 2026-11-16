@@ -11,6 +11,7 @@ from ..credentials import build_passphrase_fn
 from ..disks import (
     MountObservation,
     UmountResult,
+    any_failed,
     managed_mount as _disks_managed_mount,
 )
 from ..disks.output import (
@@ -141,7 +142,7 @@ def _exit_on_umount_failure(
     failed exits with its own error.  Printed to stderr in every output
     format, since stdout already holds the command's report.
     """
-    if any(not r.success for r in results):
+    if any_failed(results):
         print_umount_failures(results, display_names)
         raise typer.Exit(1)
 

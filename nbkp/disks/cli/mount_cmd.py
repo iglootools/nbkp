@@ -15,8 +15,7 @@ from ...cliwiring.runtime import Runtime, runtime_of
 from ...config import Config
 from ...credentials import build_passphrase_fn, prefetch_passphrases
 from ...remote.endpoints import NetworkType, ResolvedEndpoints
-from ..lifecycle import MountResult, mount_volumes
-from ..models import MountFailureReason
+from ..lifecycle import MountResult, any_failed, mount_volumes, refused_by_polkit
 from ..mount_checks import check_mount_status
 from ..observation import build_mount_observations
 from ..output import (
@@ -117,7 +116,7 @@ def mount(
     )
     if output is OutputFormat.HUMAN:
         _print_auth_hint(results, invocation)
-    if any(not r.success for r in results):
+    if any_failed(results):
         if output is OutputFormat.HUMAN:
             print_troubleshoot_hint(invocation)
         raise typer.Exit(1)
@@ -188,7 +187,7 @@ def _show_results(
             echo_json(
                 [
                     *(
-                        _mount_result_entry(
+                        mount_result_entry(
                             display_names.get(r.volume_slug, r.volume_slug), r
                         )
                         for r in results
@@ -200,7 +199,9 @@ def _show_results(
             _show_human_results(cfg, resolved, results, names, display_names)
 
 
-def _mount_result_entry(name: str, result: MountResult) -> dict[str, object]:
+def mount_result_entry(name: str, result: MountResult) -> dict[str, object]:
+    """The ``-o json`` entry of a volume *disks mount* acted on: the state it
+    left and, on failure, why."""
     return {
         "volume": name,
         "device_present": result.device_present,
@@ -243,7 +244,7 @@ def _show_human_results(
 
 def _print_auth_hint(results: list[MountResult], invocation: Invocation) -> None:
     """Point at ``disks setup-auth`` when polkit refused an unlock or mount."""
-    if any(r.failure_reason is MountFailureReason.NOT_AUTHORIZED for r in results):
+    if refused_by_polkit(results):
         console = Console()
         console.print(
             "udisks refused the operation (no polkit rule). Generate one with:"

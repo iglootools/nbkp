@@ -7,7 +7,7 @@ lifecycle steps that state calls for are listed.
 """
 
 import enum
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from ..config import Config, MountConfig, Volume
@@ -108,6 +108,15 @@ def plan_lifecycle(
             config, resolved, names, mounting=mounting
         )
     ]
+
+
+def plan_incomplete(plans: Sequence[VolumePlan]) -> bool:
+    """Whether a volume's state could not be probed.
+
+    The real run would fail on it too, so a dry run that cannot tell what it
+    would do must not report success.
+    """
+    return any(plan.probe_failed for plan in plans)
 
 
 def plan_json(plans: list[VolumePlan]) -> list[dict[str, object]]:

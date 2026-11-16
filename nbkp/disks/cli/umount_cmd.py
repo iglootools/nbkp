@@ -11,7 +11,7 @@ from ...cliwiring.mount_progress import LifecycleProgress, mount_display_names
 from ...cliwiring.runtime import Runtime, runtime_of
 from ...config import Config
 from ...remote.endpoints import NetworkType, ResolvedEndpoints
-from ..lifecycle import UmountResult, umount_volumes
+from ..lifecycle import UmountResult, any_failed, umount_volumes
 from ..mount_checks import check_mount_status
 from ..plan import plan_lifecycle
 from . import app
@@ -97,7 +97,7 @@ def umount(
     probe_and_show_status(
         cfg, resolved, output, name, umount_results=results, run=runtime.run
     )
-    if any(not r.success for r in results):
+    if any_failed(results):
         if output is OutputFormat.HUMAN:
             print_troubleshoot_hint(
                 Invocation.of(
