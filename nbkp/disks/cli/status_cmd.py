@@ -55,5 +55,5 @@ def status(
     """Show mount status for volumes with mount config."""
     cfg = load_config_or_exit(config, output)
     require_known_names(cfg, name, output)
-    resolved = resolve_endpoints(cfg, location, exclude_location, network)
+    resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
     probe_and_show_status(cfg, resolved, output, name)

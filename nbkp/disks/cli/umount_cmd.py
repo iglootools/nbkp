@@ -4,6 +4,7 @@ from typing import Annotated
 import typer
 
 from ...clidisplay import OutputFormat
+from ...clidisplay.invocation import Invocation, print_troubleshoot_hint
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...cliwiring.mount_progress import LifecycleProgress, mount_display_names
 from ...config import Config
@@ -71,7 +72,7 @@ def umount(
     """Umount volumes and lock LUKS. Umounts all volumes with mount config, or specific ones via --name."""
     cfg = load_config_or_exit(config, output)
     require_known_names(cfg, name, output)
-    resolved = resolve_endpoints(cfg, location, exclude_location, network)
+    resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
 
     if dry_run:
         show_plan(
@@ -84,6 +85,15 @@ def umount(
     results = _umount_with_progress(cfg, resolved, name, output)
     probe_and_show_status(cfg, resolved, output, name, umount_results=results)
     if any(not r.success for r in results):
+        if output is OutputFormat.HUMAN:
+            print_troubleshoot_hint(
+                Invocation.of(
+                    config,
+                    location,
+                    exclude_location,
+                    network.value if network else None,
+                )
+            )
         raise typer.Exit(1)
 
 

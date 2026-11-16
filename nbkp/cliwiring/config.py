@@ -83,12 +83,21 @@ def build_endpoint_filter(
     )
 
 
+UNKNOWN_LOCATION_REASON = "unknown-location"
+"""``reason`` of the JSON error for a location the config does not define."""
+
+
 def _validate_locations(
     cfg: Config,
     locations: list[str] | None,
     exclude_locations: list[str] | None,
+    output_format: OutputFormat,
 ) -> None:
-    """Exit with an error if any location value is not defined in the config."""
+    """Exit with code 2 if any location value is not defined in the config.
+
+    Like a config error, it is rendered in the command's output format: text
+    on stderr, or a JSON ``{"error": ...}`` object on stdout for ``-o json``.
+    """
     known = set(cfg.known_locations())
     unknown = [
         (label, value)
@@ -102,13 +111,19 @@ def _validate_locations(
     if unknown:
         label, value = unknown[0]
         message = (
-            f"Error: unknown location '{value}' passed to {label}."
+            f"unknown location '{value}' passed to {label}."
             f" Known locations: {', '.join(sorted(known))}"
             if known
-            else "Error: no locations are defined in the configuration."
+            else "no locations are defined in the configuration."
             " --location and --exclude-location cannot be used."
         )
-        typer.echo(message, err=True)
+        match output_format:
+            case OutputFormat.JSON:
+                echo_json(
+                    {"error": {"reason": UNKNOWN_LOCATION_REASON, "message": message}}
+                )
+            case OutputFormat.HUMAN:
+                typer.echo(f"Error: {message}", err=True)
         raise typer.Exit(2)
 
 
@@ -117,7 +132,8 @@ def resolve_endpoints(
     locations: list[str] | None,
     exclude_locations: list[str] | None,
     network: NetworkType | None,
+    output_format: OutputFormat = OutputFormat.HUMAN,
 ) -> ResolvedEndpoints:
-    _validate_locations(cfg, locations, exclude_locations)
+    _validate_locations(cfg, locations, exclude_locations, output_format)
     ef = build_endpoint_filter(locations, exclude_locations, network)
     return resolve_all_endpoints(cfg, ef)

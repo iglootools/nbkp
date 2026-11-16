@@ -10,6 +10,9 @@ import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
+from rich.console import Console
+from rich.text import Text
+
 
 def display_path(path: Path, cwd: Path | None = None) -> str:
     """*path* relative to *cwd* (default: the working directory) when under it."""
@@ -75,3 +78,22 @@ class Invocation:
                 *(self.endpoint_args() if endpoint_flags else []),
             ]
         )
+
+
+def print_troubleshoot_hint(invocation: Invocation) -> None:
+    """Point a failed command at ``nbkp preflight troubleshoot`` (on stderr).
+
+    For commands whose JSON output is a bare list, which has no room for the
+    ``hint`` field ``run`` adds to its JSON object: they print this in human
+    mode only.
+    """
+    # Text, not markup: the config path is not nbkp-authored. soft_wrap keeps
+    # the command on one line so it can be copy-pasted.
+    Console(stderr=True).print(
+        Text.assemble(
+            "Run ",
+            (invocation.command("preflight", "troubleshoot"), "bold"),
+            " for step-by-step fixes.",
+        ),
+        soft_wrap=True,
+    )

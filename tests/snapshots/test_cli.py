@@ -530,3 +530,71 @@ class TestUnknownSyncFilter:
         error = json.loads(result.output)["error"]
         assert (error["reason"], error["names"]) == ("unknown-sync", ["nope"])
         mock_checks.assert_not_called()
+
+
+class TestTroubleshootHint:
+    """A preflight failure points at ``preflight troubleshoot``, like ``run``."""
+
+    _HINT = "nbkp preflight troubleshoot -c /fake.yaml -N private"
+
+    def _invoke_human(self, *args: str) -> tuple[int, str]:
+        result = runner.invoke(
+            app, ["snapshots", *args, "-c", "/fake.yaml", "-N", "private"]
+        )
+        return result.exit_code, result.output
+
+    @patch("nbkp.cliwiring.preflight.check_all_syncs")
+    @patch("nbkp.cliwiring.config.load_config")
+    def test_show_preflight_error_suggests_troubleshoot(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+    ) -> None:
+        config = _prune_config()
+        mock_load.return_value = config
+        mock_checks.return_value = preflight(*_infra_error_statuses(config))
+
+        exit_code, output = self._invoke_human("show")
+
+        assert exit_code == 1
+        assert self._HINT in output
+
+    @patch("nbkp.cliwiring.preflight.check_all_syncs")
+    @patch("nbkp.cliwiring.config.load_config")
+    def test_prune_preflight_error_suggests_troubleshoot(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+    ) -> None:
+        config = _prune_config()
+        mock_load.return_value = config
+        mock_checks.return_value = preflight(*_infra_error_statuses(config))
+
+        exit_code, output = self._invoke_human("prune")
+
+        assert exit_code == 1
+        assert self._HINT in output
+
+    @patch(
+        "nbkp.snapshots.prune.btrfs_prune_snapshots",
+        side_effect=SnapshotOperationError(
+            SnapshotOp.DELETE, "/dst/snapshots/old1", "Permission denied"
+        ),
+    )
+    @patch("nbkp.cliwiring.preflight.check_all_syncs")
+    @patch("nbkp.cliwiring.config.load_config")
+    def test_snapshot_operation_error_has_no_hint(
+        self,
+        mock_load: MagicMock,
+        mock_checks: MagicMock,
+        _mock_prune: MagicMock,
+    ) -> None:
+        """Troubleshoot explains preflight findings, not a failed delete."""
+        config = _prune_config()
+        mock_load.return_value = config
+        mock_checks.return_value = preflight(*_prune_active_statuses(config))
+
+        exit_code, output = self._invoke_human("prune")
+
+        assert exit_code == 1
+        assert "preflight troubleshoot" not in output

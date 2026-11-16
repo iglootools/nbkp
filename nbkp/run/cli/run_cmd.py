@@ -142,7 +142,7 @@ def run(
     """Execute all active syncs in dependency order. Supports dry-run, progress display, snapshot creation, and automatic pruning."""
     cfg = load_config_or_exit(config, output)
     require_known_syncs(cfg, sync, output)
-    resolved = resolve_endpoints(cfg, location, exclude_location, network)
+    resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
     invocation = Invocation.of(
         config, location, exclude_location, network.value if network else None
     )
