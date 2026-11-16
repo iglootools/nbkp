@@ -1,11 +1,13 @@
 """Tests for nbkp.remote.dispatch: routing a command to the volume's host.
 
-The transport is the subject here, so these are the tests that patch it;
-callers of ``run_on_volume`` take a fake ``VolumeCommandRunner`` instead.
+A local command runs as a real child process; a remote one goes to a
+recording ``run_remote``. Callers of ``run_on_volume`` take a fake
+``VolumeCommandRunner`` instead.
 """
 
 import subprocess
-from unittest.mock import MagicMock, patch
+import sys
+from dataclasses import dataclass
 
 from nbkp.config import LocalVolume, RemoteVolume, SshEndpoint
 from nbkp.remote.dispatch import check_command_available, run_on_volume
@@ -18,35 +20,58 @@ _REMOTE = RemoteVolume(slug="backup", ssh_endpoint="nas", path="/backup")
 _RESOLVED = {"backup": ResolvedEndpoint(server=_NAS, proxy_chain=[_BASTION])}
 
 
+@dataclass(frozen=True)
+class _RemoteCall:
+    server: SshEndpoint
+    command: list[str]
+    proxy_chain: list[SshEndpoint] | None
+    input: str | None
+
+
+class _RecordingRemote:
+    def __init__(self) -> None:
+        self.calls: list[_RemoteCall] = []
+
+    def __call__(
+        self,
+        server: SshEndpoint,
+        command: list[str],
+        proxy_chain: list[SshEndpoint] | None = None,
+        input: str | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        self.calls.append(_RemoteCall(server, command, proxy_chain, input))
+        return completed(stdout="out")
+
+
 class TestRunOnVolume:
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_remote_runs_over_the_resolved_endpoint(
-        self, mock_remote: MagicMock
-    ) -> None:
-        mock_remote.return_value = subprocess.CompletedProcess([], 0, "out", "")
+    def test_remote_runs_over_the_resolved_endpoint(self) -> None:
+        remote = _RecordingRemote()
 
-        result = run_on_volume(["ls", "/backup"], _REMOTE, _RESOLVED, input="pw")
-
-        assert result.stdout == "out"
-        mock_remote.assert_called_once_with(
-            _NAS, ["ls", "/backup"], [_BASTION], input="pw"
+        result = run_on_volume(
+            ["ls", "/backup"], _REMOTE, _RESOLVED, input="pw", run_remote=remote
         )
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_local_runs_a_subprocess(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = subprocess.CompletedProcess([], 0, "out", "")
+        assert result.stdout == "out"
+        assert remote.calls == [_RemoteCall(_NAS, ["ls", "/backup"], [_BASTION], "pw")]
+
+    def test_local_runs_a_subprocess(self) -> None:
         vol = LocalVolume(slug="data", path="/mnt/data")
+        echo_upper = "import sys; s = sys.stdin.read(); print(s.upper()); sys.exit(3)"
 
-        result = run_on_volume(["ls", "/mnt/data"], vol, {})
+        result = run_on_volume([sys.executable, "-c", echo_upper], vol, {}, input="pw")
 
-        assert result.stdout == "out"
-        mock_run.assert_called_once_with(
-            ["ls", "/mnt/data"],
-            capture_output=True,
-            text=True,
-            input=None,
-            check=False,
-        )
+        assert result.returncode == 3
+        assert result.stdout == "PW\n"
+        assert result.stderr == ""
+
+    def test_local_captures_stderr_apart(self) -> None:
+        vol = LocalVolume(slug="data", path="/mnt/data")
+        to_stderr = "import sys; sys.stderr.write('oops')"
+
+        result = run_on_volume([sys.executable, "-c", to_stderr], vol, {})
+
+        assert result.stdout == ""
+        assert result.stderr == "oops"
 
 
 def _remote_volume() -> tuple[RemoteVolume, ResolvedEndpoints]:

@@ -1,10 +1,9 @@
 import shlex
+import subprocess
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 from nbkp.config import (
     BtrfsSnapshotConfig,
@@ -23,8 +22,10 @@ from nbkp.sync.rsync import (
     ProgressMode,
     _run_streaming,
     build_rsync_command,
+    run_local_process,
     run_rsync,
 )
+from tests.fakes import completed
 
 _SSH_KEY = str(Path("~/.ssh/key").expanduser())
 
@@ -1329,53 +1330,72 @@ class TestDestSuffix:
         assert cmd[-1] == "/mnt/dst/snapshots/T1/"
 
 
+def _local_sync() -> tuple[SyncConfig, Config]:
+    sync = SyncConfig(slug="s1", source="ep-src", destination="ep-dst")
+    config = Config(
+        volumes={
+            "src": LocalVolume(slug="src", path="/src"),
+            "dst": LocalVolume(slug="dst", path="/dst"),
+        },
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+        },
+        syncs={"s1": sync},
+    )
+    return sync, config
+
+
+class _RecordingProcessRunner:
+    def __init__(self) -> None:
+        self.calls: list[tuple[list[str], Callable[[str], None] | None]] = []
+
+    def __call__(
+        self, cmd: list[str], on_output: Callable[[str], None] | None
+    ) -> subprocess.CompletedProcess[str]:
+        self.calls.append((cmd, on_output))
+        return completed(stdout="done")
+
+
 class TestRunRsync:
-    @patch("nbkp.sync.rsync.subprocess.run")
-    def test_run_rsync(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="done", stderr="")
-        src = LocalVolume(slug="src", path="/src")
-        dst = LocalVolume(slug="dst", path="/dst")
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
-            },
-            syncs={"s1": sync},
-        )
+    def test_runs_the_built_command(self) -> None:
+        sync, config = _local_sync()
+        run_process = _RecordingProcessRunner()
 
-        result = run_rsync(sync, config)
-        assert result.returncode == 0
-        mock_run.assert_called_once()
+        result = run_rsync(sync, config, dry_run=True, run_process=run_process)
 
-    def test_run_rsync_streams_output(self) -> None:
-        src = LocalVolume(slug="src", path="/src")
-        dst = LocalVolume(slug="dst", path="/dst")
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
-            },
-            syncs={"s1": sync},
-        )
+        assert result.stdout == "done"
+        assert run_process.calls == [
+            (build_rsync_command(sync, config, dry_run=True), None)
+        ]
 
+    def test_hands_the_output_callback_to_the_process(self) -> None:
+        sync, config = _local_sync()
+        run_process = _RecordingProcessRunner()
+
+        def on_output(chunk: str) -> None:
+            pass
+
+        run_rsync(sync, config, on_output=on_output, run_process=run_process)
+
+        [(_, forwarded)] = run_process.calls
+        assert forwarded is on_output
+
+
+class TestRunLocalProcess:
+    def test_captures_stdout_and_stderr_apart(self) -> None:
+        result = run_local_process(_emit_cmd(b"out\r\n", stderr=b"err\n", exit_code=23))
+        assert result.returncode == 23
+        assert result.stdout == "out\n"
+        assert result.stderr == "err\n"
+
+    def test_streams_output_to_the_callback(self) -> None:
         chunks: list[str] = []
-        with patch(
-            "nbkp.sync.rsync.build_rsync_command",
-            return_value=_emit_cmd(b"sending incremental file list\r\nfile.txt\n"),
-        ):
-            result = run_rsync(sync, config, on_output=chunks.append)
+
+        result = run_local_process(
+            _emit_cmd(b"sending incremental file list\r\nfile.txt\n"),
+            chunks.append,
+        )
 
         assert result.returncode == 0
         assert result.stdout == "sending incremental file list\nfile.txt\n"
@@ -1400,14 +1420,14 @@ class TestRunStreaming:
         result = _run_streaming(_emit_cmd(b"a\r\nb\rc\n"), lambda _: None)
         assert result.stdout == "a\nb\nc\n"
 
-    def test_decodes_characters_and_crlf_split_across_reads(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr("nbkp.sync.rsync._STREAM_CHUNK_SIZE", 1)
+    def test_decodes_characters_and_crlf_split_across_reads(self) -> None:
         chunks: list[str] = []
-        result = _run_streaming(_emit_cmd("é\r\n€".encode()), chunks.append)
+        result = _run_streaming(
+            _emit_cmd("é\r\n€".encode()), chunks.append, chunk_size=1
+        )
         assert result.stdout == "é\n€"
-        assert "".join(chunks) == result.stdout
+        # One byte per read: the halves of "é" and of "\r\n" are joined.
+        assert chunks == ["é", "\n", "€"]
         assert "" not in chunks
 
     def test_merges_stderr_and_keeps_exit_code(self) -> None:

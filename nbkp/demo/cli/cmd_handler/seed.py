@@ -27,7 +27,7 @@ from ....sync.testkit.seed import (
 )
 
 # The 'docker' extra is optional; seed_demo(docker=True) reports it through
-# _require_docker() before anything here resolves these lazy names.
+# _require_docker(has_docker) before anything here resolves these lazy names.
 lazy from ....remote.testkit.docker import (
     LUKS_PASSPHRASE,
     build_docker_image,
@@ -81,8 +81,8 @@ class _Containers:
     storage_port: int
 
 
-def _require_docker() -> None:
-    if not _HAS_DOCKER:
+def _require_docker(has_docker: bool) -> None:
+    if not has_docker:
         raise SeedError(
             "Docker support requires the 'docker' extra."
             " Install it with: uv tool install 'nbkp[docker]'"
@@ -129,9 +129,11 @@ def seed_demo(
     credential_provider: CredentialProvider = CredentialProvider.KEYRING,
     on_step_start: Callable[[str], None] | None = None,
     on_step_end: Callable[[str, Severity, str | None], None] | None = None,
+    has_docker: bool = _HAS_DOCKER,
 ) -> SeedResult:
     """*on_step_start* receives an in-progress label (e.g.
     ``"Building Docker image..."``), *on_step_end* the step's result line.
+    *has_docker* says whether the 'docker' extra is installed.
     """
     steps = _Steps(on_step_start, on_step_end)
     rsync_opts = (
@@ -140,7 +142,7 @@ def seed_demo(
         else RsyncOptions()
     )
     if docker:
-        _require_docker()
+        _require_docker(has_docker)
     containers = _start_containers(base_dir, luks, steps) if docker else None
     luks_uuid = (
         _read_luks_uuid(containers, steps) if containers is not None and luks else None

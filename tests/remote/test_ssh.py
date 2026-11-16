@@ -4,6 +4,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import invoke.exceptions
+import invoke.runners
+import invoke.util
 import pytest
 
 from nbkp.config import LocalVolume, RemoteVolume, SshConnectionOptions, SshEndpoint
@@ -402,33 +404,73 @@ class TestFormatRemotePath:
         assert result == "nas2.example.com:/data"
 
 
-class TestRunRemoteCommand:
-    @patch("nbkp.remote.fabricssh.paramiko")
-    @patch("nbkp.remote.fabricssh.Connection")
-    def test_leading_tilde_left_for_the_remote_shell(
-        self,
-        mock_conn_cls: MagicMock,
-        mock_paramiko: MagicMock,
-        ssh_endpoint: SshEndpoint,
-    ) -> None:
-        mock_conn = mock_conn_cls.return_value
-        mock_conn.run.return_value = MagicMock(exited=0, stdout="", stderr="")
+_TARGET = SshEndpoint(slug="target", host="target.example.com")
+_OTHER = SshEndpoint(slug="other", host="other.example.com")
+_BASTION = SshEndpoint(slug="bastion", host="bastion.example.com")
 
+
+def _result(stdout: str = "ok\n", exited: int = 0) -> invoke.runners.Result:
+    return invoke.runners.Result(stdout=stdout, stderr="", exited=exited)
+
+
+def _fake_connection(**kwargs: object) -> MagicMock:
+    """A distinct, connected Fabric Connection mock per construction."""
+    conn = MagicMock(name=str(kwargs["host"]))
+    conn.host = kwargs["host"]
+    conn.gateway = kwargs["gateway"]
+    conn.is_connected = True
+    conn.run.return_value = _result()
+    return conn
+
+
+def _built(mock_conn_cls: MagicMock, host: str) -> list[MagicMock]:
+    """The connections built to *host*, in construction order."""
+    return [conn for conn in mock_conn_cls.built if conn.host == host]
+
+
+@pytest.fixture()
+def mock_conn_cls() -> Iterator[MagicMock]:
+    """Fabric's Connection class, building a :func:`_fake_connection` per
+    call; ``configure`` adjusts each one as it is built."""
+    with patch("nbkp.remote.fabricssh.Connection") as cls:
+        cls.built = []
+        cls.configure = lambda conn: None
+
+        def build(**kwargs: object) -> MagicMock:
+            conn = _fake_connection(**kwargs)
+            cls.configure(conn)
+            cls.built.append(conn)
+            return conn
+
+        cls.side_effect = build
+        yield cls
+
+
+class _Transport:
+    """The Paramiko transport of an open connection, recording keepalives."""
+
+    def __init__(self) -> None:
+        self.keepalives: list[int] = []
+
+    def set_keepalive(self, interval: int) -> None:
+        self.keepalives.append(interval)
+
+
+class TestRunRemoteCommand:
+    def test_leading_tilde_left_for_the_remote_shell(
+        self, mock_conn_cls: MagicMock, ssh_endpoint: SshEndpoint
+    ) -> None:
         run_remote_command(ssh_endpoint, ["test", "-f", "~/my backups/.nbkp-vol"])
 
-        assert mock_conn.run.call_args.args[0] == "test -f ~/'my backups/.nbkp-vol'"
+        (conn,) = _built(mock_conn_cls, "nas.example.com")
+        assert conn.run.call_args.args[0] == "test -f ~/'my backups/.nbkp-vol'"
 
-    @patch("nbkp.remote.fabricssh.paramiko")
-    @patch("nbkp.remote.fabricssh.Connection")
     def test_run_remote_command(
-        self,
-        mock_conn_cls: MagicMock,
-        mock_paramiko: MagicMock,
-        ssh_endpoint: SshEndpoint,
+        self, mock_conn_cls: MagicMock, ssh_endpoint: SshEndpoint
     ) -> None:
-        mock_conn = mock_conn_cls.return_value
-        mock_result = MagicMock(exited=0, stdout="file1\nfile2\n", stderr="")
-        mock_conn.run.return_value = mock_result
+        mock_conn_cls.configure = lambda conn: setattr(
+            conn.run, "return_value", _result("file1\nfile2\n")
+        )
 
         result = run_remote_command(ssh_endpoint, ["ls", "/tmp"])
 
@@ -446,7 +488,8 @@ class TestRunRemoteCommand:
             forward_agent=False,
             gateway=None,
         )
-        mock_conn.run.assert_called_once_with(
+        (conn,) = _built(mock_conn_cls, "nas.example.com")
+        conn.run.assert_called_once_with(
             "ls /tmp",
             warn=True,
             hide=True,
@@ -456,12 +499,8 @@ class TestRunRemoteCommand:
         assert result.stdout == "file1\nfile2\n"
         assert result.stderr == ""
 
-    @patch("nbkp.remote.fabricssh.paramiko")
-    @patch("nbkp.remote.fabricssh.Connection")
     def test_channel_timeout_and_disabled_algorithms(
-        self,
-        mock_conn_cls: MagicMock,
-        mock_paramiko: MagicMock,
+        self, mock_conn_cls: MagicMock
     ) -> None:
         server = SshEndpoint(
             slug="advanced",
@@ -473,9 +512,6 @@ class TestRunRemoteCommand:
                 },
             ),
         )
-        mock_conn = mock_conn_cls.return_value
-        mock_result = MagicMock(exited=0, stdout="ok\n", stderr="")
-        mock_conn.run.return_value = mock_result
 
         run_remote_command(server, ["echo", "ok"])
 
@@ -497,12 +533,8 @@ class TestRunRemoteCommand:
             gateway=None,
         )
 
-    @patch("nbkp.remote.fabricssh.paramiko")
-    @patch("nbkp.remote.fabricssh.Connection")
     def test_server_alive_interval_calls_set_keepalive(
-        self,
-        mock_conn_cls: MagicMock,
-        mock_paramiko: MagicMock,
+        self, mock_conn_cls: MagicMock
     ) -> None:
         server = SshEndpoint(
             slug="keepalive",
@@ -511,25 +543,21 @@ class TestRunRemoteCommand:
                 server_alive_interval=60,
             ),
         )
-        mock_conn = mock_conn_cls.return_value
-        mock_result = MagicMock(exited=0, stdout="ok\n", stderr="")
-        mock_conn.run.return_value = mock_result
-        # Like Fabric, no transport until the connection is opened.
-        transport = MagicMock()
-        mock_conn.transport = None
-        mock_conn.open.side_effect = lambda: setattr(mock_conn, "transport", transport)
+        transport = _Transport()
+
+        def no_transport_until_open(conn: MagicMock) -> None:
+            # Like Fabric, no transport until the connection is opened.
+            conn.transport = None
+            conn.open.side_effect = lambda: setattr(conn, "transport", transport)
+
+        mock_conn_cls.configure = no_transport_until_open
 
         run_remote_command(server, ["echo", "ok"])
 
-        transport.set_keepalive.assert_called_once_with(60)
+        assert transport.keepalives == [60]
 
-    @patch("nbkp.remote.fabricssh.paramiko")
-    @patch("nbkp.remote.fabricssh.Connection")
     def test_thread_exception_returns_clean_failure(
-        self,
-        mock_conn_cls: MagicMock,
-        mock_paramiko: MagicMock,
-        ssh_endpoint: SshEndpoint,
+        self, mock_conn_cls: MagicMock, ssh_endpoint: SshEndpoint
     ) -> None:
         """ThreadException from stdin writer must not leak as a traceback.
 
@@ -538,11 +566,14 @@ class TestRunRemoteCommand:
         raises OSError on the closed channel, and Fabric wraps it in
         invoke.exceptions.ThreadException.
         """
+        closed = OSError("Socket is closed")
 
-        mock_conn = mock_conn_cls.return_value
-        mock_conn.run.side_effect = invoke.exceptions.ThreadException(
-            [MagicMock(value=OSError("Socket is closed"))]
-        )
+        def stdin_writer_fails(conn: MagicMock) -> None:
+            conn.run.side_effect = invoke.exceptions.ThreadException(
+                [invoke.util.ExceptionWrapper({}, OSError, closed, None)]
+            )
+
+        mock_conn_cls.configure = stdin_writer_fails
 
         result = run_remote_command(
             ssh_endpoint,
@@ -561,69 +592,19 @@ class TestRunRemoteCommand:
         assert result.returncode == 1
         assert result.stdout == ""
 
-    @patch("nbkp.remote.fabricssh.paramiko")
-    @patch("nbkp.remote.fabricssh.Connection")
-    def test_proxy_server_creates_gateway(
-        self,
-        mock_conn_cls: MagicMock,
-        mock_paramiko: MagicMock,
-    ) -> None:
-        server = SshEndpoint(
-            slug="target",
-            host="target.example.com",
-        )
+    def test_proxy_server_creates_gateway(self, mock_conn_cls: MagicMock) -> None:
         proxy = SshEndpoint(
             slug="bastion",
             host="bastion.example.com",
             user="admin",
         )
-        mock_conn = mock_conn_cls.return_value
-        mock_result = MagicMock(exited=0, stdout="ok\n", stderr="")
-        mock_conn.run.return_value = mock_result
 
-        run_remote_command(server, ["echo", "ok"], [proxy])
+        run_remote_command(_TARGET, ["echo", "ok"], [proxy])
 
-        # Connection is called twice: once for proxy, once
-        # for target
-        assert mock_conn_cls.call_count == 2
-        target_call = mock_conn_cls.call_args_list[1]
-        assert target_call.kwargs["gateway"] is not None
-
-
-_TARGET = SshEndpoint(slug="target", host="target.example.com")
-_OTHER = SshEndpoint(slug="other", host="other.example.com")
-_BASTION = SshEndpoint(slug="bastion", host="bastion.example.com")
-
-
-def _fake_connection(**kwargs: object) -> MagicMock:
-    """A distinct, connected Fabric Connection mock per construction."""
-    conn = MagicMock(name=str(kwargs["host"]))
-    conn.host = kwargs["host"]
-    conn.gateway = kwargs["gateway"]
-    conn.is_connected = True
-    conn.run.return_value = MagicMock(exited=0, stdout="ok\n", stderr="")
-    return conn
-
-
-def _built(mock_conn_cls: MagicMock, host: str) -> list[MagicMock]:
-    """The connections built to *host*, in construction order."""
-    return [conn for conn in mock_conn_cls.built if conn.host == host]
-
-
-@pytest.fixture()
-def mock_conn_cls() -> Iterator[MagicMock]:
-    with patch("nbkp.remote.fabricssh.Connection") as cls:
-        cls.built = []
-        cls.configure = lambda conn: None
-
-        def build(**kwargs: object) -> MagicMock:
-            conn = _fake_connection(**kwargs)
-            cls.configure(conn)
-            cls.built.append(conn)
-            return conn
-
-        cls.side_effect = build
-        yield cls
+        (bastion,) = _built(mock_conn_cls, "bastion.example.com")
+        (target,) = _built(mock_conn_cls, "target.example.com")
+        assert bastion.gateway is None
+        assert target.gateway is bastion
 
 
 class TestRunRemoteCommandWithoutScope:

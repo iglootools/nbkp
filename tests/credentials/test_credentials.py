@@ -1,8 +1,11 @@
 import subprocess
-from unittest.mock import MagicMock, patch
+import sys
+from collections.abc import Callable, Iterator
 
+import keyring
 import pytest
 from keyring import errors as keyring_errors
+from keyring.backend import KeyringBackend
 
 from nbkp.config import (
     Config,
@@ -24,22 +27,54 @@ from nbkp.credentials import (
 )
 
 
-class TestRetrievePassphraseKeyring:
-    def test_returns_password_from_keyring(self) -> None:
-        mock_keyring = MagicMock()
-        mock_keyring.get_password.return_value = "secret123"
-        with patch.dict("sys.modules", {"keyring": mock_keyring}):
-            result = retrieve_passphrase("disk1", CredentialProvider.KEYRING)
-        assert result == "secret123"
-        mock_keyring.get_password.assert_called_once_with("nbkp", "disk1")
+class _StoreKeyring(KeyringBackend):
+    """A keyring backend over a dict, or failing with *error* when given."""
 
-    def test_raises_when_password_not_found(self) -> None:
-        mock_keyring = MagicMock()
-        mock_keyring.get_password.return_value = None
-        with (
-            patch.dict("sys.modules", {"keyring": mock_keyring}),
-            pytest.raises(CredentialError) as excinfo,
-        ):
+    priority = 1  # pyright: ignore[reportAssignmentType]
+
+    def __init__(
+        self,
+        passwords: dict[tuple[str, str], str] | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        super().__init__()
+        self._passwords = passwords or {}
+        self._error = error
+
+    def get_password(self, service: str, username: str) -> str | None:
+        if self._error is not None:
+            raise self._error
+        return self._passwords.get((service, username))
+
+    def set_password(self, service: str, username: str, password: str) -> None:
+        self._passwords[(service, username)] = password
+
+
+@pytest.fixture
+def use_keyring() -> Iterator[Callable[[KeyringBackend], None]]:
+    """Install a keyring backend for one test, through keyring's own API.
+
+    The backend is process-wide state: conftest points it at the fail
+    backend for the session, and this restores that afterwards.
+    """
+    previous = keyring.get_keyring()
+    yield keyring.set_keyring
+    keyring.set_keyring(previous)
+
+
+class TestRetrievePassphraseKeyring:
+    def test_returns_password_from_keyring(
+        self, use_keyring: Callable[[KeyringBackend], None]
+    ) -> None:
+        use_keyring(_StoreKeyring({("nbkp", "disk1"): "secret123"}))
+        result = retrieve_passphrase("disk1", CredentialProvider.KEYRING)
+        assert result == "secret123"
+
+    def test_raises_when_password_not_found(
+        self, use_keyring: Callable[[KeyringBackend], None]
+    ) -> None:
+        use_keyring(_StoreKeyring({("nbkp", "other"): "secret123"}))
+        with pytest.raises(CredentialError) as excinfo:
             retrieve_passphrase("disk1", CredentialProvider.KEYRING)
         assert excinfo.value.reason == CredentialErrorReason.NOT_FOUND
 
@@ -51,22 +86,22 @@ class TestRetrievePassphraseKeyring:
         ],
     )
     def test_backend_error_becomes_credential_error(
-        self, backend_error: Exception
+        self,
+        backend_error: Exception,
+        use_keyring: Callable[[KeyringBackend], None],
     ) -> None:
-        mock_keyring = MagicMock()
-        mock_keyring.get_password.side_effect = backend_error
-        with (
-            patch.dict("sys.modules", {"keyring": mock_keyring}),
-            pytest.raises(CredentialError) as excinfo,
-        ):
+        use_keyring(_StoreKeyring(error=backend_error))
+        with pytest.raises(CredentialError) as excinfo:
             retrieve_passphrase("disk1", CredentialProvider.KEYRING)
         assert excinfo.value.reason == CredentialErrorReason.BACKEND_UNAVAILABLE
 
-    def test_raises_when_keyring_not_installed(self) -> None:
-        with (
-            patch.dict("sys.modules", {"keyring": None}),
-            pytest.raises(CredentialError) as excinfo,
-        ):
+    def test_raises_when_keyring_not_installed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The test environment installs every extra, so the missing one is
+        # simulated: a None entry makes `import keyring` raise ImportError.
+        monkeypatch.setitem(sys.modules, "keyring", None)
+        with pytest.raises(CredentialError) as excinfo:
             retrieve_passphrase("disk1", CredentialProvider.KEYRING)
         assert excinfo.value.reason == CredentialErrorReason.NOT_INSTALLED
 
