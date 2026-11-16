@@ -197,6 +197,24 @@ class TestGeneratedScriptExecution:
         assert (tmp_path / _DST_DIR / "sample.txt").is_file()
         assert not (tmp_path / _DST_DIR / "excluded").exists()
 
+    def test_orphaned_snapshot_is_removed(self, tmp_path: Path) -> None:
+        """A snapshot newer than ``latest`` (left by a failed run) is deleted."""
+        config = _seeded_chain(tmp_path)
+        snapshots = _stage(tmp_path) / SNAPSHOTS_DIR
+        previous, orphan = "2020-01-01T00-00-00.000Z", "2021-01-01T00-00-00.000Z"
+        (snapshots / previous).mkdir()
+        (snapshots / orphan).mkdir()
+        latest = _stage(tmp_path) / LATEST_LINK
+        latest.unlink(missing_ok=True)
+        latest.symlink_to(f"{SNAPSHOTS_DIR}/{previous}")
+
+        result = _run_script(config, tmp_path)
+
+        assert result.returncode == 0, result.stderr
+        assert f"Removing orphaned snapshot: {orphan}" in result.stderr
+        assert not (snapshots / orphan).exists()
+        assert (snapshots / previous).exists()
+
     def test_progress_flags_reach_rsync(self, tmp_path: Path) -> None:
         """--progress modes pass several rsync flags as separate words."""
         config = _seeded_chain(tmp_path)

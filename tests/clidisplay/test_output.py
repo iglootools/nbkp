@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from nbkp.clidisplay import echo_json
+from nbkp.clidisplay import OutputFormat, echo_json
 from nbkp.fsprotocol import Snapshot
 
 
@@ -51,3 +51,9 @@ class TestEchoJson:
         """Unknown types still raise rather than being silently coerced."""
         with pytest.raises(TypeError, match="not JSON serializable"):
             echo_json({"path": object()})
+
+
+class TestOutputFormat:
+    def test_values(self) -> None:
+        assert OutputFormat.HUMAN.value == "human"
+        assert OutputFormat.JSON.value == "json"

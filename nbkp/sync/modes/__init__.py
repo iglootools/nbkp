@@ -1,11 +1,11 @@
 from ...preflight.status.sync import SyncStatus
 from ..results import SyncResult
 from .btrfs import run_btrfs_sync
-from .common import RunContext
+from .common import RsyncRunner, RunContext
 from .hardlink import run_hard_link_sync
 from .plain import run_plain_sync
 
-__all__ = ["RunContext", "run_single_sync"]
+__all__ = ["RsyncRunner", "RunContext", "run_single_sync"]
 
 
 def run_single_sync(status: SyncStatus, ctx: RunContext) -> SyncResult:

@@ -7,6 +7,7 @@ lifecycle steps that state calls for are listed.
 """
 
 import enum
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from ..config import Config, MountConfig, Volume
@@ -15,6 +16,10 @@ from ..remote.errors import SSH_CONNECTION_ERRORS, describe_error
 from .lifecycle import lifecycle_volumes
 from .models import MountCapabilities
 from .mount_checks import check_mount_status
+
+type MountProbe = Callable[[Volume, MountConfig, ResolvedEndpoints], MountCapabilities]
+"""Reads a volume's current mount state: :func:`check_mount_status` in
+production, a fake in tests."""
 
 
 class MountAction(str, enum.Enum):
@@ -74,9 +79,10 @@ def _plan_one(
     resolved: ResolvedEndpoints,
     *,
     mounting: bool,
+    probe: MountProbe,
 ) -> VolumePlan:
     try:
-        caps = check_mount_status(volume, mount, resolved)
+        caps = probe(volume, mount, resolved)
     except SSH_CONNECTION_ERRORS as e:
         return VolumePlan(
             volume.slug, (), f"unreachable: {describe_error(e)}", probe_failed=True
@@ -93,10 +99,11 @@ def plan_lifecycle(
     *,
     mounting: bool,
     names: list[str] | None = None,
+    probe: MountProbe = check_mount_status,
 ) -> list[VolumePlan]:
     """Plan mount (``mounting=True``) or umount steps for mount-managed volumes."""
     return [
-        _plan_one(vol, mount, resolved, mounting=mounting)
+        _plan_one(vol, mount, resolved, mounting=mounting, probe=probe)
         for _slug, vol, mount in lifecycle_volumes(
             config, resolved, names, mounting=mounting
         )

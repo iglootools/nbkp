@@ -20,9 +20,10 @@ from ..preflight import (
 from ..preflight.severity import PreflightError
 from ..preflight.strictness import has_fatal_errors
 from ..remote.endpoints import ResolvedEndpoints
+from ..sync.modes import RsyncRunner
 from ..sync.orchestration import run_all_syncs
 from ..sync.results import SyncResult, result_severity
-from ..sync.rsync import ProgressMode
+from ..sync.rsync import ProgressMode, run_rsync
 
 __all__ = [
     "PipelineResult",
@@ -78,6 +79,7 @@ def check_and_run(
     resolved_endpoints: ResolvedEndpoints | None = None,
     mount_observations: dict[str, MountObservation] | None = None,
     exclude_locations: Collection[str] = (),
+    rsync: RsyncRunner = run_rsync,
 ) -> PipelineResult:
     """Run preflight checks, then execute syncs if no fatal errors.
 
@@ -133,6 +135,7 @@ def check_and_run(
             on_sync_start=cb.on_sync_start,
             on_sync_end=cb.on_sync_end,
             resolved_endpoints=resolved_endpoints,
+            rsync=rsync,
         )
         return PipelineResult(
             preflight=preflight,

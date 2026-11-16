@@ -21,6 +21,7 @@ from tests.clidisplay import (
     src_ep_status,
     vol_status,
 )
+from tests.fakes import FakeRsync, completed
 
 
 def _chain_config() -> Config:
@@ -79,6 +80,7 @@ def _run(
     statuses: dict[str, SyncStatus],
     strictness: Strictness,
     mock_checks: MagicMock,
+    rsync: FakeRsync,
 ) -> PipelineResult:
     mock_checks.return_value = preflight({}, statuses)
     return check_and_run(
@@ -86,14 +88,14 @@ def _run(
         clock=lambda: datetime(2026, 3, 6, tzinfo=UTC),
         platform="linux",
         strictness=strictness,
+        rsync=rsync,
     )
 
 
-@patch("nbkp.sync.modes.common.run_rsync")
 @patch("nbkp.run.pipeline.check_all_syncs")
 class TestIgnoreInactiveCancellations:
     def test_cancelled_by_inactive_upstream_is_expected(
-        self, mock_checks: MagicMock, mock_rsync: MagicMock
+        self, mock_checks: MagicMock
     ) -> None:
         """Docs: exit 0 if only inactive syncs were skipped — cascades included."""
         config = _chain_config()
@@ -102,7 +104,10 @@ class TestIgnoreInactiveCancellations:
             "b": _status(config, "b"),
         }
 
-        pipeline = _run(config, statuses, Strictness.IGNORE_INACTIVE, mock_checks)
+        rsync = FakeRsync()
+        pipeline = _run(
+            config, statuses, Strictness.IGNORE_INACTIVE, mock_checks, rsync
+        )
 
         outcomes = {r.sync_slug: r.failure for r in pipeline.results}
         assert outcomes == {
@@ -111,16 +116,18 @@ class TestIgnoreInactiveCancellations:
         }
         assert not pipeline.has_preflight_errors
         assert not pipeline.has_sync_failures
-        mock_rsync.assert_not_called()
+        assert rsync.calls == []
 
     def test_cancelled_by_failed_upstream_is_a_failure(
-        self, mock_checks: MagicMock, mock_rsync: MagicMock
+        self, mock_checks: MagicMock
     ) -> None:
         config = _chain_config()
         statuses = {"a": _status(config, "a"), "b": _status(config, "b")}
-        mock_rsync.return_value = MagicMock(returncode=23, stdout="", stderr="err")
+        rsync = FakeRsync([completed(23, stderr="err")])
 
-        pipeline = _run(config, statuses, Strictness.IGNORE_INACTIVE, mock_checks)
+        pipeline = _run(
+            config, statuses, Strictness.IGNORE_INACTIVE, mock_checks, rsync
+        )
 
         outcomes = {r.sync_slug: r.failure for r in pipeline.results}
         assert outcomes == {
@@ -130,20 +137,17 @@ class TestIgnoreInactiveCancellations:
         assert pipeline.has_sync_failures
 
 
-@patch("nbkp.sync.modes.common.run_rsync")
 @patch("nbkp.run.pipeline.check_all_syncs")
 class TestIgnoreAll:
-    def test_attempts_infra_broken_sync(
-        self, mock_checks: MagicMock, mock_rsync: MagicMock
-    ) -> None:
+    def test_attempts_infra_broken_sync(self, mock_checks: MagicMock) -> None:
         config = _chain_config()
         statuses = {
             "a": _infra_broken(_status(config, "a")),
             "b": _status(config, "b"),
         }
-        mock_rsync.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        rsync = FakeRsync()
 
-        pipeline = _run(config, statuses, Strictness.IGNORE_ALL, mock_checks)
+        pipeline = _run(config, statuses, Strictness.IGNORE_ALL, mock_checks, rsync)
 
         assert [r.outcome for r in pipeline.results] == [
             SyncOutcome.SUCCESS,
@@ -151,35 +155,32 @@ class TestIgnoreAll:
         ]
         assert not pipeline.has_preflight_errors
         assert not pipeline.has_sync_failures
-        assert mock_rsync.call_count == 2
+        assert rsync.synced == ["a", "b"]
 
-    def test_execution_failure_still_fails(
-        self, mock_checks: MagicMock, mock_rsync: MagicMock
-    ) -> None:
+    def test_execution_failure_still_fails(self, mock_checks: MagicMock) -> None:
         config = _chain_config()
         statuses = {
             "a": _infra_broken(_status(config, "a")),
             "b": _status(config, "b"),
         }
-        mock_rsync.return_value = MagicMock(returncode=11, stdout="", stderr="err")
+        rsync = FakeRsync([completed(11, stderr="err")])
 
-        pipeline = _run(config, statuses, Strictness.IGNORE_ALL, mock_checks)
+        pipeline = _run(config, statuses, Strictness.IGNORE_ALL, mock_checks, rsync)
 
         assert pipeline.has_sync_failures
 
-    def test_inactive_skip_is_not_a_failure(
-        self, mock_checks: MagicMock, mock_rsync: MagicMock
-    ) -> None:
+    def test_inactive_skip_is_not_a_failure(self, mock_checks: MagicMock) -> None:
         config = _chain_config()
         statuses = {
             "a": _status(config, "a", src_sentinel=False),
             "b": _status(config, "b"),
         }
 
-        pipeline = _run(config, statuses, Strictness.IGNORE_ALL, mock_checks)
+        rsync = FakeRsync()
+        pipeline = _run(config, statuses, Strictness.IGNORE_ALL, mock_checks, rsync)
 
         assert not pipeline.has_sync_failures
-        mock_rsync.assert_not_called()
+        assert rsync.calls == []
 
 
 @patch("nbkp.run.pipeline.run_all_syncs")
@@ -207,7 +208,7 @@ class TestPreflightAbort:
         }
         mock_run.return_value = []
 
-        pipeline = _run(config, statuses, strictness, mock_checks)
+        pipeline = _run(config, statuses, strictness, mock_checks, FakeRsync())
 
         assert pipeline.has_preflight_errors is aborts
         assert mock_run.called is not aborts

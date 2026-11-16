@@ -12,6 +12,7 @@ from nbkp.config import (
     MountConfig,
 )
 from nbkp.credentials import (
+    CommandFn,
     CredentialError,
     CredentialErrorReason,
     PassphraseCache,
@@ -111,24 +112,65 @@ class TestRetrievePassphraseEnv:
         assert passphrase_env_var("disk1") in str(excinfo.value)
 
 
+def _command_runner(
+    returncode: int = 0, stdout: str = "", stderr: str = ""
+) -> tuple[list[list[str]], CommandFn]:
+    """A CommandFn answering every command alike, and the commands it ran."""
+    ran: list[list[str]] = []
+
+    def run(command: list[str]) -> subprocess.CompletedProcess[str]:
+        ran.append(command)
+        return subprocess.CompletedProcess(command, returncode, stdout, stderr)
+
+    return ran, run
+
+
 class TestRetrievePassphraseCommand:
     def test_returns_command_output(self) -> None:
-        with patch("nbkp.credentials.subprocess.run") as mock_run:
-            mock_run.return_value = subprocess.CompletedProcess(
-                args=[], returncode=0, stdout="cmd-secret\n", stderr=""
-            )
-            result = retrieve_passphrase(
+        ran, run = _command_runner(stdout="cmd-secret\n")
+
+        result = retrieve_passphrase(
+            "disk1",
+            CredentialProvider.COMMAND,
+            command_template=["pass", "show", "nbkp/{id}"],
+            run=run,
+        )
+
+        assert result == "cmd-secret"
+        assert ran == [["pass", "show", "nbkp/disk1"]]
+
+    def test_replaces_id_in_template(self) -> None:
+        ran, run = _command_runner(stdout="secret")
+
+        retrieve_passphrase(
+            "my-drive",
+            CredentialProvider.COMMAND,
+            command_template=["op", "read", "op://vault/{id}/password"],
+            run=run,
+        )
+
+        assert ran == [["op", "read", "op://vault/my-drive/password"]]
+
+    def test_raises_on_command_failure(self) -> None:
+        _, run = _command_runner(returncode=1, stderr="not found")
+
+        with pytest.raises(CredentialError) as excinfo:
+            retrieve_passphrase(
                 "disk1",
                 CredentialProvider.COMMAND,
                 command_template=["pass", "show", "nbkp/{id}"],
+                run=run,
             )
-        assert result == "cmd-secret"
-        mock_run.assert_called_once_with(
-            ["pass", "show", "nbkp/disk1"],
-            capture_output=True,
-            text=True,
-            check=False,
+        assert excinfo.value.reason == CredentialErrorReason.COMMAND_FAILED
+
+    def test_default_runner_captures_stdout(self) -> None:
+        """The real runner, with a harmless command: stdout is the secret."""
+        result = retrieve_passphrase(
+            "disk1",
+            CredentialProvider.COMMAND,
+            command_template=["printf", "%s\\n", "secret-{id}"],
         )
+        assert result == "secret-disk1"
 
     @pytest.mark.parametrize(
         ("stdout", "passphrase"),
@@ -142,48 +184,19 @@ class TestRetrievePassphraseCommand:
     def test_passphrase_is_first_line_of_output(
         self, stdout: str, passphrase: str
     ) -> None:
-        with patch("nbkp.credentials.subprocess.run") as mock_run:
-            mock_run.return_value = subprocess.CompletedProcess(
-                args=[], returncode=0, stdout=stdout, stderr=""
-            )
-            result = retrieve_passphrase(
-                "disk1",
-                CredentialProvider.COMMAND,
-                command_template=["pass", "show", "nbkp/{id}"],
-            )
-        assert result == passphrase
+        _, run = _command_runner(stdout=stdout)
 
-    def test_replaces_id_in_template(self) -> None:
-        with patch("nbkp.credentials.subprocess.run") as mock_run:
-            mock_run.return_value = subprocess.CompletedProcess(
-                args=[], returncode=0, stdout="secret", stderr=""
-            )
-            retrieve_passphrase(
-                "my-drive",
-                CredentialProvider.COMMAND,
-                command_template=["op", "read", "op://vault/{id}/password"],
-            )
-        mock_run.assert_called_once_with(
-            ["op", "read", "op://vault/my-drive/password"],
-            capture_output=True,
-            text=True,
-            check=False,
+        result = retrieve_passphrase(
+            "disk1",
+            CredentialProvider.COMMAND,
+            command_template=["pass", "show", "nbkp/{id}"],
+            run=run,
         )
 
-    def test_raises_on_command_failure(self) -> None:
-        with patch("nbkp.credentials.subprocess.run") as mock_run:
-            mock_run.return_value = subprocess.CompletedProcess(
-                args=[], returncode=1, stdout="", stderr="not found"
-            )
-            with pytest.raises(CredentialError) as excinfo:
-                retrieve_passphrase(
-                    "disk1",
-                    CredentialProvider.COMMAND,
-                    command_template=["pass", "show", "nbkp/{id}"],
-                )
-        assert excinfo.value.reason == CredentialErrorReason.COMMAND_FAILED
+        assert result == passphrase
 
     def test_raises_when_executable_missing(self) -> None:
+        """The real runner, with a command that does not exist."""
         with pytest.raises(CredentialError) as excinfo:
             retrieve_passphrase(
                 "disk1",

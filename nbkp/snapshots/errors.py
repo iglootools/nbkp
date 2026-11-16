@@ -12,7 +12,7 @@ import subprocess
 from collections.abc import Callable
 
 from ..config import Volume
-from ..remote.dispatch import run_on_volume
+from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 from ..remote.errors import SSH_CONNECTION_ERRORS
 
@@ -48,6 +48,8 @@ def run_snapshot_command(
     cmd: list[str],
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> subprocess.CompletedProcess[str]:
     """Run *cmd* on *volume*, translating transport errors.
 
@@ -55,7 +57,7 @@ def run_snapshot_command(
     ``ls``) use a non-zero status as an answer rather than a failure.
     """
     try:
-        return run_on_volume(cmd, volume, resolved_endpoints)
+        return run(cmd, volume, resolved_endpoints)
     except SSH_CONNECTION_ERRORS as e:
         raise SnapshotOperationError(op, path, str(e)) from e
 
@@ -66,9 +68,11 @@ def run_checked(
     cmd: list[str],
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> subprocess.CompletedProcess[str]:
     """Like :func:`run_snapshot_command`, but a non-zero exit status fails."""
-    result = run_snapshot_command(op, path, cmd, volume, resolved_endpoints)
+    result = run_snapshot_command(op, path, cmd, volume, resolved_endpoints, run=run)
     if result.returncode != 0:
         raise SnapshotOperationError(op, path, result.stderr or "")
     else:

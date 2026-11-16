@@ -2,9 +2,11 @@ import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Protocol
 
 from ...config import Config, SyncConfig
 from ...fsprotocol import Snapshot
+from ...remote.dispatch import VolumeCommandRunner, run_on_volume
 from ...remote.endpoints import ResolvedEndpoints
 from ...remote.errors import SSH_CONNECTION_ERRORS
 from ...snapshots.common import update_latest_symlink
@@ -13,8 +15,31 @@ from ..results import SyncFailureKind, SyncResult, SyncWarning, SyncWarningKind
 from ..rsync import ProgressMode, run_rsync
 
 
+class RsyncRunner(Protocol):
+    """Runs rsync for a sync: :func:`~nbkp.sync.rsync.run_rsync` in
+    production, a fake in tests.
+    """
+
+    def __call__(
+        self,
+        sync: SyncConfig,
+        config: Config,
+        *,
+        dry_run: bool,
+        link_dest: str | None,
+        progress: ProgressMode | None,
+        on_output: Callable[[str], None] | None,
+        resolved_endpoints: ResolvedEndpoints,
+        dest_suffix: str | None,
+    ) -> subprocess.CompletedProcess[str]: ...
+
+
 @dataclass(frozen=True)
 class RunContext:
+    """*rsync* and *run_command* reach the destination host; tests replace
+    them with fakes instead of patching the transport.
+    """
+
     config: Config
     dry_run: bool
     progress: ProgressMode | None
@@ -23,6 +48,8 @@ class RunContext:
     resolved_endpoints: ResolvedEndpoints
     clock: Callable[[], datetime]
     platform: str
+    rsync: RsyncRunner = run_rsync
+    run_command: VolumeCommandRunner = run_on_volume
 
 
 def rsync_step(
@@ -34,7 +61,7 @@ def rsync_step(
 ) -> subprocess.CompletedProcess[str] | SyncResult:
     """Run rsync; a failed :class:`SyncResult` when it does not succeed."""
     try:
-        proc = run_rsync(
+        proc = ctx.rsync(
             sync,
             ctx.config,
             dry_run=ctx.dry_run,
@@ -99,6 +126,7 @@ def _prune(
             ctx.config,
             max_snapshots,
             resolved_endpoints=ctx.resolved_endpoints,
+            run=ctx.run_command,
         )
         return (tuple(pruned), ())
     except SnapshotOperationError as e:
@@ -120,6 +148,7 @@ def publish_snapshot(
             ctx.config,
             Snapshot.from_path(snapshot_path),
             resolved_endpoints=ctx.resolved_endpoints,
+            run=ctx.run_command,
         )
     except SnapshotOperationError as e:
         return failed_after_rsync(

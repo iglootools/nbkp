@@ -6,6 +6,7 @@ from ..config import (
     Volume,
 )
 from ..fsprotocol import STAGING_DIR
+from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 from .common import (
     create_snapshot_timestamp,
@@ -24,6 +25,7 @@ def create_snapshot(
     now: datetime,
     platform: str,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> str:
     """Create a read-only btrfs snapshot of staging/ into snapshots/.
 
@@ -42,6 +44,7 @@ def create_snapshot(
         ["btrfs", "subvolume", "snapshot", "-r", staging_path, snapshot_path],
         dst_vol,
         re,
+        run=run,
     )
     return snapshot_path
 
@@ -50,6 +53,7 @@ def _make_snapshot_writable(
     path: str,
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
+    run: VolumeCommandRunner,
 ) -> None:
     """Unset the readonly property so the snapshot can be deleted."""
     run_checked(
@@ -58,6 +62,7 @@ def _make_snapshot_writable(
         ["btrfs", "property", "set", path, "ro", "false"],
         volume,
         resolved_endpoints,
+        run=run,
     )
 
 
@@ -65,6 +70,8 @@ def delete_snapshot(
     path: str,
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> None:
     """Delete a single btrfs snapshot subvolume.
 
@@ -72,13 +79,14 @@ def delete_snapshot(
     is mounted with user_subvol_rm_allowed instead of granting
     CAP_SYS_ADMIN), then deletes the subvolume.
     """
-    _make_snapshot_writable(path, volume, resolved_endpoints)
+    _make_snapshot_writable(path, volume, resolved_endpoints, run)
     run_checked(
         SnapshotOp.DELETE,
         path,
         ["btrfs", "subvolume", "delete", path],
         volume,
         resolved_endpoints,
+        run=run,
     )
 
 
@@ -89,6 +97,7 @@ def prune_snapshots(
     *,
     dry_run: bool = False,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> list[str]:
     """See :func:`.common.prune_oldest_snapshots`."""
     return prune_oldest_snapshots(
@@ -98,4 +107,5 @@ def prune_snapshots(
         delete_snapshot,
         dry_run=dry_run,
         resolved_endpoints=resolved_endpoints,
+        run=run,
     )

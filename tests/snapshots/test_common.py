@@ -2,7 +2,6 @@
 
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import paramiko
 import pytest
@@ -31,6 +30,7 @@ from nbkp.snapshots.hardlinks import (
     delete_snapshot as hl_delete_snapshot,
     prune_snapshots as hl_prune_snapshots,
 )
+from tests.fakes import FakeCommandRunner, completed
 
 
 def _local_config() -> tuple[Config, SyncConfig]:
@@ -227,128 +227,125 @@ class TestCreateSnapshotTimestamp:
 
 
 class TestGetLatestSnapshotLocal:
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_found(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="20240101T000000Z\n20240115T120000Z\n",
+    def test_found(self) -> None:
+        runner = FakeCommandRunner().on(
+            returns=completed(
+                returncode=0,
+                stdout="20240101T000000Z\n20240115T120000Z\n",
+            )
         )
         config, sync = _local_config()
 
-        result = get_latest_snapshot(sync, config)
+        result = get_latest_snapshot(sync, config, run=runner)
         assert result is not None
         assert result.name == "20240115T120000Z"
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_empty(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="")
+    def test_empty(self) -> None:
+        runner = FakeCommandRunner().on(returns=completed(returncode=0, stdout=""))
         config, sync = _local_config()
 
-        result = get_latest_snapshot(sync, config)
+        result = get_latest_snapshot(sync, config, run=runner)
         assert result is None
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_dir_missing(self, mock_run: MagicMock) -> None:
+    def test_dir_missing(self) -> None:
         # ls fails, then `test -d` reports the directory absent
-        mock_run.side_effect = [
-            MagicMock(returncode=2, stdout="", stderr="No such file"),
-            MagicMock(returncode=1, stdout="", stderr=""),
-        ]
+        runner = FakeCommandRunner().on(
+            returns=[
+                completed(returncode=2, stdout="", stderr="No such file"),
+                completed(returncode=1, stdout="", stderr=""),
+            ]
+        )
         config, sync = _local_config()
 
-        result = get_latest_snapshot(sync, config)
+        result = get_latest_snapshot(sync, config, run=runner)
         assert result is None
 
 
 class TestGetLatestSnapshotRemote:
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_found(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="20240101T000000Z\n20240115T120000Z\n",
+    def test_found(self) -> None:
+        runner = FakeCommandRunner().on(
+            returns=completed(
+                returncode=0,
+                stdout="20240101T000000Z\n20240115T120000Z\n",
+            )
         )
         config, sync = _remote_config()
         resolved = resolve_all_endpoints(config)
 
-        result = get_latest_snapshot(sync, config, resolved)
+        result = get_latest_snapshot(sync, config, resolved, run=runner)
         assert result is not None
         assert result.name == "20240115T120000Z"
-        mock_run.assert_called_once_with(
-            config.ssh_endpoints["nas-server"],
-            ["ls", "/backup/data/snapshots"],
-            [],
-            input=None,
-        )
+        assert runner.commands == [["ls", "/backup/data/snapshots"]]
+        assert runner.calls[0].volume == config.volumes["dst"]
 
 
 class TestGetLatestSnapshotRemoteSpaces:
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_found(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="20240101T000000Z\n20240115T120000Z\n",
+    def test_found(self) -> None:
+        runner = FakeCommandRunner().on(
+            returns=completed(
+                returncode=0,
+                stdout="20240101T000000Z\n20240115T120000Z\n",
+            )
         )
         config, sync = _remote_config_spaces()
         resolved = resolve_all_endpoints(config)
 
-        result = get_latest_snapshot(sync, config, resolved)
+        result = get_latest_snapshot(sync, config, resolved, run=runner)
         assert result is not None
         assert result.name == "20240115T120000Z"
-        mock_run.assert_called_once_with(
-            config.ssh_endpoints["nas-server"],
-            ["ls", "/my backup/my data/snapshots"],
-            [],
-            input=None,
-        )
+        assert runner.commands == [["ls", "/my backup/my data/snapshots"]]
+        assert runner.calls[0].volume == config.volumes["dst"]
 
 
 class TestListSnapshotsLocal:
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_found(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="20240101T000000Z\n20240115T120000Z\n",
+    def test_found(self) -> None:
+        runner = FakeCommandRunner().on(
+            returns=completed(
+                returncode=0,
+                stdout="20240101T000000Z\n20240115T120000Z\n",
+            )
         )
         config, sync = _local_config()
 
-        result = list_snapshots(sync, config)
+        result = list_snapshots(sync, config, run=runner)
         assert [s.name for s in result] == [
             "20240101T000000Z",
             "20240115T120000Z",
         ]
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_empty(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="")
+    def test_empty(self) -> None:
+        runner = FakeCommandRunner().on(returns=completed(returncode=0, stdout=""))
         config, sync = _local_config()
 
-        result = list_snapshots(sync, config)
+        result = list_snapshots(sync, config, run=runner)
         assert result == []
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_dir_missing(self, mock_run: MagicMock) -> None:
+    def test_dir_missing(self) -> None:
         # ls fails, then `test -d` reports the directory absent
-        mock_run.side_effect = [
-            MagicMock(returncode=2, stdout="", stderr="No such file"),
-            MagicMock(returncode=1, stdout="", stderr=""),
-        ]
+        runner = FakeCommandRunner().on(
+            returns=[
+                completed(returncode=2, stdout="", stderr="No such file"),
+                completed(returncode=1, stdout="", stderr=""),
+            ]
+        )
         config, sync = _local_config()
 
-        result = list_snapshots(sync, config)
+        result = list_snapshots(sync, config, run=runner)
         assert result == []
 
 
 class TestListSnapshotsRemote:
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_found(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="20240101T000000Z\n20240115T120000Z\n",
+    def test_found(self) -> None:
+        runner = FakeCommandRunner().on(
+            returns=completed(
+                returncode=0,
+                stdout="20240101T000000Z\n20240115T120000Z\n",
+            )
         )
         config, sync = _remote_config()
         resolved = resolve_all_endpoints(config)
 
-        result = list_snapshots(sync, config, resolved)
+        result = list_snapshots(sync, config, resolved, run=runner)
         assert [s.name for s in result] == [
             "20240101T000000Z",
             "20240115T120000Z",
@@ -406,23 +403,23 @@ class TestReadLatestSymlink:
         result = read_latest_symlink(sync, config)
         assert result is None
 
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_remote_exists(self, mock_remote: MagicMock) -> None:
-        mock_remote.return_value = MagicMock(
-            returncode=0,
-            stdout=f"snapshots/{_TS_REMOTE.name}\n",
+    def test_remote_exists(self) -> None:
+        runner = FakeCommandRunner().on(
+            returns=completed(
+                returncode=0,
+                stdout=f"snapshots/{_TS_REMOTE.name}\n",
+            )
         )
         sync, config, re = _hl_remote_config()
 
-        result = read_latest_symlink(sync, config, resolved_endpoints=re)
+        result = read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
         assert result == _TS_REMOTE
 
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_remote_missing(self, mock_remote: MagicMock) -> None:
-        mock_remote.return_value = MagicMock(returncode=1, stdout="")
+    def test_remote_missing(self) -> None:
+        runner = FakeCommandRunner().on(returns=completed(returncode=1, stdout=""))
         sync, config, re = _hl_remote_config()
 
-        result = read_latest_symlink(sync, config, resolved_endpoints=re)
+        result = read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
         assert result is None
 
     def test_local_devnull(self, tmp_path: Path) -> None:
@@ -452,16 +449,17 @@ class TestReadLatestSymlink:
         result = read_latest_symlink(sync, config)
         assert result is None
 
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_remote_devnull(self, mock_remote: MagicMock) -> None:
+    def test_remote_devnull(self) -> None:
         """Remote latest -> /dev/null returns None."""
-        mock_remote.return_value = MagicMock(
-            returncode=0,
-            stdout="/dev/null\n",
+        runner = FakeCommandRunner().on(
+            returns=completed(
+                returncode=0,
+                stdout="/dev/null\n",
+            )
         )
         sync, config, re = _hl_remote_config()
 
-        result = read_latest_symlink(sync, config, resolved_endpoints=re)
+        result = read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
         assert result is None
 
 
@@ -492,16 +490,16 @@ class TestUpdateLatestSymlink:
         assert link.is_symlink()
         assert str(link.readlink()) == f"snapshots/{_TS_LOCAL.name}"
 
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_remote(self, mock_remote: MagicMock) -> None:
-        mock_remote.return_value = MagicMock(returncode=0, stderr="")
+    def test_remote(self) -> None:
+        runner = FakeCommandRunner().on(returns=completed(returncode=0, stderr=""))
         sync, config, re = _hl_remote_config()
 
-        update_latest_symlink(sync, config, _TS_REMOTE, resolved_endpoints=re)
-        mock_remote.assert_called_once()
-        cmd = mock_remote.call_args[0][1]
-        assert "ln" in cmd
-        assert f"snapshots/{_TS_REMOTE.name}" in cmd
+        update_latest_symlink(
+            sync, config, _TS_REMOTE, resolved_endpoints=re, run=runner
+        )
+        assert runner.commands == [
+            ["ln", "-sfn", f"snapshots/{_TS_REMOTE.name}", "/backup/latest"]
+        ]
 
 
 def _is_op(op: SnapshotOp):
@@ -509,13 +507,14 @@ def _is_op(op: SnapshotOp):
 
 
 class TestListSnapshotsFailures:
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_unreadable_existing_dir_raises(self, mock_run: MagicMock) -> None:
+    def test_unreadable_existing_dir_raises(self) -> None:
         """ls failing on a directory that exists is not "no snapshots"."""
-        mock_run.side_effect = [
-            MagicMock(returncode=2, stdout="", stderr="Permission denied"),
-            MagicMock(returncode=0, stdout="", stderr=""),
-        ]
+        runner = FakeCommandRunner().on(
+            returns=[
+                completed(returncode=2, stdout="", stderr="Permission denied"),
+                completed(returncode=0, stdout="", stderr=""),
+            ]
+        )
         config, sync = _local_config()
 
         with pytest.raises(
@@ -526,17 +525,18 @@ class TestListSnapshotsFailures:
                 and e.stderr == "Permission denied"
             ),
         ):
-            list_snapshots(sync, config)
+            list_snapshots(sync, config, run=runner)
 
-    @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_ignores_non_snapshot_entries(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="2026-03-01T10:00:00.000Z\nlost+found\n.DS_Store\nnotes.txt\n",
+    def test_ignores_non_snapshot_entries(self) -> None:
+        runner = FakeCommandRunner().on(
+            returns=completed(
+                returncode=0,
+                stdout="2026-03-01T10:00:00.000Z\nlost+found\n.DS_Store\nnotes.txt\n",
+            )
         )
         config, sync = _local_config()
 
-        result = list_snapshots(sync, config)
+        result = list_snapshots(sync, config, run=runner)
         assert [s.name for s in result] == ["2026-03-01T10:00:00.000Z"]
 
     @pytest.mark.parametrize(
@@ -546,11 +546,8 @@ class TestListSnapshotsFailures:
             EOFError("connection reset during handshake"),
         ],
     )
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_transport_error_is_translated(
-        self, mock_remote: MagicMock, transport_error: Exception
-    ) -> None:
-        mock_remote.side_effect = transport_error
+    def test_transport_error_is_translated(self, transport_error: Exception) -> None:
+        runner = FakeCommandRunner().on(returns=transport_error)
         config, sync = _remote_config()
         resolved = resolve_all_endpoints(config)
 
@@ -558,57 +555,60 @@ class TestListSnapshotsFailures:
             SnapshotOperationError,
             check=lambda e: e.op is SnapshotOp.LIST and "reset" in e.stderr,
         ):
-            list_snapshots(sync, config, resolved)
+            list_snapshots(sync, config, resolved, run=runner)
 
 
 class TestReadLatestSymlinkFailures:
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_remote_unreadable_symlink_raises(self, mock_remote: MagicMock) -> None:
+    def test_remote_unreadable_symlink_raises(self) -> None:
         """readlink failing on an existing symlink must not read as "absent"."""
-        mock_remote.side_effect = [
-            MagicMock(returncode=1, stdout="", stderr="I/O error"),
-            MagicMock(returncode=0, stdout="", stderr=""),  # test -L: exists
-        ]
+        runner = FakeCommandRunner().on(
+            returns=[
+                completed(returncode=1, stdout="", stderr="I/O error"),
+                completed(returncode=0, stdout="", stderr=""),  # test -L: exists
+            ]
+        )
         sync, config, re = _hl_remote_config()
 
         with pytest.raises(
             SnapshotOperationError, check=_is_op(SnapshotOp.READ_LATEST)
         ):
-            read_latest_symlink(sync, config, resolved_endpoints=re)
+            read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
 
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_non_snapshot_target_raises(self, mock_remote: MagicMock) -> None:
+    def test_non_snapshot_target_raises(self) -> None:
         """A target that is not a snapshot name is a failed read, not a crash."""
-        mock_remote.return_value = MagicMock(returncode=0, stdout="snapshots/foo\n")
+        runner = FakeCommandRunner().on(
+            "readlink", returns=completed(0, "snapshots/foo\n")
+        )
         sync, config, re = _hl_remote_config()
 
         with pytest.raises(
             SnapshotOperationError,
             check=lambda e: e.op is SnapshotOp.READ_LATEST and "foo" in e.stderr,
         ):
-            read_latest_symlink(sync, config, resolved_endpoints=re)
+            read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
 
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_prune_does_not_delete_when_latest_unknown(
-        self, mock_remote: MagicMock
-    ) -> None:
+    def test_prune_does_not_delete_when_latest_unknown(self) -> None:
         """An unreadable latest disables pruning instead of its protection."""
-        mock_remote.side_effect = [
-            MagicMock(
-                returncode=0,
-                stdout="".join(f"2026-03-0{i}T10:00:00.000Z\n" for i in range(1, 6)),
-                stderr="",
-            ),
-            MagicMock(returncode=1, stdout="", stderr="I/O error"),  # readlink
-            MagicMock(returncode=2, stdout="", stderr=""),  # test -L: error
-        ]
+        runner = FakeCommandRunner().on(
+            returns=[
+                completed(
+                    returncode=0,
+                    stdout="".join(
+                        f"2026-03-0{i}T10:00:00.000Z\n" for i in range(1, 6)
+                    ),
+                    stderr="",
+                ),
+                completed(returncode=1, stdout="", stderr="I/O error"),  # readlink
+                completed(returncode=2, stdout="", stderr=""),  # test -L: error
+            ]
+        )
         sync, config, re = _hl_remote_config()
 
         with pytest.raises(
             SnapshotOperationError, check=_is_op(SnapshotOp.READ_LATEST)
         ):
-            hl_prune_snapshots(sync, config, 3, resolved_endpoints=re)
-        assert mock_remote.call_count == 3  # no rm -rf issued
+            hl_prune_snapshots(sync, config, 3, resolved_endpoints=re, run=runner)
+        assert len(runner.calls) == 3  # no rm -rf issued
 
 
 class TestLocalOSErrorTranslation:

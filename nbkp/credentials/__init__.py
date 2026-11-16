@@ -96,7 +96,17 @@ def _from_env(passphrase_id: str, environ: Mapping[str, str]) -> str:
     return value
 
 
-def _from_command(passphrase_id: str, command_template: list[str] | None) -> str:
+type CommandFn = Callable[[list[str]], subprocess.CompletedProcess[str]]
+"""Runs the ``command`` provider's command, capturing its output as text."""
+
+
+def _run_captured(command: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(command, capture_output=True, text=True, check=False)
+
+
+def _from_command(
+    passphrase_id: str, command_template: list[str] | None, run: CommandFn
+) -> str:
     if command_template is None:
         raise CredentialError(
             "credential-command is required when credential-provider is 'command'",
@@ -104,7 +114,7 @@ def _from_command(passphrase_id: str, command_template: list[str] | None) -> str
         )
     command = [arg.replace("{id}", passphrase_id) for arg in command_template]
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        result = run(command)
     except OSError as e:
         # Left uncaught, this would crash prefetch, or reach unlock as an
         # OSError and be mislabelled an unreachable host.
@@ -134,9 +144,11 @@ def retrieve_passphrase(
     command_template: list[str] | None = None,
     environ: Mapping[str, str] = os.environ,
     prompt: PromptFn | None = None,
+    run: CommandFn = _run_captured,
 ) -> str:
     """``environ`` is where the ``env`` provider looks the passphrase up;
-    ``prompt`` is how the ``prompt`` provider asks for it.
+    ``prompt`` is how the ``prompt`` provider asks for it; ``run`` is how the
+    ``command`` provider runs its command.
     """
     match provider:
         case CredentialProvider.KEYRING:
@@ -146,7 +158,7 @@ def retrieve_passphrase(
         case CredentialProvider.ENV:
             return _from_env(passphrase_id, environ)
         case CredentialProvider.COMMAND:
-            return _from_command(passphrase_id, command_template)
+            return _from_command(passphrase_id, command_template, run)
 
 
 class PassphraseCache:

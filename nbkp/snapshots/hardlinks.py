@@ -8,6 +8,7 @@ from ..config import (
     SyncConfig,
     Volume,
 )
+from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 from .common import (
     create_snapshot_timestamp,
@@ -27,6 +28,7 @@ def create_snapshot_dir(
     now: datetime,
     platform: str,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> str:
     """*now* names the snapshot and *platform* (``sys.platform``) decides the
     macOS-safe name form; both come from the caller.  Returns the full
@@ -39,6 +41,7 @@ def create_snapshot_dir(
         ["mkdir", "-p", snapshot_path],
         destination_volume(sync, config),
         resolved_endpoints or {},
+        run=run,
     )
     return snapshot_path
 
@@ -64,6 +67,7 @@ def cleanup_orphaned_snapshots(
     config: Config,
     *,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> list[str]:
     """Remove snapshots newer than the latest symlink target.
 
@@ -71,19 +75,19 @@ def cleanup_orphaned_snapshots(
     Returns list of deleted paths.
     """
     re = resolved_endpoints or {}
-    latest = read_latest_symlink(sync, config, resolved_endpoints=re)
+    latest = read_latest_symlink(sync, config, resolved_endpoints=re, run=run)
     if latest is None:
         return []
     else:
         base = snapshots_dir(sync, config)
         orphans = [
             f"{base}/{s.name}"
-            for s in list_snapshots(sync, config, re)
+            for s in list_snapshots(sync, config, re, run=run)
             if s.timestamp > latest.timestamp
         ]
         dst_vol = destination_volume(sync, config)
         for path in orphans:
-            delete_snapshot(path, dst_vol, re)
+            delete_snapshot(path, dst_vol, re, run=run)
         return orphans
 
 
@@ -91,11 +95,18 @@ def delete_snapshot(
     path: str,
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> None:
     match volume:
         case RemoteVolume():
             run_checked(
-                SnapshotOp.DELETE, path, ["rm", "-rf", path], volume, resolved_endpoints
+                SnapshotOp.DELETE,
+                path,
+                ["rm", "-rf", path],
+                volume,
+                resolved_endpoints,
+                run=run,
             )
         case LocalVolume():
             local_fs_op(SnapshotOp.DELETE, path, lambda: shutil.rmtree(path))
@@ -108,6 +119,7 @@ def prune_snapshots(
     *,
     dry_run: bool = False,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> list[str]:
     """See :func:`.common.prune_oldest_snapshots`."""
     return prune_oldest_snapshots(
@@ -117,4 +129,5 @@ def prune_snapshots(
         delete_snapshot,
         dry_run=dry_run,
         resolved_endpoints=resolved_endpoints,
+        run=run,
     )

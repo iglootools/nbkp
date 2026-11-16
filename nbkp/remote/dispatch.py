@@ -1,5 +1,6 @@
 import shutil
 import subprocess
+from typing import Protocol
 
 from ..config import LocalVolume, RemoteVolume, Volume
 from .endpoints import ResolvedEndpoints
@@ -22,6 +23,22 @@ def run_on_volume(
             return subprocess.run(
                 cmd, capture_output=True, text=True, input=input, check=False
             )
+
+
+class VolumeCommandRunner(Protocol):
+    """Runs *cmd* on the host holding *volume*: :func:`run_on_volume` in
+    production, a fake in tests, so callers can be exercised without
+    patching the transport.
+    """
+
+    def __call__(
+        self,
+        cmd: list[str],
+        volume: Volume,
+        resolved_endpoints: ResolvedEndpoints,
+        *,
+        input: str | None = None,
+    ) -> subprocess.CompletedProcess[str]: ...
 
 
 def check_command_available(

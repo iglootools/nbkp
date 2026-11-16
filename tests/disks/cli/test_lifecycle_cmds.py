@@ -15,6 +15,7 @@ from nbkp.disks.models import (
     MountFailureReason,
     UmountFailureReason,
 )
+from nbkp.disks.plan import MountAction, VolumePlan
 
 runner = CliRunner()
 
@@ -63,10 +64,8 @@ class TestUnknownNames:
 class TestDryRun:
     @patch("nbkp.disks.cli.mount_cmd.mount_volumes")
     @patch(
-        "nbkp.disks.plan.check_mount_status",
-        return_value=MountCapabilities(
-            device_present=True, luks_unlocked=False, mounted=False
-        ),
+        "nbkp.disks.cli.mount_cmd.plan_lifecycle",
+        return_value=[VolumePlan("enc", (MountAction.UNLOCK, MountAction.MOUNT))],
     )
     @patch("nbkp.cliwiring.config.load_config", return_value=_config())
     def test_mount_dry_run_plans_without_mounting(
@@ -90,10 +89,8 @@ class TestDryRun:
 
     @patch("nbkp.disks.cli.umount_cmd.umount_volumes")
     @patch(
-        "nbkp.disks.plan.check_mount_status",
-        return_value=MountCapabilities(
-            device_present=True, luks_unlocked=True, mounted=True
-        ),
+        "nbkp.disks.cli.umount_cmd.plan_lifecycle",
+        return_value=[VolumePlan("enc", (MountAction.UNMOUNT, MountAction.LOCK))],
     )
     @patch("nbkp.cliwiring.config.load_config", return_value=_config())
     def test_umount_dry_run_plans_without_umounting(
@@ -105,8 +102,8 @@ class TestDryRun:
         mock_umount.assert_not_called()
 
     @patch(
-        "nbkp.disks.plan.check_mount_status",
-        return_value=MountCapabilities(device_present=False),
+        "nbkp.disks.cli.mount_cmd.plan_lifecycle",
+        return_value=[VolumePlan("enc", (), "device not plugged in")],
     )
     @patch("nbkp.cliwiring.config.load_config", return_value=_config())
     def test_absent_drive_needs_nothing(

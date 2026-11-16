@@ -2,11 +2,11 @@
 
 from datetime import UTC, datetime
 from typing import Any
-from unittest.mock import MagicMock
 
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
+    HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
     SshEndpoint,
@@ -31,16 +31,21 @@ from nbkp.preflight import (
     VolumeError,
     VolumeStatus,
 )
-from nbkp.snapshots.errors import SnapshotOp, SnapshotOperationError
 from nbkp.sync import SyncResult, run_all_syncs
 
 FIXED_NOW = datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC)
+# The snapshot a real run names from FIXED_NOW on a remote destination.
+NEW_SNAPSHOT_NAME = "2026-03-06T14:30:00.000Z"
 
 
 def run_syncs(
     config: Config, sync_statuses: dict[str, SyncStatus], **kwargs: Any
 ) -> list[SyncResult]:
-    """run_all_syncs with a fixed clock and platform."""
+    """run_all_syncs with a fixed clock and platform.
+
+    Pass ``rsync=`` and ``run_command=`` fakes (``tests.fakes``) for any sync
+    that is attempted: the defaults are the real rsync and transport.
+    """
     return run_all_syncs(
         config,
         sync_statuses,
@@ -164,47 +169,34 @@ def make_local_config() -> Config:
     )
 
 
-def make_btrfs_config() -> Config:
-    src = LocalVolume(slug="src", path="/src")
-    dst = LocalVolume(slug="dst", path="/dst")
-    sync = SyncConfig(
-        slug="s1",
-        source="ep-src",
-        destination="ep-dst",
-    )
+def make_snapshot_config(
+    *,
+    btrfs: BtrfsSnapshotConfig | None = None,
+    hard_link: HardLinkSnapshotConfig | None = None,
+) -> Config:
+    """Local source, snapshot-enabled destination ``/dst`` on a remote host.
+
+    Remote, so every destination operation — including the ``latest``
+    symlink, which is a local filesystem call on a local volume — goes
+    through the injected command runner.
+    """
+    nas = SshEndpoint(slug="nas", host="nas.local")
     return Config(
-        volumes={"src": src, "dst": dst},
+        ssh_endpoints={"nas": nas},
+        volumes={
+            "src": LocalVolume(slug="src", path="/src"),
+            "dst": RemoteVolume(slug="dst", ssh_endpoint="nas", path="/dst"),
+        },
         sync_endpoints={
             "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
             "ep-dst": SyncEndpoint(
                 slug="ep-dst",
                 volume="dst",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+                btrfs_snapshots=btrfs or BtrfsSnapshotConfig(),
+                hard_link_snapshots=hard_link or HardLinkSnapshotConfig(),
             ),
         },
-        syncs={"s1": sync},
-    )
-
-
-def make_btrfs_config_with_max() -> Config:
-    src = LocalVolume(slug="src", path="/src")
-    dst = LocalVolume(slug="dst", path="/dst")
-    sync = SyncConfig(
-        slug="s1",
-        source="ep-src",
-        destination="ep-dst",
-    )
-    return Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True, max_snapshots=5),
-            ),
-        },
-        syncs={"s1": sync},
+        syncs={"s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst")},
     )
 
 
@@ -273,11 +265,3 @@ def inactive_statuses(
         for name, sync in config.syncs.items()
     }
     return {}, sync_statuses
-
-
-def snapshot_error(op: SnapshotOp) -> SnapshotOperationError:
-    return SnapshotOperationError(op, "/dst/snapshots/x", "Permission denied")
-
-
-def ok_proc() -> MagicMock:
-    return MagicMock(returncode=0, stdout="done\n", stderr="")

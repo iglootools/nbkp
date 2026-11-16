@@ -12,10 +12,11 @@ from ..config import Config
 from ..ordering.graph import sort_syncs, sync_predecessors
 from ..policy import Strictness
 from ..preflight.status.sync import SyncError, SyncStatus
+from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
-from .modes import RunContext, run_single_sync
+from .modes import RsyncRunner, RunContext, run_single_sync
 from .results import DISABLED_FAILURES, RUNTIME_FAILURES, SyncFailureKind, SyncResult
-from .rsync import ProgressMode
+from .rsync import ProgressMode, run_rsync
 
 
 def _collect_all_errors(status: SyncStatus) -> str:
@@ -148,13 +149,16 @@ def run_all_syncs(
     on_sync_start: Callable[[str], None] | None = None,
     on_sync_end: Callable[[str, SyncResult], None] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    rsync: RsyncRunner = run_rsync,
+    run_command: VolumeCommandRunner = run_on_volume,
 ) -> list[SyncResult]:
     """Run all (or selected) syncs in dependency order.
 
     Expects pre-computed sync statuses from ``check_all_syncs``.  *clock*
     names snapshots (read once per snapshot-enabled sync) and *platform*
     (``sys.platform``) decides the macOS-safe snapshot name form; both are
-    supplied by the entry point.
+    supplied by the entry point.  *rsync* and *run_command* run the
+    transfer and the snapshot commands on the destination.
     """
     selected = {
         s: st for s, st in sync_statuses.items() if not only_syncs or s in only_syncs
@@ -170,6 +174,8 @@ def run_all_syncs(
         resolved_endpoints=resolved_endpoints or {},
         clock=clock,
         platform=platform,
+        rsync=rsync,
+        run_command=run_command,
     )
 
     # An explicit loop rather than a comprehension: each sync's
