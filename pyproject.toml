@@ -125,21 +125,15 @@ target-version = "py315"
 # tests/test_startup_imports.py; this catches the per-statement mistake.
 #
 # TID251: tests inject fakes through parameters instead of patching (docs/guidelines.md,
-# Testing), so unittest.mock is banned. The files below keep it for a documented
-# exception; build-scripts/patchcheck.py does the same for monkeypatch, which is a
-# fixture rather than an import and so out of ruff's reach.
-extend-select = ["TID251", "TID255"]
+# Testing). unittest.mock is banned, and so is pytest.MonkeyPatch: tests/conftest.py
+# replaces the monkeypatch fixture with one that fails, so the class is the only way
+# left to patch. Each documented exception carries `# noqa: TID251` on its import, and RUF100
+# reports a noqa that is no longer needed.
+extend-select = ["RUF100", "TID251", "TID255"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "unittest.mock".msg = "Inject a fake through a parameter instead of patching (docs/guidelines.md, Testing)."
-
-[tool.ruff.lint.per-file-ignores]
-# (a) Fabric's Connection is the boundary run_remote_command wraps; building a real
-# one needs an SSH server that authenticates and runs commands.
-"tests/remote/test_ssh.py" = ["TID251"]
-# (a) The Docker SDK client: the test checks the port binding handed to it, with no
-# Docker daemon.
-"tests/remote/test_docker_testkit.py" = ["TID251"]
+"pytest.MonkeyPatch".msg = "Inject a fake through a parameter instead of patching (docs/guidelines.md, Testing)."
 
 [tool.ruff.lint.isort]
 # Keep aliased re-imports in the same `from x import (a, b as c)` block instead of

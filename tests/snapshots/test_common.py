@@ -5,6 +5,7 @@ from pathlib import Path
 
 import paramiko
 import pytest
+from pytest import MonkeyPatch  # noqa: TID251 -- (b) Path.symlink_to failing mid-update
 
 from nbkp.config import (
     BtrfsSnapshotConfig,
@@ -519,9 +520,7 @@ class TestUpdateLatestSymlink:
         assert str(link.readlink()) == f"snapshots/{_TS_LOCAL.name}"
         assert sorted(p.name for p in tmp_path.iterdir()) == ["latest"]
 
-    def test_local_failure_keeps_previous_latest(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_local_failure_keeps_previous_latest(self, tmp_path: Path) -> None:
         """latest is never missing, even when creating the new link fails."""
         sync, config = _hl_local_config(tmp_path)
         link = tmp_path / "latest"
@@ -530,11 +529,13 @@ class TestUpdateLatestSymlink:
         def fail(self: Path, target: str) -> None:
             raise OSError("disk full")
 
-        monkeypatch.setattr(Path, "symlink_to", fail)
-
-        with pytest.raises(
-            SnapshotOperationError, check=_is_op(SnapshotOp.UPDATE_LATEST)
+        with (
+            MonkeyPatch.context() as patch,
+            pytest.raises(
+                SnapshotOperationError, check=_is_op(SnapshotOp.UPDATE_LATEST)
+            ),
         ):
+            patch.setattr(Path, "symlink_to", fail)
             update_latest_symlink(sync, config, _TS_LOCAL)
         assert str(link.readlink()) == "snapshots/previous"
 

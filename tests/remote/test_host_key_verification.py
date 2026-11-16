@@ -10,6 +10,7 @@ from pathlib import Path
 
 import paramiko
 import pytest
+from pytest import MonkeyPatch  # noqa: TID251 -- (c) HOME, read by Paramiko
 
 from nbkp.config import SshConnectionOptions, SshEndpoint
 from nbkp.preflight.volume_checks import unreachable_diagnostics
@@ -52,9 +53,11 @@ class _LocalSshServer:
 
 
 @pytest.fixture(autouse=True)
-def _isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _isolated_home(tmp_path: Path) -> Iterator[None]:
     """Keep the developer's ~/.ssh/known_hosts and ~/.ssh/config out of it."""
-    monkeypatch.setenv("HOME", str(tmp_path))
+    with MonkeyPatch.context() as patch:
+        patch.setenv("HOME", str(tmp_path))
+        yield
 
 
 @pytest.fixture

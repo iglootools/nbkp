@@ -6,6 +6,7 @@ import keyring
 import pytest
 from keyring import errors as keyring_errors
 from keyring.backend import KeyringBackend
+from pytest import MonkeyPatch  # noqa: TID251 -- (b) the keyring extra, simulated as missing
 
 from nbkp.config import (
     Config,
@@ -95,13 +96,14 @@ class TestRetrievePassphraseKeyring:
             retrieve_passphrase("disk1", CredentialProvider.KEYRING)
         assert excinfo.value.reason == CredentialErrorReason.BACKEND_UNAVAILABLE
 
-    def test_raises_when_keyring_not_installed(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_raises_when_keyring_not_installed(self) -> None:
         # The test environment installs every extra, so the missing one is
         # simulated: a None entry makes `import keyring` raise ImportError.
-        monkeypatch.setitem(sys.modules, "keyring", None)
-        with pytest.raises(CredentialError) as excinfo:
+        with (
+            MonkeyPatch.context() as patch,
+            pytest.raises(CredentialError) as excinfo,
+        ):
+            patch.setitem(sys.modules, "keyring", None)
             retrieve_passphrase("disk1", CredentialProvider.KEYRING)
         assert excinfo.value.reason == CredentialErrorReason.NOT_INSTALLED
 

@@ -50,33 +50,27 @@ For general coding, Python, and tooling guidelines, see the [common guidelines](
   - Perform `~` expansion for all file paths in the config
 - **Testing**
   - No real rsync/ssh/btrfs calls in unit tests: they run against fakes, and the Docker-enabled integration tests cover the real interactions.
-  - **Test without patching.** This is the common [Mocks](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#mocks)
-    rule, made enforceable. In order of preference:
-    1. Put the decision in a *decider*, a pure function over plain values, and test it with
-       plain values: the preflight `*Status.from_diagnostics` interpretation, the CLI
-       deciders over `PreflightResult` / `SyncResult` / mount results.
-    2. Otherwise inject the dependency: a parameter whose default is the real
-       implementation, and a fake in the test. The fakes live in `tests/fakes.py`:
-       `FakeCommandRunner` for any `run: VolumeCommandRunner`, `FakeRsync`, and for CLI
-       tests a fake `Runtime` passed as `CliRunner.invoke(..., obj=fake_runtime(...))`.
-       Smaller seams follow the same shape: `environ`, `which`, `run_process`, `has_docker`.
-       Values are real, not stand-ins: `completed()` for a `CompletedProcess`, model
-       instances for configs and results.
-    3. Use a real local resource when it is cheap: a Python child process, a file under
-       `tmp_path`, the in-process SSH server of `tests/remote/test_host_key_verification.py`.
-  - Patching — `unittest.mock`, and `monkeypatch.setattr` / `delattr` / `setitem` /
-    `delitem` / `setenv` / `delenv` — is reserved for three exceptions:
-    **(a)** a third-party boundary that nbkp itself wraps, where the test is about that
-    wrapper; **(b)** a fault that no real resource can produce at the point the test needs
-    it; **(c)** process-global state a test must isolate from the developer's machine.
-    `monkeypatch.chdir` is not patching: tests use it to make relative config paths
-    predictable.
-  - **Enforced** by ruff's `TID251`, which bans `unittest.mock` (`[tool.ruff.lint]` in
-    `pyproject.toml`, whose `per-file-ignores` name the files of category (a)), and by
-    `mise run patch-check` (`build-scripts/patchcheck.py`, part of `mise run check`),
-    which fails on a `monkeypatch` replacement in a file not on its allowlist, and on an
-    allowlisted file that no longer needs it. A new exception goes in the table below,
-    in the matching list, with its reason.
+  - **Test without patching**, as the common
+    [Mocks](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#mocks)
+    and [Tests](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#tests)
+    rules describe. nbkp's building blocks for it:
+    - **Deciders**: the preflight `*Status.from_diagnostics` interpretation, and the CLI
+      deciders over `PreflightResult` / `SyncResult` / mount results.
+    - **Fakes**, in `tests/fakes.py`: `FakeCommandRunner` for any `run: VolumeCommandRunner`,
+      `FakeRsync`, and for CLI tests a fake `Runtime` passed as
+      `CliRunner.invoke(..., obj=fake_runtime(...))`. Smaller seams follow the same shape:
+      `environ`, `which`, `run_process`, `has_docker`. `completed()` builds a real
+      `CompletedProcess`.
+    - **Real local resources**: a Python child process, a file under `tmp_path`, the
+      in-process SSH server of `tests/remote/test_host_key_verification.py`.
+    - **`chdir`** (`tests/conftest.py`): changes the working directory until the end of
+      the test, so relative config paths are predictable.
+  - **Enforced** by pytest and ruff. `tests/conftest.py` replaces the `monkeypatch`
+    fixture with one that fails the test, and ruff's `TID251` bans `unittest.mock` and
+    `pytest.MonkeyPatch`, the only ways left to patch. Each exception below carries
+    `# noqa: TID251` on its import, with its category, and ruff's `RUF100` fails on a
+    `noqa` that is no longer needed. A new exception goes in the table below, with its
+    reason.
 
     | File | What is replaced | Category | Why, and when to retire it |
     |---|---|---|---|

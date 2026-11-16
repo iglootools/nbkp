@@ -2,8 +2,10 @@ import contextlib
 import os
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
+from pytest import MonkeyPatch  # noqa: TID251 -- (c) see _isolate_from_user_ssh_config
 
 from nbkp.config import (
     Config,
@@ -70,8 +72,8 @@ def pytest_configure(config: pytest.Config) -> None:
 
 @pytest.fixture(autouse=True)
 def _isolate_from_user_ssh_config(
-    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
-) -> None:
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[None]:
     """Never let a test read the developer's real ``~/.ssh/config``.
 
     Endpoint resolution falls back to it when no SSH config is passed in, so
@@ -81,14 +83,32 @@ def _isolate_from_user_ssh_config(
     exists; tests exercising enrichment pass their own ``ssh_config``.
     """
     absent = tmp_path_factory.getbasetemp() / "no-user-ssh-config"
-    monkeypatch.setattr(
-        "nbkp.remote.resolution.default_ssh_config_path", lambda: absent
+    with MonkeyPatch.context() as patch:
+        patch.setattr("nbkp.remote.resolution.default_ssh_config_path", lambda: absent)
+        yield
+
+
+@pytest.fixture
+def monkeypatch() -> NoReturn:
+    """Replace pytest's fixture for every test: tests do not patch.
+
+    Inject a fake through a parameter instead (docs/guidelines.md, Testing).
+    The documented exceptions use ``pytest.MonkeyPatch``, which ruff bans
+    everywhere else (TID251).
+    """
+    pytest.fail(
+        "The monkeypatch fixture is disabled: inject a fake through a parameter"
+        " instead (docs/guidelines.md, Testing).",
+        pytrace=False,
     )
 
 
 @pytest.fixture
 def chdir() -> Iterator[Callable[[Path], None]]:
-    """Change the working directory until the end of the test."""
+    """Change the working directory until the end of the test.
+
+    Stands in for ``monkeypatch.chdir``, which went with the fixture above.
+    """
     with contextlib.ExitStack() as stack:
         yield lambda path: stack.enter_context(contextlib.chdir(path))
 

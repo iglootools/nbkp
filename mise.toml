@@ -82,7 +82,7 @@ description = "Install dependencies"
 run = "mise deps install uv"
 
 [tasks.check]
-description = "Run all checks (format-check, lint, lint-shell, type-check, lock-check, lock-check-uv, clidocs-check, configdocs-check, depgraph-check, boundaries-check, patch-check)"
+description = "Run all checks (format-check, lint, lint-shell, type-check, lock-check, lock-check-uv, clidocs-check, configdocs-check, depgraph-check, boundaries-check)"
 run = [
   { task = "format-check" },
   { task = "lint" },
@@ -94,7 +94,6 @@ run = [
   { task = "configdocs-check" },
   { task = "depgraph-check" },
   { task = "boundaries-check" },
-  { task = "patch-check" },
 ]
 
 [tasks.check-all]
@@ -303,11 +302,6 @@ description = "Check module boundaries (import-linter contracts in pyproject.tom
 run = "uv run --no-sync lint-imports"
 
 # The monkeypatch half of the no-patching rule (docs/guidelines.md, Testing): ruff's
-# TID251 bans unittest.mock in lint, but monkeypatch is a fixture, not an import.
-[tasks.patch-check]
-description = "Check that tests patch only where docs/guidelines.md allows it (monkeypatch allowlist)"
-run = "uv run --no-sync python build-scripts/patchcheck.py"
-
 [tasks.depgraph-ascii]
 description = "Generate module dependency graph (ASCII art)"
 run = "uv run --no-sync python build-scripts/depgraph.py --format ascii"
