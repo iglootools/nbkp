@@ -16,6 +16,7 @@ from ....config.testkit import write_config
 from ....disks import mount_volumes, umount_volumes
 from ....disks.output import mount_failure_detail, umount_failure_detail
 from ....policy import Severity
+from ....remote.dispatch import VolumeCommandRunner, run_on_volume
 from ....remote.endpoints import ResolvedEndpoints
 from ....remote.resolution import resolve_all_endpoints
 from ....sync.testkit.seed import (
@@ -252,13 +253,18 @@ def _encrypted_volume_mounted(
     resolved: ResolvedEndpoints,
     enabled: bool,
     steps: _Steps,
+    *,
+    passphrase_fn: Callable[[str], str] = lambda _: LUKS_PASSPHRASE,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> Generator[None]:
     """Mount the encrypted volume around seeding, and check the umount.
 
     The umount + lock also runs when mounting fails, as in
     ``disks/context.py``: the volume may already be unlocked by then.  A
     failed umount leaves the demo LUKS volume unlocked: it is reported and,
-    when seeding itself succeeded, turned into a ``SeedError``.
+    when seeding itself succeeded, turned into a ``SeedError``.  The udisks
+    steps run through *run*, unlocking with the demo passphrase
+    (*passphrase_fn*).
     """
     if not enabled:
         yield
@@ -268,7 +274,7 @@ def _encrypted_volume_mounted(
         failed_mount = next(
             (
                 r
-                for r in mount_volumes(config, resolved, lambda _: LUKS_PASSPHRASE)
+                for r in mount_volumes(config, resolved, passphrase_fn, run=run)
                 if not r.success
             ),
             None,
@@ -280,7 +286,7 @@ def _encrypted_volume_mounted(
         steps.end("mount encrypted volume", True)
         yield
     finally:
-        failed_umount = _umount_encrypted(config, resolved, steps)
+        failed_umount = _umount_encrypted(config, resolved, steps, run=run)
     if failed_umount is not None:
         raise SeedError(
             f"Umount failed: {failed_umount}. The encrypted volume may still be"
@@ -289,11 +295,17 @@ def _encrypted_volume_mounted(
 
 
 def _umount_encrypted(
-    config: Config, resolved: ResolvedEndpoints, steps: _Steps
+    config: Config,
+    resolved: ResolvedEndpoints,
+    steps: _Steps,
+    *,
+    run: VolumeCommandRunner,
 ) -> str | None:
     """Umount + lock; returns the failure detail, if any."""
     steps.start("Unmounting encrypted volume...")
-    failed = next((r for r in umount_volumes(config, resolved) if not r.success), None)
+    failed = next(
+        (r for r in umount_volumes(config, resolved, run=run) if not r.success), None
+    )
     detail = (
         (umount_failure_detail(failed) or "unknown error")
         if failed is not None
