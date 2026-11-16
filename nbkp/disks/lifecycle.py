@@ -13,7 +13,7 @@ from ..config import (
     Volume,
 )
 from ..credentials import CredentialError
-from ..remote.dispatch import run_on_volume
+from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints, location_excluded
 from ..remote.errors import describe_error, ssh_connection_errors
 from .detection import (
@@ -82,18 +82,19 @@ def run_udisks(
     *,
     input: str | None = None,
     sleep: Callable[[float], None] = time.sleep,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> subprocess.CompletedProcess[str]:
     """Run a ``udisksctl`` command, retrying while udisks catches up with udev."""
-    result = run_on_volume(command, volume, resolved_endpoints, input=input)
+    result = run(command, volume, resolved_endpoints, input=input)
     attempts = 1
     while (
         result.returncode != 0
         and attempts < _UDISKS_RETRY_ATTEMPTS
         and any(sig in result.stderr.lower() for sig in _TRANSIENT_UDISKS_SIGNATURES)
     ):
-        settle_udev(volume, resolved_endpoints)
+        settle_udev(volume, resolved_endpoints, run=run)
         sleep(_UDISKS_RETRY_DELAY_S)
-        result = run_on_volume(command, volume, resolved_endpoints, input=input)
+        result = run(command, volume, resolved_endpoints, input=input)
         attempts += 1
     return result
 
@@ -249,6 +250,8 @@ def mount_volume(
     mount_config: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
     passphrase_fn: Callable[[str], str],
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> MountResult:
     """Mount a single volume via udisks. Idempotent: skips already mounted.
 
@@ -259,7 +262,7 @@ def mount_volume(
     """
     try:
         return _mount_volume_inner(
-            volume, mount_config, resolved_endpoints, passphrase_fn
+            volume, mount_config, resolved_endpoints, passphrase_fn, run=run
         )
     except DeviceProbeError as e:
         return MountResult(
@@ -288,10 +291,14 @@ def _mount_volume_inner(
     mount_config: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
     passphrase_fn: Callable[[str], str],
+    *,
+    run: VolumeCommandRunner,
 ) -> MountResult:
     """Core mount logic, separated for exception boundary in ``mount_volume``."""
-    settle_udev(volume, resolved_endpoints)
-    if not detect_device_present(volume, mount_config.device_uuid, resolved_endpoints):
+    settle_udev(volume, resolved_endpoints, run=run)
+    if not detect_device_present(
+        volume, mount_config.device_uuid, resolved_endpoints, run=run
+    ):
         return MountResult(
             volume_slug=volume.slug,
             success=False,
@@ -300,12 +307,14 @@ def _mount_volume_inner(
             device_present=False,
         )
     match _resolve_device_to_mount(
-        volume, mount_config, resolved_endpoints, passphrase_fn
+        volume, mount_config, resolved_endpoints, passphrase_fn, run=run
     ):
         case MountResult() as failure:
             return failure
         case str() as device:
-            return _mount_device(volume, mount_config, device, resolved_endpoints)
+            return _mount_device(
+                volume, mount_config, device, resolved_endpoints, run=run
+            )
 
 
 def _resolve_device_to_mount(
@@ -313,6 +322,8 @@ def _resolve_device_to_mount(
     mount_config: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
     passphrase_fn: Callable[[str], str],
+    *,
+    run: VolumeCommandRunner,
 ) -> str | MountResult:
     """The block device to mount, unlocking the LUKS container first if needed.
 
@@ -323,7 +334,7 @@ def _resolve_device_to_mount(
             return f"/dev/disk/by-uuid/{mount_config.device_uuid}"
         case encryption:
             existing = discover_cleartext_device(
-                volume, mount_config.device_uuid, resolved_endpoints
+                volume, mount_config.device_uuid, resolved_endpoints, run=run
             )
             return existing or _unlock(
                 volume,
@@ -331,6 +342,7 @@ def _resolve_device_to_mount(
                 encryption.passphrase_id,
                 resolved_endpoints,
                 passphrase_fn,
+                run=run,
             )
 
 
@@ -354,6 +366,8 @@ def _unlock(
     passphrase_id: str,
     resolved_endpoints: ResolvedEndpoints,
     passphrase_fn: Callable[[str], str],
+    *,
+    run: VolumeCommandRunner,
 ) -> str | MountResult:
     """Unlock a LUKS container and return its cleartext device.
 
@@ -375,6 +389,7 @@ def _unlock(
         volume,
         resolved_endpoints,
         input=passphrase,
+        run=run,
     )
     if result.returncode != 0:
         reason, failure = _classify_udisks_failure(
@@ -385,7 +400,7 @@ def _unlock(
     # re-probing with lsblk here races the cleartext device's sysfs entry
     # appearing asynchronously after unlock.
     device = parse_unlocked_device(result.stdout) or discover_cleartext_device(
-        volume, device_uuid, resolved_endpoints
+        volume, device_uuid, resolved_endpoints, run=run
     )
     return (
         device
@@ -404,6 +419,8 @@ def _mount_device(
     mount_config: MountConfig,
     device: str,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
 ) -> MountResult:
     encrypted = mount_config.encryption is not None
     result_for = partial(
@@ -413,10 +430,12 @@ def _mount_device(
         luks_unlocked=True if encrypted else None,
         cleartext_device=device if encrypted else None,
     )
-    existing = find_mountpoint(volume, device, resolved_endpoints)
+    existing = find_mountpoint(volume, device, resolved_endpoints, run=run)
     if existing is not None:
         return result_for(success=True, mounted=True, effective_path=existing)
-    result = run_udisks(build_mount_command(device), volume, resolved_endpoints)
+    result = run_udisks(
+        build_mount_command(device), volume, resolved_endpoints, run=run
+    )
     if result.returncode != 0:
         reason, failure = _classify_udisks_failure(
             result, MountFailureReason.MOUNT_FAILED, LifecycleStep.MOUNT
@@ -428,7 +447,7 @@ def _mount_device(
         return result_for(
             success=True,
             mounted=True,
-            effective_path=find_mountpoint(volume, device, resolved_endpoints),
+            effective_path=find_mountpoint(volume, device, resolved_endpoints, run=run),
         )
 
 
@@ -436,6 +455,8 @@ def umount_volume(
     volume: Volume,
     mount_config: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> UmountResult:
     """Umount and lock LUKS for a single volume.
 
@@ -444,7 +465,7 @@ def umount_volume(
     ``UmountResult`` rather than crashing; programming errors propagate.
     """
     try:
-        return _umount_volume_inner(volume, mount_config, resolved_endpoints)
+        return _umount_volume_inner(volume, mount_config, resolved_endpoints, run=run)
     except DeviceProbeError as e:
         return UmountResult(
             volume_slug=volume.slug,
@@ -470,14 +491,20 @@ def _umount_volume_inner(
     volume: Volume,
     mount_config: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
 ) -> UmountResult:
     """Core umount logic, separated for exception boundary in ``umount_volume``."""
     slug = volume.slug
 
-    device = resolve_target_device(volume, mount_config, resolved_endpoints)
+    device = resolve_target_device(volume, mount_config, resolved_endpoints, run=run)
 
-    if device is not None and find_mountpoint(volume, device, resolved_endpoints):
-        result = run_udisks(build_unmount_command(device), volume, resolved_endpoints)
+    if device is not None and find_mountpoint(
+        volume, device, resolved_endpoints, run=run
+    ):
+        result = run_udisks(
+            build_unmount_command(device), volume, resolved_endpoints, run=run
+        )
         if result.returncode != 0:
             return UmountResult(
                 volume_slug=slug,
@@ -493,6 +520,7 @@ def _umount_volume_inner(
             build_lock_command(mount_config.device_uuid),
             volume,
             resolved_endpoints,
+            run=run,
         )
         if result.returncode != 0:
             # A failure, not a warning: the volume is left unlocked, which is
@@ -515,6 +543,7 @@ def mount_volumes(
     names: list[str] | None = None,
     on_mount_start: Callable[[str], None] | None = None,
     on_mount_end: Callable[[str, MountResult], None] | None = None,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> list[MountResult]:
     """Mount all volumes with mount config. Idempotent: skips already mounted."""
 
@@ -526,6 +555,7 @@ def mount_volumes(
             mount_config=mount_cfg,
             resolved_endpoints=resolved_endpoints,
             passphrase_fn=passphrase_fn,
+            run=run,
         )
         if on_mount_end is not None:
             on_mount_end(slug, result)
@@ -544,6 +574,7 @@ def umount_volumes(
     names: list[str] | None = None,
     on_umount_start: Callable[[str], None] | None = None,
     on_umount_end: Callable[[str, UmountResult], None] | None = None,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> list[UmountResult]:
     """Umount and lock LUKS for all volumes with mount config.
 
@@ -558,6 +589,7 @@ def umount_volumes(
             volume=vol,
             mount_config=mount_cfg,
             resolved_endpoints=resolved_endpoints,
+            run=run,
         )
         if on_umount_end is not None:
             on_umount_end(slug, result)

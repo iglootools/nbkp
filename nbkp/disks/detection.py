@@ -8,7 +8,7 @@ from ..config import (
     MountConfig,
     Volume,
 )
-from ..remote.dispatch import run_on_volume
+from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 
 
@@ -32,7 +32,12 @@ class DeviceProbeError(Exception):
 _UDEV_SETTLE_TIMEOUT_S = 10
 
 
-def settle_udev(volume: Volume, resolved_endpoints: ResolvedEndpoints) -> None:
+def settle_udev(
+    volume: Volume,
+    resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
+) -> None:
     """Wait until udev has processed the pending device events, best effort.
 
     A lock, an unlock or a newly plugged drive makes udev remove and re-create the
@@ -44,7 +49,7 @@ def settle_udev(volume: Volume, resolved_endpoints: ResolvedEndpoints) -> None:
     caller's own checks still run and report what they find.
     """
     try:
-        run_on_volume(
+        run(
             ["udevadm", "settle", f"--timeout={_UDEV_SETTLE_TIMEOUT_S}"],
             volume,
             resolved_endpoints,
@@ -57,6 +62,8 @@ def detect_device_present(
     volume: Volume,
     device_uuid: str,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> bool:
     """Check if a device UUID exists in ``/dev/disk/by-uuid/``.
 
@@ -64,7 +71,7 @@ def detect_device_present(
     Maintained by udev — no root, no parsing, works on all
     systemd-based Linux.
     """
-    result = run_on_volume(
+    result = run(
         ["test", "-e", f"/dev/disk/by-uuid/{device_uuid}"],
         volume,
         resolved_endpoints,
@@ -76,6 +83,8 @@ def discover_cleartext_device(
     volume: Volume,
     luks_uuid: str,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> str | None:
     """Discover the unlocked cleartext device for a LUKS container.
 
@@ -88,7 +97,7 @@ def discover_cleartext_device(
     agnostic to what named the mapper: a LUKS2 header label and an
     ``/etc/crypttab`` entry both override the default.
     """
-    result = run_on_volume(
+    result = run(
         ["lsblk", "-rno", "NAME,TYPE", f"/dev/disk/by-uuid/{luks_uuid}"],
         volume,
         resolved_endpoints,
@@ -113,6 +122,8 @@ def resolve_target_device(
     volume: Volume,
     mount_config: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> str | None:
     """Resolve the block device to mount/unmount for a volume.
 
@@ -124,7 +135,7 @@ def resolve_target_device(
     if mount_config.encryption is None:
         return f"/dev/disk/by-uuid/{mount_config.device_uuid}"
     return discover_cleartext_device(
-        volume, mount_config.device_uuid, resolved_endpoints
+        volume, mount_config.device_uuid, resolved_endpoints, run=run
     )
 
 
@@ -132,6 +143,8 @@ def find_mountpoint(
     volume: Volume,
     device: str,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> str | None:
     """Return the current mountpoint of ``device``, or ``None`` if unmounted.
 
@@ -148,7 +161,7 @@ def find_mountpoint(
     # locally and over SSH. The query that forces the choice — the live mount
     # option string — has no udisks equivalent; see
     # preflight.snapshot_checks.check_btrfs_mount_option.
-    result = run_on_volume(
+    result = run(
         ["findmnt", "--source", device, "-n", "-o", "TARGET"],
         volume,
         resolved_endpoints,
@@ -169,6 +182,8 @@ def resolve_effective_path(
     volume: Volume,
     mount_config: MountConfig,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> str | None:
     """Resolve where a mount-managed volume is (or should be) located.
 
@@ -180,7 +195,7 @@ def resolve_effective_path(
     """
     if volume.path is not None:
         return volume.path
-    device = resolve_target_device(volume, mount_config, resolved_endpoints)
+    device = resolve_target_device(volume, mount_config, resolved_endpoints, run=run)
     if device is None:
         return None
-    return find_mountpoint(volume, device, resolved_endpoints)
+    return find_mountpoint(volume, device, resolved_endpoints, run=run)
