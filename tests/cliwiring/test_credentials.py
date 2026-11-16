@@ -1,17 +1,24 @@
 """Tests for the CLI passphrase prompt."""
 
-from unittest.mock import patch
+import typer
+from typer.testing import CliRunner
 
 from nbkp.cliwiring.credentials import prompt_passphrase
+
+_app = typer.Typer()
+
+
+@_app.command()
+def _ask() -> None:
+    typer.echo(f"got {prompt_passphrase('disk1')}")
 
 
 class TestPromptPassphrase:
     def test_prompts_with_hidden_input(self) -> None:
-        with patch("nbkp.cliwiring.credentials.typer") as mock_typer:
-            mock_typer.prompt.return_value = "typed-secret"
-            result = prompt_passphrase("disk1")
-        assert result == "typed-secret"
-        mock_typer.prompt.assert_called_once_with(
-            "LUKS passphrase for disk1",
-            hide_input=True,
-        )
+        result = CliRunner().invoke(_app, input="typed-secret\n")
+
+        assert result.exit_code == 0, result.output
+        assert result.output.startswith("LUKS passphrase for disk1: ")
+        assert "got typed-secret" in result.output
+        # A visible prompt would echo the typed input as well.
+        assert result.output.count("typed-secret") == 1
