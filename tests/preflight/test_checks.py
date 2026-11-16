@@ -73,11 +73,11 @@ def _no_real_host_commands(monkeypatch: pytest.MonkeyPatch) -> None:
     Tests exercising these probes patch them (or ``subprocess.run``) directly.
     """
     monkeypatch.setattr(
-        "nbkp.preflight.volume_checks.check_rsync_version", lambda *_: True
+        "nbkp.preflight.volume_checks.check_rsync_version", lambda *_, **__: True
     )
     monkeypatch.setattr(
         "nbkp.preflight.endpoint_checks.check_directory_writable",
-        lambda _vol, path, _re: os.access(path, os.W_OK),
+        lambda _vol, path, _re, **_kw: os.access(path, os.W_OK),
     )
 
 
@@ -430,7 +430,7 @@ class TestCheckRemoteVolume:
         return_value=_STUB_CAPS,
     )
     @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_active(
         self, mock_run: MagicMock, mock_ssh_ep: MagicMock, mock_caps: MagicMock
     ) -> None:
@@ -448,7 +448,7 @@ class TestCheckRemoteVolume:
         assert status.diagnostics.capabilities is _STUB_CAPS
 
     @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_sentinel_missing(
         self, mock_run: MagicMock, mock_ssh_ep: MagicMock
     ) -> None:
@@ -1654,12 +1654,10 @@ class TestCheckSyncRemoteCommands:
         "nbkp.preflight.checks.observe_ssh_endpoint",
     )
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_rsync_not_found_on_remote_source(
         self,
         mock_run: MagicMock,
-        mock_vol_run: MagicMock,
         mock_caps: MagicMock,
         mock_ssh_ep: MagicMock,
         tmp_path: Path,
@@ -1691,8 +1689,6 @@ class TestCheckSyncRemoteCommands:
             },
             syncs={"s1": sync},
         )
-
-        mock_vol_run.return_value = MagicMock(returncode=0)
 
         def ssh_ep_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
             if isinstance(volume, RemoteVolume):
@@ -1727,12 +1723,10 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.checks.observe_ssh_endpoint")
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_rsync_not_found_on_remote_destination(
         self,
         mock_run: MagicMock,
-        mock_vol_run: MagicMock,
         mock_caps: MagicMock,
         mock_ssh_ep: MagicMock,
         tmp_path: Path,
@@ -1773,7 +1767,6 @@ class TestCheckSyncRemoteCommands:
             return _ssh_diag()
 
         mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
 
         def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
             return _NO_RSYNC_CAPS if volume.slug == "dst" else _STUB_CAPS
@@ -1805,12 +1798,10 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.checks.observe_ssh_endpoint")
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_btrfs_not_found_on_remote_destination(
         self,
         mock_run: MagicMock,
-        mock_vol_run: MagicMock,
         mock_caps: MagicMock,
         mock_ssh_ep: MagicMock,
         tmp_path: Path,
@@ -1860,7 +1851,6 @@ class TestCheckSyncRemoteCommands:
             return _ssh_diag()
 
         mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
 
         def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
             return _BTRFS_NO_BTRFS_CMD_CAPS if volume.slug == "dst" else _STUB_CAPS
@@ -1892,12 +1882,10 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.checks.observe_ssh_endpoint")
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_destination_not_btrfs_on_remote(
         self,
         mock_run: MagicMock,
-        mock_vol_run: MagicMock,
         mock_caps: MagicMock,
         mock_ssh_ep: MagicMock,
         tmp_path: Path,
@@ -1945,7 +1933,6 @@ class TestCheckSyncRemoteCommands:
             return _ssh_diag()
 
         mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
 
         def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
             return _BTRFS_NOT_BTRFS_FS_CAPS if volume.slug == "dst" else _STUB_CAPS
@@ -1977,12 +1964,10 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.checks.observe_ssh_endpoint")
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_destination_not_subvolume_on_remote(
         self,
         mock_run: MagicMock,
-        mock_vol_run: MagicMock,
         mock_caps: MagicMock,
         mock_ssh_ep: MagicMock,
         tmp_path: Path,
@@ -2030,7 +2015,6 @@ class TestCheckSyncRemoteCommands:
             return _ssh_diag()
 
         mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
 
         def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
             return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
@@ -2069,12 +2053,10 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.checks.observe_ssh_endpoint")
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_destination_not_mounted_user_subvol_rm_on_remote(
         self,
         mock_run: MagicMock,
-        mock_vol_run: MagicMock,
         mock_caps: MagicMock,
         mock_ssh_ep: MagicMock,
         tmp_path: Path,
@@ -2122,7 +2104,6 @@ class TestCheckSyncRemoteCommands:
             return _ssh_diag()
 
         mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
 
         def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
             return _BTRFS_NO_SUBVOL_RM_CAPS if volume.slug == "dst" else _STUB_CAPS
@@ -2161,12 +2142,10 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.checks.observe_ssh_endpoint")
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_stat_not_found_on_remote_destination(
         self,
         mock_run: MagicMock,
-        mock_vol_run: MagicMock,
         mock_caps: MagicMock,
         mock_ssh_ep: MagicMock,
         tmp_path: Path,
@@ -2216,7 +2195,6 @@ class TestCheckSyncRemoteCommands:
             return _ssh_diag()
 
         mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
 
         def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
             return _BTRFS_NO_STAT_CAPS if volume.slug == "dst" else _STUB_CAPS
@@ -2252,12 +2230,10 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.checks.observe_ssh_endpoint")
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_findmnt_not_found_on_remote_destination(
         self,
         mock_run: MagicMock,
-        mock_vol_run: MagicMock,
         mock_caps: MagicMock,
         mock_ssh_ep: MagicMock,
         tmp_path: Path,
@@ -2307,7 +2283,6 @@ class TestCheckSyncRemoteCommands:
             return _ssh_diag()
 
         mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
 
         def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
             return _BTRFS_NO_FINDMNT_CAPS if volume.slug == "dst" else _STUB_CAPS
@@ -2354,12 +2329,10 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.checks.observe_ssh_endpoint")
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_destination_latest_not_found_on_remote(
         self,
         mock_run: MagicMock,
-        mock_vol_run: MagicMock,
         mock_caps: MagicMock,
         mock_ssh_ep: MagicMock,
         tmp_path: Path,
@@ -2407,7 +2380,6 @@ class TestCheckSyncRemoteCommands:
             return _ssh_diag()
 
         mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
 
         def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
             return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
@@ -2462,12 +2434,10 @@ class TestCheckSyncRemoteCommands:
 
     @patch("nbkp.preflight.checks.observe_ssh_endpoint")
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_destination_snapshots_dir_not_found_on_remote(
         self,
         mock_run: MagicMock,
-        mock_vol_run: MagicMock,
         mock_caps: MagicMock,
         mock_ssh_ep: MagicMock,
         tmp_path: Path,
@@ -2515,7 +2485,6 @@ class TestCheckSyncRemoteCommands:
             return _ssh_diag()
 
         mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
 
         def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
             return _BTRFS_FULL_CAPS if volume.slug == "dst" else _STUB_CAPS
@@ -2777,7 +2746,7 @@ class TestStandaloneEndpointProbing:
                     stack.enter_context(
                         patch(
                             "nbkp.preflight.checks.enrich_from_ssh_config",
-                            side_effect=lambda ep: ep,
+                            side_effect=lambda ep, **_kw: ep,
                         )
                     )
                     stack.enter_context(
@@ -3177,7 +3146,7 @@ class TestAlternateEndpointUnderLocationExclusion:
             ),
             patch(
                 "nbkp.preflight.checks.enrich_from_ssh_config",
-                side_effect=lambda ep: ep,
+                side_effect=lambda ep, **_kw: ep,
             ),
             patch(
                 "nbkp.preflight.checks.observe_source_endpoint",
@@ -3400,12 +3369,10 @@ class TestCheckHardLinkDest:
 
     @patch("nbkp.preflight.checks.observe_ssh_endpoint")
     @patch("nbkp.preflight.volume_checks.check_volume_capabilities")
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_remote_no_hardlink_support(
         self,
         mock_run: MagicMock,
-        mock_vol_run: MagicMock,
         mock_caps: MagicMock,
         mock_ssh_ep: MagicMock,
         tmp_path: Path,
@@ -3453,7 +3420,6 @@ class TestCheckHardLinkDest:
             return _ssh_diag()
 
         mock_ssh_ep.side_effect = ssh_ep_side_effect
-        mock_vol_run.return_value = MagicMock(returncode=0)
 
         def caps_side_effect(volume, *args, **kwargs):  # type: ignore[no-untyped-def]
             return _HL_NO_HARDLINK_CAPS if volume.slug == "dst" else _STUB_CAPS
@@ -4226,7 +4192,7 @@ class TestCheckRemoteVolumeSpaces:
         "nbkp.preflight.volume_checks.check_volume_capabilities",
         return_value=_STUB_CAPS,
     )
-    @patch("nbkp.preflight.volume_checks.run_remote_command")
+    @patch("nbkp.remote.dispatch.run_remote_command")
     def test_active(
         self, mock_run: MagicMock, mock_caps: MagicMock, _mock_ssh: MagicMock
     ) -> None:
@@ -4240,6 +4206,7 @@ class TestCheckRemoteVolumeSpaces:
             config.ssh_endpoints["nas-server"],
             ["test", "-f", "/my backup/.nbkp-vol"],
             [],
+            input=None,
         )
 
 
@@ -4367,7 +4334,9 @@ def _stub_volume(*_args: object, **_kwargs: object) -> VolumeDiagnostics:
     return VolumeDiagnostics(capabilities=_STUB_CAPS)
 
 
-def _src_ok(ep: SyncEndpoint, *_args: object) -> SourceEndpointDiagnostics:
+def _src_ok(
+    ep: SyncEndpoint, *_args: object, **_kwargs: object
+) -> SourceEndpointDiagnostics:
     return SourceEndpointDiagnostics(endpoint_slug=ep.slug, sentinel_exists=True)
 
 
@@ -4422,7 +4391,7 @@ class TestConnectionLostDuringPreflight:
         self, _ssh: MagicMock, _vol: MagicMock, mock_src: MagicMock, _dst: MagicMock
     ) -> None:
         def observe(
-            ep: SyncEndpoint, volume: Volume, *_args: object
+            ep: SyncEndpoint, volume: Volume, *_args: object, **_kwargs: object
         ) -> SourceEndpointDiagnostics:
             match volume:
                 case RemoteVolume():

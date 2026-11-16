@@ -13,8 +13,13 @@ Two levels of observation:
 No error interpretation happens here — the ``status`` package translates
 diagnostics into errors using ``SshEndpointToolNeeds``,
 ``SshEndpointStatus.from_diagnostics`` and ``VolumeStatus.from_diagnostics``.
+
+Every probe runs through *run* (:func:`remote.dispatch.run_on_volume`) and
+finds local tools with *which* (:func:`shutil.which`), unless a test injects
+fakes.
 """
 
+import shutil
 from pathlib import Path
 
 from ..config import (
@@ -29,7 +34,12 @@ from ..disks import (
     probe_mount_tools as _probe_mount_tools,
 )
 from ..fsprotocol import VOLUME_SENTINEL
-from ..remote.dispatch import check_command_available
+from ..remote.dispatch import (
+    CommandLocator,
+    VolumeCommandRunner,
+    check_command_available,
+    run_on_volume,
+)
 from ..remote.endpoints import ResolvedEndpoints
 from ..remote.errors import describe_error, is_auth_error, ssh_connection_errors
 from .probes import check_rsync_version
@@ -41,13 +51,15 @@ from .snapshot_checks import (
 )
 from .status.ssh import HostToolCapabilities, SshEndpointDiagnostics
 from .status.volume import VolumeCapabilities, VolumeDiagnostics
-lazy from ..remote import run_remote_command
 
 
 def observe_ssh_endpoint(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints | None = None,
     probe_mount_tools: bool = False,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
+    which: CommandLocator = shutil.which,
 ) -> SshEndpointDiagnostics:
     """Uses *volume* as the dispatch target for running commands on the host.
     For local volumes, commands run locally (implicit localhost endpoint).
@@ -59,19 +71,28 @@ def observe_ssh_endpoint(
     re = resolved_endpoints or {}
     match volume:
         case LocalVolume():
-            return _observe_ssh_endpoint_local(volume, re, probe_mount_tools)
+            return _observe_ssh_endpoint_local(
+                volume, re, probe_mount_tools, run=run, which=which
+            )
         case RemoteVolume():
-            return _observe_ssh_endpoint_remote(volume, re, probe_mount_tools)
+            return _observe_ssh_endpoint_remote(
+                volume, re, probe_mount_tools, run=run, which=which
+            )
 
 
 def _observe_ssh_endpoint_local(
     volume: LocalVolume,
     resolved_endpoints: ResolvedEndpoints,
     probe_mount_tools: bool,
+    *,
+    run: VolumeCommandRunner,
+    which: CommandLocator,
 ) -> SshEndpointDiagnostics:
-    host_tools = _probe_host_tools(volume, resolved_endpoints)
+    host_tools = _probe_host_tools(volume, resolved_endpoints, run=run, which=which)
     mount_tools = (
-        _probe_mount_tools(volume, resolved_endpoints) if probe_mount_tools else None
+        _probe_mount_tools(volume, resolved_endpoints, run=run, which=which)
+        if probe_mount_tools
+        else None
     )
     return SshEndpointDiagnostics(
         host_tools=host_tools,
@@ -83,6 +104,9 @@ def _observe_ssh_endpoint_remote(
     volume: RemoteVolume,
     resolved_endpoints: ResolvedEndpoints,
     probe_mount_tools: bool,
+    *,
+    run: VolumeCommandRunner,
+    which: CommandLocator,
 ) -> SshEndpointDiagnostics:
     """SSH reachability is tested implicitly via the first host tool probe
     (``which rsync``).  A connection failure — then or during a later probe,
@@ -95,9 +119,11 @@ def _observe_ssh_endpoint_remote(
     try:
         return SshEndpointDiagnostics(
             ssh_reachable=True,
-            host_tools=_probe_host_tools(volume, resolved_endpoints),
+            host_tools=_probe_host_tools(
+                volume, resolved_endpoints, run=run, which=which
+            ),
             mount_tools=(
-                _probe_mount_tools(volume, resolved_endpoints)
+                _probe_mount_tools(volume, resolved_endpoints, run=run, which=which)
                 if probe_mount_tools
                 else None
             ),
@@ -117,18 +143,27 @@ def unreachable_diagnostics(error: BaseException) -> SshEndpointDiagnostics:
 def _probe_host_tools(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
+    which: CommandLocator,
 ) -> HostToolCapabilities:
     """For remote volumes, any of these ``which`` probes implicitly tests
     SSH reachability — if the connection fails, the caller catches the
     exception.
     """
-    has_rsync = check_command_available(volume, "rsync", resolved_endpoints)
+
+    def available(command: str) -> bool:
+        return check_command_available(
+            volume, command, resolved_endpoints, run=run, which=which
+        )
+
+    has_rsync = available("rsync")
     rsync_version_ok = (
-        check_rsync_version(volume, resolved_endpoints) if has_rsync else False
+        check_rsync_version(volume, resolved_endpoints, run=run) if has_rsync else False
     )
-    has_btrfs = check_command_available(volume, "btrfs", resolved_endpoints)
-    has_stat = check_command_available(volume, "stat", resolved_endpoints)
-    has_findmnt = check_command_available(volume, "findmnt", resolved_endpoints)
+    has_btrfs = available("btrfs")
+    has_stat = available("stat")
+    has_findmnt = available("findmnt")
     return HostToolCapabilities(
         has_rsync=has_rsync,
         rsync_version_ok=rsync_version_ok,
@@ -144,6 +179,8 @@ def observe_volume(
     mount_tools: MountToolCapabilities | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     mount_observation: MountObservation | None = None,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> VolumeDiagnostics:
     """Called only when the SSH endpoint is active.  SSH reachability and
     location exclusion are handled at the SSH endpoint level.
@@ -151,69 +188,43 @@ def observe_volume(
     *host_tools* and *mount_tools* come from the SSH endpoint observation.
     """
     re = resolved_endpoints or {}
+    caps = (
+        check_volume_capabilities(
+            volume, host_tools, mount_tools, re, mount_observation, run=run
+        )
+        if _volume_sentinel_exists(volume, re, run=run)
+        else _sentinel_only_capabilities(
+            volume, mount_tools, re, mount_observation, run=run
+        )
+    )
+    return VolumeDiagnostics(capabilities=caps)
+
+
+def _volume_sentinel_exists(
+    volume: Volume,
+    resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
+) -> bool:
+    """A mount-managed volume with no declared path that is not yet mounted
+    has no knowable location — treated as sentinel-missing (inactive).
+
+    For a remote volume, SSH reachability has already been verified at the
+    SSH endpoint level.
+    """
+    if volume.path is None:
+        return False
+    sentinel_path = f"{volume.path}/{VOLUME_SENTINEL}"
     match volume:
         case LocalVolume():
-            return _observe_local(
-                volume, host_tools, mount_tools, re, mount_observation
-            )
+            return Path(sentinel_path).is_file()
         case RemoteVolume():
-            return _observe_remote(
-                volume, host_tools, mount_tools, re, mount_observation
+            return (
+                run(
+                    ["test", "-f", sentinel_path], volume, resolved_endpoints
+                ).returncode
+                == 0
             )
-
-
-def _observe_local(
-    volume: LocalVolume,
-    host_tools: HostToolCapabilities,
-    mount_tools: MountToolCapabilities | None,
-    resolved_endpoints: ResolvedEndpoints,
-    mount_observation: MountObservation | None = None,
-) -> VolumeDiagnostics:
-    # A mount-managed volume with no declared path that is not yet mounted
-    # has no knowable location — treat as sentinel-missing (inactive).
-    sentinel_exists = (
-        volume.path is not None and (Path(volume.path) / VOLUME_SENTINEL).is_file()
-    )
-    caps = (
-        check_volume_capabilities(
-            volume, host_tools, mount_tools, resolved_endpoints, mount_observation
-        )
-        if sentinel_exists
-        else _sentinel_only_capabilities(
-            volume, mount_tools, resolved_endpoints, mount_observation
-        )
-    )
-    return VolumeDiagnostics(capabilities=caps)
-
-
-def _observe_remote(
-    volume: RemoteVolume,
-    host_tools: HostToolCapabilities,
-    mount_tools: MountToolCapabilities | None,
-    resolved_endpoints: ResolvedEndpoints,
-    mount_observation: MountObservation | None = None,
-) -> VolumeDiagnostics:
-    """SSH reachability has already been verified at the SSH endpoint level."""
-    ep = resolved_endpoints[volume.slug]
-    if volume.path is None:
-        # Unmounted discovery-model volume — no knowable location.
-        sentinel_exists = False
-    else:
-        sentinel_path = f"{volume.path}/{VOLUME_SENTINEL}"
-        result = run_remote_command(
-            ep.server, ["test", "-f", sentinel_path], ep.proxy_chain
-        )
-        sentinel_exists = result.returncode == 0
-    caps = (
-        check_volume_capabilities(
-            volume, host_tools, mount_tools, resolved_endpoints, mount_observation
-        )
-        if sentinel_exists
-        else _sentinel_only_capabilities(
-            volume, mount_tools, resolved_endpoints, mount_observation
-        )
-    )
-    return VolumeDiagnostics(capabilities=caps)
 
 
 def check_volume_capabilities(
@@ -222,6 +233,8 @@ def check_volume_capabilities(
     mount_tools: MountToolCapabilities | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     mount_observation: MountObservation | None = None,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> VolumeCapabilities:
     """Compute volume-level capabilities once per active volume.
 
@@ -230,18 +243,20 @@ def check_volume_capabilities(
     probes only volume-specific filesystem properties.
     """
     re = resolved_endpoints or {}
-    fs_type = probe_filesystem_type(volume, re) if host_tools.has_stat else None
+    fs_type = (
+        probe_filesystem_type(volume, re, run=run) if host_tools.has_stat else None
+    )
     is_btrfs = is_btrfs_filesystem(fs_type) if host_tools.has_stat else False
     hardlink_supported = supports_hard_links(fs_type)
     btrfs_user_subvol_rm = (
-        check_btrfs_mount_option(volume, "user_subvol_rm_allowed", re)
+        check_btrfs_mount_option(volume, "user_subvol_rm_allowed", re, run=run)
         if host_tools.has_findmnt and is_btrfs
         else False
     )
 
     mount_caps = (
         _check_mount_capabilities(
-            volume, volume.mount, mount_tools, re, mount_observation
+            volume, volume.mount, mount_tools, re, mount_observation, run=run
         )
         if volume.mount is not None
         else None
@@ -261,6 +276,8 @@ def _sentinel_only_capabilities(
     mount_tools: MountToolCapabilities | None,
     resolved_endpoints: ResolvedEndpoints,
     mount_observation: MountObservation | None = None,
+    *,
+    run: VolumeCommandRunner,
 ) -> VolumeCapabilities:
     """Minimal capabilities for a reachable volume whose sentinel is missing.
 
@@ -272,7 +289,12 @@ def _sentinel_only_capabilities(
     """
     mount_caps = (
         _check_mount_capabilities(
-            volume, volume.mount, mount_tools, resolved_endpoints, mount_observation
+            volume,
+            volume.mount,
+            mount_tools,
+            resolved_endpoints,
+            mount_observation,
+            run=run,
         )
         if volume.mount is not None
         else None

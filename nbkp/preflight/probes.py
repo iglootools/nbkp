@@ -7,7 +7,7 @@ from ..config import (
     Volume,
     resolve_endpoint_path,
 )
-from ..remote.dispatch import run_on_volume
+from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 
 
@@ -16,6 +16,8 @@ def check_endpoint_sentinel(
     subdir: str | None,
     sentinel_name: str,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> bool:
     base = resolve_endpoint_path(volume, subdir)
     rel_path = f"{base}/{sentinel_name}"
@@ -24,9 +26,7 @@ def check_endpoint_sentinel(
             return Path(rel_path).is_file()
         case RemoteVolume():
             return (
-                run_on_volume(
-                    ["test", "-f", rel_path], volume, resolved_endpoints
-                ).returncode
+                run(["test", "-f", rel_path], volume, resolved_endpoints).returncode
                 == 0
             )
 
@@ -35,50 +35,46 @@ def check_directory_writable(
     volume: Volume,
     path: str,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> bool:
-    return (
-        run_on_volume(["test", "-w", path], volume, resolved_endpoints).returncode == 0
-    )
+    return run(["test", "-w", path], volume, resolved_endpoints).returncode == 0
 
 
 def check_directory_exists(
     volume: Volume,
     path: str,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> bool:
     match volume:
         case LocalVolume():
             return Path(path).is_dir()
         case RemoteVolume():
-            return (
-                run_on_volume(
-                    ["test", "-d", path], volume, resolved_endpoints
-                ).returncode
-                == 0
-            )
+            return run(["test", "-d", path], volume, resolved_endpoints).returncode == 0
 
 
 def check_symlink_exists(
     volume: Volume,
     path: str,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> bool:
     match volume:
         case LocalVolume():
             return Path(path).is_symlink()
         case RemoteVolume():
-            return (
-                run_on_volume(
-                    ["test", "-L", path], volume, resolved_endpoints
-                ).returncode
-                == 0
-            )
+            return run(["test", "-L", path], volume, resolved_endpoints).returncode == 0
 
 
 def read_symlink_target(
     volume: Volume,
     path: str,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> str | None:
     """Read a symlink target, returning None if it doesn't exist."""
     match volume:
@@ -86,7 +82,7 @@ def read_symlink_target(
             p = Path(path)
             return str(p.readlink()) if p.is_symlink() else None
         case RemoteVolume():
-            result = run_on_volume(["readlink", path], volume, resolved_endpoints)
+            result = run(["readlink", path], volume, resolved_endpoints)
             return result.stdout.strip() if result.returncode == 0 else None
 
 
@@ -110,8 +106,10 @@ def parse_rsync_version(output: str) -> tuple[int, ...]:
 def check_rsync_version(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> bool:
-    result = run_on_volume(["rsync", "--version"], volume, resolved_endpoints)
+    result = run(["rsync", "--version"], volume, resolved_endpoints)
     return (
         result.returncode == 0
         and parse_rsync_version(result.stdout) >= _MIN_RSYNC_VERSION

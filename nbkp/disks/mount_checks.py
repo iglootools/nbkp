@@ -5,13 +5,16 @@ unlocked/mounted.  Used by both ``disks status`` and preflight checks.
 """
 
 import shlex
+import shutil
 from dataclasses import dataclass
+from functools import partial
 
 from ..config import (
     MountConfig,
     Volume,
 )
 from ..remote.dispatch import (
+    CommandLocator,
     VolumeCommandRunner,
     check_command_available,
     run_on_volume,
@@ -42,6 +45,7 @@ def probe_mount_tools(
     resolved_endpoints: ResolvedEndpoints,
     *,
     run: VolumeCommandRunner = run_on_volume,
+    which: CommandLocator = shutil.which,
 ) -> MountToolCapabilities:
     """Probe mount management tool availability on the host.
 
@@ -49,9 +53,16 @@ def probe_mount_tools(
     Which tools are actually *required* is determined during error
     interpretation (``SshEndpointToolNeeds``).
     """
-    has_udisksctl = check_command_available(volume, "udisksctl", resolved_endpoints)
-    has_findmnt = check_command_available(volume, "findmnt", resolved_endpoints)
-    has_lsblk = check_command_available(volume, "lsblk", resolved_endpoints)
+    available = partial(
+        check_command_available,
+        volume,
+        resolved_endpoints=resolved_endpoints,
+        run=run,
+        which=which,
+    )
+    has_udisksctl = available("udisksctl")
+    has_findmnt = available("findmnt")
+    has_lsblk = available("lsblk")
     udisksd_running = (
         run(["udisksctl", "status"], volume, resolved_endpoints).returncode == 0
         if has_udisksctl

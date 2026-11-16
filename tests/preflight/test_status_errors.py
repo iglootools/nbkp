@@ -6,7 +6,6 @@ handling, and the ``latest`` symlink target parsing.
 """
 
 from pathlib import Path
-from unittest.mock import patch
 
 import paramiko
 import pydantic
@@ -49,6 +48,7 @@ from nbkp.preflight.status.volume import (
 from nbkp.preflight.strictness import has_fatal_errors
 from nbkp.preflight.volume_checks import observe_ssh_endpoint
 from nbkp.remote.endpoints import ResolvedEndpoint
+from tests.fakes import FakeCommandRunner
 
 _TOOLS = HostToolCapabilities(
     has_rsync=True,
@@ -223,67 +223,76 @@ def _remote_volume() -> tuple[RemoteVolume, dict[str, ResolvedEndpoint]]:
     return vol, {"data": ResolvedEndpoint(server=server, proxy_chain=[])}
 
 
+def _host_raising(error: Exception) -> FakeCommandRunner:
+    """A host whose first probe (``which rsync``) fails with *error*."""
+    return FakeCommandRunner().on("which", returns=error)
+
+
 class TestObservationExceptions:
-    @patch(
-        "nbkp.preflight.volume_checks.check_command_available",
-        side_effect=paramiko.AuthenticationException("Authentication failed."),
-    )
-    def test_auth_failure_recorded(self, _mock: object) -> None:
+    def test_auth_failure_recorded(self) -> None:
         vol, resolved = _remote_volume()
-        diag = observe_ssh_endpoint(vol, resolved)
+        run = _host_raising(paramiko.AuthenticationException("Authentication failed."))
+        diag = observe_ssh_endpoint(vol, resolved, run=run)
         assert diag.ssh_reachable is False
         assert diag.ssh_auth_failed is True
         assert diag.ssh_error == "Authentication failed."
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_command_available",
-        side_effect=paramiko.BadHostKeyException(
-            "nas.local", paramiko.RSAKey.generate(1024), paramiko.RSAKey.generate(1024)
-        ),
-    )
-    def test_host_key_mismatch_is_auth_failure(self, _mock: object) -> None:
+    def test_host_key_mismatch_is_auth_failure(self) -> None:
         vol, resolved = _remote_volume()
-        assert observe_ssh_endpoint(vol, resolved).ssh_auth_failed is True
+        run = _host_raising(
+            paramiko.BadHostKeyException(
+                "nas.local",
+                paramiko.RSAKey.generate(1024),
+                paramiko.RSAKey.generate(1024),
+            )
+        )
+        assert observe_ssh_endpoint(vol, resolved, run=run).ssh_auth_failed is True
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_command_available",
-        side_effect=TimeoutError("timed out"),
-    )
-    def test_timeout_is_unreachable(self, _mock: object) -> None:
+    def test_timeout_is_unreachable(self) -> None:
         vol, resolved = _remote_volume()
-        diag = observe_ssh_endpoint(vol, resolved)
+        diag = observe_ssh_endpoint(
+            vol, resolved, run=_host_raising(TimeoutError("timed out"))
+        )
         assert diag.ssh_reachable is False
         assert diag.ssh_auth_failed is False
         assert diag.ssh_error == "timed out"
 
-    @patch(
-        "nbkp.preflight.volume_checks.check_command_available",
-        side_effect=KeyError("bug"),
-    )
-    def test_programming_error_propagates(self, _mock: object) -> None:
+    def test_programming_error_propagates(self) -> None:
         vol, resolved = _remote_volume()
         with pytest.raises(KeyError):
-            observe_ssh_endpoint(vol, resolved)
+            observe_ssh_endpoint(vol, resolved, run=_host_raising(KeyError("bug")))
 
-    @patch(
-        "nbkp.preflight.ssh_checks.run_remote_command",
-        side_effect=paramiko.AuthenticationException("Authentication failed."),
-    )
-    def test_standalone_auth_failure(self, _mock: object) -> None:
-        diag = observe_standalone_endpoint(SshEndpoint(slug="b", host="b"), [])
+    def test_standalone_probe_reaches_the_server_through_its_proxy_chain(
+        self,
+    ) -> None:
+        server = SshEndpoint(slug="b", host="b")
+        bastion = SshEndpoint(slug="j", host="j")
+        run = FakeCommandRunner()
+        diag = observe_standalone_endpoint(server, [bastion], run=run)
+        assert diag.ssh_reachable is True
+        assert run.commands == [["true"]]
+        assert run.calls[0].endpoint == ResolvedEndpoint(
+            server=server, proxy_chain=[bastion]
+        )
+
+    def test_standalone_auth_failure(self) -> None:
+        run = FakeCommandRunner().on(
+            "true", returns=paramiko.AuthenticationException("Authentication failed.")
+        )
+        diag = observe_standalone_endpoint(SshEndpoint(slug="b", host="b"), [], run=run)
         assert diag.ssh_auth_failed is True
 
-    @patch("nbkp.preflight.ssh_checks.run_remote_command", side_effect=ValueError)
-    def test_standalone_programming_error_propagates(self, _mock: object) -> None:
+    def test_standalone_programming_error_propagates(self) -> None:
+        run = FakeCommandRunner().on("true", returns=ValueError())
         with pytest.raises(ValueError):
-            observe_standalone_endpoint(SshEndpoint(slug="b", host="b"), [])
+            observe_standalone_endpoint(SshEndpoint(slug="b", host="b"), [], run=run)
 
 
 class TestLatestSymlinkTarget:
     def _state(self, tmp_path: Path, target: str):  # type: ignore[no-untyped-def]
         vol = LocalVolume(slug="v", path=str(tmp_path))
         (tmp_path / "latest").symlink_to(target)
-        return _read_latest_state(vol, str(tmp_path), {})
+        return _read_latest_state(vol, str(tmp_path), {}, run=FakeCommandRunner())
 
     def test_non_snapshot_directory_is_invalid(self, tmp_path: Path) -> None:
         """Regression: ``latest -> snapshots/foo`` used to raise ValueError."""

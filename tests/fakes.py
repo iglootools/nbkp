@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from nbkp.config import Config, SyncConfig, Volume
-from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.remote.endpoints import ResolvedEndpoint, ResolvedEndpoints
 
 type Response = subprocess.CompletedProcess[str] | Exception
 
@@ -26,24 +26,44 @@ class CommandCall:
     cmd: list[str]
     volume: Volume
     input: str | None
+    endpoint: ResolvedEndpoint | None
+    """Where a remote volume's command was routed (``None`` for a local one)."""
+
+
+@dataclass(frozen=True)
+class _Rule:
+    prefix: tuple[str, ...]
+    volume: str | None
+    responses: list[Response]
+
+    def matches(self, cmd: list[str], volume: Volume) -> bool:
+        return tuple(cmd[: len(self.prefix)]) == self.prefix and (
+            self.volume is None or self.volume == volume.slug
+        )
 
 
 @dataclass
 class FakeCommandRunner:
     """A :class:`~nbkp.remote.dispatch.VolumeCommandRunner` answering from a script.
 
-    Each rule maps a command prefix (``("ls",)``, ``("btrfs", "subvolume")``)
-    to a response, or to a list of responses consumed in order (the last one
-    repeats).  The first matching rule wins; unmatched commands succeed with
-    empty output.  An ``Exception`` response is raised, like a transport
-    failure.
+    Each rule maps a command prefix (``("ls",)``, ``("btrfs", "subvolume")``),
+    optionally restricted to one volume slug, to a response, or to a list of
+    responses consumed in order (the last one repeats).  The first matching
+    rule wins; unmatched commands succeed with empty output.  An ``Exception``
+    response is raised, like a transport failure.
     """
 
-    rules: list[tuple[tuple[str, ...], list[Response]]] = field(default_factory=list)
+    rules: list[_Rule] = field(default_factory=list)
     calls: list[CommandCall] = field(default_factory=list)
 
-    def on(self, *prefix: str, returns: Response | list[Response]) -> FakeCommandRunner:
-        self.rules.append((prefix, returns if isinstance(returns, list) else [returns]))
+    def on(
+        self,
+        *prefix: str,
+        returns: Response | list[Response],
+        volume: str | None = None,
+    ) -> FakeCommandRunner:
+        responses = returns if isinstance(returns, list) else [returns]
+        self.rules.append(_Rule(prefix, volume, responses))
         return self
 
     def __call__(
@@ -54,22 +74,24 @@ class FakeCommandRunner:
         *,
         input: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        self.calls.append(CommandCall(cmd, volume, input))
-        response = self._response_for(cmd)
+        self.calls.append(
+            CommandCall(cmd, volume, input, resolved_endpoints.get(volume.slug))
+        )
+        response = self._response_for(cmd, volume)
         if isinstance(response, Exception):
             raise response
         else:
             return response
 
-    def _response_for(self, cmd: list[str]) -> Response:
-        queue = next((q for p, q in self.rules if tuple(cmd[: len(p)]) == p), None)
-        match queue:
+    def _response_for(self, cmd: list[str], volume: Volume) -> Response:
+        rule = next((r for r in self.rules if r.matches(cmd, volume)), None)
+        match rule:
             case None:
                 return completed()
-            case [only]:
+            case _Rule(responses=[only]):
                 return only
             case _:
-                return queue.pop(0)
+                return rule.responses.pop(0)
 
     @property
     def commands(self) -> list[list[str]]:

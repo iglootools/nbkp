@@ -19,19 +19,24 @@ Four-phase check hierarchy (each level gates the next):
    ``SyncStatus.from_diagnostics``)
 """
 
+import shutil
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from functools import partial
+
+lazy import paramiko
 
 from ..config import (
     Config,
     LocalVolume,
     RemoteVolume,
+    SshEndpoint,
     SyncConfig,
     SyncEndpoint,
     Volume,
 )
 from ..disks import MountObservation
+from ..remote.dispatch import CommandLocator, VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints, location_excluded
 from ..remote.errors import ssh_connection_errors
 from ..remote.resolution import (
@@ -91,6 +96,10 @@ def check_all_syncs(
     dry_run: bool = False,
     mount_observations: dict[str, MountObservation] | None = None,
     exclude_locations: Collection[str] = (),
+    *,
+    run: VolumeCommandRunner = run_on_volume,
+    which: CommandLocator = shutil.which,
+    ssh_config: paramiko.SSHConfig | None = None,
 ) -> PreflightResult:
     """Check SSH endpoints, volumes, and syncs in staged passes.
 
@@ -107,6 +116,11 @@ def check_all_syncs(
     Progress callbacks use labels like ``"ssh:localhost"``,
     ``"vol:usb-backup"``, ``"src:photos-local"``, ``"dst:photos-backup"``
     to describe what is being checked.
+
+    Every probe runs through *run* and finds local tools with *which*
+    (:func:`remote.dispatch.run_on_volume` and :func:`shutil.which` unless a
+    test injects fakes); standalone endpoints are enriched from *ssh_config*
+    (default: ``~/.ssh/config``).
     """
     re = resolved_endpoints or {}
     progress = _Progress(on_check_start, on_check_end)
@@ -120,12 +134,19 @@ def check_all_syncs(
         re,
         _standalone_candidates(config, needed_volumes, only_syncs, exclude_locations),
         progress,
+        _Host(run, which, partial(enrich_from_ssh_config, ssh_config=ssh_config)),
     )
     volume_statuses = _check_volumes(
-        config, needed_volumes, ssh_statuses, re, mount_observations or {}, progress
+        config,
+        needed_volumes,
+        ssh_statuses,
+        re,
+        mount_observations or {},
+        progress,
+        run=run,
     )
     src_ep_statuses, dst_ep_statuses = _check_sync_endpoints(
-        config, syncs, volume_statuses, re, progress
+        config, syncs, volume_statuses, re, progress, run=run
     )
     return PreflightResult(
         ssh_endpoint_statuses=ssh_statuses,
@@ -196,6 +217,15 @@ def _needed_volumes(
     )
 
 
+@dataclass(frozen=True)
+class _Host:
+    """How the SSH endpoint phase reaches hosts (see :func:`check_all_syncs`)."""
+
+    run: VolumeCommandRunner
+    which: CommandLocator
+    enrich: Callable[[SshEndpoint], SshEndpoint]
+
+
 def _check_ssh_endpoints(
     config: Config,
     needed_volumes: set[str],
@@ -203,6 +233,7 @@ def _check_ssh_endpoints(
     resolved_endpoints: ResolvedEndpoints,
     standalone_candidates: set[str],
     progress: _Progress,
+    host: _Host,
 ) -> dict[str, SshEndpointStatus]:
     """Each endpoint is probed once, through a representative volume.
 
@@ -224,6 +255,7 @@ def _check_ssh_endpoints(
                 vol_slugs,
                 syncs,
                 resolved_endpoints,
+                host,
             ),
         )
         for ssh_slug, vol_slugs in by_endpoint.items()
@@ -236,7 +268,7 @@ def _check_ssh_endpoints(
     volume_endpoints = {**probed, **excluded}
     standalone = {
         slug: progress.track(
-            f"ssh:{slug}", partial(_check_standalone_endpoint, config, slug)
+            f"ssh:{slug}", partial(_check_standalone_endpoint, config, slug, host)
         )
         for slug in _standalone_endpoints(
             standalone_candidates, volume_endpoints.keys()
@@ -357,11 +389,14 @@ def _check_volume_ssh_endpoint(
     vol_slugs: list[str],
     syncs: dict[str, SyncConfig],
     resolved_endpoints: ResolvedEndpoints,
+    host: _Host,
 ) -> SshEndpointStatus:
     diag = observe_ssh_endpoint(
         config.volumes[vol_slugs[0]],
         resolved_endpoints=resolved_endpoints,
         probe_mount_tools=any(config.volumes[v].mount is not None for v in vol_slugs),
+        run=host.run,
+        which=host.which,
     )
     return SshEndpointStatus.from_diagnostics(
         slug=ssh_slug,
@@ -370,15 +405,15 @@ def _check_volume_ssh_endpoint(
     )
 
 
-def _check_standalone_endpoint(config: Config, slug: str) -> SshEndpointStatus:
+def _check_standalone_endpoint(
+    config: Config, slug: str, host: _Host
+) -> SshEndpointStatus:
     """Reachability-only probe for an endpoint no needed volume uses."""
-    server = enrich_from_ssh_config(config.ssh_endpoints[slug])
-    proxy_chain = [
-        enrich_from_ssh_config(hop) for hop in resolve_proxy_chain(config, server)
-    ]
+    server = host.enrich(config.ssh_endpoints[slug])
+    proxy_chain = [host.enrich(hop) for hop in resolve_proxy_chain(config, server)]
     return SshEndpointStatus.from_diagnostics(
         slug=slug,
-        diagnostics=observe_standalone_endpoint(server, proxy_chain),
+        diagnostics=observe_standalone_endpoint(server, proxy_chain, run=host.run),
     )
 
 
@@ -437,6 +472,8 @@ def _check_volumes(
     resolved_endpoints: ResolvedEndpoints,
     mount_observations: dict[str, MountObservation],
     progress: _Progress,
+    *,
+    run: VolumeCommandRunner,
 ) -> dict[str, VolumeStatus]:
     """Observe and interpret every needed volume (sorted for stable output)."""
     return {
@@ -450,6 +487,7 @@ def _check_volumes(
                 ),
                 resolved_endpoints,
                 mount_observations.get(slug),
+                run=run,
             ),
         )
         for slug in sorted(needed_volumes)
@@ -461,6 +499,8 @@ def _check_volume(
     ssh_status: SshEndpointStatus,
     resolved_endpoints: ResolvedEndpoints,
     mount_observation: MountObservation | None,
+    *,
+    run: VolumeCommandRunner,
 ) -> VolumeStatus:
     """Observe one volume unless its (remote) SSH endpoint is inactive."""
     host_tools = ssh_status.diagnostics.host_tools
@@ -473,6 +513,7 @@ def _check_volume(
                 mount_tools=ssh_status.diagnostics.mount_tools,
                 resolved_endpoints=resolved_endpoints,
                 mount_observation=mount_observation,
+                run=run,
             )
             if observable and host_tools is not None
             else None
@@ -518,6 +559,8 @@ def _check_sync_endpoints(
     volume_statuses: dict[str, VolumeStatus],
     resolved_endpoints: ResolvedEndpoints,
     progress: _Progress,
+    *,
+    run: VolumeCommandRunner,
 ) -> tuple[dict[str, SourceEndpointStatus], dict[str, DestinationEndpointStatus]]:
     src_eps = {
         config.source_endpoint(s).slug: config.source_endpoint(s)
@@ -537,6 +580,7 @@ def _check_sync_endpoints(
                 volume_statuses[ep.volume],
                 _endpoint_probe(config, ep, volume_statuses),
                 resolved_endpoints,
+                run=run,
             ),
         )
         for slug, ep in src_eps.items()
@@ -550,6 +594,7 @@ def _check_sync_endpoints(
                 volume_statuses[ep.volume],
                 _endpoint_probe(config, ep, volume_statuses),
                 resolved_endpoints,
+                run=run,
             ),
         )
         for slug, ep in dst_eps.items()
@@ -562,10 +607,12 @@ def _check_source_endpoint(
     volume_status: VolumeStatus,
     probe: _EndpointProbe | None,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
 ) -> SourceEndpointStatus:
     try:
         diagnostics = (
-            observe_source_endpoint(ep, probe.volume, resolved_endpoints)
+            observe_source_endpoint(ep, probe.volume, resolved_endpoints, run=run)
             if probe is not None
             else None
         )
@@ -587,6 +634,8 @@ def _check_destination_endpoint(
     volume_status: VolumeStatus,
     probe: _EndpointProbe | None,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
 ) -> DestinationEndpointStatus:
     try:
         diagnostics = (
@@ -596,6 +645,7 @@ def _check_destination_endpoint(
                 probe.capabilities,
                 resolved_endpoints,
                 host_tools=probe.host_tools,
+                run=run,
             )
             if probe is not None
             else None

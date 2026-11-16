@@ -20,6 +20,7 @@ from ..fsprotocol import (
     STAGING_DIR,
     Snapshot,
 )
+from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 from .probes import (
     check_directory_exists,
@@ -44,9 +45,11 @@ def observe_source_endpoint(
     endpoint: SyncEndpoint,
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> SourceEndpointDiagnostics:
     sentinel_exists = check_endpoint_sentinel(
-        volume, endpoint.subdir, SOURCE_SENTINEL, resolved_endpoints
+        volume, endpoint.subdir, SOURCE_SENTINEL, resolved_endpoints, run=run
     )
     src_ep = resolve_endpoint_path(volume, endpoint.subdir)
 
@@ -56,9 +59,11 @@ def observe_source_endpoint(
         **(
             {
                 "snapshot_dirs": _check_snapshot_dirs(
-                    volume, src_ep, resolved_endpoints
+                    volume, src_ep, resolved_endpoints, run=run
                 ),
-                "latest": _read_latest_state(volume, src_ep, resolved_endpoints),
+                "latest": _read_latest_state(
+                    volume, src_ep, resolved_endpoints, run=run
+                ),
             }
             if endpoint.snapshot_mode != "none"
             else {}
@@ -73,25 +78,36 @@ def observe_destination_endpoint(
     resolved_endpoints: ResolvedEndpoints,
     *,
     host_tools: HostToolCapabilities,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> DestinationEndpointDiagnostics:
     sentinel_exists = check_endpoint_sentinel(
-        volume, endpoint.subdir, DESTINATION_SENTINEL, resolved_endpoints
+        volume, endpoint.subdir, DESTINATION_SENTINEL, resolved_endpoints, run=run
     )
     dst_ep = resolve_endpoint_path(volume, endpoint.subdir)
 
     return DestinationEndpointDiagnostics(
         endpoint_slug=endpoint.slug,
         sentinel_exists=sentinel_exists,
-        endpoint_writable=check_directory_writable(volume, dst_ep, resolved_endpoints),
+        endpoint_writable=check_directory_writable(
+            volume, dst_ep, resolved_endpoints, run=run
+        ),
         btrfs=_check_btrfs_diagnostics(
-            endpoint, volume, capabilities, dst_ep, resolved_endpoints, host_tools
+            endpoint,
+            volume,
+            capabilities,
+            dst_ep,
+            resolved_endpoints,
+            host_tools,
+            run=run,
         ),
         **(
             {
                 "snapshot_dirs": _check_snapshot_dirs(
-                    volume, dst_ep, resolved_endpoints
+                    volume, dst_ep, resolved_endpoints, run=run
                 ),
-                "latest": _read_latest_state(volume, dst_ep, resolved_endpoints),
+                "latest": _read_latest_state(
+                    volume, dst_ep, resolved_endpoints, run=run
+                ),
             }
             if endpoint.snapshot_mode != "none"
             else {}
@@ -106,6 +122,8 @@ def _check_btrfs_diagnostics(
     dst_ep: str,
     resolved_endpoints: ResolvedEndpoints,
     host_tools: HostToolCapabilities,
+    *,
+    run: VolumeCommandRunner,
 ) -> BtrfsStagingSubvolumeDiagnostics | None:
     if not (
         endpoint.btrfs_snapshots.enabled
@@ -118,16 +136,18 @@ def _check_btrfs_diagnostics(
         f"{endpoint.subdir}/{STAGING_DIR}" if endpoint.subdir else STAGING_DIR
     )
     staging_path = f"{dst_ep}/{STAGING_DIR}"
-    staging_exists = check_directory_exists(volume, staging_path, resolved_endpoints)
+    staging_exists = check_directory_exists(
+        volume, staging_path, resolved_endpoints, run=run
+    )
     return BtrfsStagingSubvolumeDiagnostics(
         staging_exists=staging_exists,
         staging_is_subvolume=(
-            check_btrfs_subvolume(volume, staging_subdir, resolved_endpoints)
+            check_btrfs_subvolume(volume, staging_subdir, resolved_endpoints, run=run)
             if staging_exists
             else False
         ),
         staging_writable=(
-            check_directory_writable(volume, staging_path, resolved_endpoints)
+            check_directory_writable(volume, staging_path, resolved_endpoints, run=run)
             if staging_exists
             else None
         ),
@@ -138,11 +158,13 @@ def _check_snapshot_dirs(
     volume: Volume,
     endpoint_path: str,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
 ) -> SnapshotDirsDiagnostics:
     snaps_path = f"{endpoint_path}/{SNAPSHOTS_DIR}"
-    exists = check_directory_exists(volume, snaps_path, resolved_endpoints)
+    exists = check_directory_exists(volume, snaps_path, resolved_endpoints, run=run)
     writable = (
-        check_directory_writable(volume, snaps_path, resolved_endpoints)
+        check_directory_writable(volume, snaps_path, resolved_endpoints, run=run)
         if exists
         else None
     )
@@ -153,12 +175,14 @@ def _read_latest_state(
     volume: Volume,
     endpoint_path: str,
     resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
 ) -> LatestSymlinkState:
     latest_path = f"{endpoint_path}/{LATEST_LINK}"
-    if not check_symlink_exists(volume, latest_path, resolved_endpoints):
+    if not check_symlink_exists(volume, latest_path, resolved_endpoints, run=run):
         return LatestSymlinkState(exists=False)
 
-    raw_target = read_symlink_target(volume, latest_path, resolved_endpoints)
+    raw_target = read_symlink_target(volume, latest_path, resolved_endpoints, run=run)
     match raw_target:
         case None:
             return LatestSymlinkState(exists=False)
@@ -168,7 +192,7 @@ def _read_latest_state(
             snapshot = (
                 _parse_snapshot(target)
                 if check_directory_exists(
-                    volume, f"{endpoint_path}/{target}", resolved_endpoints
+                    volume, f"{endpoint_path}/{target}", resolved_endpoints, run=run
                 )
                 else None
             )
