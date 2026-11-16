@@ -181,25 +181,18 @@ def build_rsync_command(
             return [*rsync_args, f"{src_path}/", _dest_target(dst_path, dest_suffix)]
 
 
-def run_rsync(
-    sync: SyncConfig,
-    config: Config,
-    dry_run: bool = False,
-    link_dest: str | None = None,
-    progress: ProgressMode | None = None,
-    on_output: Callable[[str], None] | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-    dest_suffix: str | None = None,
+type ProcessRunner = Callable[
+    [list[str], Callable[[str], None] | None], subprocess.CompletedProcess[str]
+]
+"""Runs a command on the orchestrator, forwarding its output to the callback
+when one is given, and capturing it otherwise."""
+
+
+def run_local_process(
+    cmd: list[str], on_output: Callable[[str], None] | None = None
 ) -> subprocess.CompletedProcess[str]:
-    cmd = build_rsync_command(
-        sync,
-        config,
-        dry_run,
-        link_dest,
-        progress,
-        resolved_endpoints,
-        dest_suffix=dest_suffix,
-    )
+    """Run *cmd*: its stdout and stderr captured apart when *on_output* is
+    ``None``, merged and forwarded to *on_output* as they arrive otherwise."""
     if on_output is None:
         return subprocess.run(cmd, capture_output=True, text=True, check=False)
     else:
@@ -214,14 +207,17 @@ _STREAM_CHUNK_SIZE = 64 * 1024
 
 
 def _run_streaming(
-    cmd: list[str], on_output: Callable[[str], None]
+    cmd: list[str],
+    on_output: Callable[[str], None],
+    chunk_size: int = _STREAM_CHUNK_SIZE,
 ) -> subprocess.CompletedProcess[str]:
-    """Run *cmd*, forwarding its merged stdout/stderr to *on_output*."""
+    """Run *cmd*, forwarding its merged stdout/stderr to *on_output*, read at
+    most *chunk_size* bytes at a time."""
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     assert proc.stdout is not None
     fd = proc.stdout.fileno()
     decoder = _text_decoder()
-    raw_chunks = iter(lambda: os.read(fd, _STREAM_CHUNK_SIZE), b"")
+    raw_chunks = iter(lambda: os.read(fd, chunk_size), b"")
     output_chunks = [
         *(_forward(decoder.decode(raw), on_output) for raw in raw_chunks),
         _forward(decoder.decode(b"", final=True), on_output),
@@ -249,3 +245,28 @@ def _forward(chunk: str, on_output: Callable[[str], None]) -> str:
     if chunk:
         on_output(chunk)
     return chunk
+
+
+def run_rsync(
+    sync: SyncConfig,
+    config: Config,
+    dry_run: bool = False,
+    link_dest: str | None = None,
+    progress: ProgressMode | None = None,
+    on_output: Callable[[str], None] | None = None,
+    resolved_endpoints: ResolvedEndpoints | None = None,
+    dest_suffix: str | None = None,
+    run_process: ProcessRunner = run_local_process,
+) -> subprocess.CompletedProcess[str]:
+    """*run_process* runs the built command: :func:`run_local_process` by
+    default, a fake in tests."""
+    cmd = build_rsync_command(
+        sync,
+        config,
+        dry_run,
+        link_dest,
+        progress,
+        resolved_endpoints,
+        dest_suffix=dest_suffix,
+    )
+    return run_process(cmd, on_output)
