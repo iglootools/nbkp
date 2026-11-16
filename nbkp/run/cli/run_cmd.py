@@ -34,15 +34,19 @@ from ...policy import Strictness
 from ...preflight import (
     PreflightError,
     PreflightResult,
-    SyncStatus,
     check_step_count,
-    is_fatal,
 )
 from ...preflight.output import print_human_check
 from ...remote.endpoints import NetworkType, ResolvedEndpoints
 from ...sync import ProgressMode, SyncResult, result_severity
 from ...sync.output import build_human_results_sections
-from ..pipeline import PipelineResult, SyncCallbacks, check_and_run
+from ..pipeline import (
+    PipelineResult,
+    SyncCallbacks,
+    check_and_run,
+    fatal_sync_errors,
+    run_failed,
+)
 
 _ABORT_DETAIL_INDENT = 2
 
@@ -197,11 +201,7 @@ def run(
     _print_outcome(
         pipeline, cfg, resolved, output, strictness, dry_run, hint, umount_results
     )
-    if (
-        pipeline.has_preflight_errors
-        or pipeline.has_sync_failures
-        or any(not r.success for r in umount_results)
-    ):
+    if run_failed(pipeline, umount_results):
         raise typer.Exit(1)
 
 
@@ -293,11 +293,9 @@ def _print_outcome(
 ) -> None:
     match (output, pipeline.has_preflight_errors):
         case (OutputFormat.JSON, aborted):
-            echo_json(
-                _json_payload(pipeline, hint if aborted else None, umount_results)
-            )
+            echo_json(run_json(pipeline, hint if aborted else None, umount_results))
         case (OutputFormat.HUMAN, True):
-            Console(stderr=True).print(_abort_message(pipeline, strictness, hint))
+            Console(stderr=True).print(abort_message(pipeline, strictness, hint))
         case (OutputFormat.HUMAN, False):
             Console().print(
                 _results_panel(pipeline, cfg, resolved, strictness, dry_run)
@@ -306,11 +304,14 @@ def _print_outcome(
         print_umount_failures(umount_results, mount_display_names(cfg))
 
 
-def _json_payload(
+def run_json(
     pipeline: PipelineResult,
     hint: str | None,
     umount_results: list[UmountResult],
 ) -> dict[str, object]:
+    """``run -o json``: the preflight statuses, the sync results, the umount
+    outcome of each mount-managed volume, and, when preflight aborted the
+    run, the troubleshoot command (*hint*)."""
     return {
         "volumes": list(pipeline.preflight.volume_statuses.values()),
         "syncs": list(pipeline.preflight.sync_statuses.values()),
@@ -323,21 +324,12 @@ def _json_payload(
     }
 
 
-def _fatal_sync_errors(
-    sync_statuses: dict[str, SyncStatus], strictness: Strictness
-) -> dict[str, list[str]]:
-    """Errors of the syncs that made preflight abort under *strictness*."""
-    return {
-        slug: sorted(e.value for e in s.errors)
-        for slug, s in sync_statuses.items()
-        if is_fatal(s, strictness)
-    }
-
-
-def _abort_message(
+def abort_message(
     pipeline: PipelineResult, strictness: Strictness, hint: str
 ) -> RenderableType:
-    errored = _fatal_sync_errors(pipeline.preflight.sync_statuses, strictness)
+    """Why preflight aborted the run: each sync whose errors are fatal under
+    *strictness*, and the troubleshoot command (*hint*) that explains them."""
+    errored = fatal_sync_errors(pipeline.preflight.sync_statuses, strictness)
     plural = "s" if len(errored) != 1 else ""
     # Text, not markup: slugs and error values are not nbkp-authored markup.
     return Group(
