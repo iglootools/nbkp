@@ -70,7 +70,10 @@ nbkp supports exactly one Python version, the one pinned in `mise.toml` (`[tools
 local development, CI and the `requires-python` floor all use it, so there is no separate
 compatibility check. Raising it means moving `[tools] python` (then `mise lock`),
 `requires-python`, ruff's `target-version`, pyright's `pythonVersion`, and the base image in
-`nbkp/remote/testkit/dockerbuild/Dockerfile.btrfs-local-test` together. See the
+`nbkp/remote/testkit/dockerbuild/Dockerfile.btrfs-local-test` together. Renovate keeps that
+Dockerfile's Python and uv pins in step with `mise.toml` on its own: `# renovate:` comments
+there point it at the same datasources as the mise manager, so each pin's two copies land in
+the same update (see `renovate.json`). See the
 [Python Version Policy](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#python-version-policy)
 for the rationale.
 
