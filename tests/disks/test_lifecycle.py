@@ -15,6 +15,7 @@ from nbkp.config import (
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
+    Volume,
 )
 from nbkp.credentials import CredentialError, CredentialErrorReason
 from nbkp.disks.detection import DeviceProbeError
@@ -837,9 +838,13 @@ class TestLocationExcludedVolumes:
     @pytest.mark.parametrize("mounting", [True, False])
     def test_plan_skips_excluded_volume(self, mounting: bool) -> None:
         cfg, resolved = _config_with_excluded_remote_mount()
-        with patch(
-            "nbkp.disks.plan.check_mount_status",
-            return_value=MountCapabilities(device_present=False),
-        ):
-            plans = plan_lifecycle(cfg, resolved, mounting=mounting)
+        probed: list[str] = []
+
+        def probe(volume: Volume, *_: object) -> MountCapabilities:
+            probed.append(volume.slug)
+            return MountCapabilities(device_present=False)
+
+        plans = plan_lifecycle(cfg, resolved, mounting=mounting, probe=probe)
+
         assert [p.volume_slug for p in plans] == ["usb"]
+        assert probed == ["usb"]
