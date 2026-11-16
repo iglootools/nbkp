@@ -1,7 +1,5 @@
 """Tests for mount-related preflight checks (udisks2 backend)."""
 
-from unittest.mock import patch
-
 import pytest
 from rich.text import Text
 
@@ -11,7 +9,6 @@ from nbkp.config import (
     MountConfig,
 )
 from nbkp.disks import MountCapabilities, MountToolCapabilities
-from nbkp.disks.detection import DeviceProbeError
 from nbkp.disks.models import MountFailureReason
 from nbkp.disks.mount_checks import (
     FstabEntry,
@@ -341,21 +338,9 @@ class TestFormatMountStatus:
 class TestObservationReuse:
     """Verify that mount observation values bypass runtime detection probes."""
 
-    @patch("nbkp.disks.mount_checks.detect_device_present")
-    @patch("nbkp.disks.mount_checks.discover_cleartext_device")
-    @patch("nbkp.disks.mount_checks.find_mountpoint")
-    @patch(
-        "nbkp.disks.mount_checks._check_fstab_entry",
-        return_value=FstabEntry(source="/dev/mapper/luks-x", target="/mnt/encrypted"),
-    )
-    def test_observation_skips_runtime_probes(
-        self,
-        _mock_fstab: object,
-        mock_findmnt: object,
-        mock_discover: object,
-        mock_device: object,
-    ) -> None:
-        """When observation is provided, runtime detection functions are not called."""
+    def test_observation_skips_runtime_probes(self) -> None:
+        """When observation is provided, only the fstab entry is read."""
+        run = _fstab_line("/dev/mapper/luks-x", "/mnt/encrypted")
         obs = MountObservation(
             device_present=True,
             luks_unlocked=True,
@@ -364,13 +349,10 @@ class TestObservationReuse:
             effective_path="/mnt/encrypted",
         )
         result = check_mount_capabilities(
-            _encrypted_vol(), _encrypted_mount(), _MOUNT_TOOLS, {}, obs
+            _encrypted_vol(), _encrypted_mount(), _MOUNT_TOOLS, {}, obs, run=run
         )
 
-        mock_device.assert_not_called()  # type: ignore[union-attr]
-        mock_discover.assert_not_called()  # type: ignore[union-attr]
-        mock_findmnt.assert_not_called()  # type: ignore[union-attr]
-
+        assert [cmd[:2] for cmd in run.commands] == [["findmnt", "--fstab"]]
         assert result.device_present is True
         assert result.luks_unlocked is True
         assert result.mounted is True
@@ -378,99 +360,85 @@ class TestObservationReuse:
         assert result.effective_path == "/mnt/encrypted"
         assert result.has_fstab_entry is True
 
-    @patch(
-        "nbkp.disks.mount_checks._check_fstab_entry",
-        return_value=FstabEntry(source="/dev/mapper/luks-x", target="/mnt/encrypted"),
-    )
-    @patch("nbkp.disks.mount_checks.find_mountpoint", return_value="/mnt/encrypted")
-    @patch(
-        "nbkp.disks.mount_checks.discover_cleartext_device",
-        return_value="/dev/mapper/luks-x",
-    )
-    @patch("nbkp.disks.mount_checks.detect_device_present", return_value=True)
-    def test_probes_when_no_observation(
-        self,
-        mock_device: object,
-        mock_discover: object,
-        mock_findmnt: object,
-        _mock_fstab: object,
-    ) -> None:
-        """Without an observation, runtime detection functions are called once."""
-        result = check_mount_capabilities(
-            _encrypted_vol(), _encrypted_mount(), _MOUNT_TOOLS, {}, None
+    def test_probes_when_no_observation(self) -> None:
+        """Without an observation, the runtime state is probed on the host."""
+        run = (
+            _fstab_line("/dev/mapper/luks-x", "/mnt/encrypted")
+            .on("lsblk", returns=completed(0, "sdb part\nluks-x crypt\n"))
+            .on("findmnt", "--source", returns=completed(0, "/mnt/encrypted\n"))
         )
-        mock_device.assert_called_once()  # type: ignore[union-attr]
+        result = check_mount_capabilities(
+            _encrypted_vol(), _encrypted_mount(), _MOUNT_TOOLS, {}, None, run=run
+        )
         # lsblk runs once: the cleartext device is reused for the mountpoint.
-        mock_discover.assert_called_once()  # type: ignore[union-attr]
+        assert run.commands == [
+            ["test", "-e", f"/dev/disk/by-uuid/{_ENC_UUID}"],
+            ["lsblk", "-rno", "NAME,TYPE", f"/dev/disk/by-uuid/{_ENC_UUID}"],
+            ["findmnt", "--source", "/dev/mapper/luks-x", "-n", "-o", "TARGET"],
+            [
+                "findmnt",
+                "--fstab",
+                "--target",
+                "/mnt/encrypted",
+                "-n",
+                "-P",
+                "-o",
+                "SOURCE,TARGET",
+            ],
+        ]
         assert result.device_present is True
         assert result.luks_unlocked is True
         assert result.mounted is True
+        assert result.cleartext_device == "/dev/mapper/luks-x"
+        assert result.effective_path == "/mnt/encrypted"
 
 
 class TestToolGating:
     """Probes for tools reported missing are skipped (state unknown)."""
 
-    @patch("nbkp.disks.mount_checks._check_fstab_entry")
-    @patch("nbkp.disks.mount_checks.find_mountpoint")
-    @patch("nbkp.disks.mount_checks.discover_cleartext_device")
-    @patch("nbkp.disks.mount_checks.detect_device_present", return_value=True)
-    def test_missing_findmnt_and_lsblk(
-        self,
-        _mock_device: object,
-        mock_discover: object,
-        mock_findmnt: object,
-        mock_fstab: object,
-    ) -> None:
+    def test_missing_findmnt_and_lsblk(self) -> None:
         tools = MountToolCapabilities(
             has_udisksctl=True, udisksd_running=True, has_findmnt=False, has_lsblk=False
         )
+        run = FakeCommandRunner()
         result = check_mount_capabilities(
-            _encrypted_vol(), _encrypted_mount(), tools, {}, None
+            _encrypted_vol(), _encrypted_mount(), tools, {}, None, run=run
         )
-        mock_discover.assert_not_called()  # type: ignore[union-attr]
-        mock_findmnt.assert_not_called()  # type: ignore[union-attr]
-        mock_fstab.assert_not_called()  # type: ignore[union-attr]
+        # Only the device presence probe ran: no lsblk, no findmnt.
+        assert run.commands == [["test", "-e", f"/dev/disk/by-uuid/{_ENC_UUID}"]]
         # Unknown, not False: no false FSTAB_MOUNTPOINT_MISMATCH / unlocked state.
         assert result.has_fstab_entry is None
         assert result.luks_unlocked is None
         assert result.mounted is None
 
-    @patch("nbkp.disks.mount_checks._check_fstab_entry", return_value=None)
-    @patch("nbkp.disks.mount_checks.find_mountpoint", return_value=None)
-    @patch(
-        "nbkp.disks.mount_checks.discover_cleartext_device",
-        side_effect=DeviceProbeError("lsblk", 1, "boom"),
-    )
-    @patch("nbkp.disks.mount_checks.detect_device_present", return_value=True)
-    def test_failed_lsblk_is_unknown(self, *_mocks: object) -> None:
+    def test_failed_lsblk_is_unknown(self) -> None:
+        run = FakeCommandRunner().on("lsblk", returns=completed(1, stderr="boom"))
         result = check_mount_capabilities(
-            _encrypted_vol(), _encrypted_mount(), _MOUNT_TOOLS, {}, None
+            _encrypted_vol(), _encrypted_mount(), _MOUNT_TOOLS, {}, None, run=run
         )
+        assert result.device_present is True
         assert result.luks_unlocked is None
         assert result.mounted is None
 
-    @patch("nbkp.disks.mount_checks._check_fstab_entry", return_value=None)
-    @patch(
-        "nbkp.disks.mount_checks.find_mountpoint",
-        side_effect=DeviceProbeError("findmnt", 2, "boom"),
-    )
-    @patch("nbkp.disks.mount_checks.detect_device_present", return_value=True)
-    def test_failed_findmnt_is_unknown(self, *_mocks: object) -> None:
+    def test_failed_findmnt_is_unknown(self) -> None:
+        run = FakeCommandRunner().on(
+            "findmnt", "--source", returns=completed(2, stderr="boom")
+        )
         result = check_mount_capabilities(
-            _unencrypted_vol(), _unencrypted_mount(), _MOUNT_TOOLS, {}, None
+            _unencrypted_vol(), _unencrypted_mount(), _MOUNT_TOOLS, {}, None, run=run
         )
         assert result.mounted is None
         assert result.effective_path is None
 
-    @patch("nbkp.disks.mount_checks.probe_mount_tools")
-    @patch("nbkp.disks.mount_checks._check_fstab_entry", return_value=None)
-    @patch("nbkp.disks.mount_checks.find_mountpoint", return_value=None)
-    @patch("nbkp.disks.mount_checks.detect_device_present", return_value=False)
-    def test_check_mount_status_does_not_probe_tools(
-        self, _d: object, _f: object, _fs: object, mock_probe: object
-    ) -> None:
-        check_mount_status(_unencrypted_vol(), _unencrypted_mount(), {})
-        mock_probe.assert_not_called()  # type: ignore[union-attr]
+    def test_check_mount_status_does_not_probe_tools(self) -> None:
+        run = FakeCommandRunner().on("test", "-e", returns=completed(1))
+        check_mount_status(_unencrypted_vol(), _unencrypted_mount(), {}, run=run)
+        # Device and fstab probes only: no ``udisksctl status``, no udisks
+        # btrfs module lookup (``sh -c``), no ``which``.
+        assert [cmd[:2] for cmd in run.commands] == [
+            ["test", "-e"],
+            ["findmnt", "--fstab"],
+        ]
 
 
 class TestFstabSourceMatches:
@@ -515,17 +483,12 @@ class TestFstabSourceMatches:
     ) -> None:
         assert fstab_source_matches(source, _encrypted_mount(), cleartext) is expected
 
-    @patch(
-        "nbkp.disks.mount_checks._check_fstab_entry",
-        return_value=FstabEntry(
-            source="UUID=11111111-2222-3333-4444-555555555555", target="/mnt/usb"
-        ),
-    )
-    @patch("nbkp.disks.mount_checks.find_mountpoint", return_value=None)
-    @patch("nbkp.disks.mount_checks.detect_device_present", return_value=True)
-    def test_entry_for_another_device_is_a_mismatch(self, *_mocks: object) -> None:
+    def test_entry_for_another_device_is_a_mismatch(self) -> None:
+        run = _fstab_line("UUID=11111111-2222-3333-4444-555555555555", "/mnt/usb").on(
+            "findmnt", "--source", returns=completed(1)
+        )
         result = check_mount_capabilities(
-            _unencrypted_vol(), _unencrypted_mount(), _MOUNT_TOOLS, {}, None
+            _unencrypted_vol(), _unencrypted_mount(), _MOUNT_TOOLS, {}, None, run=run
         )
         assert result.has_fstab_entry is False
         assert result.fstab_source == "UUID=11111111-2222-3333-4444-555555555555"
