@@ -20,7 +20,7 @@ from ...config import Config, LocalVolume, MountConfig, RemoteVolume, SyncConfig
 from ...disks import DeviceProbeError, discover_cleartext_device, generate_auth_rules
 from ...policy import Severity, Strictness
 from ...remote.endpoints import ResolvedEndpoints
-from ...remote.errors import SSH_CONNECTION_ERRORS
+from ...remote.errors import ssh_connection_errors
 from ..severity import PreflightError, severity_for_error
 from ..status.endpoint import (
     DestinationEndpointError,
@@ -250,7 +250,7 @@ def _discover_cleartext_device(
     """
     try:
         return discover_cleartext_device(vol, mount.device_uuid, resolved_endpoints)
-    except (*SSH_CONNECTION_ERRORS, DeviceProbeError):
+    except (*ssh_connection_errors(), DeviceProbeError):
         return None
 
 

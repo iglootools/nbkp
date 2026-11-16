@@ -282,3 +282,35 @@ class TestResolveAllEndpoints:
         )
         assert resolved["nas"].server.slug == "nas-lan"
         assert looked_up == []
+
+    def test_resolves_each_hostname_once(self) -> None:
+        config = Config(
+            ssh_endpoints={
+                "nas-lan": SshEndpoint(slug="nas-lan", host="nas.lan"),
+                "nas-wan": SshEndpoint(slug="nas-wan", host="nas.example.com"),
+            },
+            volumes={
+                slug: RemoteVolume(
+                    slug=slug,
+                    ssh_endpoint="nas-lan",
+                    ssh_endpoints=["nas-lan", "nas-wan"],
+                    path=f"/{slug}",
+                )
+                for slug in ("drive-a", "drive-b")
+            },
+        )
+        table = {"nas.lan": {"192.168.1.100"}, "nas.example.com": {"8.8.8.8"}}
+        queried: list[str] = []
+
+        def lookup(host: str) -> set[str] | None:
+            queried.append(host)
+            return table.get(host)
+
+        resolved = resolve_all_endpoints(
+            config,
+            EndpointFilter(network=NetworkType.PRIVATE),
+            ssh_config=_NO_SSH_CONFIG,
+            lookup=lookup,
+        )
+        assert {r.server.slug for r in resolved.values()} == {"nas-lan"}
+        assert sorted(queried) == ["nas.example.com", "nas.lan"]

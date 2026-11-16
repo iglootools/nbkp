@@ -1,8 +1,10 @@
 import shlex
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import invoke.exceptions
+import pytest
 
 from nbkp.config import LocalVolume, RemoteVolume, SshConnectionOptions, SshEndpoint
 from nbkp.remote import (
@@ -13,6 +15,7 @@ from nbkp.remote import (
 )
 from nbkp.remote.endpoints import ResolvedEndpoint
 from nbkp.remote.fabricssh import StdinClosedProcess
+from nbkp.remote.pool import connection_scope
 from nbkp.remote.ssh import wrap_cmd
 
 _SSH_KEY = str(Path("~/.ssh/key").expanduser())
@@ -408,7 +411,7 @@ class TestRunRemoteCommand:
         mock_paramiko: MagicMock,
         ssh_endpoint: SshEndpoint,
     ) -> None:
-        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_conn = mock_conn_cls.return_value
         mock_conn.run.return_value = MagicMock(exited=0, stdout="", stderr="")
 
         run_remote_command(ssh_endpoint, ["test", "-f", "~/my backups/.nbkp-vol"])
@@ -423,7 +426,7 @@ class TestRunRemoteCommand:
         mock_paramiko: MagicMock,
         ssh_endpoint: SshEndpoint,
     ) -> None:
-        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_conn = mock_conn_cls.return_value
         mock_result = MagicMock(exited=0, stdout="file1\nfile2\n", stderr="")
         mock_conn.run.return_value = mock_result
 
@@ -470,7 +473,7 @@ class TestRunRemoteCommand:
                 },
             ),
         )
-        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_conn = mock_conn_cls.return_value
         mock_result = MagicMock(exited=0, stdout="ok\n", stderr="")
         mock_conn.run.return_value = mock_result
 
@@ -508,13 +511,17 @@ class TestRunRemoteCommand:
                 server_alive_interval=60,
             ),
         )
-        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_conn = mock_conn_cls.return_value
         mock_result = MagicMock(exited=0, stdout="ok\n", stderr="")
         mock_conn.run.return_value = mock_result
+        # Like Fabric, no transport until the connection is opened.
+        transport = MagicMock()
+        mock_conn.transport = None
+        mock_conn.open.side_effect = lambda: setattr(mock_conn, "transport", transport)
 
         run_remote_command(server, ["echo", "ok"])
 
-        mock_conn.transport.set_keepalive.assert_called_once_with(60)
+        transport.set_keepalive.assert_called_once_with(60)
 
     @patch("nbkp.remote.fabricssh.paramiko")
     @patch("nbkp.remote.fabricssh.Connection")
@@ -532,7 +539,7 @@ class TestRunRemoteCommand:
         invoke.exceptions.ThreadException.
         """
 
-        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_conn = mock_conn_cls.return_value
         mock_conn.run.side_effect = invoke.exceptions.ThreadException(
             [MagicMock(value=OSError("Socket is closed"))]
         )
@@ -570,7 +577,7 @@ class TestRunRemoteCommand:
             host="bastion.example.com",
             user="admin",
         )
-        mock_conn = mock_conn_cls.return_value.__enter__.return_value
+        mock_conn = mock_conn_cls.return_value
         mock_result = MagicMock(exited=0, stdout="ok\n", stderr="")
         mock_conn.run.return_value = mock_result
 
@@ -581,3 +588,158 @@ class TestRunRemoteCommand:
         assert mock_conn_cls.call_count == 2
         target_call = mock_conn_cls.call_args_list[1]
         assert target_call.kwargs["gateway"] is not None
+
+
+_TARGET = SshEndpoint(slug="target", host="target.example.com")
+_OTHER = SshEndpoint(slug="other", host="other.example.com")
+_BASTION = SshEndpoint(slug="bastion", host="bastion.example.com")
+
+
+def _fake_connection(**kwargs: object) -> MagicMock:
+    """A distinct, connected Fabric Connection mock per construction."""
+    conn = MagicMock(name=str(kwargs["host"]))
+    conn.host = kwargs["host"]
+    conn.gateway = kwargs["gateway"]
+    conn.is_connected = True
+    conn.run.return_value = MagicMock(exited=0, stdout="ok\n", stderr="")
+    return conn
+
+
+def _built(mock_conn_cls: MagicMock, host: str) -> list[MagicMock]:
+    """The connections built to *host*, in construction order."""
+    return [conn for conn in mock_conn_cls.built if conn.host == host]
+
+
+@pytest.fixture()
+def mock_conn_cls() -> Iterator[MagicMock]:
+    with patch("nbkp.remote.fabricssh.Connection") as cls:
+        cls.built = []
+        cls.configure = lambda conn: None
+
+        def build(**kwargs: object) -> MagicMock:
+            conn = _fake_connection(**kwargs)
+            cls.configure(conn)
+            cls.built.append(conn)
+            return conn
+
+        cls.side_effect = build
+        yield cls
+
+
+class TestRunRemoteCommandWithoutScope:
+    def test_connects_for_every_command(self, mock_conn_cls: MagicMock) -> None:
+        run_remote_command(_TARGET, ["true"])
+        run_remote_command(_TARGET, ["true"])
+
+        first, second = _built(mock_conn_cls, "target.example.com")
+        first.close.assert_called_once()
+        second.close.assert_called_once()
+
+    def test_closes_every_proxy_hop(self, mock_conn_cls: MagicMock) -> None:
+        run_remote_command(_TARGET, ["true"], [_BASTION])
+
+        (bastion,) = _built(mock_conn_cls, "bastion.example.com")
+        (target,) = _built(mock_conn_cls, "target.example.com")
+        assert target.gateway is bastion
+        target.close.assert_called_once()
+        bastion.close.assert_called_once()
+
+
+class TestRunRemoteCommandInScope:
+    def test_reuses_one_connection_per_endpoint(self, mock_conn_cls: MagicMock) -> None:
+        with connection_scope():
+            run_remote_command(_TARGET, ["true"])
+            run_remote_command(_TARGET, ["ls", "/"])
+            run_remote_command(_OTHER, ["true"])
+            (target,) = _built(mock_conn_cls, "target.example.com")
+            target.open.assert_called_once()
+            assert target.run.call_count == 2
+            target.close.assert_not_called()
+            (other,) = _built(mock_conn_cls, "other.example.com")
+
+        target.close.assert_called_once()
+        other.close.assert_called_once()
+
+    def test_reuses_proxy_hops_and_closes_them_with_the_scope(
+        self, mock_conn_cls: MagicMock
+    ) -> None:
+        with connection_scope():
+            run_remote_command(_TARGET, ["true"], [_BASTION])
+            run_remote_command(_TARGET, ["true"], [_BASTION])
+            # Through a proxy, a different route to the same host.
+            run_remote_command(_TARGET, ["true"])
+
+        (bastion,) = _built(mock_conn_cls, "bastion.example.com")
+        proxied, direct = _built(mock_conn_cls, "target.example.com")
+        assert proxied.gateway is bastion
+        assert direct.gateway is None
+        assert proxied.run.call_count == 2
+        for conn in (bastion, proxied, direct):
+            conn.close.assert_called_once()
+
+    def test_sends_stdin_on_a_reused_connection(self, mock_conn_cls: MagicMock) -> None:
+        with connection_scope():
+            run_remote_command(_TARGET, ["true"])
+            run_remote_command(_TARGET, ["udisksctl", "unlock"], input="secret")
+
+        (target,) = _built(mock_conn_cls, "target.example.com")
+        in_stream = target.run.call_args_list[1].kwargs["in_stream"]
+        assert in_stream.read() == b"secret"
+
+    def test_reconnects_when_the_transport_dropped(
+        self, mock_conn_cls: MagicMock
+    ) -> None:
+        with connection_scope():
+            run_remote_command(_TARGET, ["true"])
+            (stale,) = _built(mock_conn_cls, "target.example.com")
+            stale.is_connected = False
+            run_remote_command(_TARGET, ["true"])
+
+            stale.close.assert_called_once()
+            stale.run.assert_called_once()
+            _, fresh = _built(mock_conn_cls, "target.example.com")
+            fresh.run.assert_called_once()
+
+    def test_retries_once_when_a_reused_connection_fails(
+        self, mock_conn_cls: MagicMock
+    ) -> None:
+        with connection_scope():
+            run_remote_command(_TARGET, ["true"])
+            (stale,) = _built(mock_conn_cls, "target.example.com")
+            stale.run.side_effect = EOFError()
+            result = run_remote_command(_TARGET, ["ls"])
+
+            stale.close.assert_called_once()
+            _, fresh = _built(mock_conn_cls, "target.example.com")
+            fresh.run.assert_called_once()
+            assert result.returncode == 0
+            assert result.stdout == "ok\n"
+
+    def test_a_fresh_connection_failure_is_not_retried(
+        self, mock_conn_cls: MagicMock
+    ) -> None:
+        def reset(conn: MagicMock) -> None:
+            conn.run.side_effect = OSError("Connection reset")
+
+        mock_conn_cls.configure = reset
+        with connection_scope(), pytest.raises(OSError, match="reset"):
+            run_remote_command(_TARGET, ["true"])
+
+        (target,) = _built(mock_conn_cls, "target.example.com")
+        target.close.assert_called_once()
+
+    def test_a_failed_connect_is_not_kept(self, mock_conn_cls: MagicMock) -> None:
+        def refuse(conn: MagicMock) -> None:
+            conn.open.side_effect = OSError("refused")
+
+        with connection_scope():
+            mock_conn_cls.configure = refuse
+            with pytest.raises(OSError, match="refused"):
+                run_remote_command(_TARGET, ["true"])
+            mock_conn_cls.configure = lambda conn: None
+            result = run_remote_command(_TARGET, ["true"])
+
+            refused, connected = _built(mock_conn_cls, "target.example.com")
+            refused.close.assert_called_once()
+            connected.close.assert_not_called()
+        assert result.returncode == 0

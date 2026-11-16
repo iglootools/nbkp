@@ -15,7 +15,7 @@ from ....clidisplay import (
 from ....config import Config, LocalVolume, RemoteVolume
 from ....policy import Severity
 from ....remote.endpoints import ResolvedEndpoints, location_excluded
-from ....remote.errors import SSH_CONNECTION_ERRORS, describe_error
+from ....remote.errors import describe_error, ssh_connection_errors
 from ...lifecycle import UmountResult, lifecycle_volumes, unknown_volume_names
 from ...models import MountFailureReason, display_name
 from ...mount_checks import check_mount_status
@@ -116,7 +116,7 @@ def _probe_volume_status(
         if bar is not None:
             bar.on_end(line, Severity.OK)
         return label, status
-    except SSH_CONNECTION_ERRORS as e:
+    except ssh_connection_errors() as e:
         if bar is not None:
             bar.on_end(line, Severity.ERROR, describe_error(e))
         return error_label(label, f"unreachable: {describe_error(e)}"), ErrorStatus()

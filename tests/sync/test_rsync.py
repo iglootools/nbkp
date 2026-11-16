@@ -1,8 +1,10 @@
-import io
 import shlex
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from nbkp.config import (
     BtrfsSnapshotConfig,
@@ -17,7 +19,12 @@ from nbkp.config import (
 )
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.snapshots.common import create_snapshot_timestamp
-from nbkp.sync.rsync import ProgressMode, build_rsync_command, run_rsync
+from nbkp.sync.rsync import (
+    ProgressMode,
+    _run_streaming,
+    build_rsync_command,
+    run_rsync,
+)
 
 _SSH_KEY = str(Path("~/.ssh/key").expanduser())
 
@@ -1346,8 +1353,7 @@ class TestRunRsync:
         assert result.returncode == 0
         mock_run.assert_called_once()
 
-    @patch("nbkp.sync.rsync.subprocess.Popen")
-    def test_run_rsync_streams_output(self, mock_popen: MagicMock) -> None:
+    def test_run_rsync_streams_output(self) -> None:
         src = LocalVolume(slug="src", path="/src")
         dst = LocalVolume(slug="dst", path="/dst")
         sync = SyncConfig(
@@ -1364,19 +1370,59 @@ class TestRunRsync:
             syncs={"s1": sync},
         )
 
-        streamed = "sending incremental file list\r\nfile.txt\n"
-        proc = MagicMock()
-        proc.stdout = io.StringIO(streamed)
-        proc.poll.side_effect = lambda: (
-            0 if proc.stdout.tell() == len(streamed) else None
-        )
-        proc.wait.return_value = 0
-        mock_popen.return_value = proc
-
         chunks: list[str] = []
-        result = run_rsync(sync, config, on_output=chunks.append)
+        with patch(
+            "nbkp.sync.rsync.build_rsync_command",
+            return_value=_emit_cmd(b"sending incremental file list\r\nfile.txt\n"),
+        ):
+            result = run_rsync(sync, config, on_output=chunks.append)
 
         assert result.returncode == 0
-        assert result.stdout == streamed
-        assert "".join(chunks) == streamed
-        mock_popen.assert_called_once()
+        assert result.stdout == "sending incremental file list\nfile.txt\n"
+        assert "".join(chunks) == result.stdout
+
+
+def _emit_cmd(data: bytes, *, stderr: bytes = b"", exit_code: int = 0) -> list[str]:
+    """A command writing *data* to stdout and *stderr* to stderr, unbuffered."""
+    code = (
+        "import sys\n"
+        f"sys.stdout.buffer.write({data!r}); sys.stdout.flush()\n"
+        f"sys.stderr.buffer.write({stderr!r}); sys.stderr.flush()\n"
+        f"sys.exit({exit_code})\n"
+    )
+    return [sys.executable, "-c", code]
+
+
+class TestRunStreaming:
+    """Chunked reads decode exactly like the ``text=True`` pipe they replaced."""
+
+    def test_translates_newlines_like_a_text_pipe(self) -> None:
+        result = _run_streaming(_emit_cmd(b"a\r\nb\rc\n"), lambda _: None)
+        assert result.stdout == "a\nb\nc\n"
+
+    def test_decodes_characters_and_crlf_split_across_reads(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("nbkp.sync.rsync._STREAM_CHUNK_SIZE", 1)
+        chunks: list[str] = []
+        result = _run_streaming(_emit_cmd("é\r\n€".encode()), chunks.append)
+        assert result.stdout == "é\n€"
+        assert "".join(chunks) == result.stdout
+        assert "" not in chunks
+
+    def test_merges_stderr_and_keeps_exit_code(self) -> None:
+        result = _run_streaming(
+            _emit_cmd(b"out\n", stderr=b"err\n", exit_code=23), lambda _: None
+        )
+        assert result.returncode == 23
+        assert result.stdout == "out\nerr\n"
+        assert result.stderr == ""
+
+    def test_forwards_large_output_in_few_chunks(self) -> None:
+        size = 1_000_000
+        # The child builds the payload: Linux caps one argument at 128 KiB.
+        cmd = [sys.executable, "-c", f"import sys; sys.stdout.write('x' * {size})"]
+        chunks: list[str] = []
+        result = _run_streaming(cmd, chunks.append)
+        assert result.stdout == "x" * size
+        assert len(chunks) < 1_000

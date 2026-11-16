@@ -29,9 +29,11 @@ from nbkp.preflight.probes import (
     parse_rsync_version,
 )
 from nbkp.preflight.snapshot_checks import (
-    check_btrfs_filesystem,
     check_btrfs_mount_option,
     check_btrfs_subvolume,
+    is_btrfs_filesystem,
+    probe_filesystem_type,
+    supports_hard_links,
 )
 from nbkp.preflight.status.endpoint import (
     DestinationEndpointDiagnostics,
@@ -55,7 +57,7 @@ from nbkp.preflight.status.volume import (
     VolumeStatus,
 )
 from nbkp.preflight.testkit import check_sync, check_volume
-from nbkp.preflight.volume_checks import observe_ssh_endpoint
+from nbkp.preflight.volume_checks import check_volume_capabilities, observe_ssh_endpoint
 from nbkp.remote.endpoints import EndpointFilter, ResolvedEndpoint, ResolvedEndpoints
 from nbkp.remote.resolution import resolve_all_endpoints, resolve_proxy_chain
 from nbkp.snapshots.common import create_snapshot_timestamp
@@ -491,12 +493,12 @@ class TestCheckRemoteVolumeLocationExcluded:
         assert SshEndpointError.LOCATION_EXCLUDED in status.ssh_endpoint_status.errors
 
 
-class TestCheckBtrfsFilesystemLocal:
+class TestProbeFilesystemTypeLocal:
     @patch("nbkp.remote.dispatch.subprocess.run")
     def test_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_filesystem(vol, {}) is True
+        assert probe_filesystem_type(vol, {}) == "btrfs"
         mock_run.assert_called_once_with(
             ["stat", "-f", "-c", "%T", "/mnt/data"],
             capture_output=True,
@@ -506,26 +508,19 @@ class TestCheckBtrfsFilesystemLocal:
         )
 
     @patch("nbkp.remote.dispatch.subprocess.run")
-    def test_not_btrfs(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
-        vol = LocalVolume(slug="data", path="/mnt/data")
-        assert check_btrfs_filesystem(vol, {}) is False
-
-    @patch("nbkp.remote.dispatch.subprocess.run")
     def test_stat_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=1, stdout="")
         vol = LocalVolume(slug="data", path="/mnt/data")
-        # Unknown, not "not btrfs": a failed probe must not trigger VOL_NOT_BTRFS.
-        assert check_btrfs_filesystem(vol, {}) is None
+        assert probe_filesystem_type(vol, {}) is None
 
 
-class TestCheckBtrfsFilesystemRemote:
+class TestProbeFilesystemTypeRemote:
     @patch("nbkp.remote.dispatch.run_remote_command")
     def test_btrfs(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0, stdout="btrfs\n")
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert check_btrfs_filesystem(vol, resolved) is True
+        assert probe_filesystem_type(vol, resolved) == "btrfs"
         server = config.ssh_endpoints["nas-server"]
         mock_run.assert_called_once_with(
             server,
@@ -534,12 +529,44 @@ class TestCheckBtrfsFilesystemRemote:
             input=None,
         )
 
+
+class TestFilesystemTypeInterpretation:
+    def test_btrfs(self) -> None:
+        assert is_btrfs_filesystem("btrfs") is True
+        assert supports_hard_links("btrfs") is True
+
+    def test_not_btrfs(self) -> None:
+        assert is_btrfs_filesystem("ext2/ext3") is False
+        assert supports_hard_links("ext2/ext3") is True
+
+    def test_unknown(self) -> None:
+        # Unknown, not "not btrfs": a failed probe must not trigger VOL_NOT_BTRFS.
+        assert is_btrfs_filesystem(None) is None
+        # Cannot determine, so hard links are assumed to work.
+        assert supports_hard_links(None) is True
+
+    @pytest.mark.parametrize("fs_type", ["vfat", "msdos", "exfat"])
+    def test_no_hard_links(self, fs_type: str) -> None:
+        assert supports_hard_links(fs_type) is False
+
+
+class TestCheckVolumeCapabilitiesFilesystemProbe:
     @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_not_btrfs(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(returncode=0, stdout="ext2/ext3\n")
+    def test_stat_runs_once_per_volume(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0, stdout="msdos\n")
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert check_btrfs_filesystem(vol, resolved) is False
+        tools = HostToolCapabilities(
+            has_rsync=True,
+            rsync_version_ok=True,
+            has_btrfs=False,
+            has_stat=True,
+            has_findmnt=False,
+        )
+        caps = check_volume_capabilities(vol, tools, resolved_endpoints=resolved)
+        assert caps.is_btrfs_filesystem is False
+        assert caps.hardlink_supported is False
+        mock_run.assert_called_once()
 
 
 class TestCheckBtrfsSubvolumeLocal:
