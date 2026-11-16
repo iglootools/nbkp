@@ -10,8 +10,8 @@ test drives a whole command against fake hosts by passing its own::
 
 Only the boundaries a command cannot avoid live here: commands on the hosts
 holding the volumes, tools on the orchestrator's ``PATH``, rsync, the clock
-and platform that name snapshots, and where credentials and the local user
-name come from.
+and platform that name snapshots, where the config file is searched for, and
+where credentials and the local user name come from.
 """
 
 import getpass
@@ -21,9 +21,13 @@ import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 
 import typer
+from platformdirs import site_config_dir, user_config_dir
 
+from ..config import Config, load_config
+from ..config.loader import ConfigDirFn
 from ..credentials import CommandFn, run_captured
 from ..remote.dispatch import CommandLocator, VolumeCommandRunner, run_on_volume
 from ..sync.modes import RsyncRunner
@@ -49,11 +53,29 @@ class Runtime:
     platform: str = sys.platform
     """Decides the macOS-safe snapshot name form."""
     environ: Mapping[str, str] = field(default_factory=lambda: os.environ)
-    """Where the ``env`` credential provider looks passphrases up."""
+    """The process environment: where the ``env`` credential provider looks
+    passphrases up, and ``XDG_CONFIG_HOME`` for the config search."""
+    home: Callable[[], Path] = Path.home
+    """The user's home directory, where the config search starts."""
+    user_config_dir: ConfigDirFn = user_config_dir
+    """The platform user config directory of an app."""
+    site_config_dir: ConfigDirFn = site_config_dir
+    """The platform site config directory of an app."""
     run_credential_command: CommandFn = run_captured
     """Runs the ``command`` credential provider's command."""
     local_user: Callable[[], str] = getpass.getuser
     """The orchestrator user named in suggested polkit rules."""
+
+    def load_config(self, config_path: str | Path | None) -> Config:
+        """Load *config_path*, or search for the config in this runtime's
+        environment, home and platform directories."""
+        return load_config(
+            config_path,
+            self.environ,
+            home=self.home(),
+            user_dir=self.user_config_dir,
+            site_dir=self.site_config_dir,
+        )
 
 
 def runtime_of(ctx: typer.Context) -> Runtime:

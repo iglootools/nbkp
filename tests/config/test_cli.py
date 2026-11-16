@@ -9,6 +9,7 @@ from tests.clidisplay import (
     sample_config,
     strip_panel,
 )
+from tests.fakes import fake_runtime
 
 _MISSING = "/nonexistent/nbkp/config.yaml"
 """A config path no test machine has: the real file lookup fails on it."""
@@ -30,6 +31,34 @@ _UNKNOWN_SSH_ENDPOINT = (
     "    path: /x\n"
     "syncs: {}\n"
 )
+
+
+class TestConfigSearch:
+    """Without ``--config``, the command searches the runtime's home and
+    platform directories, never the developer's."""
+
+    def test_finds_the_config_under_the_runtime_home(self, tmp_path: Path) -> None:
+        (tmp_path / ".config" / "nbkp").mkdir(parents=True)
+        write_config(tmp_path / ".config" / "nbkp", sample_config())
+
+        result = runner.invoke(
+            app,
+            ["config", "show", "-o", "json"],
+            obj=fake_runtime(home=tmp_path),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "nas-server" in json.loads(result.output)["ssh-endpoints"]
+
+    def test_reports_no_config_when_the_runtime_has_none(self) -> None:
+        result = runner.invoke(
+            app, ["config", "show", "-o", "json"], obj=fake_runtime()
+        )
+
+        assert result.exit_code == 2
+        error = json.loads(result.output)["error"]
+        assert error["reason"] == ConfigErrorReason.NO_CONFIG_FOUND
+        assert "/nonexistent-nbkp-test/home/.config/nbkp" in error["message"]
 
 
 class TestConfigShowCommand:

@@ -42,10 +42,9 @@ def setup_auth(
     ] = OutputFormat.HUMAN,
 ) -> None:
     """Generate the polkit rule for udisks-based mount management."""
-    cfg = load_config_or_exit(config, output)
-    rules = generate_auth_rules(
-        cfg, user if user is not None else runtime_of(ctx).local_user()
-    )
+    runtime = runtime_of(ctx)
+    cfg = load_config_or_exit(runtime, config, output)
+    rules = generate_auth_rules(cfg, user if user is not None else runtime.local_user())
     blocks = list(rules.blocks())
     match output:
         case OutputFormat.JSON:

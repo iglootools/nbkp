@@ -8,11 +8,13 @@ import typer
 
 from ...clidisplay.invocation import display_path
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
+from ...cliwiring.runtime import runtime_of
 from ...remote.endpoints import NetworkType
 from .. import ScriptOptions, generate_script
 
 
 def sh(
+    ctx: typer.Context,
     config: Annotated[
         Path | None,
         typer.Option(
@@ -111,7 +113,7 @@ def sh(
         )
         raise typer.Exit(2)
 
-    cfg = load_config_or_exit(config)
+    cfg = load_config_or_exit(runtime_of(ctx), config)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
     script = generate_script(
         cfg,

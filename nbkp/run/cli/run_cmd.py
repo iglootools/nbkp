@@ -145,7 +145,7 @@ def run(
 ) -> None:
     """Execute all active syncs in dependency order. Supports dry-run, progress display, snapshot creation, and automatic pruning."""
     runtime = runtime_of(ctx)
-    cfg = load_config_or_exit(config, output)
+    cfg = load_config_or_exit(runtime, config, output)
     require_known_syncs(cfg, sync, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
     invocation = Invocation.of(

@@ -102,7 +102,7 @@ def prune(
 ) -> None:
     """Remove snapshots beyond the `max-snapshots` limit. Normally handled automatically by `run`, but can be invoked manually."""
     runtime = runtime_of(ctx)
-    cfg = load_config_or_exit(config, output)
+    cfg = load_config_or_exit(runtime, config, output)
     require_known_syncs(cfg, sync, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
     with managed_mount(

@@ -6,6 +6,7 @@ import typer
 
 from ...clidisplay import OutputFormat, echo_json
 from ...cliwiring.config import load_config_or_exit
+from ...cliwiring.runtime import runtime_of
 from ..output import (
     build_graph_json,
     print_mermaid_ascii_graph,
@@ -23,6 +24,7 @@ class GraphFormat(str, enum.Enum):
 
 @app.command()
 def graph(
+    ctx: typer.Context,
     config: Annotated[
         Path | None,
         typer.Option(
@@ -44,7 +46,7 @@ def graph(
     ] = GraphFormat.RICH_TREE,
 ) -> None:
     """Display the backup chain as a graph."""
-    cfg = load_config_or_exit(config, output)
+    cfg = load_config_or_exit(runtime_of(ctx), config, output)
     match output:
         case OutputFormat.JSON:
             echo_json(build_graph_json(cfg))
