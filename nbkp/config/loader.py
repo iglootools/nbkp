@@ -1,5 +1,5 @@
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from enum import StrEnum
 from pathlib import Path
 
@@ -11,6 +11,10 @@ from .protocol import Config
 
 _APP = "nbkp"
 _FILENAME = "config.yaml"
+
+type ConfigDirFn = Callable[[str], str]
+"""Where the platform keeps an app's config directory, given the app name
+(``platformdirs.user_config_dir`` / ``site_config_dir``)."""
 _CONFIG_REFERENCE_URL = (
     "https://github.com/iglootools/nbkp/blob/main/docs/config-reference.md"
 )
@@ -32,7 +36,12 @@ class ConfigError(Exception):
         self.reason = reason
 
 
-def _config_search_paths(environ: Mapping[str, str] = os.environ) -> list[Path]:
+def _config_search_paths(
+    environ: Mapping[str, str],
+    home: Path,
+    user_dir: ConfigDirFn,
+    site_dir: ConfigDirFn,
+) -> list[Path]:
     """Config file search paths in priority order.
 
     Order: XDG > platform user config > platform site config.
@@ -41,11 +50,11 @@ def _config_search_paths(environ: Mapping[str, str] = os.environ) -> list[Path]:
     Added explicitly so that ~/.config/nbkp/config.yml works on Mac OS X
     (for which user_config_dir(_APP) defaults to ~/Library/Application Support/nbkp).
     """
-    xdg = environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+    xdg = environ.get("XDG_CONFIG_HOME", str(home / ".config"))
     candidates = [
         Path(xdg) / _APP / _FILENAME,
-        Path(user_config_dir(_APP)) / _FILENAME,
-        Path(site_config_dir(_APP)) / _FILENAME,
+        Path(user_dir(_APP)) / _FILENAME,
+        Path(site_dir(_APP)) / _FILENAME,
     ]
     return list(dict.fromkeys(candidates))
 
@@ -53,10 +62,17 @@ def _config_search_paths(environ: Mapping[str, str] = os.environ) -> list[Path]:
 def find_config_file(
     config_path: str | Path | None = None,
     environ: Mapping[str, str] = os.environ,
+    *,
+    home: Path | None = None,
+    user_dir: ConfigDirFn = user_config_dir,
+    site_dir: ConfigDirFn = site_config_dir,
 ) -> Path:
     """Find the configuration file using search order.
 
-    Order: explicit path > XDG > platform user config > platform site config
+    Order: explicit path > XDG > platform user config > platform site config.
+    The search reads *environ*, *home* (the user's home directory, by
+    default the process's) and the platform directories, so a caller can
+    keep it off the real ones.
     """
     if config_path is not None:
         p = Path(config_path)
@@ -68,7 +84,12 @@ def find_config_file(
         else:
             return p
     else:
-        search = _config_search_paths(environ)
+        search = _config_search_paths(
+            environ,
+            home if home is not None else Path.home(),
+            user_dir,
+            site_dir,
+        )
         found = next((p for p in search if p.is_file()), None)
         if found is not None:
             return found
@@ -85,11 +106,17 @@ def find_config_file(
 def load_config(
     config_path: str | Path | None = None,
     environ: Mapping[str, str] = os.environ,
+    *,
+    home: Path | None = None,
+    user_dir: ConfigDirFn = user_config_dir,
+    site_dir: ConfigDirFn = site_config_dir,
 ) -> Config:
     """Raises ``ConfigError`` when the file is missing or unreadable, is not a
     YAML mapping, or fails validation; ``reason`` says which.
     """
-    path = find_config_file(config_path, environ)
+    path = find_config_file(
+        config_path, environ, home=home, user_dir=user_dir, site_dir=site_dir
+    )
     try:
         with open(path) as f:
             raw = yaml.safe_load(f)
