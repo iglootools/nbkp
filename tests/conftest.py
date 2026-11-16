@@ -1,4 +1,6 @@
+import contextlib
 import os
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -82,6 +84,13 @@ def _isolate_from_user_ssh_config(
     monkeypatch.setattr(
         "nbkp.remote.resolution.default_ssh_config_path", lambda: absent
     )
+
+
+@pytest.fixture
+def chdir() -> Iterator[Callable[[Path], None]]:
+    """Change the working directory until the end of the test."""
+    with contextlib.ExitStack() as stack:
+        yield lambda path: stack.enter_context(contextlib.chdir(path))
 
 
 def _sample_config() -> Config:

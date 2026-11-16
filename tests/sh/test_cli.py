@@ -1,7 +1,6 @@
 import stat
+from collections.abc import Callable
 from pathlib import Path
-
-import pytest
 
 from nbkp.cli import app
 from nbkp.config.testkit import write_config
@@ -48,9 +47,9 @@ class TestShCommand:
     def test_output_file_reported_relative_to_cwd(
         self,
         tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
+        chdir: Callable[[Path], None],
     ) -> None:
-        monkeypatch.chdir(tmp_path)
+        chdir(tmp_path)
         (tmp_path / "out").mkdir()
         write_config(tmp_path, sample_config())
 

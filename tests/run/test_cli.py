@@ -7,6 +7,7 @@ an injected runtime, with a fake rsync.
 
 import json
 import subprocess
+from collections.abc import Callable
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -198,10 +199,10 @@ class TestAbortMessage:
 
 
 @pytest.fixture
-def nas_config_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+def nas_config_file(tmp_path: Path, chdir: Callable[[Path], None]) -> str:
     """``conf/nbkp.yaml`` (two syncs on the fake NAS), relative to the
     working directory so that suggested commands show it as given."""
-    monkeypatch.chdir(tmp_path)
+    chdir(tmp_path)
     (tmp_path / "conf").mkdir()
     write_config(tmp_path / "conf", nas_config(syncs=("photos", "music")), "nbkp.yaml")
     return "conf/nbkp.yaml"
