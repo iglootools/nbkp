@@ -123,7 +123,23 @@ target-version = "py315"
 # class, a decorator argument) is reified at import time anyway, so `lazy` silently
 # does nothing. That nbkp.cli stays free of the heavy imports is asserted by
 # tests/test_startup_imports.py; this catches the per-statement mistake.
-extend-select = ["TID255"]
+#
+# TID251: tests inject fakes through parameters instead of patching (docs/guidelines.md,
+# Testing), so unittest.mock is banned. The files below keep it for a documented
+# exception; build-scripts/patchcheck.py does the same for monkeypatch, which is a
+# fixture rather than an import and so out of ruff's reach.
+extend-select = ["TID251", "TID255"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"unittest.mock".msg = "Inject a fake through a parameter instead of patching (docs/guidelines.md, Testing)."
+
+[tool.ruff.lint.per-file-ignores]
+# (a) Fabric's Connection is the boundary run_remote_command wraps; building a real
+# one needs an SSH server that authenticates and runs commands.
+"tests/remote/test_ssh.py" = ["TID251"]
+# (a) The Docker SDK client: the test checks the port binding handed to it, with no
+# Docker daemon.
+"tests/remote/test_docker_testkit.py" = ["TID251"]
 
 [tool.ruff.lint.isort]
 # Keep aliased re-imports in the same `from x import (a, b as c)` block instead of

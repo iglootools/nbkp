@@ -7,7 +7,7 @@ Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/Q
 Run automated tests and checks (no external dependencies):
 ```bash
 # mise tasks
-mise run check              # Run all checks: format-check + lint + lint-shell + type-check + lock-check + lock-check-uv + clidocs-check + configdocs-check + depgraph-check + boundaries-check
+mise run check              # Run all checks: format-check + lint + lint-shell + type-check + lock-check + lock-check-uv + clidocs-check + configdocs-check + depgraph-check + boundaries-check + patch-check
 mise run check-all          # Run all checks: regular checks + all tests
 
 mise run test-all           # All tests
@@ -40,6 +40,7 @@ mise run configdocs-check   # check config reference tables in docs/config-refer
 mise run depgraph           # regenerate Module Overview in docs/architecture.md
 mise run depgraph-check     # check Module Overview is up to date
 mise run boundaries-check   # check the module layering rules (import-linter)
+mise run patch-check        # check that tests monkeypatch only in the documented exceptions
 
 # Running tools directly
 uv run pytest tests/ --ignore=tests/e2e_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -n auto -v  # Unit tests only
@@ -123,7 +124,7 @@ The demo uses the same real udisks path as production: the Docker harness runs `
 
 Automated tests are organized into 4 categories based on what they test and what infrastructure they require:
 
-1. **Unit tests** (`tests/`, `tests/sync/`, `tests/remote/`, `tests/disks/`, …) — Mock all external calls (rsync, SSH, filesystem). Test logic and command building. No external dependencies.
+1. **Unit tests** (`tests/`, `tests/sync/`, `tests/remote/`, `tests/disks/`, …) — Run every external call (rsync, SSH, host commands) against fakes rather than patches; see [Testing](guidelines.md#coding) in the project guidelines. Test logic and command building. No external dependencies.
 
 2. **E2E (Docker)** (`tests/e2e_docker/`) — Full pipeline tests against Docker containers. The chain sync test exercises a 6-hop pipeline covering all four sync direction combinations (local→local, local→remote, remote→remote, remote→local), both snapshot modes (hard-link and btrfs), bastion/proxy-jump, LUKS-encrypted volumes, filter exclusion, topological ordering, and failure propagation. The shell script test generates and executes the equivalent standalone bash script.
 

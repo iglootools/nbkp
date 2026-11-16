@@ -49,7 +49,47 @@ For general coding, Python, and tooling guidelines, see the [common guidelines](
 - **Config**
   - Perform `~` expansion for all file paths in the config
 - **Testing**
-  - No real rsync/ssh/btrfs calls in unit tests - use mocks instead. Docker-enabled integration tests cover the real interactions.
+  - No real rsync/ssh/btrfs calls in unit tests: they run against fakes, and the Docker-enabled integration tests cover the real interactions.
+  - **Test without patching.** This is the common [Mocks](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#mocks)
+    rule, made enforceable. In order of preference:
+    1. Put the decision in a *decider*, a pure function over plain values, and test it with
+       plain values: the preflight `*Status.from_diagnostics` interpretation, the CLI
+       deciders over `PreflightResult` / `SyncResult` / mount results.
+    2. Otherwise inject the dependency: a parameter whose default is the real
+       implementation, and a fake in the test. The fakes live in `tests/fakes.py`:
+       `FakeCommandRunner` for any `run: VolumeCommandRunner`, `FakeRsync`, and for CLI
+       tests a fake `Runtime` passed as `CliRunner.invoke(..., obj=fake_runtime(...))`.
+       Smaller seams follow the same shape: `environ`, `which`, `run_process`, `has_docker`.
+       Values are real, not stand-ins: `completed()` for a `CompletedProcess`, model
+       instances for configs and results.
+    3. Use a real local resource when it is cheap: a Python child process, a file under
+       `tmp_path`, the in-process SSH server of `tests/remote/test_host_key_verification.py`.
+  - Patching — `unittest.mock`, and `monkeypatch.setattr` / `delattr` / `setitem` /
+    `delitem` / `setenv` / `delenv` — is reserved for three exceptions:
+    **(a)** a third-party boundary that nbkp itself wraps, where the test is about that
+    wrapper; **(b)** a fault that no real resource can produce at the point the test needs
+    it; **(c)** process-global state a test must isolate from the developer's machine.
+    `monkeypatch.chdir` is not patching: tests use it to make relative config paths
+    predictable.
+  - **Enforced** by ruff's `TID251`, which bans `unittest.mock` (`[tool.ruff.lint]` in
+    `pyproject.toml`, whose `per-file-ignores` name the files of category (a)), and by
+    `mise run patch-check` (`build-scripts/patchcheck.py`, part of `mise run check`),
+    which fails on a `monkeypatch` replacement in a file not on its allowlist, and on an
+    allowlisted file that no longer needs it. A new exception goes in the table below,
+    in the matching list, with its reason.
+
+    | File | What is replaced | Category | Why, and when to retire it |
+    |---|---|---|---|
+    | `tests/remote/test_ssh.py` | Fabric's `Connection` class (`patch`, `MagicMock` connections) | (a) | `run_remote_command` is the wrapper under test: argument mapping, hop closing, connection reuse and retry. A real connection needs an SSH server that authenticates and runs commands. Retire if the in-process SSH server gains public-key auth and an exec channel, or if `run_remote_command` takes a connection factory. |
+    | `tests/remote/test_docker_testkit.py` | `docker.from_env` (`patch`, `MagicMock` client) | (a) | Checks the port binding handed to the Docker SDK without a Docker daemon. Retire if the container starters take the client as a parameter. |
+    | `tests/snapshots/test_common.py` | `Path.symlink_to` raising | (b) | The failure must strike after nothing has been removed and before the new `latest` exists. A read-only directory would also block the removal, so it could not catch an update that deletes `latest` before creating the new link, which this test does. |
+    | `tests/credentials/test_credentials.py` | `sys.modules["keyring"] = None` | (b) | The test environment installs every extra, so the missing `keyring` package can only be simulated. |
+    | `tests/conftest.py` | `nbkp.remote.resolution.default_ssh_config_path` | (c) | Endpoint resolution falls back to `~/.ssh/config` when no SSH config is passed, so every test would otherwise read the developer's. Retire when every caller passes its SSH config explicitly. |
+    | `tests/remote/test_host_key_verification.py` | `HOME` | (c) | Paramiko reads `~/.ssh/known_hosts` from the home directory, below any seam of nbkp's. |
+
+    The keyring backend is process-global as well; `tests/conftest.py` and the keyring
+    tests choose it through `keyring.set_keyring`, the library's own API, rather than by
+    patching.
   - Generate YAML test data using the Pydantic data models and `model.model_dump()` instead of hardcoding YAML strings.
     This ensures the test data is always valid and consistent with the models.
 
