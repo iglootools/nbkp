@@ -1,109 +1,65 @@
-"""Tests for `preflight troubleshoot` and the check/troubleshoot JSON outputs."""
+"""Tests for `preflight troubleshoot`, run against the fake NAS (``tests.nas``).
+
+The issues and their remediation text are tested in
+test_troubleshoot_render.py; these check what the command reports and its
+exit code.
+"""
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 from nbkp.cli import app
 from nbkp.config.testkit import write_config
-from nbkp.preflight import SyncError, SyncStatus
-from tests.clidisplay import (
-    preflight,
-    runner,
-    sample_all_active_sync_statuses,
-    sample_all_active_vol_statuses,
-    sample_config,
-    sample_sentinel_only_sync_statuses,
-    sample_sync_statuses,
-    sample_vol_statuses,
-)
+from tests.clidisplay import runner
+from tests.fakes import FakeCommandRunner, fake_runtime
+from tests.nas import healthy_nas, nas_config
+from tests.preflight.fake_hosts import FAILS
 
 
-class TestCheckJsonIncludesSshEndpoints:
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_ssh_endpoints_in_json(
-        self, mock_checks: MagicMock, tmp_path: Path
-    ) -> None:
-        config = sample_config()
-        config_path = write_config(tmp_path, config)
-        vol_s = sample_all_active_vol_statuses(config)
-        mock_checks.return_value = preflight(
-            vol_s, sample_all_active_sync_statuses(config, vol_s)
-        )
-        result = runner.invoke(
-            app, ["preflight", "check", "--config", str(config_path), "-o", "json"]
-        )
-        data = json.loads(result.output)
-        assert [s["slug"] for s in data["ssh_endpoints"]]
-        assert "warnings" in data["ssh_endpoints"][0]
-
-
-def _with_host_errors(statuses: dict[str, SyncStatus]) -> dict[str, SyncStatus]:
-    """Mark every sync as blocked by host tool errors (fatal)."""
-    return {
-        slug: ss.model_copy(update={"errors": [SyncError.ENDPOINT_HOST_ERRORS]})
-        for slug, ss in statuses.items()
-    }
+def _troubleshoot(
+    tmp_path: Path, run: FakeCommandRunner, *args: str
+) -> tuple[int, str]:
+    config_path = write_config(tmp_path, nas_config())
+    result = runner.invoke(
+        app,
+        ["preflight", "troubleshoot", "--config", str(config_path), *args],
+        obj=fake_runtime(run=run),
+    )
+    return result.exit_code, result.output
 
 
 class TestTroubleshootCommand:
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_json_lists_issues_and_exits_1_on_fatal(
-        self, mock_checks: MagicMock, tmp_path: Path
-    ) -> None:
-        config = sample_config()
-        config_path = write_config(tmp_path, config)
-        vol_s = sample_all_active_vol_statuses(config)
-        mock_checks.return_value = preflight(
-            vol_s, _with_host_errors(sample_all_active_sync_statuses(config, vol_s))
+    def test_json_lists_issues_and_exits_1_on_fatal(self, tmp_path: Path) -> None:
+        rsync_missing = healthy_nas(
+            FakeCommandRunner().on("which", "rsync", returns=FAILS)
         )
-        result = runner.invoke(
-            app,
-            ["preflight", "troubleshoot", "--config", str(config_path), "-o", "json"],
-        )
-        assert result.exit_code == 1
-        data = json.loads(result.output)
+
+        exit_code, output = _troubleshoot(tmp_path, rsync_missing, "-o", "json")
+
+        assert exit_code == 1
+        data = json.loads(output)
         assert data["has_fatal_errors"] is True
         codes = {issue["code"] for issue in data["issues"]}
-        assert "ENDPOINT_HOST_ERRORS" in codes
+        assert "RSYNC_NOT_FOUND" in codes
         assert all(issue["remediation"] for issue in data["issues"])
 
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_inactive_only_exits_0_unless_strict(
-        self, mock_checks: MagicMock, tmp_path: Path
-    ) -> None:
-        config = sample_config()
-        config_path = write_config(tmp_path, config)
-        vol_s = sample_all_active_vol_statuses(config)
-        mock_checks.return_value = preflight(
-            vol_s, sample_sentinel_only_sync_statuses(config, vol_s)
-        )
-        args = ["preflight", "troubleshoot", "--config", str(config_path)]
-        assert runner.invoke(app, args).exit_code == 0
-        assert runner.invoke(app, [*args, "-S", "ignore-none"]).exit_code == 1
+    def test_inactive_only_exits_0_unless_strict(self, tmp_path: Path) -> None:
+        def sentinel_missing() -> FakeCommandRunner:
+            return healthy_nas(
+                FakeCommandRunner().on(
+                    "test", "-f", "/data/photos/.nbkp-src", returns=FAILS
+                )
+            )
 
+        exit_code, output = _troubleshoot(tmp_path, sentinel_missing())
+        assert exit_code == 0
+        assert ".nbkp-src" in output
 
-class TestSuggestedCommands:
-    @patch("nbkp.cliwiring.preflight.check_all_syncs")
-    def test_check_hint_carries_config_and_endpoint_flags(
-        self,
-        mock_checks: MagicMock,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        # Run from the config's directory: the hint shows the path relative
-        # to it, short enough not to wrap inside the panel.
-        monkeypatch.chdir(tmp_path)
-        config = sample_config()
-        write_config(tmp_path, config)
-        vol_s = sample_vol_statuses(config)
-        mock_checks.return_value = preflight(vol_s, sample_sync_statuses(config, vol_s))
-        result = runner.invoke(
-            app, ["preflight", "check", "--config", "config.yaml", "-N", "private"]
-        )
-        flat = " ".join(
-            line.strip(" │") for line in result.output.splitlines() if line.strip()
-        )
-        assert "nbkp preflight troubleshoot -c config.yaml -N private" in flat
+        exit_code, _ = _troubleshoot(tmp_path, sentinel_missing(), "-S", "ignore-none")
+        assert exit_code == 1
+
+    def test_no_issues(self, tmp_path: Path) -> None:
+        exit_code, output = _troubleshoot(tmp_path, healthy_nas())
+
+        assert exit_code == 0
+        assert "No issues found." in output
