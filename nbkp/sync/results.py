@@ -33,12 +33,16 @@ class SyncFailureKind(str, Enum):
     """Dry run: the source snapshot only exists once the upstream really runs."""
     PREFLIGHT = "preflight"
     """Infrastructure errors, and presence could not be proven."""
+    DISABLED = "disabled"
+    """The sync is ``enabled: false``: never run, and never fatal."""
 
     # CANCELLED: an upstream sync did not succeed.
     UPSTREAM_FAILED = "upstream-failed"
     """An upstream sync failed (directly or transitively)."""
     UPSTREAM_SKIPPED = "upstream-skipped"
     """An upstream sync was skipped (directly or transitively)."""
+    UPSTREAM_DISABLED = "upstream-disabled"
+    """An upstream sync is disabled (directly or transitively)."""
 
 
 _OUTCOME_BY_FAILURE: dict[SyncFailureKind, SyncOutcome] = {
@@ -49,8 +53,10 @@ _OUTCOME_BY_FAILURE: dict[SyncFailureKind, SyncOutcome] = {
     SyncFailureKind.INACTIVE: SyncOutcome.SKIPPED,
     SyncFailureKind.DRY_RUN_PENDING: SyncOutcome.SKIPPED,
     SyncFailureKind.PREFLIGHT: SyncOutcome.SKIPPED,
+    SyncFailureKind.DISABLED: SyncOutcome.SKIPPED,
     SyncFailureKind.UPSTREAM_FAILED: SyncOutcome.CANCELLED,
     SyncFailureKind.UPSTREAM_SKIPPED: SyncOutcome.CANCELLED,
+    SyncFailureKind.UPSTREAM_DISABLED: SyncOutcome.CANCELLED,
 }
 
 #: Failures that originate in a step that actually ran (or in a cascade
@@ -63,6 +69,12 @@ RUNTIME_FAILURES: frozenset[SyncFailureKind] = frozenset(
         SyncFailureKind.SYMLINK,
         SyncFailureKind.UPSTREAM_FAILED,
     }
+)
+
+#: Non-runs rooted in a disabled sync: never fatal, under any strictness,
+#: since nobody asked for that sync to run.
+DISABLED_FAILURES: frozenset[SyncFailureKind] = frozenset(
+    {SyncFailureKind.DISABLED, SyncFailureKind.UPSTREAM_DISABLED}
 )
 
 #: Non-runs rooted in expected inactivity.
@@ -192,7 +204,13 @@ class SyncResult(BaseModel):
     def cancelled(
         slug: str, dry_run: bool, failure: SyncFailureKind, upstream: str
     ) -> SyncResult:
-        reason = "failed" if failure is SyncFailureKind.UPSTREAM_FAILED else "skipped"
+        match failure:
+            case SyncFailureKind.UPSTREAM_FAILED:
+                reason = "failed"
+            case SyncFailureKind.UPSTREAM_DISABLED:
+                reason = "is disabled"
+            case _:
+                reason = "skipped"
         return SyncResult(
             sync_slug=slug,
             outcome=SyncOutcome.CANCELLED,
@@ -215,6 +233,7 @@ def result_severity(
     every strictness.  Non-runs rooted in expected inactivity follow the
     strictness policy for inactive errors, and syncs skipped for
     infrastructure errors follow the policy for infrastructure errors.
+    A disabled sync, and what it cancels, is never more than a warning.
     ``ERROR`` is exactly what makes ``run`` exit non-zero.
     """
     match result.failure:
@@ -222,5 +241,7 @@ def result_severity(
             return Severity.OK
         case kind if kind in RUNTIME_FAILURES:
             return Severity.ERROR
+        case kind if kind in DISABLED_FAILURES:
+            return Severity.WARNING
         case kind:
             return classify_severity(kind in _INACTIVE_FAILURES, strictness)

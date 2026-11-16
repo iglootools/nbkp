@@ -56,7 +56,7 @@ def sync_failed(result: SyncResult, strictness: Strictness) -> bool:
     Runtime failures, and cancellations caused by one, always do.  Skips
     and cancellations rooted in expected inactivity only do under
     ``ignore-none``; skips for infrastructure errors do unless
-    ``ignore-all``.
+    ``ignore-all``.  A disabled sync, and what it cancels, never does.
     """
     return result_severity(result, strictness) is Severity.ERROR
 
