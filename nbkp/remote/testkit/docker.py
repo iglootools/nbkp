@@ -32,6 +32,12 @@ _NETWORK_NAME = "nbkp-demo-net"
 
 SSH_AUTHORIZED_KEYS_PATH = "/mnt/ssh-authorized-keys"
 
+# Publish sshd on loopback only, on a random port (Docker picks one for host
+# port 0): the storage container is privileged with the host's /dev mounted,
+# and the demo connects through 127.0.0.1 anyway, so nothing on the LAN
+# should reach it.
+_SSH_PORT_ON_LOOPBACK = {"22/tcp": ("127.0.0.1", 0)}
+
 
 @dataclass(frozen=True)
 class LuksMetadata:
@@ -170,7 +176,7 @@ def start_storage_container(
         detach=True,
         name=STORAGE_CONTAINER_NAME,
         privileged=True,
-        ports={"22/tcp": None},
+        ports=_SSH_PORT_ON_LOOPBACK,
         environment={
             "NBKP_BACKUP_PATH": REMOTE_BACKUP_PATH,
             "NBKP_BTRFS_PATH": REMOTE_BTRFS_PATH,
@@ -227,7 +233,7 @@ def start_bastion_container(
         _IMAGE_TAG,
         detach=True,
         name=BASTION_CONTAINER_NAME,
-        ports={"22/tcp": None},
+        ports=_SSH_PORT_ON_LOOPBACK,
         environment={"NBKP_BASTION_ONLY": "1"},
         volumes={
             str(pub_key): {

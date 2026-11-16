@@ -17,13 +17,19 @@ from functools import cache
 lazy import invoke.exceptions  # type: ignore[import-untyped]
 lazy import paramiko
 
+lazy from .hostkeys import UnknownHostKeyError
+
 
 @cache
 def ssh_auth_errors() -> tuple[type[BaseException], ...]:
     """The host was reached but refused the connection (bad key, unknown or
     changed host key).  Subclasses of ``paramiko.SSHException`` — catch these
     first."""
-    return (paramiko.AuthenticationException, paramiko.BadHostKeyException)
+    return (
+        paramiko.AuthenticationException,
+        paramiko.BadHostKeyException,
+        UnknownHostKeyError,
+    )
 
 
 @cache

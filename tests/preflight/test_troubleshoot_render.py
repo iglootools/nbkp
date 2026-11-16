@@ -12,6 +12,8 @@ from nbkp.config import (
     LocalVolume,
     LuksEncryptionConfig,
     MountConfig,
+    SshConnectionOptions,
+    SshEndpoint,
 )
 from nbkp.disks import MountToolCapabilities
 from nbkp.preflight.output import (
@@ -160,3 +162,38 @@ class TestWarnings:
         assert issue["kind"] == "warning"
         assert issue["code"] == "UDISKS_BTRFS_MODULE_MISSING"
         assert "udisks2-btrfs" in issue["remediation"]
+
+
+class TestAuthFailedFix:
+    def _render_auth_failed(self, endpoint: SshEndpoint) -> str:
+        config = Config(ssh_endpoints={endpoint.slug: endpoint})
+        status = SshEndpointStatus.from_diagnostics(
+            slug=endpoint.slug,
+            diagnostics=SshEndpointDiagnostics(
+                ssh_reachable=False,
+                ssh_auth_failed=True,
+                ssh_error="host key for nas.lan not found in known_hosts",
+            ),
+        )
+        return _render({}, config, ssh={endpoint.slug: status})
+
+    def test_suggests_accepting_an_unknown_host_key(self) -> None:
+        out = self._render_auth_failed(
+            SshEndpoint(slug="nas", host="nas.lan", port=2222, user="bk")
+        )
+        assert "If the host key is not known yet" in out
+        assert "ssh -p 2222 bk@nas.lan true" in out
+        assert "ssh-keygen -R '[nas.lan]:2222'" in out
+
+    def test_targets_the_configured_known_hosts_file(self) -> None:
+        out = self._render_auth_failed(
+            SshEndpoint(
+                slug="nas",
+                host="nas.lan",
+                connection_options=SshConnectionOptions(
+                    known_hosts_file="/etc/nbkp/known_hosts"
+                ),
+            )
+        )
+        assert "ssh -o UserKnownHostsFile=/etc/nbkp/known_hosts nas.lan true" in out
+        assert "ssh-keygen -f /etc/nbkp/known_hosts -R nas.lan" in out
