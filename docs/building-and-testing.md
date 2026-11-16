@@ -211,12 +211,33 @@ The following functionality is covered by unit tests but intentionally excluded 
 
   `test` must keep running on every pull request (no `paths` filter on its workflow), or a
   pull request it skips can never be merged.
-- Settings > Advanced Security > Enable Dependency graph
-- Set up the following Github secrets:
-    - `ASCIINEMA_INSTALL_ID`:
-        1. Execute `asciinema auth` in your terminal
-        2. Click the suggested link
-        3. store the content of `~/.local/state/asciinema/install-id` in the `ASCIINEMA_INSTALL_ID` secret
+- **Keep the dependency graph on.** Dependabot security updates (below) read it to find
+  vulnerable dependencies. GitHub enables it on every public repository and offers no switch
+  to turn it off there, so there is nothing to apply while the repository stays public; on a
+  private one, enable it under Settings > Advanced Security. Verify that
+  GitHub can export it:
+
+    ```bash
+    gh api repos/iglootools/nbkp/dependency-graph/sbom -q '.sbom.name'
+    # expect: com.github.iglootools/nbkp   (a 404 means the graph is off)
+    ```
+- **Set the `ASCIINEMA_INSTALL_ID` Actions secret.** The `demo` workflow's upload steps use
+  it to publish the recording under the project's asciinema.org account (they are commented
+  out for now, uploads going through `mise run demo-upload-latest`; the workflow explains
+  why, and the secret stays set so they can be re-enabled). Run `asciinema auth` and open
+  the link it prints to tie the local install id to the account, then store it:
+
+    ```bash
+    gh secret set ASCIINEMA_INSTALL_ID -R iglootools/nbkp < ~/.local/state/asciinema/install-id
+    gh secret list -R iglootools/nbkp   # expect a line starting with ASCIINEMA_INSTALL_ID
+    ```
+
+    A secret's value cannot be read back, only its name and update date, so `gh secret list`
+    is as far as verification goes.
+- **The `pypi` and `testpypi` environments**, which the publish workflows run in and the
+  PyPI trusted publishers name, are release configuration: they are recorded, with the
+  publisher settings that must match them, in
+  [Releasing and Publishing › PyPI Config](releasing-and-publishing.md#pypi-config).
 - **Enable Dependabot security updates.** These are *repository settings*, and
   [.github/dependabot.yml](../.github/dependabot.yml) cannot switch them on — that file only
   shapes the resulting PRs and restricts Dependabot to the security half
