@@ -188,10 +188,13 @@ def build_passphrase_fn(
     command_template: list[str] | None,
     *,
     prompt: PromptFn,
+    environ: Mapping[str, str] = os.environ,
+    run: CommandFn = _run_captured,
 ) -> tuple[Callable[[str], str], PassphraseCache]:
     """Build a passphrase retrieval function backed by a per-run cache.
 
-    *prompt* is used only by the ``prompt`` provider.
+    *prompt*, *environ* and *run* are handed to :func:`retrieve_passphrase`:
+    each is used only by its own provider.
     """
     cache = PassphraseCache()
 
@@ -199,7 +202,7 @@ def build_passphrase_fn(
         return cache.get_or_retrieve(
             passphrase_id,
             lambda pid: retrieve_passphrase(
-                pid, provider, command_template, prompt=prompt
+                pid, provider, command_template, environ, prompt, run
             ),
         )
 

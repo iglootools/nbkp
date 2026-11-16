@@ -1,6 +1,7 @@
 from ..config import Config
 from ..policy import Strictness
 from ..preflight import SyncStatus
+from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 from .common import list_snapshots, read_latest_symlink
 from .disposition import preflight_disposition
@@ -26,14 +27,17 @@ def _read_snapshots(
     status: SyncStatus,
     config: Config,
     re: ResolvedEndpoints,
+    run: VolumeCommandRunner,
 ) -> ShowResult:
     dst_ep = config.destination_endpoint(status.config)
     try:
         return ShowResult(
             sync_slug=slug,
             snapshot_mode=dst_ep.snapshot_mode,
-            snapshots=tuple(list_snapshots(status.config, config, re)),
-            latest=read_latest_symlink(status.config, config, resolved_endpoints=re),
+            snapshots=tuple(list_snapshots(status.config, config, re, run=run)),
+            latest=read_latest_symlink(
+                status.config, config, resolved_endpoints=re, run=run
+            ),
             max_snapshots=dst_ep.max_snapshots,
         )
     except SnapshotOperationError as e:
@@ -53,10 +57,11 @@ def _process_candidate(
     config: Config,
     re: ResolvedEndpoints,
     strictness: Strictness,
+    run: VolumeCommandRunner,
 ) -> ShowResult:
     match _disposition(status, config, strictness):
         case (None, None):
-            return _read_snapshots(slug, status, config, re)
+            return _read_snapshots(slug, status, config, re, run)
         case (skip_reason, error):
             dst_ep = config.destination_endpoint(status.config)
             return ShowResult(
@@ -76,10 +81,13 @@ def show_all_syncs(
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
 ) -> list[ShowResult]:
+    """Snapshots of each selected sync's destination, read through *run*."""
     re = resolved_endpoints or {}
     return [
-        _process_candidate(slug, status, config, re, strictness)
+        _process_candidate(slug, status, config, re, strictness, run)
         for slug, status in sync_statuses.items()
         if not only_syncs or slug in only_syncs
     ]

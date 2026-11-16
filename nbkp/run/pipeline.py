@@ -6,6 +6,7 @@ tests.  Display/output, mount lifecycle, and config loading are the
 caller's responsibility.
 """
 
+import shutil
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -19,6 +20,7 @@ from ..preflight import (
     check_all_syncs,
     has_fatal_errors,
 )
+from ..remote.dispatch import CommandLocator, VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 from ..sync.modes import RsyncRunner
 from ..sync.orchestration import run_all_syncs
@@ -80,6 +82,8 @@ def check_and_run(
     mount_observations: dict[str, MountObservation] | None = None,
     exclude_locations: Collection[str] = (),
     rsync: RsyncRunner = run_rsync,
+    run: VolumeCommandRunner = run_on_volume,
+    which: CommandLocator = shutil.which,
 ) -> PipelineResult:
     """Run preflight checks, then execute syncs if no fatal errors.
 
@@ -98,6 +102,9 @@ def check_and_run(
         Called after preflight completes but before syncs start, whether
         or not there are fatal errors, so the CLI can print the check
         table in both cases.
+    rsync, run, which:
+        Run the transfers, run commands on volume hosts (probes and
+        snapshots), and find tools on the orchestrator.
     """
     preflight = check_all_syncs(
         config,
@@ -108,6 +115,8 @@ def check_and_run(
         dry_run=dry_run,
         mount_observations=mount_observations,
         exclude_locations=exclude_locations,
+        run=run,
+        which=which,
     )
     if on_checks_done is not None:
         on_checks_done(preflight)
@@ -136,6 +145,7 @@ def check_and_run(
             on_sync_end=cb.on_sync_end,
             resolved_endpoints=resolved_endpoints,
             rsync=rsync,
+            run_command=run,
         )
         return PipelineResult(
             preflight=preflight,
