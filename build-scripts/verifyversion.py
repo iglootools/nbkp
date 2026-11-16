@@ -22,6 +22,7 @@ import tomllib
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+from textwrap import indent
 from typing import Annotated
 
 import typer
@@ -118,8 +119,9 @@ def main(
             f"\n{len(fallbacks)} wheel(s) carry fallback-version {FALLBACK_VERSION}, "
             "meaning git tags/history were not visible to the build:"
         )
-        for found in fallbacks:
-            err_console.print(f"  {found.wheel}")
+        err_console.print(
+            indent("\n".join(str(found.wheel) for found in fallbacks), "  ")
+        )
         err_console.print(
             "\nCheck that the checkout has full history and tags "
             "(fetch-depth: 0, fetch-tags: true)."
