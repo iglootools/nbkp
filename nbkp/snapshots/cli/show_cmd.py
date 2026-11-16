@@ -14,9 +14,9 @@ from ...cliwiring.mount import managed_mount
 from ...cliwiring.preflight import check_all_with_progress
 from ...cliwiring.runtime import runtime_of
 from ...policy import Strictness
-from ...preflight import SyncStatus
 from ...remote.endpoints import NetworkType
 from .. import show_all_syncs
+from ..disposition import failed_in_preflight, has_errors
 from ..models import ShowResult
 from ..output import print_human_show_results
 from . import app
@@ -129,8 +129,8 @@ def show(
             run=runtime.run,
         )
         _print_results(results, output)
-        if any(r.error is not None for r in results):
-            if output is OutputFormat.HUMAN and _preflight_failed(
+        if has_errors(results):
+            if output is OutputFormat.HUMAN and failed_in_preflight(
                 results, preflight.sync_statuses
             ):
                 print_troubleshoot_hint(
@@ -150,16 +150,3 @@ def _print_results(results: list[ShowResult], output: OutputFormat) -> None:
             echo_json(list(results))
         case OutputFormat.HUMAN:
             print_human_show_results(results)
-
-
-def _preflight_failed(
-    results: list[ShowResult], sync_statuses: dict[str, SyncStatus]
-) -> bool:
-    """Whether a sync errored because preflight found it inactive or broken.
-
-    Those are the errors ``preflight troubleshoot`` explains; a snapshot
-    operation failing on an active sync is not.
-    """
-    return any(
-        r.error is not None and not sync_statuses[r.sync_slug].active for r in results
-    )
