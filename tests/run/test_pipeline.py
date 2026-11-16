@@ -1,18 +1,28 @@
-"""Tests for the check-then-run pipeline's strictness semantics."""
+"""Tests for the check-then-run pipeline's strictness semantics.
+
+:func:`run_checked` takes the preflight result :func:`check_and_run` computed,
+so these tests hand it testkit statuses; the CLI tests drive the whole
+pipeline against fake hosts.
+"""
 
 from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from nbkp.config import Config, LocalVolume, SyncConfig, SyncEndpoint, Volume
+from nbkp.disks import UmountResult
 from nbkp.policy import Strictness
 from nbkp.preflight import (
     DestinationEndpointError,
     SyncError,
     SyncStatus,
 )
-from nbkp.run.pipeline import PipelineResult, check_and_run
+from nbkp.run.pipeline import (
+    PipelineResult,
+    fatal_sync_errors,
+    run_checked,
+    run_failed,
+)
 from nbkp.sync import SyncFailureKind, SyncOutcome
 from tests.clidisplay import (
     dst_ep_status,
@@ -79,12 +89,11 @@ def _run(
     config: Config,
     statuses: dict[str, SyncStatus],
     strictness: Strictness,
-    mock_checks: MagicMock,
     rsync: FakeRsync,
 ) -> PipelineResult:
-    mock_checks.return_value = preflight({}, statuses)
-    return check_and_run(
+    return run_checked(
         config,
+        preflight({}, statuses),
         clock=lambda: datetime(2026, 3, 6, tzinfo=UTC),
         platform="linux",
         strictness=strictness,
@@ -92,11 +101,8 @@ def _run(
     )
 
 
-@patch("nbkp.run.pipeline.check_all_syncs")
 class TestIgnoreInactiveCancellations:
-    def test_cancelled_by_inactive_upstream_is_expected(
-        self, mock_checks: MagicMock
-    ) -> None:
+    def test_cancelled_by_inactive_upstream_is_expected(self) -> None:
         """Docs: exit 0 if only inactive syncs were skipped — cascades included."""
         config = _chain_config()
         statuses = {
@@ -105,9 +111,7 @@ class TestIgnoreInactiveCancellations:
         }
 
         rsync = FakeRsync()
-        pipeline = _run(
-            config, statuses, Strictness.IGNORE_INACTIVE, mock_checks, rsync
-        )
+        pipeline = _run(config, statuses, Strictness.IGNORE_INACTIVE, rsync)
 
         outcomes = {r.sync_slug: r.failure for r in pipeline.results}
         assert outcomes == {
@@ -118,16 +122,12 @@ class TestIgnoreInactiveCancellations:
         assert not pipeline.has_sync_failures
         assert rsync.calls == []
 
-    def test_cancelled_by_failed_upstream_is_a_failure(
-        self, mock_checks: MagicMock
-    ) -> None:
+    def test_cancelled_by_failed_upstream_is_a_failure(self) -> None:
         config = _chain_config()
         statuses = {"a": _status(config, "a"), "b": _status(config, "b")}
         rsync = FakeRsync([completed(23, stderr="err")])
 
-        pipeline = _run(
-            config, statuses, Strictness.IGNORE_INACTIVE, mock_checks, rsync
-        )
+        pipeline = _run(config, statuses, Strictness.IGNORE_INACTIVE, rsync)
 
         outcomes = {r.sync_slug: r.failure for r in pipeline.results}
         assert outcomes == {
@@ -137,9 +137,8 @@ class TestIgnoreInactiveCancellations:
         assert pipeline.has_sync_failures
 
 
-@patch("nbkp.run.pipeline.check_all_syncs")
 class TestIgnoreAll:
-    def test_attempts_infra_broken_sync(self, mock_checks: MagicMock) -> None:
+    def test_attempts_infra_broken_sync(self) -> None:
         config = _chain_config()
         statuses = {
             "a": _infra_broken(_status(config, "a")),
@@ -147,7 +146,7 @@ class TestIgnoreAll:
         }
         rsync = FakeRsync()
 
-        pipeline = _run(config, statuses, Strictness.IGNORE_ALL, mock_checks, rsync)
+        pipeline = _run(config, statuses, Strictness.IGNORE_ALL, rsync)
 
         assert [r.outcome for r in pipeline.results] == [
             SyncOutcome.SUCCESS,
@@ -157,7 +156,7 @@ class TestIgnoreAll:
         assert not pipeline.has_sync_failures
         assert rsync.synced == ["a", "b"]
 
-    def test_execution_failure_still_fails(self, mock_checks: MagicMock) -> None:
+    def test_execution_failure_still_fails(self) -> None:
         config = _chain_config()
         statuses = {
             "a": _infra_broken(_status(config, "a")),
@@ -165,11 +164,11 @@ class TestIgnoreAll:
         }
         rsync = FakeRsync([completed(11, stderr="err")])
 
-        pipeline = _run(config, statuses, Strictness.IGNORE_ALL, mock_checks, rsync)
+        pipeline = _run(config, statuses, Strictness.IGNORE_ALL, rsync)
 
         assert pipeline.has_sync_failures
 
-    def test_inactive_skip_is_not_a_failure(self, mock_checks: MagicMock) -> None:
+    def test_inactive_skip_is_not_a_failure(self) -> None:
         config = _chain_config()
         statuses = {
             "a": _status(config, "a", src_sentinel=False),
@@ -177,14 +176,12 @@ class TestIgnoreAll:
         }
 
         rsync = FakeRsync()
-        pipeline = _run(config, statuses, Strictness.IGNORE_ALL, mock_checks, rsync)
+        pipeline = _run(config, statuses, Strictness.IGNORE_ALL, rsync)
 
         assert not pipeline.has_sync_failures
         assert rsync.calls == []
 
 
-@patch("nbkp.run.pipeline.run_all_syncs")
-@patch("nbkp.run.pipeline.check_all_syncs")
 class TestPreflightAbort:
     @pytest.mark.parametrize(
         ("strictness", "aborts"),
@@ -194,21 +191,66 @@ class TestPreflightAbort:
             (Strictness.IGNORE_ALL, False),
         ],
     )
-    def test_infra_errors(
-        self,
-        mock_checks: MagicMock,
-        mock_run: MagicMock,
-        strictness: Strictness,
-        aborts: bool,
-    ) -> None:
+    def test_infra_errors(self, strictness: Strictness, aborts: bool) -> None:
         config = _chain_config()
         statuses = {
             "a": _infra_broken(_status(config, "a")),
             "b": _status(config, "b"),
         }
-        mock_run.return_value = []
+        rsync = FakeRsync()
 
-        pipeline = _run(config, statuses, strictness, mock_checks, FakeRsync())
+        pipeline = _run(config, statuses, strictness, rsync)
 
         assert pipeline.has_preflight_errors is aborts
-        assert mock_run.called is not aborts
+        assert (rsync.synced == []) is aborts
+
+
+class TestFatalSyncErrors:
+    def test_lists_only_the_syncs_fatal_under_the_strictness(self) -> None:
+        config = _chain_config()
+        statuses = {
+            "a": _status(config, "a", src_sentinel=False),
+            "b": _infra_broken(_status(config, "b")),
+        }
+
+        assert fatal_sync_errors(statuses, Strictness.IGNORE_INACTIVE) == {
+            "b": ["destination endpoint inactive"]
+        }
+        assert fatal_sync_errors(statuses, Strictness.IGNORE_NONE) == {
+            "a": ["source endpoint inactive"],
+            "b": ["destination endpoint inactive"],
+        }
+
+    def test_a_disabled_sync_is_never_fatal(self) -> None:
+        """Under ignore-none an inactive sync aborts the run, but a disabled
+        one must not be reported as offending."""
+        config = _chain_config()
+        disabled = _status(config, "a").model_copy(
+            update={"errors": [SyncError.DISABLED]}
+        )
+
+        assert fatal_sync_errors({"a": disabled}, Strictness.IGNORE_NONE) == {}
+
+
+class TestRunFailed:
+    def _pipeline(
+        self, *, aborted: bool = False, failed: bool = False
+    ) -> PipelineResult:
+        return PipelineResult(
+            preflight=preflight({}, {}),
+            results=[],
+            has_preflight_errors=aborted,
+            has_sync_failures=failed,
+        )
+
+    def test_a_clean_run_succeeds(self) -> None:
+        ok = UmountResult("enc", success=True)
+        assert not run_failed(self._pipeline(), [ok])
+
+    @pytest.mark.parametrize(("aborted", "failed"), [(True, True), (False, True)])
+    def test_abort_or_sync_failure_fails(self, aborted: bool, failed: bool) -> None:
+        assert run_failed(self._pipeline(aborted=aborted, failed=failed), [])
+
+    def test_a_volume_left_mounted_fails_a_successful_run(self) -> None:
+        stuck = UmountResult("enc", success=False)
+        assert run_failed(self._pipeline(), [stuck])
