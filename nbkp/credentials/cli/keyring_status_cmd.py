@@ -57,12 +57,17 @@ def keyring_status(
     )
     match output:
         case OutputFormat.JSON:
-            echo_json(_status_json(cfg, results))
+            echo_json(keyring_status_json(cfg, results))
         case OutputFormat.HUMAN:
             _print_human_status(cfg, results)
 
 
-def _status_json(cfg: Config, results: list[PassphrasePrefetch]) -> dict[str, Any]:
+def keyring_status_json(
+    cfg: Config, results: list[PassphrasePrefetch]
+) -> dict[str, Any]:
+    """``credentials keyring-status -o json``: every configured passphrase id with
+    its volumes, and, when the provider can be checked ahead of a run, whether
+    it was available (and why not)."""
     checked = is_prefetchable(cfg.credential_provider)
     by_id = {r.passphrase_id: r for r in results}
     return {
