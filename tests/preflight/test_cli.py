@@ -5,6 +5,7 @@ the fake NAS (``tests.nas``) through an injected runtime.
 """
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -140,11 +141,11 @@ class TestCheckCommand:
         assert exit_code == 1
 
     def test_hint_carries_config_and_endpoint_flags(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, chdir: Callable[[Path], None]
     ) -> None:
         # Run from the config's directory: the hint shows the path relative
         # to it, short enough not to wrap inside the panel.
-        monkeypatch.chdir(tmp_path)
+        chdir(tmp_path)
         write_config(tmp_path, nas_config())
 
         _, output = _check(

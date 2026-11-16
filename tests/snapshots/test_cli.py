@@ -6,6 +6,7 @@ the operations, the mount lifecycle and the hint together.
 """
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -27,13 +28,13 @@ _HINT = "nbkp preflight troubleshoot -c config.yaml -N private"
 
 
 @pytest.fixture(autouse=True)
-def _in_tmp_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _in_tmp_path(tmp_path: Path, chdir: Callable[[Path], None]) -> None:
     """Run every test from ``tmp_path``, where it writes ``config.yaml``.
 
     Commands get ``-c config.yaml``, and the troubleshoot hints they print
     show that same short relative path.
     """
-    monkeypatch.chdir(tmp_path)
+    chdir(tmp_path)
 
 
 def _write(tmp_path: Path, config: Config | None = None) -> None:

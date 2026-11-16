@@ -9,6 +9,7 @@ environment.
 
 import json
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -46,13 +47,13 @@ def _config() -> Config:
 
 
 @pytest.fixture(autouse=True)
-def _config_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _config_file(tmp_path: Path, chdir: Callable[[Path], None]) -> None:
     """Run every test from a directory holding ``_config()`` as ``config.yaml``.
 
     Commands get ``-c config.yaml``, and the hints they print show that
     same short relative path.
     """
-    monkeypatch.chdir(tmp_path)
+    chdir(tmp_path)
     write_config(tmp_path, _config())
 
 
