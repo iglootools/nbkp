@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -43,6 +44,26 @@ def _raise_fd_soft_limit(target: int = 8192) -> None:
 _raise_fd_soft_limit()
 
 pytest_plugins = ["tests._docker_fixtures"]
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Never let a test reach the developer's real OS keyring.
+
+    The ``keyring`` credential provider is the default, so any command run
+    through the CLI on a config with an encrypted volume prefetches its
+    passphrase from the OS secret store, and on macOS that pops a Keychain
+    approval dialog. Point keyring at its fail backend for the whole
+    session (each xdist worker runs this hook too), in the environment for
+    subprocesses as well as in this process. Tests of the keyring provider
+    substitute the ``keyring`` module themselves.
+    """
+    os.environ["PYTHON_KEYRING_BACKEND"] = "keyring.backends.fail.Keyring"
+    try:
+        import keyring
+        import keyring.backends.fail
+    except ImportError:  # the 'keyring' extra is optional
+        return
+    keyring.set_keyring(keyring.backends.fail.Keyring())
 
 
 @pytest.fixture(autouse=True)
