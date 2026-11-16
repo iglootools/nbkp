@@ -362,6 +362,25 @@ class TestMountVolume:
             result = mount_volume(vol, vol.mount, {}, lambda x: "pass")  # type: ignore[arg-type]
         assert result.failure_reason == MountFailureReason.UDISKS_NOT_AVAILABLE
 
+    def test_mount_udisks_daemon_unreachable(self) -> None:
+        # Verbatim udisksctl 2.10.1 (Debian 13) output, exit code 1, with the
+        # system D-Bus daemon stopped.
+        vol = _unencrypted_vol()
+        stderr = (
+            "Error connecting to the udisks daemon: Could not connect:"
+            " Connection refused"
+        )
+        with (
+            patch("nbkp.disks.lifecycle.detect_device_present", return_value=True),
+            patch("nbkp.disks.lifecycle.find_mountpoint", return_value=None),
+            patch(
+                "nbkp.disks.lifecycle.run_on_volume",
+                return_value=_mock_run(1, stderr=stderr),
+            ),
+        ):
+            result = mount_volume(vol, vol.mount, {}, lambda x: "pass")  # type: ignore[arg-type]
+        assert result.failure_reason == MountFailureReason.UDISKS_NOT_AVAILABLE
+
     def test_udisks_unknown_device_is_a_mount_failure(self) -> None:
         """udisks failing to find a device does not mean udisks is missing."""
         # Verbatim udisksctl 2.10.1 (Debian 13) output, exit code 1, for a

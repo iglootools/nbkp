@@ -52,6 +52,9 @@ _NOT_AUTHORIZED_SIGNATURES = (
 _UDISKS_UNAVAILABLE_SIGNATURES = (
     "command not found",  # bash: udisksctl: command not found
     "udisksctl: not found",  # dash (sh -c): udisksctl: not found
+    # udisksctl 2.10 with no system bus to reach udisksd through:
+    # "Error connecting to the udisks daemon: Could not connect: Connection refused"
+    "error connecting to the udisks daemon",
     "error connecting to the system message bus",
     "org.freedesktop.dbus.error.serviceunknown",
 )
