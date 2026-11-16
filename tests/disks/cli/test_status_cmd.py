@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
@@ -12,6 +13,7 @@ from nbkp.config import (
     RemoteVolume,
     SshEndpoint,
 )
+from nbkp.config.testkit import write_config
 from nbkp.preflight import MountCapabilities
 
 runner = CliRunner()
@@ -46,10 +48,9 @@ def _mount_config_for_status() -> Config:
 
 class TestVolumesStatusCommand:
     @patch("nbkp.disks.cli.helpers.status.check_mount_status")
-    @patch("nbkp.cliwiring.config.load_config")
-    def test_json_output(self, mock_load: MagicMock, mock_check: MagicMock) -> None:
+    def test_json_output(self, mock_check: MagicMock, tmp_path: Path) -> None:
         config = _mount_config_for_status()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         mock_check.side_effect = [
             MountCapabilities(
                 device_present=True,
@@ -63,7 +64,7 @@ class TestVolumesStatusCommand:
         ]
 
         result = runner.invoke(
-            app, ["disks", "status", "--config", "/f.yaml", "-o", "json"]
+            app, ["disks", "status", "--config", str(config_path), "-o", "json"]
         )
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -82,25 +83,23 @@ class TestVolumesStatusCommand:
         assert data[2]["mounted"] is None
 
     @patch("nbkp.disks.cli.helpers.status.check_mount_status")
-    @patch("nbkp.cliwiring.config.load_config")
-    def test_human_output(self, mock_load: MagicMock, mock_check: MagicMock) -> None:
+    def test_human_output(self, mock_check: MagicMock, tmp_path: Path) -> None:
         config = _mount_config_for_status()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         mock_check.return_value = MountCapabilities(
             device_present=True,
             luks_unlocked=True,
             mounted=True,
         )
 
-        result = runner.invoke(app, ["disks", "status", "--config", "/f.yaml"])
+        result = runner.invoke(app, ["disks", "status", "--config", str(config_path)])
         assert result.exit_code == 0
         assert "Volume Mount Status" in result.output
 
     @patch("nbkp.disks.cli.helpers.status.check_mount_status")
-    @patch("nbkp.cliwiring.config.load_config")
-    def test_name_filter(self, mock_load: MagicMock, mock_check: MagicMock) -> None:
+    def test_name_filter(self, mock_check: MagicMock, tmp_path: Path) -> None:
         config = _mount_config_for_status()
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
         mock_check.return_value = MountCapabilities(
             device_present=True,
             mounted=True,
@@ -112,7 +111,7 @@ class TestVolumesStatusCommand:
                 "disks",
                 "status",
                 "--config",
-                "/f.yaml",
+                str(config_path),
                 "-o",
                 "json",
                 "--name",
@@ -124,8 +123,7 @@ class TestVolumesStatusCommand:
         assert len(data) == 1
         assert data[0]["volume"] == "encrypted-drive"
 
-    @patch("nbkp.cliwiring.config.load_config")
-    def test_no_mount_config(self, mock_load: MagicMock) -> None:
+    def test_no_mount_config(self, tmp_path: Path) -> None:
         config = Config(
             ssh_endpoints={},
             volumes={
@@ -134,10 +132,10 @@ class TestVolumesStatusCommand:
             sync_endpoints={},
             syncs={},
         )
-        mock_load.return_value = config
+        config_path = write_config(tmp_path, config)
 
         result = runner.invoke(
-            app, ["disks", "status", "--config", "/f.yaml", "-o", "json"]
+            app, ["disks", "status", "--config", str(config_path), "-o", "json"]
         )
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -146,29 +144,40 @@ class TestVolumesStatusCommand:
         assert "not managed" in data[0]["volume"]
 
     @patch("nbkp.disks.cli.helpers.status.check_mount_status")
-    @patch("nbkp.cliwiring.config.load_config")
     def test_location_excluded_volume_not_probed(
-        self, mock_load: MagicMock, mock_check: MagicMock
+        self, mock_check: MagicMock, tmp_path: Path
     ) -> None:
-        mock_load.return_value = Config(
-            ssh_endpoints={
-                "nas": SshEndpoint(slug="nas", host="nas.lan", location="home"),
-            },
-            volumes={
-                "nas-drive": RemoteVolume(
-                    slug="nas-drive",
-                    ssh_endpoint="nas",
-                    path="/mnt/nas-drive",
-                    mount=MountConfig(
-                        device_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        config_path = write_config(
+            tmp_path,
+            Config(
+                ssh_endpoints={
+                    "nas": SshEndpoint(slug="nas", host="nas.lan", location="home"),
+                },
+                volumes={
+                    "nas-drive": RemoteVolume(
+                        slug="nas-drive",
+                        ssh_endpoint="nas",
+                        path="/mnt/nas-drive",
+                        mount=MountConfig(
+                            device_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+                        ),
                     ),
-                ),
-            },
+                },
+            ),
         )
 
         result = runner.invoke(
             app,
-            ["disks", "status", "--config", "/f.yaml", "-o", "json", "-L", "home"],
+            [
+                "disks",
+                "status",
+                "--config",
+                str(config_path),
+                "-o",
+                "json",
+                "-L",
+                "home",
+            ],
         )
         assert result.exit_code == 0
         mock_check.assert_not_called()
