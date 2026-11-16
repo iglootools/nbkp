@@ -7,8 +7,6 @@ the NAS's answers (``ls``, ``readlink``, ``btrfs``) on a FakeCommandRunner.
 
 import subprocess
 
-import pytest
-
 from nbkp.config import Config
 from nbkp.policy import Strictness
 from nbkp.preflight import (
@@ -172,19 +170,12 @@ class TestPrune:
         assert (result.deleted, result.dry_run) == ((f"{SNAPSHOTS}/{OLD}",), True)
         assert run.commands_starting_with("btrfs") == []
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "known bug, reported: a dry run adds the would-be-deleted snapshots"
-            " to a listing that still holds them, so kept is 4 of 3 snapshots."
-            " The former CLI test passed only because its stubbed listing"
-            " already left them out."
-        ),
-    )
     def test_dry_run_keeps_every_snapshot(self) -> None:
+        """A dry run deletes nothing, so every snapshot is still kept: the
+        listing already holds the would-be-deleted ones (it used to count them
+        twice, 4 kept of 3)."""
         [result] = _prune(_nas_with((OLD, MID, NEW)), dry_run=True)
 
-        # Nothing deleted yet, so the would-be-deleted count is kept.
         assert result.kept == 3
 
     def test_sync_without_snapshots_is_skipped(self) -> None:

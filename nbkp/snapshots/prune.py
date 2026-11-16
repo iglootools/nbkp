@@ -102,7 +102,7 @@ def _execute_prune(
         return PruneResult(
             sync_slug=slug,
             deleted=tuple(deleted),
-            kept=len(remaining) + (len(deleted) if dry_run else 0),
+            kept=len(remaining),
             dry_run=dry_run,
         )
     except SnapshotOperationError as e:
