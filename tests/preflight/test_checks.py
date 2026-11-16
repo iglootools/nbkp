@@ -1,4 +1,3 @@
-import os
 from collections.abc import Collection
 from datetime import UTC, datetime
 from pathlib import Path
@@ -61,197 +60,18 @@ from nbkp.snapshots.common import create_snapshot_timestamp
 from tests.fakes import FakeCommandRunner, completed
 from tests.preflight.fake_hosts import FAILS, healthy_host, local_tools
 
-
-@pytest.fixture(autouse=True)
-def _no_real_host_commands(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep the check pipeline from spawning real ``rsync`` / ``test -w``.
-
-    Unit tests must not depend on the developer's rsync (project rule): the
-    version probe reports a good rsync, and writability is answered by
-    ``os.access`` — the same question ``test -w`` asks, without a process.
-    Tests exercising these probes patch them (or ``subprocess.run``) directly.
-    """
-    monkeypatch.setattr(
-        "nbkp.preflight.volume_checks.check_rsync_version", lambda *_, **__: True
-    )
-    monkeypatch.setattr(
-        "nbkp.preflight.endpoint_checks.check_directory_writable",
-        lambda _vol, path, _re, **_kw: os.access(path, os.W_OK),
-    )
-
-
-_STUB_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=False,
-    has_stat=True,
-    has_findmnt=True,
-)
-
-_NO_RSYNC_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=False,
-    rsync_version_ok=False,
-    has_btrfs=False,
-    has_stat=False,
-    has_findmnt=False,
-)
-
-_BTRFS_FULL_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=True,
-    has_stat=True,
-    has_findmnt=True,
-)
-
-_BTRFS_NO_BTRFS_CMD_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=False,
-    has_stat=True,
-    has_findmnt=True,
-)
-
-_BTRFS_NO_STAT_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=True,
-    has_stat=False,
-    has_findmnt=True,
-)
-
-_BTRFS_NO_FINDMNT_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=True,
-    has_stat=True,
-    has_findmnt=False,
-)
-
-_BTRFS_NO_STAT_NO_FINDMNT_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=True,
-    has_stat=False,
-    has_findmnt=False,
-)
-
-_BTRFS_NOT_BTRFS_FS_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=True,
-    has_stat=True,
-    has_findmnt=True,
-)
-
-_HL_NO_STAT_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=False,
-    has_stat=False,
-    has_findmnt=False,
-)
-
-_HL_NO_HARDLINK_HOST_TOOLS = HostToolCapabilities(
-    has_rsync=True,
-    rsync_version_ok=True,
-    has_btrfs=False,
-    has_stat=True,
-    has_findmnt=False,
-)
-
-_REACHABLE_SSH_DIAG = SshEndpointDiagnostics(ssh_reachable=True)
-"""Shared default bastion diagnostics; safe to share because the model is frozen."""
-
-
-def _make_localhost_ssh(
-    host_tools: HostToolCapabilities = _STUB_HOST_TOOLS,
-) -> SshEndpointStatus:
-    return SshEndpointStatus(
-        slug="localhost",
-        diagnostics=SshEndpointDiagnostics(host_tools=host_tools),
-        errors=[],
-    )
-
-
-_ACTIVE_LOCALHOST_SSH = _make_localhost_ssh()
-
-
-_STUB_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_NO_RSYNC_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_BTRFS_FULL_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=True,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=True,
-)
-
-_BTRFS_NO_SUBVOL_RM_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=True,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_BTRFS_NO_BTRFS_CMD_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_BTRFS_NO_STAT_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_BTRFS_NO_FINDMNT_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=True,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_BTRFS_NO_STAT_NO_FINDMNT_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_BTRFS_NOT_BTRFS_FS_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_HL_NO_STAT_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=True,
-    btrfs_user_subvol_rm=False,
-)
-
-_HL_NO_HARDLINK_CAPS = VolumeCapabilities(
-    sentinel_exists=True,
-    is_btrfs_filesystem=False,
-    hardlink_supported=False,
-    btrfs_user_subvol_rm=False,
+_ACTIVE_LOCALHOST_SSH = SshEndpointStatus(
+    slug="localhost",
+    diagnostics=SshEndpointDiagnostics(
+        host_tools=HostToolCapabilities(
+            has_rsync=True,
+            rsync_version_ok=True,
+            has_btrfs=False,
+            has_stat=True,
+            has_findmnt=True,
+        )
+    ),
+    errors=[],
 )
 
 
@@ -654,18 +474,6 @@ class TestCheckBtrfsMountOptionRemote:
         )
 
 
-def _ssh_diag(
-    host_tools: HostToolCapabilities = _STUB_HOST_TOOLS,
-    ssh_reachable: bool | None = None,
-    location_excluded: bool = False,
-) -> SshEndpointDiagnostics:
-    return SshEndpointDiagnostics(
-        ssh_reachable=ssh_reachable,
-        location_excluded=location_excluded,
-        host_tools=host_tools,
-    )
-
-
 def _check(
     sync: SyncConfig,
     config: Config,
@@ -797,6 +605,22 @@ class TestCheckSync:
         # localhost rsync must fail preflight.
         assert SyncError.ENDPOINT_HOST_ERRORS in status.errors
         assert status.is_expected_inactive() is False
+
+    def test_openrsync_on_the_orchestrator_is_too_old(
+        self, src_dst: tuple[Path, Path]
+    ) -> None:
+        _setup_active_sentinels(*src_dst)
+        config, sync = _local_sync(*src_dst)
+        run = FakeCommandRunner().on(
+            "rsync", "--version", returns=completed(stdout="openrsync: protocol 29\n")
+        )
+
+        status = _check(sync, config, run=run)
+        ssh_errors = (
+            status.source_endpoint_status.volume_status.ssh_endpoint_status.errors
+        )
+        assert ssh_errors == [SshEndpointError.RSYNC_TOO_OLD]
+        assert SyncError.ENDPOINT_HOST_ERRORS in status.errors
 
     def test_rsync_found_btrfs_not_found_on_destination(
         self, src_dst: tuple[Path, Path]
