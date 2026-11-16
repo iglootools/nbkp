@@ -62,7 +62,7 @@ from nbkp.remote.endpoints import EndpointFilter, ResolvedEndpoint, ResolvedEndp
 from nbkp.remote.resolution import resolve_all_endpoints, resolve_proxy_chain
 from nbkp.snapshots.common import create_snapshot_timestamp
 from tests.fakes import FakeCommandRunner, completed
-from tests.preflight.fake_hosts import FAILS
+from tests.preflight.fake_hosts import FAILS, healthy_host, local_tools
 
 
 @pytest.fixture(autouse=True)
@@ -390,29 +390,38 @@ def _make_resolved(config: Config) -> ResolvedEndpoints:
 
 
 class TestCheckLocalVolume:
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    def test_active(self, mock_caps: MagicMock, tmp_path: Path) -> None:
+    def test_active(self, tmp_path: Path) -> None:
         vol = LocalVolume(slug="data", path=str(tmp_path))
         (tmp_path / ".nbkp-vol").touch()
-        status = check_volume(vol)
+        run = healthy_host()
+        status = check_volume(vol, run=run, which=local_tools())
         assert status.active is True
         assert status.errors == []
-        assert status.diagnostics.capabilities is _STUB_CAPS
-        mock_caps.assert_called_once()
+        assert status.diagnostics is not None
+        assert status.diagnostics.capabilities is not None
+        assert status.diagnostics.capabilities.sentinel_exists is True
+        # The capabilities were probed, on the volume itself.
+        assert run.commands_starting_with("stat", "-f") == [
+            ["stat", "-f", "-c", "%T", str(tmp_path)]
+        ]
 
     def test_inactive(self, tmp_path: Path) -> None:
         vol = LocalVolume(slug="data", path=str(tmp_path))
-        status = check_volume(vol)
+        run = healthy_host()
+        status = check_volume(vol, run=run, which=local_tools())
         assert status.active is False
         assert status.errors == [VolumeError.SENTINEL_NOT_FOUND]
+        # Without its sentinel, a volume's filesystem is not probed.
+        assert run.commands_starting_with("stat") == []
 
     def test_sentinel_directory_is_not_a_sentinel(self, tmp_path: Path) -> None:
         """Like the remote ``test -f``: only a regular file counts."""
         (tmp_path / ".nbkp-vol").mkdir()
-        status = check_volume(LocalVolume(slug="data", path=str(tmp_path)))
+        status = check_volume(
+            LocalVolume(slug="data", path=str(tmp_path)),
+            run=healthy_host(),
+            which=local_tools(),
+        )
         assert status.errors == [VolumeError.SENTINEL_NOT_FOUND]
 
     def test_endpoint_sentinel_directory_is_not_a_sentinel(
@@ -427,42 +436,27 @@ class TestCheckLocalVolume:
 
 
 class TestCheckRemoteVolume:
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_active(
-        self, mock_run: MagicMock, mock_ssh_ep: MagicMock, mock_caps: MagicMock
-    ) -> None:
-        mock_run.return_value = MagicMock(returncode=0)
-        mock_ssh_ep.return_value = SshEndpointDiagnostics(
-            ssh_reachable=True,
-            host_tools=_STUB_HOST_TOOLS,
-        )
+    def test_active(self) -> None:
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        status = check_volume(vol, resolved)
+        run = healthy_host()
+        status = check_volume(vol, resolved, run=run)
         assert status.active is True
         assert status.errors == []
         assert status.diagnostics is not None
-        assert status.diagnostics.capabilities is _STUB_CAPS
+        assert status.diagnostics.capabilities is not None
+        assert status.diagnostics.capabilities.sentinel_exists is True
+        assert ["test", "-f", "/backup/.nbkp-vol"] in run.commands
+        assert ["stat", "-f", "-c", "%T", "/backup"] in run.commands
 
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_sentinel_missing(
-        self, mock_run: MagicMock, mock_ssh_ep: MagicMock
-    ) -> None:
+    def test_sentinel_missing(self) -> None:
         """SSH succeeds but sentinel file is absent."""
-        mock_run.return_value = MagicMock(returncode=1)
-        mock_ssh_ep.return_value = SshEndpointDiagnostics(
-            ssh_reachable=True,
-            host_tools=_STUB_HOST_TOOLS,
+        run = healthy_host(
+            FakeCommandRunner().on("test", "-f", "/backup/.nbkp-vol", returns=FAILS)
         )
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        status = check_volume(vol, resolved)
+        status = check_volume(vol, resolved, run=run)
         assert status.active is False
         assert status.errors == [VolumeError.SENTINEL_NOT_FOUND]
         assert status.ssh_endpoint_status.diagnostics.ssh_reachable is True
@@ -470,29 +464,30 @@ class TestCheckRemoteVolume:
         assert status.diagnostics.capabilities is not None
         assert status.diagnostics.capabilities.sentinel_exists is False
 
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    def test_ssh_unreachable(self, mock_ssh_ep: MagicMock) -> None:
+    def test_ssh_unreachable(self) -> None:
         """SSH connection fails entirely."""
-        mock_ssh_ep.return_value = SshEndpointDiagnostics(ssh_reachable=False)
+        run = FakeCommandRunner().on("which", returns=TimeoutError("timed out"))
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        status = check_volume(vol, resolved)
+        status = check_volume(vol, resolved, run=run)
         assert status.active is False
         assert SshEndpointError.UNREACHABLE in status.ssh_endpoint_status.errors
         assert status.ssh_endpoint_status.diagnostics.ssh_reachable is False
         assert status.diagnostics is None
+        # The first failed probe settles it: nothing else is tried.
+        assert run.commands == [["which", "rsync"]]
 
 
 class TestCheckRemoteVolumeLocationExcluded:
-    @patch("nbkp.preflight.checks.observe_ssh_endpoint")
-    def test_excluded_volume_no_ssh(self, mock_ssh_ep: MagicMock) -> None:
+    def test_excluded_volume_no_ssh(self) -> None:
         """Volume excluded by location is marked without SSH."""
-        mock_ssh_ep.return_value = SshEndpointDiagnostics(location_excluded=True)
+        run = FakeCommandRunner()
         vol, _config = _remote_config()
         # Empty resolved_endpoints means volume was excluded
-        status = check_volume(vol, {})
+        status = check_volume(vol, {}, run=run)
         assert status.active is False
         assert SshEndpointError.LOCATION_EXCLUDED in status.ssh_endpoint_status.errors
+        assert run.commands == []
 
 
 class TestProbeFilesystemTypeLocal:
@@ -4142,30 +4137,16 @@ class TestCheckDevnullLatest:
 
 
 class TestCheckRemoteVolumeSpaces:
-    @patch(
-        "nbkp.preflight.checks.observe_ssh_endpoint",
-        return_value=_ssh_diag(host_tools=_STUB_HOST_TOOLS, ssh_reachable=True),
-    )
-    @patch(
-        "nbkp.preflight.volume_checks.check_volume_capabilities",
-        return_value=_STUB_CAPS,
-    )
-    @patch("nbkp.remote.dispatch.run_remote_command")
-    def test_active(
-        self, mock_run: MagicMock, mock_caps: MagicMock, _mock_ssh: MagicMock
-    ) -> None:
-        mock_run.return_value = MagicMock(returncode=0)
+    def test_active(self) -> None:
         vol, config = _remote_config(path="/my backup")
         resolved = _make_resolved(config)
-        status = check_volume(vol, resolved)
+        run = healthy_host()
+        status = check_volume(vol, resolved, run=run)
         assert status.active is True
         assert status.diagnostics.capabilities is not None
-        mock_run.assert_called_once_with(
-            config.ssh_endpoints["nas-server"],
-            ["test", "-f", "/my backup/.nbkp-vol"],
-            [],
-            input=None,
-        )
+        assert run.commands_starting_with("test", "-f") == [
+            ["test", "-f", "/my backup/.nbkp-vol"]
+        ]
 
 
 class TestParseRsyncVersion:
