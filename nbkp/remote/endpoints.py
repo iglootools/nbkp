@@ -5,14 +5,14 @@ the operator's hints (:class:`EndpointFilter`) go in, the SSH endpoint
 chosen for each remote volume (:class:`ResolvedEndpoint`) comes out.
 """
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import ConfigDict, Field
 
 from ..config.protocol import RemoteVolume, SshEndpoint, Volume, _BaseModel
 
 
-class NetworkType(str, Enum):
+class NetworkType(StrEnum):
     PRIVATE = "private"
     PUBLIC = "public"
 

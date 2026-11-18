@@ -24,7 +24,7 @@ from .ssh import HostToolCapabilities
 from .volume import VolumeCapabilities, VolumeStatus
 
 
-class SourceEndpointError(str, enum.Enum):
+class SourceEndpointError(enum.StrEnum):
     SENTINEL_NOT_FOUND = f"{SOURCE_SENTINEL} sentinel not found"
     SNAPSHOTS_DIR_NOT_FOUND = f"{SNAPSHOTS_DIR}/ directory not found"
     LATEST_SYMLINK_NOT_FOUND = f"{LATEST_LINK} symlink not found"
@@ -42,7 +42,7 @@ INACTIVE_SRC_ENDPOINT_ERRORS: frozenset[SourceEndpointError] = frozenset(
 )
 
 
-class DestinationEndpointError(str, enum.Enum):
+class DestinationEndpointError(enum.StrEnum):
     """Includes capability-gated errors that are probed at the volume or
     host level but become errors because the endpoint config requires
     a capability the volume doesn't have.  Troubleshoot offers dual

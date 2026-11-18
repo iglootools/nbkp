@@ -22,7 +22,7 @@ type MountProbe = Callable[[Volume, MountConfig, ResolvedEndpoints], MountCapabi
 production, a fake in tests."""
 
 
-class MountAction(str, enum.Enum):
+class MountAction(enum.StrEnum):
     """A mutating lifecycle step."""
 
     UNLOCK = "unlock"

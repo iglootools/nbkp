@@ -22,7 +22,7 @@ from .ssh import INACTIVE_SSH_ERRORS
 from .volume import INACTIVE_VOLUME_ERRORS
 
 
-class SyncError(str, enum.Enum):
+class SyncError(enum.StrEnum):
     """Only errors that require sync-graph context live here; the rest
     are at the SSH endpoint, volume or sync endpoint level.
     """

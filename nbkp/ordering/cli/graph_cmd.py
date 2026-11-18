@@ -16,7 +16,7 @@ from ..output import (
 from . import app
 
 
-class GraphFormat(str, enum.Enum):
+class GraphFormat(enum.StrEnum):
     RICH_TREE = "rich-tree"
     MERMAID_ASCII = "mermaid-ascii"
     MERMAID = "mermaid"

@@ -17,7 +17,7 @@ from ..remote.endpoints import ResolvedEndpoints
 from ..remote.errors import ssh_connection_errors
 
 
-class SnapshotOp(str, enum.Enum):
+class SnapshotOp(enum.StrEnum):
     CREATE = "create snapshot"
     MKDIR = "create snapshot directory"
     MAKE_WRITABLE = "make snapshot writable"
