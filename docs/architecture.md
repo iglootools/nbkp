@@ -124,7 +124,6 @@ graph TD
     preflight --> policy
     preflight --> remote
     remote --> config
-    remote --> fsprotocol
     run --> clidisplay
     run --> cliwiring
     run --> config

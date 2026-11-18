@@ -113,7 +113,6 @@ if command -v cryptsetup >/dev/null 2>&1; then
 
         # Save metadata for tests to read via SSH
         echo "$LUKS_UUID" > /srv/luks-uuid
-        echo "$LOOP_DEV" > /srv/luks-loop-device
 
         # Install the polkit rule that grants testuser the udisks actions
         # nbkp needs over SSH (inactive session) — this mirrors what

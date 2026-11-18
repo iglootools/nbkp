@@ -54,8 +54,6 @@ from nbkp.remote.testkit.docker import (  # noqa: F401
     create_sentinels,
     create_test_ssh_endpoint,
     generate_ssh_keypair,
-    prepare_btrfs_snapshot_based_backup_dst,
-    prepare_hardlinks_snapshot_based_backup_dst,
     read_luks_metadata,
     ssh_exec,
     wait_for_ssh,
