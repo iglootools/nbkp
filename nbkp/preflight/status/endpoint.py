@@ -12,12 +12,7 @@ from ...config import (
     SyncEndpoint,
 )
 from ...fsprotocol import (
-    DESTINATION_SENTINEL,
     DEVNULL_TARGET,
-    LATEST_LINK,
-    SNAPSHOTS_DIR,
-    SOURCE_SENTINEL,
-    STAGING_DIR,
     Snapshot,
 )
 from .ssh import HostToolCapabilities
@@ -25,13 +20,13 @@ from .volume import VolumeCapabilities, VolumeStatus
 
 
 class SourceEndpointErrorKind(enum.StrEnum):
-    SENTINEL_NOT_FOUND = f"{SOURCE_SENTINEL} sentinel not found"
-    SNAPSHOTS_DIR_NOT_FOUND = f"{SNAPSHOTS_DIR}/ directory not found"
-    LATEST_SYMLINK_NOT_FOUND = f"{LATEST_LINK} symlink not found"
-    LATEST_SYMLINK_INVALID = f"{LATEST_LINK} symlink target is invalid"
+    SENTINEL_NOT_FOUND = "sentinel-not-found"
+    SNAPSHOTS_DIR_NOT_FOUND = "snapshots-dir-not-found"
+    LATEST_SYMLINK_NOT_FOUND = "latest-symlink-not-found"
+    LATEST_SYMLINK_INVALID = "latest-symlink-invalid"
 
     # Cascade — lower layer inactive
-    VOLUME_INACTIVE = "volume inactive"
+    VOLUME_INACTIVE = "volume-inactive"
 
 
 INACTIVE_SRC_ENDPOINT_ERRORS: frozenset[SourceEndpointErrorKind] = frozenset(
@@ -50,25 +45,25 @@ class DestinationEndpointErrorKind(enum.StrEnum):
     change the endpoint config (e.g. switch to hard-link snapshots).
     """
 
-    SENTINEL_NOT_FOUND = f"{DESTINATION_SENTINEL} sentinel not found"
-    NOT_WRITABLE = "endpoint directory not writable"
-    SNAPSHOTS_DIR_NOT_FOUND = f"{SNAPSHOTS_DIR}/ directory not found"
-    SNAPSHOTS_DIR_NOT_WRITABLE = f"{SNAPSHOTS_DIR}/ directory not writable"
-    LATEST_SYMLINK_NOT_FOUND = f"{LATEST_LINK} symlink not found"
-    LATEST_SYMLINK_INVALID = f"{LATEST_LINK} symlink target is invalid"
-    STAGING_SUBVOL_NOT_FOUND = f"{STAGING_DIR}/ directory not found"
-    STAGING_NOT_BTRFS_SUBVOLUME = f"{STAGING_DIR}/ is not a btrfs subvolume"
-    STAGING_SUBVOL_NOT_WRITABLE = f"{STAGING_DIR}/ subvolume not writable"
+    SENTINEL_NOT_FOUND = "sentinel-not-found"
+    NOT_WRITABLE = "not-writable"
+    SNAPSHOTS_DIR_NOT_FOUND = "snapshots-dir-not-found"
+    SNAPSHOTS_DIR_NOT_WRITABLE = "snapshots-dir-not-writable"
+    LATEST_SYMLINK_NOT_FOUND = "latest-symlink-not-found"
+    LATEST_SYMLINK_INVALID = "latest-symlink-invalid"
+    STAGING_SUBVOL_NOT_FOUND = "staging-subvol-not-found"
+    STAGING_NOT_BTRFS_SUBVOLUME = "staging-not-btrfs-subvolume"
+    STAGING_SUBVOL_NOT_WRITABLE = "staging-subvol-not-writable"
 
     # Capability-gated: probed at volume level, error because endpoint config
     # requires the capability.
-    VOL_NOT_BTRFS = "volume not on btrfs filesystem"
-    VOL_FS_TYPE_UNKNOWN = "could not determine the volume filesystem type"
-    VOL_NOT_MOUNTED_USER_SUBVOL_RM = "volume not mounted with user_subvol_rm_allowed"
-    VOL_NO_HARDLINK_SUPPORT = "volume filesystem does not support hard links"
+    VOL_NOT_BTRFS = "vol-not-btrfs"
+    VOL_FS_TYPE_UNKNOWN = "vol-fs-type-unknown"
+    VOL_NOT_MOUNTED_USER_SUBVOL_RM = "vol-not-mounted-user-subvol-rm"
+    VOL_NO_HARDLINK_SUPPORT = "vol-no-hardlink-support"
 
     # Cascade — lower layer inactive
-    VOLUME_INACTIVE = "volume inactive"
+    VOLUME_INACTIVE = "volume-inactive"
 
 
 INACTIVE_DST_ENDPOINT_ERRORS: frozenset[DestinationEndpointErrorKind] = frozenset(

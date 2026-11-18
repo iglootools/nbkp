@@ -13,9 +13,6 @@ from ...disks import (
     MountCapabilities,
     MountFailureKind,
 )
-from ...fsprotocol import (
-    VOLUME_SENTINEL,
-)
 from .ssh import SshEndpointStatus
 
 
@@ -24,23 +21,23 @@ class VolumeErrorKind(enum.StrEnum):
     ``SshEndpointErrorKind``s, not volume errors.
     """
 
-    VOLUME_NOT_MOUNTED = "volume not mounted"
+    VOLUME_NOT_MOUNTED = "volume-not-mounted"
 
-    SENTINEL_NOT_FOUND = f"{VOLUME_SENTINEL} volume sentinel not found"
+    SENTINEL_NOT_FOUND = "sentinel-not-found"
 
-    DEVICE_NOT_PRESENT = "device not plugged in"
-    UNLOCK_FAILED = "failed to unlock luks encrypted device"
-    MOUNT_FAILED = "failed to mount volume"
-    PASSPHRASE_NOT_AVAILABLE = "passphrase not available"
+    DEVICE_NOT_PRESENT = "device-not-present"
+    UNLOCK_FAILED = "unlock-failed"
+    MOUNT_FAILED = "mount-failed"
+    PASSPHRASE_NOT_AVAILABLE = "passphrase-not-available"
 
     # fstab config: fixed-path (Option A) mounts only
-    FSTAB_MOUNTPOINT_MISMATCH = "no fstab entry maps the device to the configured path"
+    FSTAB_MOUNTPOINT_MISMATCH = "fstab-mountpoint-mismatch"
 
     # Auth rules (polkit only — udisks has no sudoers path)
-    POLKIT_RULES_MISSING = "polkit rules not configured"
+    POLKIT_RULES_MISSING = "polkit-rules-missing"
 
     # Cascade — lower layer inactive
-    SSH_ENDPOINT_INACTIVE = "ssh endpoint inactive"
+    SSH_ENDPOINT_INACTIVE = "ssh-endpoint-inactive"
 
 
 INACTIVE_VOLUME_ERRORS: frozenset[VolumeErrorKind] = frozenset(

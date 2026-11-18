@@ -151,7 +151,7 @@ class TestRunJson:
             {
                 "volume": "enc",
                 "success": False,
-                "failure_reason": "lock_failed",
+                "failure_reason": "lock-failed",
                 "detail": "lock failed (exit 1): busy",
                 "failure": {"step": "lock", "exit_code": 1, "message": "busy"},
                 "warning": "LUKS container still unlocked, manual lock needed",
@@ -408,5 +408,5 @@ class TestUmountFailure:
         [umount] = data["umount"]
         assert umount["volume"] == "enc"
         assert umount["success"] is False
-        assert umount["failure_reason"] == "lock_failed"
+        assert umount["failure_reason"] == "lock-failed"
         assert umount["warning"] == "LUKS container still unlocked, manual lock needed"

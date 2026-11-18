@@ -12,24 +12,24 @@ class MountFailureKind(enum.StrEnum):
     string literals.
     """
 
-    DEVICE_NOT_PRESENT = "device_not_present"
-    PASSPHRASE_NOT_AVAILABLE = "passphrase_not_available"
-    UNLOCK_FAILED = "unlock_failed"
-    MOUNT_FAILED = "mount_failed"
-    NOT_AUTHORIZED = "not_authorized"
-    UDISKS_NOT_AVAILABLE = "udisks_not_available"
-    PROBE_FAILED = "probe_failed"
+    DEVICE_NOT_PRESENT = "device-not-present"
+    PASSPHRASE_NOT_AVAILABLE = "passphrase-not-available"
+    UNLOCK_FAILED = "unlock-failed"
+    MOUNT_FAILED = "mount-failed"
+    NOT_AUTHORIZED = "not-authorized"
+    UDISKS_NOT_AVAILABLE = "udisks-not-available"
+    PROBE_FAILED = "probe-failed"
     """A read-only probe (e.g. ``lsblk``) failed, so the device state is
     unknown — distinct from "locked" or "not mounted"."""
     UNREACHABLE = "unreachable"
 
 
 class UmountFailureKind(enum.StrEnum):
-    UNMOUNT_FAILED = "unmount_failed"
-    LOCK_FAILED = "lock_failed"
+    UNMOUNT_FAILED = "unmount-failed"
+    LOCK_FAILED = "lock-failed"
     """Unmounted (or not mounted) but the LUKS container is still unlocked."""
-    UDISKS_NOT_AVAILABLE = "udisks_not_available"
-    PROBE_FAILED = "probe_failed"
+    UDISKS_NOT_AVAILABLE = "udisks-not-available"
+    PROBE_FAILED = "probe-failed"
     UNREACHABLE = "unreachable"
 
 

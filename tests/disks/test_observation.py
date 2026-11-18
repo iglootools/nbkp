@@ -124,7 +124,7 @@ class TestBuildMountObservations:
         ]
         obs = build_mount_observations(results)
         assert obs["enc"].failure_reason == MountFailureKind.NOT_AUTHORIZED
-        assert obs["enc"].mount_failure_reason == "not_authorized"
+        assert obs["enc"].mount_failure_reason == "not-authorized"
 
     def test_mount_failed(self) -> None:
         results = [

@@ -214,11 +214,11 @@ class TestFatalSyncErrors:
         }
 
         assert fatal_sync_errors(statuses, Strictness.IGNORE_INACTIVE) == {
-            "b": ["destination endpoint inactive"]
+            "b": [SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE]
         }
         assert fatal_sync_errors(statuses, Strictness.IGNORE_NONE) == {
-            "a": ["source endpoint inactive"],
-            "b": ["destination endpoint inactive"],
+            "a": [SyncErrorKind.SOURCE_ENDPOINT_INACTIVE],
+            "b": [SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE],
         }
 
     def test_a_disabled_sync_is_never_fatal(self) -> None:

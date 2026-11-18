@@ -17,6 +17,7 @@ from ..policy import Severity, Strictness
 from ..preflight import (
     PreflightErrorKind,
     PreflightResult,
+    SyncErrorKind,
     SyncStatus,
     check_all_syncs,
     has_fatal_errors,
@@ -198,10 +199,10 @@ def run_checked(
 
 def fatal_sync_errors(
     sync_statuses: dict[str, SyncStatus], strictness: Strictness
-) -> dict[str, list[str]]:
+) -> dict[str, list[SyncErrorKind]]:
     """Errors of the syncs that made preflight abort under *strictness*."""
     return {
-        slug: sorted(e.value for e in s.errors)
+        slug: sorted(s.errors)
         for slug, s in sync_statuses.items()
         if is_fatal(s, strictness)
     }

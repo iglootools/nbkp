@@ -118,7 +118,7 @@ class TestVolumeErrorsMountUpgrades:
                 device_present=True,
                 luks_unlocked=False,
                 mounted=None,
-                mount_failure_reason="not_authorized",
+                mount_failure_reason="not-authorized",
             ),
             _encrypted_mount(),
         )
@@ -144,7 +144,7 @@ class TestVolumeErrorsMountUpgrades:
                 device_present=True,
                 luks_unlocked=False,
                 mounted=None,
-                mount_failure_reason="unlock_failed",
+                mount_failure_reason="unlock-failed",
             ),
             _encrypted_mount(),
         )
@@ -157,7 +157,7 @@ class TestVolumeErrorsMountUpgrades:
                 device_present=True,
                 luks_unlocked=True,
                 mounted=False,
-                mount_failure_reason="mount_failed",
+                mount_failure_reason="mount-failed",
             ),
             _encrypted_mount(),
         )
@@ -221,7 +221,7 @@ class TestVolumeStatusFromDiagnostics:
             device_present=True,
             luks_unlocked=False,
             mounted=None,
-            mount_failure_reason="not_authorized",
+            mount_failure_reason="not-authorized",
         )
         diag = VolumeDiagnostics(capabilities=caps)
         status = VolumeStatus.from_diagnostics(
@@ -303,7 +303,7 @@ class TestFormatMountStatus:
             device_present=True,
             luks_unlocked=False,
             mounted=None,
-            mount_failure_reason="unlock_failed",
+            mount_failure_reason="unlock-failed",
         )
         result = format_mount_status(mc, _encrypted_mount())
         assert "✓device" in result
@@ -314,7 +314,7 @@ class TestFormatMountStatus:
             device_present=True,
             luks_unlocked=True,
             mounted=False,
-            mount_failure_reason="mount_failed",
+            mount_failure_reason="mount-failed",
         )
         result = format_mount_status(mc, _encrypted_mount())
         assert "✓device" in result

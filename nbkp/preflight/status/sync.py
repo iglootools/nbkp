@@ -28,21 +28,17 @@ class SyncErrorKind(enum.StrEnum):
     """
 
     DISABLED = "disabled"
-    ENDPOINT_HOST_ERRORS = "a host this sync runs on has tool errors"
+    ENDPOINT_HOST_ERRORS = "endpoint-host-errors"
     """The host of either side (localhost included) has non-inactive SSH
     endpoint errors — rsync missing or too old, btrfs/udisks tools missing.
     Remote hosts already cascade through ``VolumeErrorKind.SSH_ENDPOINT_INACTIVE``;
     this is what makes *localhost* tool errors stop the sync too."""
-    SRC_EP_LATEST_DEVNULL_NO_UPSTREAM = (
-        "source latest \u2192 /dev/null with no upstream sync"
-    )
-    DRY_RUN_SRC_EP_SNAPSHOT_PENDING = (
-        "source snapshot not yet available (dry-run; upstream has not run)"
-    )
+    SRC_EP_LATEST_DEVNULL_NO_UPSTREAM = "src-ep-latest-devnull-no-upstream"
+    DRY_RUN_SRC_EP_SNAPSHOT_PENDING = "dry-run-src-ep-snapshot-pending"
 
     # Cascade — lower layer inactive
-    SOURCE_ENDPOINT_INACTIVE = "source endpoint inactive"
-    DESTINATION_ENDPOINT_INACTIVE = "destination endpoint inactive"
+    SOURCE_ENDPOINT_INACTIVE = "source-endpoint-inactive"
+    DESTINATION_ENDPOINT_INACTIVE = "destination-endpoint-inactive"
 
 
 INACTIVE_SYNC_ERRORS: frozenset[SyncErrorKind] = frozenset(

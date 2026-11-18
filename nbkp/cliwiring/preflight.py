@@ -17,6 +17,7 @@ from ..preflight import (
     PreflightResult,
     check_all_syncs,
     check_step_count,
+    format_problems,
     severity_for_errors,
 )
 from ..remote.endpoints import ResolvedEndpoints
@@ -36,7 +37,7 @@ def end_check_step(
     """Close a step with the icon its errors deserve under *strictness*."""
     typed_errors = list(errors)
     severity = severity_for_errors(typed_errors, strictness)
-    summary = ", ".join(e.value for e in typed_errors) if typed_errors else None
+    summary = format_problems(typed_errors) if typed_errors else None
     bar.on_end(f"check {label}", severity, summary)
 
 

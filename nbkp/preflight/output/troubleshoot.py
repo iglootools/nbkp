@@ -22,6 +22,7 @@ from ...policy import Severity, Strictness
 from ...remote.dispatch import VolumeCommandRunner, run_on_volume
 from ...remote.endpoints import ResolvedEndpoints
 from ...remote.errors import ssh_connection_errors
+from ..messages import format_problem
 from ..severity import PreflightErrorKind, severity_for_error
 from ..status.endpoint import (
     DestinationEndpointErrorKind,
@@ -349,9 +350,9 @@ def format_issue_fix(issue: TroubleshootIssue, ctx: TroubleshootContext) -> Line
 
 def _issue_label(issue: TroubleshootIssue) -> tuple[str, str]:
     return (
-        (f"warning: {issue.error.value}", "yellow")
+        (f"warning: {format_problem(issue.error)}", "yellow")
         if isinstance(issue.error, SshEndpointWarningKind)
-        else (issue.error.value, "")
+        else (format_problem(issue.error), "")
     )
 
 
@@ -456,7 +457,7 @@ def troubleshoot_json(
                     else "error"
                 ),
                 "code": issue.error.name,
-                "message": issue.error.value,
+                "message": format_problem(issue.error),
                 "severity": issue.severity.value,
                 "remediation": _render_plain(format_issue_fix(issue, ctx)),
             }

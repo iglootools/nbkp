@@ -45,6 +45,7 @@ from ...preflight import (
     PreflightErrorKind,
     PreflightResult,
     check_step_count,
+    format_problems,
 )
 from ...preflight.output import format_human_check
 from ...remote.endpoints import ResolvedEndpoints
@@ -302,7 +303,8 @@ def abort_message(
         ),
         *(
             Padding(
-                Text(f"{slug}: {', '.join(errors)}"), (0, 0, 0, _ABORT_DETAIL_INDENT)
+                Text(f"{slug}: {format_problems(errors)}"),
+                (0, 0, 0, _ABORT_DETAIL_INDENT),
             )
             for slug, errors in errored.items()
         ),

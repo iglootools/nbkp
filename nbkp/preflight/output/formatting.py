@@ -11,6 +11,7 @@ from ...disks import (
     mounted_fail_severity,
 )
 from ...policy import Severity, Strictness
+from ..messages import format_problems
 from ..severity import PreflightErrorKind, severity_for_error, severity_for_errors
 from ..status.endpoint import DestinationEndpointErrorKind, SourceEndpointErrorKind
 from ..status.ssh import SshEndpointErrorKind, SshEndpointStatus
@@ -42,8 +43,7 @@ def status_text(
         Text(f"{OK_SYMBOL}active", style=severity_style(Severity.OK))
         if active
         else Text(
-            f"{severity_symbol(severity)}inactive"
-            f" ({', '.join(r.value for r in errors)})",
+            f"{severity_symbol(severity)}inactive ({format_problems(errors)})",
             style=severity_style(severity),
         )
     )

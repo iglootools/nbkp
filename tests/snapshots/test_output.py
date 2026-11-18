@@ -135,7 +135,7 @@ class TestPruneOutput:
                 kind=SnapshotErrorKind.INACTIVE,
                 preflight_errors=(SyncErrorKind.SOURCE_ENDPOINT_INACTIVE,),
             ),
-            f"inactive: {SyncErrorKind.SOURCE_ENDPOINT_INACTIVE.value}",
+            "inactive: source endpoint inactive",
         ),
         (
             SnapshotResultError(
@@ -147,7 +147,7 @@ class TestPruneOutput:
             ),
             (
                 "preflight errors: destination endpoint inactive,"
-                f" {SyncErrorKind.ENDPOINT_HOST_ERRORS.value}"
+                " a host this sync runs on has tool errors"
             ),
         ),
         (

@@ -16,6 +16,7 @@ from .endpoint_checks import (
     observe_destination_endpoint,
     observe_source_endpoint,
 )
+from .messages import format_problem, format_problems
 from .severity import PreflightErrorKind, severity_for_error, severity_for_errors
 from .status import (
     INACTIVE_DST_ENDPOINT_ERRORS,
@@ -87,6 +88,8 @@ __all__ = [
     "check_all_syncs",
     "check_step_count",
     "check_volume_capabilities",
+    "format_problem",
+    "format_problems",
     "has_fatal_errors",
     "is_fatal",
     "observe_destination_endpoint",
