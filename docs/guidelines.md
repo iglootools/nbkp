@@ -16,8 +16,24 @@ For general coding, Python, and tooling guidelines, see the [common guidelines](
 <!-- tocstop -->
 
 ## Coding
-- **Naming Conventions**
-  - `kebab-case` for CLI commands and config keys
+- **Naming Conventions**: the shared ones, in
+  [general.md › Naming](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#naming)
+  and [python.md › Naming](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#naming),
+  with this exception and the pending work below.
+  - *Exception — SSH timeouts in plain seconds:* `connect-timeout`, `server-alive-interval`,
+    `banner-timeout`, `auth-timeout` and `channel-timeout` are numbers of seconds, with no unit
+    in the name and no duration type. They are configuration keys users have written, and they
+    mirror the OpenSSH and Paramiko option names they map to; the unit is in each field's
+    description and the config reference. Retire this exception in a major release that
+    accepts durations with a unit (`10s`), keeping a bare number as seconds.
+  - *Pending — output modules that print:* the `print_*` functions in `output.py` modules
+    (`config`, `ordering`, `preflight`, `snapshots`, `sync`) write to the console
+    rather than returning text for their `cli/` command to print. Convert a module to
+    `format_*` functions when a change next reaches it; this entry goes when none print.
+  - *Pending — shared options:* every `typer.Option` is written inline, including those that
+    several commands share (`--config`, `--output`, `--dry-run`, the endpoint filters). Move a
+    shared one to an `Annotated` `<NAME>_OPTION` constant when a change next reaches it; this
+    entry goes when no option is defined twice.
 - **CLI**
   - Use `typer` for CLI implementation (argument parsing, formatting, etc.)
   - Provide both human-readable and JSON output formats for all commands, with human-readable as the default.
