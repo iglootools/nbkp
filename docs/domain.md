@@ -259,3 +259,7 @@ The same model drives the other commands, each acting on part of it: `config sho
 | **Encryption** | Left to the layers below nbkp: SSH in transit, the disk (typically LUKS) at rest; nbkp only automates LUKS unlock/lock |
 | **Credential provider** | Where LUKS passphrases come from (keyring, env, command, prompt) |
 | **Strictness** | Policy deciding whether inactive and infrastructure findings abort a run |
+
+The code abbreviates four of these terms throughout: `vol` for a volume, `ep` (`eps`) for an
+endpoint (SSH or sync, as the type says), `src` and `dst` for a sync's source and destination
+endpoints, and `cfg` for the loaded configuration.
