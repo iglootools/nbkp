@@ -1,5 +1,27 @@
 # Usage
 
+<!-- toc -->
+**On this page**
+
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Commands](#commands)
+- [Config](#config)
+  - [Config File Location](#config-file-location)
+  - [Configuration Reference](#configuration-reference)
+  - [Example 1: Home NAS backup](#example-1-home-nas-backup)
+  - [`sh` — generate a standalone backup shell script](#sh--generate-a-standalone-backup-shell-script)
+  - [Example 2: Multi-hop chained backups](#example-2-multi-hop-chained-backups)
+  - [Example 3: Encrypted removable drives with mount management](#example-3-encrypted-removable-drives-with-mount-management)
+  - [Example 4: Sami's Personal Config](#example-4-samis-personal-config)
+- [Mount management with udisks2](#mount-management-with-udisks2)
+  - [Prerequisites](#prerequisites)
+  - [Mount-point models: fstab × crypttab](#mount-point-models-fstab--crypttab)
+  - [Worked examples](#worked-examples)
+  - [Running](#running)
+  - [Consequences and gotchas](#consequences-and-gotchas)
+<!-- tocstop -->
+
 ## Installation
 
 See [Installation instructions](./installation.md)

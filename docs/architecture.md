@@ -4,6 +4,20 @@ How nbkp is composed: the external tools it orchestrates (**Building Blocks**, b
 
 For the domain model, see [Domain](./domain.md); for every config field, see the [Configuration Reference](./config-reference.md). For runtime behavior and design decisions, see [Internals](./internals.md).
 
+<!-- toc -->
+**On this page**
+
+- [Building Blocks](#building-blocks)
+  - [Data transfer](#data-transfer)
+  - [Mount management (Linux)](#mount-management-linux)
+  - [Snapshots](#snapshots)
+  - [Discovery & safety](#discovery--safety)
+  - [Credentials](#credentials)
+- [Module Overview](#module-overview)
+  - [Layering](#layering)
+  - [Package Map](#package-map)
+<!-- tocstop -->
+
 ## Building Blocks
 
 nbkp is a thin orchestrator over proven, standard tools — no custom storage format, transfer protocol, or encryption. It composes the following and defers to each for the hard parts:

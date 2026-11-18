@@ -5,6 +5,23 @@ This section provides a high-level overview of nbkp's core capabilities.
 To understand how to use these features, refer to the [Usage](./usage.md) documentation. 
 To understand how these features are implemented, refer to the [Domain](./domain.md) and [Internals](./internals.md) documentation. Every config field is listed in the [Configuration Reference](./config-reference.md).
 
+<!-- toc -->
+**On this page**
+
+- [Sync Engine](#sync-engine)
+- [Snapshots](#snapshots)
+- [SSH and Remote Access](#ssh-and-remote-access)
+- [Nomadic usage / Endpoint Filtering](#nomadic-usage--endpoint-filtering)
+- [Volume Safety](#volume-safety)
+- [Mount Management (Linux only)](#mount-management-linux-only)
+- [Pre-flight Checks](#pre-flight-checks)
+- [Configuration](#configuration)
+- [Shell Script Generation (`sh`)](#shell-script-generation-sh)
+- [Outputs](#outputs)
+- [Testing and QA](#testing-and-qa)
+- [Supported Commands](#supported-commands)
+<!-- tocstop -->
+
 ## Sync Engine
 
 nbkp uses rsync under the hood to synchronize files between volumes. Syncs can flow in any direction between local and remote filesystems, are automatically ordered based on their dependencies, and support fine-grained control over rsync behavior.

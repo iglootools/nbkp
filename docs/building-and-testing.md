@@ -64,6 +64,20 @@ So `mise run install` is seldom needed explicitly, and `mise run reinstall` is f
 automatic check cannot see — a `.venv` that is *dirty* rather than *stale*, e.g. after a manual
 `uv pip install`. Add or remove dependencies with `uv add` / `uv remove`.
 
+<!-- toc -->
+**On this page**
+
+  - [Python versions](#python-versions)
+  - [Parallel test execution](#parallel-test-execution)
+- [Testing Strategy](#testing-strategy)
+  - [Manual Testing](#manual-testing)
+  - [Automated tests](#automated-tests)
+  - [Known Gaps in Test Coverage](#known-gaps-in-test-coverage)
+- [Release Process](#release-process)
+- [GitHub Config](#github-config)
+- [Renovate](#renovate)
+<!-- tocstop -->
+
 ### Python versions
 
 nbkp supports exactly one Python version, the one pinned in `mise.toml` (`[tools] python`):
