@@ -14,7 +14,6 @@ models, so preflight reports it as a separate, non-inactive error.
 
 from functools import cache
 
-lazy import invoke.exceptions  # type: ignore[import-untyped]
 lazy import paramiko
 
 lazy from .hostkeys import UnknownHostKeyError
@@ -39,8 +38,6 @@ def ssh_connection_errors() -> tuple[type[BaseException], ...]:
         OSError,  # socket timeouts, DNS (gaierror), refused, NoValidConnectionsError
         EOFError,  # server closed the connection during the handshake
         paramiko.SSHException,  # protocol errors, includes ssh_auth_errors()
-        invoke.exceptions.Failure,
-        invoke.exceptions.ThreadException,
     )
 
 

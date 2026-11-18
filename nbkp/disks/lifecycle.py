@@ -37,7 +37,6 @@ from .udisks import (
     build_unmount_command,
     parse_unlocked_device,
 )
-lazy from ..remote.fabricssh import StdinClosedProcess
 
 # stderr fragments emitted by udisks/polkit when authorization is refused
 # under ``--no-user-interaction`` (no active session, no polkit rule).
@@ -136,9 +135,7 @@ def _classify_udisks_failure(
     """
     failure = _command_failure(step, result)
     lowered = (failure.message or "").lower()
-    if isinstance(result, StdinClosedProcess) or any(
-        sig in lowered for sig in _NOT_AUTHORIZED_SIGNATURES
-    ):
+    if any(sig in lowered for sig in _NOT_AUTHORIZED_SIGNATURES):
         return MountFailureReason.NOT_AUTHORIZED, failure
     elif any(sig in lowered for sig in _UDISKS_UNAVAILABLE_SIGNATURES):
         return MountFailureReason.UDISKS_NOT_AVAILABLE, failure
