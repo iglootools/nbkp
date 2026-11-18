@@ -102,7 +102,7 @@ description = "Install dependencies"
 run = "mise deps install uv"
 
 [tasks.check]
-description = "Run all checks (format-check, lint, lint-shell, type-check, lock-check, lock-check-uv, clidocs-check, configdocs-check, depgraph-check, boundaries-check)"
+description = "Run all checks (format-check, lint, lint-shell, type-check, lock-check, lock-check-uv, toc-check, clidocs-check, configdocs-check, depgraph-check, boundaries-check)"
 run = [
   { task = "format-check" },
   { task = "lint" },
@@ -110,6 +110,7 @@ run = [
   { task = "type-check" },
   { task = "lock-check" },
   { task = "lock-check-uv" },
+  { task = "toc-check" },
   { task = "clidocs-check" },
   { task = "configdocs-check" },
   { task = "depgraph-check" },
@@ -284,6 +285,14 @@ run = "asciinema upload demo/demo.cast"
 [tasks.demo-upload-latest]
 description = "Download the demo recorded by CI and upload it to asciinema.org"
 run = "uv run --no-sync iglootools demo upload"
+
+[tasks.toc]
+description = "Regenerate the tables of contents in the Markdown docs (add one with --add <file>)"
+run = "uv run --no-sync iglootools docs toc"
+
+[tasks.toc-check]
+description = "Check that the Markdown tables of contents are up to date (fix with `mise run toc`)"
+run = "uv run --no-sync iglootools docs toc --check"
 
 [tasks.reference-doc]
 description = "Regenerate the reference documentation"
