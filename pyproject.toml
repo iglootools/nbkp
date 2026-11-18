@@ -50,7 +50,7 @@ dev = [
   "import-linter>=2.15,<3.0",
   # The shared build, docs and check commands (guidelines/project-setup/iglootools-cli.md in
   # iglootools/common). Pinned to the release tag; uv.lock records the commit it resolved to.
-  "iglootools @ git+https://github.com/iglootools/common@v1.24.0",
+  "iglootools @ git+https://github.com/iglootools/common@v1.25.0",
 ]
 
 [build-system]
