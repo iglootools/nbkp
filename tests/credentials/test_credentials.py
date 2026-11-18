@@ -31,7 +31,7 @@ from nbkp.credentials import (
 class _StoreKeyring(KeyringBackend):
     """A keyring backend over a dict, or failing with *error* when given."""
 
-    priority = 1  # pyright: ignore[reportAssignmentType]
+    priority = 1  # pyright: ignore[reportAssignmentType]  # noqa: DC06 -- keyring reads it
 
     def __init__(
         self,
@@ -47,7 +47,9 @@ class _StoreKeyring(KeyringBackend):
             raise self._error
         return self._passwords.get((service, username))
 
-    def set_password(self, service: str, username: str, password: str) -> None:
+    def set_password(  # noqa: DC04 -- abstract in KeyringBackend
+        self, service: str, username: str, password: str
+    ) -> None:
         self._passwords[(service, username)] = password
 
 

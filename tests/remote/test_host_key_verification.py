@@ -19,7 +19,9 @@ from nbkp.remote.errors import UnknownHostKeyError
 
 
 class _NoAuthServer(paramiko.ServerInterface):
-    def get_allowed_auths(self, username: str) -> str:
+    def get_allowed_auths(  # noqa: DC04 -- Paramiko's ServerInterface calls it
+        self, username: str
+    ) -> str:
         return "publickey"
 
 

@@ -43,7 +43,7 @@ class TestPrintConfigError:
 
 def _validation_error() -> ConfigError:
     class M(BaseModel):
-        retention_count: int
+        retention_count: int  # noqa: DC06 -- the field the error names
 
     with pytest.raises(ValidationError) as exc:
         M(retention_count="x")  # type: ignore[arg-type]

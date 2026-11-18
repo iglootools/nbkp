@@ -64,13 +64,11 @@ class SshConnectionOptions(_BaseModel):
         description="Wait time for channel open (Paramiko/Fabric only)",
     )
 
-    # SSH: StrictHostKeyChecking
-    # Paramiko: SSHClient.set_missing_host_key_policy()
+    # SSH: StrictHostKeyChecking | Paramiko: SSHClient.set_missing_host_key_policy()
     strict_host_key_checking: bool = Field(
         default=True, description="Verify remote host key"
     )
-    # SSH: UserKnownHostsFile
-    # Paramiko: SSHClient.load_host_keys()
+    # SSH: UserKnownHostsFile | Paramiko: SSHClient.load_host_keys()
     known_hosts_file: str | None = Field(
         default=None, description="Custom known hosts file path"
     )
@@ -129,7 +127,7 @@ class SshEndpoint(_BaseModel):
         default=None,
         description=("Multiple location tags (mutually exclusive with `location`)"),
     )
-    extends: str | None = Field(
+    extends: str | None = Field(  # noqa: DC06 -- resolved from the raw config
         default=None,
         description="Slug of parent endpoint to inherit from",
     )

@@ -48,6 +48,7 @@ dev = [
   # one entry in uv.lock.
   "keyring>=25.0,<26.0",
   "import-linter>=2.15,<3.0",
+  "deadcode>=2.7.0,<3.0",
   # The shared build, docs and check commands (guidelines/project-setup/iglootools-cli.md in
   # iglootools/common). Pinned to the release tag; uv.lock records the commit it resolved to.
   "iglootools @ git+https://github.com/iglootools/common@v1.25.0",
@@ -278,4 +279,20 @@ forbidden_modules = [
   "nbkp.sh",
   "nbkp.snapshots",
   "nbkp.sync",
+]
+
+# Unused code, enforced by `mise run dead-code-check` (part of `check`). Each entry is code
+# that runs without being named in the project, so the scan cannot see it used.
+[tool.deadcode]
+ignore-names-if-decorated-with = [
+  "@*.command", "@*.callback",                # Typer registers commands by decorator
+  "@pytest.fixture",                          # pytest injects fixtures by parameter name
+  "@field_validator", "@model_validator",     # Pydantic calls them while validating
+  "@field_serializer",                        # and while serializing
+]
+ignore-names = [
+  "main",                                     # the [project.scripts] entry point
+  "model_config",                             # read by Pydantic
+  "pytestmark", "pytest_plugins", "pytest_*", # read by pytest
+  "side_effect",                              # MagicMock's, set on the documented Connection patch
 ]

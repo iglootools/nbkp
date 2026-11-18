@@ -102,7 +102,7 @@ description = "Install dependencies"
 run = "mise deps install uv"
 
 [tasks.check]
-description = "Run all checks (format-check, lint, lint-shell, type-check, lock-check, lock-check-uv, toc-check, clidocs-check, configdocs-check, depgraph-check, boundaries-check)"
+description = "Run all checks (format-check, lint, lint-shell, type-check, lock-check, lock-check-uv, toc-check, clidocs-check, configdocs-check, depgraph-check, boundaries-check, dead-code-check)"
 run = [
   { task = "format-check" },
   { task = "lint" },
@@ -115,6 +115,7 @@ run = [
   { task = "configdocs-check" },
   { task = "depgraph-check" },
   { task = "boundaries-check" },
+  { task = "dead-code-check" },
 ]
 
 [tasks.check-all]
@@ -329,6 +330,10 @@ run = "uv run --no-sync iglootools docs depgraph --check"
 [tasks.boundaries-check]
 description = "Check module boundaries (import-linter contracts in pyproject.toml)"
 run = "uv run --no-sync lint-imports"
+
+[tasks.dead-code-check]
+description = "Check for unused code (deadcode, configured in pyproject.toml)"
+run = "uv run --no-sync deadcode nbkp tests"
 
 # The monkeypatch half of the no-patching rule (docs/guidelines.md, Testing): ruff's
 [tasks.depgraph-ascii]
