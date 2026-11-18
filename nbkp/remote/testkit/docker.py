@@ -127,15 +127,6 @@ def create_docker_network() -> str:
     return _NETWORK_NAME
 
 
-def remove_docker_network() -> None:
-    client = dockerlib.from_env()
-    try:
-        network = client.networks.get(_NETWORK_NAME)
-        network.remove()
-    except docker_errors.NotFound:
-        pass
-
-
 def build_docker_image() -> None:
     client = dockerlib.from_env()
     try:
