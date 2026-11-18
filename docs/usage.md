@@ -222,7 +222,9 @@ nbkp disks umount --name seagate8tb
 nbkp preflight troubleshoot
 ```
 
-With `-o json`, `disks mount` and `disks umount` print one entry per volume with its state (`device_present`, `luks_unlocked`, `mounted`). The entry of a volume that failed also has a `failure_reason` (e.g. `unlock_failed`, `not_authorized`, `lock_failed`), a one-line `detail`, a `failure` object with the facts behind it (the failed `step`, its `exit_code` and `message`, a failed probe `command`, …) and, for `umount`, a `warning` saying what was left mounted or unlocked.
+With `-o json`, `disks mount` and `disks umount` print one entry per volume with its state (`device_present`, `luks_unlocked`, `mounted`). The entry of a volume that failed also has a `failure_reason` (e.g. `unlock-failed`, `not-authorized`, `lock-failed`), a one-line `detail`, a `failure` object with the facts behind it (the failed `step`, its `exit_code` and `message`, a failed probe `command`, …) and, for `umount`, a `warning` saying what was left mounted or unlocked.
+
+In the JSON output of every command, an error, failure or skip reason is a kebab-case token (`unlock-failed`, `destination-endpoint-inactive`, `no-snapshots`); the human output words it.
 
 ### Example 4: Sami's Personal Config
 

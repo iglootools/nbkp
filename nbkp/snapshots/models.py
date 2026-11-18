@@ -13,10 +13,10 @@ class SnapshotSkipReason(enum.StrEnum):
     A skip is never a failure: failures go in the result's ``error``.
     """
 
-    NO_SNAPSHOTS = "no snapshots configured"
-    NO_MAX_SNAPSHOTS = "no max-snapshots limit"
+    NO_SNAPSHOTS = "no-snapshots"
+    NO_MAX_SNAPSHOTS = "no-max-snapshots"
     INACTIVE = "inactive"
-    PREFLIGHT_ERRORS = "preflight errors ignored"
+    PREFLIGHT_ERRORS = "preflight-errors"
     """Infrastructure errors under ``--strictness ignore-all``."""
 
 

@@ -16,27 +16,27 @@ class SshEndpointErrorKind(enum.StrEnum):
     """
 
     UNREACHABLE = "unreachable"
-    LOCATION_EXCLUDED = "excluded by location filter"
-    AUTH_FAILED = "ssh authentication or host key verification failed"
+    LOCATION_EXCLUDED = "location-excluded"
+    AUTH_FAILED = "auth-failed"
 
     # Always needed
-    RSYNC_NOT_FOUND = "rsync not found"
-    RSYNC_TOO_OLD = "rsync too old (3.0+ required)"
+    RSYNC_NOT_FOUND = "rsync-not-found"
+    RSYNC_TOO_OLD = "rsync-too-old"
 
     # Needed when any endpoint on this host has btrfs snapshots
-    BTRFS_NOT_FOUND = "btrfs not found"
+    BTRFS_NOT_FOUND = "btrfs-not-found"
 
     # Needed when any endpoint on this host has btrfs or hardlink snapshots
-    STAT_NOT_FOUND = "stat not found"
+    STAT_NOT_FOUND = "stat-not-found"
 
     # Needed when any endpoint on this host has btrfs snapshots,
     # or any mount-managed volume needs mountpoint discovery
-    FINDMNT_NOT_FOUND = "findmnt not found"
+    FINDMNT_NOT_FOUND = "findmnt-not-found"
 
     # Needed when any volume on this host has mount config (udisks backend)
-    UDISKSCTL_NOT_FOUND = "udisksctl not found"
-    UDISKSD_NOT_RUNNING = "udisksd (udisks2 daemon) not running"
-    LSBLK_NOT_FOUND = "lsblk not found"
+    UDISKSCTL_NOT_FOUND = "udisksctl-not-found"
+    UDISKSD_NOT_RUNNING = "udisksd-not-running"
+    LSBLK_NOT_FOUND = "lsblk-not-found"
 
 
 INACTIVE_SSH_ERRORS: frozenset[SshEndpointErrorKind] = frozenset(
@@ -57,7 +57,7 @@ class SshEndpointWarningKind(enum.StrEnum):
 
     # Btrfs-backed mount volumes: udisks mounts btrfs without its btrfs
     # module, but cannot manage btrfs-specific features.
-    UDISKS_BTRFS_MODULE_MISSING = "udisks2 btrfs module not installed"
+    UDISKS_BTRFS_MODULE_MISSING = "udisks-btrfs-module-missing"
 
 
 @dataclass(frozen=True)

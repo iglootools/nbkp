@@ -162,7 +162,7 @@ class TestPreflightFailure:
         )
 
         assert exit_code == 0
-        assert json.loads(output)[0]["skip_reason"] == "preflight errors ignored"
+        assert json.loads(output)[0]["skip_reason"] == "preflight-errors"
 
 
 class TestMountStrictness:

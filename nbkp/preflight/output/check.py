@@ -19,6 +19,7 @@ from ...config.output import (
 from ...fsprotocol import DEVNULL_TARGET
 from ...policy import Severity, Strictness
 from ...remote.endpoints import ResolvedEndpoints
+from ..messages import format_problem, format_problems
 from ..severity import severity_for_errors
 from ..status.endpoint import (
     DestinationEndpointDiagnostics,
@@ -67,7 +68,7 @@ def _format_volume_issues(vol_status: VolumeStatus, strictness: Strictness) -> T
     severity = severity_for_errors(vol_status.errors, strictness)
     if severity is Severity.OK:
         severity = Severity.ERROR
-    reason = ", ".join(e.value for e in vol_status.errors)
+    reason = format_problems(vol_status.errors)
     symbol = severity_symbol(severity)
     label = f"{symbol}volume ({reason})" if reason else f"{symbol}volume"
     return Text(label, style=severity_style(severity))
@@ -191,7 +192,7 @@ def _ssh_status_text(status: SshEndpointStatus | None, strictness: Strictness) -
                 status_text(status.active, status.errors, strictness),
                 *(
                     (
-                        f", {severity_symbol(Severity.WARNING)}{w.value}",
+                        f", {severity_symbol(Severity.WARNING)}{format_problem(w)}",
                         severity_style(Severity.WARNING),
                     )
                     for w in status.warnings

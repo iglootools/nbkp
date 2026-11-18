@@ -128,7 +128,7 @@ class TestOutcomeDecisions:
             "device_present": True,
             "luks_unlocked": False,
             "mounted": None,
-            "failure_reason": "unlock_failed",
+            "failure_reason": "unlock-failed",
             "detail": "unlock failed (exit 1): bad key",
             "failure": {"step": "unlock", "exit_code": 1, "message": "bad key"},
         }
@@ -208,7 +208,7 @@ class TestMount:
 
         assert exit_code == 1
         [entry] = json.loads(output)
-        assert entry["failure_reason"] == "unlock_failed"
+        assert entry["failure_reason"] == "unlock-failed"
         assert entry["detail"] == "unlock failed (exit 1): bad key"
 
     def test_polkit_refusal_suggests_setup_auth(self) -> None:
@@ -251,7 +251,7 @@ class TestUmount:
         assert exit_code == 1
         [entry] = json.loads(output)
         assert (entry["luks_unlocked"], entry["mounted"]) == (True, False)
-        assert entry["failure_reason"] == "lock_failed"
+        assert entry["failure_reason"] == "lock-failed"
         assert entry["detail"] == "lock failed (exit 1): busy"
         assert entry["warning"] == "LUKS container still unlocked, manual lock needed"
 

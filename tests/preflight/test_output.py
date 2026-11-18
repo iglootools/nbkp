@@ -217,7 +217,7 @@ class TestTroubleshootBtrfsStagingNotFound:
             )
         )
         output = buf.getvalue()
-        assert DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND.value in output
+        assert "staging/ directory not found" in output
 
     def test_no_issues_message(self) -> None:
         config = _btrfs_config()
@@ -315,7 +315,10 @@ class TestTroubleshootDryRunPendingSnapshot:
         output = buf.getvalue()
         assert "dry-run" in output
         assert "upstream" in output
-        assert SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING.value in output
+        assert (
+            "source snapshot not yet available (dry-run; upstream has not run)"
+            in output
+        )
 
 
 class TestTroubleshootLocationExcluded:
@@ -360,7 +363,7 @@ class TestTroubleshootLocationExcluded:
             )
         )
         output = buf.getvalue()
-        assert SshEndpointErrorKind.LOCATION_EXCLUDED.value in output
+        assert "excluded by location filter" in output
         assert "--exclude-location" in output
 
 

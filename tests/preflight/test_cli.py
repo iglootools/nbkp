@@ -119,7 +119,7 @@ class TestCheckCommand:
 
         assert exit_code == 0
         [sync] = json.loads(output)["syncs"]
-        assert sync["errors"] == ["destination endpoint inactive"]
+        assert sync["errors"] == ["destination-endpoint-inactive"]
 
     def test_inactive_sync_exits_1_when_strict(self, tmp_path: Path) -> None:
         exit_code, _ = _check(
