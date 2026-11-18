@@ -7,8 +7,8 @@ available: laptops, removable drives, home servers. Python, uv, Typer; tasks run
 
 - `mise run check-all`: every check and test CI runs. `mise run check` is the static checks
   alone, `mise run test-unit` the fast tests; `mise tasks` lists the rest.
-- Run tools through `uv run --no-sync <tool>`, never bare, so another project's virtualenv on
-  `PATH` cannot stand in for this one.
+- Run a mise task when one does the job, and `uv run --no-sync <tool>` otherwise, never a bare
+  tool: another project's virtualenv on `PATH` could stand in for this one.
 - Generated documents are regenerated, never edited by hand: `mise run reference-doc` rewrites
   the CLI reference, the config tables and the Module Overview, and `mise run toc` the tables of
   contents. `check` fails when one is stale.
