@@ -14,7 +14,7 @@ from .sync_endpoint import SyncEndpoint
 from .volume import RemoteVolume, Volume
 
 
-class CredentialProvider(str, enum.Enum):
+class CredentialProvider(enum.StrEnum):
     """How LUKS passphrases are retrieved."""
 
     KEYRING = "keyring"

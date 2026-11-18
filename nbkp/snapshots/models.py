@@ -7,7 +7,7 @@ from ..preflight import SyncError
 from .errors import SnapshotOp, SnapshotOperationError
 
 
-class SnapshotSkipReason(str, enum.Enum):
+class SnapshotSkipReason(enum.StrEnum):
     """Why a sync was left out of ``snapshots show`` / ``snapshots prune``.
 
     A skip is never a failure: failures go in the result's ``error``.
@@ -20,7 +20,7 @@ class SnapshotSkipReason(str, enum.Enum):
     """Infrastructure errors under ``--strictness ignore-all``."""
 
 
-class SnapshotErrorKind(str, enum.Enum):
+class SnapshotErrorKind(enum.StrEnum):
     INACTIVE = "inactive"
     """Expected inactivity, fatal under ``--strictness ignore-none``."""
     PREFLIGHT_ERRORS = "preflight-errors"

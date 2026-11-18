@@ -19,7 +19,7 @@ from ...fsprotocol import (
 from .ssh import SshEndpointStatus
 
 
-class VolumeError(str, enum.Enum):
+class VolumeError(enum.StrEnum):
     """SSH reachability and host tool availability errors are
     ``SshEndpointError``s, not volume errors.
     """

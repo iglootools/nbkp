@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 lazy from ..config.protocol.volume import LocalVolume, RemoteVolume
 
 
-class MountFailureReason(str, enum.Enum):
+class MountFailureReason(enum.StrEnum):
     """Lives here (not in ``lifecycle``) so that ``MountCapabilities`` can carry
     it as a typed field and preflight can ``match`` on members instead of
     string literals.
@@ -24,7 +24,7 @@ class MountFailureReason(str, enum.Enum):
     UNREACHABLE = "unreachable"
 
 
-class UmountFailureReason(str, enum.Enum):
+class UmountFailureReason(enum.StrEnum):
     UNMOUNT_FAILED = "unmount_failed"
     LOCK_FAILED = "lock_failed"
     """Unmounted (or not mounted) but the LUKS container is still unlocked."""
@@ -33,7 +33,7 @@ class UmountFailureReason(str, enum.Enum):
     UNREACHABLE = "unreachable"
 
 
-class LifecycleStep(str, enum.Enum):
+class LifecycleStep(enum.StrEnum):
     """A ``udisksctl`` step of the mount lifecycle."""
 
     UNLOCK = "unlock"

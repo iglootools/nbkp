@@ -4,7 +4,7 @@ import locale
 import os
 import subprocess
 from collections.abc import Callable
-from enum import Enum
+from enum import StrEnum
 
 from ..config import (
     Config,
@@ -24,7 +24,7 @@ from ..remote import (
 from ..remote.endpoints import ResolvedEndpoints
 
 
-class ProgressMode(str, Enum):
+class ProgressMode(StrEnum):
     NONE = "none"
     OVERALL = "overall"
     PER_FILE = "per-file"

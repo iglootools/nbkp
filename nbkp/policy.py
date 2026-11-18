@@ -14,7 +14,7 @@ CLI layer (``severity_symbol`` / ``severity_style``).
 import enum
 
 
-class Strictness(str, enum.Enum):
+class Strictness(enum.StrEnum):
     """Controls how preflight errors affect the exit code.
 
     - ``IGNORE_NONE``: All errors are fatal — any inactive sync
@@ -31,7 +31,7 @@ class Strictness(str, enum.Enum):
     IGNORE_ALL = "ignore-all"
 
 
-class Severity(str, enum.Enum):
+class Severity(enum.StrEnum):
     """Three-way classification of a finding.
 
     ``OK``; ``WARNING`` (non-fatal under the current policy); ``ERROR``

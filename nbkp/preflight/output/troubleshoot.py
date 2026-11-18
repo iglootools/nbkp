@@ -60,7 +60,7 @@ _CASCADE_ERRORS: frozenset[PreflightError] = frozenset(
 )
 
 
-class Layer(str, enum.Enum):
+class Layer(enum.StrEnum):
     """Where an issue originates; the value is the JSON ``layer`` field."""
 
     SSH_ENDPOINT = "ssh-endpoint"

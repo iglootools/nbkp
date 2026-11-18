@@ -10,7 +10,7 @@ from ...disks import (
 )
 
 
-class SshEndpointError(str, enum.Enum):
+class SshEndpointError(enum.StrEnum):
     """Host tool availability errors live here because tool presence is a
     property of the host, shared by all volumes on that host.
     """
@@ -47,7 +47,7 @@ INACTIVE_SSH_ERRORS: frozenset[SshEndpointError] = frozenset(
 )
 
 
-class SshEndpointWarning(str, enum.Enum):
+class SshEndpointWarning(enum.StrEnum):
     """Host-level findings worth fixing that do not make the endpoint inactive.
 
     Kept apart from ``SshEndpointError`` so they never reach ``active`` or
