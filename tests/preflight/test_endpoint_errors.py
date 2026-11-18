@@ -12,7 +12,7 @@ from nbkp.config import (
 )
 from nbkp.preflight.status.endpoint import (
     DestinationEndpointDiagnostics,
-    DestinationEndpointError,
+    DestinationEndpointErrorKind,
     DestinationEndpointStatus,
     SnapshotDirsDiagnostics,
 )
@@ -79,7 +79,7 @@ class TestNotWritableSuppression:
             endpoint_writable=False,
         )
         status = DestinationEndpointStatus.from_diagnostics(ep, _vol_status(), diag)
-        assert DestinationEndpointError.NOT_WRITABLE in status.errors
+        assert DestinationEndpointErrorKind.NOT_WRITABLE in status.errors
 
     def test_not_writable_suppressed_when_sentinel_missing(self) -> None:
         """Sentinel missing → dir likely doesn't exist → suppress NOT_WRITABLE.
@@ -95,8 +95,8 @@ class TestNotWritableSuppression:
             endpoint_writable=False,
         )
         status = DestinationEndpointStatus.from_diagnostics(ep, _vol_status(), diag)
-        assert DestinationEndpointError.SENTINEL_NOT_FOUND in status.errors
-        assert DestinationEndpointError.NOT_WRITABLE not in status.errors
+        assert DestinationEndpointErrorKind.SENTINEL_NOT_FOUND in status.errors
+        assert DestinationEndpointErrorKind.NOT_WRITABLE not in status.errors
 
     def test_not_writable_suppressed_with_snapshot_errors(self) -> None:
         """Same suppression holds when other 'create me' errors are present."""
@@ -112,5 +112,5 @@ class TestNotWritableSuppression:
             snapshot_dirs=SnapshotDirsDiagnostics(exists=False),
         )
         status = DestinationEndpointStatus.from_diagnostics(ep, _vol_status(), diag)
-        assert DestinationEndpointError.SENTINEL_NOT_FOUND in status.errors
-        assert DestinationEndpointError.NOT_WRITABLE not in status.errors
+        assert DestinationEndpointErrorKind.SENTINEL_NOT_FOUND in status.errors
+        assert DestinationEndpointErrorKind.NOT_WRITABLE not in status.errors

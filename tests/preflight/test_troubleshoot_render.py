@@ -28,7 +28,11 @@ from nbkp.preflight.status.ssh import (
     SshEndpointStatus,
     SshEndpointToolNeeds,
 )
-from nbkp.preflight.status.volume import VolumeDiagnostics, VolumeError, VolumeStatus
+from nbkp.preflight.status.volume import (
+    VolumeDiagnostics,
+    VolumeErrorKind,
+    VolumeStatus,
+)
 
 
 def _render(
@@ -49,7 +53,7 @@ def _render(
     return buf.getvalue()
 
 
-def _volume_status(vol: LocalVolume, error: VolumeError) -> VolumeStatus:
+def _volume_status(vol: LocalVolume, error: VolumeErrorKind) -> VolumeStatus:
     return VolumeStatus(
         slug=vol.slug,
         config=vol,
@@ -67,7 +71,7 @@ class TestMarkupSafety:
         vol = LocalVolume(slug="v", path="/mnt/[bold]disk")
         config = Config(volumes={"v": vol})
         out = _render(
-            {"v": _volume_status(vol, VolumeError.SENTINEL_NOT_FOUND)}, config
+            {"v": _volume_status(vol, VolumeErrorKind.SENTINEL_NOT_FOUND)}, config
         )
         assert "/mnt/[bold]disk" in out
 
@@ -82,7 +86,7 @@ class TestMarkupSafety:
         )
         config = Config(volumes={"v": vol})
         out = _render(
-            {"v": _volume_status(vol, VolumeError.PASSPHRASE_NOT_AVAILABLE)}, config
+            {"v": _volume_status(vol, VolumeErrorKind.PASSPHRASE_NOT_AVAILABLE)}, config
         )
         assert "keyring set nbkp 'id[red]x'" in out
 
@@ -104,7 +108,9 @@ class TestSuggestedCommands:
             ),
         )
         out = _render(
-            {"usb": _volume_status(vol, VolumeError.VOLUME_NOT_MOUNTED)}, config, ctx
+            {"usb": _volume_status(vol, VolumeErrorKind.VOLUME_NOT_MOUNTED)},
+            config,
+            ctx,
         )
         assert "nbkp disks mount -n usb -c nbkp/config.yaml -l home" in out
 
@@ -117,7 +123,9 @@ class TestSuggestedCommands:
         config = Config(volumes={"usb": vol})
         ctx = TroubleshootContext(config=config, local_user="alice")
         out = _render(
-            {"usb": _volume_status(vol, VolumeError.POLKIT_RULES_MISSING)}, config, ctx
+            {"usb": _volume_status(vol, VolumeErrorKind.POLKIT_RULES_MISSING)},
+            config,
+            ctx,
         )
         assert 'subject.user == "alice"' in out
         assert "nbkp disks setup-auth -u alice" in out

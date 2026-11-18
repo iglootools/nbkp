@@ -44,10 +44,10 @@ from ...fsprotocol import (
 )
 from ...remote.endpoints import ResolvedEndpoints
 from ...remote.ssh import format_proxy_jump_chain, ssh_prefix, wrap_cmd
-from ..status.endpoint import DestinationEndpointError, SourceEndpointError
-from ..status.ssh import SshEndpointError, SshEndpointStatus, SshEndpointWarning
-from ..status.sync import SyncError
-from ..status.volume import VolumeError, VolumeStatus
+from ..status.endpoint import DestinationEndpointErrorKind, SourceEndpointErrorKind
+from ..status.ssh import SshEndpointErrorKind, SshEndpointStatus, SshEndpointWarningKind
+from ..status.sync import SyncErrorKind
+from ..status.volume import VolumeErrorKind, VolumeStatus
 
 Part = str | tuple[str, str] | Text
 """A line fragment: plain text, ``(text, style)``, or a ``Text``."""
@@ -368,20 +368,20 @@ def _print_unknown_host_key_steps(
 def print_ssh_endpoint_error_fix(
     console: Console,
     status: SshEndpointStatus,
-    error: SshEndpointError,
+    error: SshEndpointErrorKind,
     ctx: TroubleshootContext,
 ) -> None:
     slug = status.slug
     match error:
-        case SshEndpointError.UNREACHABLE:
+        case SshEndpointErrorKind.UNREACHABLE:
             _print_ssh_unreachable(console, status, ctx)
-        case SshEndpointError.AUTH_FAILED:
+        case SshEndpointErrorKind.AUTH_FAILED:
             _print_ssh_auth_failed(console, status, ctx)
-        case SshEndpointError.LOCATION_EXCLUDED:
+        case SshEndpointErrorKind.LOCATION_EXCLUDED:
             _print_location_excluded(console, ctx)
-        case SshEndpointError.RSYNC_NOT_FOUND:
+        case SshEndpointErrorKind.RSYNC_NOT_FOUND:
             _print_install(console, "rsync", slug, _RSYNC_INSTALL)
-        case SshEndpointError.RSYNC_TOO_OLD:
+        case SshEndpointErrorKind.RSYNC_TOO_OLD:
             say(
                 console,
                 FIX,
@@ -390,19 +390,19 @@ def print_ssh_endpoint_error_fix(
                 ". Install or upgrade:",
             )
             print_cmd(console, _RSYNC_INSTALL, STEP)
-        case SshEndpointError.BTRFS_NOT_FOUND:
+        case SshEndpointErrorKind.BTRFS_NOT_FOUND:
             _print_install(console, "btrfs-progs", slug, _BTRFS_INSTALL)
-        case SshEndpointError.STAT_NOT_FOUND:
+        case SshEndpointErrorKind.STAT_NOT_FOUND:
             _print_install(console, "coreutils (stat)", slug, _COREUTILS_INSTALL)
-        case SshEndpointError.FINDMNT_NOT_FOUND:
+        case SshEndpointErrorKind.FINDMNT_NOT_FOUND:
             _print_install(console, "util-linux (findmnt)", slug, _UTIL_LINUX_INSTALL)
-        case SshEndpointError.UDISKSCTL_NOT_FOUND:
+        case SshEndpointErrorKind.UDISKSCTL_NOT_FOUND:
             _print_titled(
                 console,
                 Text.assemble("udisksctl not found on ", slug, "."),
                 _UDISKSCTL_DETAILS,
             )
-        case SshEndpointError.UDISKSD_NOT_RUNNING:
+        case SshEndpointErrorKind.UDISKSD_NOT_RUNNING:
             _print_titled(
                 console,
                 Text.assemble(
@@ -410,7 +410,7 @@ def print_ssh_endpoint_error_fix(
                 ),
                 _UDISKSD_DETAILS,
             )
-        case SshEndpointError.LSBLK_NOT_FOUND:
+        case SshEndpointErrorKind.LSBLK_NOT_FOUND:
             _print_titled(
                 console, Text.assemble("lsblk not found on ", slug, "."), _LSBLK_DETAILS
             )
@@ -430,10 +430,10 @@ def _print_location_excluded(console: Console, ctx: TroubleshootContext) -> None
 def print_ssh_endpoint_warning_fix(
     console: Console,
     status: SshEndpointStatus,
-    warning: SshEndpointWarning,
+    warning: SshEndpointWarningKind,
 ) -> None:
     match warning:
-        case SshEndpointWarning.UDISKS_BTRFS_MODULE_MISSING:
+        case SshEndpointWarningKind.UDISKS_BTRFS_MODULE_MISSING:
             _print_titled(
                 console,
                 Text.assemble(
@@ -446,35 +446,35 @@ def print_ssh_endpoint_warning_fix(
 def print_volume_error_fix(
     console: Console,
     vol_status: VolumeStatus,
-    error: VolumeError,
+    error: VolumeErrorKind,
     ctx: TroubleshootContext,
 ) -> None:
     vol = vol_status.config
     match error:
-        case VolumeError.SENTINEL_NOT_FOUND:
+        case VolumeErrorKind.SENTINEL_NOT_FOUND:
             _print_sentinel_fix(
                 console, vol, vol.path or "<volume-path>", VOLUME_SENTINEL, ctx
             )
-        case VolumeError.VOLUME_NOT_MOUNTED:
+        case VolumeErrorKind.VOLUME_NOT_MOUNTED:
             say(console, FIX, "Volume is not mounted. Mount it with:")
             print_cmd(
                 console,
                 ctx.invocation.command("disks", "mount", "-n", vol_status.slug),
                 STEP,
             )
-        case VolumeError.DEVICE_NOT_PRESENT:
+        case VolumeErrorKind.DEVICE_NOT_PRESENT:
             _print_device_not_present_fix(console, vol.mount)
-        case VolumeError.FSTAB_MOUNTPOINT_MISMATCH:
+        case VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH:
             _print_fstab_mountpoint_mismatch_fix(console, vol_status, ctx)
-        case VolumeError.POLKIT_RULES_MISSING:
+        case VolumeErrorKind.POLKIT_RULES_MISSING:
             _print_polkit_rules_missing_fix(console, vol, ctx)
-        case VolumeError.PASSPHRASE_NOT_AVAILABLE:
+        case VolumeErrorKind.PASSPHRASE_NOT_AVAILABLE:
             _print_passphrase_not_available_fix(console, vol.mount, ctx)
-        case VolumeError.UNLOCK_FAILED:
+        case VolumeErrorKind.UNLOCK_FAILED:
             _print_unlock_failed_fix(console, vol.mount, ctx)
-        case VolumeError.MOUNT_FAILED:
+        case VolumeErrorKind.MOUNT_FAILED:
             _print_mount_failed_fix(console, vol, vol.mount, ctx)
-        case VolumeError.SSH_ENDPOINT_INACTIVE:
+        case VolumeErrorKind.SSH_ENDPOINT_INACTIVE:
             say(console, FIX, "Fix the SSH endpoint errors reported above.")
 
 
@@ -812,7 +812,7 @@ def _print_polkit_rules_missing_fix(
 
 def print_source_endpoint_error_fix(
     console: Console,
-    error: SourceEndpointError,
+    error: SourceEndpointErrorKind,
     sync: SyncConfig,
     ctx: TroubleshootContext,
 ) -> None:
@@ -820,9 +820,9 @@ def print_source_endpoint_error_fix(
     src_vol = ctx.config.volumes[src_ep.volume]
     path = endpoint_path(src_vol, src_ep.subdir)
     match error:
-        case SourceEndpointError.SENTINEL_NOT_FOUND:
+        case SourceEndpointErrorKind.SENTINEL_NOT_FOUND:
             _print_sentinel_fix(console, src_vol, path, SOURCE_SENTINEL, ctx)
-        case SourceEndpointError.LATEST_SYMLINK_NOT_FOUND:
+        case SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND:
             say(
                 console,
                 FIX,
@@ -831,7 +831,7 @@ def print_source_endpoint_error_fix(
                 " symlink does not exist. Create it:",
             )
             _print_reset_latest(console, src_vol, path, ctx)
-        case SourceEndpointError.LATEST_SYMLINK_INVALID:
+        case SourceEndpointErrorKind.LATEST_SYMLINK_INVALID:
             say(
                 console,
                 FIX,
@@ -841,18 +841,18 @@ def print_source_endpoint_error_fix(
                 " has run at least once, or reset it:",
             )
             _print_reset_latest(console, src_vol, path, ctx)
-        case SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND:
+        case SourceEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND:
             # Endpoint dir is expected to be user-writable by this point
             # (fixed via NOT_WRITABLE if needed), so a plain mkdir suffices
             # regardless of snapshot backend.
             _print_mkdir(console, src_vol, f"{path}/{SNAPSHOTS_DIR}", ctx)
-        case SourceEndpointError.VOLUME_INACTIVE:
+        case SourceEndpointErrorKind.VOLUME_INACTIVE:
             say(console, FIX, "Fix the volume errors reported above.")
 
 
 def print_destination_endpoint_error_fix(
     console: Console,
-    error: DestinationEndpointError,
+    error: DestinationEndpointErrorKind,
     sync: SyncConfig,
     ctx: TroubleshootContext,
 ) -> None:
@@ -861,13 +861,13 @@ def print_destination_endpoint_error_fix(
     path = endpoint_path(dst_vol, dst_ep.subdir)
     match error:
         case (
-            DestinationEndpointError.SENTINEL_NOT_FOUND
-            | DestinationEndpointError.NOT_WRITABLE
-            | DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND
-            | DestinationEndpointError.SNAPSHOTS_DIR_NOT_WRITABLE
-            | DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND
-            | DestinationEndpointError.LATEST_SYMLINK_INVALID
-            | DestinationEndpointError.VOLUME_INACTIVE
+            DestinationEndpointErrorKind.SENTINEL_NOT_FOUND
+            | DestinationEndpointErrorKind.NOT_WRITABLE
+            | DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND
+            | DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_WRITABLE
+            | DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND
+            | DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID
+            | DestinationEndpointErrorKind.VOLUME_INACTIVE
         ):
             _print_destination_layout_fix(console, error, dst_vol, path, ctx)
         case _:
@@ -876,7 +876,7 @@ def print_destination_endpoint_error_fix(
 
 def _print_destination_layout_fix(
     console: Console,
-    error: DestinationEndpointError,
+    error: DestinationEndpointErrorKind,
     vol: LocalVolume | RemoteVolume,
     path: str,
     ctx: TroubleshootContext,
@@ -885,9 +885,9 @@ def _print_destination_layout_fix(
     snapshots = f"{path}/{SNAPSHOTS_DIR}"
     latest = f"{path}/{LATEST_LINK}"
     match error:
-        case DestinationEndpointError.SENTINEL_NOT_FOUND:
+        case DestinationEndpointErrorKind.SENTINEL_NOT_FOUND:
             _print_sentinel_fix(console, vol, path, DESTINATION_SENTINEL, ctx)
-        case DestinationEndpointError.NOT_WRITABLE:
+        case DestinationEndpointErrorKind.NOT_WRITABLE:
             say(
                 console,
                 FIX,
@@ -896,12 +896,12 @@ def _print_destination_layout_fix(
                 " is not writable. Fix permissions:",
             )
             _print_chown(console, vol, path, ctx)
-        case DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND:
+        case DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND:
             # Endpoint dir is expected to be user-writable by this point
             # (fixed via NOT_WRITABLE if needed), so a plain mkdir suffices
             # regardless of snapshot backend.
             _print_mkdir(console, vol, snapshots, ctx)
-        case DestinationEndpointError.SNAPSHOTS_DIR_NOT_WRITABLE:
+        case DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_WRITABLE:
             say(
                 console,
                 FIX,
@@ -910,7 +910,7 @@ def _print_destination_layout_fix(
                 ") is not writable. Fix permissions:",
             )
             _print_chown(console, vol, snapshots, ctx)
-        case DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND:
+        case DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND:
             say(
                 console,
                 FIX,
@@ -919,7 +919,7 @@ def _print_destination_layout_fix(
                 " symlink does not exist. Create it:",
             )
             _print_reset_latest(console, vol, path, ctx)
-        case DestinationEndpointError.LATEST_SYMLINK_INVALID:
+        case DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID:
             say(
                 console,
                 FIX,
@@ -934,7 +934,7 @@ def _print_destination_layout_fix(
 
 def _print_destination_snapshot_backend_fix(
     console: Console,
-    error: DestinationEndpointError,
+    error: DestinationEndpointErrorKind,
     vol: LocalVolume | RemoteVolume,
     path: str,
     ctx: TroubleshootContext,
@@ -942,14 +942,14 @@ def _print_destination_snapshot_backend_fix(
     staging = f"{path}/{STAGING_DIR}"
     snapshots = f"{path}/{SNAPSHOTS_DIR}"
     match error:
-        case DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME:
+        case DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME:
             for cmd in (
                 ["sudo", "btrfs", "subvolume", "create", staging],
                 ["sudo", "mkdir", snapshots],
                 ["sudo", "chown", "<user>:<group>", staging, snapshots],
             ):
                 print_cmd(console, wrap_cmd(cmd, vol, ctx.resolved_endpoints))
-        case DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND:
+        case DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND:
             # Endpoint dir is expected to be user-writable by this point
             # (fixed via NOT_WRITABLE if needed), so subvolume create runs
             # without sudo (kernel 5.8+).
@@ -961,7 +961,7 @@ def _print_destination_snapshot_backend_fix(
                     ctx.resolved_endpoints,
                 ),
             )
-        case DestinationEndpointError.STAGING_SUBVOL_NOT_WRITABLE:
+        case DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_WRITABLE:
             say(
                 console,
                 FIX,
@@ -970,14 +970,14 @@ def _print_destination_snapshot_backend_fix(
                 ") is not writable. Fix permissions:",
             )
             _print_chown(console, vol, staging, ctx)
-        case DestinationEndpointError.VOL_NOT_BTRFS:
+        case DestinationEndpointErrorKind.VOL_NOT_BTRFS:
             say(console, FIX, "The destination is not on a btrfs filesystem.")
             say(
                 console,
                 FIX,
                 "Move it to a btrfs volume, or use hard-link-snapshots instead.",
             )
-        case DestinationEndpointError.VOL_FS_TYPE_UNKNOWN:
+        case DestinationEndpointErrorKind.VOL_FS_TYPE_UNKNOWN:
             say(
                 console,
                 FIX,
@@ -993,9 +993,9 @@ def _print_destination_snapshot_backend_fix(
                 ),
                 STEP,
             )
-        case DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM:
+        case DestinationEndpointErrorKind.VOL_NOT_MOUNTED_USER_SUBVOL_RM:
             _print_user_subvol_rm_fix(console, vol, ctx)
-        case DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT:
+        case DestinationEndpointErrorKind.VOL_NO_HARDLINK_SUPPORT:
             say(
                 console,
                 FIX,
@@ -1010,13 +1010,13 @@ def _print_destination_snapshot_backend_fix(
 def print_sync_error_fix(
     console: Console,
     sync: SyncConfig,
-    error: SyncError,
+    error: SyncErrorKind,
     ctx: TroubleshootContext,
 ) -> None:
     match error:
-        case SyncError.DISABLED:
+        case SyncErrorKind.DISABLED:
             say(console, FIX, "Enable the sync in the configuration file.")
-        case SyncError.ENDPOINT_HOST_ERRORS:
+        case SyncErrorKind.ENDPOINT_HOST_ERRORS:
             say(
                 console,
                 FIX,
@@ -1024,7 +1024,7 @@ def print_sync_error_fix(
                 " endpoint errors reported above (for local volumes, under"
                 " 'localhost').",
             )
-        case SyncError.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM:
+        case SyncErrorKind.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM:
             src_ep = ctx.config.source_endpoint(sync)
             path = endpoint_path(ctx.config.volumes[src_ep.volume], src_ep.subdir)
             say(
@@ -1036,7 +1036,7 @@ def print_sync_error_fix(
                 " to this endpoint. Either run the upstream sync first or reset"
                 " the symlink to point to a valid snapshot.",
             )
-        case SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING:
+        case SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING:
             say(
                 console,
                 FIX,
@@ -1046,6 +1046,7 @@ def print_sync_error_fix(
                 " --dry-run to execute the full chain.",
             )
         case (
-            SyncError.SOURCE_ENDPOINT_INACTIVE | SyncError.DESTINATION_ENDPOINT_INACTIVE
+            SyncErrorKind.SOURCE_ENDPOINT_INACTIVE
+            | SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE
         ):
             say(console, FIX, "Fix the endpoint errors reported above.")

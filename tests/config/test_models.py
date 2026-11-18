@@ -7,7 +7,7 @@ import pytest
 
 from nbkp.config import (
     Config,
-    ConfigValidationCode,
+    ConfigValidationErrorKind,
     LocalVolume,
     RemoteVolume,
     RsyncOptions,
@@ -187,7 +187,9 @@ class TestCrossServerValidation:
     def test_cross_server_remote_to_remote_rejected(self) -> None:
         with pytest.raises(
             pydantic.ValidationError,
-            check=lambda e: _error_types(e) == {ConfigValidationCode.CROSS_SERVER_SYNC},
+            check=lambda e: (
+                _error_types(e) == {ConfigValidationErrorKind.CROSS_SERVER_SYNC}
+            ),
         ):
             Config(
                 ssh_endpoints={

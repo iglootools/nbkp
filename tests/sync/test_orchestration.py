@@ -10,8 +10,8 @@ from nbkp.config import (
 )
 from nbkp.policy import Strictness
 from nbkp.preflight import (
-    DestinationEndpointError,
-    SyncError,
+    DestinationEndpointErrorKind,
+    SyncErrorKind,
     SyncStatus,
 )
 from nbkp.sync.results import SyncFailureKind, SyncOutcome, SyncWarningKind
@@ -308,7 +308,7 @@ class TestCancellationCause:
         config = _three_chain_config()
         _, statuses = active_statuses(config)
         _, inactive = inactive_statuses(config)
-        disabled = inactive["a"].model_copy(update={"errors": [SyncError.DISABLED]})
+        disabled = inactive["a"].model_copy(update={"errors": [SyncErrorKind.DISABLED]})
         statuses = {**statuses, "a": disabled}
         rsync = FakeRsync()
 
@@ -344,14 +344,14 @@ def _infra_broken_statuses(
     def broken(ss: SyncStatus) -> SyncStatus:
         dst = ss.destination_endpoint_status.model_copy(
             update={
-                "errors": [DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND],
+                "errors": [DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND],
                 **({} if presence_proven else {"diagnostics": None}),
             }
         )
         return ss.model_copy(
             update={
                 "destination_endpoint_status": dst,
-                "errors": [SyncError.DESTINATION_ENDPOINT_INACTIVE],
+                "errors": [SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE],
             }
         )
 
@@ -414,7 +414,7 @@ def _pending_middle_statuses(config: Config) -> dict[str, SyncStatus]:
     """
     _, statuses = active_statuses(config)
     pending = statuses["b"].model_copy(
-        update={"errors": [SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING]}
+        update={"errors": [SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING]}
     )
     return {**statuses, "b": pending}
 

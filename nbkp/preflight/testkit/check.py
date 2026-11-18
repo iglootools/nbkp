@@ -24,11 +24,11 @@ from .. import (
     SnapshotDirsDiagnostics,
     SshEndpointDiagnostics,
     SshEndpointStatus,
-    SyncError,
+    SyncErrorKind,
     SyncStatus,
     VolumeCapabilities,
     VolumeDiagnostics,
-    VolumeError,
+    VolumeErrorKind,
     VolumeStatus,
 )
 from ..output.formatting import collect_ssh_endpoint_statuses
@@ -177,14 +177,14 @@ def check_data(
         config=config.volumes["nas-backup"],
         ssh_endpoint_status=nas_ssh,
         diagnostics=None,
-        errors=[VolumeError.SSH_ENDPOINT_INACTIVE],
+        errors=[VolumeErrorKind.SSH_ENDPOINT_INACTIVE],
     )
     external_vs = VolumeStatus(
         slug="external-drive",
         config=config.volumes["external-drive"],
         ssh_endpoint_status=localhost_ssh,
         diagnostics=VolumeDiagnostics(capabilities=SENTINEL_MISSING_CAPS),
-        errors=[VolumeError.SENTINEL_NOT_FOUND],
+        errors=[VolumeErrorKind.SENTINEL_NOT_FOUND],
     )
     # Encrypted volume: device present, luks not unlocked, not mounted
     mount_encrypted_vs = VolumeStatus(
@@ -204,7 +204,7 @@ def check_data(
                 ),
             ),
         ),
-        errors=[VolumeError.VOLUME_NOT_MOUNTED],
+        errors=[VolumeErrorKind.VOLUME_NOT_MOUNTED],
     )
     # Unencrypted volume: device present, mounted, active
     mount_unencrypted_vs = VolumeStatus(
@@ -293,7 +293,7 @@ def check_data(
             config=config.syncs["docs-to-nas"],
             source_endpoint_status=inactive_src_ep_status("laptop-docs", laptop_vs),
             destination_endpoint_status=inactive_dst_ep_status("nas-docs", nas_vs),
-            errors=[SyncError.DESTINATION_ENDPOINT_INACTIVE],
+            errors=[SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE],
         ),
         "music-to-usb": SyncStatus(
             slug="music-to-usb",
@@ -311,7 +311,7 @@ def check_data(
             destination_endpoint_status=inactive_dst_ep_status(
                 "external-root", external_vs
             ),
-            errors=[SyncError.DISABLED],
+            errors=[SyncErrorKind.DISABLED],
         ),
         "backup-to-encrypted": SyncStatus(
             slug="backup-to-encrypted",
@@ -322,7 +322,7 @@ def check_data(
             destination_endpoint_status=inactive_dst_ep_status(
                 "mount-encrypted-dst", mount_encrypted_vs
             ),
-            errors=[SyncError.DESTINATION_ENDPOINT_INACTIVE],
+            errors=[SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE],
         ),
         "backup-to-unencrypted": SyncStatus(
             slug="backup-to-unencrypted",

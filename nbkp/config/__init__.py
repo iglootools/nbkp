@@ -1,8 +1,8 @@
-from .loader import ConfigError, ConfigErrorReason, find_config_file, load_config
+from .loader import ConfigError, ConfigErrorKind, find_config_file, load_config
 from .protocol import (
     BtrfsSnapshotConfig,
     Config,
-    ConfigValidationCode,
+    ConfigValidationErrorKind,
     CredentialProvider,
     EncryptionConfig,
     HardLinkSnapshotConfig,
@@ -26,8 +26,8 @@ __all__ = [
     "BtrfsSnapshotConfig",
     "Config",
     "ConfigError",
-    "ConfigErrorReason",
-    "ConfigValidationCode",
+    "ConfigErrorKind",
+    "ConfigValidationErrorKind",
     "CredentialProvider",
     "EncryptionConfig",
     "HardLinkSnapshotConfig",

@@ -2,23 +2,26 @@
 
 from nbkp.policy import Severity, Strictness
 from nbkp.preflight.severity import severity_for_error, severity_for_errors
-from nbkp.preflight.status.endpoint import DestinationEndpointError, SourceEndpointError
-from nbkp.preflight.status.ssh import SshEndpointError
-from nbkp.preflight.status.sync import SyncError
-from nbkp.preflight.status.volume import VolumeError
+from nbkp.preflight.status.endpoint import (
+    DestinationEndpointErrorKind,
+    SourceEndpointErrorKind,
+)
+from nbkp.preflight.status.ssh import SshEndpointErrorKind
+from nbkp.preflight.status.sync import SyncErrorKind
+from nbkp.preflight.status.volume import VolumeErrorKind
 
 
 class TestSeverityForError:
     def test_ignore_inactive_inactive_error_is_warning(self) -> None:
         assert (
             severity_for_error(
-                VolumeError.SENTINEL_NOT_FOUND, Strictness.IGNORE_INACTIVE
+                VolumeErrorKind.SENTINEL_NOT_FOUND, Strictness.IGNORE_INACTIVE
             )
             is Severity.WARNING
         )
         assert (
             severity_for_error(
-                VolumeError.DEVICE_NOT_PRESENT, Strictness.IGNORE_INACTIVE
+                VolumeErrorKind.DEVICE_NOT_PRESENT, Strictness.IGNORE_INACTIVE
             )
             is Severity.WARNING
         )
@@ -26,25 +29,29 @@ class TestSeverityForError:
     def test_ignore_inactive_infra_error_is_error(self) -> None:
         assert (
             severity_for_error(
-                DestinationEndpointError.NOT_WRITABLE, Strictness.IGNORE_INACTIVE
+                DestinationEndpointErrorKind.NOT_WRITABLE, Strictness.IGNORE_INACTIVE
             )
             is Severity.ERROR
         )
         assert (
-            severity_for_error(VolumeError.UNLOCK_FAILED, Strictness.IGNORE_INACTIVE)
+            severity_for_error(
+                VolumeErrorKind.UNLOCK_FAILED, Strictness.IGNORE_INACTIVE
+            )
             is Severity.ERROR
         )
 
     def test_ignore_none_everything_fatal(self) -> None:
         assert (
-            severity_for_error(VolumeError.SENTINEL_NOT_FOUND, Strictness.IGNORE_NONE)
+            severity_for_error(
+                VolumeErrorKind.SENTINEL_NOT_FOUND, Strictness.IGNORE_NONE
+            )
             is Severity.ERROR
         )
 
     def test_ignore_all_nothing_fatal(self) -> None:
         assert (
             severity_for_error(
-                DestinationEndpointError.NOT_WRITABLE, Strictness.IGNORE_ALL
+                DestinationEndpointErrorKind.NOT_WRITABLE, Strictness.IGNORE_ALL
             )
             is Severity.WARNING
         )
@@ -52,25 +59,27 @@ class TestSeverityForError:
     def test_each_layer_classifier(self) -> None:
         """Sanity-check that each enum layer routes through correctly."""
         assert (
-            severity_for_error(SshEndpointError.UNREACHABLE, Strictness.IGNORE_INACTIVE)
-            is Severity.WARNING
-        )
-        assert (
             severity_for_error(
-                SourceEndpointError.SENTINEL_NOT_FOUND, Strictness.IGNORE_INACTIVE
+                SshEndpointErrorKind.UNREACHABLE, Strictness.IGNORE_INACTIVE
             )
             is Severity.WARNING
         )
         assert (
             severity_for_error(
-                DestinationEndpointError.SENTINEL_NOT_FOUND,
+                SourceEndpointErrorKind.SENTINEL_NOT_FOUND, Strictness.IGNORE_INACTIVE
+            )
+            is Severity.WARNING
+        )
+        assert (
+            severity_for_error(
+                DestinationEndpointErrorKind.SENTINEL_NOT_FOUND,
                 Strictness.IGNORE_INACTIVE,
             )
             is Severity.WARNING
         )
         assert (
             severity_for_error(
-                SyncError.SOURCE_ENDPOINT_INACTIVE, Strictness.IGNORE_INACTIVE
+                SyncErrorKind.SOURCE_ENDPOINT_INACTIVE, Strictness.IGNORE_INACTIVE
             )
             is Severity.WARNING
         )
@@ -84,8 +93,8 @@ class TestSeverityForErrors:
         assert (
             severity_for_errors(
                 [
-                    VolumeError.SENTINEL_NOT_FOUND,
-                    VolumeError.DEVICE_NOT_PRESENT,
+                    VolumeErrorKind.SENTINEL_NOT_FOUND,
+                    VolumeErrorKind.DEVICE_NOT_PRESENT,
                 ],
                 Strictness.IGNORE_INACTIVE,
             )
@@ -96,8 +105,8 @@ class TestSeverityForErrors:
         assert (
             severity_for_errors(
                 [
-                    VolumeError.SENTINEL_NOT_FOUND,  # warning
-                    VolumeError.UNLOCK_FAILED,  # error
+                    VolumeErrorKind.SENTINEL_NOT_FOUND,  # warning
+                    VolumeErrorKind.UNLOCK_FAILED,  # error
                 ],
                 Strictness.IGNORE_INACTIVE,
             )
@@ -105,7 +114,7 @@ class TestSeverityForErrors:
         )
 
     def test_strictness_changes_classification(self) -> None:
-        errors: list = [VolumeError.SENTINEL_NOT_FOUND]
+        errors: list = [VolumeErrorKind.SENTINEL_NOT_FOUND]
         assert (
             severity_for_errors(errors, Strictness.IGNORE_INACTIVE) is Severity.WARNING
         )

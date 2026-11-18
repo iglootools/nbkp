@@ -15,7 +15,7 @@ from ..config import Config
 from ..disks import MountObservation, UmountResult, any_failed
 from ..policy import Severity, Strictness
 from ..preflight import (
-    PreflightError,
+    PreflightErrorKind,
     PreflightResult,
     SyncStatus,
     check_all_syncs,
@@ -80,7 +80,7 @@ def check_and_run(
     progress: ProgressMode | None = None,
     prune: bool = True,
     on_check_start: Callable[[str], None] | None = None,
-    on_check_end: Callable[[str, Sequence[PreflightError]], None] | None = None,
+    on_check_end: Callable[[str, Sequence[PreflightErrorKind]], None] | None = None,
     on_checks_done: Callable[[PreflightResult], None] | None = None,
     callbacks: SyncCallbacks | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,

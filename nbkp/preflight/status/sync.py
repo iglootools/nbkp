@@ -22,7 +22,7 @@ from .ssh import INACTIVE_SSH_ERRORS
 from .volume import INACTIVE_VOLUME_ERRORS
 
 
-class SyncError(enum.StrEnum):
+class SyncErrorKind(enum.StrEnum):
     """Only errors that require sync-graph context live here; the rest
     are at the SSH endpoint, volume or sync endpoint level.
     """
@@ -31,7 +31,7 @@ class SyncError(enum.StrEnum):
     ENDPOINT_HOST_ERRORS = "a host this sync runs on has tool errors"
     """The host of either side (localhost included) has non-inactive SSH
     endpoint errors — rsync missing or too old, btrfs/udisks tools missing.
-    Remote hosts already cascade through ``VolumeError.SSH_ENDPOINT_INACTIVE``;
+    Remote hosts already cascade through ``VolumeErrorKind.SSH_ENDPOINT_INACTIVE``;
     this is what makes *localhost* tool errors stop the sync too."""
     SRC_EP_LATEST_DEVNULL_NO_UPSTREAM = (
         "source latest \u2192 /dev/null with no upstream sync"
@@ -45,13 +45,13 @@ class SyncError(enum.StrEnum):
     DESTINATION_ENDPOINT_INACTIVE = "destination endpoint inactive"
 
 
-INACTIVE_SYNC_ERRORS: frozenset[SyncError] = frozenset(
+INACTIVE_SYNC_ERRORS: frozenset[SyncErrorKind] = frozenset(
     {
         # Switched off in the config: never attempted, so never a problem.
-        SyncError.DISABLED,
-        SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING,
-        SyncError.SOURCE_ENDPOINT_INACTIVE,
-        SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        SyncErrorKind.DISABLED,
+        SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING,
+        SyncErrorKind.SOURCE_ENDPOINT_INACTIVE,
+        SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE,
     }
 )
 
@@ -63,7 +63,7 @@ class SyncStatus(BaseModel):
     config: SyncConfig
     source_endpoint_status: SourceEndpointStatus
     destination_endpoint_status: DestinationEndpointStatus
-    errors: list[SyncError]
+    errors: list[SyncErrorKind]
     destination_latest_snapshot: Snapshot | None = None
     """Snapshot from the destination ``latest`` symlink.
 
@@ -124,18 +124,18 @@ class SyncStatus(BaseModel):
                         sync, src_endpoint, src_ep_status, all_syncs, dry_run
                     ),
                     *(
-                        [SyncError.SOURCE_ENDPOINT_INACTIVE]
+                        [SyncErrorKind.SOURCE_ENDPOINT_INACTIVE]
                         if not src_ep_status.active
                         else []
                     ),
                     *(
-                        [SyncError.DESTINATION_ENDPOINT_INACTIVE]
+                        [SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE]
                         if not dst_ep_status.active
                         else []
                     ),
                 ]
                 if sync.enabled
-                else [SyncError.DISABLED]
+                else [SyncErrorKind.DISABLED]
             ),
             destination_latest_snapshot=(
                 dst_diag.latest.snapshot if dst_diag and dst_diag.latest else None
@@ -146,14 +146,14 @@ class SyncStatus(BaseModel):
 def _host_errors(
     src_ep_status: SourceEndpointStatus,
     dst_ep_status: DestinationEndpointStatus,
-) -> list[SyncError]:
+) -> list[SyncErrorKind]:
     """``ENDPOINT_HOST_ERRORS`` when either side's host has fatal tool errors.
 
     Inactive host errors (unreachable, location-excluded) are left to the
     volume cascade, which already classifies them as expected-inactive.
     """
     return (
-        [SyncError.ENDPOINT_HOST_ERRORS]
+        [SyncErrorKind.ENDPOINT_HOST_ERRORS]
         if any(
             set(ep.volume_status.ssh_endpoint_status.errors) - INACTIVE_SSH_ERRORS
             for ep in (src_ep_status, dst_ep_status)
@@ -168,7 +168,7 @@ def _sync_errors(
     src_ep_status: SourceEndpointStatus,
     all_syncs: dict[str, SyncConfig],
     dry_run: bool,
-) -> list[SyncError]:
+) -> list[SyncErrorKind]:
     if not src_ep_status.active:
         return []
     if src_endpoint.snapshot_mode == "none":
@@ -179,9 +179,9 @@ def _sync_errors(
     if diag.latest.raw_target != DEVNULL_TARGET:
         return []
     if not _has_upstream_sync(sync, all_syncs):
-        return [SyncError.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM]
+        return [SyncErrorKind.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM]
     elif dry_run:
-        return [SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING]
+        return [SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING]
     else:
         return []
 

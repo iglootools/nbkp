@@ -8,7 +8,7 @@ import pytest
 from rich.console import Console
 
 from nbkp.fsprotocol import Snapshot
-from nbkp.preflight import SyncError
+from nbkp.preflight import SyncErrorKind
 from nbkp.snapshots.errors import SnapshotOp
 from nbkp.snapshots.models import (
     PruneResult,
@@ -133,21 +133,21 @@ class TestPruneOutput:
         (
             SnapshotResultError(
                 kind=SnapshotErrorKind.INACTIVE,
-                preflight_errors=(SyncError.SOURCE_ENDPOINT_INACTIVE,),
+                preflight_errors=(SyncErrorKind.SOURCE_ENDPOINT_INACTIVE,),
             ),
-            f"inactive: {SyncError.SOURCE_ENDPOINT_INACTIVE.value}",
+            f"inactive: {SyncErrorKind.SOURCE_ENDPOINT_INACTIVE.value}",
         ),
         (
             SnapshotResultError(
                 kind=SnapshotErrorKind.PREFLIGHT_ERRORS,
                 preflight_errors=(
-                    SyncError.DESTINATION_ENDPOINT_INACTIVE,
-                    SyncError.ENDPOINT_HOST_ERRORS,
+                    SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE,
+                    SyncErrorKind.ENDPOINT_HOST_ERRORS,
                 ),
             ),
             (
                 "preflight errors: destination endpoint inactive,"
-                f" {SyncError.ENDPOINT_HOST_ERRORS.value}"
+                f" {SyncErrorKind.ENDPOINT_HOST_ERRORS.value}"
             ),
         ),
         (

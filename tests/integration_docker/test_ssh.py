@@ -26,7 +26,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.preflight import SshEndpointError
+from nbkp.preflight import SshEndpointErrorKind
 from nbkp.preflight.testkit import check_volume
 from nbkp.remote.fabricssh import (
     run_remote_command as fabric_run_remote,
@@ -230,7 +230,7 @@ class TestHostKeyVerification:
         status = check_volume(vol, resolved)
         assert status.active is False
         # Host key mismatch: the host answered and was refused (not inactive).
-        assert status.ssh_endpoint_status.errors == [SshEndpointError.AUTH_FAILED]
+        assert status.ssh_endpoint_status.errors == [SshEndpointErrorKind.AUTH_FAILED]
 
     def test_rsync_succeeds_with_correct_known_hosts(
         self,
@@ -417,7 +417,7 @@ class TestConnectionFailure:
         resolved = resolve_all_endpoints(config)
         status = check_volume(vol, resolved)
         assert status.active is False
-        assert SshEndpointError.UNREACHABLE in status.ssh_endpoint_status.errors
+        assert SshEndpointErrorKind.UNREACHABLE in status.ssh_endpoint_status.errors
 
     def test_unreachable_volume_wrong_key(
         self,
@@ -455,7 +455,7 @@ class TestConnectionFailure:
         status = check_volume(vol, resolved)
         assert status.active is False
         # Unauthorized key: the host answered and refused (not inactive).
-        assert status.ssh_endpoint_status.errors == [SshEndpointError.AUTH_FAILED]
+        assert status.ssh_endpoint_status.errors == [SshEndpointErrorKind.AUTH_FAILED]
 
 
 class TestAgentForwarding:

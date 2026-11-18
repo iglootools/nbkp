@@ -32,7 +32,7 @@ from ...disks.output import umount_result_json
 from ...ordering.output import build_rich_tree_sections
 from ...policy import Strictness
 from ...preflight import (
-    PreflightError,
+    PreflightErrorKind,
     PreflightResult,
     check_step_count,
 )
@@ -236,7 +236,7 @@ class _HumanProgress:
         if self._check_bar is not None:
             start_check_step(self._check_bar, label)
 
-    def on_check_end(self, label: str, errors: Sequence[PreflightError]) -> None:
+    def on_check_end(self, label: str, errors: Sequence[PreflightErrorKind]) -> None:
         if self._check_bar is not None:
             end_check_step(self._check_bar, label, errors, self._strictness)
 

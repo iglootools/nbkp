@@ -7,7 +7,7 @@ icons.
 
 from ..policy import Severity, Strictness, classify_severity
 from .lifecycle import LUKS_STAGE_FAILURES, MOUNT_STAGE_FAILURES, MountResult
-from .models import MountFailureReason
+from .models import MountFailureKind
 
 # Each helper answers "did the action for this column actually attempt and
 # fail?" from ``mount_failure_reason``, then routes the answer through
@@ -30,7 +30,7 @@ def device_fail_severity(
 
 
 def luks_fail_severity(
-    mount_failure_reason: MountFailureReason | None,
+    mount_failure_reason: MountFailureKind | None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Severity:
     """Severity for ``luks_unlocked=False``.
@@ -47,7 +47,7 @@ def luks_fail_severity(
 
 
 def mounted_fail_severity(
-    mount_failure_reason: MountFailureReason | None,
+    mount_failure_reason: MountFailureKind | None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Severity:
     """Severity for ``mounted=False``.
@@ -61,14 +61,14 @@ def mounted_fail_severity(
 
 
 # Mount failure reasons that correspond to "expected inactive" preflight
-# states (e.g. drive not plugged in maps to VolumeError.DEVICE_NOT_PRESENT
-# in INACTIVE_VOLUME_ERRORS; UNREACHABLE maps to SshEndpointError.UNREACHABLE
+# states (e.g. drive not plugged in maps to VolumeErrorKind.DEVICE_NOT_PRESENT
+# in INACTIVE_VOLUME_ERRORS; UNREACHABLE maps to SshEndpointErrorKind.UNREACHABLE
 # in INACTIVE_SSH_ERRORS).  Everything else — PASSPHRASE_NOT_AVAILABLE on a
 # plugged-in drive included — is a real failure.
-_INACTIVE_MOUNT_REASONS: frozenset[MountFailureReason] = frozenset(
+_INACTIVE_MOUNT_REASONS: frozenset[MountFailureKind] = frozenset(
     {
-        MountFailureReason.DEVICE_NOT_PRESENT,
-        MountFailureReason.UNREACHABLE,
+        MountFailureKind.DEVICE_NOT_PRESENT,
+        MountFailureKind.UNREACHABLE,
     }
 )
 

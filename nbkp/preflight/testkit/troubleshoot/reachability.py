@@ -11,16 +11,16 @@ from ....config import (
 )
 from ... import (
     DestinationEndpointDiagnostics,
-    DestinationEndpointError,
+    DestinationEndpointErrorKind,
     DestinationEndpointStatus,
     SourceEndpointDiagnostics,
-    SourceEndpointError,
+    SourceEndpointErrorKind,
     SourceEndpointStatus,
     SshEndpointDiagnostics,
     SshEndpointStatus,
-    SyncError,
+    SyncErrorKind,
     SyncStatus,
-    VolumeError,
+    VolumeErrorKind,
     VolumeStatus,
 )
 from ..common import (
@@ -78,7 +78,7 @@ def _disabled_statuses(config: Config, shared: SharedStatuses) -> ScenarioStatus
                 destination_endpoint_status=inactive_dst_ep_status(
                     "dst-disabled", shared.usb_drive
                 ),
-                errors=[SyncError.DISABLED],
+                errors=[SyncErrorKind.DISABLED],
             ),
         )
     )
@@ -145,7 +145,7 @@ def _missing_sentinels_statuses(
                         endpoint_slug=LAPTOP_SRC,
                         sentinel_exists=False,
                     ),
-                    errors=[SourceEndpointError.SENTINEL_NOT_FOUND],
+                    errors=[SourceEndpointErrorKind.SENTINEL_NOT_FOUND],
                 ),
                 destination_endpoint_status=DestinationEndpointStatus(
                     endpoint_slug="dst-sentinels",
@@ -155,7 +155,7 @@ def _missing_sentinels_statuses(
                         sentinel_exists=False,
                         endpoint_writable=True,
                     ),
-                    errors=[DestinationEndpointError.SENTINEL_NOT_FOUND],
+                    errors=[DestinationEndpointErrorKind.SENTINEL_NOT_FOUND],
                 ),
                 errors=list(BOTH_ENDPOINTS_INACTIVE),
             ),
@@ -180,13 +180,13 @@ _HOME_NAS_SSH = SshEndpointStatus.from_diagnostics(
 def _location_excluded_statuses(
     config: Config, shared: SharedStatuses
 ) -> ScenarioStatuses:
-    # SshEndpointError.LOCATION_EXCLUDED (Layer 1 error → cascade to Layer 2)
+    # SshEndpointErrorKind.LOCATION_EXCLUDED (Layer 1 error → cascade to Layer 2)
     home_nas = VolumeStatus(
         slug="home-nas",
         config=config.volumes["home-nas"],
         ssh_endpoint_status=_HOME_NAS_SSH,
         diagnostics=None,
-        errors=[VolumeError.SSH_ENDPOINT_INACTIVE],
+        errors=[VolumeErrorKind.SSH_ENDPOINT_INACTIVE],
     )
     return ScenarioStatuses(
         volumes=(home_nas,),

@@ -22,7 +22,7 @@ from nbkp.preflight import (
     SshEndpointStatus,
     SyncStatus,
     VolumeDiagnostics,
-    VolumeError,
+    VolumeErrorKind,
     VolumeStatus,
 )
 from nbkp.snapshots.common import create_snapshot_timestamp
@@ -69,8 +69,8 @@ def _btrfs_config() -> Config:
 
 def _make_vol_statuses(
     config: Config,
-    src_errors: list[VolumeError] | None = None,
-    dst_errors: list[VolumeError] | None = None,
+    src_errors: list[VolumeErrorKind] | None = None,
+    dst_errors: list[VolumeErrorKind] | None = None,
 ) -> dict[str, VolumeStatus]:
     ssh_status = _localhost_ssh_status()
     return {

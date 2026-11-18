@@ -6,12 +6,12 @@ The :class:`~nbkp.policy.Strictness` enum is generic run policy and lives in
 """
 
 from ..policy import Strictness
-from .status.sync import SyncError, SyncStatus
+from .status.sync import SyncErrorKind, SyncStatus
 
 
 def _is_disabled(status: SyncStatus) -> bool:
     """A sync switched off in the config: never attempted, never fatal."""
-    return SyncError.DISABLED in status.errors
+    return SyncErrorKind.DISABLED in status.errors
 
 
 def is_fatal(status: SyncStatus, strictness: Strictness) -> bool:

@@ -14,11 +14,11 @@ from functools import cache
 import pytest
 
 from nbkp.preflight import (
-    DestinationEndpointError,
-    SourceEndpointError,
-    SshEndpointError,
-    SyncError,
-    VolumeError,
+    DestinationEndpointErrorKind,
+    SourceEndpointErrorKind,
+    SshEndpointErrorKind,
+    SyncErrorKind,
+    VolumeErrorKind,
 )
 from nbkp.preflight.output import (
     RemediationFacts,
@@ -26,17 +26,17 @@ from nbkp.preflight.output import (
     collect_issues,
     troubleshoot_json,
 )
-from nbkp.preflight.status.ssh import SshEndpointWarning
+from nbkp.preflight.status.ssh import SshEndpointWarningKind
 from nbkp.preflight.testkit import troubleshoot_config, troubleshoot_data
 from nbkp.remote.resolution import resolve_all_endpoints
 
 # Cascade pointers have no fix of their own; troubleshoot skips them.
 _CASCADE = {
-    VolumeError.SSH_ENDPOINT_INACTIVE,
-    SourceEndpointError.VOLUME_INACTIVE,
-    DestinationEndpointError.VOLUME_INACTIVE,
-    SyncError.SOURCE_ENDPOINT_INACTIVE,
-    SyncError.DESTINATION_ENDPOINT_INACTIVE,
+    VolumeErrorKind.SSH_ENDPOINT_INACTIVE,
+    SourceEndpointErrorKind.VOLUME_INACTIVE,
+    DestinationEndpointErrorKind.VOLUME_INACTIVE,
+    SyncErrorKind.SOURCE_ENDPOINT_INACTIVE,
+    SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE,
 }
 
 
@@ -67,12 +67,12 @@ _REPORTED_ERRORS = pytest.mark.parametrize(
     [
         member
         for enum_type in (
-            SshEndpointError,
-            SshEndpointWarning,
-            VolumeError,
-            SourceEndpointError,
-            DestinationEndpointError,
-            SyncError,
+            SshEndpointErrorKind,
+            SshEndpointWarningKind,
+            VolumeErrorKind,
+            SourceEndpointErrorKind,
+            DestinationEndpointErrorKind,
+            SyncErrorKind,
         )
         for member in enum_type
         if member not in _CASCADE

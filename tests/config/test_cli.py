@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from nbkp.cli import app
-from nbkp.config import ConfigErrorReason, ConfigValidationCode
+from nbkp.config import ConfigErrorKind, ConfigValidationErrorKind
 from nbkp.config.testkit import write_config
 from tests.clidisplay import (
     runner,
@@ -57,7 +57,7 @@ class TestConfigSearch:
 
         assert result.exit_code == 2
         error = json.loads(result.output)["error"]
-        assert error["reason"] == ConfigErrorReason.NO_CONFIG_FOUND
+        assert error["reason"] == ConfigErrorKind.NO_CONFIG_FOUND
         assert "/nonexistent-nbkp-test/home/.config/nbkp" in error["message"]
 
 
@@ -157,9 +157,9 @@ class TestConfigErrorJson:
         result = runner.invoke(app, ["config", "show", "--config", bad, "-o", "json"])
         assert result.exit_code == 2
         data = json.loads(result.stdout)
-        assert data["error"]["reason"] == ConfigErrorReason.VALIDATION
+        assert data["error"]["reason"] == ConfigErrorKind.VALIDATION
         assert [e["type"] for e in data["error"]["errors"]] == [
-            ConfigValidationCode.UNKNOWN_REFERENCE
+            ConfigValidationErrorKind.UNKNOWN_REFERENCE
         ]
 
     def test_plain_error_as_json(self) -> None:

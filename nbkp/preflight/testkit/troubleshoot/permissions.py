@@ -10,7 +10,7 @@ from ....config import (
 from ... import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
-    DestinationEndpointError,
+    DestinationEndpointErrorKind,
     LatestSymlinkState,
     SnapshotDirsDiagnostics,
 )
@@ -57,9 +57,9 @@ def _btrfs_statuses(config: Config, shared: SharedStatuses) -> ScenarioStatuses:
                     latest=_LATEST_DEVNULL,
                 ),
                 [
-                    DestinationEndpointError.NOT_WRITABLE,
-                    DestinationEndpointError.STAGING_SUBVOL_NOT_WRITABLE,
-                    DestinationEndpointError.SNAPSHOTS_DIR_NOT_WRITABLE,
+                    DestinationEndpointErrorKind.NOT_WRITABLE,
+                    DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_WRITABLE,
+                    DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_WRITABLE,
                 ],
             ),
         ),
@@ -98,8 +98,8 @@ def _hardlink_statuses(config: Config, shared: SharedStatuses) -> ScenarioStatus
                     latest=_LATEST_DEVNULL,
                 ),
                 [
-                    DestinationEndpointError.NOT_WRITABLE,
-                    DestinationEndpointError.SNAPSHOTS_DIR_NOT_WRITABLE,
+                    DestinationEndpointErrorKind.NOT_WRITABLE,
+                    DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_WRITABLE,
                 ],
             ),
         ),
@@ -135,7 +135,7 @@ def _no_snapshots_statuses(config: Config, shared: SharedStatuses) -> ScenarioSt
                     sentinel_exists=True,
                     endpoint_writable=False,
                 ),
-                [DestinationEndpointError.NOT_WRITABLE],
+                [DestinationEndpointErrorKind.NOT_WRITABLE],
             ),
         ),
     )

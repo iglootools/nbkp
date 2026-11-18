@@ -11,7 +11,7 @@ from ...cliwiring.runtime import Runtime, runtime_of
 from ...config import (
     Config,
     ConfigError,
-    ConfigErrorReason,
+    ConfigErrorKind,
 )
 from ...config.output import print_config_error, print_human_config
 from ...config.testkit import config_show_config
@@ -193,7 +193,7 @@ def _validation_error(data: dict[str, object]) -> ConfigError:
     try:
         Config.model_validate(data)
     except ValidationError as ve:
-        err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
+        err = ConfigError(str(ve), reason=ConfigErrorKind.VALIDATION)
         err.__cause__ = ve
         return err
     raise AssertionError(f"demo config unexpectedly validates: {data!r}")
@@ -205,7 +205,7 @@ def _yaml_error() -> ConfigError:
     except yaml.YAMLError as ye:
         err = ConfigError(
             f"Invalid YAML in /etc/nbkp/config.yaml: {ye}",
-            reason=ConfigErrorReason.INVALID_YAML,
+            reason=ConfigErrorKind.INVALID_YAML,
         )
         err.__cause__ = ye
         return err
@@ -217,7 +217,7 @@ def _show_config_errors() -> None:
         "file not found",
         ConfigError(
             "Config file not found: /etc/nbkp/config.yaml",
-            reason=ConfigErrorReason.FILE_NOT_FOUND,
+            reason=ConfigErrorKind.FILE_NOT_FOUND,
         ),
     )
     _show_error_panel("invalid YAML", _yaml_error())

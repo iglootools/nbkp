@@ -10,7 +10,7 @@ from nbkp.config import (
     LuksEncryptionConfig,
     MountConfig,
 )
-from nbkp.credentials import CredentialError, CredentialErrorReason
+from nbkp.credentials import CredentialError, CredentialErrorKind
 from nbkp.disks.context import managed_mount
 from tests.fakes import FakeCommandRunner, completed
 
@@ -127,7 +127,7 @@ class TestPassphrasePrefetch:
         def passphrase_fn(pid: str) -> str:
             raise CredentialError(
                 f"No passphrase found in keyring for id '{pid}'",
-                reason=CredentialErrorReason.NOT_FOUND,
+                reason=CredentialErrorKind.NOT_FOUND,
             )
 
         run = FakeCommandRunner().on("test", "-e", returns=completed(1))

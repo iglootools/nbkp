@@ -22,16 +22,16 @@ from ...policy import Severity, Strictness
 from ...remote.dispatch import VolumeCommandRunner, run_on_volume
 from ...remote.endpoints import ResolvedEndpoints
 from ...remote.errors import ssh_connection_errors
-from ..severity import PreflightError, severity_for_error
+from ..severity import PreflightErrorKind, severity_for_error
 from ..status.endpoint import (
-    DestinationEndpointError,
+    DestinationEndpointErrorKind,
     DestinationEndpointStatus,
-    SourceEndpointError,
+    SourceEndpointErrorKind,
     SourceEndpointStatus,
 )
-from ..status.ssh import SshEndpointError, SshEndpointStatus, SshEndpointWarning
-from ..status.sync import SyncError, SyncStatus
-from ..status.volume import VolumeError, VolumeStatus
+from ..status.ssh import SshEndpointErrorKind, SshEndpointStatus, SshEndpointWarningKind
+from ..status.sync import SyncErrorKind, SyncStatus
+from ..status.volume import VolumeErrorKind, VolumeStatus
 from .remediation import (
     ERROR,
     HEADER,
@@ -49,13 +49,13 @@ from .remediation import (
 
 # Cascade errors are pointers to inactive lower layers — they have no
 # actionable fix at their own layer, so troubleshoot skips them.
-_CASCADE_ERRORS: frozenset[PreflightError] = frozenset(
+_CASCADE_ERRORS: frozenset[PreflightErrorKind] = frozenset(
     {
-        VolumeError.SSH_ENDPOINT_INACTIVE,
-        SourceEndpointError.VOLUME_INACTIVE,
-        DestinationEndpointError.VOLUME_INACTIVE,
-        SyncError.SOURCE_ENDPOINT_INACTIVE,
-        SyncError.DESTINATION_ENDPOINT_INACTIVE,
+        VolumeErrorKind.SSH_ENDPOINT_INACTIVE,
+        SourceEndpointErrorKind.VOLUME_INACTIVE,
+        DestinationEndpointErrorKind.VOLUME_INACTIVE,
+        SyncErrorKind.SOURCE_ENDPOINT_INACTIVE,
+        SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE,
     }
 )
 
@@ -86,7 +86,7 @@ class TroubleshootIssue:
     layer: Layer
     subject: str
     """Slug of the SSH endpoint / volume / sync endpoint / sync."""
-    error: PreflightError | SshEndpointWarning
+    error: PreflightErrorKind | SshEndpointWarningKind
     severity: Severity
     ssh_status: SshEndpointStatus | None = None
     vol_status: VolumeStatus | None = None
@@ -214,11 +214,11 @@ def collect_issues(
 
 # Errors whose fix names the cleartext device of an encrypted volume (an
 # fstab line or a manual ``udisksctl mount``).
-_NEEDS_CLEARTEXT_DEVICE: frozenset[PreflightError] = frozenset(
+_NEEDS_CLEARTEXT_DEVICE: frozenset[PreflightErrorKind] = frozenset(
     {
-        VolumeError.FSTAB_MOUNTPOINT_MISMATCH,
-        VolumeError.MOUNT_FAILED,
-        DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM,
+        VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH,
+        VolumeErrorKind.MOUNT_FAILED,
+        DestinationEndpointErrorKind.VOL_NOT_MOUNTED_USER_SUBVOL_RM,
     }
 )
 
@@ -230,7 +230,7 @@ def _issue_volume(
         case TroubleshootIssue(vol_status=VolumeStatus() as vs):
             return vs.config
         case TroubleshootIssue(
-            error=DestinationEndpointError(), sync=SyncConfig() as sync
+            error=DestinationEndpointErrorKind(), sync=SyncConfig() as sync
         ):
             return config.volumes[config.destination_endpoint(sync).volume]
         case _:
@@ -287,7 +287,7 @@ def gather_remediation_facts(
     users = {
         polkit_user(issue.vol_status.config, ctx)
         for issue in issues
-        if issue.error is VolumeError.POLKIT_RULES_MISSING
+        if issue.error is VolumeErrorKind.POLKIT_RULES_MISSING
         and issue.vol_status is not None
     }
     rules = {
@@ -320,26 +320,29 @@ def print_issue_fix(
 ) -> None:
     match issue:
         case TroubleshootIssue(
-            error=SshEndpointWarning() as warning, ssh_status=SshEndpointStatus() as st
+            error=SshEndpointWarningKind() as warning,
+            ssh_status=SshEndpointStatus() as st,
         ):
             print_ssh_endpoint_warning_fix(console, st, warning)
         case TroubleshootIssue(
-            error=SshEndpointError() as error, ssh_status=SshEndpointStatus() as st
+            error=SshEndpointErrorKind() as error, ssh_status=SshEndpointStatus() as st
         ):
             print_ssh_endpoint_error_fix(console, st, error, ctx)
         case TroubleshootIssue(
-            error=VolumeError() as error, vol_status=VolumeStatus() as vs
+            error=VolumeErrorKind() as error, vol_status=VolumeStatus() as vs
         ):
             print_volume_error_fix(console, vs, error, ctx)
         case TroubleshootIssue(
-            error=SourceEndpointError() as error, sync=SyncConfig() as sync
+            error=SourceEndpointErrorKind() as error, sync=SyncConfig() as sync
         ):
             print_source_endpoint_error_fix(console, error, sync, ctx)
         case TroubleshootIssue(
-            error=DestinationEndpointError() as error, sync=SyncConfig() as sync
+            error=DestinationEndpointErrorKind() as error, sync=SyncConfig() as sync
         ):
             print_destination_endpoint_error_fix(console, error, sync, ctx)
-        case TroubleshootIssue(error=SyncError() as error, sync=SyncConfig() as sync):
+        case TroubleshootIssue(
+            error=SyncErrorKind() as error, sync=SyncConfig() as sync
+        ):
             print_sync_error_fix(console, sync, error, ctx)
         case _:
             pass
@@ -348,7 +351,7 @@ def print_issue_fix(
 def _issue_label(issue: TroubleshootIssue) -> tuple[str, str]:
     return (
         (f"warning: {issue.error.value}", "yellow")
-        if isinstance(issue.error, SshEndpointWarning)
+        if isinstance(issue.error, SshEndpointWarningKind)
         else (issue.error.value, "")
     )
 
@@ -444,7 +447,7 @@ def troubleshoot_json(
                 "subject": issue.subject,
                 "kind": (
                     "warning"
-                    if isinstance(issue.error, SshEndpointWarning)
+                    if isinstance(issue.error, SshEndpointWarningKind)
                     else "error"
                 ),
                 "code": issue.error.name,

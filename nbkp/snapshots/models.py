@@ -3,7 +3,7 @@ import enum
 from pydantic import BaseModel, ConfigDict, computed_field, field_serializer
 
 from ..fsprotocol import Snapshot
-from ..preflight import SyncError
+from ..preflight import SyncErrorKind
 from .errors import SnapshotOp, SnapshotOperationError
 
 
@@ -38,7 +38,7 @@ class SnapshotResultError(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     kind: SnapshotErrorKind
-    preflight_errors: tuple[SyncError, ...] = ()
+    preflight_errors: tuple[SyncErrorKind, ...] = ()
     operation: SnapshotOp | None = None
     path: str | None = None
     message: str | None = None
@@ -54,7 +54,7 @@ class SnapshotResultError(BaseModel):
         )
 
     @field_serializer("preflight_errors")
-    def _serialize_codes(self, errors: tuple[SyncError, ...]) -> list[str]:
+    def _serialize_codes(self, errors: tuple[SyncErrorKind, ...]) -> list[str]:
         return [e.name for e in errors]
 
     @field_serializer("operation")

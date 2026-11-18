@@ -18,7 +18,7 @@ from ....remote.dispatch import VolumeCommandRunner
 from ....remote.endpoints import ResolvedEndpoints, location_excluded
 from ....remote.errors import describe_error, ssh_connection_errors
 from ...lifecycle import UmountResult, lifecycle_volumes, unknown_volume_names
-from ...models import MountFailureReason, display_name
+from ...models import MountFailureKind, display_name
 from ...mount_checks import check_mount_status
 from ...output import (
     MountStatusData,
@@ -40,7 +40,7 @@ class ErrorStatus:
     device_present: bool | None = None
     luks_unlocked: bool | None = None
     mounted: bool | None = None
-    mount_failure_reason: MountFailureReason | None = None
+    mount_failure_reason: MountFailureKind | None = None
 
 
 def _unprobed_note(vol: LocalVolume | RemoteVolume, resolved: ResolvedEndpoints) -> str:

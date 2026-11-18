@@ -2,7 +2,7 @@ import pytest
 
 from nbkp.config import (
     ConfigError,
-    ConfigErrorReason,
+    ConfigErrorKind,
     SyncConfig,
 )
 from nbkp.ordering.graph import sort_syncs, sync_predecessors
@@ -64,7 +64,7 @@ class TestSortSyncs:
         }
         with pytest.raises(ConfigError) as excinfo:
             sort_syncs(syncs)
-        assert excinfo.value.reason == ConfigErrorReason.CYCLIC_DEPENDENCY
+        assert excinfo.value.reason == ConfigErrorKind.CYCLIC_DEPENDENCY
 
     def test_empty_syncs(self) -> None:
         assert sort_syncs({}) == []

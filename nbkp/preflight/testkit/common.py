@@ -3,13 +3,13 @@
 from ...fsprotocol import Snapshot
 from .. import (
     DestinationEndpointDiagnostics,
-    DestinationEndpointError,
+    DestinationEndpointErrorKind,
     DestinationEndpointStatus,
     HostToolCapabilities,
     LatestSymlinkState,
     SnapshotDirsDiagnostics,
     SourceEndpointDiagnostics,
-    SourceEndpointError,
+    SourceEndpointErrorKind,
     SourceEndpointStatus,
     SshEndpointDiagnostics,
     SshEndpointStatus,
@@ -148,7 +148,7 @@ def inactive_dst_ep_status(
         volume_status=volume_status,
         diagnostics=None,
         errors=(
-            [DestinationEndpointError.VOLUME_INACTIVE]
+            [DestinationEndpointErrorKind.VOLUME_INACTIVE]
             if not volume_status.active
             else []
         ),
@@ -164,6 +164,8 @@ def inactive_src_ep_status(
         volume_status=volume_status,
         diagnostics=None,
         errors=(
-            [SourceEndpointError.VOLUME_INACTIVE] if not volume_status.active else []
+            [SourceEndpointErrorKind.VOLUME_INACTIVE]
+            if not volume_status.active
+            else []
         ),
     )
