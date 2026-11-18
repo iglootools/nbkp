@@ -21,7 +21,7 @@ from . import app
 
 
 @app.command("keyring-status")
-def keyring_status(
+def keyring_status_cmd(
     ctx: typer.Context,
     config: Annotated[
         Path | None,

@@ -22,8 +22,8 @@ from ..output import print_human_prune_results
 from . import app
 
 
-@app.command()
-def prune(
+@app.command("prune")
+def prune_cmd(
     ctx: typer.Context,
     config: Annotated[
         Path | None,

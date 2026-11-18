@@ -51,7 +51,7 @@ from ..pipeline import (
 _ABORT_DETAIL_INDENT = 2
 
 
-def run(
+def run_cmd(
     ctx: typer.Context,
     config: Annotated[
         Path | None,

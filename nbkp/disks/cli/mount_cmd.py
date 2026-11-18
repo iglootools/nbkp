@@ -36,7 +36,7 @@ from .helpers.plan_output import show_plan
 
 
 @app.command("mount")
-def mount(
+def mount_cmd(
     ctx: typer.Context,
     config: Annotated[
         Path | None,

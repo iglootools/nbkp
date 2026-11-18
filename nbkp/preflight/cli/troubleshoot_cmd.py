@@ -22,8 +22,8 @@ from ..strictness import has_fatal_errors
 from . import app
 
 
-@app.command()
-def troubleshoot(
+@app.command("troubleshoot")
+def troubleshoot_cmd(
     ctx: typer.Context,
     config: Annotated[
         Path | None,

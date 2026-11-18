@@ -22,8 +22,8 @@ class GraphFormat(enum.StrEnum):
     MERMAID = "mermaid"
 
 
-@app.command()
-def graph(
+@app.command("graph")
+def graph_cmd(
     ctx: typer.Context,
     config: Annotated[
         Path | None,

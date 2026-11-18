@@ -20,7 +20,7 @@ from .helpers.plan_output import show_plan
 
 
 @app.command("umount")
-def umount(
+def umount_cmd(
     ctx: typer.Context,
     config: Annotated[
         Path | None,

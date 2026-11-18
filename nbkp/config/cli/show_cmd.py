@@ -10,8 +10,8 @@ from ..output import print_human_config
 from . import app
 
 
-@app.command()
-def show(
+@app.command("show")
+def show_cmd(
     ctx: typer.Context,
     config: Annotated[
         Path | None,
