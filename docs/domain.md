@@ -4,6 +4,30 @@ The ideas nbkp is built on: what problem it models, the entities in a config and
 
 For every config field, see the [Configuration Reference](./config-reference.md). For how the rules below are carried out at runtime, see [Internals](./internals.md). For how the code is organized, see [Architecture](./architecture.md).
 
+<!-- toc -->
+**On this page**
+
+- [The Problem Space](#the-problem-space)
+- [The Model at a Glance](#the-model-at-a-glance)
+- [Entities](#entities)
+  - [SSH Endpoint](#ssh-endpoint)
+  - [Volume](#volume)
+  - [Sync Endpoint](#sync-endpoint)
+  - [Sync](#sync)
+- [The Backup Graph](#the-backup-graph)
+- [Availability](#availability)
+  - [Sentinels: Presence Is Proven](#sentinels-presence-is-proven)
+  - [Network Context: Choosing a Route](#network-context-choosing-a-route)
+  - [Mount-managed Volumes](#mount-managed-volumes)
+- [Encryption](#encryption)
+- [Snapshots](#snapshots)
+- [A Run](#a-run)
+  - [Inactive vs Broken](#inactive-vs-broken)
+  - [Sync Outcomes](#sync-outcomes)
+- [Beyond `run`](#beyond-run)
+- [Glossary](#glossary)
+<!-- tocstop -->
+
 ## The Problem Space
 
 nbkp backs up data in setups where **nothing is always available**: a laptop that moves between networks, removable drives that are plugged in some days and not others, a home server reachable on the LAN at home and only through a public hostname on the road. A backup runs *when its pieces happen to be present*, and is skipped — safely and quietly — when they are not.

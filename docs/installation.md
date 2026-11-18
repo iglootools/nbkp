@@ -1,5 +1,14 @@
 # Installation
 
+<!-- toc -->
+**On this page**
+
+- [System Requirements](#system-requirements)
+- [Install with uv](#install-with-uv)
+  - [Optional Extras](#optional-extras)
+- [Shell Completion](#shell-completion)
+<!-- tocstop -->
+
 ## System Requirements
 
 - Python 3.15 (installed for you by `uv tool install` if your system lacks it — see below)

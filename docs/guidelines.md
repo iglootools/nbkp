@@ -4,6 +4,17 @@ A set of [implementation checklists](#implementation-checklists) serve as a remi
 
 For general coding, Python, and tooling guidelines, see the [common guidelines](https://github.com/iglootools/common).
 
+<!-- toc -->
+**On this page**
+
+- [Coding](#coding)
+- [Implementation Checklists](#implementation-checklists)
+  - [Build and CI](#build-and-ci)
+  - [Documentation](#documentation)
+  - [Domain Logic](#domain-logic)
+  - [Tests](#tests)
+<!-- tocstop -->
+
 ## Coding
 - **Naming Conventions**
   - `kebab-case` for CLI commands and config keys

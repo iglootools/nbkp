@@ -14,6 +14,26 @@ It mirrors [config-examples/personal-setup.yaml](config-examples/personal-setup.
 
 ---
 
+<!-- toc -->
+**On this page**
+
+- [How nbkp thinks (60-second primer)](#how-nbkp-thinks-60-second-primer)
+- [The topology we're building](#the-topology-were-building)
+- [Part A — Prepare the Raspberry Pi (the backup hub)](#part-a--prepare-the-raspberry-pi-the-backup-hub)
+  - [A1. Install packages](#a1-install-packages)
+  - [A2. Identify the disks and declare them](#a2-identify-the-disks-and-declare-them)
+  - [A3. Partitions, LUKS containers and filesystems](#a3-partitions-luks-containers-and-filesystems)
+  - [A4. Configure udisks](#a4-configure-udisks)
+- [Part B — Set up the laptop (the orchestrator)](#part-b--set-up-the-laptop-the-orchestrator)
+  - [B1. Install nbkp](#b1-install-nbkp)
+  - [B2. SSH access to the Pi](#b2-ssh-access-to-the-pi)
+  - [B3. Store the LUKS passphrases in the Keychain](#b3-store-the-luks-passphrases-in-the-keychain)
+  - [B4. Write the config](#b4-write-the-config)
+  - [B5. Sentinels on the local volumes](#b5-sentinels-on-the-local-volumes)
+- [Part C — Verify and run](#part-c--verify-and-run)
+- [Where to go next](#where-to-go-next)
+<!-- tocstop -->
+
 ## How nbkp thinks (60-second primer)
 
 Four building blocks, defined once each in one YAML file. Full detail in [domain.md](./domain.md).

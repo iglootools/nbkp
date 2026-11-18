@@ -1,16 +1,27 @@
 {
     "$schema": "https://docs.renovatebot.com/renovate-schema.json",
     "description": [
-        "helpers:pinGitHubActionDigests keeps the digest pinning in .github/workflows self-enforcing. Every `uses:` there is pinned to a commit SHA with the tag kept in a trailing comment; without this preset a newly added action written as `@v1` would silently stay unpinned and the sweep would decay one workflow at a time. It ships in config:best-practices rather than config:recommended, so it has to be listed here.",
-        "minimumReleaseAgeBehaviour: timestamp-optional is what stops those digest pins from freezing. minimumReleaseAge applies to digest updates too, and when Renovate cannot date one it treats it as pending forever under the default timestamp-required — which is exactly the case for a ref that is not a version, such as pypa/gh-action-pypi-publish@release/v1. timestamp-optional keeps the 14-day delay wherever a release timestamp exists and lets the undatable updates through instead of stalling them indefinitely."
+        "The shared rules (digest pinning, the 14-day minimumReleaseAge with timestamp-optional, and the managers for the mise version in workflows and for [tool.uv] build-constraint-dependencies) come from the iglootools presets, pinned to a release tag: see guidelines/project-setup/dependency-automation.md in iglootools/common. What is here is nbkp's own."
     ],
     "extends": [
         "config:recommended",
-        "helpers:pinGitHubActionDigests"
+        "github>iglootools/common//renovate/base#v1.24.0",
+        "github>iglootools/common//renovate/python#v1.24.0"
     ],
-    "minimumReleaseAge": "14 days",
-    "minimumReleaseAgeBehaviour": "timestamp-optional",
     "separateMajorMinor": false,
+    "customManagers": [
+        {
+            "customType": "regex",
+            "description": "Dockerfile pins that duplicate a mise.toml [tools] pin carry a `# renovate: datasource=… depName=…` comment naming the datasource the mise manager uses for that tool, and this manager reads them, so the Dockerfile copy updates in step with mise.toml (see the packageRule that turns off the dockerfile manager for the same images). The version is the first `X.Y.Z` after the image name's colon, so a suffix such as `-slim` is kept. python/cpython tags carry a leading `v`, which extractVersionTemplate drops, as the mise manager does.",
+            "managerFilePatterns": [
+                "/(^|/)Dockerfile[^/]*$/"
+            ],
+            "matchStrings": [
+                "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n(?:FROM|COPY --from=)\\s*[^:\\s]+:(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+            ],
+            "extractVersionTemplate": "^v?(?<version>.+)$"
+        }
+    ],
     "packageRules": [
         {
             "groupName": "all dependencies",
@@ -39,43 +50,6 @@
                 "invoke"
             ],
             "allowedVersions": "<3"
-        }
-    ],
-    "customManagers": [
-        {
-            "customType": "regex",
-            "description": "[tool.uv] build-constraint-dependencies pins the PEP 517 build backend closure. uv.lock does not resolve build dependencies, so these are the only pin on hatchling/uv-dynamic-versioning/dunamai — and no built-in manager reads this field, so without this they rot silently. uv.lock does record the constraints in its [manifest], and Renovate does not re-lock for a regex manager's bump; the renovate-mise-lock workflow runs uv lock on the branch instead. The two matchStrings run under the recursive strategy: the first isolates the array, the second captures every pin inside it. A single regex anchored on the field name consumes that anchor on its first match, so it only ever extracted the first pin.",
-            "managerFilePatterns": [
-                "/pyproject.toml/"
-            ],
-            "matchStrings": [
-                "build-constraint-dependencies = \\[[^\\]]*\\]",
-                "\"(?<depName>[a-zA-Z0-9._-]+)==(?<currentValue>[^\"]+)\""
-            ],
-            "matchStringsStrategy": "recursive",
-            "datasourceTemplate": "pypi"
-        },
-        {
-            "customType": "regex",
-            "description": "jdx/mise-action's `version:` input pins the mise CLI that CI runs, so a workflow resolves tools with the same mise as local development instead of whatever released last night. Renovate's github-actions manager only updates `uses:` refs and reads no action inputs, so without this manager the pin would rot silently. The marker comment is what makes the match robust: keying off the `version:` line alone would also catch every other action's `version:` input. mise tags releases as `vYYYY.M.PATCH`; extractVersionTemplate drops the leading `v` to match the bare version the input expects.",
-            "managerFilePatterns": [
-                "/^\\.github/workflows/.+\\.ya?ml$/"
-            ],
-            "matchStrings": [
-                "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>\\S+)\\s+version: (?<currentValue>\\S+)"
-            ],
-            "extractVersionTemplate": "^v?(?<version>.+)$"
-        },
-        {
-            "customType": "regex",
-            "description": "Dockerfile pins that duplicate a mise.toml [tools] pin carry a `# renovate: datasource=… depName=…` comment naming the datasource the mise manager uses for that tool, and this manager reads them, so the Dockerfile copy updates in step with mise.toml (see the packageRule that turns off the dockerfile manager for the same images). The version is the first `X.Y.Z` after the image name's colon, so a suffix such as `-slim` is kept. python/cpython tags carry a leading `v`, which extractVersionTemplate drops, as the mise manager does.",
-            "managerFilePatterns": [
-                "/(^|/)Dockerfile[^/]*$/"
-            ],
-            "matchStrings": [
-                "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n(?:FROM|COPY --from=)\\s*[^:\\s]+:(?<currentValue>\\d+\\.\\d+\\.\\d+)"
-            ],
-            "extractVersionTemplate": "^v?(?<version>.+)$"
         }
     ],
     "dependencyDashboard": true

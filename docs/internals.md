@@ -4,6 +4,28 @@ How nbkp works at runtime: execution flow, mount lifecycle, pre-flight validatio
 
 For the domain model (volumes, endpoints, syncs, snapshots), see [Domain](./domain.md); for every config field, see the [Configuration Reference](./config-reference.md). For the module dependency graph, see [Architecture](./architecture.md).
 
+<!-- toc -->
+**On this page**
+
+- [Runtime Behavior](#runtime-behavior)
+  - [Snapshot Lifecycle](#snapshot-lifecycle)
+  - [The `latest` Symlink](#the-latest-symlink)
+  - [Volume Mount Management](#volume-mount-management)
+  - [Pre-flight Checks](#pre-flight-checks)
+  - [Endpoint Filtering](#endpoint-filtering)
+  - [Shell Script Generation](#shell-script-generation)
+  - [Outputs](#outputs)
+  - [Rsync Defaults](#rsync-defaults)
+- [External Commands Reference](#external-commands-reference)
+  - [Preflight checks](#preflight-checks)
+  - [Rsync synchronization](#rsync-synchronization)
+  - [Btrfs snapshot operations](#btrfs-snapshot-operations)
+  - [Hard-link snapshot operations](#hard-link-snapshot-operations)
+  - [Symlink management](#symlink-management)
+  - [Mount management (udisks)](#mount-management-udisks)
+  - [SSH transport](#ssh-transport)
+<!-- tocstop -->
+
 ## Runtime Behavior
 
 Domain rules — sentinels and the active/inactive distinction, the backup graph (execution order and failure propagation), and the meaning of snapshots — are described in [Domain](./domain.md). This document covers how they are carried out.

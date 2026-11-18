@@ -17,6 +17,25 @@ Files are backed up as-is in plain directories: no obscure storage formats and r
 
 [![asciicast](https://asciinema.org/a/Xf4adPac7wBnHpPH.svg)](https://asciinema.org/a/Xf4adPac7wBnHpPH)
 
+<!-- toc -->
+**On this page**
+
+- [Installation](#installation)
+- [Usage](#usage)
+- [Tutorial](#tutorial)
+- [Main Use Cases](#main-use-cases)
+- [Non-Goals](#non-goals)
+- [Known Limitations](#known-limitations)
+- [Philosophy](#philosophy)
+- [Contribute](#contribute)
+- [Resources](#resources)
+- [Related Projects](#related-projects)
+  - [Dependencies](#dependencies)
+  - [Similar Tools](#similar-tools)
+  - [Community](#community)
+- [License](#license)
+<!-- tocstop -->
+
 ## Installation
 
 See [docs/installation.md](https://github.com/iglootools/nbkp/blob/main/docs/installation.md).
