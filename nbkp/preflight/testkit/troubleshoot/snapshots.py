@@ -12,14 +12,14 @@ from ....config import (
 from ... import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
-    DestinationEndpointError,
+    DestinationEndpointErrorKind,
     DestinationEndpointStatus,
     LatestSymlinkState,
     SnapshotDirsDiagnostics,
     SourceEndpointDiagnostics,
-    SourceEndpointError,
+    SourceEndpointErrorKind,
     SourceEndpointStatus,
-    SyncError,
+    SyncErrorKind,
     SyncStatus,
 )
 from ..common import (
@@ -70,7 +70,7 @@ _NAS_BTRFS_MOUNT_SSH = nas_status(
 def _btrfs_mount_issues_statuses(
     config: Config, shared: SharedStatuses
 ) -> ScenarioStatuses:
-    # DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM + missing staging
+    # DestinationEndpointErrorKind.VOL_NOT_MOUNTED_USER_SUBVOL_RM + missing staging
     # + missing snapshots dir (Layer 3)
     nas = volume_status(
         config, "nas-backup", _NAS_BTRFS_MOUNT_SSH, healthy_caps(btrfs=True)
@@ -94,9 +94,9 @@ def _btrfs_mount_issues_statuses(
                     latest=_LATEST_DEVNULL,
                 ),
                 [
-                    DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM,
-                    DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND,
-                    DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND,
+                    DestinationEndpointErrorKind.VOL_NOT_MOUNTED_USER_SUBVOL_RM,
+                    DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND,
+                    DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND,
                 ],
             ),
         )
@@ -120,7 +120,7 @@ BTRFS_MOUNT_ISSUES = Scenario(
 def _hardlink_issues_statuses(
     config: Config, shared: SharedStatuses
 ) -> ScenarioStatuses:
-    # DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT + missing snapshots dir
+    # DestinationEndpointErrorKind.VOL_NO_HARDLINK_SUPPORT + missing snapshots dir
     # (Layer 3)
     usb5 = volume_status(
         config, "usb-5", LOCALHOST_SSH_STATUS, healthy_caps(hardlinks=False)
@@ -140,8 +140,8 @@ def _hardlink_issues_statuses(
                     latest=_LATEST_DEVNULL,
                 ),
                 [
-                    DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT,
-                    DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND,
+                    DestinationEndpointErrorKind.VOL_NO_HARDLINK_SUPPORT,
+                    DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND,
                 ],
             ),
         )
@@ -165,7 +165,7 @@ HARDLINK_ISSUES = Scenario(
 def _source_latest_missing_statuses(
     config: Config, shared: SharedStatuses
 ) -> ScenarioStatuses:
-    # SourceEndpointError.LATEST_SYMLINK_NOT_FOUND + SNAPSHOTS_DIR_NOT_FOUND
+    # SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND + SNAPSHOTS_DIR_NOT_FOUND
     # (Layer 3)
     return ScenarioStatuses(
         syncs=(
@@ -182,8 +182,8 @@ def _source_latest_missing_statuses(
                         latest=LatestSymlinkState(exists=False),
                     ),
                     errors=[
-                        SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND,
-                        SourceEndpointError.LATEST_SYMLINK_NOT_FOUND,
+                        SourceEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND,
+                        SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND,
                     ],
                 ),
                 destination_endpoint_status=inactive_dst_ep_status(
@@ -236,9 +236,9 @@ def _dry_run_pending_statuses(
                 latest=_LATEST_DEVNULL,
             ),
         ),
-        errors=[SyncError.SOURCE_ENDPOINT_INACTIVE],
+        errors=[SyncErrorKind.SOURCE_ENDPOINT_INACTIVE],
     )
-    # SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING (Layer 4): in a dry run the
+    # SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING (Layer 4): in a dry run the
     # upstream sync takes no snapshot, so hl-stage's latest stays /dev/null.
     pending = SyncStatus(
         slug="dry-run-pending",
@@ -257,7 +257,7 @@ def _dry_run_pending_statuses(
         destination_endpoint_status=active_dst_ep_status(
             "dst-dry-run-pending", shared.nas_reachable
         ),
-        errors=[SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING],
+        errors=[SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING],
     )
     return ScenarioStatuses(syncs=(upstream, pending))
 
@@ -299,7 +299,7 @@ def _dst_latest_missing_statuses(
                     snapshot_dirs=_HEALTHY_SNAPSHOT_DIRS,
                     latest=LatestSymlinkState(exists=False),
                 ),
-                [DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND],
+                [DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND],
             ),
         )
     )
@@ -331,7 +331,7 @@ def _dst_latest_invalid_statuses(
                     snapshot_dirs=_HEALTHY_SNAPSHOT_DIRS,
                     latest=_LATEST_DANGLING,
                 ),
-                [DestinationEndpointError.LATEST_SYMLINK_INVALID],
+                [DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID],
             ),
         )
     )
@@ -349,7 +349,7 @@ def _snapshot_source_status(
     shared: SharedStatuses,
     endpoint_slug: str,
     latest: LatestSymlinkState,
-    errors: list[SourceEndpointError],
+    errors: list[SourceEndpointErrorKind],
 ) -> SourceEndpointStatus:
     return SourceEndpointStatus(
         endpoint_slug=endpoint_slug,
@@ -367,7 +367,7 @@ def _snapshot_source_status(
 def _src_latest_invalid_statuses(
     config: Config, shared: SharedStatuses
 ) -> ScenarioStatuses:
-    # SourceEndpointError.LATEST_SYMLINK_INVALID on a source with no upstream
+    # SourceEndpointErrorKind.LATEST_SYMLINK_INVALID on a source with no upstream
     usb13 = volume_status(config, "usb-13", LOCALHOST_SSH_STATUS, healthy_caps())
     return ScenarioStatuses(
         syncs=(
@@ -378,12 +378,12 @@ def _src_latest_invalid_statuses(
                     shared,
                     "src-latest-invalid",
                     _LATEST_DANGLING,
-                    [SourceEndpointError.LATEST_SYMLINK_INVALID],
+                    [SourceEndpointErrorKind.LATEST_SYMLINK_INVALID],
                 ),
                 destination_endpoint_status=active_dst_ep_status(
                     "dst-src-latest-invalid", usb13
                 ),
-                errors=[SyncError.SOURCE_ENDPOINT_INACTIVE],
+                errors=[SyncErrorKind.SOURCE_ENDPOINT_INACTIVE],
             ),
         )
     )
@@ -409,7 +409,7 @@ SRC_LATEST_INVALID = Scenario(
 def _src_devnull_no_upstream_statuses(
     config: Config, shared: SharedStatuses
 ) -> ScenarioStatuses:
-    # SyncError.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM (Layer 4): the source's
+    # SyncErrorKind.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM (Layer 4): the source's
     # latest → /dev/null, and no upstream sync will ever replace it.
     usb12 = volume_status(config, "usb-12", LOCALHOST_SSH_STATUS, healthy_caps())
     return ScenarioStatuses(
@@ -423,7 +423,7 @@ def _src_devnull_no_upstream_statuses(
                 destination_endpoint_status=active_dst_ep_status(
                     "dst-devnull-no-upstream", usb12
                 ),
-                errors=[SyncError.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM],
+                errors=[SyncErrorKind.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM],
             ),
         )
     )
@@ -449,7 +449,7 @@ SRC_DEVNULL_NO_UPSTREAM = Scenario(
 def _fs_type_unknown_statuses(
     config: Config, shared: SharedStatuses
 ) -> ScenarioStatuses:
-    # `stat -f` failed: DestinationEndpointError.VOL_FS_TYPE_UNKNOWN (Layer 3)
+    # `stat -f` failed: DestinationEndpointErrorKind.VOL_FS_TYPE_UNKNOWN (Layer 3)
     usb15 = volume_status(
         config, "usb-15", LOCALHOST_SSH_STATUS_BTRFS, healthy_caps(btrfs=None)
     )
@@ -470,9 +470,9 @@ def _fs_type_unknown_statuses(
                         sentinel_exists=True,
                         endpoint_writable=True,
                     ),
-                    errors=[DestinationEndpointError.VOL_FS_TYPE_UNKNOWN],
+                    errors=[DestinationEndpointErrorKind.VOL_FS_TYPE_UNKNOWN],
                 ),
-                errors=[SyncError.DESTINATION_ENDPOINT_INACTIVE],
+                errors=[SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE],
             ),
         ),
     )

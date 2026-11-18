@@ -22,9 +22,9 @@ from ...remote.endpoints import ResolvedEndpoints
 from ..severity import severity_for_errors
 from ..status.endpoint import (
     DestinationEndpointDiagnostics,
-    DestinationEndpointError,
+    DestinationEndpointErrorKind,
     LatestSymlinkState,
-    SourceEndpointError,
+    SourceEndpointErrorKind,
 )
 from ..status.ssh import INACTIVE_SSH_ERRORS, SshEndpointStatus
 from ..status.sync import SyncStatus
@@ -87,7 +87,7 @@ def _format_source_diagnostics(ss: SyncStatus, strictness: Strictness) -> Text:
         check(
             diag.sentinel_exists,
             "sentinel",
-            fail_error=SourceEndpointError.SENTINEL_NOT_FOUND,
+            fail_error=SourceEndpointErrorKind.SENTINEL_NOT_FOUND,
             strictness=strictness,
         ),
         *(
@@ -95,7 +95,7 @@ def _format_source_diagnostics(ss: SyncStatus, strictness: Strictness) -> Text:
                 check(
                     diag.snapshot_dirs.exists,
                     "snapshots/",
-                    fail_error=SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND,
+                    fail_error=SourceEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND,
                     strictness=strictness,
                 )
             ]
@@ -122,7 +122,7 @@ def _format_destination_diagnostics(ss: SyncStatus, strictness: Strictness) -> T
             check(
                 diag.sentinel_exists,
                 "sentinel",
-                fail_error=DestinationEndpointError.SENTINEL_NOT_FOUND,
+                fail_error=DestinationEndpointErrorKind.SENTINEL_NOT_FOUND,
                 strictness=strictness,
             ),
             # Without the sentinel the directory may not exist, and the status
@@ -132,7 +132,7 @@ def _format_destination_diagnostics(ss: SyncStatus, strictness: Strictness) -> T
                     check(
                         diag.endpoint_writable,
                         "writable",
-                        fail_error=DestinationEndpointError.NOT_WRITABLE,
+                        fail_error=DestinationEndpointErrorKind.NOT_WRITABLE,
                         strictness=strictness,
                     )
                 ]
@@ -153,13 +153,13 @@ def _destination_snapshot_items(
                 check(
                     diag.btrfs.staging_exists,
                     "staging/",
-                    fail_error=DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND,
+                    fail_error=DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND,
                     strictness=strictness,
                 ),
                 check(
                     diag.btrfs.staging_is_subvolume,
                     "staging-subvolume",
-                    fail_error=DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME,
+                    fail_error=DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME,
                     strictness=strictness,
                 ),
             ]
@@ -171,7 +171,7 @@ def _destination_snapshot_items(
                 check(
                     diag.snapshot_dirs.exists,
                     "snapshots/",
-                    fail_error=DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND,
+                    fail_error=DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND,
                     strictness=strictness,
                 )
             ]

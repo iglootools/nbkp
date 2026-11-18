@@ -21,7 +21,7 @@ from nbkp.config import (
     MountConfig,
 )
 from nbkp.config.testkit import write_config
-from nbkp.credentials import CommandFn, CredentialErrorReason, PassphrasePrefetch
+from nbkp.credentials import CommandFn, CredentialErrorKind, PassphrasePrefetch
 from nbkp.credentials.cli.keyring_status_cmd import keyring_status_json
 from tests.clidisplay import runner
 from tests.fakes import completed, fake_runtime
@@ -70,7 +70,7 @@ class TestKeyringStatusJson:
             ("usb",),
             success=False,
             detail="missing",
-            reason=CredentialErrorReason.NOT_FOUND,
+            reason=CredentialErrorKind.NOT_FOUND,
         )
 
         assert keyring_status_json(_config(CredentialProvider.KEYRING), [missing]) == {

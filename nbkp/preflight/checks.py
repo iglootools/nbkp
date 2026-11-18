@@ -45,7 +45,7 @@ from ..remote.resolution import (
     resolve_proxy_chain,
 )
 from .endpoint_checks import observe_destination_endpoint, observe_source_endpoint
-from .severity import PreflightError
+from .severity import PreflightErrorKind
 from .ssh_checks import observe_standalone_endpoint
 from .status.endpoint import DestinationEndpointStatus, SourceEndpointStatus
 from .status.result import PreflightResult
@@ -69,7 +69,7 @@ class _Progress:
     """Progress callbacks; labels look like ``"vol:usb-backup"``."""
 
     on_start: Callable[[str], None] | None
-    on_end: Callable[[str, Sequence[PreflightError]], None] | None
+    on_end: Callable[[str, Sequence[PreflightErrorKind]], None] | None
 
     def track[
         S: (
@@ -90,7 +90,7 @@ class _Progress:
 def check_all_syncs(
     config: Config,
     on_check_start: Callable[[str], None] | None = None,
-    on_check_end: Callable[[str, Sequence[PreflightError]], None] | None = None,
+    on_check_end: Callable[[str, Sequence[PreflightErrorKind]], None] | None = None,
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     dry_run: bool = False,

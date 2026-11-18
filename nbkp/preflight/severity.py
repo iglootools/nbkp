@@ -10,37 +10,37 @@ from ..policy import Severity, Strictness, classify_severity
 from .status.endpoint import (
     INACTIVE_DST_ENDPOINT_ERRORS,
     INACTIVE_SRC_ENDPOINT_ERRORS,
-    DestinationEndpointError,
-    SourceEndpointError,
+    DestinationEndpointErrorKind,
+    SourceEndpointErrorKind,
 )
-from .status.ssh import INACTIVE_SSH_ERRORS, SshEndpointError
-from .status.sync import INACTIVE_SYNC_ERRORS, SyncError
-from .status.volume import INACTIVE_VOLUME_ERRORS, VolumeError
+from .status.ssh import INACTIVE_SSH_ERRORS, SshEndpointErrorKind
+from .status.sync import INACTIVE_SYNC_ERRORS, SyncErrorKind
+from .status.volume import INACTIVE_VOLUME_ERRORS, VolumeErrorKind
 
-PreflightError = (
-    SshEndpointError
-    | VolumeError
-    | SourceEndpointError
-    | DestinationEndpointError
-    | SyncError
+PreflightErrorKind = (
+    SshEndpointErrorKind
+    | VolumeErrorKind
+    | SourceEndpointErrorKind
+    | DestinationEndpointErrorKind
+    | SyncErrorKind
 )
 
 
-def _is_inactive(error: PreflightError) -> bool:
+def _is_inactive(error: PreflightErrorKind) -> bool:
     match error:
-        case SshEndpointError():
+        case SshEndpointErrorKind():
             return error in INACTIVE_SSH_ERRORS
-        case VolumeError():
+        case VolumeErrorKind():
             return error in INACTIVE_VOLUME_ERRORS
-        case SourceEndpointError():
+        case SourceEndpointErrorKind():
             return error in INACTIVE_SRC_ENDPOINT_ERRORS
-        case DestinationEndpointError():
+        case DestinationEndpointErrorKind():
             return error in INACTIVE_DST_ENDPOINT_ERRORS
-        case SyncError():
+        case SyncErrorKind():
             return error in INACTIVE_SYNC_ERRORS
 
 
-def severity_for_error(error: PreflightError, strictness: Strictness) -> Severity:
+def severity_for_error(error: PreflightErrorKind, strictness: Strictness) -> Severity:
     """Classify a single error as fatal (ERROR) or non-fatal (WARNING).
 
     Under ``IGNORE_NONE`` every error is fatal; under ``IGNORE_ALL``
@@ -51,12 +51,12 @@ def severity_for_error(error: PreflightError, strictness: Strictness) -> Severit
 
 
 def severity_for_errors(
-    errors: list[PreflightError]
-    | list[SshEndpointError]
-    | list[VolumeError]
-    | list[SourceEndpointError]
-    | list[DestinationEndpointError]
-    | list[SyncError],
+    errors: list[PreflightErrorKind]
+    | list[SshEndpointErrorKind]
+    | list[VolumeErrorKind]
+    | list[SourceEndpointErrorKind]
+    | list[DestinationEndpointErrorKind]
+    | list[SyncErrorKind],
     strictness: Strictness,
 ) -> Severity:
     """Highest severity across the given errors.

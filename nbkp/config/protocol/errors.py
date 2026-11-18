@@ -2,7 +2,7 @@
 
 Validators raise :func:`config_error` instead of a bare ``ValueError`` so that
 each failure surfaces in ``ValidationError.errors()`` with a machine-readable
-``type`` (one of :class:`ConfigValidationCode`). Callers and tests can then
+``type`` (one of :class:`ConfigValidationErrorKind`). Callers and tests can then
 branch on the code rather than match against the human-readable message.
 """
 
@@ -11,7 +11,7 @@ from enum import StrEnum
 from pydantic_core import PydanticCustomError
 
 
-class ConfigValidationCode(StrEnum):
+class ConfigValidationErrorKind(StrEnum):
     """``type`` of the pydantic errors raised by nbkp's config validators."""
 
     UNKNOWN_REFERENCE = "unknown-reference"
@@ -32,7 +32,7 @@ class ConfigValidationCode(StrEnum):
     UNKNOWN_DIR_MERGE_OPTION = "unknown-dir-merge-option"
 
 
-def config_error(code: ConfigValidationCode, message: str) -> PydanticCustomError:
+def config_error(code: ConfigValidationErrorKind, message: str) -> PydanticCustomError:
     """The message travels as a context value behind a fixed ``{message}``
     template, so braces in it (e.g. the literal ``{id}`` placeholder) are
     rendered verbatim rather than read as template fields.

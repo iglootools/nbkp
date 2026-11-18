@@ -1,4 +1,4 @@
-"""No ``SyncError`` interpretation happens here — the sync layer translates
+"""No ``SyncErrorKind`` interpretation happens here — the sync layer translates
 diagnostics + capabilities into errors.
 
 ``VolumeCapabilities`` is accepted to decide *which* checks to run

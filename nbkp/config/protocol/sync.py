@@ -4,7 +4,7 @@ from typing import Any
 from pydantic import ConfigDict, Field, field_validator
 
 from .base import Slug, _BaseModel
-from .errors import ConfigValidationCode, config_error
+from .errors import ConfigValidationErrorKind, config_error
 
 
 class RsyncOptions(_BaseModel):
@@ -27,7 +27,7 @@ def _validate_dir_merge_opts(opts: dict[str, Any]) -> None:
     unknown = set(opts) - _DIR_MERGE_OPTS
     if unknown:
         raise config_error(
-            ConfigValidationCode.UNKNOWN_DIR_MERGE_OPTION,
+            ConfigValidationErrorKind.UNKNOWN_DIR_MERGE_OPTION,
             f"Unknown dir-merge option(s): {', '.join(sorted(unknown))}."
             f" Allowed: {', '.join(sorted(_DIR_MERGE_OPTS))}",
         )
@@ -58,7 +58,7 @@ def _filter_rules(item: Any) -> list[str]:
             ]
         case _:
             raise config_error(
-                ConfigValidationCode.INVALID_FILTER,
+                ConfigValidationErrorKind.INVALID_FILTER,
                 "Filter must be a string or a dict with"
                 " 'include'/'exclude'/'merge'/'dir-merge'"
                 f" key, got: {item!r}",
@@ -102,14 +102,14 @@ class SyncConfig(_BaseModel):
                 return [rule for item in v for rule in _filter_rules(item)]
             case dict():
                 raise config_error(
-                    ConfigValidationCode.FILTERS_NOT_A_LIST,
+                    ConfigValidationErrorKind.FILTERS_NOT_A_LIST,
                     "filters must be a list, not a mapping. Add '- ' before each"
                     f" filter rule. Got: {v!r}",
                 )
             case str():
                 # Iterating a string would yield one filter rule per character.
                 raise config_error(
-                    ConfigValidationCode.FILTERS_NOT_A_LIST,
+                    ConfigValidationErrorKind.FILTERS_NOT_A_LIST,
                     "filters must be a list, not a single string. Write it as"
                     f" a one-item list: filters: [{v!r}]",
                 )

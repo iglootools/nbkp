@@ -33,23 +33,23 @@ from nbkp.preflight.snapshot_checks import (
     supports_hard_links,
 )
 from nbkp.preflight.status.endpoint import (
-    DestinationEndpointError,
+    DestinationEndpointErrorKind,
     DestinationEndpointStatus,
-    SourceEndpointError,
+    SourceEndpointErrorKind,
     SourceEndpointStatus,
 )
 from nbkp.preflight.status.result import PreflightResult
 from nbkp.preflight.status.ssh import (
     HostToolCapabilities,
     SshEndpointDiagnostics,
-    SshEndpointError,
+    SshEndpointErrorKind,
     SshEndpointStatus,
 )
-from nbkp.preflight.status.sync import SyncError, SyncStatus
+from nbkp.preflight.status.sync import SyncErrorKind, SyncStatus
 from nbkp.preflight.status.volume import (
     VolumeCapabilities,
     VolumeDiagnostics,
-    VolumeError,
+    VolumeErrorKind,
     VolumeStatus,
 )
 from nbkp.preflight.testkit import check_sync, check_volume
@@ -100,7 +100,7 @@ class TestVolumeStatus:
             config=vol,
             ssh_endpoint_status=_ACTIVE_LOCALHOST_SSH,
             diagnostics=VolumeDiagnostics(capabilities=sentinel_missing_caps),
-            errors=[VolumeError.SENTINEL_NOT_FOUND],
+            errors=[VolumeErrorKind.SENTINEL_NOT_FOUND],
         )
         assert vs.active is False
 
@@ -172,7 +172,7 @@ class TestSyncStatus:
             config=sc,
             source_endpoint_status=src_ep_status,
             destination_endpoint_status=dst_ep_status,
-            errors=[SyncError.DISABLED],
+            errors=[SyncErrorKind.DISABLED],
         )
         assert ss.active is False
 
@@ -227,7 +227,7 @@ class TestCheckLocalVolume:
         run = healthy_host()
         status = check_volume(vol, run=run, which=local_tools())
         assert status.active is False
-        assert status.errors == [VolumeError.SENTINEL_NOT_FOUND]
+        assert status.errors == [VolumeErrorKind.SENTINEL_NOT_FOUND]
         # Without its sentinel, a volume's filesystem is not probed.
         assert run.commands_starting_with("stat") == []
 
@@ -239,7 +239,7 @@ class TestCheckLocalVolume:
             run=healthy_host(),
             which=local_tools(),
         )
-        assert status.errors == [VolumeError.SENTINEL_NOT_FOUND]
+        assert status.errors == [VolumeErrorKind.SENTINEL_NOT_FOUND]
 
     def test_endpoint_sentinel_directory_is_not_a_sentinel(
         self, tmp_path: Path
@@ -275,7 +275,7 @@ class TestCheckRemoteVolume:
         resolved = _make_resolved(config)
         status = check_volume(vol, resolved, run=run)
         assert status.active is False
-        assert status.errors == [VolumeError.SENTINEL_NOT_FOUND]
+        assert status.errors == [VolumeErrorKind.SENTINEL_NOT_FOUND]
         assert status.ssh_endpoint_status.diagnostics.ssh_reachable is True
         assert status.diagnostics is not None
         assert status.diagnostics.capabilities is not None
@@ -288,7 +288,7 @@ class TestCheckRemoteVolume:
         resolved = _make_resolved(config)
         status = check_volume(vol, resolved, run=run)
         assert status.active is False
-        assert SshEndpointError.UNREACHABLE in status.ssh_endpoint_status.errors
+        assert SshEndpointErrorKind.UNREACHABLE in status.ssh_endpoint_status.errors
         assert status.ssh_endpoint_status.diagnostics.ssh_reachable is False
         assert status.diagnostics is None
         # The first failed probe settles it: nothing else is tried.
@@ -303,7 +303,9 @@ class TestCheckRemoteVolumeLocationExcluded:
         # Empty resolved_endpoints means volume was excluded
         status = check_volume(vol, {}, run=run)
         assert status.active is False
-        assert SshEndpointError.LOCATION_EXCLUDED in status.ssh_endpoint_status.errors
+        assert (
+            SshEndpointErrorKind.LOCATION_EXCLUDED in status.ssh_endpoint_status.errors
+        )
         assert run.commands == []
 
     def test_unresolved_endpoint_is_not_contacted(self) -> None:
@@ -567,7 +569,7 @@ class TestCheckSync:
 
         status = _check(sync, config)
         assert status.active is False
-        assert status.errors == [SyncError.DISABLED]
+        assert status.errors == [SyncErrorKind.DISABLED]
 
     def test_source_unavailable(self, src_dst: tuple[Path, Path]) -> None:
         src, dst = src_dst
@@ -580,7 +582,7 @@ class TestCheckSync:
         status = _check(sync, config)
         assert status.active is False
         src_vol_errors = status.source_endpoint_status.volume_status.errors
-        assert VolumeError.SENTINEL_NOT_FOUND in src_vol_errors
+        assert VolumeErrorKind.SENTINEL_NOT_FOUND in src_vol_errors
 
     def test_missing_src_sentinel(self, src_dst: tuple[Path, Path]) -> None:
         src, dst = src_dst
@@ -591,7 +593,7 @@ class TestCheckSync:
         status = _check(sync, config)
         assert status.active is False
         assert (
-            SourceEndpointError.SENTINEL_NOT_FOUND
+            SourceEndpointErrorKind.SENTINEL_NOT_FOUND
             in status.source_endpoint_status.errors
         )
 
@@ -606,12 +608,12 @@ class TestCheckSync:
         ssh_errors = (
             status.source_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
-        assert SshEndpointError.RSYNC_NOT_FOUND in ssh_errors
+        assert SshEndpointErrorKind.RSYNC_NOT_FOUND in ssh_errors
         # Local volumes don't cascade SSH_ENDPOINT_INACTIVE — volume is active
         assert status.source_endpoint_status.volume_status.active is True
         # ...but the sync is inactive, and not expected-inactive: a missing
         # localhost rsync must fail preflight.
-        assert SyncError.ENDPOINT_HOST_ERRORS in status.errors
+        assert SyncErrorKind.ENDPOINT_HOST_ERRORS in status.errors
         assert status.is_expected_inactive() is False
 
     def test_openrsync_on_the_orchestrator_is_too_old(
@@ -627,8 +629,8 @@ class TestCheckSync:
         ssh_errors = (
             status.source_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
-        assert ssh_errors == [SshEndpointError.RSYNC_TOO_OLD]
-        assert SyncError.ENDPOINT_HOST_ERRORS in status.errors
+        assert ssh_errors == [SshEndpointErrorKind.RSYNC_TOO_OLD]
+        assert SyncErrorKind.ENDPOINT_HOST_ERRORS in status.errors
 
     def test_rsync_found_btrfs_not_found_on_destination(
         self, src_dst: tuple[Path, Path]
@@ -641,7 +643,7 @@ class TestCheckSync:
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
-        assert SshEndpointError.BTRFS_NOT_FOUND in ssh_errors
+        assert SshEndpointErrorKind.BTRFS_NOT_FOUND in ssh_errors
 
     def test_disabled_sync_does_not_add_tool_needs(
         self, src_dst: tuple[Path, Path]
@@ -698,10 +700,13 @@ class TestCheckSync:
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
-        assert SshEndpointError.STAT_NOT_FOUND in ssh_errors
+        assert SshEndpointErrorKind.STAT_NOT_FOUND in ssh_errors
         dst_ep_errors = status.destination_endpoint_status.errors
-        assert DestinationEndpointError.VOL_NOT_BTRFS not in dst_ep_errors
-        assert DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME not in dst_ep_errors
+        assert DestinationEndpointErrorKind.VOL_NOT_BTRFS not in dst_ep_errors
+        assert (
+            DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME
+            not in dst_ep_errors
+        )
 
     def test_findmnt_not_found_on_destination(self, src_dst: tuple[Path, Path]) -> None:
         src, dst = src_dst
@@ -719,10 +724,11 @@ class TestCheckSync:
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
-        assert SshEndpointError.FINDMNT_NOT_FOUND in ssh_errors
+        assert SshEndpointErrorKind.FINDMNT_NOT_FOUND in ssh_errors
         dst_ep_errors = status.destination_endpoint_status.errors
         assert (
-            DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM not in dst_ep_errors
+            DestinationEndpointErrorKind.VOL_NOT_MOUNTED_USER_SUBVOL_RM
+            not in dst_ep_errors
         )
 
     def test_stat_and_findmnt_both_missing(self, src_dst: tuple[Path, Path]) -> None:
@@ -736,8 +742,8 @@ class TestCheckSync:
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
-        assert SshEndpointError.STAT_NOT_FOUND in ssh_errors
-        assert SshEndpointError.FINDMNT_NOT_FOUND in ssh_errors
+        assert SshEndpointErrorKind.STAT_NOT_FOUND in ssh_errors
+        assert SshEndpointErrorKind.FINDMNT_NOT_FOUND in ssh_errors
 
     def test_destination_not_btrfs_filesystem(self, src_dst: tuple[Path, Path]) -> None:
         _setup_active_sentinels(*src_dst)
@@ -746,7 +752,7 @@ class TestCheckSync:
         status = _check(sync, config, fs_type="ext2/ext3")
         assert status.active is False
         assert (
-            DestinationEndpointError.VOL_NOT_BTRFS
+            DestinationEndpointErrorKind.VOL_NOT_BTRFS
             in status.destination_endpoint_status.errors
         )
 
@@ -763,7 +769,7 @@ class TestCheckSync:
         status = _check(sync, config, run=run, fs_type="btrfs")
         assert status.active is False
         assert (
-            DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME
+            DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME
             in status.destination_endpoint_status.errors
         )
         assert run.commands_starting_with("stat", "-c") == [
@@ -785,7 +791,7 @@ class TestCheckSync:
         status = _check(sync, config, run=run, fs_type="btrfs")
         assert status.active is False
         assert (
-            DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM
+            DestinationEndpointErrorKind.VOL_NOT_MOUNTED_USER_SUBVOL_RM
             in status.destination_endpoint_status.errors
         )
 
@@ -799,8 +805,8 @@ class TestCheckSync:
         status = _check(sync, config, fs_type="btrfs")
         assert status.active is False
         dst_ep_errors = status.destination_endpoint_status.errors
-        assert DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND in dst_ep_errors
-        assert DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND not in dst_ep_errors
+        assert DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND in dst_ep_errors
+        assert DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND not in dst_ep_errors
 
     def test_destination_snapshots_dir_not_found(
         self, src_dst: tuple[Path, Path]
@@ -814,8 +820,10 @@ class TestCheckSync:
         status = _check(sync, config, fs_type="btrfs")
         assert status.active is False
         dst_ep_errors = status.destination_endpoint_status.errors
-        assert DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND in dst_ep_errors
-        assert DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND not in dst_ep_errors
+        assert DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND in dst_ep_errors
+        assert (
+            DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND not in dst_ep_errors
+        )
 
     def test_destination_latest_and_snapshots_both_missing(
         self, src_dst: tuple[Path, Path]
@@ -827,8 +835,8 @@ class TestCheckSync:
         status = _check(sync, config, fs_type="btrfs")
         assert status.active is False
         dst_ep_errors = status.destination_endpoint_status.errors
-        assert DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND in dst_ep_errors
-        assert DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND in dst_ep_errors
+        assert DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND in dst_ep_errors
+        assert DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND in dst_ep_errors
 
     def test_btrfs_check_skipped_when_not_enabled(
         self, src_dst: tuple[Path, Path]
@@ -858,12 +866,12 @@ class TestCheckSync:
         ssh_errors = (
             status.source_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
-        assert SshEndpointError.RSYNC_NOT_FOUND in ssh_errors
+        assert SshEndpointErrorKind.RSYNC_NOT_FOUND in ssh_errors
         # Local volume is still probed despite SSH endpoint errors —
         # no SSH_ENDPOINT_INACTIVE cascade for local volumes
         assert status.source_endpoint_status.volume_status.active is True
         # Source endpoint is inactive because .nbkp-src sentinel is missing
-        assert SourceEndpointError.SENTINEL_NOT_FOUND in (
+        assert SourceEndpointErrorKind.SENTINEL_NOT_FOUND in (
             status.source_endpoint_status.errors
         )
 
@@ -876,8 +884,8 @@ class TestCheckSync:
         assert status.active is False
         src_vol_errors = status.source_endpoint_status.volume_status.errors
         dst_vol_errors = status.destination_endpoint_status.volume_status.errors
-        assert VolumeError.SENTINEL_NOT_FOUND in src_vol_errors
-        assert VolumeError.SENTINEL_NOT_FOUND in dst_vol_errors
+        assert VolumeErrorKind.SENTINEL_NOT_FOUND in src_vol_errors
+        assert VolumeErrorKind.SENTINEL_NOT_FOUND in dst_vol_errors
 
 
 def _sync_with_remote(
@@ -933,7 +941,7 @@ class TestCheckSyncRemoteCommands:
         ssh_errors = (
             status.source_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
-        assert SshEndpointError.RSYNC_NOT_FOUND in ssh_errors
+        assert SshEndpointErrorKind.RSYNC_NOT_FOUND in ssh_errors
 
     def test_rsync_not_found_on_remote_destination(self, tmp_path: Path) -> None:
         config, sync = _sync_with_remote(tmp_path, "dst")
@@ -944,7 +952,7 @@ class TestCheckSyncRemoteCommands:
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
-        assert SshEndpointError.RSYNC_NOT_FOUND in ssh_errors
+        assert SshEndpointErrorKind.RSYNC_NOT_FOUND in ssh_errors
 
     def test_btrfs_not_found_on_remote_destination(self, tmp_path: Path) -> None:
         config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
@@ -957,7 +965,7 @@ class TestCheckSyncRemoteCommands:
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
-        assert SshEndpointError.BTRFS_NOT_FOUND in ssh_errors
+        assert SshEndpointErrorKind.BTRFS_NOT_FOUND in ssh_errors
 
     def test_destination_not_btrfs_on_remote(self, tmp_path: Path) -> None:
         config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
@@ -970,7 +978,7 @@ class TestCheckSyncRemoteCommands:
         )
         assert status.active is False
         assert (
-            DestinationEndpointError.VOL_NOT_BTRFS
+            DestinationEndpointErrorKind.VOL_NOT_BTRFS
             in status.destination_endpoint_status.errors
         )
 
@@ -989,7 +997,7 @@ class TestCheckSyncRemoteCommands:
         )
         assert status.active is False
         assert (
-            DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME
+            DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME
             in status.destination_endpoint_status.errors
         )
 
@@ -1006,7 +1014,7 @@ class TestCheckSyncRemoteCommands:
         )
         assert status.active is False
         assert (
-            DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM
+            DestinationEndpointErrorKind.VOL_NOT_MOUNTED_USER_SUBVOL_RM
             in status.destination_endpoint_status.errors
         )
 
@@ -1022,9 +1030,9 @@ class TestCheckSyncRemoteCommands:
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
-        assert SshEndpointError.STAT_NOT_FOUND in ssh_errors
+        assert SshEndpointErrorKind.STAT_NOT_FOUND in ssh_errors
         assert (
-            DestinationEndpointError.VOL_NOT_BTRFS
+            DestinationEndpointErrorKind.VOL_NOT_BTRFS
             not in status.destination_endpoint_status.errors
         )
 
@@ -1044,9 +1052,9 @@ class TestCheckSyncRemoteCommands:
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
-        assert SshEndpointError.FINDMNT_NOT_FOUND in ssh_errors
+        assert SshEndpointErrorKind.FINDMNT_NOT_FOUND in ssh_errors
         assert (
-            DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM
+            DestinationEndpointErrorKind.VOL_NOT_MOUNTED_USER_SUBVOL_RM
             not in status.destination_endpoint_status.errors
         )
 
@@ -1061,11 +1069,11 @@ class TestCheckSyncRemoteCommands:
         )
         assert status.active is False
         assert (
-            DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND
+            DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND
             in status.destination_endpoint_status.errors
         )
         assert (
-            DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND
+            DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND
             not in status.destination_endpoint_status.errors
         )
 
@@ -1082,11 +1090,11 @@ class TestCheckSyncRemoteCommands:
         )
         assert status.active is False
         assert (
-            DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND
+            DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND
             in status.destination_endpoint_status.errors
         )
         assert (
-            DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND
+            DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND
             not in status.destination_endpoint_status.errors
         )
 
@@ -1294,7 +1302,7 @@ class TestStandaloneEndpointProbing:
         assert "bastion" in result.ssh_endpoint_statuses
         bastion_status = result.ssh_endpoint_statuses["bastion"]
         assert bastion_status.active is False
-        assert SshEndpointError.UNREACHABLE in bastion_status.errors
+        assert SshEndpointErrorKind.UNREACHABLE in bastion_status.errors
 
     def test_multi_hop_bastion_chain(self, tmp_path: Path) -> None:
         """All hops in a multi-hop bastion chain appear in statuses."""
@@ -1577,7 +1585,7 @@ class TestAlternateEndpointUnderLocationExclusion:
         assert result.ssh_endpoint_statuses["nas-wan"].active is True
         assert result.volume_statuses[archive].active is False
         assert result.ssh_endpoint_statuses["nas-lan"].errors == [
-            SshEndpointError.LOCATION_EXCLUDED
+            SshEndpointErrorKind.LOCATION_EXCLUDED
         ]
         assert check_step_count(config, None, resolved) == (
             len(result.ssh_endpoint_statuses)
@@ -1641,7 +1649,7 @@ class TestCheckHardLinkDest:
         status = _check(sync, config)
         assert status.active is False
         assert (
-            DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND
+            DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND
             in status.destination_endpoint_status.errors
         )
 
@@ -1658,7 +1666,7 @@ class TestCheckHardLinkDest:
         status = _check(sync, config, fs_type="vfat")
         assert status.active is False
         assert (
-            DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT
+            DestinationEndpointErrorKind.VOL_NO_HARDLINK_SUPPORT
             in status.destination_endpoint_status.errors
         )
 
@@ -1697,10 +1705,10 @@ class TestCheckHardLinkDest:
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
-        assert SshEndpointError.STAT_NOT_FOUND in ssh_errors
+        assert SshEndpointErrorKind.STAT_NOT_FOUND in ssh_errors
         # No hardlink support check when stat is missing
         assert (
-            DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT
+            DestinationEndpointErrorKind.VOL_NO_HARDLINK_SUPPORT
             not in status.destination_endpoint_status.errors
         )
 
@@ -1722,17 +1730,17 @@ class TestCheckHardLinkDest:
         ssh_errors = (
             status.destination_endpoint_status.volume_status.ssh_endpoint_status.errors
         )
-        assert SshEndpointError.BTRFS_NOT_FOUND not in ssh_errors
+        assert SshEndpointErrorKind.BTRFS_NOT_FOUND not in ssh_errors
         assert (
-            DestinationEndpointError.VOL_NOT_BTRFS
+            DestinationEndpointErrorKind.VOL_NOT_BTRFS
             not in status.destination_endpoint_status.errors
         )
         assert (
-            DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME
+            DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME
             not in status.destination_endpoint_status.errors
         )
         assert (
-            DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND
+            DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND
             not in status.destination_endpoint_status.errors
         )
 
@@ -1780,7 +1788,7 @@ class TestCheckHardLinkDest:
         status = _check(sync, config, run=run, resolved=_make_resolved(config))
         assert status.active is False
         assert (
-            DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT
+            DestinationEndpointErrorKind.VOL_NO_HARDLINK_SUPPORT
             in status.destination_endpoint_status.errors
         )
         assert ["stat", "-f", "-c", "%T", "/backup"] in run.commands
@@ -1851,7 +1859,7 @@ class TestCheckSourceLatest:
 
         status = _check(sync, config)
         assert (
-            SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
+            SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND
             in status.source_endpoint_status.errors
         )
 
@@ -1867,7 +1875,7 @@ class TestCheckSourceLatest:
 
         status = _check(sync, config)
         assert (
-            SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
+            SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND
             in status.source_endpoint_status.errors
         )
 
@@ -1892,11 +1900,11 @@ class TestCheckSourceLatest:
 
         status = _check(sync, config)
         assert (
-            SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
+            SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND
             not in status.source_endpoint_status.errors
         )
         assert (
-            SourceEndpointError.LATEST_SYMLINK_INVALID
+            SourceEndpointErrorKind.LATEST_SYMLINK_INVALID
             not in status.source_endpoint_status.errors
         )
 
@@ -1920,7 +1928,7 @@ class TestCheckSourceLatest:
 
         status = _check(sync, config)
         assert (
-            SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
+            SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND
             not in status.source_endpoint_status.errors
         )
 
@@ -1958,7 +1966,7 @@ class TestCheckSourceLatest:
 
         status = _check(sync, config)
         assert (
-            SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
+            SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND
             not in status.source_endpoint_status.errors
         )
         # A source without snapshots has no layout to observe.
@@ -2032,7 +2040,7 @@ class TestCheckSourceSnapshots:
 
         status = _check(sync, config)
         assert (
-            SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND
+            SourceEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND
             in status.source_endpoint_status.errors
         )
 
@@ -2049,7 +2057,7 @@ class TestCheckSourceSnapshots:
 
         status = _check(sync, config)
         assert (
-            SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND
+            SourceEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND
             in status.source_endpoint_status.errors
         )
 
@@ -2066,7 +2074,7 @@ class TestCheckSourceSnapshots:
 
         status = _check(sync, config)
         assert (
-            SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND
+            SourceEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND
             not in status.source_endpoint_status.errors
         )
 
@@ -2104,7 +2112,7 @@ class TestCheckSourceSnapshots:
 
         status = _check(sync, config)
         assert (
-            SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND
+            SourceEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND
             not in status.source_endpoint_status.errors
         )
         assert status.source_endpoint_status.diagnostics is not None
@@ -2224,11 +2232,11 @@ class TestCheckDevnullLatest:
         )
         status = _check(sync, config)
         assert (
-            SourceEndpointError.LATEST_SYMLINK_INVALID
+            SourceEndpointErrorKind.LATEST_SYMLINK_INVALID
             not in status.source_endpoint_status.errors
         )
         assert (
-            SourceEndpointError.LATEST_SYMLINK_NOT_FOUND
+            SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND
             not in status.source_endpoint_status.errors
         )
 
@@ -2291,7 +2299,7 @@ class TestCheckDevnullLatest:
             syncs={"s1": sync, "upstream": upstream},
         )
         status = _check(sync, config, dry_run=True)
-        assert SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING in status.errors
+        assert SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING in status.errors
         assert not status.active
 
     def test_source_devnull_rejected_without_upstream(
@@ -2313,7 +2321,7 @@ class TestCheckDevnullLatest:
         config, sync = self._make_config(src, dst)
 
         status = _check(sync, config)
-        assert SyncError.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM in status.errors
+        assert SyncErrorKind.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM in status.errors
 
     def test_source_dangling_symlink_invalid(
         self,
@@ -2341,7 +2349,7 @@ class TestCheckDevnullLatest:
 
         status = _check(sync, config)
         assert (
-            SourceEndpointError.LATEST_SYMLINK_INVALID
+            SourceEndpointErrorKind.LATEST_SYMLINK_INVALID
             in status.source_endpoint_status.errors
         )
 
@@ -2363,11 +2371,11 @@ class TestCheckDevnullLatest:
 
         status = _check(sync, config)
         assert (
-            DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND
+            DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND
             not in status.destination_endpoint_status.errors
         )
         assert (
-            DestinationEndpointError.LATEST_SYMLINK_INVALID
+            DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID
             not in status.destination_endpoint_status.errors
         )
 
@@ -2388,7 +2396,7 @@ class TestCheckDevnullLatest:
 
         status = _check(sync, config)
         assert (
-            DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND
+            DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND
             in status.destination_endpoint_status.errors
         )
 
@@ -2416,7 +2424,7 @@ class TestCheckDevnullLatest:
 
         status = _check(sync, config)
         assert (
-            DestinationEndpointError.LATEST_SYMLINK_INVALID
+            DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID
             in status.destination_endpoint_status.errors
         )
 
@@ -2558,8 +2566,8 @@ class TestConnectionLostDuringPreflight:
         result = _check_all(config, run, resolved_endpoints=_make_resolved(config))
 
         nas = result.volume_statuses["nas"]
-        assert nas.errors == [VolumeError.SSH_ENDPOINT_INACTIVE]
-        assert nas.ssh_endpoint_status.errors == [SshEndpointError.UNREACHABLE]
+        assert nas.errors == [VolumeErrorKind.SSH_ENDPOINT_INACTIVE]
+        assert nas.ssh_endpoint_status.errors == [SshEndpointErrorKind.UNREACHABLE]
         assert nas.ssh_endpoint_status.diagnostics.ssh_error == (
             "connection closed by peer"
         )
@@ -2579,9 +2587,9 @@ class TestConnectionLostDuringPreflight:
 
         assert result.volume_statuses["nas"].active
         src = result.source_endpoint_statuses["ep-nas"]
-        assert src.errors == [SourceEndpointError.VOLUME_INACTIVE]
+        assert src.errors == [SourceEndpointErrorKind.VOLUME_INACTIVE]
         assert src.volume_status.ssh_endpoint_status.errors == [
-            SshEndpointError.UNREACHABLE
+            SshEndpointErrorKind.UNREACHABLE
         ]
         assert result.sync_statuses["remote"].is_expected_inactive()
         assert result.sync_statuses["local"].active

@@ -13,7 +13,7 @@ from ..config import Config
 from ..disks import MountObservation
 from ..policy import Strictness
 from ..preflight import (
-    PreflightError,
+    PreflightErrorKind,
     PreflightResult,
     check_all_syncs,
     check_step_count,
@@ -30,7 +30,7 @@ def start_check_step(bar: StepProgressBar, label: str) -> None:
 def end_check_step(
     bar: StepProgressBar,
     label: str,
-    errors: Sequence[PreflightError],
+    errors: Sequence[PreflightErrorKind],
     strictness: Strictness,
 ) -> None:
     """Close a step with the icon its errors deserve under *strictness*."""

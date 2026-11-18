@@ -6,7 +6,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 from rich.console import Console
 
-from nbkp.config import ConfigError, ConfigErrorReason
+from nbkp.config import ConfigError, ConfigErrorKind
 from nbkp.config.output import config_error_json, print_config_error
 
 
@@ -19,14 +19,14 @@ def _render(e: ConfigError) -> str:
 class TestPrintConfigError:
     def test_reason_survives_in_title(self) -> None:
         """The title's own brackets are literal, not a Rich style tag."""
-        e = ConfigError("boom", reason=ConfigErrorReason.INVALID_YAML)
-        assert f"[{ConfigErrorReason.INVALID_YAML}]" in _render(e)
+        e = ConfigError("boom", reason=ConfigErrorKind.INVALID_YAML)
+        assert f"[{ConfigErrorKind.INVALID_YAML}]" in _render(e)
 
     def test_message_brackets_survive(self) -> None:
         """YAML parser messages quote the offending text, brackets included."""
         e = ConfigError(
             "Invalid YAML in /etc/nbkp.yaml: found unexpected ']' at line 3",
-            reason=ConfigErrorReason.INVALID_YAML,
+            reason=ConfigErrorKind.INVALID_YAML,
         )
         assert "unexpected ']'" in _render(e)
 
@@ -47,6 +47,6 @@ def _validation_error() -> ConfigError:
 
     with pytest.raises(ValidationError) as exc:
         M(retention_count="x")  # type: ignore[arg-type]
-    e = ConfigError("bad config", reason=ConfigErrorReason.VALIDATION)
+    e = ConfigError("bad config", reason=ConfigErrorKind.VALIDATION)
     e.__cause__ = exc.value
     return e

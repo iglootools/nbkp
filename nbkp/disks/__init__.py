@@ -25,7 +25,7 @@ from .detection import (
     resolve_target_device,
 )
 from .lifecycle import (
-    MountFailureReason,
+    MountFailureKind,
     MountResult,
     UmountResult,
     any_failed,
@@ -41,7 +41,7 @@ from .models import (
     LifecycleStep,
     MountCapabilities,
     MountToolCapabilities,
-    UmountFailureReason,
+    UmountFailureKind,
     display_name,
 )
 from .mount_checks import (
@@ -76,11 +76,11 @@ __all__ = [
     "LifecycleFailure",
     "LifecycleStep",
     "MountCapabilities",
-    "MountFailureReason",
+    "MountFailureKind",
     "MountObservation",
     "MountResult",
     "MountToolCapabilities",
-    "UmountFailureReason",
+    "UmountFailureKind",
     "UmountResult",
     "any_failed",
     "apply_effective_paths",

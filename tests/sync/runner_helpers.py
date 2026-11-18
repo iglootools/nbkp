@@ -16,19 +16,19 @@ from nbkp.config import (
 )
 from nbkp.preflight import (
     DestinationEndpointDiagnostics,
-    DestinationEndpointError,
+    DestinationEndpointErrorKind,
     DestinationEndpointStatus,
     SourceEndpointDiagnostics,
-    SourceEndpointError,
+    SourceEndpointErrorKind,
     SourceEndpointStatus,
     SshEndpointDiagnostics,
-    SshEndpointError,
+    SshEndpointErrorKind,
     SshEndpointStatus,
-    SyncError,
+    SyncErrorKind,
     SyncStatus,
     VolumeCapabilities,
     VolumeDiagnostics,
-    VolumeError,
+    VolumeErrorKind,
     VolumeStatus,
 )
 from nbkp.sync import SyncResult, run_all_syncs
@@ -67,7 +67,7 @@ def inactive_ssh_status() -> SshEndpointStatus:
     return SshEndpointStatus(
         slug="localhost",
         diagnostics=SshEndpointDiagnostics(ssh_reachable=False),
-        errors=[SshEndpointError.UNREACHABLE],
+        errors=[SshEndpointErrorKind.UNREACHABLE],
     )
 
 
@@ -94,7 +94,7 @@ def inactive_vol_status(name: str, vol: Volume) -> VolumeStatus:
         config=vol,
         ssh_endpoint_status=inactive_ssh_status(),
         diagnostics=None,
-        errors=[VolumeError.SSH_ENDPOINT_INACTIVE],
+        errors=[VolumeErrorKind.SSH_ENDPOINT_INACTIVE],
     )
 
 
@@ -134,7 +134,7 @@ def inactive_src_ep_status(config: Config, sync: SyncConfig) -> SourceEndpointSt
         endpoint_slug=ep.slug,
         volume_status=inactive_vol_status(ep.volume, vol),
         diagnostics=None,
-        errors=[SourceEndpointError.VOLUME_INACTIVE],
+        errors=[SourceEndpointErrorKind.VOLUME_INACTIVE],
     )
 
 
@@ -147,7 +147,7 @@ def inactive_dst_ep_status(
         endpoint_slug=ep.slug,
         volume_status=inactive_vol_status(ep.volume, vol),
         diagnostics=None,
-        errors=[DestinationEndpointError.VOLUME_INACTIVE],
+        errors=[DestinationEndpointErrorKind.VOLUME_INACTIVE],
     )
 
 
@@ -258,8 +258,8 @@ def inactive_statuses(
             source_endpoint_status=inactive_src_ep_status(config, sync),
             destination_endpoint_status=inactive_dst_ep_status(config, sync),
             errors=[
-                SyncError.SOURCE_ENDPOINT_INACTIVE,
-                SyncError.DESTINATION_ENDPOINT_INACTIVE,
+                SyncErrorKind.SOURCE_ENDPOINT_INACTIVE,
+                SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE,
             ],
         )
         for name, sync in config.syncs.items()

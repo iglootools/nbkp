@@ -6,8 +6,8 @@ from rich.console import Console
 from rich.text import Text
 
 from nbkp.disks import MountCapabilities
-from nbkp.disks.lifecycle import MountFailureReason, MountResult, UmountResult
-from nbkp.disks.models import LifecycleFailure, LifecycleStep, UmountFailureReason
+from nbkp.disks.lifecycle import MountFailureKind, MountResult, UmountResult
+from nbkp.disks.models import LifecycleFailure, LifecycleStep, UmountFailureKind
 from nbkp.disks.observation import MountObservation
 from nbkp.disks.output import (
     build_mount_status_json,
@@ -81,7 +81,7 @@ class TestMountStatusTableSeverity:
             device_present=True,
             luks_unlocked=False,
             mounted=None,
-            failure_reason=MountFailureReason.UNLOCK_FAILED,
+            failure_reason=MountFailureKind.UNLOCK_FAILED,
         )
         rendered = _render(build_mount_status_table([("vol", obs)]))
         assert "✗" in rendered
@@ -91,7 +91,7 @@ class TestMountStatusTableSeverity:
             device_present=True,
             luks_unlocked=False,
             mounted=None,
-            failure_reason=MountFailureReason.NOT_AUTHORIZED,
+            failure_reason=MountFailureKind.NOT_AUTHORIZED,
         )
         rendered = _render(build_mount_status_table([("vol", obs)]))
         assert "✗" in rendered
@@ -101,7 +101,7 @@ class TestMountStatusTableSeverity:
             device_present=True,
             luks_unlocked=True,
             mounted=False,
-            failure_reason=MountFailureReason.MOUNT_FAILED,
+            failure_reason=MountFailureKind.MOUNT_FAILED,
         )
         rendered = _render(build_mount_status_table([("vol", obs)]))
         assert "✗" in rendered
@@ -111,7 +111,7 @@ class TestMountStatusTableSeverity:
             device_present=True,
             luks_unlocked=True,
             mounted=False,
-            failure_reason=MountFailureReason.NOT_AUTHORIZED,
+            failure_reason=MountFailureKind.NOT_AUTHORIZED,
         )
         rendered = _render(build_mount_status_table([("vol", obs)]))
         assert "✗" in rendered
@@ -235,56 +235,56 @@ class TestMountFailureDetail:
         ("reason", "failure", "expected"),
         [
             (
-                MountFailureReason.DEVICE_NOT_PRESENT,
+                MountFailureKind.DEVICE_NOT_PRESENT,
                 LifecycleFailure(device_uuid=_UUID),
                 f"device not plugged in (UUID: {_UUID})",
             ),
             (
-                MountFailureReason.PASSPHRASE_NOT_AVAILABLE,
+                MountFailureKind.PASSPHRASE_NOT_AVAILABLE,
                 LifecycleFailure(passphrase_id="usb", message="not in keyring"),
                 "passphrase 'usb' not available: not in keyring",
             ),
             (
-                MountFailureReason.NOT_AUTHORIZED,
+                MountFailureKind.NOT_AUTHORIZED,
                 LifecycleFailure(step=LifecycleStep.UNLOCK, exit_code=1),
                 "unlock not authorized — polkit rule not configured",
             ),
             (
-                MountFailureReason.UDISKS_NOT_AVAILABLE,
+                MountFailureKind.UDISKS_NOT_AVAILABLE,
                 LifecycleFailure(
                     step=LifecycleStep.MOUNT, exit_code=127, message="not found"
                 ),
                 "mount failed — udisks2 not available: not found",
             ),
             (
-                MountFailureReason.UDISKS_NOT_AVAILABLE,
+                MountFailureKind.UDISKS_NOT_AVAILABLE,
                 LifecycleFailure(command="lsblk"),
                 "udisks2 not available: lsblk not found",
             ),
             (
-                MountFailureReason.PROBE_FAILED,
+                MountFailureKind.PROBE_FAILED,
                 LifecycleFailure(command="lsblk", exit_code=1, message="boom"),
                 "device state unknown: lsblk failed (exit 1): boom",
             ),
             (
-                MountFailureReason.UNREACHABLE,
+                MountFailureKind.UNREACHABLE,
                 LifecycleFailure(message="timed out"),
                 "unreachable: timed out",
             ),
             (
-                MountFailureReason.UNLOCK_FAILED,
+                MountFailureKind.UNLOCK_FAILED,
                 LifecycleFailure(step=LifecycleStep.UNLOCK),
                 "unlocked device could not be resolved",
             ),
             (
-                MountFailureReason.MOUNT_FAILED,
+                MountFailureKind.MOUNT_FAILED,
                 LifecycleFailure(step=LifecycleStep.MOUNT, exit_code=32, message="x"),
                 "mount failed (exit 32): x",
             ),
         ],
     )
     def test_renders_reason_and_facts(
-        self, reason: MountFailureReason, failure: LifecycleFailure, expected: str
+        self, reason: MountFailureKind, failure: LifecycleFailure, expected: str
     ) -> None:
         result = MountResult("v", False, failure_reason=reason, failure=failure)
         assert mount_failure_detail(result) == expected
@@ -298,7 +298,7 @@ class TestUmountFailureDetail:
         ("reason", "failure", "detail", "warning"),
         [
             (
-                UmountFailureReason.UNMOUNT_FAILED,
+                UmountFailureKind.UNMOUNT_FAILED,
                 LifecycleFailure(
                     step=LifecycleStep.UNMOUNT, exit_code=1, message="busy"
                 ),
@@ -306,25 +306,25 @@ class TestUmountFailureDetail:
                 "device may still be mounted, manual umount needed",
             ),
             (
-                UmountFailureReason.LOCK_FAILED,
+                UmountFailureKind.LOCK_FAILED,
                 LifecycleFailure(step=LifecycleStep.LOCK, exit_code=1, message="busy"),
                 "lock failed (exit 1): busy",
                 "LUKS container still unlocked, manual lock needed",
             ),
             (
-                UmountFailureReason.PROBE_FAILED,
+                UmountFailureKind.PROBE_FAILED,
                 LifecycleFailure(command="findmnt", exit_code=2, message="boom"),
                 "device state unknown: findmnt failed (exit 2): boom",
                 "volume may still be mounted or unlocked, check manually",
             ),
             (
-                UmountFailureReason.UNREACHABLE,
+                UmountFailureKind.UNREACHABLE,
                 LifecycleFailure(message="timed out"),
                 "unreachable: timed out",
                 "volume may still be mounted, manual umount needed",
             ),
             (
-                UmountFailureReason.UDISKS_NOT_AVAILABLE,
+                UmountFailureKind.UDISKS_NOT_AVAILABLE,
                 LifecycleFailure(command="findmnt"),
                 "udisks2 not available: findmnt not found",
                 "volume may still be mounted, manual umount needed",
@@ -333,7 +333,7 @@ class TestUmountFailureDetail:
     )
     def test_renders_reason_and_facts(
         self,
-        reason: UmountFailureReason,
+        reason: UmountFailureKind,
         failure: LifecycleFailure,
         detail: str,
         warning: str,

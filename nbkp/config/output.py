@@ -264,7 +264,7 @@ def config_error_json(e: ConfigError) -> dict[str, Any]:
     """A ConfigError as JSON-ready data for ``--output json``.
 
     Validation failures also list each problem with its location and its
-    stable ``type`` code (see ``ConfigValidationCode``).
+    stable ``type`` code (see ``ConfigValidationErrorKind``).
     """
     cause = e.__cause__
     return {

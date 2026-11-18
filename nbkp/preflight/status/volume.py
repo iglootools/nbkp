@@ -11,7 +11,7 @@ from ...config import (
 )
 from ...disks import (
     MountCapabilities,
-    MountFailureReason,
+    MountFailureKind,
 )
 from ...fsprotocol import (
     VOLUME_SENTINEL,
@@ -19,9 +19,9 @@ from ...fsprotocol import (
 from .ssh import SshEndpointStatus
 
 
-class VolumeError(enum.StrEnum):
+class VolumeErrorKind(enum.StrEnum):
     """SSH reachability and host tool availability errors are
-    ``SshEndpointError``s, not volume errors.
+    ``SshEndpointErrorKind``s, not volume errors.
     """
 
     VOLUME_NOT_MOUNTED = "volume not mounted"
@@ -43,12 +43,12 @@ class VolumeError(enum.StrEnum):
     SSH_ENDPOINT_INACTIVE = "ssh endpoint inactive"
 
 
-INACTIVE_VOLUME_ERRORS: frozenset[VolumeError] = frozenset(
+INACTIVE_VOLUME_ERRORS: frozenset[VolumeErrorKind] = frozenset(
     {
-        VolumeError.SENTINEL_NOT_FOUND,
-        VolumeError.DEVICE_NOT_PRESENT,
-        VolumeError.VOLUME_NOT_MOUNTED,
-        VolumeError.SSH_ENDPOINT_INACTIVE,
+        VolumeErrorKind.SENTINEL_NOT_FOUND,
+        VolumeErrorKind.DEVICE_NOT_PRESENT,
+        VolumeErrorKind.VOLUME_NOT_MOUNTED,
+        VolumeErrorKind.SSH_ENDPOINT_INACTIVE,
     }
 )
 
@@ -76,7 +76,7 @@ class VolumeDiagnostics(BaseModel):
 
     Pure diagnostics — no interpretation of what constitutes an error.
     ``VolumeStatus.from_diagnostics`` translates these into
-    ``VolumeError`` values.  SSH reachability and location exclusion
+    ``VolumeErrorKind`` values.  SSH reachability and location exclusion
     live on ``SshEndpointDiagnostics``.
     """
 
@@ -96,7 +96,7 @@ class VolumeStatus(BaseModel):
     diagnostics: VolumeDiagnostics | None
     """``None`` when the SSH endpoint is inactive (unreachable or
     excluded)."""
-    errors: list[VolumeError]
+    errors: list[VolumeErrorKind]
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -112,7 +112,7 @@ class VolumeStatus(BaseModel):
     ) -> VolumeStatus:
         """Only remote volumes cascade an inactive SSH endpoint: localhost is
         always reachable, and its tool errors surface at the sync level as
-        ``SyncError.ENDPOINT_HOST_ERRORS`` instead.
+        ``SyncErrorKind.ENDPOINT_HOST_ERRORS`` instead.
         """
         return VolumeStatus(
             slug=slug,
@@ -120,7 +120,7 @@ class VolumeStatus(BaseModel):
             ssh_endpoint_status=ssh_endpoint_status,
             diagnostics=diagnostics,
             errors=(
-                [VolumeError.SSH_ENDPOINT_INACTIVE]
+                [VolumeErrorKind.SSH_ENDPOINT_INACTIVE]
                 if isinstance(config, RemoteVolume) and not ssh_endpoint_status.active
                 else _volume_errors(diagnostics, config.mount)
                 if diagnostics is not None
@@ -132,17 +132,17 @@ class VolumeStatus(BaseModel):
 def _volume_errors(
     diag: VolumeDiagnostics,
     mount: MountConfig | None = None,
-) -> list[VolumeError]:
+) -> list[VolumeErrorKind]:
     match (diag.capabilities, mount):
         case (None | VolumeCapabilities(sentinel_exists=True), _):
             return []
         case (VolumeCapabilities(mount=MountCapabilities() as caps), MountConfig()):
             return [_mount_sentinel_error(caps)]
         case _:
-            return [VolumeError.SENTINEL_NOT_FOUND]
+            return [VolumeErrorKind.SENTINEL_NOT_FOUND]
 
 
-def _mount_sentinel_error(mount_caps: MountCapabilities) -> VolumeError:
+def _mount_sentinel_error(mount_caps: MountCapabilities) -> VolumeErrorKind:
     """Most specific reason a mount-managed volume's sentinel is missing.
 
     A cause the mount lifecycle recorded (e.g. NOT_AUTHORIZED →
@@ -155,29 +155,29 @@ def _mount_sentinel_error(mount_caps: MountCapabilities) -> VolumeError:
         case _ if specific is not None:
             return specific
         case MountCapabilities(device_present=False):
-            return VolumeError.DEVICE_NOT_PRESENT
+            return VolumeErrorKind.DEVICE_NOT_PRESENT
         case MountCapabilities(has_fstab_entry=False):
-            return VolumeError.FSTAB_MOUNTPOINT_MISMATCH
+            return VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH
         case MountCapabilities(mounted=False):
-            return VolumeError.VOLUME_NOT_MOUNTED
+            return VolumeErrorKind.VOLUME_NOT_MOUNTED
         case _:
-            return VolumeError.SENTINEL_NOT_FOUND
+            return VolumeErrorKind.SENTINEL_NOT_FOUND
 
 
 def _mount_lifecycle_failure_error(
     mount_caps: MountCapabilities,
-) -> VolumeError | None:
+) -> VolumeErrorKind | None:
     """Returns ``None`` when no upgrade is available — caller falls back to
     DEVICE_NOT_PRESENT / VOLUME_NOT_MOUNTED / SENTINEL_NOT_FOUND.
     """
     match mount_caps.mount_failure_reason:
-        case MountFailureReason.NOT_AUTHORIZED:
-            return VolumeError.POLKIT_RULES_MISSING
-        case MountFailureReason.PASSPHRASE_NOT_AVAILABLE:
-            return VolumeError.PASSPHRASE_NOT_AVAILABLE
-        case MountFailureReason.UNLOCK_FAILED:
-            return VolumeError.UNLOCK_FAILED
-        case MountFailureReason.MOUNT_FAILED | MountFailureReason.PROBE_FAILED:
-            return VolumeError.MOUNT_FAILED
+        case MountFailureKind.NOT_AUTHORIZED:
+            return VolumeErrorKind.POLKIT_RULES_MISSING
+        case MountFailureKind.PASSPHRASE_NOT_AVAILABLE:
+            return VolumeErrorKind.PASSPHRASE_NOT_AVAILABLE
+        case MountFailureKind.UNLOCK_FAILED:
+            return VolumeErrorKind.UNLOCK_FAILED
+        case MountFailureKind.MOUNT_FAILED | MountFailureKind.PROBE_FAILED:
+            return VolumeErrorKind.MOUNT_FAILED
         case _:
             return None

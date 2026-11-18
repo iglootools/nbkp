@@ -12,7 +12,7 @@ import pytest
 from nbkp.config import CredentialProvider
 from nbkp.credentials import (
     CredentialError,
-    CredentialErrorReason,
+    CredentialErrorKind,
     retrieve_passphrase,
 )
 
@@ -31,4 +31,4 @@ def test_keyring_provider_reports_no_backend() -> None:
     with pytest.raises(CredentialError) as exc_info:
         retrieve_passphrase("any-id", CredentialProvider.KEYRING)
 
-    assert exc_info.value.reason == CredentialErrorReason.BACKEND_UNAVAILABLE
+    assert exc_info.value.reason == CredentialErrorKind.BACKEND_UNAVAILABLE

@@ -21,7 +21,7 @@ from nbkp.config import Config
 from nbkp.config.testkit import write_config
 from nbkp.disks import UmountResult
 from nbkp.policy import Strictness
-from nbkp.preflight import SyncError, SyncStatus
+from nbkp.preflight import SyncErrorKind, SyncStatus
 from nbkp.run.cli.run_cmd import abort_message, run_json
 from nbkp.run.pipeline import PipelineResult
 from nbkp.sync import ProgressMode, SyncFailureKind, SyncResult
@@ -182,7 +182,7 @@ class TestAbortMessage:
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_sentinel_only_sync_statuses(config, vol_s)
         sync_s["off"] = sync_s["photos-to-nas"].model_copy(
-            update={"slug": "off", "errors": [SyncError.DISABLED]}
+            update={"slug": "off", "errors": [SyncErrorKind.DISABLED]}
         )
         pipeline = PipelineResult(
             preflight=preflight(vol_s, sync_s),

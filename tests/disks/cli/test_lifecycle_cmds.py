@@ -24,7 +24,7 @@ from nbkp.disks.cli.mount_cmd import mount_result_entry
 from nbkp.disks.models import (
     LifecycleFailure,
     LifecycleStep,
-    MountFailureReason,
+    MountFailureKind,
 )
 from nbkp.disks.plan import MountAction, VolumePlan, plan_incomplete
 from tests.clidisplay import runner
@@ -91,7 +91,7 @@ def _udisks_steps(run: FakeCommandRunner) -> list[str]:
 
 
 def _failed_mount(
-    reason: MountFailureReason, step: LifecycleStep, message: str
+    reason: MountFailureKind, step: LifecycleStep, message: str
 ) -> MountResult:
     return MountResult(
         volume_slug="enc",
@@ -111,17 +111,17 @@ class TestOutcomeDecisions:
 
     def test_polkit_refusal_is_told_apart(self) -> None:
         refused = _failed_mount(
-            MountFailureReason.NOT_AUTHORIZED, LifecycleStep.UNLOCK, "denied"
+            MountFailureKind.NOT_AUTHORIZED, LifecycleStep.UNLOCK, "denied"
         )
         bad_key = _failed_mount(
-            MountFailureReason.UNLOCK_FAILED, LifecycleStep.UNLOCK, "bad key"
+            MountFailureKind.UNLOCK_FAILED, LifecycleStep.UNLOCK, "bad key"
         )
         assert refused_by_polkit([bad_key, refused])
         assert not refused_by_polkit([bad_key])
 
     def test_mount_result_entry_says_why_it_failed(self) -> None:
         result = _failed_mount(
-            MountFailureReason.UNLOCK_FAILED, LifecycleStep.UNLOCK, "bad key"
+            MountFailureKind.UNLOCK_FAILED, LifecycleStep.UNLOCK, "bad key"
         )
         assert mount_result_entry("enc", result) == {
             "volume": "enc",

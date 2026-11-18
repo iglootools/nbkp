@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from ..config import Config, Volume
 from .lifecycle import MountResult
-from .models import MountFailureReason
+from .models import MountFailureKind
 
 
 @dataclass(frozen=True)
@@ -19,12 +19,12 @@ class MountObservation:
     mounted: bool | None = None
     cleartext_device: str | None = None
     effective_path: str | None = None
-    failure_reason: MountFailureReason | None = None
+    failure_reason: MountFailureKind | None = None
     """Specific cause when the lifecycle step failed, for preflight to
     upgrade the generic VOLUME_NOT_MOUNTED to a more actionable error."""
 
     @property
-    def mount_failure_reason(self) -> MountFailureReason | None:
+    def mount_failure_reason(self) -> MountFailureKind | None:
         """Alias of ``failure_reason``.
 
         Mirrors ``MountCapabilities.mount_failure_reason`` so that the
@@ -54,7 +54,7 @@ def build_mount_observations(
             failure_reason=result.failure_reason,
         )
         for result in mount_results
-        if result.failure_reason is not MountFailureReason.UNREACHABLE
+        if result.failure_reason is not MountFailureKind.UNREACHABLE
     }
 
 

@@ -10,8 +10,8 @@ import subprocess
 from nbkp.config import Config
 from nbkp.policy import Strictness
 from nbkp.preflight import (
-    DestinationEndpointError,
-    SyncError,
+    DestinationEndpointErrorKind,
+    SyncErrorKind,
     SyncStatus,
 )
 from nbkp.remote.resolution import resolve_all_endpoints
@@ -70,10 +70,10 @@ def infra_error_statuses(config: Config) -> dict[str, SyncStatus]:
             update={
                 "destination_endpoint_status": ss.destination_endpoint_status.model_copy(
                     update={
-                        "errors": [DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND]
+                        "errors": [DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND]
                     }
                 ),
-                "errors": [SyncError.DESTINATION_ENDPOINT_INACTIVE],
+                "errors": [SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE],
             }
         )
         for name, ss in active_statuses(config).items()
@@ -90,7 +90,7 @@ def inactive_statuses(config: Config) -> dict[str, SyncStatus]:
                     ss.source_endpoint_status.volume_status,
                     sentinel_exists=False,
                 ),
-                "errors": [SyncError.SOURCE_ENDPOINT_INACTIVE],
+                "errors": [SyncErrorKind.SOURCE_ENDPOINT_INACTIVE],
             }
         )
         for name, ss in active_statuses(config).items()
@@ -212,7 +212,7 @@ class TestPrune:
         assert result.skip_reason is None
         assert result.error == SnapshotResultError(
             kind=SnapshotErrorKind.PREFLIGHT_ERRORS,
-            preflight_errors=(SyncError.DESTINATION_ENDPOINT_INACTIVE,),
+            preflight_errors=(SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE,),
         )
         assert run.calls == []
 
@@ -274,13 +274,13 @@ class TestShow:
 
         assert result.error == SnapshotResultError(
             kind=SnapshotErrorKind.INACTIVE,
-            preflight_errors=(SyncError.SOURCE_ENDPOINT_INACTIVE,),
+            preflight_errors=(SyncErrorKind.SOURCE_ENDPOINT_INACTIVE,),
         )
 
     def test_disabled_sync_skipped_under_ignore_none(self) -> None:
         """A disabled sync is never fatal, under any strictness."""
         disabled = {
-            name: status.model_copy(update={"errors": [SyncError.DISABLED]})
+            name: status.model_copy(update={"errors": [SyncErrorKind.DISABLED]})
             for name, status in active_statuses(_BTRFS).items()
         }
 

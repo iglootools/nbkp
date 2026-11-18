@@ -15,7 +15,7 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.disks.lifecycle import mount_volume, umount_volume
-from nbkp.preflight import DestinationEndpointError
+from nbkp.preflight import DestinationEndpointErrorKind
 from nbkp.preflight.endpoint_checks import (
     observe_destination_endpoint,
     observe_source_endpoint,
@@ -285,7 +285,7 @@ class TestSyncCheckBtrfs:
         )
         assert status.active is False
         assert (
-            DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME
+            DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME
             in status.destination_endpoint_status.errors
         )
 

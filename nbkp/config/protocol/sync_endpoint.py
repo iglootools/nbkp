@@ -3,7 +3,7 @@ from typing import Any, Literal
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from .base import Slug, _BaseModel
-from .errors import ConfigValidationCode, config_error
+from .errors import ConfigValidationErrorKind, config_error
 
 SnapshotMode = Literal["none", "btrfs", "hard-link"]
 
@@ -74,7 +74,7 @@ class SyncEndpoint(_BaseModel):
     ) -> SyncEndpoint:
         if self.btrfs_snapshots.enabled and self.hard_link_snapshots.enabled:
             raise config_error(
-                ConfigValidationCode.MUTUALLY_EXCLUSIVE,
+                ConfigValidationErrorKind.MUTUALLY_EXCLUSIVE,
                 "btrfs-snapshots and hard-link-snapshots are mutually exclusive",
             )
         return self

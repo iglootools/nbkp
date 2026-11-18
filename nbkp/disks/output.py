@@ -11,8 +11,8 @@ from .lifecycle import MountResult, UmountResult
 from .models import (
     LifecycleFailure,
     LifecycleStep,
-    MountFailureReason,
-    UmountFailureReason,
+    MountFailureKind,
+    UmountFailureKind,
 )
 from .severity import device_fail_severity, luks_fail_severity, mounted_fail_severity
 
@@ -41,7 +41,7 @@ class MountStatusData(Protocol):
     def mounted(self) -> bool | None: ...
 
     @property
-    def mount_failure_reason(self) -> MountFailureReason | None: ...
+    def mount_failure_reason(self) -> MountFailureKind | None: ...
 
 
 def mount_state_icon(
@@ -149,25 +149,25 @@ def mount_failure_detail(result: MountResult) -> str | None:
     )
 
 
-def _mount_failure_detail(reason: MountFailureReason, failure: LifecycleFailure) -> str:
+def _mount_failure_detail(reason: MountFailureKind, failure: LifecycleFailure) -> str:
     match reason, failure:
-        case MountFailureReason.DEVICE_NOT_PRESENT, _:
+        case MountFailureKind.DEVICE_NOT_PRESENT, _:
             return f"device not plugged in (UUID: {failure.device_uuid})"
-        case MountFailureReason.PASSPHRASE_NOT_AVAILABLE, _:
+        case MountFailureKind.PASSPHRASE_NOT_AVAILABLE, _:
             return (
                 f"passphrase '{failure.passphrase_id}' not available: {failure.message}"
             )
-        case MountFailureReason.NOT_AUTHORIZED, _:
+        case MountFailureKind.NOT_AUTHORIZED, _:
             return f"{_step(failure)} not authorized — polkit rule not configured"
-        case MountFailureReason.UDISKS_NOT_AVAILABLE, LifecycleFailure(step=None):
+        case MountFailureKind.UDISKS_NOT_AVAILABLE, LifecycleFailure(step=None):
             return f"udisks2 not available: {failure.command} not found"
-        case MountFailureReason.UDISKS_NOT_AVAILABLE, _:
+        case MountFailureKind.UDISKS_NOT_AVAILABLE, _:
             return f"{_step(failure)} failed — udisks2 not available: {failure.message}"
-        case MountFailureReason.PROBE_FAILED, _:
+        case MountFailureKind.PROBE_FAILED, _:
             return _probe_failed(failure)
-        case MountFailureReason.UNREACHABLE, _:
+        case MountFailureKind.UNREACHABLE, _:
             return f"unreachable: {failure.message}"
-        case MountFailureReason.UNLOCK_FAILED, LifecycleFailure(exit_code=None):
+        case MountFailureKind.UNLOCK_FAILED, LifecycleFailure(exit_code=None):
             return "unlocked device could not be resolved"
         case _:
             return _step_failed(failure)
@@ -183,17 +183,15 @@ def umount_failure_detail(result: UmountResult) -> str | None:
     )
 
 
-def _umount_failure_detail(
-    reason: UmountFailureReason, failure: LifecycleFailure
-) -> str:
+def _umount_failure_detail(reason: UmountFailureKind, failure: LifecycleFailure) -> str:
     match reason:
-        case UmountFailureReason.PROBE_FAILED:
+        case UmountFailureKind.PROBE_FAILED:
             return _probe_failed(failure)
-        case UmountFailureReason.UNREACHABLE:
+        case UmountFailureKind.UNREACHABLE:
             return f"unreachable: {failure.message}"
-        case UmountFailureReason.UDISKS_NOT_AVAILABLE:
+        case UmountFailureKind.UDISKS_NOT_AVAILABLE:
             return f"udisks2 not available: {failure.command} not found"
-        case UmountFailureReason.UNMOUNT_FAILED | UmountFailureReason.LOCK_FAILED:
+        case UmountFailureKind.UNMOUNT_FAILED | UmountFailureKind.LOCK_FAILED:
             return _step_failed(failure)
 
 
@@ -202,13 +200,13 @@ def umount_failure_warning(result: UmountResult) -> str | None:
     match result.failure_reason:
         case None:
             return None
-        case UmountFailureReason.UNMOUNT_FAILED:
+        case UmountFailureKind.UNMOUNT_FAILED:
             return "device may still be mounted, manual umount needed"
-        case UmountFailureReason.LOCK_FAILED:
+        case UmountFailureKind.LOCK_FAILED:
             return "LUKS container still unlocked, manual lock needed"
-        case UmountFailureReason.PROBE_FAILED:
+        case UmountFailureKind.PROBE_FAILED:
             return "volume may still be mounted or unlocked, check manually"
-        case UmountFailureReason.UNREACHABLE | UmountFailureReason.UDISKS_NOT_AVAILABLE:
+        case UmountFailureKind.UNREACHABLE | UmountFailureKind.UDISKS_NOT_AVAILABLE:
             return "volume may still be mounted, manual umount needed"
 
 
