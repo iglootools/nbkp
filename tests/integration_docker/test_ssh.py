@@ -547,3 +547,24 @@ class TestAgentForwarding:
             )
             assert result.returncode == 0
             assert "ED25519" in result.stdout
+
+
+class TestRemoteCommandInput:
+    def test_input_reaches_the_command(self, docker_ssh_endpoint: SshEndpoint) -> None:
+        result = fabric_run_remote(docker_ssh_endpoint, ["cat"], input="secret")
+
+        assert (result.returncode, result.stdout) == (0, "secret")
+
+    def test_command_exiting_before_reading_input_keeps_stderr(
+        self, docker_ssh_endpoint: SshEndpoint
+    ) -> None:
+        # More input than the channel window holds, so the write is still
+        # under way when the command closes its stdin and exits.
+        result = fabric_run_remote(
+            docker_ssh_endpoint,
+            ["sh", "-c", "exec <&-; echo 'no such device' >&2; exit 3"],
+            input="x" * (8 * 1024 * 1024),
+        )
+
+        assert result.returncode == 3
+        assert result.stderr == "no such device\n"

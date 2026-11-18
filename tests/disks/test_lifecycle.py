@@ -43,7 +43,6 @@ from nbkp.disks.models import (
 )
 from nbkp.disks.plan import plan_lifecycle
 from nbkp.remote.endpoints import EndpointFilter, ResolvedEndpoints
-from nbkp.remote.fabricssh import StdinClosedProcess
 from nbkp.remote.resolution import resolve_all_endpoints
 from tests.fakes import FakeCommandRunner, completed
 
@@ -279,13 +278,18 @@ class TestMountVolume:
         assert result.failure is not None
         assert result.failure.step is LifecycleStep.UNLOCK
 
-    def test_unlock_stdin_closed_classified_as_not_authorized(self) -> None:
+    def test_unlock_of_a_device_udisks_does_not_know_is_not_authorization(
+        self,
+    ) -> None:
+        message = "Error looking up object for device /dev/disk/by-uuid/x"
         run = FakeCommandRunner().on(
-            "udisksctl", "unlock", returns=StdinClosedProcess(args="udisksctl unlock")
+            "udisksctl", "unlock", returns=completed(1, stderr=message)
         )
         result = _mount(_encrypted_vol(), run)
-        assert not result.success
-        assert result.failure_reason == MountFailureReason.NOT_AUTHORIZED
+        assert result.failure_reason == MountFailureReason.UNLOCK_FAILED
+        assert result.failure == LifecycleFailure(
+            step=LifecycleStep.UNLOCK, exit_code=1, message=message
+        )
 
     def test_mount_failure(self) -> None:
         run = FakeCommandRunner().on(

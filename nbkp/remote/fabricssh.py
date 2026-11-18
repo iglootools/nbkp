@@ -1,13 +1,12 @@
-import io
 import subprocess
 from collections.abc import Callable, Hashable
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial, reduce
 from pathlib import Path
 from typing import cast
 
-import invoke.exceptions  # type: ignore[import-untyped]
 import paramiko
 from fabric import Connection  # type: ignore[import-untyped]
 
@@ -16,25 +15,6 @@ from .errors import ssh_connection_errors
 from .hostkeys import UnknownHostKeyError
 from .pool import ConnectionPool, active_pool
 from .ssh import shell_join
-
-
-class StdinClosedProcess(subprocess.CompletedProcess[str]):
-    """A remote command that exited before consuming the stdin sent to it.
-
-    Returned instead of crashing on the raw Paramiko/Fabric thread exception
-    (e.g. ``udisksctl unlock`` refusing fast under ``--no-user-interaction``).
-    The remote stderr is lost with the channel, so callers classify the
-    failure from the type — ``isinstance(result, StdinClosedProcess)`` — and
-    ``stderr`` only carries a human-readable explanation.
-    """
-
-    def __init__(self, args: str) -> None:
-        super().__init__(
-            args=args,
-            returncode=1,
-            stdout="",
-            stderr="remote process exited before consuming stdin",
-        )
 
 
 def _build_single_connection(
@@ -166,26 +146,52 @@ def _run_on_connection(
     cmd_string: str,
     input: str | None,
 ) -> subprocess.CompletedProcess[str]:
-    # in_stream=False disables stdin; Fabric's default would forward this
-    # process's own stdin to the remote command.
-    in_stream: io.BytesIO | bool = (
-        io.BytesIO(input.encode()) if input is not None else False
-    )
+    """Run *cmd_string* on a session channel of our own, with *input* on its
+    stdin, then stdin closed.
+
+    Not ``conn.run``: Fabric writes stdin from a worker thread, and when the
+    command exits before reading it (``udisksctl unlock`` on a device udisks
+    does not know yet), that thread fails on the closed channel and
+    ``conn.run`` raises instead of returning, losing the command's stderr and
+    exit status (https://github.com/fabric/fabric/issues/2351). Go back to
+    ``conn.run`` once Fabric fixes that or offers a supported way to run a
+    command that may exit without reading its input.
+    """
+    channel = conn.create_session()
     try:
-        result = conn.run(cmd_string, warn=True, hide=True, in_stream=in_stream)
-    except invoke.exceptions.ThreadException:
-        # Stdin/stdout/stderr worker raised — usually because the remote
-        # process exited before the stdin writer finished sending data
-        # (Paramiko then raises OSError("Socket is closed")). The actual
-        # remote stderr is lost with the channel, so we return a typed
-        # result and let callers classify based on context.
-        return StdinClosedProcess(args=cmd_string)
-    return subprocess.CompletedProcess(
-        args=cmd_string,
-        returncode=result.exited,
-        stdout=result.stdout,
-        stderr=result.stderr,
-    )
+        channel.exec_command(cmd_string)
+        _send_input(channel, (input or "").encode())
+        stdout, stderr = _read_output(channel)
+        return subprocess.CompletedProcess(
+            args=cmd_string,
+            returncode=channel.recv_exit_status(),
+            stdout=stdout,
+            stderr=stderr,
+        )
+    finally:
+        channel.close()
+
+
+def _send_input(channel: paramiko.Channel, data: bytes) -> None:
+    # A command may exit without reading its input; its output and exit
+    # status are what tell the caller why, so a closed channel is no error.
+    with suppress(OSError):
+        channel.sendall(data)
+        channel.shutdown_write()
+
+
+def _read_output(channel: paramiko.Channel) -> tuple[str, str]:
+    # stderr is read on its own thread: stdout and stderr share the channel's
+    # window, so reading one to the end first would stall a command that
+    # fills the window with the other.
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        stderr = executor.submit(channel.makefile_stderr("rb").read)
+        stdout = channel.makefile("rb").read()
+        return _decode(stdout), _decode(stderr.result())
+
+
+def _decode(output: bytes) -> str:
+    return output.decode(errors="replace")
 
 
 def run_remote_command(
@@ -231,9 +237,10 @@ def _run_pooled(
         if not reused:
             raise
     # A reused connection can be dead without the transport knowing yet (a
-    # NAT or firewall dropped it). run() raises a transport error only while
-    # opening the session channel: a connection lost mid-command ends the
-    # command with exit status -1 instead. The command therefore never
+    # NAT or firewall dropped it). _run_on_connection raises a transport error
+    # only while opening the session channel or starting the command: a
+    # connection lost mid-command ends the command with exit status -1
+    # instead, and a failed write of its input is ignored. The command therefore never
     # started, and running it once more on a fresh connection is safe.
     fresh, _ = _get_or_open(pool, key, open_)
     return _run_on_connection(fresh.target, cmd_string, input)
