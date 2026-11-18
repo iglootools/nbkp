@@ -109,6 +109,27 @@ for u in /usr/libexec/udisks2/udisksd /usr/lib/udisks2/udisksd; do
     [ -x "$u" ] && { "$u" & break; }
 done
 
+# udisksd enumerates block devices asynchronously after it starts, and the test harness only
+# waits for sshd, so without this a test that unlocks early reaches udisks before it has an
+# object for the LUKS device. udisksctl then exits at once with "Error looking up object for
+# device", before reading the passphrase: the intermittent unlock failures in
+# TestLuksLifecycle and TestDiscoverCleartextDevice. Wait on the exact path nbkp unlocks, the
+# by-uuid link, which udisks resolves through the symlinks udev reported, not on the loop
+# device alone. Bounded: a container that never gets there still boots for the other tests.
+if [ -f /srv/luks-uuid ]; then
+    luks_device="/dev/disk/by-uuid/$(cat /srv/luks-uuid)"
+    tries=0
+    until udisksctl info -b "$luks_device" >/dev/null 2>&1; do
+        tries=$((tries + 1))
+        if [ "$tries" -ge 150 ]; then
+            echo "WARNING: udisks has no object for $luks_device after 30s;" \
+                "LUKS unlock will fail" >&2
+            break
+        fi
+        sleep 0.2
+    done
+fi
+
 # Generate SSH host keys if not present
 ssh-keygen -A
 
