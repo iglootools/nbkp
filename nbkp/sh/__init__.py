@@ -54,7 +54,7 @@ def generate_script(
 @dataclass(frozen=True)
 class _SyncContext:
     slug: str
-    fn_name: str
+    fn_name: str  # noqa: DC06 -- read by templates/backup.sh.j2
     enabled: bool
     preflight: str
     steps: tuple[Step, ...]

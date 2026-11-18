@@ -92,30 +92,6 @@ def _remote_config() -> tuple[Config, SyncConfig]:
     return config, sync
 
 
-def _local_config_spaces() -> tuple[Config, SyncConfig]:
-    src = LocalVolume(slug="src", path="/mnt/my src")
-    dst = LocalVolume(slug="dst", path="/mnt/my dst")
-    sync = SyncConfig(
-        slug="s1",
-        source="ep-src",
-        destination="ep-dst",
-    )
-    config = Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                subdir="my backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
-        },
-        syncs={"s1": sync},
-    )
-    return config, sync
-
-
 def _remote_config_spaces() -> tuple[Config, SyncConfig]:
     src = LocalVolume(slug="src", path="/mnt/my src")
     dst_server = SshEndpoint(

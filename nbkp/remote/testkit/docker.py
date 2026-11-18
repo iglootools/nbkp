@@ -13,7 +13,6 @@ lazy from cryptography.hazmat.primitives import serialization
 lazy from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from ...config import SshConnectionOptions, SshEndpoint
-from ...fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
 from ...remote.fabricssh import run_remote_command
 from .constants import (  # noqa: F401
     LUKS_MAPPER_NAME,
@@ -43,7 +42,6 @@ _SSH_PORT_ON_LOOPBACK = {"22/tcp": ("127.0.0.1", 0)}
 class LuksMetadata:
     available: bool
     uuid: str | None = None
-    loop_device: str | None = None
 
 
 def create_test_ssh_endpoint(
@@ -290,21 +288,6 @@ def create_sentinels(
             raise RuntimeError(f"Failed to create sentinel {sentinel}: {result.stderr}")
 
 
-def prepare_btrfs_snapshot_based_backup_dst(
-    server: SshEndpoint,
-    path: str,
-) -> None:
-    ssh_exec(server, f"btrfs subvolume create {path}/{STAGING_DIR}")
-    ssh_exec(server, f"mkdir -p {path}/{SNAPSHOTS_DIR}")
-
-
-def prepare_hardlinks_snapshot_based_backup_dst(
-    server: SshEndpoint,
-    path: str,
-) -> None:
-    ssh_exec(server, f"mkdir -p {path}/{SNAPSHOTS_DIR}")
-
-
 # Tests drive LUKS through the production lifecycle functions
 # (``mount_volume`` / ``umount_volume``), which delegate to udisks
 # (``udisksctl``) authorized by the installed polkit rule.  Only
@@ -322,9 +305,7 @@ def read_luks_metadata(server: SshEndpoint) -> LuksMetadata:
         return LuksMetadata(available=False)
     else:
         uuid_result = ssh_exec(server, "cat /srv/luks-uuid")
-        loop_result = ssh_exec(server, "cat /srv/luks-loop-device")
         return LuksMetadata(
             available=True,
             uuid=uuid_result.stdout.strip(),
-            loop_device=loop_result.stdout.strip(),
         )

@@ -229,6 +229,15 @@ wheels = [
 ]
 
 [[package]]
+name = "deadcode"
+version = "2.7.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f9/89/f954368778afab9d3e8d151f9706a1a6f24fa0c73e678f35e0f14a11fb82/deadcode-2.7.0.tar.gz", hash = "sha256:b26e5e4a89c9a6069adca542fc2e6ffd9e8c6d07cf6c420c2143bee027357d9a", size = 63467, upload-time = "2026-11-16T21:20:56.739Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2a/bd/7570dc7331fb8a5d56288d15572421c9ee36997b109975d727508a8a0f72/deadcode-2.7.0-py3-none-any.whl", hash = "sha256:299694391af9e2a06be1dd41ef48bbbaf30fc9c0bc9e4d24a8e3d67c4531ccb8", size = 67457, upload-time = "2026-11-16T21:20:54.999Z" },
+]
+
+[[package]]
 name = "decorator"
 version = "5.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -538,6 +547,7 @@ keyring = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "deadcode" },
     { name = "iglootools" },
     { name = "import-linter" },
     { name = "keyring" },
@@ -567,6 +577,7 @@ provides-extras = ["docker", "keyring"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "deadcode", specifier = ">=2.7.0,<3.0" },
     { name = "iglootools", git = "https://github.com/iglootools/common?rev=v1.25.0" },
     { name = "import-linter", specifier = ">=2.15,<3.0" },
     { name = "keyring", specifier = ">=25.0,<26.0" },

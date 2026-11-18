@@ -58,7 +58,7 @@ class _RejectUnknownHostKey(paramiko.MissingHostKeyPolicy):
     unknown host is classified as an authentication failure rather than as
     an unreachable host (``RejectPolicy`` raises a bare ``SSHException``)."""
 
-    def missing_host_key(
+    def missing_host_key(  # noqa: DC04 -- Paramiko calls it
         self, client: paramiko.SSHClient, hostname: str, key: paramiko.PKey
     ) -> None:
         raise UnknownHostKeyError(hostname)

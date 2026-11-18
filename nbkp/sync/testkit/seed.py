@@ -16,7 +16,6 @@ from ...config import (
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
-    resolve_endpoint_path,
 )
 from ...fsprotocol import (
     DESTINATION_SENTINEL,
@@ -167,40 +166,6 @@ def _create_endpoint_sentinels(
                         f" || ln -sfn {DEVNULL_TARGET}"
                         f" {rp}/{LATEST_LINK}",
                     )
-
-
-def create_seed_data(
-    config: Config,
-    big_file_size_mb: int = 0,
-    remote_exec: Callable[[str], None] | None = None,
-) -> None:
-    """Generate sample files in source volumes.
-
-    Creates a handful of small files in each unique source
-    path.  When *big_file_size_mb* > 0, an additional large
-    zeroed file is written to slow down syncs for manual
-    testing.
-
-    For remote source volumes, uses *remote_exec(command)*
-    to create files on the remote host.
-    """
-    size_bytes = big_file_size_mb * 1024 * 1024
-
-    unique_sources: dict[str, tuple[LocalVolume | RemoteVolume, str | None]] = {}
-    for s in config.syncs.values():
-        src_ep = config.source_endpoint(s)
-        src_vol = config.volumes[src_ep.volume]
-        key = resolve_endpoint_path(src_vol, src_ep.subdir)
-        if key not in unique_sources:
-            unique_sources[key] = (src_vol, src_ep.subdir)
-
-    for vol, subdir in unique_sources.values():
-        seed_volume(
-            vol,
-            subdir,
-            big_file_size_bytes=size_bytes,
-            remote_exec=remote_exec,
-        )
 
 
 def seed_volume(
