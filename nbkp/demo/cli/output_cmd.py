@@ -64,8 +64,8 @@ def _print_panel(title: str, buf: StringIO) -> None:
     )
 
 
-@app.command()
-def output(ctx: typer.Context) -> None:
+@app.command("output")
+def output_cmd(ctx: typer.Context) -> None:
     """Render all human output functions with fake data."""
     _show_config_show()
     _show_config_graph()

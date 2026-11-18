@@ -11,7 +11,7 @@ from . import app
 
 
 @app.command("setup-auth")
-def setup_auth(
+def setup_auth_cmd(
     ctx: typer.Context,
     config: Annotated[
         Path | None,

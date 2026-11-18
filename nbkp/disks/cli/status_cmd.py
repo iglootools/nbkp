@@ -12,7 +12,7 @@ from .helpers import probe_and_show_status, require_known_names
 
 
 @app.command("status")
-def status(
+def status_cmd(
     ctx: typer.Context,
     config: Annotated[
         Path | None,

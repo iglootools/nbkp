@@ -15,8 +15,8 @@ from . import app
 from .helpers import check_and_display
 
 
-@app.command()
-def check(
+@app.command("check")
+def check_cmd(
     ctx: typer.Context,
     config: Annotated[
         Path | None,

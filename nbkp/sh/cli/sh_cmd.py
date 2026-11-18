@@ -13,7 +13,7 @@ from ...remote.endpoints import NetworkType
 from .. import ScriptOptions, generate_script
 
 
-def sh(
+def sh_cmd(
     ctx: typer.Context,
     config: Annotated[
         Path | None,

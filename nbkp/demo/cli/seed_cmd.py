@@ -85,8 +85,8 @@ def _step_count(docker: bool, luks: bool) -> int:
     )
 
 
-@app.command()
-def seed(
+@app.command("seed")
+def seed_cmd(
     big_file_size: Annotated[
         int,
         typer.Option(
