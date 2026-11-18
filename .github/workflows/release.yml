@@ -20,30 +20,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  bump-version:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  release:
     permissions:
-      # Write, not read: github-tag-action pushes the release tag through the API and
-      # release-action creates the GitHub release. Declared rather than inherited, so the
-      # release does not depend on the repository's default token being read-write.
+      # Must be granted here: `permissions` in the called workflow is a ceiling on what the
+      # caller allowed, not a grant. github-tag-action pushes the tag, release-action creates
+      # the GitHub release.
       contents: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          # Full history + tags required for mathieudutour/github-tag-action
-          # to find the previous tag and generate the changelog from commits
-          fetch-depth: 0
-          fetch-tags: true
-      - name: Bump version and push tag
-        id: tag-version
-        uses: mathieudutour/github-tag-action@af99e60ce8132224b8e6ebab5023449fe256ed46 # v7.0.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          fetch_all_tags: true
-      - name: Create a GitHub release
-        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1
-        with:
-          tag: ${{ steps.tag-version.outputs.new_tag }}
-          name: ${{ steps.tag-version.outputs.new_tag }}
-          body: ${{ steps.tag-version.outputs.changelog }}
+    # The job lives in iglootools/common (guidelines/project-setup/shared-workflows.md). Keep
+    # this workflow named `release`: publish.yml and demo.yml start on its completion.
+    # Rehearse a change with `with: dry-run: true`, which pushes nothing.
+    uses: iglootools/common/.github/workflows/reusable-release.yml@862ce93ed0a2733d2ee9aeacf34d9494ab43be27 # v1.24.0

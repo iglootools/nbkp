@@ -32,84 +32,21 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('main-{0}', github.event.workflow_run.head_sha || github.sha) || github.ref }}
   cancel-in-progress: true
 
-env:
-  MISE_EXPERIMENTAL: true
-  # Fail on a stale uv.lock instead of silently re-resolving on the runner, as in the
-  # test and publish workflows.
-  UV_LOCKED: 1
-  HAS_ASCIINEMA_INSTALL_ID: ${{ secrets.ASCIINEMA_INSTALL_ID != '' }}
-
 jobs:
   demo:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # workflow_run fires on both success and failure; skip if the release workflow failed.
-    # For all other triggers (push, workflow_dispatch, repository_dispatch), always run.
-    if: >-
-      github.event.workflow_run.conclusion == 'success'
-      || github.event_name != 'workflow_run'
-    # Checkout only: upload-artifact authenticates with the runner's own token, not
-    # GITHUB_TOKEN. Declared so the job does not inherit the repository's read-write default.
     permissions:
+      # Checkout only: upload-artifact authenticates with the runner's own token. Must be
+      # granted here, since the called workflow's permissions are only a ceiling.
       contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-      - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5
-        with:
-          # renovate: datasource=github-releases depName=jdx/mise
-          version: 2026.11.0
-      - name: Install pv (required by demo-magic)
-        run: sudo apt-get update && sudo apt-get install -y pv
-      - name: Record demo
-        run: mise run ci-demo-record
-      # Keep the recording downloadable: publishing from CI is disabled below.
-      # Also on failure: the cast is the only record of what went wrong inside the
-      # recorded session. demo-upload-latest only publishes from successful runs.
-      - name: Upload demo artifacts
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: demo-recording
-          # Only the cast: the agg/GIF conversion in record-demo.sh is commented out,
-          # so demo/demo.gif is not produced. Add it back here when that is re-enabled.
-          path: demo/demo.cast
-          if-no-files-found: error
-          retention-days: 90
-
-      # ---------------------------------------------------------------------------
-      # Publishing to asciinema.org is disabled: GitHub-hosted runners cannot reach
-      # that host over either address family. IPv6 has no route, and the single A
-      # record (109.107.37.0) times out at the TCP level even when pinned in
-      # /etc/hosts to take DNS out of the picture — while the same address answers
-      # HTTP 200 from outside CI. Each attempt burned ~136 s of SYN retries (the
-      # kernel's default budget) and then failed the workflow after an otherwise
-      # successful release.
-      #
-      # To publish: run
-      #   mise run demo-upload-latest
-      # from a machine that has a route to asciinema.org — it downloads the
-      # demo-recording artifact from the newest successful run and uploads it.
-      #
-      # To re-enable here: uncomment both steps below. secrets.ASCIINEMA_INSTALL_ID
-      # and the HAS_ASCIINEMA_INSTALL_ID env above are still wired up for them.
-      # ---------------------------------------------------------------------------
-      # - name: Set up asciinema install ID
-      #   if: env.HAS_ASCIINEMA_INSTALL_ID == 'true'
-      #   env:
-      #     ASCIINEMA_INSTALL_ID: ${{ secrets.ASCIINEMA_INSTALL_ID }}
-      #   run: |
-      #     mkdir -p "$HOME/.local/state/asciinema"
-      #     echo "$ASCIINEMA_INSTALL_ID" > "$HOME/.local/state/asciinema/install-id"
-      # - name: Upload demo
-      #   # Trigger on release workflow runs or on tag pushes
-      #   if: >-
-      #     startsWith(github.ref, 'refs/tags/')
-      #     || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
-      #     || github.event_name == 'workflow_dispatch'
-      #     || github.event_name == 'repository_dispatch'
-      #   env:
-      #     ASCIINEMA_SERVER_URL: https://asciinema.org
-      #   run: mise run demo-upload
+    # The job lives in iglootools/common (guidelines/project-setup/shared-workflows.md): it
+    # records the demo with `mise run ci-demo-record` and keeps the cast as the
+    # demo-recording artifact. Publishing from CI stays off, because GitHub-hosted runners
+    # cannot reach asciinema.org; publish with `mise run demo-upload-latest`.
+    uses: iglootools/common/.github/workflows/reusable-demo.yml@862ce93ed0a2733d2ee9aeacf34d9494ab43be27 # v1.24.0
+    with:
+      # Pinned here, matching the version mise.lock was generated with; the custom manager in
+      # renovate.json keeps it current.
+      # renovate: datasource=github-releases depName=jdx/mise
+      version: 2026.11.0
+      # pv: demo-magic's simulated typing.
+      apt-packages: pv
