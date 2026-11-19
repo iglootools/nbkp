@@ -2,9 +2,10 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich.console import Console
 
 from ...clidisplay import OutputFormat, echo_json
-from ...clidisplay.invocation import Invocation, print_troubleshoot_hint
+from ...clidisplay.invocation import Invocation, format_troubleshoot_hint
 from ...cliwiring.config import (
     load_config_or_exit,
     require_known_syncs,
@@ -18,7 +19,7 @@ from ...remote.endpoints import NetworkType
 from .. import show_all_syncs
 from ..disposition import failed_in_preflight, has_errors
 from ..models import ShowResult
-from ..output import print_human_show_results
+from ..output import format_human_show_results
 from . import app
 
 
@@ -133,13 +134,16 @@ def show_cmd(
             if output is OutputFormat.HUMAN and failed_in_preflight(
                 results, preflight.sync_statuses
             ):
-                print_troubleshoot_hint(
-                    Invocation.of(
-                        config,
-                        location,
-                        exclude_location,
-                        network.value if network else None,
-                    )
+                Console(stderr=True).print(
+                    format_troubleshoot_hint(
+                        Invocation.of(
+                            config,
+                            location,
+                            exclude_location,
+                            network.value if network else None,
+                        )
+                    ),
+                    soft_wrap=True,
                 )
             raise typer.Exit(1)
 
@@ -149,4 +153,4 @@ def _print_results(results: list[ShowResult], output: OutputFormat) -> None:
         case OutputFormat.JSON:
             echo_json(list(results))
         case OutputFormat.HUMAN:
-            print_human_show_results(results)
+            Console().print(format_human_show_results(results))

@@ -10,7 +10,6 @@ import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
-from rich.console import Console
 from rich.text import Text
 
 
@@ -80,20 +79,17 @@ class Invocation:
         )
 
 
-def print_troubleshoot_hint(invocation: Invocation) -> None:
-    """Point a failed command at ``nbkp preflight troubleshoot`` (on stderr).
+def format_troubleshoot_hint(invocation: Invocation) -> Text:
+    """Point a failed command at ``nbkp preflight troubleshoot``.
 
     For commands whose JSON output is a bare list, which has no room for the
-    ``hint`` field ``run`` adds to its JSON object: they print this in human
-    mode only.
+    ``hint`` field ``run`` adds to its JSON object: they print this, to
+    stderr, in human mode only.  Print it with ``soft_wrap=True`` so the
+    command stays on one line and can be copy-pasted.
     """
-    # Text, not markup: the config path is not nbkp-authored. soft_wrap keeps
-    # the command on one line so it can be copy-pasted.
-    Console(stderr=True).print(
-        Text.assemble(
-            "Run ",
-            (invocation.command("preflight", "troubleshoot"), "bold"),
-            " for step-by-step fixes.",
-        ),
-        soft_wrap=True,
+    # Text, not markup: the config path is not nbkp-authored.
+    return Text.assemble(
+        "Run ",
+        (invocation.command("preflight", "troubleshoot"), "bold"),
+        " for step-by-step fixes.",
     )

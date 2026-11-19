@@ -1,4 +1,4 @@
-from rich.console import Console, Group, RenderableType
+from rich.console import Group, RenderableType
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -372,23 +372,21 @@ def build_check_sections(
     ]
 
 
-def print_human_check(
+def format_human_check(
     ssh_statuses: dict[str, SshEndpointStatus],
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
     config: Config,
     *,
-    console: Console | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     wrap_in_panel: bool = True,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
     invocation: Invocation | None = None,
-) -> None:
+) -> RenderableType:
     """*invocation* carries the config path and endpoint flags so the
     ``troubleshoot`` suggestion can be copy-pasted as-is.
     """
-    con = console if console is not None else Console()
-    sections = [
+    sections = Group(
         *build_check_sections(
             ssh_statuses,
             vol_statuses,
@@ -398,19 +396,17 @@ def print_human_check(
             strictness,
         ),
         *_troubleshoot_hint(ssh_statuses, sync_statuses, invocation or Invocation()),
-    ]
-    if wrap_in_panel:
-        con.print(
-            Panel(
-                Group(*sections),
-                title="[bold]Preflight Checks[/bold]",
-                border_style="cyan",
-                padding=(0, 1),
-            )
+    )
+    return (
+        Panel(
+            sections,
+            title="[bold]Preflight Checks[/bold]",
+            border_style="cyan",
+            padding=(0, 1),
         )
-    else:
-        for section in sections:
-            con.print(section)
+        if wrap_in_panel
+        else sections
+    )
 
 
 def _troubleshoot_hint(

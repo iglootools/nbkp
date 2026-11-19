@@ -1,6 +1,6 @@
 import shlex
 
-from rich.console import Console, Group, RenderableType
+from rich.console import Group, RenderableType
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -141,31 +141,26 @@ def build_run_preview_sections(
     ]
 
 
-def print_run_preview(
+def format_run_preview(
     sync_statuses: dict[str, SyncStatus],
     config: Config,
     *,
-    console: Console | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     wrap_in_panel: bool = True,
-) -> None:
-    re = resolved_endpoints or {}
-    c = console or Console()
-
-    sections = build_run_preview_sections(sync_statuses, config, re)
-
-    if wrap_in_panel:
-        c.print(
-            Panel(
-                Group(*sections),
-                title="[bold]Run Preview[/bold]",
-                border_style="cyan",
-                padding=(0, 1),
-            )
+) -> RenderableType:
+    sections = Group(
+        *build_run_preview_sections(sync_statuses, config, resolved_endpoints or {})
+    )
+    return (
+        Panel(
+            sections,
+            title="[bold]Run Preview[/bold]",
+            border_style="cyan",
+            padding=(0, 1),
         )
-    else:
-        for section in sections:
-            c.print(section)
+        if wrap_in_panel
+        else sections
+    )
 
 
 def _format_snapshot_display(
@@ -248,16 +243,12 @@ def build_human_results_sections(
     return [table]
 
 
-def print_human_results(
+def format_human_results(
     results: list[SyncResult],
     dry_run: bool,
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
-    *,
-    console: Console | None = None,
-) -> None:
-    c = console or Console()
-    for section in build_human_results_sections(
-        results, dry_run, config, resolved_endpoints
-    ):
-        c.print(section)
+) -> Group:
+    return Group(
+        *build_human_results_sections(results, dry_run, config, resolved_endpoints)
+    )

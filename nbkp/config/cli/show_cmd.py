@@ -2,11 +2,12 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich.console import Console
 
 from ...clidisplay import OutputFormat, echo_json
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...cliwiring.runtime import runtime_of
-from ..output import print_human_config
+from ..output import format_human_config
 from . import app
 
 
@@ -36,4 +37,4 @@ def show_cmd(
             echo_json(cfg.model_dump(by_alias=True, mode="json"))
         case OutputFormat.HUMAN:
             resolved = resolve_endpoints(cfg, None, None, None)
-            print_human_config(cfg, resolved_endpoints=resolved)
+            Console().print(format_human_config(cfg, resolved_endpoints=resolved))

@@ -19,7 +19,7 @@ from nbkp.disks import MountToolCapabilities
 from nbkp.preflight.output import (
     TroubleshootContext,
     collect_issues,
-    print_human_troubleshoot,
+    format_human_troubleshoot,
     troubleshoot_json,
 )
 from nbkp.preflight.status.ssh import (
@@ -42,13 +42,14 @@ def _render(
     ssh: dict[str, SshEndpointStatus] | None = None,
 ) -> str:
     buf = StringIO()
-    print_human_troubleshoot(
-        ssh or {},
-        vol_statuses,
-        {},
-        config,
-        console=Console(file=buf, width=200, color_system=None),
-        context=ctx,
+    Console(file=buf, width=200, color_system=None).print(
+        format_human_troubleshoot(
+            ssh or {},
+            vol_statuses,
+            {},
+            config,
+            context=ctx,
+        )
     )
     return buf.getvalue()
 

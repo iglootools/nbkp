@@ -26,10 +26,6 @@ For general coding, Python, and tooling guidelines, see the [common guidelines](
     mirror the OpenSSH and Paramiko option names they map to; the unit is in each field's
     description and the config reference. Retire this exception in a major release that
     accepts durations with a unit (`10s`), keeping a bare number as seconds.
-  - *Pending — output modules that print:* the `print_*` functions in `output.py` modules
-    (`config`, `ordering`, `preflight`, `snapshots`, `sync`) write to the console
-    rather than returning text for their `cli/` command to print. Convert a module to
-    `format_*` functions when a change next reaches it; this entry goes when none print.
   - *Pending — shared options:* every `typer.Option` is written inline, including those that
     several commands share (`--config`, `--output`, `--dry-run`, the endpoint filters). Move a
     shared one to an `Annotated` `<NAME>_OPTION` constant when a change next reaches it; this

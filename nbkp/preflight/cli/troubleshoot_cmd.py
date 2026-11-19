@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich.console import Console
 
 from ...clidisplay import OutputFormat, echo_json
 from ...clidisplay.invocation import Invocation
@@ -14,7 +15,7 @@ from ...remote.endpoints import NetworkType
 from ..output import (
     TroubleshootContext,
     collect_issues,
-    print_human_troubleshoot,
+    format_human_troubleshoot,
     troubleshoot_json,
 )
 from ..status.result import PreflightResult
@@ -150,12 +151,14 @@ def _report(
                 troubleshoot_json(issues, ctx, has_fatal_errors=fatal, run=runtime.run)
             )
         case OutputFormat.HUMAN:
-            print_human_troubleshoot(
-                preflight.ssh_endpoint_statuses,
-                preflight.volume_statuses,
-                preflight.sync_statuses,
-                ctx.config,
-                context=ctx,
-                strictness=strictness,
-                run=runtime.run,
+            Console().print(
+                format_human_troubleshoot(
+                    preflight.ssh_endpoint_statuses,
+                    preflight.volume_statuses,
+                    preflight.sync_statuses,
+                    ctx.config,
+                    context=ctx,
+                    strictness=strictness,
+                    run=runtime.run,
+                )
             )

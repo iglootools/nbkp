@@ -7,16 +7,16 @@ from pydantic import BaseModel, ValidationError
 from rich.console import Console
 
 from nbkp.config import ConfigError, ConfigErrorKind
-from nbkp.config.output import config_error_json, print_config_error
+from nbkp.config.output import config_error_json, format_config_error
 
 
 def _render(e: ConfigError) -> str:
     buf = StringIO()
-    print_config_error(e, console=Console(file=buf, width=200))
+    Console(file=buf, width=200).print(format_config_error(e))
     return buf.getvalue()
 
 
-class TestPrintConfigError:
+class TestFormatConfigError:
     def test_reason_survives_in_title(self) -> None:
         """The title's own brackets are literal, not a Rich style tag."""
         e = ConfigError("boom", reason=ConfigErrorKind.INVALID_YAML)

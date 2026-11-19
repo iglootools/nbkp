@@ -3,15 +3,16 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich.console import Console
 
 from ...clidisplay import OutputFormat, echo_json
 from ...cliwiring.config import load_config_or_exit
 from ...cliwiring.runtime import runtime_of
 from ..output import (
     build_graph_json,
-    print_mermaid_ascii_graph,
-    print_mermaid_graph,
-    print_rich_tree_graph,
+    format_mermaid_ascii_graph,
+    format_mermaid_graph,
+    format_rich_tree_graph,
 )
 from . import app
 
@@ -53,8 +54,10 @@ def graph_cmd(
         case OutputFormat.HUMAN:
             match format:
                 case GraphFormat.RICH_TREE:
-                    print_rich_tree_graph(cfg)
+                    Console().print(format_rich_tree_graph(cfg))
                 case GraphFormat.MERMAID_ASCII:
-                    print_mermaid_ascii_graph(cfg)
+                    Console().print(format_mermaid_ascii_graph(cfg))
                 case GraphFormat.MERMAID:
-                    print_mermaid_graph(cfg)
+                    # soft_wrap: lines wider than the terminal stay whole,
+                    # since the output is piped into a mermaid renderer.
+                    Console().print(format_mermaid_graph(cfg), soft_wrap=True)

@@ -1,4 +1,3 @@
-from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
@@ -45,13 +44,7 @@ def _status_text(
             return Text("OK", style="green")
 
 
-def print_human_prune_results(
-    results: list[PruneResult],
-    dry_run: bool,
-    *,
-    console: Console | None = None,
-) -> None:
-    c = console or Console()
+def format_human_prune_results(results: list[PruneResult], dry_run: bool) -> Table:
     mode = " (dry run)" if dry_run else ""
 
     table = Table(
@@ -71,7 +64,7 @@ def print_human_prune_results(
             status,
         )
 
-    c.print(table)
+    return table
 
 
 def _show_row(r: ShowResult) -> tuple[str, str, str, str, str, Text]:
@@ -91,13 +84,7 @@ def _show_row(r: ShowResult) -> tuple[str, str, str, str, str, Text]:
             )
 
 
-def print_human_show_results(
-    results: list[ShowResult],
-    *,
-    console: Console | None = None,
-) -> None:
-    c = console or Console()
-
+def format_human_show_results(results: list[ShowResult]) -> Table:
     table = Table(title="Snapshots:")
     table.add_column("Name", style="bold")
     table.add_column("Mode")
@@ -109,4 +96,4 @@ def print_human_show_results(
     for r in results:
         table.add_row(*_show_row(r))
 
-    c.print(table)
+    return table

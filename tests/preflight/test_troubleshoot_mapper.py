@@ -100,10 +100,10 @@ class TestCleartextDeviceRendering:
             facts=rem.RemediationFacts(cleartext_devices={vol.slug: _LABELLED}),
         )
         buf = StringIO()
-        ts.print_issues(
-            Console(file=buf, width=200, color_system=None),
-            _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH),
-            ctx,
+        Console(file=buf, width=200, color_system=None).print(
+            ts.format_issues(
+                _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH), ctx
+            )
         )
         out = buf.getvalue()
         assert f"{_LABELLED}  /mnt/seagate8tb" in out

@@ -10,11 +10,11 @@ with the same remediation text in plain form; rendering itself does no I/O.
 """
 
 import enum
-from collections.abc import Callable
 from dataclasses import dataclass, replace
 from io import StringIO
 
-from rich.console import Console
+from rich.console import Console, Group, RenderableType
+from rich.text import Text
 
 from ...config import Config, LocalVolume, MountConfig, RemoteVolume, SyncConfig
 from ...disks import DeviceProbeError, discover_cleartext_device, generate_auth_rules
@@ -35,16 +35,17 @@ from ..status.volume import VolumeErrorKind, VolumeStatus
 from .remediation import (
     ERROR,
     HEADER,
+    Lines,
     RemediationFacts,
     TroubleshootContext,
+    format_destination_endpoint_error_fix,
+    format_line,
+    format_source_endpoint_error_fix,
+    format_ssh_endpoint_error_fix,
+    format_ssh_endpoint_warning_fix,
+    format_sync_error_fix,
+    format_volume_error_fix,
     polkit_user,
-    print_destination_endpoint_error_fix,
-    print_source_endpoint_error_fix,
-    print_ssh_endpoint_error_fix,
-    print_ssh_endpoint_warning_fix,
-    print_sync_error_fix,
-    print_volume_error_fix,
-    say,
 )
 
 # Cascade errors are pointers to inactive lower layers — they have no
@@ -315,37 +316,35 @@ def with_remediation_facts(
     )
 
 
-def print_issue_fix(
-    console: Console, issue: TroubleshootIssue, ctx: TroubleshootContext
-) -> None:
+def format_issue_fix(issue: TroubleshootIssue, ctx: TroubleshootContext) -> Lines:
     match issue:
         case TroubleshootIssue(
             error=SshEndpointWarningKind() as warning,
             ssh_status=SshEndpointStatus() as st,
         ):
-            print_ssh_endpoint_warning_fix(console, st, warning)
+            return format_ssh_endpoint_warning_fix(st, warning)
         case TroubleshootIssue(
             error=SshEndpointErrorKind() as error, ssh_status=SshEndpointStatus() as st
         ):
-            print_ssh_endpoint_error_fix(console, st, error, ctx)
+            return format_ssh_endpoint_error_fix(st, error, ctx)
         case TroubleshootIssue(
             error=VolumeErrorKind() as error, vol_status=VolumeStatus() as vs
         ):
-            print_volume_error_fix(console, vs, error, ctx)
+            return format_volume_error_fix(vs, error, ctx)
         case TroubleshootIssue(
             error=SourceEndpointErrorKind() as error, sync=SyncConfig() as sync
         ):
-            print_source_endpoint_error_fix(console, error, sync, ctx)
+            return format_source_endpoint_error_fix(error, sync, ctx)
         case TroubleshootIssue(
             error=DestinationEndpointErrorKind() as error, sync=SyncConfig() as sync
         ):
-            print_destination_endpoint_error_fix(console, error, sync, ctx)
+            return format_destination_endpoint_error_fix(error, sync, ctx)
         case TroubleshootIssue(
             error=SyncErrorKind() as error, sync=SyncConfig() as sync
         ):
-            print_sync_error_fix(console, sync, error, ctx)
+            return format_sync_error_fix(sync, error, ctx)
         case _:
-            pass
+            return []
 
 
 def _issue_label(issue: TroubleshootIssue) -> tuple[str, str]:
@@ -356,74 +355,80 @@ def _issue_label(issue: TroubleshootIssue) -> tuple[str, str]:
     )
 
 
-def _print_group(
-    console: Console,
+def _format_group(
     layer: Layer,
     subject: str,
     issues: list[TroubleshootIssue],
     ctx: TroubleshootContext,
-) -> None:
-    console.print()
-    say(
-        console,
-        HEADER,
-        (f"{_HEADERS[layer]} ", "bold"),
-        (repr(subject), "bold"),
-        (":", "bold"),
-    )
-    for issue in issues:
-        say(console, ERROR, _issue_label(issue))
-        print_issue_fix(console, issue, ctx)
+) -> Lines:
+    return [
+        Text(""),
+        format_line(
+            HEADER,
+            (f"{_HEADERS[layer]} ", "bold"),
+            (repr(subject), "bold"),
+            (":", "bold"),
+        ),
+        *(
+            line
+            for issue in issues
+            for line in (
+                format_line(ERROR, _issue_label(issue)),
+                *format_issue_fix(issue, ctx),
+            )
+        ),
+    ]
 
 
-def print_issues(
-    console: Console,
-    issues: list[TroubleshootIssue],
-    ctx: TroubleshootContext,
-) -> None:
+def format_issues(issues: list[TroubleshootIssue], ctx: TroubleshootContext) -> Group:
     """Pure rendering: facts missing from ``ctx.facts`` are rendered as unknown
     (default mapper name, no polkit rule body).
     """
     groups = list(dict.fromkeys((i.layer, i.subject) for i in issues))
-    for layer, subject in groups:
-        _print_group(
-            console,
-            layer,
-            subject,
-            [i for i in issues if (i.layer, i.subject) == (layer, subject)],
-            ctx,
+    return Group(
+        *(
+            line
+            for layer, subject in groups
+            for line in _format_group(
+                layer,
+                subject,
+                [i for i in issues if (i.layer, i.subject) == (layer, subject)],
+                ctx,
+            )
         )
+    )
 
 
-def print_human_troubleshoot(
+def format_human_troubleshoot(
     ssh_statuses: dict[str, SshEndpointStatus],
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
     config: Config,
     *,
-    console: Console | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     context: TroubleshootContext | None = None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
     run: VolumeCommandRunner = run_on_volume,
-) -> None:
+) -> RenderableType:
     """*context* carries the invocation flags and local user used in
     suggested commands; facts it lacks are gathered through *run*.
     """
-    con = console if console is not None else Console()
     ctx = context or TroubleshootContext(
         config=config, resolved_endpoints=resolved_endpoints or {}
     )
     issues = collect_issues(ssh_statuses, vol_statuses, sync_statuses, strictness)
-    if issues:
-        print_issues(con, issues, with_remediation_facts(issues, ctx, run=run))
-    else:
-        con.print("No issues found. All volumes and syncs are active.")
+    return (
+        format_issues(issues, with_remediation_facts(issues, ctx, run=run))
+        if issues
+        else "No issues found. All volumes and syncs are active."
+    )
 
 
-def _render_plain(render: Callable[[Console], None]) -> str:
+def _render_plain(lines: Lines) -> str:
     buf = StringIO()
-    render(Console(file=buf, width=100, color_system=None, highlight=False))
+    Console(file=buf, width=100, color_system=None, highlight=False).print(
+        Group(*lines)
+    )
     return buf.getvalue().rstrip("\n")
 
 
@@ -453,9 +458,7 @@ def troubleshoot_json(
                 "code": issue.error.name,
                 "message": issue.error.value,
                 "severity": issue.severity.value,
-                "remediation": _render_plain(
-                    lambda con, issue=issue: print_issue_fix(con, issue, ctx)
-                ),
+                "remediation": _render_plain(format_issue_fix(issue, ctx)),
             }
             for issue in issues
         ],
