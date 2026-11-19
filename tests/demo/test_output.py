@@ -45,5 +45,5 @@ def test_demo_output_renders_all_sections() -> None:
     assert result.exit_code == 0, result.output
     assert run.commands_starting_with("lsblk")
     # Sanity: the command renders panels named after the output functions.
-    assert "print_human_config" in result.output
-    assert "print_human_troubleshoot" in result.output
+    assert "format_human_config" in result.output
+    assert "format_human_troubleshoot" in result.output

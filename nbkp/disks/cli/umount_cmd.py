@@ -3,9 +3,10 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich.console import Console
 
 from ...clidisplay import OutputFormat
-from ...clidisplay.invocation import Invocation, print_troubleshoot_hint
+from ...clidisplay.invocation import Invocation, format_troubleshoot_hint
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...cliwiring.mount_progress import LifecycleProgress, mount_display_names
 from ...cliwiring.runtime import Runtime, runtime_of
@@ -99,13 +100,16 @@ def umount_cmd(
     )
     if any_failed(results):
         if output is OutputFormat.HUMAN:
-            print_troubleshoot_hint(
-                Invocation.of(
-                    config,
-                    location,
-                    exclude_location,
-                    network.value if network else None,
-                )
+            Console(stderr=True).print(
+                format_troubleshoot_hint(
+                    Invocation.of(
+                        config,
+                        location,
+                        exclude_location,
+                        network.value if network else None,
+                    )
+                ),
+                soft_wrap=True,
             )
         raise typer.Exit(1)
 

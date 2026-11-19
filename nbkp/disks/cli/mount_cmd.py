@@ -7,7 +7,7 @@ from rich.console import Console
 from rich.text import Text
 
 from ...clidisplay import OutputFormat, echo_json
-from ...clidisplay.invocation import Invocation, print_troubleshoot_hint
+from ...clidisplay.invocation import Invocation, format_troubleshoot_hint
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...cliwiring.credentials import prompt_passphrase
 from ...cliwiring.mount_progress import LifecycleProgress, mount_display_names
@@ -118,7 +118,9 @@ def mount_cmd(
         _print_auth_hint(results, invocation)
     if any_failed(results):
         if output is OutputFormat.HUMAN:
-            print_troubleshoot_hint(invocation)
+            Console(stderr=True).print(
+                format_troubleshoot_hint(invocation), soft_wrap=True
+            )
         raise typer.Exit(1)
 
 

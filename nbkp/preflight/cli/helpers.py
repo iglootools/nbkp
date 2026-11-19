@@ -1,5 +1,7 @@
 from collections.abc import Collection
 
+from rich.console import Console
+
 from ...clidisplay import OutputFormat
 from ...clidisplay.invocation import Invocation
 from ...cliwiring.preflight import check_all_with_progress
@@ -8,7 +10,7 @@ from ...config import Config
 from ...disks import MountObservation
 from ...policy import Strictness
 from ...preflight import PreflightResult
-from ...preflight.output import print_human_check
+from ...preflight.output import format_human_check
 from ...remote.endpoints import ResolvedEndpoints
 from ..strictness import has_fatal_errors
 
@@ -45,14 +47,16 @@ def check_and_display(
     )
 
     if output_format is OutputFormat.HUMAN:
-        print_human_check(
-            preflight.ssh_endpoint_statuses,
-            preflight.volume_statuses,
-            preflight.sync_statuses,
-            cfg,
-            resolved_endpoints=resolved_endpoints,
-            strictness=strictness,
-            invocation=invocation,
+        Console().print(
+            format_human_check(
+                preflight.ssh_endpoint_statuses,
+                preflight.volume_statuses,
+                preflight.sync_statuses,
+                cfg,
+                resolved_endpoints=resolved_endpoints,
+                strictness=strictness,
+                invocation=invocation,
+            )
         )
 
     return preflight, has_fatal_errors(preflight.sync_statuses, strictness=strictness)

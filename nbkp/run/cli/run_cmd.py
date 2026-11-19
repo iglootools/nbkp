@@ -22,7 +22,7 @@ from ...cliwiring.config import (
     require_known_syncs,
     resolve_endpoints,
 )
-from ...cliwiring.mount import managed_mount, print_umount_failures
+from ...cliwiring.mount import format_umount_failures, managed_mount
 from ...cliwiring.mount_progress import mount_display_names
 from ...cliwiring.preflight import end_check_step, start_check_step
 from ...cliwiring.runtime import runtime_of
@@ -36,7 +36,7 @@ from ...preflight import (
     PreflightResult,
     check_step_count,
 )
-from ...preflight.output import print_human_check
+from ...preflight.output import format_human_check
 from ...remote.endpoints import NetworkType, ResolvedEndpoints
 from ...sync import ProgressMode, SyncResult, result_severity
 from ...sync.output import build_human_results_sections
@@ -243,14 +243,16 @@ class _HumanProgress:
     def on_checks_done(self, preflight: PreflightResult) -> None:
         if self._check_bar is not None:
             self._check_bar.stop()
-        print_human_check(
-            preflight.ssh_endpoint_statuses,
-            preflight.volume_statuses,
-            preflight.sync_statuses,
-            self._cfg,
-            resolved_endpoints=self._resolved,
-            strictness=self._strictness,
-            invocation=self._invocation,
+        self._console.print(
+            format_human_check(
+                preflight.ssh_endpoint_statuses,
+                preflight.volume_statuses,
+                preflight.sync_statuses,
+                self._cfg,
+                resolved_endpoints=self._resolved,
+                strictness=self._strictness,
+                invocation=self._invocation,
+            )
         )
 
     def sync_callbacks(self) -> SyncCallbacks:
@@ -301,7 +303,9 @@ def _print_outcome(
                 _results_panel(pipeline, cfg, resolved, strictness, dry_run)
             )
     if output is OutputFormat.HUMAN:
-        print_umount_failures(umount_results, mount_display_names(cfg))
+        Console(stderr=True).print(
+            format_umount_failures(umount_results, mount_display_names(cfg))
+        )
 
 
 def run_json(

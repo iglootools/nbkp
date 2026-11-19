@@ -2,7 +2,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 
 import typer
-from rich.console import Console
+from rich.console import Console, Group, RenderableType
 from rich.text import Text
 
 from ..clidisplay import OutputFormat
@@ -26,19 +26,17 @@ from .mount_progress import LifecycleProgress
 from .runtime import Runtime
 
 
-def _print_mount_status(
+def _format_mount_status(
     progress: LifecycleProgress,
     mount_observations: dict[str, MountObservation],
-) -> None:
-    """Print the post-mount status table (human output only)."""
-    Console().print(
-        build_mount_status_table(
-            [
-                (progress.display_names.get(slug, slug), obs)
-                for slug, obs in mount_observations.items()
-            ],
-            strictness=progress.strictness,
-        )
+) -> RenderableType:
+    """The post-mount status table (human output only)."""
+    return build_mount_status_table(
+        [
+            (progress.display_names.get(slug, slug), obs)
+            for slug, obs in mount_observations.items()
+        ],
+        strictness=progress.strictness,
     )
 
 
@@ -124,7 +122,7 @@ def managed_mount(
             progress.stop_mounting()
             _resolved_config, mount_observations = result
             if use_progress and mount_observations:
-                _print_mount_status(progress, mount_observations)
+                Console().print(_format_mount_status(progress, mount_observations))
             yield result
     finally:
         progress.stop_all()
@@ -143,22 +141,23 @@ def _exit_on_umount_failure(
     format, since stdout already holds the command's report.
     """
     if any_failed(results):
-        print_umount_failures(results, display_names)
+        Console(stderr=True).print(format_umount_failures(results, display_names))
         raise typer.Exit(1)
 
 
-def print_umount_failures(
+def format_umount_failures(
     results: list[UmountResult], display_names: dict[str, str]
-) -> None:
-    """One stderr line per volume that could not be unmounted or locked."""
-    console = Console(stderr=True)
-    for r in results:
-        if not r.success:
-            console.print(
-                Text.assemble(
-                    ("Umount failed: ", "bold red"),
-                    f"{display_names.get(r.volume_slug, r.volume_slug)}: ",
-                    umount_failure_detail(r) or "",
-                    f" ({umount_failure_warning(r)})",
-                )
+) -> Group:
+    """One line per volume that could not be unmounted or locked, for stderr."""
+    return Group(
+        *(
+            Text.assemble(
+                ("Umount failed: ", "bold red"),
+                f"{display_names.get(r.volume_slug, r.volume_slug)}: ",
+                umount_failure_detail(r) or "",
+                f" ({umount_failure_warning(r)})",
             )
+            for r in results
+            if not r.success
+        )
+    )
