@@ -41,7 +41,7 @@ $ nbkp run [OPTIONS]
 
 * `-c, --config <file>`: Path to config file
 * `-n, --dry-run`: Perform a dry run
-* `-s, --sync <str>`: Sync name(s) to run
+* `-s, --sync <str>`: Sync name(s) to include
 * `-o, --output <human|json>`: Output format  [default: human]
 * `-p, --progress <none|overall|per-file|full>`: Progress mode: none, overall, per-file, or full
 * `--prune / --no-prune`: Prune old snapshots after sync  [default: prune]
@@ -50,7 +50,7 @@ $ nbkp run [OPTIONS]
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
 * `--mount / --no-mount`: Mount/umount volumes with mount config  [default: mount]
-* `--umount / --no-umount`: Umount after sync (use --no-umount for debugging)  [default: umount]
+* `--umount / --no-umount`: Umount when done (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
 
 ## `nbkp sh`
@@ -181,7 +181,7 @@ $ nbkp disks mount [OPTIONS]
 
 * `-c, --config <file>`: Path to config file
 * `-o, --output <human|json>`: Output format  [default: human]
-* `-n, --name <str>`: Volume name(s) to mount
+* `-n, --name <str>`: Volume name(s) to include
 * `-l, --location <str>`: Prefer endpoints at these locations
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
@@ -202,7 +202,7 @@ $ nbkp disks umount [OPTIONS]
 
 * `-c, --config <file>`: Path to config file
 * `-o, --output <human|json>`: Output format  [default: human]
-* `-n, --name <str>`: Volume name(s) to umount
+* `-n, --name <str>`: Volume name(s) to include
 * `-l, --location <str>`: Prefer endpoints at these locations
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
@@ -223,7 +223,7 @@ $ nbkp disks status [OPTIONS]
 
 * `-c, --config <file>`: Path to config file
 * `-o, --output <human|json>`: Output format  [default: human]
-* `-n, --name <str>`: Volume name(s) to check
+* `-n, --name <str>`: Volume name(s) to include
 * `-l, --location <str>`: Prefer endpoints at these locations
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
@@ -318,8 +318,8 @@ $ nbkp preflight check [OPTIONS]
 * `-l, --location <str>`: Prefer endpoints at these locations
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
-* `--mount / --no-mount`: Mount/umount volumes with mount config before checking  [default: mount]
-* `--umount / --no-umount`: Umount after check (use --no-umount for debugging)  [default: umount]
+* `--mount / --no-mount`: Mount/umount volumes with mount config  [default: mount]
+* `--umount / --no-umount`: Umount when done (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
 
 ### `nbkp preflight troubleshoot`
@@ -340,8 +340,8 @@ $ nbkp preflight troubleshoot [OPTIONS]
 * `-l, --location <str>`: Prefer endpoints at these locations
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
-* `--mount / --no-mount`: Mount/umount volumes with mount config before checking  [default: mount]
-* `--umount / --no-umount`: Umount after check (use --no-umount for debugging)  [default: umount]
+* `--mount / --no-mount`: Mount/umount volumes with mount config  [default: mount]
+* `--umount / --no-umount`: Umount when done (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
 
 ## `nbkp snapshots`
@@ -376,7 +376,7 @@ $ nbkp snapshots prune [OPTIONS]
 **Options**:
 
 * `-c, --config <file>`: Path to config file
-* `-s, --sync <str>`: Sync name(s) to prune
+* `-s, --sync <str>`: Sync name(s) to include
 * `-n, --dry-run`: Perform a dry run
 * `-o, --output <human|json>`: Output format  [default: human]
 * `-S, --strictness <ignore-none|ignore-inactive|ignore-all>`: How to handle preflight errors: ignore-none (inactive syncs fail), ignore-inactive (skip expected-inactive, default), ignore-all (skip syncs with preflight errors)  [default: ignore-inactive]
@@ -384,7 +384,7 @@ $ nbkp snapshots prune [OPTIONS]
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
 * `--mount / --no-mount`: Mount/umount volumes with mount config  [default: mount]
-* `--umount / --no-umount`: Umount after prune (use --no-umount for debugging)  [default: umount]
+* `--umount / --no-umount`: Umount when done (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
 
 ### `nbkp snapshots show`
@@ -400,14 +400,14 @@ $ nbkp snapshots show [OPTIONS]
 **Options**:
 
 * `-c, --config <file>`: Path to config file
-* `-s, --sync <str>`: Sync name(s) to show
+* `-s, --sync <str>`: Sync name(s) to include
 * `-o, --output <human|json>`: Output format  [default: human]
 * `-S, --strictness <ignore-none|ignore-inactive|ignore-all>`: How to handle preflight errors: ignore-none (inactive syncs fail), ignore-inactive (skip expected-inactive, default), ignore-all (skip syncs with preflight errors)  [default: ignore-inactive]
 * `-l, --location <str>`: Prefer endpoints at these locations
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
 * `--mount / --no-mount`: Mount/umount volumes with mount config  [default: mount]
-* `--umount / --no-umount`: Umount after show (use --no-umount for debugging)  [default: umount]
+* `--umount / --no-umount`: Umount when done (use --no-umount for debugging)  [default: umount]
 * `--help`: Show this message and exit.
 
 ## `nbkp demo`

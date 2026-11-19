@@ -19,17 +19,22 @@ For general coding, Python, and tooling guidelines, see the [common guidelines](
 - **Naming Conventions**: the shared ones, in
   [general.md › Naming](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#naming)
   and [python.md › Naming](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#naming),
-  with this exception and the pending work below.
+  with these exceptions.
   - *Exception — SSH timeouts in plain seconds:* `connect-timeout`, `server-alive-interval`,
     `banner-timeout`, `auth-timeout` and `channel-timeout` are numbers of seconds, with no unit
     in the name and no duration type. They are configuration keys users have written, and they
     mirror the OpenSSH and Paramiko option names they map to; the unit is in each field's
     description and the config reference. Retire this exception in a major release that
     accepts durations with a unit (`10s`), keeping a bare number as seconds.
-  - *Pending — shared options:* every `typer.Option` is written inline, including those that
-    several commands share (`--config`, `--output`, `--dry-run`, the endpoint filters). Move a
-    shared one to an `Annotated` `<NAME>_OPTION` constant when a change next reaches it; this
-    entry goes when no option is defined twice.
+  - *Exception — options whose help is per command:* `--strictness` in `run`,
+    `preflight check` and `preflight troubleshoot`, and the long-only `--dry-run` of
+    `disks mount` and `disks umount` and the one of `demo seed`, are written inline in each
+    command rather than as a shared `<NAME>_OPTION` constant. The flag is shared but what it
+    does is not: each help text says what that command does at each strictness level, or
+    what a dry run skips there, and one constant would carry one wording for all of them.
+    The other shared options live in `cliwiring/options.py`, and those shared within one
+    sub-app in its `cli/options.py`. Retire this exception for a flag once its commands
+    behave alike, or if Typer lets a shared option take per-command help.
 - **CLI**
   - Use `typer` for CLI implementation (argument parsing, formatting, etc.)
   - Provide both human-readable and JSON output formats for all commands, with human-readable as the default.

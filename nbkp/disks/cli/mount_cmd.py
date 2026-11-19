@@ -1,5 +1,4 @@
 from functools import partial
-from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -11,10 +10,17 @@ from ...clidisplay.invocation import Invocation, format_troubleshoot_hint
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...cliwiring.credentials import prompt_passphrase
 from ...cliwiring.mount_progress import LifecycleProgress, mount_display_names
+from ...cliwiring.options import (
+    CONFIG_OPTION,
+    EXCLUDE_LOCATION_OPTION,
+    LOCATION_OPTION,
+    NETWORK_OPTION,
+    OUTPUT_OPTION,
+)
 from ...cliwiring.runtime import Runtime, runtime_of
 from ...config import Config
 from ...credentials import build_passphrase_fn, prefetch_passphrases
-from ...remote.endpoints import NetworkType, ResolvedEndpoints
+from ...remote.endpoints import ResolvedEndpoints
 from ..lifecycle import MountResult, any_failed, mount_volumes, refused_by_polkit
 from ..mount_checks import check_mount_status
 from ..observation import build_mount_observations
@@ -33,50 +39,18 @@ from .helpers import (
     unprobed_statuses,
 )
 from .helpers.plan_output import show_plan
+from .options import NAME_OPTION
 
 
 @app.command("mount")
 def mount_cmd(
     ctx: typer.Context,
-    config: Annotated[
-        Path | None,
-        typer.Option(
-            "--config",
-            "-c",
-            help="Path to config file",
-            file_okay=True,
-            dir_okay=False,
-            resolve_path=True,
-        ),
-    ] = None,
-    output: Annotated[
-        OutputFormat,
-        typer.Option("--output", "-o", help="Output format"),
-    ] = OutputFormat.HUMAN,
-    name: Annotated[
-        list[str] | None,
-        typer.Option("--name", "-n", help="Volume name(s) to mount"),
-    ] = None,
-    location: Annotated[
-        list[str] | None,
-        typer.Option("--location", "-l", help="Prefer endpoints at these locations"),
-    ] = None,
-    exclude_location: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--exclude-location",
-            "-L",
-            help="Exclude endpoints at these locations",
-        ),
-    ] = None,
-    network: Annotated[
-        NetworkType | None,
-        typer.Option(
-            "--network",
-            "-N",
-            help="Prefer private (LAN) or public (WAN) endpoints",
-        ),
-    ] = None,
+    config: CONFIG_OPTION = None,
+    output: OUTPUT_OPTION = OutputFormat.HUMAN,
+    name: NAME_OPTION = None,
+    location: LOCATION_OPTION = None,
+    exclude_location: EXCLUDE_LOCATION_OPTION = None,
+    network: NETWORK_OPTION = None,
     dry_run: Annotated[
         bool,
         typer.Option(

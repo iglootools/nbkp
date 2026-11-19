@@ -8,24 +8,19 @@ import typer
 
 from ...clidisplay.invocation import display_path
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
+from ...cliwiring.options import (
+    CONFIG_OPTION,
+    EXCLUDE_LOCATION_OPTION,
+    LOCATION_OPTION,
+    NETWORK_OPTION,
+)
 from ...cliwiring.runtime import runtime_of
-from ...remote.endpoints import NetworkType
 from .. import ScriptOptions, generate_script
 
 
 def sh_cmd(
     ctx: typer.Context,
-    config: Annotated[
-        Path | None,
-        typer.Option(
-            "--config",
-            "-c",
-            help="Path to config file",
-            file_okay=True,
-            dir_okay=False,
-            resolve_path=True,
-        ),
-    ] = None,
+    config: CONFIG_OPTION = None,
     output_file: Annotated[
         Path | None,
         typer.Option(
@@ -57,30 +52,9 @@ def sh_cmd(
             ),
         ),
     ] = False,
-    location: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--location",
-            "-l",
-            help="Prefer endpoints at these locations",
-        ),
-    ] = None,
-    exclude_location: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--exclude-location",
-            "-L",
-            help="Exclude endpoints at these locations",
-        ),
-    ] = None,
-    network: Annotated[
-        NetworkType | None,
-        typer.Option(
-            "--network",
-            "-N",
-            help="Prefer private (LAN) or public (WAN) endpoints",
-        ),
-    ] = None,
+    location: LOCATION_OPTION = None,
+    exclude_location: EXCLUDE_LOCATION_OPTION = None,
+    network: NETWORK_OPTION = None,
     portable: Annotated[
         bool,
         typer.Option(
