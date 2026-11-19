@@ -83,7 +83,7 @@ _HEADERS: dict[Layer, str] = {
 
 @dataclass(frozen=True)
 class TroubleshootIssue:
-    """One error (or warning) to explain, with what its fix printer needs."""
+    """One error (or warning) to explain, with what formatting its fix needs."""
 
     layer: Layer
     subject: str
@@ -267,7 +267,7 @@ def gather_remediation_facts(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> RemediationFacts:
-    """Only issues that print a cleartext device trigger a discovery, once per
+    """Only issues whose fix shows a cleartext device trigger a discovery, once per
     encrypted volume; only a missing polkit rule triggers rule generation.
 
     Discovery runs ``lsblk`` on the volume's host through *run*
