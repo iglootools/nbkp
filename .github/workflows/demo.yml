@@ -47,6 +47,6 @@ jobs:
       # Pinned here, matching the version mise.lock was generated with; the custom manager in
       # renovate.json keeps it current.
       # renovate: datasource=github-releases depName=jdx/mise
-      version: 2026.11.0
+      version: 2026.11.1
       # pv: demo-magic's simulated typing.
       apt-packages: pv
