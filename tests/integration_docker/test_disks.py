@@ -34,7 +34,7 @@ from nbkp.disks.detection import (
     resolve_target_device,
 )
 from nbkp.disks.lifecycle import (
-    MountFailureReason,
+    MountFailureKind,
     mount_volume,
     mount_volumes,
     run_udisks,
@@ -365,7 +365,7 @@ class TestMountVolumeIdempotency:
             lambda _: LUKS_PASSPHRASE,
         )
         assert not result.success
-        assert result.failure_reason == MountFailureReason.DEVICE_NOT_PRESENT
+        assert result.failure_reason == MountFailureKind.DEVICE_NOT_PRESENT
 
 
 class TestUmountVolumeIdempotency:

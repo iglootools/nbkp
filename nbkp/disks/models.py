@@ -6,34 +6,34 @@ from pydantic import BaseModel, ConfigDict
 lazy from ..config.protocol.volume import LocalVolume, RemoteVolume
 
 
-class MountFailureReason(str, enum.Enum):
+class MountFailureKind(enum.StrEnum):
     """Lives here (not in ``lifecycle``) so that ``MountCapabilities`` can carry
     it as a typed field and preflight can ``match`` on members instead of
     string literals.
     """
 
-    DEVICE_NOT_PRESENT = "device_not_present"
-    PASSPHRASE_NOT_AVAILABLE = "passphrase_not_available"
-    UNLOCK_FAILED = "unlock_failed"
-    MOUNT_FAILED = "mount_failed"
-    NOT_AUTHORIZED = "not_authorized"
-    UDISKS_NOT_AVAILABLE = "udisks_not_available"
-    PROBE_FAILED = "probe_failed"
+    DEVICE_NOT_PRESENT = "device-not-present"
+    PASSPHRASE_NOT_AVAILABLE = "passphrase-not-available"
+    UNLOCK_FAILED = "unlock-failed"
+    MOUNT_FAILED = "mount-failed"
+    NOT_AUTHORIZED = "not-authorized"
+    UDISKS_NOT_AVAILABLE = "udisks-not-available"
+    PROBE_FAILED = "probe-failed"
     """A read-only probe (e.g. ``lsblk``) failed, so the device state is
     unknown — distinct from "locked" or "not mounted"."""
     UNREACHABLE = "unreachable"
 
 
-class UmountFailureReason(str, enum.Enum):
-    UNMOUNT_FAILED = "unmount_failed"
-    LOCK_FAILED = "lock_failed"
+class UmountFailureKind(enum.StrEnum):
+    UNMOUNT_FAILED = "unmount-failed"
+    LOCK_FAILED = "lock-failed"
     """Unmounted (or not mounted) but the LUKS container is still unlocked."""
-    UDISKS_NOT_AVAILABLE = "udisks_not_available"
-    PROBE_FAILED = "probe_failed"
+    UDISKS_NOT_AVAILABLE = "udisks-not-available"
+    PROBE_FAILED = "probe-failed"
     UNREACHABLE = "unreachable"
 
 
-class LifecycleStep(str, enum.Enum):
+class LifecycleStep(enum.StrEnum):
     """A ``udisksctl`` step of the mount lifecycle."""
 
     UNLOCK = "unlock"
@@ -104,7 +104,7 @@ class MountCapabilities(BaseModel):
     mounted: bool | None = None
     cleartext_device: str | None = None
     effective_path: str | None = None
-    mount_failure_reason: MountFailureReason | None = None
+    mount_failure_reason: MountFailureKind | None = None
     """Why the lifecycle step failed, when it failed for a known cause.
     Used by preflight to upgrade the generic VOLUME_NOT_MOUNTED to a more
     specific error like POLKIT_RULES_MISSING."""

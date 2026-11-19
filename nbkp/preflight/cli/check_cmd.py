@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -7,32 +6,27 @@ from ...clidisplay import OutputFormat, echo_json
 from ...clidisplay.invocation import Invocation
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...cliwiring.mount import managed_mount
+from ...cliwiring.options import (
+    CONFIG_OPTION,
+    EXCLUDE_LOCATION_OPTION,
+    LOCATION_OPTION,
+    MOUNT_OPTION,
+    NETWORK_OPTION,
+    OUTPUT_OPTION,
+    UMOUNT_OPTION,
+)
 from ...cliwiring.runtime import runtime_of
 from ...policy import Strictness
-from ...remote.endpoints import NetworkType
 from ..status.result import PreflightResult
 from . import app
 from .helpers import check_and_display
 
 
-@app.command()
-def check(
+@app.command("check")
+def check_cmd(
     ctx: typer.Context,
-    config: Annotated[
-        Path | None,
-        typer.Option(
-            "--config",
-            "-c",
-            help="Path to config file",
-            file_okay=True,
-            dir_okay=False,
-            resolve_path=True,
-        ),
-    ] = None,
-    output: Annotated[
-        OutputFormat,
-        typer.Option("--output", "-o", help="Output format"),
-    ] = OutputFormat.HUMAN,
+    config: CONFIG_OPTION = None,
+    output: OUTPUT_OPTION = OutputFormat.HUMAN,
     strictness: Annotated[
         Strictness,
         typer.Option(
@@ -46,44 +40,11 @@ def check(
             ),
         ),
     ] = Strictness.IGNORE_INACTIVE,
-    location: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--location",
-            "-l",
-            help="Prefer endpoints at these locations",
-        ),
-    ] = None,
-    exclude_location: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--exclude-location",
-            "-L",
-            help="Exclude endpoints at these locations",
-        ),
-    ] = None,
-    network: Annotated[
-        NetworkType | None,
-        typer.Option(
-            "--network",
-            "-N",
-            help="Prefer private (LAN) or public (WAN) endpoints",
-        ),
-    ] = None,
-    mount: Annotated[
-        bool,
-        typer.Option(
-            "--mount/--no-mount",
-            help="Mount/umount volumes with mount config before checking",
-        ),
-    ] = True,
-    umount: Annotated[
-        bool,
-        typer.Option(
-            "--umount/--no-umount",
-            help="Umount after check (use --no-umount for debugging)",
-        ),
-    ] = True,
+    location: LOCATION_OPTION = None,
+    exclude_location: EXCLUDE_LOCATION_OPTION = None,
+    network: NETWORK_OPTION = None,
+    mount: MOUNT_OPTION = True,
+    umount: UMOUNT_OPTION = True,
 ) -> None:
     """Verify that volumes are reachable, sentinel files exist, SSH connectivity works, and required tools are available. Use this before `run` to confirm everything is ready."""
     runtime = runtime_of(ctx)

@@ -15,8 +15,9 @@ from ..config import Config
 from ..disks import MountObservation, UmountResult, any_failed
 from ..policy import Severity, Strictness
 from ..preflight import (
-    PreflightError,
+    PreflightErrorKind,
     PreflightResult,
+    SyncErrorKind,
     SyncStatus,
     check_all_syncs,
     has_fatal_errors,
@@ -80,7 +81,7 @@ def check_and_run(
     progress: ProgressMode | None = None,
     prune: bool = True,
     on_check_start: Callable[[str], None] | None = None,
-    on_check_end: Callable[[str, Sequence[PreflightError]], None] | None = None,
+    on_check_end: Callable[[str, Sequence[PreflightErrorKind]], None] | None = None,
     on_checks_done: Callable[[PreflightResult], None] | None = None,
     callbacks: SyncCallbacks | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
@@ -198,10 +199,10 @@ def run_checked(
 
 def fatal_sync_errors(
     sync_statuses: dict[str, SyncStatus], strictness: Strictness
-) -> dict[str, list[str]]:
+) -> dict[str, list[SyncErrorKind]]:
     """Errors of the syncs that made preflight abort under *strictness*."""
     return {
-        slug: sorted(e.value for e in s.errors)
+        slug: sorted(s.errors)
         for slug, s in sync_statuses.items()
         if is_fatal(s, strictness)
     }

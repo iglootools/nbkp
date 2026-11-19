@@ -6,16 +6,16 @@ from dataclasses import dataclass
 from ....config import Config, SshEndpoint, SyncConfig, SyncEndpoint, Volume
 from ... import (
     DestinationEndpointDiagnostics,
-    DestinationEndpointError,
+    DestinationEndpointErrorKind,
     DestinationEndpointStatus,
     SourceEndpointStatus,
     SshEndpointDiagnostics,
     SshEndpointStatus,
-    SyncError,
+    SyncErrorKind,
     SyncStatus,
     VolumeCapabilities,
     VolumeDiagnostics,
-    VolumeError,
+    VolumeErrorKind,
     VolumeStatus,
 )
 from ..common import (
@@ -30,8 +30,8 @@ from .ssh import HOST_TOOLS, nas_status
 LAPTOP_SRC = "laptop-src"
 
 BOTH_ENDPOINTS_INACTIVE = (
-    SyncError.SOURCE_ENDPOINT_INACTIVE,
-    SyncError.DESTINATION_ENDPOINT_INACTIVE,
+    SyncErrorKind.SOURCE_ENDPOINT_INACTIVE,
+    SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE,
 )
 
 
@@ -101,7 +101,7 @@ def volume_status(
     slug: str,
     ssh_status: SshEndpointStatus,
     capabilities: VolumeCapabilities,
-    errors: tuple[VolumeError, ...] = (),
+    errors: tuple[VolumeErrorKind, ...] = (),
 ) -> VolumeStatus:
     return VolumeStatus(
         slug=slug,
@@ -118,7 +118,7 @@ def broken_destination(
     sync_slug: str,
     volume: VolumeStatus,
     diagnostics: DestinationEndpointDiagnostics,
-    errors: list[DestinationEndpointError],
+    errors: list[DestinationEndpointErrorKind],
 ) -> SyncStatus:
     """A sync from the inactive laptop whose destination has *errors*."""
     return SyncStatus(
@@ -151,7 +151,7 @@ def shared_statuses(config: Config) -> SharedStatuses:
         "laptop",
         LOCALHOST_SSH_STATUS,
         SENTINEL_MISSING_CAPS,
-        (VolumeError.SENTINEL_NOT_FOUND,),
+        (VolumeErrorKind.SENTINEL_NOT_FOUND,),
     )
     return SharedStatuses(
         laptop=laptop,
@@ -172,7 +172,7 @@ def shared_statuses(config: Config) -> SharedStatuses:
             config=config.volumes["nas-backup"],
             ssh_endpoint_status=_NAS_UNREACHABLE_SSH,
             diagnostics=None,
-            errors=[VolumeError.SSH_ENDPOINT_INACTIVE],
+            errors=[VolumeErrorKind.SSH_ENDPOINT_INACTIVE],
         ),
         nas_reachable=volume_status(
             config, "nas-backup", _NAS_REACHABLE_SSH, healthy_caps()

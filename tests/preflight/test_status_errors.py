@@ -1,7 +1,7 @@
 """Tests for SSH-endpoint and sync-level error interpretation.
 
 Covers auth failures, warnings, host-tool errors on localhost
-(``SyncError.ENDPOINT_HOST_ERRORS``), the observation layer's exception
+(``SyncErrorKind.ENDPOINT_HOST_ERRORS``), the observation layer's exception
 handling, and the ``latest`` symlink target parsing.
 """
 
@@ -25,7 +25,7 @@ from nbkp.preflight.endpoint_checks import _read_latest_state
 from nbkp.preflight.ssh_checks import observe_standalone_endpoint
 from nbkp.preflight.status.endpoint import (
     DestinationEndpointDiagnostics,
-    DestinationEndpointError,
+    DestinationEndpointErrorKind,
     DestinationEndpointStatus,
     SourceEndpointDiagnostics,
     SourceEndpointStatus,
@@ -34,12 +34,12 @@ from nbkp.preflight.status.ssh import (
     INACTIVE_SSH_ERRORS,
     HostToolCapabilities,
     SshEndpointDiagnostics,
-    SshEndpointError,
+    SshEndpointErrorKind,
     SshEndpointStatus,
     SshEndpointToolNeeds,
-    SshEndpointWarning,
+    SshEndpointWarningKind,
 )
-from nbkp.preflight.status.sync import SyncError, SyncStatus
+from nbkp.preflight.status.sync import SyncErrorKind, SyncStatus
 from nbkp.preflight.status.volume import (
     VolumeCapabilities,
     VolumeDiagnostics,
@@ -79,15 +79,15 @@ class TestSshEndpointErrors:
             ),
             slug="nas",
         )
-        assert status.errors == [SshEndpointError.AUTH_FAILED]
-        assert SshEndpointError.AUTH_FAILED not in INACTIVE_SSH_ERRORS
+        assert status.errors == [SshEndpointErrorKind.AUTH_FAILED]
+        assert SshEndpointErrorKind.AUTH_FAILED not in INACTIVE_SSH_ERRORS
 
     def test_unreachable_keeps_cause(self) -> None:
         status = _ssh(
             SshEndpointDiagnostics(ssh_reachable=False, ssh_error="timed out"),
             slug="nas",
         )
-        assert status.errors == [SshEndpointError.UNREACHABLE]
+        assert status.errors == [SshEndpointErrorKind.UNREACHABLE]
         assert status.diagnostics.ssh_error == "timed out"
 
     def test_findmnt_reported_once(self) -> None:
@@ -108,7 +108,7 @@ class TestSshEndpointErrors:
                 has_mount_volumes=True,
             ),
         )
-        assert status.errors == [SshEndpointError.FINDMNT_NOT_FOUND]
+        assert status.errors == [SshEndpointErrorKind.FINDMNT_NOT_FOUND]
 
     def test_btrfs_module_is_a_warning_not_an_error(self) -> None:
         status = _ssh(
@@ -126,12 +126,12 @@ class TestSshEndpointErrors:
         )
         assert status.errors == []
         assert status.active is True
-        assert status.warnings == [SshEndpointWarning.UDISKS_BTRFS_MODULE_MISSING]
+        assert status.warnings == [SshEndpointWarningKind.UDISKS_BTRFS_MODULE_MISSING]
 
     def test_statuses_are_frozen(self) -> None:
         status = _ssh(SshEndpointDiagnostics(host_tools=_TOOLS))
         with pytest.raises(pydantic.ValidationError):
-            status.errors = [SshEndpointError.UNREACHABLE]  # type: ignore[misc]
+            status.errors = [SshEndpointErrorKind.UNREACHABLE]  # type: ignore[misc]
 
 
 def _sync_status(ssh_status: SshEndpointStatus) -> SyncStatus:
@@ -187,7 +187,7 @@ class TestEndpointHostErrors:
             )
         )
         status = _sync_status(ssh)
-        assert status.errors == [SyncError.ENDPOINT_HOST_ERRORS]
+        assert status.errors == [SyncErrorKind.ENDPOINT_HOST_ERRORS]
         assert status.active is False
         assert status.is_expected_inactive() is False
         assert has_fatal_errors({"s": status}) is True
@@ -363,8 +363,8 @@ class TestFsTypeUnknown:
                 endpoint_slug="ep", sentinel_exists=True, endpoint_writable=True
             ),
         )
-        assert DestinationEndpointError.VOL_FS_TYPE_UNKNOWN in status.errors
-        assert DestinationEndpointError.VOL_NOT_BTRFS not in status.errors
+        assert DestinationEndpointErrorKind.VOL_FS_TYPE_UNKNOWN in status.errors
+        assert DestinationEndpointErrorKind.VOL_NOT_BTRFS not in status.errors
 
 
 class TestDisabledSyncNeverFatal:
@@ -375,7 +375,7 @@ class TestDisabledSyncNeverFatal:
         disabled = status.model_copy(
             update={
                 "config": status.config.model_copy(update={"enabled": False}),
-                "errors": [SyncError.DISABLED],
+                "errors": [SyncErrorKind.DISABLED],
             }
         )
         return {"s": disabled}

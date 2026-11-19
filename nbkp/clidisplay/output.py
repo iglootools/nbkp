@@ -6,7 +6,7 @@ import typer
 from pydantic import BaseModel
 
 
-class OutputFormat(str, enum.Enum):
+class OutputFormat(enum.StrEnum):
     HUMAN = "human"
     JSON = "json"
 

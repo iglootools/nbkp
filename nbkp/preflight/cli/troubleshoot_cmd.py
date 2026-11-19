@@ -1,20 +1,28 @@
-from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich.console import Console
 
 from ...clidisplay import OutputFormat, echo_json
 from ...clidisplay.invocation import Invocation
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...cliwiring.mount import managed_mount
+from ...cliwiring.options import (
+    CONFIG_OPTION,
+    EXCLUDE_LOCATION_OPTION,
+    LOCATION_OPTION,
+    MOUNT_OPTION,
+    NETWORK_OPTION,
+    OUTPUT_OPTION,
+    UMOUNT_OPTION,
+)
 from ...cliwiring.preflight import check_all_with_progress
 from ...cliwiring.runtime import Runtime, runtime_of
 from ...policy import Strictness
-from ...remote.endpoints import NetworkType
 from ..output import (
     TroubleshootContext,
     collect_issues,
-    print_human_troubleshoot,
+    format_human_troubleshoot,
     troubleshoot_json,
 )
 from ..status.result import PreflightResult
@@ -22,24 +30,11 @@ from ..strictness import has_fatal_errors
 from . import app
 
 
-@app.command()
-def troubleshoot(
+@app.command("troubleshoot")
+def troubleshoot_cmd(
     ctx: typer.Context,
-    config: Annotated[
-        Path | None,
-        typer.Option(
-            "--config",
-            "-c",
-            help="Path to config file",
-            file_okay=True,
-            dir_okay=False,
-            resolve_path=True,
-        ),
-    ] = None,
-    output: Annotated[
-        OutputFormat,
-        typer.Option("--output", "-o", help="Output format"),
-    ] = OutputFormat.HUMAN,
+    config: CONFIG_OPTION = None,
+    output: OUTPUT_OPTION = OutputFormat.HUMAN,
     strictness: Annotated[
         Strictness,
         typer.Option(
@@ -52,44 +47,11 @@ def troubleshoot(
             ),
         ),
     ] = Strictness.IGNORE_INACTIVE,
-    location: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--location",
-            "-l",
-            help="Prefer endpoints at these locations",
-        ),
-    ] = None,
-    exclude_location: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--exclude-location",
-            "-L",
-            help="Exclude endpoints at these locations",
-        ),
-    ] = None,
-    network: Annotated[
-        NetworkType | None,
-        typer.Option(
-            "--network",
-            "-N",
-            help="Prefer private (LAN) or public (WAN) endpoints",
-        ),
-    ] = None,
-    mount: Annotated[
-        bool,
-        typer.Option(
-            "--mount/--no-mount",
-            help="Mount/umount volumes with mount config before checking",
-        ),
-    ] = True,
-    umount: Annotated[
-        bool,
-        typer.Option(
-            "--umount/--no-umount",
-            help="Umount after check (use --no-umount for debugging)",
-        ),
-    ] = True,
+    location: LOCATION_OPTION = None,
+    exclude_location: EXCLUDE_LOCATION_OPTION = None,
+    network: NETWORK_OPTION = None,
+    mount: MOUNT_OPTION = True,
+    umount: UMOUNT_OPTION = True,
 ) -> None:
     """Run the same checks as `check` but displays step-by-step fix instructions for every failure. Useful when `check` reports problems."""
     runtime = runtime_of(ctx)
@@ -150,12 +112,14 @@ def _report(
                 troubleshoot_json(issues, ctx, has_fatal_errors=fatal, run=runtime.run)
             )
         case OutputFormat.HUMAN:
-            print_human_troubleshoot(
-                preflight.ssh_endpoint_statuses,
-                preflight.volume_statuses,
-                preflight.sync_statuses,
-                ctx.config,
-                context=ctx,
-                strictness=strictness,
-                run=runtime.run,
+            Console().print(
+                format_human_troubleshoot(
+                    preflight.ssh_endpoint_statuses,
+                    preflight.volume_statuses,
+                    preflight.sync_statuses,
+                    ctx.config,
+                    context=ctx,
+                    strictness=strictness,
+                    run=runtime.run,
+                )
             )

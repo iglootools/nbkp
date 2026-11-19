@@ -15,22 +15,22 @@ from nbkp.config import (
 from nbkp.fsprotocol import Snapshot
 from nbkp.preflight import (
     DestinationEndpointDiagnostics,
-    DestinationEndpointError,
+    DestinationEndpointErrorKind,
     DestinationEndpointStatus,
     HostToolCapabilities,
     LatestSymlinkState,
     PreflightResult,
     SourceEndpointDiagnostics,
-    SourceEndpointError,
+    SourceEndpointErrorKind,
     SourceEndpointStatus,
     SshEndpointDiagnostics,
-    SshEndpointError,
+    SshEndpointErrorKind,
     SshEndpointStatus,
-    SyncError,
+    SyncErrorKind,
     SyncStatus,
     VolumeCapabilities,
     VolumeDiagnostics,
-    VolumeError,
+    VolumeErrorKind,
     VolumeStatus,
 )
 
@@ -63,7 +63,7 @@ def localhost_ssh_status(*, active: bool = True) -> SshEndpointStatus:
         return SshEndpointStatus(
             slug="localhost",
             diagnostics=SshEndpointDiagnostics(ssh_reachable=False),
-            errors=[SshEndpointError.UNREACHABLE],
+            errors=[SshEndpointErrorKind.UNREACHABLE],
         )
 
 
@@ -77,7 +77,7 @@ def remote_ssh_status(
         return SshEndpointStatus(
             slug=slug,
             diagnostics=SshEndpointDiagnostics(ssh_reachable=False),
-            errors=[SshEndpointError.UNREACHABLE],
+            errors=[SshEndpointErrorKind.UNREACHABLE],
         )
     elif rsync_missing:
         return SshEndpointStatus(
@@ -92,7 +92,7 @@ def remote_ssh_status(
                     has_findmnt=False,
                 ),
             ),
-            errors=[SshEndpointError.RSYNC_NOT_FOUND],
+            errors=[SshEndpointErrorKind.RSYNC_NOT_FOUND],
         )
     else:
         return SshEndpointStatus(
@@ -124,7 +124,7 @@ def vol_status(
             config=config.volumes[slug],
             ssh_endpoint_status=ssh_status,
             diagnostics=None,
-            errors=[VolumeError.SSH_ENDPOINT_INACTIVE],
+            errors=[VolumeErrorKind.SSH_ENDPOINT_INACTIVE],
         )
     else:
         diag = VolumeDiagnostics(
@@ -135,7 +135,7 @@ def vol_status(
                 btrfs_user_subvol_rm=False,
             ),
         )
-        errors = [VolumeError.SENTINEL_NOT_FOUND] if not sentinel_exists else []
+        errors = [VolumeErrorKind.SENTINEL_NOT_FOUND] if not sentinel_exists else []
         return VolumeStatus(
             slug=slug,
             config=config.volumes[slug],
@@ -156,13 +156,13 @@ def src_ep_status(
             endpoint_slug=endpoint_slug,
             volume_status=vol_s,
             diagnostics=None,
-            errors=[SourceEndpointError.VOLUME_INACTIVE],
+            errors=[SourceEndpointErrorKind.VOLUME_INACTIVE],
         )
     diag = SourceEndpointDiagnostics(
         endpoint_slug=endpoint_slug,
         sentinel_exists=sentinel_exists,
     )
-    errors = [SourceEndpointError.SENTINEL_NOT_FOUND] if not sentinel_exists else []
+    errors = [SourceEndpointErrorKind.SENTINEL_NOT_FOUND] if not sentinel_exists else []
     return SourceEndpointStatus(
         endpoint_slug=endpoint_slug,
         volume_status=vol_s,
@@ -189,7 +189,7 @@ def dst_ep_status(
             endpoint_slug=endpoint_slug,
             volume_status=vol_s,
             diagnostics=None,
-            errors=[DestinationEndpointError.VOLUME_INACTIVE],
+            errors=[DestinationEndpointErrorKind.VOLUME_INACTIVE],
         )
     diag = DestinationEndpointDiagnostics(
         endpoint_slug=endpoint_slug,
@@ -207,7 +207,7 @@ def dst_ep_status(
         ),
     )
     errors = (
-        [DestinationEndpointError.SENTINEL_NOT_FOUND] if not sentinel_exists else []
+        [DestinationEndpointErrorKind.SENTINEL_NOT_FOUND] if not sentinel_exists else []
     )
     return DestinationEndpointStatus(
         endpoint_slug=endpoint_slug,
@@ -297,7 +297,7 @@ def sample_sync_statuses(
             config=config.syncs["photos-to-nas"],
             source_endpoint_status=src_ep,
             destination_endpoint_status=dst_ep,
-            errors=[SyncError.DESTINATION_ENDPOINT_INACTIVE],
+            errors=[SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE],
         ),
     }
 
@@ -317,7 +317,7 @@ def sample_error_sync_statuses(
             config=config.syncs["photos-to-nas"],
             source_endpoint_status=src_ep,
             destination_endpoint_status=dst_ep,
-            errors=[SyncError.DESTINATION_ENDPOINT_INACTIVE],
+            errors=[SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE],
         ),
     }
 
@@ -336,8 +336,8 @@ def sample_sentinel_only_sync_statuses(
             source_endpoint_status=src,
             destination_endpoint_status=dst,
             errors=[
-                SyncError.SOURCE_ENDPOINT_INACTIVE,
-                SyncError.DESTINATION_ENDPOINT_INACTIVE,
+                SyncErrorKind.SOURCE_ENDPOINT_INACTIVE,
+                SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE,
             ],
         ),
     }

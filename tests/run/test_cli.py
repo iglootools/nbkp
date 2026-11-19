@@ -21,7 +21,7 @@ from nbkp.config import Config
 from nbkp.config.testkit import write_config
 from nbkp.disks import UmountResult
 from nbkp.policy import Strictness
-from nbkp.preflight import SyncError, SyncStatus
+from nbkp.preflight import SyncErrorKind, SyncStatus
 from nbkp.run.cli.run_cmd import abort_message, run_json
 from nbkp.run.pipeline import PipelineResult
 from nbkp.sync import ProgressMode, SyncFailureKind, SyncResult
@@ -151,7 +151,7 @@ class TestRunJson:
             {
                 "volume": "enc",
                 "success": False,
-                "failure_reason": "lock_failed",
+                "failure_reason": "lock-failed",
                 "detail": "lock failed (exit 1): busy",
                 "failure": {"step": "lock", "exit_code": 1, "message": "busy"},
                 "warning": "LUKS container still unlocked, manual lock needed",
@@ -182,7 +182,7 @@ class TestAbortMessage:
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_sentinel_only_sync_statuses(config, vol_s)
         sync_s["off"] = sync_s["photos-to-nas"].model_copy(
-            update={"slug": "off", "errors": [SyncError.DISABLED]}
+            update={"slug": "off", "errors": [SyncErrorKind.DISABLED]}
         )
         pipeline = PipelineResult(
             preflight=preflight(vol_s, sync_s),
@@ -408,5 +408,5 @@ class TestUmountFailure:
         [umount] = data["umount"]
         assert umount["volume"] == "enc"
         assert umount["success"] is False
-        assert umount["failure_reason"] == "lock_failed"
+        assert umount["failure_reason"] == "lock-failed"
         assert umount["warning"] == "LUKS container still unlocked, manual lock needed"

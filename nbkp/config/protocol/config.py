@@ -7,14 +7,14 @@ from typing import Any
 from pydantic import Field, field_validator, model_validator
 
 from .base import _BaseModel
-from .errors import ConfigValidationCode, config_error
+from .errors import ConfigValidationErrorKind, config_error
 from .ssh_endpoint import SshEndpoint
 from .sync import SyncConfig
 from .sync_endpoint import SyncEndpoint
 from .volume import RemoteVolume, Volume
 
 
-class CredentialProvider(str, enum.Enum):
+class CredentialProvider(enum.StrEnum):
     """How LUKS passphrases are retrieved."""
 
     KEYRING = "keyring"
@@ -65,12 +65,12 @@ def _resolve_endpoint(
         return ep
     elif parent_slug in chain:
         raise config_error(
-            ConfigValidationCode.CIRCULAR_EXTENDS,
+            ConfigValidationErrorKind.CIRCULAR_EXTENDS,
             f"Circular extends chain: {' -> '.join([*chain, parent_slug])}",
         )
     elif parent_slug not in endpoints:
         raise config_error(
-            ConfigValidationCode.UNKNOWN_REFERENCE,
+            ConfigValidationErrorKind.UNKNOWN_REFERENCE,
             f"Endpoint '{slug}' extends unknown endpoint '{parent_slug}'",
         )
     else:
@@ -94,7 +94,7 @@ def _inject_slugs(entries: Any) -> Any:
 
 
 def _unknown_reference(message: str) -> ValueError:
-    return config_error(ConfigValidationCode.UNKNOWN_REFERENCE, message)
+    return config_error(ConfigValidationErrorKind.UNKNOWN_REFERENCE, message)
 
 
 def _raise_first(errors: Iterable[ValueError]) -> None:
@@ -123,7 +123,7 @@ def _location_error(
     if path_a == path_b:
         subdir_msg = f" subdir '{ep_b.subdir}'" if ep_b.subdir else ""
         return config_error(
-            ConfigValidationCode.DUPLICATE_ENDPOINT_LOCATION,
+            ConfigValidationErrorKind.DUPLICATE_ENDPOINT_LOCATION,
             f"Sync endpoints '{slug_a}' and '{slug_b}' both target volume"
             f" '{ep_b.volume}'{subdir_msg}",
         )
@@ -132,7 +132,7 @@ def _location_error(
             (slug_a, slug_b) if len(path_a) < len(path_b) else (slug_b, slug_a)
         )
         return config_error(
-            ConfigValidationCode.NESTED_ENDPOINT,
+            ConfigValidationErrorKind.NESTED_ENDPOINT,
             f"Sync endpoint '{child}' is nested inside '{parent}' on volume"
             f" '{ep_a.volume}': overlapping endpoint paths are not supported"
             " because sync dependencies cannot be detected between them",
@@ -249,7 +249,7 @@ class Config(_BaseModel):
     def _circular_proxy_jump_errors(self) -> Iterator[ValueError]:
         return (
             config_error(
-                ConfigValidationCode.CIRCULAR_PROXY_JUMP,
+                ConfigValidationErrorKind.CIRCULAR_PROXY_JUMP,
                 f"Circular proxy-jump chain detected starting from server '{slug}'",
             )
             for slug in self.ssh_endpoints
@@ -306,7 +306,7 @@ class Config(_BaseModel):
     def _shared_destination_errors(self) -> Iterator[ValueError]:
         return (
             config_error(
-                ConfigValidationCode.SHARED_DESTINATION,
+                ConfigValidationErrorKind.SHARED_DESTINATION,
                 f"Syncs '{slug_a}' and '{slug_b}' share destination endpoint"
                 f" '{sync_a.destination}'",
             )
@@ -331,7 +331,7 @@ class Config(_BaseModel):
             TopologicalSorter(upstreams).prepare()
         except CycleError as e:
             yield config_error(
-                ConfigValidationCode.CYCLIC_DEPENDENCY,
+                ConfigValidationErrorKind.CYCLIC_DEPENDENCY,
                 "Cyclic sync dependency: " + " -> ".join(e.args[1]),
             )
 
@@ -346,7 +346,7 @@ class Config(_BaseModel):
         )
         return (
             config_error(
-                ConfigValidationCode.CROSS_SERVER_SYNC,
+                ConfigValidationErrorKind.CROSS_SERVER_SYNC,
                 f"Sync '{sync_slug}' has source on '{src_vol.ssh_endpoint}'"
                 f" and destination on '{dst_vol.ssh_endpoint}'."
                 " Cross-server remote-to-remote syncs are not supported."
@@ -371,7 +371,7 @@ class Config(_BaseModel):
                 *(
                     [
                         config_error(
-                            ConfigValidationCode.CREDENTIAL_COMMAND_REQUIRED,
+                            ConfigValidationErrorKind.CREDENTIAL_COMMAND_REQUIRED,
                             "credential-command is required when"
                             " credential-provider is 'command'",
                         )
@@ -382,7 +382,7 @@ class Config(_BaseModel):
                 *(
                     [
                         config_error(
-                            ConfigValidationCode.CREDENTIAL_COMMAND_PLACEHOLDER,
+                            ConfigValidationErrorKind.CREDENTIAL_COMMAND_PLACEHOLDER,
                             "credential-command must contain the '{id}' placeholder",
                         )
                     ]

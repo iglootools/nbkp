@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from .base import Slug, _BaseModel
-from .errors import ConfigValidationCode, config_error
+from .errors import ConfigValidationErrorKind, config_error
 
 
 class LuksEncryptionConfig(_BaseModel):
@@ -95,7 +95,7 @@ class LocalVolume(_BaseModel):
         # started from, so the volume would move between a shell and a timer.
         if v is not None and not Path(v).is_absolute():
             raise config_error(
-                ConfigValidationCode.RELATIVE_PATH,
+                ConfigValidationErrorKind.RELATIVE_PATH,
                 f"path must be absolute (or start with ~), got {v!r}",
             )
         return v
@@ -162,7 +162,7 @@ def _validate_path_requirement(volume: LocalVolume | RemoteVolume) -> None:
             f"volume '{volume.slug}': 'path' is required for volumes without a"
             " 'mount' section"
         )
-        raise config_error(ConfigValidationCode.PATH_REQUIRED, msg)
+        raise config_error(ConfigValidationErrorKind.PATH_REQUIRED, msg)
 
 
 Volume = Annotated[LocalVolume | RemoteVolume, Field(discriminator="type")]

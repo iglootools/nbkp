@@ -4,7 +4,7 @@ from typing import Any
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from .base import Slug, _BaseModel
-from .errors import ConfigValidationCode, config_error
+from .errors import ConfigValidationErrorKind, config_error
 
 
 def _expand_user(v: Any) -> Any:
@@ -136,7 +136,7 @@ class SshEndpoint(_BaseModel):
     def validate_proxy_exclusivity(self) -> SshEndpoint:
         if self.proxy_jump is not None and self.proxy_jumps is not None:
             raise config_error(
-                ConfigValidationCode.MUTUALLY_EXCLUSIVE,
+                ConfigValidationErrorKind.MUTUALLY_EXCLUSIVE,
                 "proxy-jump and proxy-jumps are mutually exclusive",
             )
         return self
@@ -145,7 +145,7 @@ class SshEndpoint(_BaseModel):
     def validate_location_exclusivity(self) -> SshEndpoint:
         if self.location is not None and self.locations is not None:
             raise config_error(
-                ConfigValidationCode.MUTUALLY_EXCLUSIVE,
+                ConfigValidationErrorKind.MUTUALLY_EXCLUSIVE,
                 "location and locations are mutually exclusive",
             )
         return self

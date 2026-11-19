@@ -11,7 +11,7 @@ from datetime import datetime
 from ..config import Config
 from ..ordering.graph import sort_syncs, sync_predecessors
 from ..policy import Strictness
-from ..preflight import SyncError, SyncStatus
+from ..preflight import SyncErrorKind, SyncStatus, format_problems
 from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 from .modes import RsyncRunner, RunContext, run_single_sync
@@ -24,7 +24,7 @@ def _collect_all_errors(status: SyncStatus) -> str:
     contains sync-level errors plus cascade pointers to inactive lower
     layers.  No need to walk the full 4-layer chain.
     """
-    return ", ".join(e.value for e in status.errors) or "unknown"
+    return format_problems(status.errors) or "unknown"
 
 
 def _presence_proven(status: SyncStatus) -> bool:
@@ -43,7 +43,7 @@ def _presence_proven(status: SyncStatus) -> bool:
         and src.sentinel_exists
         and dst is not None
         and dst.sentinel_exists
-        and SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING not in status.errors
+        and SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING not in status.errors
     )
 
 
@@ -60,9 +60,9 @@ def _should_attempt(status: SyncStatus, strictness: Strictness) -> bool:
 
 
 def _skip_kind(status: SyncStatus) -> SyncFailureKind:
-    if SyncError.DISABLED in status.errors:
+    if SyncErrorKind.DISABLED in status.errors:
         return SyncFailureKind.DISABLED
-    elif SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING in status.errors:
+    elif SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING in status.errors:
         return SyncFailureKind.DRY_RUN_PENDING
     elif status.is_expected_inactive():
         return SyncFailureKind.INACTIVE

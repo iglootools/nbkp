@@ -16,8 +16,25 @@ For general coding, Python, and tooling guidelines, see the [common guidelines](
 <!-- tocstop -->
 
 ## Coding
-- **Naming Conventions**
-  - `kebab-case` for CLI commands and config keys
+- **Naming Conventions**: the shared ones, in
+  [general.md › Naming](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#naming)
+  and [python.md › Naming](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#naming),
+  with these exceptions.
+  - *Exception — SSH timeouts in plain seconds:* `connect-timeout`, `server-alive-interval`,
+    `banner-timeout`, `auth-timeout` and `channel-timeout` are numbers of seconds, with no unit
+    in the name and no duration type. They are configuration keys users have written, and they
+    mirror the OpenSSH and Paramiko option names they map to; the unit is in each field's
+    description and the config reference. Retire this exception in a major release that
+    accepts durations with a unit (`10s`), keeping a bare number as seconds.
+  - *Exception — options whose help is per command:* `--strictness` in `run`,
+    `preflight check` and `preflight troubleshoot`, and the long-only `--dry-run` of
+    `disks mount` and `disks umount` and the one of `demo seed`, are written inline in each
+    command rather than as a shared `<NAME>_OPTION` constant. The flag is shared but what it
+    does is not: each help text says what that command does at each strictness level, or
+    what a dry run skips there, and one constant would carry one wording for all of them.
+    The other shared options live in `cliwiring/options.py`, and those shared within one
+    sub-app in its `cli/options.py`. Retire this exception for a flag once its commands
+    behave alike, or if Typer lets a shared option take per-command help.
 - **CLI**
   - Use `typer` for CLI implementation (argument parsing, formatting, etc.)
   - Provide both human-readable and JSON output formats for all commands, with human-readable as the default.
@@ -114,7 +131,7 @@ In general, keep the documentation in sync with the codebase. In particular:
 ### Domain Logic
 
 - When making changes to the config schema/models or preflight checks, make sure to update **all** of the following:
-  - **Troubleshoot output** (`nbkp/preflight/output/remediation.py`): add a `case` in the per-layer fix printer for every new `SshEndpointError`, `SshEndpointWarning`, `VolumeError`, `SourceEndpointError`, `DestinationEndpointError` or `SyncError`, with actionable remediation text. Fix printers are pure rendering: a fix that needs a probed or generated fact (like the discovered cleartext mapper or the polkit rule) gets it from `RemediationFacts`, gathered up front in `nbkp/preflight/output/troubleshoot.py`.
+  - **Troubleshoot output** (`nbkp/preflight/output/remediation.py`): add a `case` in the per-layer fix printer for every new `SshEndpointErrorKind`, `SshEndpointWarningKind`, `VolumeErrorKind`, `SourceEndpointErrorKind`, `DestinationEndpointErrorKind` or `SyncErrorKind`, with actionable remediation text. Fix printers are pure rendering: a fix that needs a probed or generated fact (like the discovered cleartext mapper or the polkit rule) gets it from `RemediationFacts`, gathered up front in `nbkp/preflight/output/troubleshoot.py`.
   - **Seed / demo test data** (`nbkp/preflight/testkit/troubleshoot/`): add a `Scenario` that exercises the new error — its config entries and its statuses — to the module for its area, and list it in `SCENARIOS`, so `nbkp-demo output` renders it. `tests/preflight/test_testkit_coverage.py` fails until every member is covered.
   - **Inactive-errors sets** (`INACTIVE_*_ERRORS`, defined next to each error enum in `nbkp/preflight/status/` — `ssh.py`, `volume.py`, `endpoint.py`, `sync.py`): if the new error should be treated as a non-fatal skip (like missing sentinels), add it to its layer's set.
   - The demo CLI (`nbkp/demo/`) to generate new test data that reflects the changes.

@@ -1,100 +1,47 @@
-from pathlib import Path
-from typing import Annotated
-
 import typer
+from rich.console import Console
 
 from ...clidisplay import OutputFormat, echo_json
-from ...clidisplay.invocation import Invocation, print_troubleshoot_hint
+from ...clidisplay.invocation import Invocation, format_troubleshoot_hint
 from ...cliwiring.config import (
     load_config_or_exit,
     require_known_syncs,
     resolve_endpoints,
 )
 from ...cliwiring.mount import managed_mount
+from ...cliwiring.options import (
+    CONFIG_OPTION,
+    EXCLUDE_LOCATION_OPTION,
+    LOCATION_OPTION,
+    MOUNT_OPTION,
+    NETWORK_OPTION,
+    OUTPUT_OPTION,
+    SYNC_OPTION,
+    UMOUNT_OPTION,
+)
 from ...cliwiring.preflight import check_all_with_progress
 from ...cliwiring.runtime import runtime_of
 from ...policy import Strictness
-from ...remote.endpoints import NetworkType
 from .. import show_all_syncs
 from ..disposition import failed_in_preflight, has_errors
 from ..models import ShowResult
-from ..output import print_human_show_results
+from ..output import format_human_show_results
 from . import app
+from .options import STRICTNESS_OPTION
 
 
-@app.command()
-def show(
+@app.command("show")
+def show_cmd(
     ctx: typer.Context,
-    config: Annotated[
-        Path | None,
-        typer.Option(
-            "--config",
-            "-c",
-            help="Path to config file",
-            file_okay=True,
-            dir_okay=False,
-            resolve_path=True,
-        ),
-    ] = None,
-    sync: Annotated[
-        list[str] | None,
-        typer.Option("--sync", "-s", help="Sync name(s) to show"),
-    ] = None,
-    output: Annotated[
-        OutputFormat,
-        typer.Option("--output", "-o", help="Output format"),
-    ] = OutputFormat.HUMAN,
-    strictness: Annotated[
-        Strictness,
-        typer.Option(
-            "--strictness",
-            "-S",
-            help=(
-                "How to handle preflight errors:"
-                " ignore-none (inactive syncs fail),"
-                " ignore-inactive (skip expected-inactive, default),"
-                " ignore-all (skip syncs with preflight errors)"
-            ),
-        ),
-    ] = Strictness.IGNORE_INACTIVE,
-    location: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--location",
-            "-l",
-            help="Prefer endpoints at these locations",
-        ),
-    ] = None,
-    exclude_location: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--exclude-location",
-            "-L",
-            help="Exclude endpoints at these locations",
-        ),
-    ] = None,
-    network: Annotated[
-        NetworkType | None,
-        typer.Option(
-            "--network",
-            "-N",
-            help="Prefer private (LAN) or public (WAN) endpoints",
-        ),
-    ] = None,
-    mount: Annotated[
-        bool,
-        typer.Option(
-            "--mount/--no-mount",
-            help="Mount/umount volumes with mount config",
-        ),
-    ] = True,
-    umount: Annotated[
-        bool,
-        typer.Option(
-            "--umount/--no-umount",
-            help="Umount after show (use --no-umount for debugging)",
-        ),
-    ] = True,
+    config: CONFIG_OPTION = None,
+    sync: SYNC_OPTION = None,
+    output: OUTPUT_OPTION = OutputFormat.HUMAN,
+    strictness: STRICTNESS_OPTION = Strictness.IGNORE_INACTIVE,
+    location: LOCATION_OPTION = None,
+    exclude_location: EXCLUDE_LOCATION_OPTION = None,
+    network: NETWORK_OPTION = None,
+    mount: MOUNT_OPTION = True,
+    umount: UMOUNT_OPTION = True,
 ) -> None:
     """Display snapshot information for each sync endpoint."""
     runtime = runtime_of(ctx)
@@ -133,13 +80,16 @@ def show(
             if output is OutputFormat.HUMAN and failed_in_preflight(
                 results, preflight.sync_statuses
             ):
-                print_troubleshoot_hint(
-                    Invocation.of(
-                        config,
-                        location,
-                        exclude_location,
-                        network.value if network else None,
-                    )
+                Console(stderr=True).print(
+                    format_troubleshoot_hint(
+                        Invocation.of(
+                            config,
+                            location,
+                            exclude_location,
+                            network.value if network else None,
+                        )
+                    ),
+                    soft_wrap=True,
                 )
             raise typer.Exit(1)
 
@@ -149,4 +99,4 @@ def _print_results(results: list[ShowResult], output: OutputFormat) -> None:
         case OutputFormat.JSON:
             echo_json(list(results))
         case OutputFormat.HUMAN:
-            print_human_show_results(results)
+            Console().print(format_human_show_results(results))

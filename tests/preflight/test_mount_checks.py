@@ -9,7 +9,7 @@ from nbkp.config import (
     MountConfig,
 )
 from nbkp.disks import MountCapabilities, MountToolCapabilities
-from nbkp.disks.models import MountFailureReason
+from nbkp.disks.models import MountFailureKind
 from nbkp.disks.mount_checks import (
     FstabEntry,
     _check_fstab_entry,
@@ -23,7 +23,7 @@ from nbkp.preflight.status.ssh import SshEndpointDiagnostics, SshEndpointStatus
 from nbkp.preflight.status.volume import (
     VolumeCapabilities,
     VolumeDiagnostics,
-    VolumeError,
+    VolumeErrorKind,
     VolumeStatus,
     _volume_errors,
 )
@@ -105,7 +105,7 @@ def _active_ssh_endpoint_status() -> SshEndpointStatus:
 class TestVolumeErrorsMountUpgrades:
     """When the sentinel is missing and a mount-managed volume recorded a
     lifecycle failure, the generic SENTINEL_NOT_FOUND is upgraded to the
-    most actionable VolumeError."""
+    most actionable VolumeErrorKind."""
 
     def _diag(self, **mount_overrides: object) -> VolumeDiagnostics:
         return VolumeDiagnostics(
@@ -118,13 +118,13 @@ class TestVolumeErrorsMountUpgrades:
                 device_present=True,
                 luks_unlocked=False,
                 mounted=None,
-                mount_failure_reason="not_authorized",
+                mount_failure_reason="not-authorized",
             ),
             _encrypted_mount(),
         )
-        assert VolumeError.POLKIT_RULES_MISSING in errors
-        assert VolumeError.SENTINEL_NOT_FOUND not in errors
-        assert VolumeError.VOLUME_NOT_MOUNTED not in errors
+        assert VolumeErrorKind.POLKIT_RULES_MISSING in errors
+        assert VolumeErrorKind.SENTINEL_NOT_FOUND not in errors
+        assert VolumeErrorKind.VOLUME_NOT_MOUNTED not in errors
 
     def test_passphrase_not_available_upgrades(self) -> None:
         errors = _volume_errors(
@@ -132,11 +132,11 @@ class TestVolumeErrorsMountUpgrades:
                 device_present=True,
                 luks_unlocked=False,
                 mounted=None,
-                mount_failure_reason=MountFailureReason.PASSPHRASE_NOT_AVAILABLE,
+                mount_failure_reason=MountFailureKind.PASSPHRASE_NOT_AVAILABLE,
             ),
             _encrypted_mount(),
         )
-        assert errors == [VolumeError.PASSPHRASE_NOT_AVAILABLE]
+        assert errors == [VolumeErrorKind.PASSPHRASE_NOT_AVAILABLE]
 
     def test_unlock_failed_upgrades(self) -> None:
         errors = _volume_errors(
@@ -144,12 +144,12 @@ class TestVolumeErrorsMountUpgrades:
                 device_present=True,
                 luks_unlocked=False,
                 mounted=None,
-                mount_failure_reason="unlock_failed",
+                mount_failure_reason="unlock-failed",
             ),
             _encrypted_mount(),
         )
-        assert VolumeError.UNLOCK_FAILED in errors
-        assert VolumeError.SENTINEL_NOT_FOUND not in errors
+        assert VolumeErrorKind.UNLOCK_FAILED in errors
+        assert VolumeErrorKind.SENTINEL_NOT_FOUND not in errors
 
     def test_mount_failed_upgrades(self) -> None:
         errors = _volume_errors(
@@ -157,20 +157,20 @@ class TestVolumeErrorsMountUpgrades:
                 device_present=True,
                 luks_unlocked=True,
                 mounted=False,
-                mount_failure_reason="mount_failed",
+                mount_failure_reason="mount-failed",
             ),
             _encrypted_mount(),
         )
-        assert VolumeError.MOUNT_FAILED in errors
-        assert VolumeError.VOLUME_NOT_MOUNTED not in errors
+        assert VolumeErrorKind.MOUNT_FAILED in errors
+        assert VolumeErrorKind.VOLUME_NOT_MOUNTED not in errors
 
     def test_device_not_present(self) -> None:
         errors = _volume_errors(
             self._diag(device_present=False, mounted=None),
             _encrypted_mount(),
         )
-        assert VolumeError.DEVICE_NOT_PRESENT in errors
-        assert VolumeError.SENTINEL_NOT_FOUND not in errors
+        assert VolumeErrorKind.DEVICE_NOT_PRESENT in errors
+        assert VolumeErrorKind.SENTINEL_NOT_FOUND not in errors
 
     def test_fstab_mismatch_when_path_declared_no_fstab(self) -> None:
         errors = _volume_errors(
@@ -181,26 +181,26 @@ class TestVolumeErrorsMountUpgrades:
             ),
             _encrypted_mount(),
         )
-        assert VolumeError.FSTAB_MOUNTPOINT_MISMATCH in errors
+        assert VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH in errors
 
     def test_device_present_unmounted_emits_volume_not_mounted(self) -> None:
         errors = _volume_errors(
             self._diag(device_present=True, has_fstab_entry=True, mounted=False),
             _encrypted_mount(),
         )
-        assert VolumeError.VOLUME_NOT_MOUNTED in errors
-        assert VolumeError.DEVICE_NOT_PRESENT not in errors
+        assert VolumeErrorKind.VOLUME_NOT_MOUNTED in errors
+        assert VolumeErrorKind.DEVICE_NOT_PRESENT not in errors
 
     def test_sentinel_missing_when_mounted_falls_back_to_sentinel(self) -> None:
         errors = _volume_errors(
             self._diag(device_present=True, has_fstab_entry=True, mounted=True),
             _encrypted_mount(),
         )
-        assert VolumeError.SENTINEL_NOT_FOUND in errors
+        assert VolumeErrorKind.SENTINEL_NOT_FOUND in errors
 
     def test_no_mount_config_falls_back_to_sentinel(self) -> None:
         errors = _volume_errors(self._diag(), None)
-        assert VolumeError.SENTINEL_NOT_FOUND in errors
+        assert VolumeErrorKind.SENTINEL_NOT_FOUND in errors
 
     def test_sentinel_present_no_errors(self) -> None:
         diag = VolumeDiagnostics(capabilities=_base_caps(sentinel_exists=True))
@@ -221,14 +221,14 @@ class TestVolumeStatusFromDiagnostics:
             device_present=True,
             luks_unlocked=False,
             mounted=None,
-            mount_failure_reason="not_authorized",
+            mount_failure_reason="not-authorized",
         )
         diag = VolumeDiagnostics(capabilities=caps)
         status = VolumeStatus.from_diagnostics(
             "encrypted", _encrypted_vol(), _active_ssh_endpoint_status(), diag
         )
-        assert VolumeError.POLKIT_RULES_MISSING in status.errors
-        assert VolumeError.SENTINEL_NOT_FOUND not in status.errors
+        assert VolumeErrorKind.POLKIT_RULES_MISSING in status.errors
+        assert VolumeErrorKind.SENTINEL_NOT_FOUND not in status.errors
 
     def test_no_mount_config_no_mount_errors(self) -> None:
         caps = _base_caps(sentinel_exists=True)
@@ -245,7 +245,7 @@ class TestVolumeStatusFromDiagnostics:
         status = VolumeStatus.from_diagnostics(
             "encrypted", _encrypted_vol(), _active_ssh_endpoint_status(), diag
         )
-        assert VolumeError.DEVICE_NOT_PRESENT in status.errors
+        assert VolumeErrorKind.DEVICE_NOT_PRESENT in status.errors
 
 
 class TestMountCapabilitiesRuntimeState:
@@ -303,7 +303,7 @@ class TestFormatMountStatus:
             device_present=True,
             luks_unlocked=False,
             mounted=None,
-            mount_failure_reason="unlock_failed",
+            mount_failure_reason="unlock-failed",
         )
         result = format_mount_status(mc, _encrypted_mount())
         assert "✓device" in result
@@ -314,7 +314,7 @@ class TestFormatMountStatus:
             device_present=True,
             luks_unlocked=True,
             mounted=False,
-            mount_failure_reason="mount_failed",
+            mount_failure_reason="mount-failed",
         )
         result = format_mount_status(mc, _encrypted_mount())
         assert "✓device" in result
@@ -501,7 +501,7 @@ class TestFstabSourceMatches:
         )
         assert _volume_errors(
             VolumeDiagnostics(capabilities=caps), _unencrypted_mount()
-        ) == [VolumeError.FSTAB_MOUNTPOINT_MISMATCH]
+        ) == [VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH]
 
     def test_parses_findmnt_pairs(self) -> None:
         run = _fstab_line(f"UUID={_USB_UUID}", "/mnt/my usb")

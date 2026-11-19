@@ -1,4 +1,4 @@
-from rich.console import Console, Group, RenderableType
+from rich.console import Group, RenderableType
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -19,12 +19,13 @@ from ...config.output import (
 from ...fsprotocol import DEVNULL_TARGET
 from ...policy import Severity, Strictness
 from ...remote.endpoints import ResolvedEndpoints
+from ..messages import format_problem, format_problems
 from ..severity import severity_for_errors
 from ..status.endpoint import (
     DestinationEndpointDiagnostics,
-    DestinationEndpointError,
+    DestinationEndpointErrorKind,
     LatestSymlinkState,
-    SourceEndpointError,
+    SourceEndpointErrorKind,
 )
 from ..status.ssh import INACTIVE_SSH_ERRORS, SshEndpointStatus
 from ..status.sync import SyncStatus
@@ -67,7 +68,7 @@ def _format_volume_issues(vol_status: VolumeStatus, strictness: Strictness) -> T
     severity = severity_for_errors(vol_status.errors, strictness)
     if severity is Severity.OK:
         severity = Severity.ERROR
-    reason = ", ".join(e.value for e in vol_status.errors)
+    reason = format_problems(vol_status.errors)
     symbol = severity_symbol(severity)
     label = f"{symbol}volume ({reason})" if reason else f"{symbol}volume"
     return Text(label, style=severity_style(severity))
@@ -87,7 +88,7 @@ def _format_source_diagnostics(ss: SyncStatus, strictness: Strictness) -> Text:
         check(
             diag.sentinel_exists,
             "sentinel",
-            fail_error=SourceEndpointError.SENTINEL_NOT_FOUND,
+            fail_error=SourceEndpointErrorKind.SENTINEL_NOT_FOUND,
             strictness=strictness,
         ),
         *(
@@ -95,7 +96,7 @@ def _format_source_diagnostics(ss: SyncStatus, strictness: Strictness) -> Text:
                 check(
                     diag.snapshot_dirs.exists,
                     "snapshots/",
-                    fail_error=SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND,
+                    fail_error=SourceEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND,
                     strictness=strictness,
                 )
             ]
@@ -122,7 +123,7 @@ def _format_destination_diagnostics(ss: SyncStatus, strictness: Strictness) -> T
             check(
                 diag.sentinel_exists,
                 "sentinel",
-                fail_error=DestinationEndpointError.SENTINEL_NOT_FOUND,
+                fail_error=DestinationEndpointErrorKind.SENTINEL_NOT_FOUND,
                 strictness=strictness,
             ),
             # Without the sentinel the directory may not exist, and the status
@@ -132,7 +133,7 @@ def _format_destination_diagnostics(ss: SyncStatus, strictness: Strictness) -> T
                     check(
                         diag.endpoint_writable,
                         "writable",
-                        fail_error=DestinationEndpointError.NOT_WRITABLE,
+                        fail_error=DestinationEndpointErrorKind.NOT_WRITABLE,
                         strictness=strictness,
                     )
                 ]
@@ -153,13 +154,13 @@ def _destination_snapshot_items(
                 check(
                     diag.btrfs.staging_exists,
                     "staging/",
-                    fail_error=DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND,
+                    fail_error=DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND,
                     strictness=strictness,
                 ),
                 check(
                     diag.btrfs.staging_is_subvolume,
                     "staging-subvolume",
-                    fail_error=DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME,
+                    fail_error=DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME,
                     strictness=strictness,
                 ),
             ]
@@ -171,7 +172,7 @@ def _destination_snapshot_items(
                 check(
                     diag.snapshot_dirs.exists,
                     "snapshots/",
-                    fail_error=DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND,
+                    fail_error=DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND,
                     strictness=strictness,
                 )
             ]
@@ -191,7 +192,7 @@ def _ssh_status_text(status: SshEndpointStatus | None, strictness: Strictness) -
                 status_text(status.active, status.errors, strictness),
                 *(
                     (
-                        f", {severity_symbol(Severity.WARNING)}{w.value}",
+                        f", {severity_symbol(Severity.WARNING)}{format_problem(w)}",
                         severity_style(Severity.WARNING),
                     )
                     for w in status.warnings
@@ -372,23 +373,21 @@ def build_check_sections(
     ]
 
 
-def print_human_check(
+def format_human_check(
     ssh_statuses: dict[str, SshEndpointStatus],
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
     config: Config,
     *,
-    console: Console | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     wrap_in_panel: bool = True,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
     invocation: Invocation | None = None,
-) -> None:
+) -> RenderableType:
     """*invocation* carries the config path and endpoint flags so the
     ``troubleshoot`` suggestion can be copy-pasted as-is.
     """
-    con = console if console is not None else Console()
-    sections = [
+    sections = Group(
         *build_check_sections(
             ssh_statuses,
             vol_statuses,
@@ -398,19 +397,17 @@ def print_human_check(
             strictness,
         ),
         *_troubleshoot_hint(ssh_statuses, sync_statuses, invocation or Invocation()),
-    ]
-    if wrap_in_panel:
-        con.print(
-            Panel(
-                Group(*sections),
-                title="[bold]Preflight Checks[/bold]",
-                border_style="cyan",
-                padding=(0, 1),
-            )
+    )
+    return (
+        Panel(
+            sections,
+            title="[bold]Preflight Checks[/bold]",
+            border_style="cyan",
+            padding=(0, 1),
         )
-    else:
-        for section in sections:
-            con.print(section)
+        if wrap_in_panel
+        else sections
+    )
 
 
 def _troubleshoot_hint(

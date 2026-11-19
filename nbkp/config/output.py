@@ -3,7 +3,7 @@ from typing import Any, Protocol
 
 from pydantic import ValidationError
 from pydantic_core import ErrorDetails
-from rich.console import Console
+from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -137,23 +137,19 @@ def _snapshot_label(name: str, max_snapshots: int | None) -> str:
     return f"{name}(max:{max_snapshots})" if max_snapshots is not None else name
 
 
-def print_human_config(
+def format_human_config(
     config: Config,
     *,
-    console: Console | None = None,
     resolved_endpoints: SelectedEndpoints | None = None,
-) -> None:
+) -> Group:
+    """The config's tables, separated by a blank line."""
     re = resolved_endpoints or {}
-    c = console or Console()
     tables = [
         *([_ssh_endpoints_table(config)] if config.ssh_endpoints else []),
         _volumes_table(config, re),
         _syncs_table(config),
     ]
-    for i, table in enumerate(tables):
-        if i > 0:
-            c.print()
-        c.print(table)
+    return Group(*tables[:1], *(part for t in tables[1:] for part in (Text(""), t)))
 
 
 def _ssh_endpoints_table(config: Config) -> Table:
@@ -264,7 +260,7 @@ def config_error_json(e: ConfigError) -> dict[str, Any]:
     """A ConfigError as JSON-ready data for ``--output json``.
 
     Validation failures also list each problem with its location and its
-    stable ``type`` code (see ``ConfigValidationCode``).
+    stable ``type`` code (see ``ConfigValidationErrorKind``).
     """
     cause = e.__cause__
     return {
@@ -280,17 +276,11 @@ def config_error_json(e: ConfigError) -> dict[str, Any]:
     }
 
 
-def print_config_error(
-    e: ConfigError,
-    *,
-    console: Console | None = None,
-) -> None:
-    """Print a ConfigError as a Rich panel to stderr."""
-    if console is None:
-        console = Console(stderr=True)
+def format_config_error(e: ConfigError) -> Panel:
+    """A ConfigError as a Rich panel, for stderr."""
     body = _config_error_body(e)
     # Both wrapped in Text: the title's own brackets would be read as a style
     # tag (rendering a bare "Config error"), and the body carries YAML parser
     # and pydantic messages, which embed "[type=..., input_value=...]".
     title = Text(f"Config error [{e.reason}]")
-    console.print(Panel(Text(body), title=title, style="red"))
+    return Panel(Text(body), title=title, style="red")

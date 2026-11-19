@@ -8,11 +8,11 @@ from ....config import (
     MountConfig,
     SyncEndpoint,
 )
-from ....disks import MountFailureReason, MountToolCapabilities
+from ....disks import MountFailureKind, MountToolCapabilities
 from ... import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
-    DestinationEndpointError,
+    DestinationEndpointErrorKind,
     LatestSymlinkState,
     MountCapabilities,
     SnapshotDirsDiagnostics,
@@ -20,7 +20,7 @@ from ... import (
     SshEndpointToolNeeds,
     SyncStatus,
     VolumeCapabilities,
-    VolumeError,
+    VolumeErrorKind,
 )
 from ..common import inactive_dst_ep_status
 from .scenario import (
@@ -67,7 +67,7 @@ def _unmounted_volume_scenario(
     volume: LocalVolume,
     ssh_status: SshEndpointStatus,
     capabilities: VolumeCapabilities,
-    error: VolumeError,
+    error: VolumeErrorKind,
 ) -> Scenario:
     """A sync from the inactive laptop to a volume that is not usable."""
     endpoint = f"{volume.slug}-dst"
@@ -125,7 +125,7 @@ MOUNT_ENCRYPTED = _unmounted_volume_scenario(
         ),
         sentinel=True,
     ),
-    VolumeError.VOLUME_NOT_MOUNTED,
+    VolumeErrorKind.VOLUME_NOT_MOUNTED,
 )
 
 # Device present but not mounted (VOLUME_NOT_MOUNTED).
@@ -146,7 +146,7 @@ MOUNT_UNENCRYPTED = _unmounted_volume_scenario(
         ),
         sentinel=True,
     ),
-    VolumeError.VOLUME_NOT_MOUNTED,
+    VolumeErrorKind.VOLUME_NOT_MOUNTED,
 )
 
 # localhost: btrfs + udisks all present
@@ -207,7 +207,7 @@ def _btrfs_subvolrm_statuses(
                     snapshot_dirs=SnapshotDirsDiagnostics(exists=True, writable=True),
                     latest=LatestSymlinkState(exists=True, raw_target="/dev/null"),
                 ),
-                [DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM],
+                [DestinationEndpointErrorKind.VOL_NOT_MOUNTED_USER_SUBVOL_RM],
             ),
         ),
     )
@@ -250,7 +250,7 @@ MOUNT_DEVICE_MISSING = _unmounted_volume_scenario(
         MountCapabilities(device_present=False, luks_unlocked=None, mounted=None),
         sentinel=False,
     ),
-    VolumeError.DEVICE_NOT_PRESENT,
+    VolumeErrorKind.DEVICE_NOT_PRESENT,
 )
 
 # Device present, but no fstab entry maps it to the configured path, so
@@ -272,11 +272,11 @@ MOUNT_FSTAB_MISMATCH = _unmounted_volume_scenario(
         ),
         sentinel=False,
     ),
-    VolumeError.FSTAB_MOUNTPOINT_MISMATCH,
+    VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH,
 )
 
 
-def _failed_mount_caps(path: str, reason: MountFailureReason) -> VolumeCapabilities:
+def _failed_mount_caps(path: str, reason: MountFailureKind) -> VolumeCapabilities:
     """The lifecycle reported *reason*, which preflight surfaces instead of
     VOLUME_NOT_MOUNTED."""
     return _mount_caps(
@@ -284,7 +284,7 @@ def _failed_mount_caps(path: str, reason: MountFailureReason) -> VolumeCapabilit
             has_fstab_entry=True,
             fstab_target=path,
             device_present=True,
-            luks_unlocked=reason == MountFailureReason.MOUNT_FAILED,
+            luks_unlocked=reason == MountFailureKind.MOUNT_FAILED,
             mounted=False,
             mount_failure_reason=reason,
         ),
@@ -298,8 +298,8 @@ MOUNT_LUKS_FAILED = _unmounted_volume_scenario(
         "mount-luks-failed", "/mnt/luks-failed", "66666666-7777-8888-9999-aaaaaaaaaaaa"
     ),
     _LOCALHOST_UDISKS_SSH,
-    _failed_mount_caps("/mnt/luks-failed", MountFailureReason.UNLOCK_FAILED),
-    VolumeError.UNLOCK_FAILED,
+    _failed_mount_caps("/mnt/luks-failed", MountFailureKind.UNLOCK_FAILED),
+    VolumeErrorKind.UNLOCK_FAILED,
 )
 
 # Unlocked, but the mount step failed.
@@ -311,13 +311,13 @@ MOUNT_MOUNT_FAILED = _unmounted_volume_scenario(
         "77777777-8888-9999-aaaa-bbbbbbbbbbbb",
     ),
     _LOCALHOST_UDISKS_SSH,
-    _failed_mount_caps("/mnt/mount-failed", MountFailureReason.MOUNT_FAILED),
-    VolumeError.MOUNT_FAILED,
+    _failed_mount_caps("/mnt/mount-failed", MountFailureKind.MOUNT_FAILED),
+    VolumeErrorKind.MOUNT_FAILED,
 )
 
 # udisks refused the action under --no-user-interaction because no polkit
 # rule allows it.  The host also lacks the udisks btrfs module
-# (SshEndpointWarning.UDISKS_BTRFS_MODULE_MISSING — a warning, not an error).
+# (SshEndpointWarningKind.UDISKS_BTRFS_MODULE_MISSING — a warning, not an error).
 MOUNT_POLKIT_REFUSED = _unmounted_volume_scenario(
     "mount-polkit-refused",
     _encrypted_volume(
@@ -330,8 +330,8 @@ MOUNT_POLKIT_REFUSED = _unmounted_volume_scenario(
         mount_tools=UDISKS_TOOLS.model_copy(update={"has_btrfs_module": False}),
         needs=SshEndpointToolNeeds(has_mount_volumes=True, has_btrfs_mount=True),
     ),
-    _failed_mount_caps("/mnt/polkit-refused", MountFailureReason.NOT_AUTHORIZED),
-    VolumeError.POLKIT_RULES_MISSING,
+    _failed_mount_caps("/mnt/polkit-refused", MountFailureKind.NOT_AUTHORIZED),
+    VolumeErrorKind.POLKIT_RULES_MISSING,
 )
 
 # Drive plugged in, but its passphrase cannot be retrieved.
@@ -343,8 +343,6 @@ MOUNT_NO_PASSPHRASE = _unmounted_volume_scenario(
         "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
     ),
     _LOCALHOST_UDISKS_SSH,
-    _failed_mount_caps(
-        "/mnt/no-passphrase", MountFailureReason.PASSPHRASE_NOT_AVAILABLE
-    ),
-    VolumeError.PASSPHRASE_NOT_AVAILABLE,
+    _failed_mount_caps("/mnt/no-passphrase", MountFailureKind.PASSPHRASE_NOT_AVAILABLE),
+    VolumeErrorKind.PASSPHRASE_NOT_AVAILABLE,
 )

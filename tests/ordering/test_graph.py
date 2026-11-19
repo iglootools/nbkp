@@ -2,9 +2,11 @@
 
 import json
 from io import StringIO
+from pathlib import Path
 
 from rich.console import Console
 
+from nbkp.cli import app
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
@@ -13,13 +15,16 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.config.testkit import write_config
 from nbkp.ordering.output import (
     build_graph_json,
     build_mermaid_graph,
-    print_mermaid_ascii_graph,
-    print_mermaid_graph,
-    print_rich_tree_graph,
+    format_mermaid_ascii_graph,
+    format_mermaid_graph,
+    format_rich_tree_graph,
 )
+from tests.clidisplay import runner
+from tests.fakes import fake_runtime
 
 
 def _chain_config() -> Config:
@@ -101,34 +106,46 @@ class TestBuildMermaidGraph:
         assert laptop_to_server_idx < server_to_usb_idx
 
 
-class TestPrintMermaidGraph:
+class TestFormatMermaidGraph:
     def test_output_is_exact_mermaid_text(self) -> None:
         # Lines wider than the console must not be wrapped, and ``|``/``>``
         # must not be highlighted: the output is piped into mermaid.
         cfg = _chain_config()
         buf = StringIO()
-        print_mermaid_graph(cfg, console=Console(file=buf, width=20))
+        Console(file=buf, width=20).print(format_mermaid_graph(cfg), soft_wrap=True)
         assert buf.getvalue() == build_mermaid_graph(cfg) + "\n"
 
+    def test_command_prints_exact_mermaid_text(self, tmp_path: Path) -> None:
+        cfg = _chain_config()
+        config_path = write_config(tmp_path, cfg)
+        result = runner.invoke(
+            app,
+            ["ordering", "graph", "-c", str(config_path), "-f", "mermaid"],
+            obj=fake_runtime(),
+            env={"COLUMNS": "20"},
+        )
+        assert result.exit_code == 0, result.output
+        assert result.output == build_mermaid_graph(cfg) + "\n"
 
-class TestPrintMermaidAsciiGraph:
+
+class TestFormatMermaidAsciiGraph:
     def test_renders_without_error(self) -> None:
         cfg = _chain_config()
         buf = StringIO()
         console = Console(file=buf, highlight=False, markup=False)
-        print_mermaid_ascii_graph(cfg, console=console)
+        console.print(format_mermaid_ascii_graph(cfg))
         output = buf.getvalue()
         assert "laptop-docs" in output
         assert "server-docs" in output
         assert "usb-docs" in output
 
 
-class TestPrintRichTreeGraph:
+class TestFormatRichTreeGraph:
     def test_contains_root_and_sync_slugs(self) -> None:
         cfg = _chain_config()
         buf = StringIO()
         console = Console(file=buf, highlight=False, markup=False)
-        print_rich_tree_graph(cfg, console=console)
+        console.print(format_rich_tree_graph(cfg))
         output = buf.getvalue()
         assert "laptop-docs" in output
         assert "laptop-to-server" in output
@@ -140,7 +157,7 @@ class TestPrintRichTreeGraph:
         cfg = _chain_config()
         buf = StringIO()
         console = Console(file=buf, highlight=False, markup=False)
-        print_rich_tree_graph(cfg, console=console)
+        console.print(format_rich_tree_graph(cfg))
         output = buf.getvalue()
         assert "btrfs, max: 10" in output
         assert "hard-link, max: 5" in output
@@ -149,7 +166,7 @@ class TestPrintRichTreeGraph:
         cfg = _chain_config()
         buf = StringIO()
         console = Console(file=buf, highlight=False, markup=False)
-        print_rich_tree_graph(cfg, console=console)
+        console.print(format_rich_tree_graph(cfg))
         output = buf.getvalue()
         assert "laptop-to-offsite" in output
         assert "(disabled)" in output
@@ -158,7 +175,7 @@ class TestPrintRichTreeGraph:
         cfg = _chain_config()
         buf = StringIO()
         console = Console(file=buf, highlight=False, markup=False)
-        print_rich_tree_graph(cfg, console=console)
+        console.print(format_rich_tree_graph(cfg))
         output = buf.getvalue()
         # offsite-docs has no snapshots — line should not have parens
         # except for (disabled)

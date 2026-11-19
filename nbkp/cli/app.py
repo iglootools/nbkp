@@ -11,8 +11,8 @@ from ..disks.cli import app as disks_app
 from ..ordering.cli import app as ordering_app
 from ..preflight.cli import app as preflight_app
 from ..remote.pool import connection_scope
-from ..run.cli.run_cmd import run as run_fn
-from ..sh.cli.sh_cmd import sh as sh_fn
+from ..run.cli.run_cmd import run_cmd
+from ..sh.cli.sh_cmd import sh_cmd
 from ..snapshots.cli import app as snapshots_app
 
 
@@ -64,5 +64,5 @@ app.add_typer(
     help="Demo CLI: sample output rendering and seed data",
 )
 
-app.command()(run_fn)
-app.command(name="sh")(sh_fn)
+app.command(name="run")(run_cmd)
+app.command(name="sh")(sh_cmd)

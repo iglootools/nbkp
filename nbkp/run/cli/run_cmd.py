@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -22,8 +21,19 @@ from ...cliwiring.config import (
     require_known_syncs,
     resolve_endpoints,
 )
-from ...cliwiring.mount import managed_mount, print_umount_failures
+from ...cliwiring.mount import format_umount_failures, managed_mount
 from ...cliwiring.mount_progress import mount_display_names
+from ...cliwiring.options import (
+    CONFIG_OPTION,
+    DRY_RUN_OPTION,
+    EXCLUDE_LOCATION_OPTION,
+    LOCATION_OPTION,
+    MOUNT_OPTION,
+    NETWORK_OPTION,
+    OUTPUT_OPTION,
+    SYNC_OPTION,
+    UMOUNT_OPTION,
+)
 from ...cliwiring.preflight import end_check_step, start_check_step
 from ...cliwiring.runtime import runtime_of
 from ...config import Config
@@ -32,12 +42,13 @@ from ...disks.output import umount_result_json
 from ...ordering.output import build_rich_tree_sections
 from ...policy import Strictness
 from ...preflight import (
-    PreflightError,
+    PreflightErrorKind,
     PreflightResult,
     check_step_count,
+    format_problems,
 )
-from ...preflight.output import print_human_check
-from ...remote.endpoints import NetworkType, ResolvedEndpoints
+from ...preflight.output import format_human_check
+from ...remote.endpoints import ResolvedEndpoints
 from ...sync import ProgressMode, SyncResult, result_severity
 from ...sync.output import build_human_results_sections
 from ..pipeline import (
@@ -51,31 +62,12 @@ from ..pipeline import (
 _ABORT_DETAIL_INDENT = 2
 
 
-def run(
+def run_cmd(
     ctx: typer.Context,
-    config: Annotated[
-        Path | None,
-        typer.Option(
-            "--config",
-            "-c",
-            help="Path to config file",
-            file_okay=True,
-            dir_okay=False,
-            resolve_path=True,
-        ),
-    ] = None,
-    dry_run: Annotated[
-        bool,
-        typer.Option("--dry-run", "-n", help="Perform a dry run"),
-    ] = False,
-    sync: Annotated[
-        list[str] | None,
-        typer.Option("--sync", "-s", help="Sync name(s) to run"),
-    ] = None,
-    output: Annotated[
-        OutputFormat,
-        typer.Option("--output", "-o", help="Output format"),
-    ] = OutputFormat.HUMAN,
+    config: CONFIG_OPTION = None,
+    dry_run: DRY_RUN_OPTION = False,
+    sync: SYNC_OPTION = None,
+    output: OUTPUT_OPTION = OutputFormat.HUMAN,
     progress: Annotated[
         ProgressMode | None,
         typer.Option(
@@ -104,44 +96,11 @@ def run(
             ),
         ),
     ] = Strictness.IGNORE_INACTIVE,
-    location: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--location",
-            "-l",
-            help="Prefer endpoints at these locations",
-        ),
-    ] = None,
-    exclude_location: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--exclude-location",
-            "-L",
-            help="Exclude endpoints at these locations",
-        ),
-    ] = None,
-    network: Annotated[
-        NetworkType | None,
-        typer.Option(
-            "--network",
-            "-N",
-            help="Prefer private (LAN) or public (WAN) endpoints",
-        ),
-    ] = None,
-    mount: Annotated[
-        bool,
-        typer.Option(
-            "--mount/--no-mount",
-            help="Mount/umount volumes with mount config",
-        ),
-    ] = True,
-    umount: Annotated[
-        bool,
-        typer.Option(
-            "--umount/--no-umount",
-            help="Umount after sync (use --no-umount for debugging)",
-        ),
-    ] = True,
+    location: LOCATION_OPTION = None,
+    exclude_location: EXCLUDE_LOCATION_OPTION = None,
+    network: NETWORK_OPTION = None,
+    mount: MOUNT_OPTION = True,
+    umount: UMOUNT_OPTION = True,
 ) -> None:
     """Execute all active syncs in dependency order. Supports dry-run, progress display, snapshot creation, and automatic pruning."""
     runtime = runtime_of(ctx)
@@ -236,21 +195,23 @@ class _HumanProgress:
         if self._check_bar is not None:
             start_check_step(self._check_bar, label)
 
-    def on_check_end(self, label: str, errors: Sequence[PreflightError]) -> None:
+    def on_check_end(self, label: str, errors: Sequence[PreflightErrorKind]) -> None:
         if self._check_bar is not None:
             end_check_step(self._check_bar, label, errors, self._strictness)
 
     def on_checks_done(self, preflight: PreflightResult) -> None:
         if self._check_bar is not None:
             self._check_bar.stop()
-        print_human_check(
-            preflight.ssh_endpoint_statuses,
-            preflight.volume_statuses,
-            preflight.sync_statuses,
-            self._cfg,
-            resolved_endpoints=self._resolved,
-            strictness=self._strictness,
-            invocation=self._invocation,
+        self._console.print(
+            format_human_check(
+                preflight.ssh_endpoint_statuses,
+                preflight.volume_statuses,
+                preflight.sync_statuses,
+                self._cfg,
+                resolved_endpoints=self._resolved,
+                strictness=self._strictness,
+                invocation=self._invocation,
+            )
         )
 
     def sync_callbacks(self) -> SyncCallbacks:
@@ -301,7 +262,9 @@ def _print_outcome(
                 _results_panel(pipeline, cfg, resolved, strictness, dry_run)
             )
     if output is OutputFormat.HUMAN:
-        print_umount_failures(umount_results, mount_display_names(cfg))
+        Console(stderr=True).print(
+            format_umount_failures(umount_results, mount_display_names(cfg))
+        )
 
 
 def run_json(
@@ -340,7 +303,8 @@ def abort_message(
         ),
         *(
             Padding(
-                Text(f"{slug}: {', '.join(errors)}"), (0, 0, 0, _ABORT_DETAIL_INDENT)
+                Text(f"{slug}: {format_problems(errors)}"),
+                (0, 0, 0, _ABORT_DETAIL_INDENT),
             )
             for slug, errors in errored.items()
         ),

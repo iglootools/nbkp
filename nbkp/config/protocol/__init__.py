@@ -1,6 +1,6 @@
 from .base import Slug, _BaseModel
 from .config import Config, CredentialProvider
-from .errors import ConfigValidationCode
+from .errors import ConfigValidationErrorKind
 from .ssh_endpoint import SshConnectionOptions, SshEndpoint
 from .sync import RsyncOptions, SyncConfig
 from .sync_endpoint import (
@@ -23,7 +23,7 @@ from .volume import (
 __all__ = [
     "BtrfsSnapshotConfig",
     "Config",
-    "ConfigValidationCode",
+    "ConfigValidationErrorKind",
     "CredentialProvider",
     "EncryptionConfig",
     "HardLinkSnapshotConfig",

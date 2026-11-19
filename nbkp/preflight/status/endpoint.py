@@ -12,37 +12,32 @@ from ...config import (
     SyncEndpoint,
 )
 from ...fsprotocol import (
-    DESTINATION_SENTINEL,
     DEVNULL_TARGET,
-    LATEST_LINK,
-    SNAPSHOTS_DIR,
-    SOURCE_SENTINEL,
-    STAGING_DIR,
     Snapshot,
 )
 from .ssh import HostToolCapabilities
 from .volume import VolumeCapabilities, VolumeStatus
 
 
-class SourceEndpointError(str, enum.Enum):
-    SENTINEL_NOT_FOUND = f"{SOURCE_SENTINEL} sentinel not found"
-    SNAPSHOTS_DIR_NOT_FOUND = f"{SNAPSHOTS_DIR}/ directory not found"
-    LATEST_SYMLINK_NOT_FOUND = f"{LATEST_LINK} symlink not found"
-    LATEST_SYMLINK_INVALID = f"{LATEST_LINK} symlink target is invalid"
+class SourceEndpointErrorKind(enum.StrEnum):
+    SENTINEL_NOT_FOUND = "sentinel-not-found"
+    SNAPSHOTS_DIR_NOT_FOUND = "snapshots-dir-not-found"
+    LATEST_SYMLINK_NOT_FOUND = "latest-symlink-not-found"
+    LATEST_SYMLINK_INVALID = "latest-symlink-invalid"
 
     # Cascade — lower layer inactive
-    VOLUME_INACTIVE = "volume inactive"
+    VOLUME_INACTIVE = "volume-inactive"
 
 
-INACTIVE_SRC_ENDPOINT_ERRORS: frozenset[SourceEndpointError] = frozenset(
+INACTIVE_SRC_ENDPOINT_ERRORS: frozenset[SourceEndpointErrorKind] = frozenset(
     {
-        SourceEndpointError.SENTINEL_NOT_FOUND,
-        SourceEndpointError.VOLUME_INACTIVE,
+        SourceEndpointErrorKind.SENTINEL_NOT_FOUND,
+        SourceEndpointErrorKind.VOLUME_INACTIVE,
     }
 )
 
 
-class DestinationEndpointError(str, enum.Enum):
+class DestinationEndpointErrorKind(enum.StrEnum):
     """Includes capability-gated errors that are probed at the volume or
     host level but become errors because the endpoint config requires
     a capability the volume doesn't have.  Troubleshoot offers dual
@@ -50,31 +45,31 @@ class DestinationEndpointError(str, enum.Enum):
     change the endpoint config (e.g. switch to hard-link snapshots).
     """
 
-    SENTINEL_NOT_FOUND = f"{DESTINATION_SENTINEL} sentinel not found"
-    NOT_WRITABLE = "endpoint directory not writable"
-    SNAPSHOTS_DIR_NOT_FOUND = f"{SNAPSHOTS_DIR}/ directory not found"
-    SNAPSHOTS_DIR_NOT_WRITABLE = f"{SNAPSHOTS_DIR}/ directory not writable"
-    LATEST_SYMLINK_NOT_FOUND = f"{LATEST_LINK} symlink not found"
-    LATEST_SYMLINK_INVALID = f"{LATEST_LINK} symlink target is invalid"
-    STAGING_SUBVOL_NOT_FOUND = f"{STAGING_DIR}/ directory not found"
-    STAGING_NOT_BTRFS_SUBVOLUME = f"{STAGING_DIR}/ is not a btrfs subvolume"
-    STAGING_SUBVOL_NOT_WRITABLE = f"{STAGING_DIR}/ subvolume not writable"
+    SENTINEL_NOT_FOUND = "sentinel-not-found"
+    NOT_WRITABLE = "not-writable"
+    SNAPSHOTS_DIR_NOT_FOUND = "snapshots-dir-not-found"
+    SNAPSHOTS_DIR_NOT_WRITABLE = "snapshots-dir-not-writable"
+    LATEST_SYMLINK_NOT_FOUND = "latest-symlink-not-found"
+    LATEST_SYMLINK_INVALID = "latest-symlink-invalid"
+    STAGING_SUBVOL_NOT_FOUND = "staging-subvol-not-found"
+    STAGING_NOT_BTRFS_SUBVOLUME = "staging-not-btrfs-subvolume"
+    STAGING_SUBVOL_NOT_WRITABLE = "staging-subvol-not-writable"
 
     # Capability-gated: probed at volume level, error because endpoint config
     # requires the capability.
-    VOL_NOT_BTRFS = "volume not on btrfs filesystem"
-    VOL_FS_TYPE_UNKNOWN = "could not determine the volume filesystem type"
-    VOL_NOT_MOUNTED_USER_SUBVOL_RM = "volume not mounted with user_subvol_rm_allowed"
-    VOL_NO_HARDLINK_SUPPORT = "volume filesystem does not support hard links"
+    VOL_NOT_BTRFS = "vol-not-btrfs"
+    VOL_FS_TYPE_UNKNOWN = "vol-fs-type-unknown"
+    VOL_NOT_MOUNTED_USER_SUBVOL_RM = "vol-not-mounted-user-subvol-rm"
+    VOL_NO_HARDLINK_SUPPORT = "vol-no-hardlink-support"
 
     # Cascade — lower layer inactive
-    VOLUME_INACTIVE = "volume inactive"
+    VOLUME_INACTIVE = "volume-inactive"
 
 
-INACTIVE_DST_ENDPOINT_ERRORS: frozenset[DestinationEndpointError] = frozenset(
+INACTIVE_DST_ENDPOINT_ERRORS: frozenset[DestinationEndpointErrorKind] = frozenset(
     {
-        DestinationEndpointError.SENTINEL_NOT_FOUND,
-        DestinationEndpointError.VOLUME_INACTIVE,
+        DestinationEndpointErrorKind.SENTINEL_NOT_FOUND,
+        DestinationEndpointErrorKind.VOLUME_INACTIVE,
     }
 )
 
@@ -131,7 +126,7 @@ class SourceEndpointDiagnostics(BaseModel):
 
     Pure diagnostics — no interpretation of what constitutes an error.
     ``SourceEndpointStatus.from_diagnostics`` translates these into
-    ``SourceEndpointError`` values.
+    ``SourceEndpointErrorKind`` values.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -147,7 +142,7 @@ class DestinationEndpointDiagnostics(BaseModel):
 
     Pure diagnostics — no interpretation of what constitutes an error.
     ``DestinationEndpointStatus.from_diagnostics`` translates these into
-    ``DestinationEndpointError`` values.
+    ``DestinationEndpointErrorKind`` values.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -167,7 +162,7 @@ class SourceEndpointStatus(BaseModel):
     volume_status: VolumeStatus
     diagnostics: SourceEndpointDiagnostics | None
     """``None`` when the volume is inactive."""
-    errors: list[SourceEndpointError]
+    errors: list[SourceEndpointErrorKind]
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -185,7 +180,7 @@ class SourceEndpointStatus(BaseModel):
             volume_status=volume_status,
             diagnostics=diagnostics,
             errors=(
-                [SourceEndpointError.VOLUME_INACTIVE]
+                [SourceEndpointErrorKind.VOLUME_INACTIVE]
                 if not volume_status.active
                 else _source_endpoint_errors(diagnostics, endpoint)
                 if diagnostics is not None
@@ -201,7 +196,7 @@ class DestinationEndpointStatus(BaseModel):
     volume_status: VolumeStatus
     diagnostics: DestinationEndpointDiagnostics | None
     """``None`` when the volume is inactive."""
-    errors: list[DestinationEndpointError]
+    errors: list[DestinationEndpointErrorKind]
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -227,7 +222,7 @@ class DestinationEndpointStatus(BaseModel):
             volume_status=volume_status,
             diagnostics=diagnostics,
             errors=(
-                [DestinationEndpointError.VOLUME_INACTIVE]
+                [DestinationEndpointErrorKind.VOLUME_INACTIVE]
                 if not volume_status.active
                 else _destination_endpoint_errors(
                     diagnostics,
@@ -244,13 +239,17 @@ class DestinationEndpointStatus(BaseModel):
 def _source_endpoint_errors(
     diag: SourceEndpointDiagnostics,
     endpoint: SyncEndpoint,
-) -> list[SourceEndpointError]:
+) -> list[SourceEndpointErrorKind]:
     return [
-        *([SourceEndpointError.SENTINEL_NOT_FOUND] if not diag.sentinel_exists else []),
+        *(
+            [SourceEndpointErrorKind.SENTINEL_NOT_FOUND]
+            if not diag.sentinel_exists
+            else []
+        ),
         *(
             [
                 *(
-                    [SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND]
+                    [SourceEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND]
                     if diag.snapshot_dirs is not None and not diag.snapshot_dirs.exists
                     else []
                 ),
@@ -264,19 +263,19 @@ def _source_endpoint_errors(
 
 def _source_latest_ep_errors(
     diag: SourceEndpointDiagnostics,
-) -> list[SourceEndpointError]:
+) -> list[SourceEndpointErrorKind]:
     """Only structural validity is checked here.  The ``/dev/null``
     interpretation requires sync-level context (upstream sync check)
     and stays at Layer 4.
     """
     latest = diag.latest
     if latest is None or not latest.exists:
-        return [SourceEndpointError.LATEST_SYMLINK_NOT_FOUND]
+        return [SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND]
     elif latest.raw_target == DEVNULL_TARGET:
         # /dev/null is structurally valid — interpretation deferred to sync
         return []
     elif latest.target_valid is False:
-        return [SourceEndpointError.LATEST_SYMLINK_INVALID]
+        return [SourceEndpointErrorKind.LATEST_SYMLINK_INVALID]
     else:
         return []
 
@@ -286,7 +285,7 @@ def _destination_endpoint_errors(
     caps: VolumeCapabilities | None,
     host_tools: HostToolCapabilities | None,
     endpoint: SyncEndpoint,
-) -> list[DestinationEndpointError]:
+) -> list[DestinationEndpointErrorKind]:
     """``NOT_WRITABLE`` is only emitted when the endpoint directory is
     known to exist — approximated via ``sentinel_exists`` (the sentinel
     lives inside the endpoint dir, so its presence proves the dir
@@ -297,13 +296,13 @@ def _destination_endpoint_errors(
     """
     return [
         *(
-            [DestinationEndpointError.SENTINEL_NOT_FOUND]
+            [DestinationEndpointErrorKind.SENTINEL_NOT_FOUND]
             if not diag.sentinel_exists
             else []
         ),
         *_destination_snapshot_backend_ep_errors(diag, caps, host_tools, endpoint),
         *(
-            [DestinationEndpointError.NOT_WRITABLE]
+            [DestinationEndpointErrorKind.NOT_WRITABLE]
             if not diag.endpoint_writable and diag.sentinel_exists
             else []
         ),
@@ -320,7 +319,7 @@ def _destination_snapshot_backend_ep_errors(
     caps: VolumeCapabilities | None,
     host_tools: HostToolCapabilities | None,
     endpoint: SyncEndpoint,
-) -> list[DestinationEndpointError]:
+) -> list[DestinationEndpointErrorKind]:
     if endpoint.btrfs_snapshots.enabled:
         return _btrfs_destination_ep_errors(diag, caps, host_tools)
     elif endpoint.hard_link_snapshots.enabled:
@@ -333,7 +332,7 @@ def _btrfs_destination_ep_errors(
     diag: DestinationEndpointDiagnostics,
     caps: VolumeCapabilities | None,
     host_tools: HostToolCapabilities | None,
-) -> list[DestinationEndpointError]:
+) -> list[DestinationEndpointErrorKind]:
     """Tool availability (btrfs, stat, findmnt) errors are reported at the
     SSH endpoint level.  Here we check capability-gated errors: the
     endpoint config requires btrfs but the volume may not support it.
@@ -345,9 +344,9 @@ def _btrfs_destination_ep_errors(
             # Can't determine filesystem type — stat error at SSH endpoint level
             return []
         case (VolumeCapabilities(is_btrfs_filesystem=None), _):
-            return [DestinationEndpointError.VOL_FS_TYPE_UNKNOWN]
+            return [DestinationEndpointErrorKind.VOL_FS_TYPE_UNKNOWN]
         case (VolumeCapabilities(is_btrfs_filesystem=False), _):
-            return [DestinationEndpointError.VOL_NOT_BTRFS]
+            return [DestinationEndpointErrorKind.VOL_NOT_BTRFS]
         case (VolumeCapabilities() as vol_caps, HostToolCapabilities() as tools):
             return _btrfs_volume_ep_errors(diag, vol_caps, tools)
         case _:
@@ -358,17 +357,17 @@ def _btrfs_volume_ep_errors(
     diag: DestinationEndpointDiagnostics,
     caps: VolumeCapabilities,
     host_tools: HostToolCapabilities,
-) -> list[DestinationEndpointError]:
+) -> list[DestinationEndpointErrorKind]:
     """Btrfs endpoint errors once the volume is known to be on btrfs."""
     return [
         *(
-            [DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM]
+            [DestinationEndpointErrorKind.VOL_NOT_MOUNTED_USER_SUBVOL_RM]
             if host_tools.has_findmnt and not caps.btrfs_user_subvol_rm
             else []
         ),
         *_btrfs_staging_ep_errors(diag),
         *(
-            [DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME]
+            [DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME]
             if diag.btrfs is not None
             and diag.btrfs.staging_exists
             and not diag.btrfs.staging_is_subvolume
@@ -380,13 +379,13 @@ def _btrfs_volume_ep_errors(
 
 def _btrfs_staging_ep_errors(
     diag: DestinationEndpointDiagnostics,
-) -> list[DestinationEndpointError]:
+) -> list[DestinationEndpointErrorKind]:
     if diag.btrfs is None:
         return []
     if not diag.btrfs.staging_exists:
-        return [DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND]
+        return [DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND]
     elif diag.btrfs.staging_writable is False:
-        return [DestinationEndpointError.STAGING_SUBVOL_NOT_WRITABLE]
+        return [DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_WRITABLE]
     else:
         return []
 
@@ -395,7 +394,7 @@ def _hardlink_destination_ep_errors(
     diag: DestinationEndpointDiagnostics,
     caps: VolumeCapabilities | None,
     host_tools: HostToolCapabilities | None,
-) -> list[DestinationEndpointError]:
+) -> list[DestinationEndpointErrorKind]:
     if caps is None or host_tools is None:
         return []
     if not host_tools.has_stat:
@@ -404,7 +403,7 @@ def _hardlink_destination_ep_errors(
     else:
         return [
             *(
-                [DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT]
+                [DestinationEndpointErrorKind.VOL_NO_HARDLINK_SUPPORT]
                 if not caps.hardlink_supported
                 else []
             ),
@@ -414,25 +413,25 @@ def _hardlink_destination_ep_errors(
 
 def _snapshot_dirs_ep_errors(
     diag: DestinationEndpointDiagnostics,
-) -> list[DestinationEndpointError]:
+) -> list[DestinationEndpointErrorKind]:
     sd = diag.snapshot_dirs
     if sd is None:
         return []
     elif not sd.exists:
-        return [DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND]
+        return [DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND]
     elif sd.writable is False:
-        return [DestinationEndpointError.SNAPSHOTS_DIR_NOT_WRITABLE]
+        return [DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_WRITABLE]
     else:
         return []
 
 
 def _destination_latest_ep_errors(
     diag: DestinationEndpointDiagnostics,
-) -> list[DestinationEndpointError]:
+) -> list[DestinationEndpointErrorKind]:
     latest = diag.latest
     if latest is None or not latest.exists:
-        return [DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND]
+        return [DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND]
     elif latest.target_valid is False:
-        return [DestinationEndpointError.LATEST_SYMLINK_INVALID]
+        return [DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID]
     else:
         return []

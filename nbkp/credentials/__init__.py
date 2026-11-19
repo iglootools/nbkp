@@ -12,7 +12,7 @@ from pydantic import SecretStr
 from ..config import Config, CredentialProvider
 
 
-class CredentialErrorReason(StrEnum):
+class CredentialErrorKind(StrEnum):
     NOT_INSTALLED = "not-installed"
     NOT_FOUND = "not-found"
     BACKEND_UNAVAILABLE = "backend-unavailable"
@@ -23,7 +23,7 @@ class CredentialErrorReason(StrEnum):
 
 
 class CredentialError(Exception):
-    def __init__(self, message: str, reason: CredentialErrorReason) -> None:
+    def __init__(self, message: str, reason: CredentialErrorKind) -> None:
         super().__init__(message)
         self.reason = reason
 
@@ -38,7 +38,7 @@ def _from_keyring(passphrase_id: str) -> str:
             " Install with: uv tool install 'nbkp[keyring]'"
             " (quotes required — the shell would glob the extra otherwise),"
             " or switch to another credential-provider.",
-            reason=CredentialErrorReason.NOT_INSTALLED,
+            reason=CredentialErrorKind.NOT_INSTALLED,
         ) from None
 
     try:
@@ -51,13 +51,13 @@ def _from_keyring(passphrase_id: str) -> str:
             f"Keyring backend unavailable for id '{passphrase_id}': {e}."
             " Unlock the keyring, configure a backend,"
             " or switch to another credential-provider.",
-            reason=CredentialErrorReason.BACKEND_UNAVAILABLE,
+            reason=CredentialErrorKind.BACKEND_UNAVAILABLE,
         ) from e
     if password is None:
         raise CredentialError(
             f"No passphrase found in keyring for id '{passphrase_id}'."
             f" Store it with: keyring set nbkp {passphrase_id}",
-            reason=CredentialErrorReason.NOT_FOUND,
+            reason=CredentialErrorKind.NOT_FOUND,
         )
     return password
 
@@ -91,7 +91,7 @@ def _from_env(passphrase_id: str, environ: Mapping[str, str]) -> str:
         raise CredentialError(
             f"Environment variable '{env_var}' not set."
             f" Export it with: export {env_var}=...",
-            reason=CredentialErrorReason.ENV_UNSET,
+            reason=CredentialErrorKind.ENV_UNSET,
         )
     return value
 
@@ -110,7 +110,7 @@ def _from_command(
     if command_template is None:
         raise CredentialError(
             "credential-command is required when credential-provider is 'command'",
-            reason=CredentialErrorReason.COMMAND_MISSING,
+            reason=CredentialErrorKind.COMMAND_MISSING,
         )
     command = [arg.replace("{id}", passphrase_id) for arg in command_template]
     try:
@@ -120,13 +120,13 @@ def _from_command(
         # OSError and be mislabelled an unreachable host.
         raise CredentialError(
             f"Credential command could not be started ({command[0]}): {e}",
-            reason=CredentialErrorReason.COMMAND_NOT_RUNNABLE,
+            reason=CredentialErrorKind.COMMAND_NOT_RUNNABLE,
         ) from e
     if result.returncode != 0:
         raise CredentialError(
             f"Credential command failed (exit {result.returncode}):"
             f" {shlex.join(command)}\nstderr: {result.stderr.strip()}",
-            reason=CredentialErrorReason.COMMAND_FAILED,
+            reason=CredentialErrorKind.COMMAND_FAILED,
         )
     return _first_line(result.stdout)
 
@@ -250,7 +250,7 @@ class PassphrasePrefetch:
     volumes: tuple[str, ...]
     success: bool
     detail: str | None = None
-    reason: CredentialErrorReason | None = None
+    reason: CredentialErrorKind | None = None
 
 
 def prefetch_passphrases(

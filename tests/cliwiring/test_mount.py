@@ -13,7 +13,7 @@ from nbkp.clidisplay import OutputFormat
 from nbkp.cliwiring.mount import managed_mount
 from nbkp.config import Config, LocalVolume, LuksEncryptionConfig, MountConfig
 from nbkp.disks import UmountResult
-from nbkp.disks.models import LifecycleFailure, LifecycleStep, UmountFailureReason
+from nbkp.disks.models import LifecycleFailure, LifecycleStep, UmountFailureKind
 from tests.fakes import FakeCommandRunner, completed, fake_runtime
 
 UUID = "5941f273-f73c-44c5-a3ef-fae7248db1b6"
@@ -21,7 +21,7 @@ UUID = "5941f273-f73c-44c5-a3ef-fae7248db1b6"
 LOCK_FAILED = UmountResult(
     "enc",
     success=False,
-    failure_reason=UmountFailureReason.LOCK_FAILED,
+    failure_reason=UmountFailureKind.LOCK_FAILED,
     failure=LifecycleFailure(step=LifecycleStep.LOCK, exit_code=1, message="busy"),
 )
 

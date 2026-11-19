@@ -20,7 +20,7 @@ _CONFIG_REFERENCE_URL = (
 )
 
 
-class ConfigErrorReason(StrEnum):
+class ConfigErrorKind(StrEnum):
     FILE_NOT_FOUND = "file-not-found"
     UNREADABLE = "unreadable"
     NO_CONFIG_FOUND = "no-config-found"
@@ -31,7 +31,7 @@ class ConfigErrorReason(StrEnum):
 
 
 class ConfigError(Exception):
-    def __init__(self, message: str, reason: ConfigErrorReason) -> None:
+    def __init__(self, message: str, reason: ConfigErrorKind) -> None:
         super().__init__(message)
         self.reason = reason
 
@@ -79,7 +79,7 @@ def find_config_file(
         if not p.is_file():
             raise ConfigError(
                 f"Config file not found: {config_path}",
-                reason=ConfigErrorReason.FILE_NOT_FOUND,
+                reason=ConfigErrorKind.FILE_NOT_FOUND,
             )
         else:
             return p
@@ -99,7 +99,7 @@ def find_config_file(
                 f" Create one at {search[0]} or pass --config PATH (format:"
                 f" {_CONFIG_REFERENCE_URL}), or run `nbkp demo seed` to"
                 " generate a sample config to start from.",
-                reason=ConfigErrorReason.NO_CONFIG_FOUND,
+                reason=ConfigErrorKind.NO_CONFIG_FOUND,
             )
 
 
@@ -123,22 +123,22 @@ def load_config(
     except OSError as e:
         raise ConfigError(
             f"Cannot read config file {path}: {e.strerror or e}",
-            reason=ConfigErrorReason.UNREADABLE,
+            reason=ConfigErrorKind.UNREADABLE,
         ) from e
     except yaml.YAMLError as e:
         raise ConfigError(
             f"Invalid YAML in {path}: {e}",
-            reason=ConfigErrorReason.INVALID_YAML,
+            reason=ConfigErrorKind.INVALID_YAML,
         ) from e
 
     if not isinstance(raw, dict):
         raise ConfigError(
             "Config file must be a YAML mapping",
-            reason=ConfigErrorReason.NOT_A_MAPPING,
+            reason=ConfigErrorKind.NOT_A_MAPPING,
         )
     else:
         try:
             config = Config.model_validate(raw)
         except ValidationError as e:
-            raise ConfigError(str(e), reason=ConfigErrorReason.VALIDATION) from e
+            raise ConfigError(str(e), reason=ConfigErrorKind.VALIDATION) from e
         return config

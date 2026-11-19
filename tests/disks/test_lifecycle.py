@@ -23,9 +23,9 @@ from nbkp.config import (
     SyncEndpoint,
     Volume,
 )
-from nbkp.credentials import CredentialError, CredentialErrorReason
+from nbkp.credentials import CredentialError, CredentialErrorKind
 from nbkp.disks.lifecycle import (
-    MountFailureReason,
+    MountFailureKind,
     MountResult,
     UmountResult,
     mount_count,
@@ -39,7 +39,7 @@ from nbkp.disks.models import (
     LifecycleFailure,
     LifecycleStep,
     MountCapabilities,
-    UmountFailureReason,
+    UmountFailureKind,
 )
 from nbkp.disks.plan import plan_lifecycle
 from nbkp.remote.endpoints import EndpointFilter, ResolvedEndpoints
@@ -160,7 +160,7 @@ class TestMountVolume:
         run = FakeCommandRunner().on("test", "-e", returns=completed(1))
         result = _mount(_encrypted_vol(), run)
         assert not result.success
-        assert result.failure_reason == MountFailureReason.DEVICE_NOT_PRESENT
+        assert result.failure_reason == MountFailureKind.DEVICE_NOT_PRESENT
         assert result.device_present is False
         assert result.failure == LifecycleFailure(device_uuid=_ENC_UUID)
 
@@ -245,7 +245,7 @@ class TestMountVolume:
         )
         result = _mount(_encrypted_vol(), run)
         assert not result.success
-        assert result.failure_reason == MountFailureReason.UNLOCK_FAILED
+        assert result.failure_reason == MountFailureKind.UNLOCK_FAILED
         assert result.luks_unlocked is False
         assert result.failure == LifecycleFailure(
             step=LifecycleStep.UNLOCK,
@@ -259,7 +259,7 @@ class TestMountVolume:
         # crypt child.
         run = FakeCommandRunner().on("lsblk", returns=_LOCKED)
         result = _mount(_encrypted_vol(), run)
-        assert result.failure_reason == MountFailureReason.UNLOCK_FAILED
+        assert result.failure_reason == MountFailureKind.UNLOCK_FAILED
         assert result.failure == LifecycleFailure(step=LifecycleStep.UNLOCK)
         assert _udisks_steps(run) == ["unlock"]
 
@@ -274,7 +274,7 @@ class TestMountVolume:
         )
         result = _mount(_encrypted_vol(), run)
         assert not result.success
-        assert result.failure_reason == MountFailureReason.NOT_AUTHORIZED
+        assert result.failure_reason == MountFailureKind.NOT_AUTHORIZED
         assert result.failure is not None
         assert result.failure.step is LifecycleStep.UNLOCK
 
@@ -286,7 +286,7 @@ class TestMountVolume:
             "udisksctl", "unlock", returns=completed(1, stderr=message)
         )
         result = _mount(_encrypted_vol(), run)
-        assert result.failure_reason == MountFailureReason.UNLOCK_FAILED
+        assert result.failure_reason == MountFailureKind.UNLOCK_FAILED
         assert result.failure == LifecycleFailure(
             step=LifecycleStep.UNLOCK, exit_code=1, message=message
         )
@@ -299,7 +299,7 @@ class TestMountVolume:
         )
         result = _mount(_unencrypted_vol(), run)
         assert not result.success
-        assert result.failure_reason == MountFailureReason.MOUNT_FAILED
+        assert result.failure_reason == MountFailureKind.MOUNT_FAILED
         assert result.mounted is False
         assert result.failure == LifecycleFailure(
             step=LifecycleStep.MOUNT, exit_code=1, message="mount: unknown filesystem"
@@ -308,18 +308,18 @@ class TestMountVolume:
     @pytest.mark.parametrize(
         ("returncode", "stderr", "reason"),
         [
-            (1, "Error mounting: Not Authorized", MountFailureReason.NOT_AUTHORIZED),
+            (1, "Error mounting: Not Authorized", MountFailureKind.NOT_AUTHORIZED),
             (
                 127,
                 "udisksctl: command not found",
-                MountFailureReason.UDISKS_NOT_AVAILABLE,
+                MountFailureKind.UDISKS_NOT_AVAILABLE,
             ),
             # Verbatim dash output (`sh -c`, as on a Debian host) for a missing
             # binary, captured with exit code 127.
             (
                 127,
                 "sh: 1: udisksctl: not found",
-                MountFailureReason.UDISKS_NOT_AVAILABLE,
+                MountFailureKind.UDISKS_NOT_AVAILABLE,
             ),
             # Verbatim udisksctl 2.10.1 (Debian 13) output, exit code 1, with
             # the system D-Bus daemon stopped.
@@ -329,13 +329,13 @@ class TestMountVolume:
                     "Error connecting to the udisks daemon: Could not connect:"
                     " Connection refused"
                 ),
-                MountFailureReason.UDISKS_NOT_AVAILABLE,
+                MountFailureKind.UDISKS_NOT_AVAILABLE,
             ),
         ],
         ids=["polkit-denied", "bash-missing", "dash-missing", "daemon-unreachable"],
     )
     def test_mount_failure_classification(
-        self, returncode: int, stderr: str, reason: MountFailureReason
+        self, returncode: int, stderr: str, reason: MountFailureKind
     ) -> None:
         run = FakeCommandRunner().on(
             "udisksctl", "mount", returns=completed(returncode, stderr=stderr)
@@ -353,14 +353,14 @@ class TestMountVolume:
             "udisksctl", "mount", returns=completed(1, stderr=stderr)
         )
         result = _mount(_unencrypted_vol(), run)
-        assert result.failure_reason == MountFailureReason.MOUNT_FAILED
+        assert result.failure_reason == MountFailureKind.MOUNT_FAILED
 
     def test_mount_volume_swallows_multiline_exception(self) -> None:
         multiline_msg = "first line\nsecond line\nthird line"
         run = FakeCommandRunner().on("test", "-e", returns=OSError(multiline_msg))
         result = _mount(_encrypted_vol(), run)
         assert not result.success
-        assert result.failure_reason == MountFailureReason.UNREACHABLE
+        assert result.failure_reason == MountFailureKind.UNREACHABLE
         assert result.failure == LifecycleFailure(message="first line")
 
     def test_programming_error_propagates(self) -> None:
@@ -387,7 +387,7 @@ class TestMountVolume:
         run = FakeCommandRunner().on("test", "-e", returns=error)
         result = _mount(_encrypted_vol(), run)
         assert not result.success
-        assert result.failure_reason == MountFailureReason.UNREACHABLE
+        assert result.failure_reason == MountFailureKind.UNREACHABLE
         assert result.failure == LifecycleFailure(message=message)
 
     def test_missing_passphrase_on_plugged_in_drive(self) -> None:
@@ -402,13 +402,13 @@ class TestMountVolume:
         def no_passphrase(pid: str) -> str:
             raise CredentialError(
                 f"No passphrase found in keyring for id '{pid}'",
-                reason=CredentialErrorReason.NOT_FOUND,
+                reason=CredentialErrorKind.NOT_FOUND,
             )
 
         run = FakeCommandRunner().on("lsblk", returns=_LOCKED)
         result = mount_volume(vol, vol.mount, {}, no_passphrase, run=run)
         assert not result.success
-        assert result.failure_reason == MountFailureReason.PASSPHRASE_NOT_AVAILABLE
+        assert result.failure_reason == MountFailureKind.PASSPHRASE_NOT_AVAILABLE
         assert result.device_present is True
         assert result.luks_unlocked is False
         assert _udisks_steps(run) == []
@@ -416,7 +416,7 @@ class TestMountVolume:
     def test_failed_lsblk_probe_is_not_locked(self) -> None:
         run = FakeCommandRunner().on("lsblk", returns=completed(1, stderr="boom"))
         result = _mount(_encrypted_vol(), run)
-        assert result.failure_reason == MountFailureReason.PROBE_FAILED
+        assert result.failure_reason == MountFailureKind.PROBE_FAILED
         assert result.failure == LifecycleFailure(
             command="lsblk", exit_code=1, message="boom"
         )
@@ -429,7 +429,7 @@ class TestMountVolume:
             "lsblk", returns=FileNotFoundError(2, "No such file", "lsblk")
         )
         result = _mount(_encrypted_vol(), run)
-        assert result.failure_reason == MountFailureReason.UDISKS_NOT_AVAILABLE
+        assert result.failure_reason == MountFailureKind.UDISKS_NOT_AVAILABLE
         assert result.failure == LifecycleFailure(command="lsblk")
 
 
@@ -490,7 +490,7 @@ class TestUmountVolume:
         result = _umount(_encrypted_vol(), run)
         assert _udisks_steps(run) == ["unmount", "lock"]
         assert not result.success
-        assert result.failure_reason == UmountFailureReason.LOCK_FAILED
+        assert result.failure_reason == UmountFailureKind.LOCK_FAILED
         assert result.failure == LifecycleFailure(
             step=LifecycleStep.LOCK, exit_code=1, message="Error locking: device busy"
         )
@@ -504,7 +504,7 @@ class TestUmountVolume:
         )
         result = _umount(_encrypted_vol(), run)
         assert not result.success
-        assert result.failure_reason == UmountFailureReason.UNMOUNT_FAILED
+        assert result.failure_reason == UmountFailureKind.UNMOUNT_FAILED
         # Locking a mounted container cannot succeed: it is not attempted.
         assert _udisks_steps(run) == ["unmount"]
 
@@ -512,7 +512,7 @@ class TestUmountVolume:
         run = FakeCommandRunner().on("lsblk", returns=TimeoutError("timed out"))
         result = _umount(_encrypted_vol(), run)
         assert not result.success
-        assert result.failure_reason == UmountFailureReason.UNREACHABLE
+        assert result.failure_reason == UmountFailureKind.UNREACHABLE
         assert result.failure == LifecycleFailure(message="timed out")
 
     def test_missing_local_tool_is_not_unreachable(self) -> None:
@@ -521,7 +521,7 @@ class TestUmountVolume:
         )
         result = _umount(_unencrypted_vol(), run)
         assert not result.success
-        assert result.failure_reason == UmountFailureReason.UDISKS_NOT_AVAILABLE
+        assert result.failure_reason == UmountFailureKind.UDISKS_NOT_AVAILABLE
         assert result.failure == LifecycleFailure(command="findmnt")
 
     def test_failed_probe_is_reported_not_skipped(self) -> None:
@@ -529,7 +529,7 @@ class TestUmountVolume:
         run = FakeCommandRunner().on("lsblk", returns=completed(1, stderr="boom"))
         result = _umount(_encrypted_vol(), run)
         assert not result.success
-        assert result.failure_reason == UmountFailureReason.PROBE_FAILED
+        assert result.failure_reason == UmountFailureKind.PROBE_FAILED
         assert result.failure == LifecycleFailure(
             command="lsblk", exit_code=1, message="boom"
         )
@@ -542,7 +542,7 @@ class TestUmountVolume:
         )
         result = _umount(_unencrypted_vol(), run)
         assert not result.success
-        assert result.failure_reason == UmountFailureReason.PROBE_FAILED
+        assert result.failure_reason == UmountFailureKind.PROBE_FAILED
         assert result.failure == LifecycleFailure(
             command="findmnt", exit_code=127, message="findmnt: command not found"
         )

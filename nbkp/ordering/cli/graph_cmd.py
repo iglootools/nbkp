@@ -1,45 +1,36 @@
 import enum
-from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich.console import Console
 
 from ...clidisplay import OutputFormat, echo_json
 from ...cliwiring.config import load_config_or_exit
+from ...cliwiring.options import (
+    CONFIG_OPTION,
+    OUTPUT_OPTION,
+)
 from ...cliwiring.runtime import runtime_of
 from ..output import (
     build_graph_json,
-    print_mermaid_ascii_graph,
-    print_mermaid_graph,
-    print_rich_tree_graph,
+    format_mermaid_ascii_graph,
+    format_mermaid_graph,
+    format_rich_tree_graph,
 )
 from . import app
 
 
-class GraphFormat(str, enum.Enum):
+class GraphFormat(enum.StrEnum):
     RICH_TREE = "rich-tree"
     MERMAID_ASCII = "mermaid-ascii"
     MERMAID = "mermaid"
 
 
-@app.command()
-def graph(
+@app.command("graph")
+def graph_cmd(
     ctx: typer.Context,
-    config: Annotated[
-        Path | None,
-        typer.Option(
-            "--config",
-            "-c",
-            help="Path to config file",
-            file_okay=True,
-            dir_okay=False,
-            resolve_path=True,
-        ),
-    ] = None,
-    output: Annotated[
-        OutputFormat,
-        typer.Option("--output", "-o", help="Output format"),
-    ] = OutputFormat.HUMAN,
+    config: CONFIG_OPTION = None,
+    output: OUTPUT_OPTION = OutputFormat.HUMAN,
     format: Annotated[
         GraphFormat,
         typer.Option("--format", "-f", help="Graph format (human output only)"),
@@ -53,8 +44,10 @@ def graph(
         case OutputFormat.HUMAN:
             match format:
                 case GraphFormat.RICH_TREE:
-                    print_rich_tree_graph(cfg)
+                    Console().print(format_rich_tree_graph(cfg))
                 case GraphFormat.MERMAID_ASCII:
-                    print_mermaid_ascii_graph(cfg)
+                    Console().print(format_mermaid_ascii_graph(cfg))
                 case GraphFormat.MERMAID:
-                    print_mermaid_graph(cfg)
+                    # soft_wrap: lines wider than the terminal stay whole,
+                    # since the output is piped into a mermaid renderer.
+                    Console().print(format_mermaid_graph(cfg), soft_wrap=True)

@@ -19,7 +19,11 @@ from rich.console import Console
 from nbkp.config import Config, LocalVolume, LuksEncryptionConfig, MountConfig
 from nbkp.preflight.output import remediation as rem, troubleshoot as ts
 from nbkp.preflight.status.ssh import SshEndpointDiagnostics, SshEndpointStatus
-from nbkp.preflight.status.volume import VolumeDiagnostics, VolumeError, VolumeStatus
+from nbkp.preflight.status.volume import (
+    VolumeDiagnostics,
+    VolumeErrorKind,
+    VolumeStatus,
+)
 from tests.fakes import FakeCommandRunner, completed
 
 _UUID = "5941f273-f73c-44c5-a3ef-fae7248db1b6"
@@ -42,7 +46,7 @@ def _mount(vol: LocalVolume) -> MountConfig:
     return vol.mount
 
 
-def _issues(vol: LocalVolume, error: VolumeError) -> list[ts.TroubleshootIssue]:
+def _issues(vol: LocalVolume, error: VolumeErrorKind) -> list[ts.TroubleshootIssue]:
     status = VolumeStatus(
         slug=vol.slug,
         config=vol,
@@ -96,10 +100,10 @@ class TestCleartextDeviceRendering:
             facts=rem.RemediationFacts(cleartext_devices={vol.slug: _LABELLED}),
         )
         buf = StringIO()
-        ts.print_issues(
-            Console(file=buf, width=200, color_system=None),
-            _issues(vol, VolumeError.FSTAB_MOUNTPOINT_MISMATCH),
-            ctx,
+        Console(file=buf, width=200, color_system=None).print(
+            ts.format_issues(
+                _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH), ctx
+            )
         )
         out = buf.getvalue()
         assert f"{_LABELLED}  /mnt/seagate8tb" in out
@@ -113,7 +117,7 @@ class TestCleartextDeviceGathering:
             "lsblk", returns=completed(stdout="sdb1 part\nseagate8tb-luks crypt\n")
         )
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeError.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol), run=run
+            _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol), run=run
         )
         assert facts.cleartext_devices == {vol.slug: _LABELLED}
         assert run.commands == [
@@ -125,7 +129,7 @@ class TestCleartextDeviceGathering:
         # A locked container has no crypt child.
         run = FakeCommandRunner().on("lsblk", returns=completed(stdout="sdb1 part\n"))
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeError.MOUNT_FAILED), _ctx(vol), run=run
+            _issues(vol, VolumeErrorKind.MOUNT_FAILED), _ctx(vol), run=run
         )
         assert facts.cleartext_devices == {}
         assert len(run.commands) == 1
@@ -134,7 +138,7 @@ class TestCleartextDeviceGathering:
         vol = _volume()
         run = FakeCommandRunner()
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeError.UNLOCK_FAILED), _ctx(vol), run=run
+            _issues(vol, VolumeErrorKind.UNLOCK_FAILED), _ctx(vol), run=run
         )
         assert facts.cleartext_devices == {}
         assert run.commands == []
@@ -151,7 +155,7 @@ class TestCleartextDeviceGathering:
             "lsblk", returns=FileNotFoundError(2, "No such file or directory", "lsblk")
         )
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeError.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol), run=run
+            _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol), run=run
         )
         assert facts.cleartext_devices == {}
 
@@ -163,7 +167,7 @@ class TestCleartextDeviceGathering:
         vol = _volume()
         run = FakeCommandRunner().on("lsblk", returns=error)
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeError.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol), run=run
+            _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol), run=run
         )
         assert facts.cleartext_devices == {}
 
@@ -173,7 +177,7 @@ class TestCleartextDeviceGathering:
             "lsblk", returns=completed(1, stderr="permission denied")
         )
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeError.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol), run=run
+            _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol), run=run
         )
         assert facts.cleartext_devices == {}
 
@@ -185,7 +189,7 @@ class TestPolkitRuleGathering:
             config=Config(volumes={vol.slug: vol}), local_user="alice"
         )
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeError.POLKIT_RULES_MISSING), ctx
+            _issues(vol, VolumeErrorKind.POLKIT_RULES_MISSING), ctx
         )
         assert set(facts.polkit_rules) == {"alice"}
         assert 'subject.user == "alice"' in facts.polkit_rules["alice"].content
@@ -193,6 +197,6 @@ class TestPolkitRuleGathering:
     def test_no_rule_without_a_polkit_issue(self) -> None:
         vol = _volume()
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeError.UNLOCK_FAILED), _ctx(vol)
+            _issues(vol, VolumeErrorKind.UNLOCK_FAILED), _ctx(vol)
         )
         assert facts.polkit_rules == {}

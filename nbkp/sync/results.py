@@ -1,19 +1,19 @@
 import subprocess
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, computed_field, model_validator
 
 from ..policy import Severity, Strictness, classify_severity
 
 
-class SyncOutcome(str, Enum):
+class SyncOutcome(StrEnum):
     SUCCESS = "success"
     FAILED = "failed"
     CANCELLED = "cancelled"
     SKIPPED = "skipped"
 
 
-class SyncFailureKind(str, Enum):
+class SyncFailureKind(StrEnum):
     """Why a sync did not succeed.  ``None`` on a successful result."""
 
     # FAILED: the sync ran and a step failed.
@@ -87,7 +87,7 @@ _INACTIVE_FAILURES: frozenset[SyncFailureKind] = frozenset(
 )
 
 
-class SyncWarningKind(str, Enum):
+class SyncWarningKind(StrEnum):
     """A best-effort step that failed without failing the sync."""
 
     ORPHAN_CLEANUP = "orphan-cleanup"

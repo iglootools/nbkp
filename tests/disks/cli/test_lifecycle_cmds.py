@@ -24,7 +24,7 @@ from nbkp.disks.cli.mount_cmd import mount_result_entry
 from nbkp.disks.models import (
     LifecycleFailure,
     LifecycleStep,
-    MountFailureReason,
+    MountFailureKind,
 )
 from nbkp.disks.plan import MountAction, VolumePlan, plan_incomplete
 from tests.clidisplay import runner
@@ -91,7 +91,7 @@ def _udisks_steps(run: FakeCommandRunner) -> list[str]:
 
 
 def _failed_mount(
-    reason: MountFailureReason, step: LifecycleStep, message: str
+    reason: MountFailureKind, step: LifecycleStep, message: str
 ) -> MountResult:
     return MountResult(
         volume_slug="enc",
@@ -111,24 +111,24 @@ class TestOutcomeDecisions:
 
     def test_polkit_refusal_is_told_apart(self) -> None:
         refused = _failed_mount(
-            MountFailureReason.NOT_AUTHORIZED, LifecycleStep.UNLOCK, "denied"
+            MountFailureKind.NOT_AUTHORIZED, LifecycleStep.UNLOCK, "denied"
         )
         bad_key = _failed_mount(
-            MountFailureReason.UNLOCK_FAILED, LifecycleStep.UNLOCK, "bad key"
+            MountFailureKind.UNLOCK_FAILED, LifecycleStep.UNLOCK, "bad key"
         )
         assert refused_by_polkit([bad_key, refused])
         assert not refused_by_polkit([bad_key])
 
     def test_mount_result_entry_says_why_it_failed(self) -> None:
         result = _failed_mount(
-            MountFailureReason.UNLOCK_FAILED, LifecycleStep.UNLOCK, "bad key"
+            MountFailureKind.UNLOCK_FAILED, LifecycleStep.UNLOCK, "bad key"
         )
         assert mount_result_entry("enc", result) == {
             "volume": "enc",
             "device_present": True,
             "luks_unlocked": False,
             "mounted": None,
-            "failure_reason": "unlock_failed",
+            "failure_reason": "unlock-failed",
             "detail": "unlock failed (exit 1): bad key",
             "failure": {"step": "unlock", "exit_code": 1, "message": "bad key"},
         }
@@ -208,7 +208,7 @@ class TestMount:
 
         assert exit_code == 1
         [entry] = json.loads(output)
-        assert entry["failure_reason"] == "unlock_failed"
+        assert entry["failure_reason"] == "unlock-failed"
         assert entry["detail"] == "unlock failed (exit 1): bad key"
 
     def test_polkit_refusal_suggests_setup_auth(self) -> None:
@@ -251,7 +251,7 @@ class TestUmount:
         assert exit_code == 1
         [entry] = json.loads(output)
         assert (entry["luks_unlocked"], entry["mounted"]) == (True, False)
-        assert entry["failure_reason"] == "lock_failed"
+        assert entry["failure_reason"] == "lock-failed"
         assert entry["detail"] == "lock failed (exit 1): busy"
         assert entry["warning"] == "LUKS container still unlocked, manual lock needed"
 

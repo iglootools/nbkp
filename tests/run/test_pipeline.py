@@ -13,8 +13,8 @@ from nbkp.config import Config, LocalVolume, SyncConfig, SyncEndpoint, Volume
 from nbkp.disks import UmountResult
 from nbkp.policy import Strictness
 from nbkp.preflight import (
-    DestinationEndpointError,
-    SyncError,
+    DestinationEndpointErrorKind,
+    SyncErrorKind,
     SyncStatus,
 )
 from nbkp.run.pipeline import (
@@ -68,19 +68,19 @@ def _status(config: Config, slug: str, *, src_sentinel: bool = True) -> SyncStat
         destination_endpoint_status=dst_ep_status(
             dst_ep.slug, vol_status(dst_ep.volume, config, ssh)
         ),
-        errors=[] if src_sentinel else [SyncError.SOURCE_ENDPOINT_INACTIVE],
+        errors=[] if src_sentinel else [SyncErrorKind.SOURCE_ENDPOINT_INACTIVE],
     )
 
 
 def _infra_broken(status: SyncStatus) -> SyncStatus:
     """Destination not writable: infrastructure, sentinels observed."""
     dst = status.destination_endpoint_status.model_copy(
-        update={"errors": [DestinationEndpointError.NOT_WRITABLE]}
+        update={"errors": [DestinationEndpointErrorKind.NOT_WRITABLE]}
     )
     return status.model_copy(
         update={
             "destination_endpoint_status": dst,
-            "errors": [SyncError.DESTINATION_ENDPOINT_INACTIVE],
+            "errors": [SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE],
         }
     )
 
@@ -214,11 +214,11 @@ class TestFatalSyncErrors:
         }
 
         assert fatal_sync_errors(statuses, Strictness.IGNORE_INACTIVE) == {
-            "b": ["destination endpoint inactive"]
+            "b": [SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE]
         }
         assert fatal_sync_errors(statuses, Strictness.IGNORE_NONE) == {
-            "a": ["source endpoint inactive"],
-            "b": ["destination endpoint inactive"],
+            "a": [SyncErrorKind.SOURCE_ENDPOINT_INACTIVE],
+            "b": [SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE],
         }
 
     def test_a_disabled_sync_is_never_fatal(self) -> None:
@@ -226,7 +226,7 @@ class TestFatalSyncErrors:
         one must not be reported as offending."""
         config = _chain_config()
         disabled = _status(config, "a").model_copy(
-            update={"errors": [SyncError.DISABLED]}
+            update={"errors": [SyncErrorKind.DISABLED]}
         )
 
         assert fatal_sync_errors({"a": disabled}, Strictness.IGNORE_NONE) == {}

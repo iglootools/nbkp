@@ -3,24 +3,24 @@ import enum
 from pydantic import BaseModel, ConfigDict, computed_field, field_serializer
 
 from ..fsprotocol import Snapshot
-from ..preflight import SyncError
+from ..preflight import SyncErrorKind
 from .errors import SnapshotOp, SnapshotOperationError
 
 
-class SnapshotSkipReason(str, enum.Enum):
+class SnapshotSkipReason(enum.StrEnum):
     """Why a sync was left out of ``snapshots show`` / ``snapshots prune``.
 
     A skip is never a failure: failures go in the result's ``error``.
     """
 
-    NO_SNAPSHOTS = "no snapshots configured"
-    NO_MAX_SNAPSHOTS = "no max-snapshots limit"
+    NO_SNAPSHOTS = "no-snapshots"
+    NO_MAX_SNAPSHOTS = "no-max-snapshots"
     INACTIVE = "inactive"
-    PREFLIGHT_ERRORS = "preflight errors ignored"
+    PREFLIGHT_ERRORS = "preflight-errors"
     """Infrastructure errors under ``--strictness ignore-all``."""
 
 
-class SnapshotErrorKind(str, enum.Enum):
+class SnapshotErrorKind(enum.StrEnum):
     INACTIVE = "inactive"
     """Expected inactivity, fatal under ``--strictness ignore-none``."""
     PREFLIGHT_ERRORS = "preflight-errors"
@@ -38,7 +38,7 @@ class SnapshotResultError(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     kind: SnapshotErrorKind
-    preflight_errors: tuple[SyncError, ...] = ()
+    preflight_errors: tuple[SyncErrorKind, ...] = ()
     operation: SnapshotOp | None = None
     path: str | None = None
     message: str | None = None
@@ -54,7 +54,7 @@ class SnapshotResultError(BaseModel):
         )
 
     @field_serializer("preflight_errors")
-    def _serialize_codes(self, errors: tuple[SyncError, ...]) -> list[str]:
+    def _serialize_codes(self, errors: tuple[SyncErrorKind, ...]) -> list[str]:
         return [e.name for e in errors]
 
     @field_serializer("operation")

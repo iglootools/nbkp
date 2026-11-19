@@ -11,11 +11,12 @@ from ...disks import (
     mounted_fail_severity,
 )
 from ...policy import Severity, Strictness
-from ..severity import PreflightError, severity_for_error, severity_for_errors
-from ..status.endpoint import DestinationEndpointError, SourceEndpointError
-from ..status.ssh import SshEndpointError, SshEndpointStatus
-from ..status.sync import SyncError, SyncStatus
-from ..status.volume import VolumeCapabilities, VolumeError, VolumeStatus
+from ..messages import format_problems
+from ..severity import PreflightErrorKind, severity_for_error, severity_for_errors
+from ..status.endpoint import DestinationEndpointErrorKind, SourceEndpointErrorKind
+from ..status.ssh import SshEndpointErrorKind, SshEndpointStatus
+from ..status.sync import SyncErrorKind, SyncStatus
+from ..status.volume import VolumeCapabilities, VolumeErrorKind, VolumeStatus
 
 
 def join_text(items: Iterable[Text], separator: str = ", ") -> Text:
@@ -25,11 +26,11 @@ def join_text(items: Iterable[Text], separator: str = ", ") -> Text:
 def status_text(
     active: bool,
     errors: (
-        list[VolumeError]
-        | list[SyncError]
-        | list[SshEndpointError]
-        | list[SourceEndpointError]
-        | list[DestinationEndpointError]
+        list[VolumeErrorKind]
+        | list[SyncErrorKind]
+        | list[SshEndpointErrorKind]
+        | list[SourceEndpointErrorKind]
+        | list[DestinationEndpointErrorKind]
     ),
     strictness: Strictness,
 ) -> Text:
@@ -42,8 +43,7 @@ def status_text(
         Text(f"{OK_SYMBOL}active", style=severity_style(Severity.OK))
         if active
         else Text(
-            f"{severity_symbol(severity)}inactive"
-            f" ({', '.join(r.value for r in errors)})",
+            f"{severity_symbol(severity)}inactive ({format_problems(errors)})",
             style=severity_style(severity),
         )
     )
@@ -88,7 +88,7 @@ def format_capabilities(caps: VolumeCapabilities | None) -> Text:
 def check(
     ok: bool,
     label: str,
-    fail_error: PreflightError | None = None,
+    fail_error: PreflightErrorKind | None = None,
     fail_severity: Severity | None = None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Text:

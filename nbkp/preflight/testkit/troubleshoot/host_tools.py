@@ -4,10 +4,10 @@ from ....config import BtrfsSnapshotConfig, Config, LocalVolume, SyncEndpoint
 from ... import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
-    DestinationEndpointError,
+    DestinationEndpointErrorKind,
     LatestSymlinkState,
     SnapshotDirsDiagnostics,
-    SyncError,
+    SyncErrorKind,
     SyncStatus,
 )
 from ..common import (
@@ -45,7 +45,7 @@ _NAS_RSYNC_MISSING_SSH = nas_status(
 
 
 def _rsync_missing_statuses(config: Config, shared: SharedStatuses) -> ScenarioStatuses:
-    # SshEndpointError.RSYNC_NOT_FOUND (Layer 1 on NAS)
+    # SshEndpointErrorKind.RSYNC_NOT_FOUND (Layer 1 on NAS)
     nas = volume_status(config, "nas-backup", _NAS_RSYNC_MISSING_SSH, healthy_caps())
     return ScenarioStatuses(
         syncs=(
@@ -56,7 +56,7 @@ def _rsync_missing_statuses(config: Config, shared: SharedStatuses) -> ScenarioS
                 destination_endpoint_status=inactive_dst_ep_status(
                     "dst-rsync-missing", nas
                 ),
-                errors=[SyncError.SOURCE_ENDPOINT_INACTIVE],
+                errors=[SyncErrorKind.SOURCE_ENDPOINT_INACTIVE],
             ),
         )
     )
@@ -78,9 +78,9 @@ _LOCALHOST_BTRFS_MISSING_SSH = localhost_status(needs=BTRFS_SNAPSHOT_NEEDS)
 def _btrfs_not_detected_statuses(
     config: Config, shared: SharedStatuses
 ) -> ScenarioStatuses:
-    # SshEndpointError.BTRFS_NOT_FOUND (Layer 1)
-    # + DestinationEndpointError.VOL_NOT_BTRFS (Layer 3)
-    # + DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME (Layer 3)
+    # SshEndpointErrorKind.BTRFS_NOT_FOUND (Layer 1)
+    # + DestinationEndpointErrorKind.VOL_NOT_BTRFS (Layer 3)
+    # + DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME (Layer 3)
     usb3 = volume_status(config, "usb-3", _LOCALHOST_BTRFS_MISSING_SSH, healthy_caps())
     return ScenarioStatuses(
         syncs=(
@@ -101,8 +101,8 @@ def _btrfs_not_detected_statuses(
                     latest=LatestSymlinkState(exists=True, raw_target="/dev/null"),
                 ),
                 [
-                    DestinationEndpointError.VOL_NOT_BTRFS,
-                    DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME,
+                    DestinationEndpointErrorKind.VOL_NOT_BTRFS,
+                    DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME,
                 ],
             ),
         )
@@ -129,7 +129,7 @@ _LOCALHOST_TOOLS_MISSING_SSH = localhost_status(
 
 
 def _tools_missing_statuses(config: Config, shared: SharedStatuses) -> ScenarioStatuses:
-    # SshEndpointError.STAT_NOT_FOUND + FINDMNT_NOT_FOUND (Layer 1)
+    # SshEndpointErrorKind.STAT_NOT_FOUND + FINDMNT_NOT_FOUND (Layer 1)
     usb4 = volume_status(
         config, "usb-4", _LOCALHOST_TOOLS_MISSING_SSH, healthy_caps(hardlinks=False)
     )
@@ -140,7 +140,7 @@ def _tools_missing_statuses(config: Config, shared: SharedStatuses) -> ScenarioS
                 config=config.syncs["tools-missing"],
                 source_endpoint_status=shared.laptop_src_inactive,
                 destination_endpoint_status=inactive_dst_ep_status("dst-tools", usb4),
-                errors=[SyncError.SOURCE_ENDPOINT_INACTIVE],
+                errors=[SyncErrorKind.SOURCE_ENDPOINT_INACTIVE],
             ),
         )
     )
@@ -165,7 +165,7 @@ _NAS_RSYNC_OLD_SSH = nas_status(
 
 
 def _rsync_too_old_statuses(config: Config, shared: SharedStatuses) -> ScenarioStatuses:
-    # SshEndpointError.RSYNC_TOO_OLD (Layer 1 on NAS)
+    # SshEndpointErrorKind.RSYNC_TOO_OLD (Layer 1 on NAS)
     nas = volume_status(config, "nas-backup", _NAS_RSYNC_OLD_SSH, healthy_caps())
     return ScenarioStatuses(
         syncs=(
@@ -176,7 +176,7 @@ def _rsync_too_old_statuses(config: Config, shared: SharedStatuses) -> ScenarioS
                 destination_endpoint_status=inactive_dst_ep_status(
                     "dst-rsync-old", nas
                 ),
-                errors=[SyncError.SOURCE_ENDPOINT_INACTIVE],
+                errors=[SyncErrorKind.SOURCE_ENDPOINT_INACTIVE],
             ),
         )
     )
@@ -191,7 +191,7 @@ RSYNC_TOO_OLD = Scenario(
 
 # localhost with lsblk missing while a mount-managed volume is configured
 # (LSBLK_NOT_FOUND).  Localhost errors do not cascade to the volume; the
-# syncs on it carry SyncError.ENDPOINT_HOST_ERRORS instead.
+# syncs on it carry SyncErrorKind.ENDPOINT_HOST_ERRORS instead.
 _LOCALHOST_LSBLK_MISSING_SSH = localhost_status(
     mount_tools=UDISKS_TOOLS.model_copy(update={"has_lsblk": False}),
     needs=MOUNT_NEEDS,
@@ -201,7 +201,7 @@ _LOCALHOST_LSBLK_MISSING_SSH = localhost_status(
 def _host_tool_errors_statuses(
     config: Config, shared: SharedStatuses
 ) -> ScenarioStatuses:
-    # SyncError.ENDPOINT_HOST_ERRORS (Layer 4; the fix lives at the SSH
+    # SyncErrorKind.ENDPOINT_HOST_ERRORS (Layer 4; the fix lives at the SSH
     # endpoint layer)
     usb14 = volume_status(
         config, "usb-14", _LOCALHOST_LSBLK_MISSING_SSH, healthy_caps()
@@ -218,7 +218,7 @@ def _host_tool_errors_statuses(
                 destination_endpoint_status=active_dst_ep_status(
                     "dst-host-errors", usb14
                 ),
-                errors=[SyncError.ENDPOINT_HOST_ERRORS],
+                errors=[SyncErrorKind.ENDPOINT_HOST_ERRORS],
             ),
         ),
     )

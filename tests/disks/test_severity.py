@@ -1,11 +1,11 @@
 """Tests for mount lifecycle severity mapping."""
 
-from nbkp.disks.lifecycle import MountFailureReason, MountResult
+from nbkp.disks.lifecycle import MountFailureKind, MountResult
 from nbkp.disks.severity import mount_result_severity
 from nbkp.policy import Severity, Strictness
 
 
-def _result(success: bool, reason: MountFailureReason | None = None) -> MountResult:
+def _result(success: bool, reason: MountFailureKind | None = None) -> MountResult:
     return MountResult(
         volume_slug="vol",
         success=success,
@@ -22,40 +22,38 @@ class TestMountResultSeverityDefaultStrictness:
     def test_device_not_present_is_warning(self) -> None:
         """A drive being unplugged is expected for removable media."""
         assert (
-            mount_result_severity(_result(False, MountFailureReason.DEVICE_NOT_PRESENT))
+            mount_result_severity(_result(False, MountFailureKind.DEVICE_NOT_PRESENT))
             is Severity.WARNING
         )
 
     def test_unreachable_is_warning(self) -> None:
         """SSH unreachable maps to INACTIVE_SSH_ERRORS — also warning."""
         assert (
-            mount_result_severity(_result(False, MountFailureReason.UNREACHABLE))
+            mount_result_severity(_result(False, MountFailureKind.UNREACHABLE))
             is Severity.WARNING
         )
 
     def test_unlock_failure_is_error(self) -> None:
         assert (
-            mount_result_severity(_result(False, MountFailureReason.UNLOCK_FAILED))
+            mount_result_severity(_result(False, MountFailureKind.UNLOCK_FAILED))
             is Severity.ERROR
         )
 
     def test_mount_failure_is_error(self) -> None:
         assert (
-            mount_result_severity(_result(False, MountFailureReason.MOUNT_FAILED))
+            mount_result_severity(_result(False, MountFailureKind.MOUNT_FAILED))
             is Severity.ERROR
         )
 
     def test_not_authorized_is_error(self) -> None:
         assert (
-            mount_result_severity(_result(False, MountFailureReason.NOT_AUTHORIZED))
+            mount_result_severity(_result(False, MountFailureKind.NOT_AUTHORIZED))
             is Severity.ERROR
         )
 
     def test_udisks_not_available_is_error(self) -> None:
         assert (
-            mount_result_severity(
-                _result(False, MountFailureReason.UDISKS_NOT_AVAILABLE)
-            )
+            mount_result_severity(_result(False, MountFailureKind.UDISKS_NOT_AVAILABLE))
             is Severity.ERROR
         )
 
@@ -71,7 +69,7 @@ class TestMountResultSeverityIgnoreNone:
     def test_device_not_present_is_error(self) -> None:
         assert (
             mount_result_severity(
-                _result(False, MountFailureReason.DEVICE_NOT_PRESENT),
+                _result(False, MountFailureKind.DEVICE_NOT_PRESENT),
                 Strictness.IGNORE_NONE,
             )
             is Severity.ERROR
@@ -80,7 +78,7 @@ class TestMountResultSeverityIgnoreNone:
     def test_unreachable_is_error(self) -> None:
         assert (
             mount_result_severity(
-                _result(False, MountFailureReason.UNREACHABLE),
+                _result(False, MountFailureKind.UNREACHABLE),
                 Strictness.IGNORE_NONE,
             )
             is Severity.ERROR
@@ -93,7 +91,7 @@ class TestMountResultSeverityIgnoreAll:
     def test_device_not_present_is_warning(self) -> None:
         assert (
             mount_result_severity(
-                _result(False, MountFailureReason.DEVICE_NOT_PRESENT),
+                _result(False, MountFailureKind.DEVICE_NOT_PRESENT),
                 Strictness.IGNORE_ALL,
             )
             is Severity.WARNING
@@ -102,7 +100,7 @@ class TestMountResultSeverityIgnoreAll:
     def test_unlock_failure_is_warning(self) -> None:
         assert (
             mount_result_severity(
-                _result(False, MountFailureReason.UNLOCK_FAILED),
+                _result(False, MountFailureKind.UNLOCK_FAILED),
                 Strictness.IGNORE_ALL,
             )
             is Severity.WARNING

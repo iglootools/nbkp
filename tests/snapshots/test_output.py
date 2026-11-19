@@ -5,10 +5,10 @@ from io import StringIO
 from typing import Any
 
 import pytest
-from rich.console import Console
+from rich.console import Console, RenderableType
 
 from nbkp.fsprotocol import Snapshot
-from nbkp.preflight import SyncError
+from nbkp.preflight import SyncErrorKind
 from nbkp.snapshots.errors import SnapshotOp
 from nbkp.snapshots.models import (
     PruneResult,
@@ -18,8 +18,8 @@ from nbkp.snapshots.models import (
     SnapshotSkipReason,
 )
 from nbkp.snapshots.output import (
-    print_human_prune_results,
-    print_human_show_results,
+    format_human_prune_results,
+    format_human_show_results,
     snapshot_error_text,
 )
 
@@ -36,10 +36,10 @@ _FAILED = f"FAILED (list snapshots failed for /dst/snapshots: {_STDERR})"
 
 
 def _render(
-    print_fn: Callable[..., None], results: Sequence[object], **kwargs: Any
+    format_fn: Callable[..., RenderableType], results: Sequence[object], **kwargs: Any
 ) -> str:
     buffer = StringIO()
-    print_fn(results, console=Console(file=buffer, width=200), **kwargs)
+    Console(file=buffer, width=200).print(format_fn(results, **kwargs))
     return buffer.getvalue()
 
 
@@ -50,7 +50,7 @@ def _row(output: str, slug: str) -> str:
 class TestShowOutput:
     def test_status_cells(self) -> None:
         output = _render(
-            print_human_show_results,
+            format_human_show_results,
             [
                 ShowResult(
                     sync_slug="ok-sync",
@@ -92,7 +92,7 @@ class TestShowOutput:
 class TestPruneOutput:
     def test_status_cells(self) -> None:
         output = _render(
-            print_human_prune_results,
+            format_human_prune_results,
             [
                 PruneResult(
                     sync_slug="ok-sync",
@@ -133,21 +133,21 @@ class TestPruneOutput:
         (
             SnapshotResultError(
                 kind=SnapshotErrorKind.INACTIVE,
-                preflight_errors=(SyncError.SOURCE_ENDPOINT_INACTIVE,),
+                preflight_errors=(SyncErrorKind.SOURCE_ENDPOINT_INACTIVE,),
             ),
-            f"inactive: {SyncError.SOURCE_ENDPOINT_INACTIVE.value}",
+            "inactive: source endpoint inactive",
         ),
         (
             SnapshotResultError(
                 kind=SnapshotErrorKind.PREFLIGHT_ERRORS,
                 preflight_errors=(
-                    SyncError.DESTINATION_ENDPOINT_INACTIVE,
-                    SyncError.ENDPOINT_HOST_ERRORS,
+                    SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE,
+                    SyncErrorKind.ENDPOINT_HOST_ERRORS,
                 ),
             ),
             (
                 "preflight errors: destination endpoint inactive,"
-                f" {SyncError.ENDPOINT_HOST_ERRORS.value}"
+                " a host this sync runs on has tool errors"
             ),
         ),
         (

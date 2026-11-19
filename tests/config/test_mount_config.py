@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from nbkp.config import (
     Config,
-    ConfigValidationCode,
+    ConfigValidationErrorKind,
     CredentialProvider,
     LocalVolume,
     LuksEncryptionConfig,
@@ -116,12 +116,12 @@ class TestVolumePathRequirement:
     def test_local_path_required_without_mount(self) -> None:
         with pytest.raises(ValidationError) as excinfo:
             LocalVolume(slug="data")
-        assert _error_types(excinfo.value) == {ConfigValidationCode.PATH_REQUIRED}
+        assert _error_types(excinfo.value) == {ConfigValidationErrorKind.PATH_REQUIRED}
 
     def test_local_path_must_be_absolute(self) -> None:
         with pytest.raises(ValidationError) as excinfo:
             LocalVolume(slug="data", path="backups")
-        assert _error_types(excinfo.value) == {ConfigValidationCode.RELATIVE_PATH}
+        assert _error_types(excinfo.value) == {ConfigValidationErrorKind.RELATIVE_PATH}
 
     def test_local_tilde_path_is_absolute_once_expanded(self) -> None:
         vol = LocalVolume(slug="data", path="~/backups")
@@ -139,7 +139,7 @@ class TestVolumePathRequirement:
     def test_remote_path_required_without_mount(self) -> None:
         with pytest.raises(ValidationError) as excinfo:
             RemoteVolume(slug="nas", ssh_endpoint="nas")
-        assert _error_types(excinfo.value) == {ConfigValidationCode.PATH_REQUIRED}
+        assert _error_types(excinfo.value) == {ConfigValidationErrorKind.PATH_REQUIRED}
 
 
 class TestResolveEndpointPath:
@@ -193,7 +193,7 @@ class TestCredentialProviderConfig:
         with pytest.raises(ValidationError) as excinfo:
             self._minimal_config(credential_provider="command")
         assert _error_types(excinfo.value) == {
-            ConfigValidationCode.CREDENTIAL_COMMAND_REQUIRED
+            ConfigValidationErrorKind.CREDENTIAL_COMMAND_REQUIRED
         }
 
     def test_provider_command_with_credential_command(self) -> None:
@@ -211,7 +211,7 @@ class TestCredentialProviderConfig:
                 credential_command=["pass", "show", "nbkp/fixed"],
             )
         assert _error_types(excinfo.value) == {
-            ConfigValidationCode.CREDENTIAL_COMMAND_PLACEHOLDER
+            ConfigValidationErrorKind.CREDENTIAL_COMMAND_PLACEHOLDER
         }
 
     def test_credential_command_without_command_provider(self) -> None:

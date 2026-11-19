@@ -1,7 +1,7 @@
-"""Per-error remediation instructions printed by ``preflight troubleshoot``.
+"""Per-error remediation instructions shown by ``preflight troubleshoot``.
 
-Every line goes through :func:`say` (or :func:`print_cmd` for shell
-commands): config values — paths, hosts, passphrase ids — are not authored by
+Every line goes through :func:`format_line` (or :func:`format_command` for
+shell commands): config values — paths, hosts, passphrase ids — are not authored by
 nbkp, so they are assembled into a ``Text`` (never parsed as Rich markup), and
 indentation is computed from a nesting *level* at the call site rather than
 hardcoded into the strings.
@@ -17,7 +17,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from textwrap import dedent
 
-from rich.console import Console
+from rich.console import RenderableType
 from rich.padding import Padding
 from rich.syntax import Syntax
 from rich.text import Text
@@ -44,13 +44,16 @@ from ...fsprotocol import (
 )
 from ...remote.endpoints import ResolvedEndpoints
 from ...remote.ssh import format_proxy_jump_chain, ssh_prefix, wrap_cmd
-from ..status.endpoint import DestinationEndpointError, SourceEndpointError
-from ..status.ssh import SshEndpointError, SshEndpointStatus, SshEndpointWarning
-from ..status.sync import SyncError
-from ..status.volume import VolumeError, VolumeStatus
+from ..status.endpoint import DestinationEndpointErrorKind, SourceEndpointErrorKind
+from ..status.ssh import SshEndpointErrorKind, SshEndpointStatus, SshEndpointWarningKind
+from ..status.sync import SyncErrorKind
+from ..status.volume import VolumeErrorKind, VolumeStatus
 
 Part = str | tuple[str, str] | Text
 """A line fragment: plain text, ``(text, style)``, or a ``Text``."""
+
+type Lines = list[RenderableType]
+"""Remediation lines, each already indented to its nesting level."""
 
 _INDENT_WIDTH = 2
 
@@ -61,12 +64,12 @@ HEADER, ERROR, FIX, STEP, STEP_CMD = range(5)
 
 @dataclass(frozen=True)
 class RemediationFacts:
-    """Facts the fix printers show that had to be probed or generated first."""
+    """Facts the fixes show that had to be probed or generated first."""
 
     cleartext_devices: Mapping[str, str] = field(default_factory=dict)
     """Volume slug → cleartext device udisks actually created (e.g.
     ``/dev/mapper/<label>``).  A volume is absent when its container is locked
-    or discovery failed; the fix then prints udisks's default name with a
+    or discovery failed; the fix then shows udisks's default name with a
     caveat."""
     polkit_rules: Mapping[str, AuthRuleBlock] = field(default_factory=dict)
     """System user → the polkit rule block authorizing that user.  A user is
@@ -75,7 +78,7 @@ class RemediationFacts:
 
 @dataclass(frozen=True)
 class TroubleshootContext:
-    """Everything the fix printers need besides the error itself."""
+    """Everything the fixes need besides the error itself."""
 
     config: Config
     resolved_endpoints: ResolvedEndpoints = field(default_factory=dict)
@@ -93,22 +96,18 @@ class TroubleshootContext:
         return self.facts if self.facts is not None else RemediationFacts()
 
 
-def say(console: Console, level: int, *parts: Part) -> None:
-    """Print one line at nesting *level*; *parts* are never parsed as markup."""
-    console.print(
-        Padding(Text.assemble(*parts), (0, 0, 0, level * _INDENT_WIDTH)),
-        highlight=False,
-    )
+def format_line(level: int, *parts: Part) -> Padding:
+    """One line at nesting *level*; *parts* are never parsed as markup."""
+    return Padding(Text.assemble(*parts), (0, 0, 0, level * _INDENT_WIDTH))
 
 
-def print_cmd(console: Console, cmd: str, level: int = FIX) -> None:
+def format_command(cmd: str, level: int = FIX) -> Padding:
     syntax = Syntax(cmd, "bash", theme="monokai", background_color="default")
-    console.print(Padding(syntax, (0, 0, 0, level * _INDENT_WIDTH)))
+    return Padding(syntax, (0, 0, 0, level * _INDENT_WIDTH))
 
 
-def _say_lines(console: Console, level: int, block: str) -> None:
-    for line in block.splitlines():
-        say(console, level, line)
+def _format_lines(level: int, block: str) -> Lines:
+    return [format_line(level, line) for line in block.splitlines()]
 
 
 _RSYNC_INSTALL = dedent("""\
@@ -156,68 +155,70 @@ _UDISKS_MOUNT_OPTIONS = dedent("""\
     btrfs_defaults=user_subvol_rm_allowed""")
 
 
-def _print_titled(console: Console, title: Part, details: str) -> None:
-    say(console, FIX, title)
-    _say_lines(console, STEP, details)
+def _titled(title: Part, details: str) -> Lines:
+    return [format_line(FIX, title), *_format_lines(STEP, details)]
 
 
-def _print_install(console: Console, what: str, host: str, recipe: str) -> None:
-    say(console, FIX, f"Install {what} on ", host, ":")
-    print_cmd(console, recipe, STEP)
+def _install(what: str, host: str, recipe: str) -> Lines:
+    return [
+        format_line(FIX, f"Install {what} on ", host, ":"),
+        format_command(recipe, STEP),
+    ]
 
 
-def _print_sentinel_fix(
-    console: Console,
+def _sentinel_fix(
     vol: LocalVolume | RemoteVolume,
     path: str,
     sentinel: str,
     ctx: TroubleshootContext,
-) -> None:
-    say(console, FIX, "Ensure the volume is mounted, then:")
-    print_cmd(console, wrap_cmd(["mkdir", "-p", path], vol, ctx.resolved_endpoints))
-    print_cmd(
-        console,
-        wrap_cmd(["touch", f"{path}/{sentinel}"], vol, ctx.resolved_endpoints),
-    )
-
-
-def _print_reset_latest(
-    console: Console,
-    vol: LocalVolume | RemoteVolume,
-    path: str,
-    ctx: TroubleshootContext,
-) -> None:
-    print_cmd(
-        console,
-        wrap_cmd(
-            ["ln", "-sfn", "/dev/null", f"{path}/{LATEST_LINK}"],
-            vol,
-            ctx.resolved_endpoints,
+) -> Lines:
+    return [
+        format_line(FIX, "Ensure the volume is mounted, then:"),
+        format_command(wrap_cmd(["mkdir", "-p", path], vol, ctx.resolved_endpoints)),
+        format_command(
+            wrap_cmd(["touch", f"{path}/{sentinel}"], vol, ctx.resolved_endpoints),
         ),
-    )
+    ]
 
 
-def _print_chown(
-    console: Console,
+def _reset_latest(
     vol: LocalVolume | RemoteVolume,
     path: str,
     ctx: TroubleshootContext,
-) -> None:
-    print_cmd(
-        console,
-        wrap_cmd(
-            ["sudo", "chown", "<user>:<group>", path], vol, ctx.resolved_endpoints
-        ),
-    )
+) -> Lines:
+    return [
+        format_command(
+            wrap_cmd(
+                ["ln", "-sfn", "/dev/null", f"{path}/{LATEST_LINK}"],
+                vol,
+                ctx.resolved_endpoints,
+            ),
+        )
+    ]
 
 
-def _print_mkdir(
-    console: Console,
+def _chown(
     vol: LocalVolume | RemoteVolume,
     path: str,
     ctx: TroubleshootContext,
-) -> None:
-    print_cmd(console, wrap_cmd(["mkdir", "-p", path], vol, ctx.resolved_endpoints))
+) -> Lines:
+    return [
+        format_command(
+            wrap_cmd(
+                ["sudo", "chown", "<user>:<group>", path], vol, ctx.resolved_endpoints
+            ),
+        )
+    ]
+
+
+def _mkdir(
+    vol: LocalVolume | RemoteVolume,
+    path: str,
+    ctx: TroubleshootContext,
+) -> Lines:
+    return [
+        format_command(wrap_cmd(["mkdir", "-p", path], vol, ctx.resolved_endpoints))
+    ]
 
 
 def _proxy_chain(config: Config, server: SshEndpoint) -> list[SshEndpoint] | None:
@@ -245,53 +246,54 @@ def _ssh_copy_id_cmd(server: SshEndpoint, proxy_chain: list[SshEndpoint] | None)
     )
 
 
-def _print_ssh_auth_steps(
-    console: Console,
+def _ssh_auth_steps(
     server: SshEndpoint,
     proxy_chain: list[SshEndpoint] | None,
-) -> None:
+) -> Lines:
     echo_ok = shlex.join([*ssh_prefix(server, proxy_chain), "echo", "ok"])
-    say(
-        console,
-        STEP,
-        "1. Ensure the key exists:" if server.key else "1. Generate a key:",
-    )
-    print_cmd(
-        console,
-        shlex.join(["ls", "-l", server.key]) if server.key else "ssh-keygen -t ed25519",
-        STEP_CMD,
-    )
-    say(console, STEP, "2. Copy it to the server:")
-    print_cmd(console, _ssh_copy_id_cmd(server, proxy_chain), STEP_CMD)
-    say(console, STEP, "3. Verify passwordless login:")
-    print_cmd(console, echo_ok, STEP_CMD)
+    return [
+        format_line(
+            STEP,
+            "1. Ensure the key exists:" if server.key else "1. Generate a key:",
+        ),
+        format_command(
+            shlex.join(["ls", "-l", server.key])
+            if server.key
+            else "ssh-keygen -t ed25519",
+            STEP_CMD,
+        ),
+        format_line(STEP, "2. Copy it to the server:"),
+        format_command(_ssh_copy_id_cmd(server, proxy_chain), STEP_CMD),
+        format_line(STEP, "3. Verify passwordless login:"),
+        format_command(echo_ok, STEP_CMD),
+    ]
 
 
-def _print_ssh_unreachable(
-    console: Console, status: SshEndpointStatus, ctx: TroubleshootContext
-) -> None:
+def _ssh_unreachable(status: SshEndpointStatus, ctx: TroubleshootContext) -> Lines:
     server = ctx.config.ssh_endpoints.get(status.slug)
     cause = status.diagnostics.ssh_error
     if server is None:
-        say(console, FIX, "SSH endpoint is unreachable.")
+        return [format_line(FIX, "SSH endpoint is unreachable.")]
     else:
         proxy_chain = _proxy_chain(ctx.config, server)
-        say(console, FIX, "Server ", server.host, " is unreachable.")
-        if cause is not None:
-            say(console, FIX, "Cause: ", (cause, "italic"))
-        say(console, FIX, "Verify connectivity:")
-        print_cmd(
-            console,
-            shlex.join([*ssh_prefix(server, proxy_chain), "echo", "ok"]),
-            STEP,
-        )
-        say(console, FIX, "If authentication fails:")
-        _print_ssh_auth_steps(console, server, proxy_chain)
+        return [
+            format_line(FIX, "Server ", server.host, " is unreachable."),
+            *(
+                [format_line(FIX, "Cause: ", (cause, "italic"))]
+                if cause is not None
+                else []
+            ),
+            format_line(FIX, "Verify connectivity:"),
+            format_command(
+                shlex.join([*ssh_prefix(server, proxy_chain), "echo", "ok"]),
+                STEP,
+            ),
+            format_line(FIX, "If authentication fails:"),
+            *_ssh_auth_steps(server, proxy_chain),
+        ]
 
 
-def _print_ssh_auth_failed(
-    console: Console, status: SshEndpointStatus, ctx: TroubleshootContext
-) -> None:
+def _ssh_auth_failed(status: SshEndpointStatus, ctx: TroubleshootContext) -> Lines:
     """The host answered but refused the key, or its host key is unknown or
     changed."""
     server = ctx.config.ssh_endpoints.get(status.slug)
@@ -304,138 +306,145 @@ def _print_ssh_auth_failed(
         host if server is None or server.port == 22 else f"[{host}]:{server.port}"
     )
     cause = status.diagnostics.ssh_error
-    say(console, FIX, "Server ", host, " refused the connection.")
-    if cause is not None:
-        say(console, FIX, "Cause: ", (cause, "italic"))
-    if server is not None:
-        _print_unknown_host_key_steps(console, server, _proxy_chain(ctx.config, server))
-    say(
-        console,
-        FIX,
-        "If the host key changed (reinstalled host), verify it out of band, then:",
-    )
-    print_cmd(
-        console,
-        shlex.join(
-            [
-                "ssh-keygen",
-                *(["-f", known_hosts_file] if known_hosts_file else []),
-                "-R",
-                known_hosts_name,
-            ]
+    return [
+        format_line(FIX, "Server ", host, " refused the connection."),
+        *(
+            [format_line(FIX, "Cause: ", (cause, "italic"))]
+            if cause is not None
+            else []
         ),
-        STEP,
-    )
-    if server is not None:
-        say(console, FIX, "If the key is not authorized:")
-        _print_ssh_auth_steps(console, server, _proxy_chain(ctx.config, server))
+        *(
+            _unknown_host_key_steps(server, _proxy_chain(ctx.config, server))
+            if server is not None
+            else []
+        ),
+        format_line(
+            FIX,
+            "If the host key changed (reinstalled host), verify it out of band, then:",
+        ),
+        format_command(
+            shlex.join(
+                [
+                    "ssh-keygen",
+                    *(["-f", known_hosts_file] if known_hosts_file else []),
+                    "-R",
+                    known_hosts_name,
+                ]
+            ),
+            STEP,
+        ),
+        *(
+            [
+                format_line(FIX, "If the key is not authorized:"),
+                *_ssh_auth_steps(server, _proxy_chain(ctx.config, server)),
+            ]
+            if server is not None
+            else []
+        ),
+    ]
 
 
-def _print_unknown_host_key_steps(
-    console: Console,
+def _unknown_host_key_steps(
     server: SshEndpoint,
     proxy_chain: list[SshEndpoint] | None,
-) -> None:
+) -> Lines:
     """nbkp never trusts a host key on first use while
     ``strict-host-key-checking`` is on: the operator adds it once, after
     comparing the fingerprint OpenSSH shows with the host's own."""
     known_hosts_file = server.connection_options.known_hosts_file
-    say(
-        console,
-        FIX,
-        "If the host key is not known yet, connect once with ssh, check the "
-        "fingerprint it shows against the host's, and accept it:",
-    )
     ssh = ssh_prefix(server, proxy_chain)
-    print_cmd(
-        console,
-        shlex.join(
-            [
-                ssh[0],
-                *(
-                    ["-o", f"UserKnownHostsFile={known_hosts_file}"]
-                    if known_hosts_file
-                    else []
-                ),
-                *ssh[1:],
-                "true",
-            ]
+    return [
+        format_line(
+            FIX,
+            "If the host key is not known yet, connect once with ssh, check the "
+            "fingerprint it shows against the host's, and accept it:",
         ),
-        STEP,
-    )
+        format_command(
+            shlex.join(
+                [
+                    ssh[0],
+                    *(
+                        ["-o", f"UserKnownHostsFile={known_hosts_file}"]
+                        if known_hosts_file
+                        else []
+                    ),
+                    *ssh[1:],
+                    "true",
+                ]
+            ),
+            STEP,
+        ),
+    ]
 
 
-def print_ssh_endpoint_error_fix(
-    console: Console,
+def format_ssh_endpoint_error_fix(
     status: SshEndpointStatus,
-    error: SshEndpointError,
+    error: SshEndpointErrorKind,
     ctx: TroubleshootContext,
-) -> None:
+) -> Lines:
     slug = status.slug
     match error:
-        case SshEndpointError.UNREACHABLE:
-            _print_ssh_unreachable(console, status, ctx)
-        case SshEndpointError.AUTH_FAILED:
-            _print_ssh_auth_failed(console, status, ctx)
-        case SshEndpointError.LOCATION_EXCLUDED:
-            _print_location_excluded(console, ctx)
-        case SshEndpointError.RSYNC_NOT_FOUND:
-            _print_install(console, "rsync", slug, _RSYNC_INSTALL)
-        case SshEndpointError.RSYNC_TOO_OLD:
-            say(
-                console,
-                FIX,
-                "rsync 3.0+ is required on ",
-                slug,
-                ". Install or upgrade:",
-            )
-            print_cmd(console, _RSYNC_INSTALL, STEP)
-        case SshEndpointError.BTRFS_NOT_FOUND:
-            _print_install(console, "btrfs-progs", slug, _BTRFS_INSTALL)
-        case SshEndpointError.STAT_NOT_FOUND:
-            _print_install(console, "coreutils (stat)", slug, _COREUTILS_INSTALL)
-        case SshEndpointError.FINDMNT_NOT_FOUND:
-            _print_install(console, "util-linux (findmnt)", slug, _UTIL_LINUX_INSTALL)
-        case SshEndpointError.UDISKSCTL_NOT_FOUND:
-            _print_titled(
-                console,
+        case SshEndpointErrorKind.UNREACHABLE:
+            return _ssh_unreachable(status, ctx)
+        case SshEndpointErrorKind.AUTH_FAILED:
+            return _ssh_auth_failed(status, ctx)
+        case SshEndpointErrorKind.LOCATION_EXCLUDED:
+            return _location_excluded(ctx)
+        case SshEndpointErrorKind.RSYNC_NOT_FOUND:
+            return _install("rsync", slug, _RSYNC_INSTALL)
+        case SshEndpointErrorKind.RSYNC_TOO_OLD:
+            return [
+                format_line(
+                    FIX,
+                    "rsync 3.0+ is required on ",
+                    slug,
+                    ". Install or upgrade:",
+                ),
+                format_command(_RSYNC_INSTALL, STEP),
+            ]
+        case SshEndpointErrorKind.BTRFS_NOT_FOUND:
+            return _install("btrfs-progs", slug, _BTRFS_INSTALL)
+        case SshEndpointErrorKind.STAT_NOT_FOUND:
+            return _install("coreutils (stat)", slug, _COREUTILS_INSTALL)
+        case SshEndpointErrorKind.FINDMNT_NOT_FOUND:
+            return _install("util-linux (findmnt)", slug, _UTIL_LINUX_INSTALL)
+        case SshEndpointErrorKind.UDISKSCTL_NOT_FOUND:
+            return _titled(
                 Text.assemble("udisksctl not found on ", slug, "."),
                 _UDISKSCTL_DETAILS,
             )
-        case SshEndpointError.UDISKSD_NOT_RUNNING:
-            _print_titled(
-                console,
+        case SshEndpointErrorKind.UDISKSD_NOT_RUNNING:
+            return _titled(
                 Text.assemble(
                     "udisksd (the udisks2 daemon) is not running on ", slug, "."
                 ),
                 _UDISKSD_DETAILS,
             )
-        case SshEndpointError.LSBLK_NOT_FOUND:
-            _print_titled(
-                console, Text.assemble("lsblk not found on ", slug, "."), _LSBLK_DETAILS
+        case SshEndpointErrorKind.LSBLK_NOT_FOUND:
+            return _titled(
+                Text.assemble("lsblk not found on ", slug, "."), _LSBLK_DETAILS
             )
 
 
-def _print_location_excluded(console: Console, ctx: TroubleshootContext) -> None:
+def _location_excluded(ctx: TroubleshootContext) -> Lines:
     excluded = ", ".join(ctx.invocation.exclude_locations)
-    say(
-        console,
-        FIX,
-        "All SSH endpoints for volumes on this host are at an excluded location",
-        *([" (", excluded, ")"] if excluded else []),
-        ". Remove --exclude-location or add an endpoint at a different location.",
-    )
+    return [
+        format_line(
+            FIX,
+            "All SSH endpoints for volumes on this host are at an excluded location",
+            *([" (", excluded, ")"] if excluded else []),
+            ". Remove --exclude-location or add an endpoint at a different location.",
+        )
+    ]
 
 
-def print_ssh_endpoint_warning_fix(
-    console: Console,
+def format_ssh_endpoint_warning_fix(
     status: SshEndpointStatus,
-    warning: SshEndpointWarning,
-) -> None:
+    warning: SshEndpointWarningKind,
+) -> Lines:
     match warning:
-        case SshEndpointWarning.UDISKS_BTRFS_MODULE_MISSING:
-            _print_titled(
-                console,
+        case SshEndpointWarningKind.UDISKS_BTRFS_MODULE_MISSING:
+            return _titled(
                 Text.assemble(
                     "udisks2 btrfs module not installed on ", status.slug, "."
                 ),
@@ -443,47 +452,47 @@ def print_ssh_endpoint_warning_fix(
             )
 
 
-def print_volume_error_fix(
-    console: Console,
+def format_volume_error_fix(
     vol_status: VolumeStatus,
-    error: VolumeError,
+    error: VolumeErrorKind,
     ctx: TroubleshootContext,
-) -> None:
+) -> Lines:
     vol = vol_status.config
     match error:
-        case VolumeError.SENTINEL_NOT_FOUND:
-            _print_sentinel_fix(
-                console, vol, vol.path or "<volume-path>", VOLUME_SENTINEL, ctx
-            )
-        case VolumeError.VOLUME_NOT_MOUNTED:
-            say(console, FIX, "Volume is not mounted. Mount it with:")
-            print_cmd(
-                console,
-                ctx.invocation.command("disks", "mount", "-n", vol_status.slug),
-                STEP,
-            )
-        case VolumeError.DEVICE_NOT_PRESENT:
-            _print_device_not_present_fix(console, vol.mount)
-        case VolumeError.FSTAB_MOUNTPOINT_MISMATCH:
-            _print_fstab_mountpoint_mismatch_fix(console, vol_status, ctx)
-        case VolumeError.POLKIT_RULES_MISSING:
-            _print_polkit_rules_missing_fix(console, vol, ctx)
-        case VolumeError.PASSPHRASE_NOT_AVAILABLE:
-            _print_passphrase_not_available_fix(console, vol.mount, ctx)
-        case VolumeError.UNLOCK_FAILED:
-            _print_unlock_failed_fix(console, vol.mount, ctx)
-        case VolumeError.MOUNT_FAILED:
-            _print_mount_failed_fix(console, vol, vol.mount, ctx)
-        case VolumeError.SSH_ENDPOINT_INACTIVE:
-            say(console, FIX, "Fix the SSH endpoint errors reported above.")
+        case VolumeErrorKind.SENTINEL_NOT_FOUND:
+            return _sentinel_fix(vol, vol.path or "<volume-path>", VOLUME_SENTINEL, ctx)
+        case VolumeErrorKind.VOLUME_NOT_MOUNTED:
+            return [
+                format_line(FIX, "Volume is not mounted. Mount it with:"),
+                format_command(
+                    ctx.invocation.command("disks", "mount", "-n", vol_status.slug),
+                    STEP,
+                ),
+            ]
+        case VolumeErrorKind.DEVICE_NOT_PRESENT:
+            return _device_not_present_fix(vol.mount)
+        case VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH:
+            return _fstab_mountpoint_mismatch_fix(vol_status, ctx)
+        case VolumeErrorKind.POLKIT_RULES_MISSING:
+            return _polkit_rules_missing_fix(vol, ctx)
+        case VolumeErrorKind.PASSPHRASE_NOT_AVAILABLE:
+            return _passphrase_not_available_fix(vol.mount, ctx)
+        case VolumeErrorKind.UNLOCK_FAILED:
+            return _unlock_failed_fix(vol.mount, ctx)
+        case VolumeErrorKind.MOUNT_FAILED:
+            return _mount_failed_fix(vol, vol.mount, ctx)
+        case VolumeErrorKind.SSH_ENDPOINT_INACTIVE:
+            return [format_line(FIX, "Fix the SSH endpoint errors reported above.")]
 
 
-def _print_device_not_present_fix(console: Console, mount: MountConfig | None) -> None:
+def _device_not_present_fix(mount: MountConfig | None) -> Lines:
     uuid = mount.device_uuid if mount else "<uuid>"
-    say(console, FIX, "Plug in the drive and verify:")
-    print_cmd(console, shlex.join(["ls", "-la", f"/dev/disk/by-uuid/{uuid}"]))
-    say(console, FIX, "Or with systemd:")
-    print_cmd(console, shlex.join(["udevadm", "info", f"/dev/disk/by-uuid/{uuid}"]))
+    return [
+        format_line(FIX, "Plug in the drive and verify:"),
+        format_command(shlex.join(["ls", "-la", f"/dev/disk/by-uuid/{uuid}"])),
+        format_line(FIX, "Or with systemd:"),
+        format_command(shlex.join(["udevadm", "info", f"/dev/disk/by-uuid/{uuid}"])),
+    ]
 
 
 def _cleartext_device(
@@ -491,7 +500,7 @@ def _cleartext_device(
     mount: MountConfig,
     facts: RemediationFacts,
 ) -> tuple[str, bool]:
-    """Cleartext device path to print in a fix, and whether it was discovered.
+    """Cleartext device path to show in a fix, and whether it was discovered.
 
     ``luks-<uuid>`` is only udisks's default: a LUKS2 header label or an
     ``/etc/crypttab`` entry renames the mapper, so deriving the name from the
@@ -508,43 +517,45 @@ def _cleartext_device(
     )
 
 
-def _print_mapper_name_caveat(console: Console, level: int) -> None:
-    say(
-        console,
-        level,
-        "The container is locked, so the device above is udisks's default name."
-        "  A LUKS2 header label or crypttab entry renames it — unlock the volume"
-        " and check `lsblk` before writing it into fstab.",
-    )
+def _mapper_name_caveat(level: int) -> Lines:
+    return [
+        format_line(
+            level,
+            "The container is locked, so the device above is udisks's default name."
+            "  A LUKS2 header label or crypttab entry renames it — unlock the volume"
+            " and check `lsblk` before writing it into fstab.",
+        )
+    ]
 
 
-def _print_fstab_line(
-    console: Console,
+def _fstab_line(
     vol: LocalVolume | RemoteVolume,
     mount: MountConfig | None,
     path: str,
     fs_and_options: str,
     ctx: TroubleshootContext,
-) -> None:
+) -> Lines:
     match mount:
         case MountConfig(encryption=None):
-            print_cmd(
-                console, f"UUID={mount.device_uuid}  {path}  {fs_and_options}", STEP
-            )
+            return [
+                format_command(
+                    f"UUID={mount.device_uuid}  {path}  {fs_and_options}", STEP
+                )
+            ]
         case MountConfig():
             device, discovered = _cleartext_device(vol, mount, ctx.known_facts)
-            print_cmd(console, f"{device}  {path}  {fs_and_options}", STEP)
-            if not discovered:
-                _print_mapper_name_caveat(console, STEP)
+            return [
+                format_command(f"{device}  {path}  {fs_and_options}", STEP),
+                *([] if discovered else _mapper_name_caveat(STEP)),
+            ]
         case None:
-            print_cmd(console, f"UUID=<fs-uuid>  {path}  {fs_and_options}", STEP)
+            return [format_command(f"UUID=<fs-uuid>  {path}  {fs_and_options}", STEP)]
 
 
-def _print_fstab_mountpoint_mismatch_fix(
-    console: Console,
+def _fstab_mountpoint_mismatch_fix(
     vol_status: VolumeStatus,
     ctx: TroubleshootContext,
-) -> None:
+) -> Lines:
     """The volume declares a fixed ``path`` but no ``/etc/fstab`` entry maps the
     device to that path (none at all, or one naming another device), so
     udisks would mount it at its own ``/run/media/<user>/<label>`` location
@@ -555,48 +566,50 @@ def _print_fstab_mountpoint_mismatch_fix(
     path = vol.path or "<volume-path>"
     caps = vol_status.diagnostics.capabilities if vol_status.diagnostics else None
     other_source = caps.mount.fstab_source if caps and caps.mount else None
-    say(
-        console, FIX, "No /etc/fstab entry maps the device to ", path, " on ", host, "."
-    )
-    if other_source is not None:
-        say(
-            console,
+    return [
+        format_line(
+            FIX, "No /etc/fstab entry maps the device to ", path, " on ", host, "."
+        ),
+        *(
+            [
+                format_line(
+                    FIX,
+                    "The entry for ",
+                    path,
+                    " mounts ",
+                    other_source,
+                    ", a different device.",
+                )
+            ]
+            if other_source is not None
+            else []
+        ),
+        format_line(
             FIX,
-            "The entry for ",
-            path,
-            " mounts ",
-            other_source,
-            ", a different device.",
-        )
-    say(
-        console,
-        FIX,
-        "With a fixed 'path', udisks must mount the device there; without a"
-        " matching fstab entry it would mount at /run/media/<user>/<label>.",
-    )
-    say(console, FIX, "Option A — add an /etc/fstab entry (no crypttab needed):")
-    _print_fstab_line(
-        console, vol, vol.mount, path, "<FS>  noauto,nofail,x-udisks-auth  0 0", ctx
-    )
-    say(
-        console,
-        STEP,
-        "Replace <FS> with the volume's filesystem type (e.g. btrfs, ext4);"
-        " for btrfs also add user_subvol_rm_allowed to the options.",
-    )
-    say(
-        console,
-        FIX,
-        "Option B — remove 'path' from the volume config to use the mountpoint"
-        " udisks discovers (/run/media/<user>/<label>).",
-    )
+            "With a fixed 'path', udisks must mount the device there; without a"
+            " matching fstab entry it would mount at /run/media/<user>/<label>.",
+        ),
+        format_line(FIX, "Option A — add an /etc/fstab entry (no crypttab needed):"),
+        *_fstab_line(
+            vol, vol.mount, path, "<FS>  noauto,nofail,x-udisks-auth  0 0", ctx
+        ),
+        format_line(
+            STEP,
+            "Replace <FS> with the volume's filesystem type (e.g. btrfs, ext4);"
+            " for btrfs also add user_subvol_rm_allowed to the options.",
+        ),
+        format_line(
+            FIX,
+            "Option B — remove 'path' from the volume config to use the mountpoint"
+            " udisks discovers (/run/media/<user>/<label>).",
+        ),
+    ]
 
 
-def _print_user_subvol_rm_fix(
-    console: Console,
+def _user_subvol_rm_fix(
     vol: LocalVolume | RemoteVolume,
     ctx: TroubleshootContext,
-) -> None:
+) -> Lines:
     """The option is required for snapshot pruning.  nbkp does not pass it to
     udisks at mount time — udisks rejects any non-allowlisted mount option
     (``OptionNotPermitted``), which would fail the mount — so the option must
@@ -604,65 +617,73 @@ def _print_user_subvol_rm_fix(
     for the discovered ``/run/media`` model, the udisks mount-options allowlist.
     """
     path = vol.path or "<volume-path>"
-    say(
-        console,
-        FIX,
-        "The btrfs volume must be mounted with user_subvol_rm_allowed"
-        " (needed for snapshot pruning).  Remount now (ephemeral):",
-    )
-    print_cmd(
-        console,
-        wrap_cmd(
-            ["sudo", "mount", "-o", "remount,user_subvol_rm_allowed", path],
-            vol,
-            ctx.resolved_endpoints,
+    return [
+        format_line(
+            FIX,
+            "The btrfs volume must be mounted with user_subvol_rm_allowed"
+            " (needed for snapshot pruning).  Remount now (ephemeral):",
         ),
-    )
-    match vol.mount:
-        case None:
-            # Externally-mounted volume: fstab is the only persistence mechanism.
-            say(
-                console,
-                FIX,
-                "To persist, add user_subvol_rm_allowed to the /etc/fstab options for ",
-                path,
-                ".",
-            )
-        case MountConfig():
-            _print_udisks_persistence(console, vol, path, ctx)
+        format_command(
+            wrap_cmd(
+                ["sudo", "mount", "-o", "remount,user_subvol_rm_allowed", path],
+                vol,
+                ctx.resolved_endpoints,
+            ),
+        ),
+        *_user_subvol_rm_persistence(vol, path, ctx),
+    ]
 
 
-def _print_udisks_persistence(
-    console: Console,
+def _user_subvol_rm_persistence(
     vol: LocalVolume | RemoteVolume,
     path: str,
     ctx: TroubleshootContext,
-) -> None:
-    say(console, FIX, "To persist (udisks-managed volume), use ONE of:")
-    say(console, FIX, "Option A — /etc/fstab (udisks honors fstab options):")
-    _print_fstab_line(
-        console,
-        vol,
-        vol.mount,
-        path,
-        "btrfs  noauto,nofail,x-udisks-auth,user_subvol_rm_allowed  0 0",
-        ctx,
-    )
-    say(
-        console,
-        FIX,
-        "Option B — /etc/udisks2/mount_options.conf, then restart udisksd"
-        " (for the discovered /run/media mountpoint):",
-    )
-    print_cmd(console, _UDISKS_MOUNT_OPTIONS, STEP)
-    say(
-        console,
-        STEP,
-        "Both keys are required: btrfs_allow permits the option, btrfs_defaults"
-        " applies it.  Scope to one device with a [/dev/disk/by-uuid/<uuid>]"
-        " section (the unlocked cleartext device for encrypted volumes);"
-        " see man udisks2.conf.",
-    )
+) -> Lines:
+    match vol.mount:
+        case None:
+            # Externally-mounted volume: fstab is the only persistence mechanism.
+            return [
+                format_line(
+                    FIX,
+                    "To persist, add user_subvol_rm_allowed to the /etc/fstab"
+                    " options for ",
+                    path,
+                    ".",
+                )
+            ]
+        case MountConfig():
+            return _udisks_persistence(vol, path, ctx)
+
+
+def _udisks_persistence(
+    vol: LocalVolume | RemoteVolume,
+    path: str,
+    ctx: TroubleshootContext,
+) -> Lines:
+    return [
+        format_line(FIX, "To persist (udisks-managed volume), use ONE of:"),
+        format_line(FIX, "Option A — /etc/fstab (udisks honors fstab options):"),
+        *_fstab_line(
+            vol,
+            vol.mount,
+            path,
+            "btrfs  noauto,nofail,x-udisks-auth,user_subvol_rm_allowed  0 0",
+            ctx,
+        ),
+        format_line(
+            FIX,
+            "Option B — /etc/udisks2/mount_options.conf, then restart udisksd"
+            " (for the discovered /run/media mountpoint):",
+        ),
+        format_command(_UDISKS_MOUNT_OPTIONS, STEP),
+        format_line(
+            STEP,
+            "Both keys are required: btrfs_allow permits the option, btrfs_defaults"
+            " applies it.  Scope to one device with a [/dev/disk/by-uuid/<uuid>]"
+            " section (the unlocked cleartext device for encrypted volumes);"
+            " see man udisks2.conf.",
+        ),
+    ]
 
 
 def _passphrase_id(mount: MountConfig | None) -> str:
@@ -673,74 +694,74 @@ def _passphrase_id(mount: MountConfig | None) -> str:
     )
 
 
-def _print_passphrase_not_available_fix(
-    console: Console,
+def _passphrase_not_available_fix(
     mount: MountConfig | None,
     ctx: TroubleshootContext,
-) -> None:
+) -> Lines:
     pid = _passphrase_id(mount)
-    say(
-        console,
-        FIX,
-        "The drive is plugged in but its passphrase could not be retrieved.",
-    )
-    say(console, FIX, "Check credential status:")
-    print_cmd(
-        console,
-        ctx.invocation.command("credentials", "keyring-status", endpoint_flags=False),
-        STEP,
-    )
-    say(
-        console,
-        FIX,
-        "Configure it for your credential provider (",
-        ctx.config.credential_provider.value,
-        "):",
-    )
-    say(console, STEP, "keyring: ", shlex.join(["keyring", "set", "nbkp", pid]))
-    say(console, STEP, "env: export ", passphrase_env_var(pid), "=...")
-    say(console, STEP, "command: ensure the credential-command prints it for id ", pid)
+    return [
+        format_line(
+            FIX,
+            "The drive is plugged in but its passphrase could not be retrieved.",
+        ),
+        format_line(FIX, "Check credential status:"),
+        format_command(
+            ctx.invocation.command(
+                "credentials", "keyring-status", endpoint_flags=False
+            ),
+            STEP,
+        ),
+        format_line(
+            FIX,
+            "Configure it for your credential provider (",
+            ctx.config.credential_provider.value,
+            "):",
+        ),
+        format_line(STEP, "keyring: ", shlex.join(["keyring", "set", "nbkp", pid])),
+        format_line(STEP, "env: export ", passphrase_env_var(pid), "=..."),
+        format_line(
+            STEP, "command: ensure the credential-command prints it for id ", pid
+        ),
+    ]
 
 
-def _print_unlock_failed_fix(
-    console: Console,
+def _unlock_failed_fix(
     mount: MountConfig | None,
     ctx: TroubleshootContext,
-) -> None:
+) -> Lines:
     uuid = mount.device_uuid if mount else "<uuid>"
-    say(console, FIX, "udisksctl failed to unlock the LUKS container.")
-    say(
-        console,
-        FIX,
-        "Verify the passphrase from your credential provider (passphrase-id '",
-        _passphrase_id(mount),
-        "') is correct:",
-    )
-    print_cmd(
-        console,
-        ctx.invocation.command("credentials", "keyring-status", endpoint_flags=False),
-        STEP,
-    )
-    say(console, FIX, "Confirm the device is a LUKS container:")
-    print_cmd(
-        console,
-        shlex.join(["sudo", "cryptsetup", "isLuks", f"/dev/disk/by-uuid/{uuid}"]),
-        STEP,
-    )
-    say(console, FIX, "Try unlocking manually to see the error:")
-    print_cmd(
-        console,
-        shlex.join(["udisksctl", "unlock", "-b", f"/dev/disk/by-uuid/{uuid}"]),
-        STEP,
-    )
+    return [
+        format_line(FIX, "udisksctl failed to unlock the LUKS container."),
+        format_line(
+            FIX,
+            "Verify the passphrase from your credential provider (passphrase-id '",
+            _passphrase_id(mount),
+            "') is correct:",
+        ),
+        format_command(
+            ctx.invocation.command(
+                "credentials", "keyring-status", endpoint_flags=False
+            ),
+            STEP,
+        ),
+        format_line(FIX, "Confirm the device is a LUKS container:"),
+        format_command(
+            shlex.join(["sudo", "cryptsetup", "isLuks", f"/dev/disk/by-uuid/{uuid}"]),
+            STEP,
+        ),
+        format_line(FIX, "Try unlocking manually to see the error:"),
+        format_command(
+            shlex.join(["udisksctl", "unlock", "-b", f"/dev/disk/by-uuid/{uuid}"]),
+            STEP,
+        ),
+    ]
 
 
-def _print_mount_failed_fix(
-    console: Console,
+def _mount_failed_fix(
     vol: LocalVolume | RemoteVolume,
     mount: MountConfig | None,
     ctx: TroubleshootContext,
-) -> None:
+) -> Lines:
     match mount:
         case MountConfig(encryption=None):
             device = f"/dev/disk/by-uuid/{mount.device_uuid}"
@@ -748,26 +769,25 @@ def _print_mount_failed_fix(
             device, _ = _cleartext_device(vol, mount, ctx.known_facts)
         case None:
             device = "<device>"
-    say(console, FIX, "udisksctl failed to mount the volume.")
-    say(
-        console,
-        FIX,
-        "Check the filesystem and, for a fixed 'path', that an /etc/fstab entry"
-        " maps the device there (otherwise udisks mounts at"
-        " /run/media/<user>/<label>).",
-    )
-    say(
-        console,
-        FIX,
-        "Ensure the polkit rule is installed (see polkit rules not configured);"
-        " without it udisks denies the mount over SSH.",
-    )
-    say(console, FIX, "Try mounting manually to see the error:")
-    print_cmd(
-        console,
-        wrap_cmd(["udisksctl", "mount", "-b", device], vol, ctx.resolved_endpoints),
-        STEP,
-    )
+    return [
+        format_line(FIX, "udisksctl failed to mount the volume."),
+        format_line(
+            FIX,
+            "Check the filesystem and, for a fixed 'path', that an /etc/fstab entry"
+            " maps the device there (otherwise udisks mounts at"
+            " /run/media/<user>/<label>).",
+        ),
+        format_line(
+            FIX,
+            "Ensure the polkit rule is installed (see polkit rules not configured);"
+            " without it udisks denies the mount over SSH.",
+        ),
+        format_line(FIX, "Try mounting manually to see the error:"),
+        format_command(
+            wrap_cmd(["udisksctl", "mount", "-b", device], vol, ctx.resolved_endpoints),
+            STEP,
+        ),
+    ]
 
 
 def polkit_user(vol: LocalVolume | RemoteVolume, ctx: TroubleshootContext) -> str:
@@ -779,273 +799,290 @@ def polkit_user(vol: LocalVolume | RemoteVolume, ctx: TroubleshootContext) -> st
             return ctx.local_user
 
 
-def _print_polkit_rules_missing_fix(
-    console: Console,
+def _polkit_rules_missing_fix(
     vol: LocalVolume | RemoteVolume,
     ctx: TroubleshootContext,
-) -> None:
+) -> Lines:
     user = polkit_user(vol, ctx)
     block = ctx.known_facts.polkit_rules.get(user)
-    say(
-        console,
-        FIX,
-        "polkit rules not configured on ",
-        host_label(vol, ctx.resolved_endpoints),
-        ".",
-    )
-    say(
-        console,
-        FIX,
-        "Required so udisks authorizes unlock/mount/unmount/lock without an"
-        " interactive prompt (nbkp runs over SSH / in inactive sessions).",
-    )
-    if block is not None:
-        say(console, FIX, block.install_hint)
-        print_cmd(console, block.content.rstrip(), STEP)
-    say(console, FIX, "Or generate it with:")
-    print_cmd(
-        console,
-        ctx.invocation.command("disks", "setup-auth", "-u", user, endpoint_flags=False),
-        STEP,
-    )
+    return [
+        format_line(
+            FIX,
+            "polkit rules not configured on ",
+            host_label(vol, ctx.resolved_endpoints),
+            ".",
+        ),
+        format_line(
+            FIX,
+            "Required so udisks authorizes unlock/mount/unmount/lock without an"
+            " interactive prompt (nbkp runs over SSH / in inactive sessions).",
+        ),
+        *(
+            [
+                format_line(FIX, block.install_hint),
+                format_command(block.content.rstrip(), STEP),
+            ]
+            if block is not None
+            else []
+        ),
+        format_line(FIX, "Or generate it with:"),
+        format_command(
+            ctx.invocation.command(
+                "disks", "setup-auth", "-u", user, endpoint_flags=False
+            ),
+            STEP,
+        ),
+    ]
 
 
-def print_source_endpoint_error_fix(
-    console: Console,
-    error: SourceEndpointError,
+def format_source_endpoint_error_fix(
+    error: SourceEndpointErrorKind,
     sync: SyncConfig,
     ctx: TroubleshootContext,
-) -> None:
+) -> Lines:
     src_ep = ctx.config.source_endpoint(sync)
     src_vol = ctx.config.volumes[src_ep.volume]
     path = endpoint_path(src_vol, src_ep.subdir)
     match error:
-        case SourceEndpointError.SENTINEL_NOT_FOUND:
-            _print_sentinel_fix(console, src_vol, path, SOURCE_SENTINEL, ctx)
-        case SourceEndpointError.LATEST_SYMLINK_NOT_FOUND:
-            say(
-                console,
-                FIX,
-                "Source has snapshots enabled but ",
-                f"{path}/{LATEST_LINK}",
-                " symlink does not exist. Create it:",
-            )
-            _print_reset_latest(console, src_vol, path, ctx)
-        case SourceEndpointError.LATEST_SYMLINK_INVALID:
-            say(
-                console,
-                FIX,
-                "Source ",
-                f"{path}/{LATEST_LINK}",
-                " symlink points to an invalid target. Ensure the upstream sync"
-                " has run at least once, or reset it:",
-            )
-            _print_reset_latest(console, src_vol, path, ctx)
-        case SourceEndpointError.SNAPSHOTS_DIR_NOT_FOUND:
+        case SourceEndpointErrorKind.SENTINEL_NOT_FOUND:
+            return _sentinel_fix(src_vol, path, SOURCE_SENTINEL, ctx)
+        case SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND:
+            return [
+                format_line(
+                    FIX,
+                    "Source has snapshots enabled but ",
+                    f"{path}/{LATEST_LINK}",
+                    " symlink does not exist. Create it:",
+                ),
+                *_reset_latest(src_vol, path, ctx),
+            ]
+        case SourceEndpointErrorKind.LATEST_SYMLINK_INVALID:
+            return [
+                format_line(
+                    FIX,
+                    "Source ",
+                    f"{path}/{LATEST_LINK}",
+                    " symlink points to an invalid target. Ensure the upstream sync"
+                    " has run at least once, or reset it:",
+                ),
+                *_reset_latest(src_vol, path, ctx),
+            ]
+        case SourceEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND:
             # Endpoint dir is expected to be user-writable by this point
             # (fixed via NOT_WRITABLE if needed), so a plain mkdir suffices
             # regardless of snapshot backend.
-            _print_mkdir(console, src_vol, f"{path}/{SNAPSHOTS_DIR}", ctx)
-        case SourceEndpointError.VOLUME_INACTIVE:
-            say(console, FIX, "Fix the volume errors reported above.")
+            return _mkdir(src_vol, f"{path}/{SNAPSHOTS_DIR}", ctx)
+        case SourceEndpointErrorKind.VOLUME_INACTIVE:
+            return [format_line(FIX, "Fix the volume errors reported above.")]
 
 
-def print_destination_endpoint_error_fix(
-    console: Console,
-    error: DestinationEndpointError,
+def format_destination_endpoint_error_fix(
+    error: DestinationEndpointErrorKind,
     sync: SyncConfig,
     ctx: TroubleshootContext,
-) -> None:
+) -> Lines:
     dst_ep = ctx.config.destination_endpoint(sync)
     dst_vol = ctx.config.volumes[dst_ep.volume]
     path = endpoint_path(dst_vol, dst_ep.subdir)
     match error:
         case (
-            DestinationEndpointError.SENTINEL_NOT_FOUND
-            | DestinationEndpointError.NOT_WRITABLE
-            | DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND
-            | DestinationEndpointError.SNAPSHOTS_DIR_NOT_WRITABLE
-            | DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND
-            | DestinationEndpointError.LATEST_SYMLINK_INVALID
-            | DestinationEndpointError.VOLUME_INACTIVE
+            DestinationEndpointErrorKind.SENTINEL_NOT_FOUND
+            | DestinationEndpointErrorKind.NOT_WRITABLE
+            | DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND
+            | DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_WRITABLE
+            | DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND
+            | DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID
+            | DestinationEndpointErrorKind.VOLUME_INACTIVE
         ):
-            _print_destination_layout_fix(console, error, dst_vol, path, ctx)
+            return _destination_layout_fix(error, dst_vol, path, ctx)
         case _:
-            _print_destination_snapshot_backend_fix(console, error, dst_vol, path, ctx)
+            return _destination_snapshot_backend_fix(error, dst_vol, path, ctx)
 
 
-def _print_destination_layout_fix(
-    console: Console,
-    error: DestinationEndpointError,
+def _destination_layout_fix(
+    error: DestinationEndpointErrorKind,
     vol: LocalVolume | RemoteVolume,
     path: str,
     ctx: TroubleshootContext,
-) -> None:
+) -> Lines:
     """Fixes for the directory layout shared by every destination."""
     snapshots = f"{path}/{SNAPSHOTS_DIR}"
     latest = f"{path}/{LATEST_LINK}"
     match error:
-        case DestinationEndpointError.SENTINEL_NOT_FOUND:
-            _print_sentinel_fix(console, vol, path, DESTINATION_SENTINEL, ctx)
-        case DestinationEndpointError.NOT_WRITABLE:
-            say(
-                console,
-                FIX,
-                "The destination endpoint directory ",
-                f"{path}/",
-                " is not writable. Fix permissions:",
-            )
-            _print_chown(console, vol, path, ctx)
-        case DestinationEndpointError.SNAPSHOTS_DIR_NOT_FOUND:
+        case DestinationEndpointErrorKind.SENTINEL_NOT_FOUND:
+            return _sentinel_fix(vol, path, DESTINATION_SENTINEL, ctx)
+        case DestinationEndpointErrorKind.NOT_WRITABLE:
+            return [
+                format_line(
+                    FIX,
+                    "The destination endpoint directory ",
+                    f"{path}/",
+                    " is not writable. Fix permissions:",
+                ),
+                *_chown(vol, path, ctx),
+            ]
+        case DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND:
             # Endpoint dir is expected to be user-writable by this point
             # (fixed via NOT_WRITABLE if needed), so a plain mkdir suffices
             # regardless of snapshot backend.
-            _print_mkdir(console, vol, snapshots, ctx)
-        case DestinationEndpointError.SNAPSHOTS_DIR_NOT_WRITABLE:
-            say(
-                console,
-                FIX,
-                f"The destination {SNAPSHOTS_DIR}/ directory (",
-                snapshots,
-                ") is not writable. Fix permissions:",
-            )
-            _print_chown(console, vol, snapshots, ctx)
-        case DestinationEndpointError.LATEST_SYMLINK_NOT_FOUND:
-            say(
-                console,
-                FIX,
-                "Destination has snapshots enabled but ",
-                latest,
-                " symlink does not exist. Create it:",
-            )
-            _print_reset_latest(console, vol, path, ctx)
-        case DestinationEndpointError.LATEST_SYMLINK_INVALID:
-            say(
-                console,
-                FIX,
-                "Destination ",
-                latest,
-                " symlink points to an invalid target. Reset it:",
-            )
-            _print_reset_latest(console, vol, path, ctx)
+            return _mkdir(vol, snapshots, ctx)
+        case DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_WRITABLE:
+            return [
+                format_line(
+                    FIX,
+                    f"The destination {SNAPSHOTS_DIR}/ directory (",
+                    snapshots,
+                    ") is not writable. Fix permissions:",
+                ),
+                *_chown(vol, snapshots, ctx),
+            ]
+        case DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND:
+            return [
+                format_line(
+                    FIX,
+                    "Destination has snapshots enabled but ",
+                    latest,
+                    " symlink does not exist. Create it:",
+                ),
+                *_reset_latest(vol, path, ctx),
+            ]
+        case DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID:
+            return [
+                format_line(
+                    FIX,
+                    "Destination ",
+                    latest,
+                    " symlink points to an invalid target. Reset it:",
+                ),
+                *_reset_latest(vol, path, ctx),
+            ]
         case _:
-            say(console, FIX, "Fix the volume errors reported above.")
+            return [format_line(FIX, "Fix the volume errors reported above.")]
 
 
-def _print_destination_snapshot_backend_fix(
-    console: Console,
-    error: DestinationEndpointError,
+def _destination_snapshot_backend_fix(
+    error: DestinationEndpointErrorKind,
     vol: LocalVolume | RemoteVolume,
     path: str,
     ctx: TroubleshootContext,
-) -> None:
+) -> Lines:
     staging = f"{path}/{STAGING_DIR}"
     snapshots = f"{path}/{SNAPSHOTS_DIR}"
     match error:
-        case DestinationEndpointError.STAGING_NOT_BTRFS_SUBVOLUME:
-            for cmd in (
-                ["sudo", "btrfs", "subvolume", "create", staging],
-                ["sudo", "mkdir", snapshots],
-                ["sudo", "chown", "<user>:<group>", staging, snapshots],
-            ):
-                print_cmd(console, wrap_cmd(cmd, vol, ctx.resolved_endpoints))
-        case DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND:
+        case DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME:
+            return [
+                format_command(wrap_cmd(cmd, vol, ctx.resolved_endpoints))
+                for cmd in (
+                    ["sudo", "btrfs", "subvolume", "create", staging],
+                    ["sudo", "mkdir", snapshots],
+                    ["sudo", "chown", "<user>:<group>", staging, snapshots],
+                )
+            ]
+        case DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND:
             # Endpoint dir is expected to be user-writable by this point
             # (fixed via NOT_WRITABLE if needed), so subvolume create runs
             # without sudo (kernel 5.8+).
-            print_cmd(
-                console,
-                wrap_cmd(
-                    ["btrfs", "subvolume", "create", staging],
-                    vol,
-                    ctx.resolved_endpoints,
+            return [
+                format_command(
+                    wrap_cmd(
+                        ["btrfs", "subvolume", "create", staging],
+                        vol,
+                        ctx.resolved_endpoints,
+                    ),
+                )
+            ]
+        case DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_WRITABLE:
+            return [
+                format_line(
+                    FIX,
+                    f"The destination {STAGING_DIR}/ directory (",
+                    staging,
+                    ") is not writable. Fix permissions:",
                 ),
-            )
-        case DestinationEndpointError.STAGING_SUBVOL_NOT_WRITABLE:
-            say(
-                console,
-                FIX,
-                f"The destination {STAGING_DIR}/ directory (",
-                staging,
-                ") is not writable. Fix permissions:",
-            )
-            _print_chown(console, vol, staging, ctx)
-        case DestinationEndpointError.VOL_NOT_BTRFS:
-            say(console, FIX, "The destination is not on a btrfs filesystem.")
-            say(
-                console,
-                FIX,
-                "Move it to a btrfs volume, or use hard-link-snapshots instead.",
-            )
-        case DestinationEndpointError.VOL_FS_TYPE_UNKNOWN:
-            say(
-                console,
-                FIX,
-                "`stat -f` failed on the volume, so its filesystem type is unknown.",
-            )
-            say(console, FIX, "Check that the volume path exists and is readable:")
-            print_cmd(
-                console,
-                wrap_cmd(
-                    ["stat", "-f", "-c", "%T", vol.path or "<volume-path>"],
-                    vol,
-                    ctx.resolved_endpoints,
+                *_chown(vol, staging, ctx),
+            ]
+        case DestinationEndpointErrorKind.VOL_NOT_BTRFS:
+            return [
+                format_line(FIX, "The destination is not on a btrfs filesystem."),
+                format_line(
+                    FIX,
+                    "Move it to a btrfs volume, or use hard-link-snapshots instead.",
                 ),
-                STEP,
-            )
-        case DestinationEndpointError.VOL_NOT_MOUNTED_USER_SUBVOL_RM:
-            _print_user_subvol_rm_fix(console, vol, ctx)
-        case DestinationEndpointError.VOL_NO_HARDLINK_SUPPORT:
-            say(
-                console,
-                FIX,
-                "The destination filesystem does not support hard links (e.g."
-                " FAT/exFAT). Use a filesystem like ext4, xfs, or btrfs, or use"
-                " btrfs-snapshots instead.",
-            )
+            ]
+        case DestinationEndpointErrorKind.VOL_FS_TYPE_UNKNOWN:
+            return [
+                format_line(
+                    FIX,
+                    "`stat -f` failed on the volume, so its filesystem type is"
+                    " unknown.",
+                ),
+                format_line(FIX, "Check that the volume path exists and is readable:"),
+                format_command(
+                    wrap_cmd(
+                        ["stat", "-f", "-c", "%T", vol.path or "<volume-path>"],
+                        vol,
+                        ctx.resolved_endpoints,
+                    ),
+                    STEP,
+                ),
+            ]
+        case DestinationEndpointErrorKind.VOL_NOT_MOUNTED_USER_SUBVOL_RM:
+            return _user_subvol_rm_fix(vol, ctx)
+        case DestinationEndpointErrorKind.VOL_NO_HARDLINK_SUPPORT:
+            return [
+                format_line(
+                    FIX,
+                    "The destination filesystem does not support hard links (e.g."
+                    " FAT/exFAT). Use a filesystem like ext4, xfs, or btrfs, or use"
+                    " btrfs-snapshots instead.",
+                )
+            ]
         case _:
-            pass
+            return []
 
 
-def print_sync_error_fix(
-    console: Console,
+def format_sync_error_fix(
     sync: SyncConfig,
-    error: SyncError,
+    error: SyncErrorKind,
     ctx: TroubleshootContext,
-) -> None:
+) -> Lines:
     match error:
-        case SyncError.DISABLED:
-            say(console, FIX, "Enable the sync in the configuration file.")
-        case SyncError.ENDPOINT_HOST_ERRORS:
-            say(
-                console,
-                FIX,
-                "A host this sync runs on is missing required tools. Fix the SSH"
-                " endpoint errors reported above (for local volumes, under"
-                " 'localhost').",
-            )
-        case SyncError.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM:
+        case SyncErrorKind.DISABLED:
+            return [format_line(FIX, "Enable the sync in the configuration file.")]
+        case SyncErrorKind.ENDPOINT_HOST_ERRORS:
+            return [
+                format_line(
+                    FIX,
+                    "A host this sync runs on is missing required tools. Fix the SSH"
+                    " endpoint errors reported above (for local volumes, under"
+                    " 'localhost').",
+                )
+            ]
+        case SyncErrorKind.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM:
             src_ep = ctx.config.source_endpoint(sync)
             path = endpoint_path(ctx.config.volumes[src_ep.volume], src_ep.subdir)
-            say(
-                console,
-                FIX,
-                "Source ",
-                f"{path}/{LATEST_LINK}",
-                " points to /dev/null but there is no upstream sync that writes"
-                " to this endpoint. Either run the upstream sync first or reset"
-                " the symlink to point to a valid snapshot.",
-            )
-        case SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING:
-            say(
-                console,
-                FIX,
-                "The source endpoint's latest symlink points to /dev/null (no"
-                " snapshot yet). In dry-run mode, the upstream sync does not"
-                " create a real snapshot, so this sync is skipped. Run without"
-                " --dry-run to execute the full chain.",
-            )
+            return [
+                format_line(
+                    FIX,
+                    "Source ",
+                    f"{path}/{LATEST_LINK}",
+                    " points to /dev/null but there is no upstream sync that writes"
+                    " to this endpoint. Either run the upstream sync first or reset"
+                    " the symlink to point to a valid snapshot.",
+                )
+            ]
+        case SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING:
+            return [
+                format_line(
+                    FIX,
+                    "The source endpoint's latest symlink points to /dev/null (no"
+                    " snapshot yet). In dry-run mode, the upstream sync does not"
+                    " create a real snapshot, so this sync is skipped. Run without"
+                    " --dry-run to execute the full chain.",
+                )
+            ]
         case (
-            SyncError.SOURCE_ENDPOINT_INACTIVE | SyncError.DESTINATION_ENDPOINT_INACTIVE
+            SyncErrorKind.SOURCE_ENDPOINT_INACTIVE
+            | SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE
         ):
-            say(console, FIX, "Fix the endpoint errors reported above.")
+            return [format_line(FIX, "Fix the endpoint errors reported above.")]

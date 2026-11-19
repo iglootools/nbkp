@@ -13,10 +13,11 @@ from ..config import Config
 from ..disks import MountObservation
 from ..policy import Strictness
 from ..preflight import (
-    PreflightError,
+    PreflightErrorKind,
     PreflightResult,
     check_all_syncs,
     check_step_count,
+    format_problems,
     severity_for_errors,
 )
 from ..remote.endpoints import ResolvedEndpoints
@@ -30,13 +31,13 @@ def start_check_step(bar: StepProgressBar, label: str) -> None:
 def end_check_step(
     bar: StepProgressBar,
     label: str,
-    errors: Sequence[PreflightError],
+    errors: Sequence[PreflightErrorKind],
     strictness: Strictness,
 ) -> None:
     """Close a step with the icon its errors deserve under *strictness*."""
     typed_errors = list(errors)
     severity = severity_for_errors(typed_errors, strictness)
-    summary = ", ".join(e.value for e in typed_errors) if typed_errors else None
+    summary = format_problems(typed_errors) if typed_errors else None
     bar.on_end(f"check {label}", severity, summary)
 
 

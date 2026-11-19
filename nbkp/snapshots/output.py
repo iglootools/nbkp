@@ -1,7 +1,8 @@
-from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
+from ..preflight import format_problems
+from .errors import SnapshotOp
 from .models import (
     PruneResult,
     ShowResult,
@@ -18,15 +19,43 @@ def retention_display(max_snapshots: int | None) -> str:
         return f"keep {max_snapshots}"
 
 
+_OPERATIONS: dict[SnapshotOp, str] = {
+    SnapshotOp.CREATE: "create snapshot",
+    SnapshotOp.MKDIR: "create snapshot directory",
+    SnapshotOp.MAKE_WRITABLE: "make snapshot writable",
+    SnapshotOp.DELETE: "delete snapshot",
+    SnapshotOp.LIST: "list snapshots",
+    SnapshotOp.READ_LATEST: "read latest symlink",
+    SnapshotOp.UPDATE_LATEST: "update latest symlink",
+}
+
+_SKIP_REASONS: dict[SnapshotSkipReason, str] = {
+    SnapshotSkipReason.NO_SNAPSHOTS: "no snapshots configured",
+    SnapshotSkipReason.NO_MAX_SNAPSHOTS: "no max-snapshots limit",
+    SnapshotSkipReason.INACTIVE: "inactive",
+    SnapshotSkipReason.PREFLIGHT_ERRORS: "preflight errors ignored",
+}
+
+
+def format_operation(op: SnapshotOp) -> str:
+    return _OPERATIONS[op]
+
+
+def format_skip_reason(reason: SnapshotSkipReason) -> str:
+    return _SKIP_REASONS[reason]
+
+
 def snapshot_error_text(error: SnapshotResultError) -> str:
-    errors = ", ".join(e.value for e in error.preflight_errors)
+    errors = format_problems(error.preflight_errors)
     match error.kind:
         case SnapshotErrorKind.INACTIVE:
             return f"inactive: {errors}"
         case SnapshotErrorKind.PREFLIGHT_ERRORS:
             return f"preflight errors: {errors}"
         case SnapshotErrorKind.OPERATION_FAILED:
-            operation = error.operation.value if error.operation else "operation"
+            operation = (
+                format_operation(error.operation) if error.operation else "operation"
+            )
             return f"{operation} failed for {error.path}: {error.message}"
 
 
@@ -40,18 +69,12 @@ def _status_text(
         case (_, SnapshotResultError() as e):
             return Text(f"FAILED ({snapshot_error_text(e)})", style="red")
         case (SnapshotSkipReason() as reason, None):
-            return Text(f"SKIPPED ({reason.value})", style="dim")
+            return Text(f"SKIPPED ({format_skip_reason(reason)})", style="dim")
         case _:
             return Text("OK", style="green")
 
 
-def print_human_prune_results(
-    results: list[PruneResult],
-    dry_run: bool,
-    *,
-    console: Console | None = None,
-) -> None:
-    c = console or Console()
+def format_human_prune_results(results: list[PruneResult], dry_run: bool) -> Table:
     mode = " (dry run)" if dry_run else ""
 
     table = Table(
@@ -71,7 +94,7 @@ def print_human_prune_results(
             status,
         )
 
-    c.print(table)
+    return table
 
 
 def _show_row(r: ShowResult) -> tuple[str, str, str, str, str, Text]:
@@ -91,13 +114,7 @@ def _show_row(r: ShowResult) -> tuple[str, str, str, str, str, Text]:
             )
 
 
-def print_human_show_results(
-    results: list[ShowResult],
-    *,
-    console: Console | None = None,
-) -> None:
-    c = console or Console()
-
+def format_human_show_results(results: list[ShowResult]) -> Table:
     table = Table(title="Snapshots:")
     table.add_column("Name", style="bold")
     table.add_column("Mode")
@@ -109,4 +126,4 @@ def print_human_show_results(
     for r in results:
         table.add_row(*_show_row(r))
 
-    c.print(table)
+    return table

@@ -3,10 +3,11 @@
 from pathlib import Path
 
 import typer
+from rich.console import Console
 
 from ..clidisplay import OutputFormat, echo_json
 from ..config import Config, ConfigError
-from ..config.output import config_error_json, print_config_error
+from ..config.output import config_error_json, format_config_error
 from ..remote.endpoints import (
     EndpointFilter,
     NetworkType,
@@ -35,7 +36,7 @@ def load_config_or_exit(
             case OutputFormat.JSON:
                 echo_json(config_error_json(e))
             case OutputFormat.HUMAN:
-                print_config_error(e)
+                Console(stderr=True).print(format_config_error(e))
         raise typer.Exit(2)
 
 

@@ -11,16 +11,16 @@ from ...cliwiring.runtime import Runtime, runtime_of
 from ...config import (
     Config,
     ConfigError,
-    ConfigErrorReason,
+    ConfigErrorKind,
 )
-from ...config.output import print_config_error, print_human_config
+from ...config.output import format_config_error, format_human_config
 from ...config.testkit import config_show_config
 from ...ordering.output import (
     build_mermaid_graph,
-    print_mermaid_ascii_graph,
-    print_rich_tree_graph,
+    format_mermaid_ascii_graph,
+    format_rich_tree_graph,
 )
-from ...preflight.output import print_human_check, print_human_troubleshoot
+from ...preflight.output import format_human_check, format_human_troubleshoot
 from ...preflight.testkit import (
     check_config,
     check_data,
@@ -28,10 +28,10 @@ from ...preflight.testkit import (
     troubleshoot_data,
 )
 from ...remote.resolution import resolve_all_endpoints
-from ...snapshots.output import print_human_prune_results
+from ...snapshots.output import format_human_prune_results
 from ...sync.output import (
-    print_human_results,
-    print_run_preview,
+    format_human_results,
+    format_run_preview,
 )
 from ...sync.testkit.results import (
     dry_run_results,
@@ -64,8 +64,8 @@ def _print_panel(title: str, buf: StringIO) -> None:
     )
 
 
-@app.command()
-def output(ctx: typer.Context) -> None:
+@app.command("output")
+def output_cmd(ctx: typer.Context) -> None:
     """Render all human output functions with fake data."""
     _show_config_show()
     _show_config_graph()
@@ -81,20 +81,20 @@ def _show_config_show() -> None:
     console, buf = _capture_console()
     config = config_show_config()
     re = resolve_all_endpoints(config)
-    print_human_config(config, console=console, resolved_endpoints=re)
-    _print_panel("print_human_config", buf)
+    console.print(format_human_config(config, resolved_endpoints=re))
+    _print_panel("format_human_config", buf)
 
 
 def _show_config_graph() -> None:
     config = config_show_config()
 
     console, buf = _capture_console()
-    print_rich_tree_graph(config, console=console)
-    _print_panel("print_rich_tree_graph", buf)
+    console.print(format_rich_tree_graph(config))
+    _print_panel("format_rich_tree_graph", buf)
 
     console, buf = _capture_console()
-    print_mermaid_ascii_graph(config, console=console)
-    _print_panel("print_mermaid_ascii_graph", buf)
+    console.print(format_mermaid_ascii_graph(config))
+    _print_panel("format_mermaid_ascii_graph", buf)
 
     console, buf = _capture_console()
     mermaid_src = build_mermaid_graph(config)
@@ -107,16 +107,17 @@ def _show_check() -> None:
     config = check_config()
     re = resolve_all_endpoints(config)
     preflight = check_data(config)
-    print_human_check(
-        preflight.ssh_endpoint_statuses,
-        preflight.volume_statuses,
-        preflight.sync_statuses,
-        config,
-        console=console,
-        resolved_endpoints=re,
-        wrap_in_panel=False,
+    console.print(
+        format_human_check(
+            preflight.ssh_endpoint_statuses,
+            preflight.volume_statuses,
+            preflight.sync_statuses,
+            config,
+            resolved_endpoints=re,
+            wrap_in_panel=False,
+        )
     )
-    _print_panel("print_human_check", buf)
+    _print_panel("format_human_check", buf)
 
 
 def _show_run_preview() -> None:
@@ -124,41 +125,40 @@ def _show_run_preview() -> None:
     config = check_config()
     re = resolve_all_endpoints(config)
     preflight = check_data(config)
-    print_run_preview(
-        preflight.sync_statuses,
-        config,
-        console=console,
-        resolved_endpoints=re,
-        wrap_in_panel=False,
+    console.print(
+        format_run_preview(
+            preflight.sync_statuses,
+            config,
+            resolved_endpoints=re,
+            wrap_in_panel=False,
+        )
     )
-    _print_panel("print_run_preview", buf)
+    _print_panel("format_run_preview", buf)
 
 
 def _show_results() -> None:
     config = config_show_config()
     re = resolve_all_endpoints(config)
     console, buf = _capture_console()
-    print_human_results(run_results(config), False, config, re, console=console)
-    _print_panel("print_human_results (run)", buf)
+    console.print(format_human_results(run_results(config), False, config, re))
+    _print_panel("format_human_results (run)", buf)
 
     console, buf = _capture_console()
-    print_human_results(dry_run_results(config), True, config, re, console=console)
-    _print_panel("print_human_results (dry run)", buf)
+    console.print(format_human_results(dry_run_results(config), True, config, re))
+    _print_panel("format_human_results (dry run)", buf)
 
 
 def _show_prune() -> None:
     config = config_show_config()
     console, buf = _capture_console()
-    print_human_prune_results(prune_results(config), dry_run=False, console=console)
-    _print_panel("print_human_prune_results (prune)", buf)
+    console.print(format_human_prune_results(prune_results(config), dry_run=False))
+    _print_panel("format_human_prune_results (prune)", buf)
 
     console, buf = _capture_console()
-    print_human_prune_results(
-        prune_dry_run_results(config),
-        dry_run=True,
-        console=console,
+    console.print(
+        format_human_prune_results(prune_dry_run_results(config), dry_run=True)
     )
-    _print_panel("print_human_prune_results (dry run)", buf)
+    _print_panel("format_human_prune_results (dry run)", buf)
 
 
 def _show_troubleshoot(runtime: Runtime) -> None:
@@ -166,22 +166,23 @@ def _show_troubleshoot(runtime: Runtime) -> None:
     config = troubleshoot_config()
     re = resolve_all_endpoints(config)
     preflight = troubleshoot_data(config)
-    print_human_troubleshoot(
-        preflight.ssh_endpoint_statuses,
-        preflight.volume_statuses,
-        preflight.sync_statuses,
-        config,
-        console=console,
-        resolved_endpoints=re,
-        run=runtime.run,
+    console.print(
+        format_human_troubleshoot(
+            preflight.ssh_endpoint_statuses,
+            preflight.volume_statuses,
+            preflight.sync_statuses,
+            config,
+            resolved_endpoints=re,
+            run=runtime.run,
+        )
     )
-    _print_panel("print_human_troubleshoot", buf)
+    _print_panel("format_human_troubleshoot", buf)
 
 
 def _show_error_panel(title: str, error: ConfigError) -> None:
     console, buf = _capture_console()
-    print_config_error(error, console=console)
-    _print_panel(f"print_config_error ({title})", buf)
+    console.print(format_config_error(error))
+    _print_panel(f"format_config_error ({title})", buf)
 
 
 def _validation_error(data: dict[str, object]) -> ConfigError:
@@ -193,7 +194,7 @@ def _validation_error(data: dict[str, object]) -> ConfigError:
     try:
         Config.model_validate(data)
     except ValidationError as ve:
-        err = ConfigError(str(ve), reason=ConfigErrorReason.VALIDATION)
+        err = ConfigError(str(ve), reason=ConfigErrorKind.VALIDATION)
         err.__cause__ = ve
         return err
     raise AssertionError(f"demo config unexpectedly validates: {data!r}")
@@ -205,7 +206,7 @@ def _yaml_error() -> ConfigError:
     except yaml.YAMLError as ye:
         err = ConfigError(
             f"Invalid YAML in /etc/nbkp/config.yaml: {ye}",
-            reason=ConfigErrorReason.INVALID_YAML,
+            reason=ConfigErrorKind.INVALID_YAML,
         )
         err.__cause__ = ye
         return err
@@ -217,7 +218,7 @@ def _show_config_errors() -> None:
         "file not found",
         ConfigError(
             "Config file not found: /etc/nbkp/config.yaml",
-            reason=ConfigErrorReason.FILE_NOT_FOUND,
+            reason=ConfigErrorKind.FILE_NOT_FOUND,
         ),
     )
     _show_error_panel("invalid YAML", _yaml_error())

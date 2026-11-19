@@ -16,21 +16,21 @@ from nbkp.config import (
 from nbkp.policy import Strictness
 from nbkp.preflight import (
     DestinationEndpointDiagnostics,
-    DestinationEndpointError,
+    DestinationEndpointErrorKind,
     DestinationEndpointStatus,
     SourceEndpointDiagnostics,
-    SourceEndpointError,
+    SourceEndpointErrorKind,
     SourceEndpointStatus,
     SshEndpointDiagnostics,
-    SshEndpointError,
+    SshEndpointErrorKind,
     SshEndpointStatus,
-    SyncError,
+    SyncErrorKind,
     SyncStatus,
     VolumeDiagnostics,
-    VolumeError,
+    VolumeErrorKind,
     VolumeStatus,
 )
-from nbkp.preflight.output import print_human_troubleshoot
+from nbkp.preflight.output import format_human_troubleshoot
 from nbkp.preflight.output.check import (
     _format_destination_diagnostics,
     _format_latest,
@@ -84,8 +84,8 @@ def _ssh_statuses_from(
 
 def _make_vol_statuses(
     config: Config,
-    src_errors: list[VolumeError] | None = None,
-    dst_errors: list[VolumeError] | None = None,
+    src_errors: list[VolumeErrorKind] | None = None,
+    dst_errors: list[VolumeErrorKind] | None = None,
 ) -> dict[str, VolumeStatus]:
     ssh_status = _localhost_ssh_status()
     return {
@@ -110,9 +110,9 @@ def _make_sync_status(
     config: Config,
     vol_statuses: dict[str, VolumeStatus],
     *,
-    dst_ep_errors: list[DestinationEndpointError] | None = None,
-    src_ep_errors: list[SourceEndpointError] | None = None,
-    sync_errors: list[SyncError] | None = None,
+    dst_ep_errors: list[DestinationEndpointErrorKind] | None = None,
+    src_ep_errors: list[SourceEndpointErrorKind] | None = None,
+    sync_errors: list[SyncErrorKind] | None = None,
     sync_slug: str = "btrfs-sync",
 ) -> SyncStatus:
     sync_cfg = config.syncs[sync_slug]
@@ -157,16 +157,17 @@ class TestTroubleshootBtrfsStagingNotFound:
             "btrfs-sync": _make_sync_status(
                 config,
                 vol_statuses,
-                dst_ep_errors=[DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND],
+                dst_ep_errors=[DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND],
             )
         }
         console, buf = _make_console()
-        print_human_troubleshoot(
-            _ssh_statuses_from(vol_statuses),
-            vol_statuses,
-            sync_statuses,
-            config,
-            console=console,
+        console.print(
+            format_human_troubleshoot(
+                _ssh_statuses_from(vol_statuses),
+                vol_statuses,
+                sync_statuses,
+                config,
+            )
         )
         output = buf.getvalue()
         assert "staging" in output
@@ -181,16 +182,17 @@ class TestTroubleshootBtrfsStagingNotFound:
             "btrfs-sync": _make_sync_status(
                 config,
                 vol_statuses,
-                dst_ep_errors=[DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND],
+                dst_ep_errors=[DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND],
             )
         }
         console, buf = _make_console()
-        print_human_troubleshoot(
-            _ssh_statuses_from(vol_statuses),
-            vol_statuses,
-            sync_statuses,
-            config,
-            console=console,
+        console.print(
+            format_human_troubleshoot(
+                _ssh_statuses_from(vol_statuses),
+                vol_statuses,
+                sync_statuses,
+                config,
+            )
         )
         output = buf.getvalue()
         assert "btrfs subvolume create /mnt/dst/staging" in output
@@ -202,31 +204,33 @@ class TestTroubleshootBtrfsStagingNotFound:
             "btrfs-sync": _make_sync_status(
                 config,
                 vol_statuses,
-                dst_ep_errors=[DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND],
+                dst_ep_errors=[DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND],
             )
         }
         console, buf = _make_console()
-        print_human_troubleshoot(
-            _ssh_statuses_from(vol_statuses),
-            vol_statuses,
-            sync_statuses,
-            config,
-            console=console,
+        console.print(
+            format_human_troubleshoot(
+                _ssh_statuses_from(vol_statuses),
+                vol_statuses,
+                sync_statuses,
+                config,
+            )
         )
         output = buf.getvalue()
-        assert DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND.value in output
+        assert "staging/ directory not found" in output
 
     def test_no_issues_message(self) -> None:
         config = _btrfs_config()
         vol_statuses = _make_vol_statuses(config)
         sync_statuses = {"btrfs-sync": _make_sync_status(config, vol_statuses)}
         console, buf = _make_console()
-        print_human_troubleshoot(
-            _ssh_statuses_from(vol_statuses),
-            vol_statuses,
-            sync_statuses,
-            config,
-            console=console,
+        console.print(
+            format_human_troubleshoot(
+                _ssh_statuses_from(vol_statuses),
+                vol_statuses,
+                sync_statuses,
+                config,
+            )
         )
         output = buf.getvalue()
         assert "No issues found" in output
@@ -272,16 +276,17 @@ class TestTroubleshootBtrfsStagingNotFound:
             "btrfs-sync": _make_sync_status(
                 config,
                 vol_statuses,
-                dst_ep_errors=[DestinationEndpointError.STAGING_SUBVOL_NOT_FOUND],
+                dst_ep_errors=[DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND],
             )
         }
         console, buf = _make_console()
-        print_human_troubleshoot(
-            _ssh_statuses_from(vol_statuses),
-            vol_statuses,
-            sync_statuses,
-            config,
-            console=console,
+        console.print(
+            format_human_troubleshoot(
+                _ssh_statuses_from(vol_statuses),
+                vol_statuses,
+                sync_statuses,
+                config,
+            )
         )
         output = buf.getvalue()
         assert "/mnt/dst/backup/staging" in output
@@ -295,21 +300,25 @@ class TestTroubleshootDryRunPendingSnapshot:
             "btrfs-sync": _make_sync_status(
                 config,
                 vol_statuses,
-                sync_errors=[SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING],
+                sync_errors=[SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING],
             )
         }
         console, buf = _make_console()
-        print_human_troubleshoot(
-            _ssh_statuses_from(vol_statuses),
-            vol_statuses,
-            sync_statuses,
-            config,
-            console=console,
+        console.print(
+            format_human_troubleshoot(
+                _ssh_statuses_from(vol_statuses),
+                vol_statuses,
+                sync_statuses,
+                config,
+            )
         )
         output = buf.getvalue()
         assert "dry-run" in output
         assert "upstream" in output
-        assert SyncError.DRY_RUN_SRC_EP_SNAPSHOT_PENDING.value in output
+        assert (
+            "source snapshot not yet available (dry-run; upstream has not run)"
+            in output
+        )
 
 
 class TestTroubleshootLocationExcluded:
@@ -333,7 +342,7 @@ class TestTroubleshootLocationExcluded:
         ssh_status = SshEndpointStatus(
             slug="server",
             diagnostics=SshEndpointDiagnostics(location_excluded=True),
-            errors=[SshEndpointError.LOCATION_EXCLUDED],
+            errors=[SshEndpointErrorKind.LOCATION_EXCLUDED],
         )
         vol_statuses = {
             "remote": VolumeStatus(
@@ -345,15 +354,16 @@ class TestTroubleshootLocationExcluded:
             ),
         }
         console, buf = _make_console()
-        print_human_troubleshoot(
-            _ssh_statuses_from(vol_statuses),
-            vol_statuses,
-            {},
-            config,
-            console=console,
+        console.print(
+            format_human_troubleshoot(
+                _ssh_statuses_from(vol_statuses),
+                vol_statuses,
+                {},
+                config,
+            )
         )
         output = buf.getvalue()
-        assert SshEndpointError.LOCATION_EXCLUDED.value in output
+        assert "excluded by location filter" in output
         assert "--exclude-location" in output
 
 

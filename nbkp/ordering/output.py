@@ -1,5 +1,6 @@
 from mermaid_ascii import parse_mermaid, render_ascii
-from rich.console import Console, RenderableType
+from rich.console import Group, RenderableType
+from rich.text import Text
 from rich.tree import Tree
 
 from ..clidisplay import severity_icon
@@ -42,18 +43,11 @@ def build_mermaid_graph(config: Config) -> str:
     return "\n".join(lines)
 
 
-def print_mermaid_ascii_graph(
-    config: Config,
-    *,
-    console: Console | None = None,
-) -> None:
-    if console is None:
-        console = Console()
-    mermaid_src = build_mermaid_graph(config)
-    diagram = parse_mermaid(mermaid_src)
-    # markup=False: the ASCII art is drawing, not markup — any bracket in it
-    # is a box character, not a style tag.
-    console.print(render_ascii(diagram), highlight=False, markup=False)
+def format_mermaid_ascii_graph(config: Config) -> Text:
+    """Text, not markup: the ASCII art is drawing, and any bracket in it is a
+    box character, not a style tag.
+    """
+    return Text(render_ascii(parse_mermaid(build_mermaid_graph(config))))
 
 
 def build_rich_tree_sections(
@@ -99,28 +93,16 @@ def build_rich_tree_sections(
     return trees
 
 
-def print_rich_tree_graph(
-    config: Config,
-    *,
-    console: Console | None = None,
-) -> None:
-    c = console or Console()
-    for section in build_rich_tree_sections(config):
-        c.print(section)
+def format_rich_tree_graph(config: Config) -> Group:
+    return Group(*build_rich_tree_sections(config))
 
 
-def print_mermaid_graph(config: Config, *, console: Console | None = None) -> None:
-    """Markup, emoji codes, highlighting and wrapping are all disabled so the
-    output is the exact mermaid text, ready to pipe into a renderer.
+def format_mermaid_graph(config: Config) -> Text:
+    """The exact mermaid text, ready to pipe into a renderer: a ``Text`` is
+    never parsed for markup or emoji codes, nor highlighted.  Print it with
+    ``soft_wrap=True`` so long lines are neither wrapped nor cropped.
     """
-    c = console or Console()
-    c.print(
-        build_mermaid_graph(config),
-        markup=False,
-        emoji=False,
-        highlight=False,
-        soft_wrap=True,
-    )
+    return Text(build_mermaid_graph(config))
 
 
 def build_graph_json(config: Config) -> dict[str, object]:

@@ -17,14 +17,14 @@ from ..remote.endpoints import ResolvedEndpoints
 from ..remote.errors import ssh_connection_errors
 
 
-class SnapshotOp(str, enum.Enum):
-    CREATE = "create snapshot"
-    MKDIR = "create snapshot directory"
-    MAKE_WRITABLE = "make snapshot writable"
-    DELETE = "delete snapshot"
-    LIST = "list snapshots"
-    READ_LATEST = "read latest symlink"
-    UPDATE_LATEST = "update latest symlink"
+class SnapshotOp(enum.StrEnum):
+    CREATE = "create"
+    MKDIR = "mkdir"
+    MAKE_WRITABLE = "make-writable"
+    DELETE = "delete"
+    LIST = "list"
+    READ_LATEST = "read-latest"
+    UPDATE_LATEST = "update-latest"
 
 
 class SnapshotOperationError(Exception):

@@ -10,54 +10,54 @@ from ...disks import (
 )
 
 
-class SshEndpointError(str, enum.Enum):
+class SshEndpointErrorKind(enum.StrEnum):
     """Host tool availability errors live here because tool presence is a
     property of the host, shared by all volumes on that host.
     """
 
     UNREACHABLE = "unreachable"
-    LOCATION_EXCLUDED = "excluded by location filter"
-    AUTH_FAILED = "ssh authentication or host key verification failed"
+    LOCATION_EXCLUDED = "location-excluded"
+    AUTH_FAILED = "auth-failed"
 
     # Always needed
-    RSYNC_NOT_FOUND = "rsync not found"
-    RSYNC_TOO_OLD = "rsync too old (3.0+ required)"
+    RSYNC_NOT_FOUND = "rsync-not-found"
+    RSYNC_TOO_OLD = "rsync-too-old"
 
     # Needed when any endpoint on this host has btrfs snapshots
-    BTRFS_NOT_FOUND = "btrfs not found"
+    BTRFS_NOT_FOUND = "btrfs-not-found"
 
     # Needed when any endpoint on this host has btrfs or hardlink snapshots
-    STAT_NOT_FOUND = "stat not found"
+    STAT_NOT_FOUND = "stat-not-found"
 
     # Needed when any endpoint on this host has btrfs snapshots,
     # or any mount-managed volume needs mountpoint discovery
-    FINDMNT_NOT_FOUND = "findmnt not found"
+    FINDMNT_NOT_FOUND = "findmnt-not-found"
 
     # Needed when any volume on this host has mount config (udisks backend)
-    UDISKSCTL_NOT_FOUND = "udisksctl not found"
-    UDISKSD_NOT_RUNNING = "udisksd (udisks2 daemon) not running"
-    LSBLK_NOT_FOUND = "lsblk not found"
+    UDISKSCTL_NOT_FOUND = "udisksctl-not-found"
+    UDISKSD_NOT_RUNNING = "udisksd-not-running"
+    LSBLK_NOT_FOUND = "lsblk-not-found"
 
 
-INACTIVE_SSH_ERRORS: frozenset[SshEndpointError] = frozenset(
+INACTIVE_SSH_ERRORS: frozenset[SshEndpointErrorKind] = frozenset(
     {
-        SshEndpointError.UNREACHABLE,
-        SshEndpointError.LOCATION_EXCLUDED,
+        SshEndpointErrorKind.UNREACHABLE,
+        SshEndpointErrorKind.LOCATION_EXCLUDED,
     }
 )
 
 
-class SshEndpointWarning(str, enum.Enum):
+class SshEndpointWarningKind(enum.StrEnum):
     """Host-level findings worth fixing that do not make the endpoint inactive.
 
-    Kept apart from ``SshEndpointError`` so they never reach ``active`` or
+    Kept apart from ``SshEndpointErrorKind`` so they never reach ``active`` or
     the strictness policy: ``check`` and ``troubleshoot`` display them, and
     nothing else reads them.
     """
 
     # Btrfs-backed mount volumes: udisks mounts btrfs without its btrfs
     # module, but cannot manage btrfs-specific features.
-    UDISKS_BTRFS_MODULE_MISSING = "udisks2 btrfs module not installed"
+    UDISKS_BTRFS_MODULE_MISSING = "udisks-btrfs-module-missing"
 
 
 @dataclass(frozen=True)
@@ -96,7 +96,7 @@ class SshEndpointDiagnostics(BaseModel):
 
     Pure diagnostics — no interpretation of what constitutes an error.
     ``SshEndpointStatus.from_diagnostics`` translates these into
-    ``SshEndpointError`` values using ``SshEndpointToolNeeds``.
+    ``SshEndpointErrorKind`` values using ``SshEndpointToolNeeds``.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -129,8 +129,8 @@ class SshEndpointStatus(BaseModel):
     slug: str
     """SSH endpoint slug, or ``\"localhost\"`` for local volumes."""
     diagnostics: SshEndpointDiagnostics
-    errors: list[SshEndpointError]
-    warnings: list[SshEndpointWarning] = []
+    errors: list[SshEndpointErrorKind]
+    warnings: list[SshEndpointWarningKind] = []
     """Non-fatal findings; never affect ``active``."""
 
     @computed_field  # type: ignore[prop-decorator]
@@ -155,14 +155,14 @@ class SshEndpointStatus(BaseModel):
 def _ssh_endpoint_errors(
     diag: SshEndpointDiagnostics,
     needs: SshEndpointToolNeeds,
-) -> list[SshEndpointError]:
+) -> list[SshEndpointErrorKind]:
     match diag:
         case SshEndpointDiagnostics(location_excluded=True):
-            return [SshEndpointError.LOCATION_EXCLUDED]
+            return [SshEndpointErrorKind.LOCATION_EXCLUDED]
         case SshEndpointDiagnostics(ssh_reachable=False, ssh_auth_failed=True):
-            return [SshEndpointError.AUTH_FAILED]
+            return [SshEndpointErrorKind.AUTH_FAILED]
         case SshEndpointDiagnostics(ssh_reachable=False):
-            return [SshEndpointError.UNREACHABLE]
+            return [SshEndpointErrorKind.UNREACHABLE]
         case SshEndpointDiagnostics(host_tools=HostToolCapabilities() as tools):
             # findmnt is needed both by btrfs endpoints and by mount
             # management: report it once when both need it.
@@ -186,9 +186,9 @@ def _ssh_endpoint_errors(
 def _ssh_endpoint_warnings(
     diag: SshEndpointDiagnostics,
     needs: SshEndpointToolNeeds,
-) -> list[SshEndpointWarning]:
+) -> list[SshEndpointWarningKind]:
     return (
-        [SshEndpointWarning.UDISKS_BTRFS_MODULE_MISSING]
+        [SshEndpointWarningKind.UDISKS_BTRFS_MODULE_MISSING]
         if diag.mount_tools is not None
         and needs.has_mount_volumes
         and needs.has_btrfs_mount
@@ -197,12 +197,12 @@ def _ssh_endpoint_warnings(
     )
 
 
-def _ssh_rsync_errors(tools: HostToolCapabilities) -> list[SshEndpointError]:
+def _ssh_rsync_errors(tools: HostToolCapabilities) -> list[SshEndpointErrorKind]:
     match (tools.has_rsync, tools.rsync_version_ok):
         case (False, _):
-            return [SshEndpointError.RSYNC_NOT_FOUND]
+            return [SshEndpointErrorKind.RSYNC_NOT_FOUND]
         case (True, False):
-            return [SshEndpointError.RSYNC_TOO_OLD]
+            return [SshEndpointErrorKind.RSYNC_TOO_OLD]
         case _:
             return []
 
@@ -210,20 +210,20 @@ def _ssh_rsync_errors(tools: HostToolCapabilities) -> list[SshEndpointError]:
 def _ssh_snapshot_tool_errors(
     tools: HostToolCapabilities,
     needs: SshEndpointToolNeeds,
-) -> list[SshEndpointError]:
+) -> list[SshEndpointErrorKind]:
     return [
         *(
-            [SshEndpointError.BTRFS_NOT_FOUND]
+            [SshEndpointErrorKind.BTRFS_NOT_FOUND]
             if needs.has_btrfs_endpoints and not tools.has_btrfs
             else []
         ),
         *(
-            [SshEndpointError.STAT_NOT_FOUND]
+            [SshEndpointErrorKind.STAT_NOT_FOUND]
             if needs.has_snapshot_endpoints and not tools.has_stat
             else []
         ),
         *(
-            [SshEndpointError.FINDMNT_NOT_FOUND]
+            [SshEndpointErrorKind.FINDMNT_NOT_FOUND]
             if needs.has_btrfs_endpoints and not tools.has_findmnt
             else []
         ),
@@ -233,7 +233,7 @@ def _ssh_snapshot_tool_errors(
 def _ssh_mount_tool_errors(
     mount_tools: MountToolCapabilities,
     needs: SshEndpointToolNeeds,
-) -> list[SshEndpointError]:
+) -> list[SshEndpointErrorKind]:
     """A mount-managed host needs ``udisksctl`` + a running ``udisksd`` (for
     unlock/mount/lock), ``findmnt`` (mountpoint discovery), and ``lsblk``
     (cleartext-device discovery).  The udisks btrfs module that btrfs-backed
@@ -243,18 +243,18 @@ def _ssh_mount_tool_errors(
         return []
     return [
         *(
-            [SshEndpointError.UDISKSCTL_NOT_FOUND]
+            [SshEndpointErrorKind.UDISKSCTL_NOT_FOUND]
             if mount_tools.has_udisksctl is False
             else []
         ),
         *(
-            [SshEndpointError.UDISKSD_NOT_RUNNING]
+            [SshEndpointErrorKind.UDISKSD_NOT_RUNNING]
             if mount_tools.has_udisksctl is True
             and mount_tools.udisksd_running is False
             else []
         ),
         *(
-            [SshEndpointError.FINDMNT_NOT_FOUND]
+            [SshEndpointErrorKind.FINDMNT_NOT_FOUND]
             if mount_tools.has_findmnt is False
             else []
         ),
@@ -267,5 +267,9 @@ def _ssh_mount_tool_errors(
         # pre-mount introspection (lsblk -o FSTYPE/SIZE/MODEL), label/partition
         # resolution, multi-device btrfs enumeration, or a richer `disks status`
         # block-device tree.
-        *([SshEndpointError.LSBLK_NOT_FOUND] if mount_tools.has_lsblk is False else []),
+        *(
+            [SshEndpointErrorKind.LSBLK_NOT_FOUND]
+            if mount_tools.has_lsblk is False
+            else []
+        ),
     ]
