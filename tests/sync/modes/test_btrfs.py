@@ -104,6 +104,20 @@ class TestBtrfsSync:
         assert results[0].failure == SyncFailureKind.SNAPSHOT
         assert runner.commands_starting_with("ln") == []
 
+    def test_snapshot_failure_keeps_rsync_stderr(self) -> None:
+        """rsync's warnings on stderr belong in the failure report too."""
+        config = _btrfs_config()
+        _, sync_statuses = active_statuses(config)
+        rsync = FakeRsync([completed(0, "sent 10 bytes\n", "file vanished: a\n")])
+        runner = FakeCommandRunner().on(
+            "btrfs", "subvolume", "snapshot", returns=completed(1, stderr="no space")
+        )
+
+        results = run_syncs(config, sync_statuses, rsync=rsync, run_command=runner)
+
+        assert results[0].failure == SyncFailureKind.SNAPSHOT
+        assert results[0].output == "sent 10 bytes\nfile vanished: a\n"
+
     def test_refuses_snapshot_not_after_latest(self) -> None:
         """A clock behind latest must not move latest back in time."""
         config = _btrfs_config()
