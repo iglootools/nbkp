@@ -48,6 +48,13 @@ class TestSeverityForError:
             is Severity.ERROR
         )
 
+    def test_disabled_sync_is_warning_under_every_strictness(self) -> None:
+        """A disabled sync never fails a run, so it is never shown as an error."""
+        assert {
+            severity_for_error(SyncErrorKind.DISABLED, strictness)
+            for strictness in Strictness
+        } == {Severity.WARNING}
+
     def test_ignore_all_nothing_fatal(self) -> None:
         assert (
             severity_for_error(

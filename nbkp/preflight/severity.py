@@ -45,9 +45,15 @@ def severity_for_error(error: PreflightErrorKind, strictness: Strictness) -> Sev
 
     Under ``IGNORE_NONE`` every error is fatal; under ``IGNORE_ALL``
     nothing is fatal; under ``IGNORE_INACTIVE`` (default) only the
-    "expected inactive" set is treated as non-fatal.
+    "expected inactive" set is treated as non-fatal.  A disabled sync is a
+    warning under every mode, as :func:`~nbkp.preflight.strictness.is_fatal`
+    never lets it fail a run.
     """
-    return classify_severity(_is_inactive(error), strictness)
+    return (
+        Severity.WARNING
+        if error is SyncErrorKind.DISABLED
+        else classify_severity(_is_inactive(error), strictness)
+    )
 
 
 def severity_for_errors(
