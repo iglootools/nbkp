@@ -287,6 +287,7 @@ def build_chain_config(
     rsync_options: RsyncOptions | None = None,
     max_snapshots: int | None = None,
     credential_provider: CredentialProvider = CredentialProvider.KEYRING,
+    credential_command: list[str] | None = None,
 ) -> Config:
     """Build a 6-hop chain config across local and remote volumes.
 
@@ -309,6 +310,7 @@ def build_chain_config(
 
     - *rsync_options*: applied to every sync (e.g. bandwidth limiting).
     - *max_snapshots*: applied to both HL and btrfs snapshot configs.
+    - *credential_command*: required by the ``command`` *credential_provider*.
     """
     volumes: dict[str, LocalVolume | RemoteVolume] = {
         "src-local-bare": LocalVolume(
@@ -451,6 +453,7 @@ def build_chain_config(
 
     return Config(
         credential_provider=credential_provider,
+        credential_command=credential_command,
         ssh_endpoints={
             "bastion": bastion_endpoint,
             "via-bastion": proxied_endpoint,

@@ -1,3 +1,4 @@
+import shlex
 import subprocess
 import tempfile
 from collections.abc import Callable, Generator
@@ -22,6 +23,7 @@ from ..policy import Severity
 from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 from ..remote.resolution import resolve_all_endpoints
+from ..remote.testkit.constants import LUKS_PASSPHRASE
 from ..remote.testkit.errors import DockerError
 from ..sync.testkit.seed import (
     build_chain_config,
@@ -34,7 +36,6 @@ from ..sync.testkit.seed import (
 # _check_docker(has_docker) before anything here resolves these lazy names.
 lazy from ..remote.testkit.docker import (
     DOCKER_DIR,
-    LUKS_PASSPHRASE,
     build_docker_image,
     check_docker,
     create_docker_network,
@@ -48,6 +49,15 @@ lazy from ..remote.testkit.docker import (
 )
 
 _HAS_DOCKER = find_spec("docker") is not None
+
+# What the demo config gives the `command` credential provider: it prints the
+# demo passphrase whatever the {id}, which sh receives as $0 and ignores.
+DEMO_CREDENTIAL_COMMAND = [
+    "sh",
+    "-c",
+    f"printf '%s\\n' {shlex.quote(LUKS_PASSPHRASE)}",
+    "{id}",
+]
 
 
 class SeedErrorKind(StrEnum):
@@ -363,6 +373,9 @@ def _docker_config(
     credential_provider: CredentialProvider,
 ) -> Config:
     """Chain layout matching the integration test, through the bastion."""
+    provider = (
+        credential_provider if luks_uuid is not None else CredentialProvider.KEYRING
+    )
     proxied = create_test_ssh_endpoint(
         "via-bastion",
         "backup-server",
@@ -377,8 +390,9 @@ def _docker_config(
         luks_uuid=luks_uuid,
         rsync_options=rsync_opts,
         max_snapshots=5,
-        credential_provider=(
-            credential_provider if luks_uuid is not None else CredentialProvider.KEYRING
+        credential_provider=provider,
+        credential_command=(
+            DEMO_CREDENTIAL_COMMAND if provider == CredentialProvider.COMMAND else None
         ),
     )
 

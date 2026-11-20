@@ -48,8 +48,8 @@ def _luks_setup_instructions(provider: CredentialProvider) -> list[str]:
             ]
         case CredentialProvider.COMMAND:
             return [
-                "# Configure a command provider in the config to retrieve",
-                f"# the passphrase. Passphrase: {LUKS_PASSPHRASE}",
+                "# The config's credential-command prints the passphrase.",
+                f"# Passphrase: {LUKS_PASSPHRASE}",
             ]
 
 

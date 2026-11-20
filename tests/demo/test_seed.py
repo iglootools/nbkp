@@ -7,7 +7,14 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from nbkp.config import Config, CredentialProvider, LocalVolume
+from nbkp.config import (
+    Config,
+    CredentialProvider,
+    LocalVolume,
+    RsyncOptions,
+    SshEndpoint,
+)
+from nbkp.credentials import retrieve_passphrase
 from nbkp.demo import seed as seed_module
 from nbkp.demo.cli import app
 from nbkp.demo.cli.seed_cmd import commands_script, format_seed_error
@@ -19,6 +26,7 @@ from nbkp.demo.seed import (
     seed_plan,
     seed_steps,
 )
+from nbkp.remote.testkit.constants import LUKS_PASSPHRASE
 from tests.cliwiring.test_mount import UUID, encrypted_volume
 from tests.fakes import FakeCommandRunner, completed
 
@@ -50,6 +58,26 @@ class TestSteps:
             on_step_end=lambda label, _sev, _detail: ends.append(label),
         )
         assert ends == [s.done for s in seed_steps(docker=False, luks=False)]
+
+
+class TestCredentialProvider:
+    def test_command_provider_config_retrieves_the_demo_passphrase(
+        self, tmp_path: Path
+    ) -> None:
+        """Regression: the config had no credential-command and failed
+        validation after the containers had started."""
+        endpoint = SshEndpoint(slug="bastion", host="127.0.0.1")
+        containers = seed_module._Containers(
+            tmp_path / "id", endpoint, endpoint, 2222, 2223
+        )
+        config = seed_module._docker_config(
+            tmp_path, containers, UUID, RsyncOptions(), CredentialProvider.COMMAND
+        )
+        assert config.credential_provider == CredentialProvider.COMMAND
+        passphrase = retrieve_passphrase(
+            "test-luks", config.credential_provider, config.credential_command
+        )
+        assert passphrase == LUKS_PASSPHRASE
 
 
 class TestDockerExtra:
