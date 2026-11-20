@@ -5,7 +5,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from ...clidisplay import OutputFormat, echo_json
+from ...clidisplay import OutputFormat, echo_json, severity_style, severity_symbol
 from ...cliwiring.config import load_config_or_exit
 from ...cliwiring.options import (
     CONFIG_OPTION,
@@ -13,6 +13,7 @@ from ...cliwiring.options import (
 )
 from ...cliwiring.runtime import runtime_of
 from ...config import Config
+from ...policy import Severity
 from .. import (
     PassphrasePrefetch,
     collect_passphrase_ids,
@@ -110,10 +111,15 @@ def _print_human_status(cfg: Config, results: list[PassphrasePrefetch]) -> None:
 
 
 def _status_text(result: PassphrasePrefetch) -> Text:
-    if result.success:
-        return Text("✓ available", style="green")
-    else:
-        return Text(
-            f"✗ missing ({result.detail})" if result.detail else "✗ missing",
-            style="red",
-        )
+    severity, label = _status(result)
+    return Text(f"{severity_symbol(severity)} {label}", style=severity_style(severity))
+
+
+def _status(result: PassphrasePrefetch) -> tuple[Severity, str]:
+    match result:
+        case PassphrasePrefetch(success=True):
+            return Severity.OK, "available"
+        case PassphrasePrefetch(detail=str() as detail) if detail:
+            return Severity.ERROR, f"missing ({detail})"
+        case _:
+            return Severity.ERROR, "missing"
