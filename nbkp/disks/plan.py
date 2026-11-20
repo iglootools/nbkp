@@ -87,10 +87,23 @@ def _plan_one(
         return VolumePlan(
             volume.slug, (), f"unreachable: {describe_error(e)}", probe_failed=True
         )
-    actions, detail = (
-        _mount_actions(mount, caps) if mounting else _umount_actions(mount, caps)
+    if _state_unknown(mount, caps):
+        return VolumePlan(volume.slug, (), "device state unknown", probe_failed=True)
+    else:
+        actions, detail = (
+            _mount_actions(mount, caps) if mounting else _umount_actions(mount, caps)
+        )
+        return VolumePlan(volume.slug, actions, detail)
+
+
+def _state_unknown(mount: MountConfig, caps: MountCapabilities) -> bool:
+    """A failed ``lsblk``/``findmnt`` probe leaves the state ``None`` rather
+    than raising, and a plan built on it would read ``None`` as "not mounted".
+    """
+    return caps.device_present is not False and (
+        caps.mounted is None
+        or (mount.encryption is not None and caps.luks_unlocked is None)
     )
-    return VolumePlan(volume.slug, actions, detail)
 
 
 def plan_lifecycle(

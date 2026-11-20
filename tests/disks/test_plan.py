@@ -125,6 +125,20 @@ class TestPlanLifecycle:
         assert plan.detail.startswith("unreachable: ")
         assert "No route to host" in plan.detail
 
+    def test_unknown_mount_state_is_a_probe_failure_when_unmounting(self) -> None:
+        state = MountCapabilities(device_present=True)
+
+        [plan] = _plan(_config(_volume("enc")), {"enc": state}, mounting=False)
+
+        assert plan == VolumePlan("enc", (), "device state unknown", probe_failed=True)
+
+    def test_unknown_lock_state_is_a_probe_failure_when_mounting(self) -> None:
+        state = MountCapabilities(device_present=True, mounted=False)
+
+        [plan] = _plan(_config(_volume("enc")), {"enc": state}, mounting=True)
+
+        assert plan == VolumePlan("enc", (), "device state unknown", probe_failed=True)
+
     def test_umount_is_planned_in_reverse_order(self) -> None:
         config = _config(_volume("first"), _volume("second"))
         states: dict[str, MountCapabilities | Exception] = {
