@@ -12,13 +12,14 @@ from ...clidisplay import StepProgressBar
 from ...config import (
     CredentialProvider,
 )
-from ...remote.testkit.constants import (
+from . import app, console as _console
+lazy from ...remote.testkit.constants import (
     BASTION_CONTAINER_NAME,
     LUKS_PASSPHRASE,
     NETWORK_NAME,
     STORAGE_CONTAINER_NAME,
 )
-from ..seed import (
+lazy from ..seed import (
     SeedError,
     SeedErrorKind,
     SeedResult,
@@ -26,7 +27,6 @@ from ..seed import (
     seed_plan,
     seed_steps,
 )
-from . import app, console as _console
 
 
 def _luks_setup_instructions(provider: CredentialProvider) -> list[str]:
