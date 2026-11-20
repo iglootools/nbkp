@@ -2,7 +2,7 @@
 
 The unit tests cover the core logic of the tool. Integration and end-to-end tests exercise the real rsync/SSH/btrfs pipeline against Docker containers and local filesystems. See [Testing Strategy](#testing-strategy) for details on each test category.
 
-Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/QA. The `seed --docker` command requires the `docker` extra: `uv tool install 'nbkp[docker]'`. In dev, run it from the project environment: `uv run nbkp demo seed` (or `uv run nbkp demo output`).
+Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/QA. The `seed --docker` command requires the `docker` extra: `uv tool install 'nbkp[docker]'`. In dev, run it from the project environment: `uv run --no-sync nbkp demo seed` (or `uv run --no-sync nbkp demo output`).
 
 Run automated tests and checks (no external dependencies):
 ```bash
@@ -46,21 +46,23 @@ mise run boundaries-check   # check the module layering rules (import-linter)
 mise run dead-code-check    # check for unused code (deadcode)
 
 # Running tools directly
-uv run pytest tests/ --ignore=tests/e2e_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -n auto -v  # Unit tests only
-uv run pytest tests/e2e_docker/ -v                                   # End-to-end sync tests
-uv run pytest tests/integration_fs/ -n auto -v                       # Filesystem integration tests
-uv run pytest tests/integration_docker/ -n auto -v                   # Docker integration tests
-uv run pytest tests/ -v                                              # All tests
-uv run ruff format .                                                 # formatting
-uv run ruff check nbkp/ tests/ build-scripts/                        # linting
-uv run pyright nbkp/ tests/ build-scripts/                           # type-checking
-uv run pytest tests/remote/test_ssh.py::TestBuildSshBaseArgs::test_full -v  # run a single test
+uv run --no-sync pytest tests/ --ignore=tests/e2e_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -n auto -v  # Unit tests only
+uv run --no-sync pytest tests/e2e_docker/ -v                         # End-to-end sync tests
+uv run --no-sync pytest tests/integration_fs/ -n auto -v             # Filesystem integration tests
+uv run --no-sync pytest tests/integration_docker/ -n auto -v         # Docker integration tests
+uv run --no-sync pytest tests/ -v                                    # All tests
+uv run --no-sync ruff format .                                       # formatting
+uv run --no-sync ruff check nbkp/ tests/ build-scripts/              # linting
+uv run --no-sync pyright nbkp/ tests/ build-scripts/                 # type-checking
+uv run --no-sync pytest tests/remote/test_ssh.py::TestBuildSshBaseArgs::test_full -v  # run a single test
 ```
 
-`uv run` is the prefix to use rather than a bare `pytest`/`ruff`. It resolves the
-environment from the project root, so it is correct regardless of what is on `PATH` — a bare
-command in a shell that has *another* project's `.venv` active silently runs that project's
-copy of the tool. The mise tasks above use `uv run --no-sync` for the same reason.
+`uv run --no-sync` is the prefix to use rather than a bare `pytest`/`ruff`, as the mise tasks
+above do. `uv run` resolves the environment from the project root, so it is correct regardless
+of what is on `PATH` — a bare command in a shell that has *another* project's `.venv` active
+silently runs that project's copy of the tool. `--no-sync` stops it from syncing `.venv` on
+every call, leaving installation to `[deps.uv]` (below). From a shell where mise is not
+activated, run a tool with `mise exec -- <tool>` instead.
 
 Dependencies install themselves: `[deps.uv]` in `mise.toml` runs `uv sync --all-extras` before
 any `mise run` whenever `uv.lock` or `pyproject.toml` has changed, or `.venv` has gone missing.

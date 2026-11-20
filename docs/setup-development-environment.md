@@ -29,9 +29,9 @@
    Add and remove dependencies with `uv add` / `uv remove`, which update `pyproject.toml`
    and `uv.lock` together. (`mise deps add` does not support uv.)
 
-   Run tools with `uv run <tool>` rather than bare — see
-   [Building and Testing](building-and-testing.md) for why that matters when more than one
-   project's virtualenv is in play.
+   Run tools with `uv run --no-sync <tool>` rather than bare, or `mise exec -- <tool>` from a
+   shell where mise is not activated — see [Building and Testing](building-and-testing.md) for
+   why that matters when more than one project's virtualenv is in play.
 
 6. Upgrade rsync if you're on macOS, as the default version is too old and lacks some features nbkp relies on:
    ```bash
