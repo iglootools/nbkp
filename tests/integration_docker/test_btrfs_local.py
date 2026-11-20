@@ -30,7 +30,6 @@ from tests.integration_docker._btrfs_helpers import (
     run_test_dry_run_preserves_all,
     run_test_lists_sorted_oldest_first,
     run_test_prunes_oldest_beyond_limit,
-    run_test_returns_most_recent,
 )
 
 _btrfs_available = platform.system() == "Linux" and shutil.which("btrfs") is not None
@@ -179,12 +178,6 @@ class TestCreateSnapshot:
 class TestListSnapshots:
     def test_lists_sorted_oldest_first(self, btrfs_env_local: BtrfsEnv) -> None:
         run_test_lists_sorted_oldest_first(btrfs_env_local)
-
-
-@_skip_no_btrfs
-class TestGetLatestSnapshot:
-    def test_returns_most_recent(self, btrfs_env_local: BtrfsEnv) -> None:
-        run_test_returns_most_recent(btrfs_env_local)
 
 
 @_skip_no_btrfs

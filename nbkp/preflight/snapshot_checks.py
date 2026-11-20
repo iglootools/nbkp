@@ -50,17 +50,6 @@ def check_btrfs_subvolume(
     return result.returncode == 0 and result.stdout.strip() == "256"
 
 
-def check_btrfs_readonly(
-    volume: Volume,
-    path: str,
-    resolved_endpoints: ResolvedEndpoints,
-    *,
-    run: VolumeCommandRunner = run_on_volume,
-) -> bool:
-    result = run(["btrfs", "property", "get", path, "ro"], volume, resolved_endpoints)
-    return result.returncode == 0 and "ro=true" in result.stdout
-
-
 def check_btrfs_mount_option(
     volume: Volume,
     option: str,

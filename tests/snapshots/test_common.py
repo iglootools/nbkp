@@ -21,7 +21,6 @@ from nbkp.remote.endpoints import ResolvedEndpoint
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.snapshots.common import (
     create_snapshot_timestamp,
-    get_latest_snapshot,
     list_snapshots,
     read_latest_symlink,
     update_latest_symlink,
@@ -203,60 +202,7 @@ class TestCreateSnapshotTimestamp:
         assert result.name == "2026-02-21T12:00:00.000Z"
 
 
-class TestGetLatestSnapshotLocal:
-    def test_found(self) -> None:
-        runner = FakeCommandRunner().on(
-            returns=completed(
-                returncode=0,
-                stdout="2024-01-01T00:00:00.000Z\n2024-01-15T12:00:00.000Z\n",
-            )
-        )
-        config, sync = _local_config()
-
-        result = get_latest_snapshot(sync, config, run=runner)
-        assert result is not None
-        assert result.name == "2024-01-15T12:00:00.000Z"
-
-    def test_empty(self) -> None:
-        runner = FakeCommandRunner().on(returns=completed(returncode=0, stdout=""))
-        config, sync = _local_config()
-
-        result = get_latest_snapshot(sync, config, run=runner)
-        assert result is None
-
-    def test_dir_missing(self) -> None:
-        # ls fails, then `test -d` reports the directory absent
-        runner = FakeCommandRunner().on(
-            returns=[
-                completed(returncode=2, stdout="", stderr="No such file"),
-                completed(returncode=1, stdout="", stderr=""),
-            ]
-        )
-        config, sync = _local_config()
-
-        result = get_latest_snapshot(sync, config, run=runner)
-        assert result is None
-
-
-class TestGetLatestSnapshotRemote:
-    def test_found(self) -> None:
-        runner = FakeCommandRunner().on(
-            returns=completed(
-                returncode=0,
-                stdout="2024-01-01T00:00:00.000Z\n2024-01-15T12:00:00.000Z\n",
-            )
-        )
-        config, sync = _remote_config()
-        resolved = resolve_all_endpoints(config)
-
-        result = get_latest_snapshot(sync, config, resolved, run=runner)
-        assert result is not None
-        assert result.name == "2024-01-15T12:00:00.000Z"
-        assert runner.commands == [["ls", "/backup/data/snapshots"]]
-        assert runner.calls[0].volume == config.volumes["dst"]
-
-
-class TestGetLatestSnapshotRemoteSpaces:
+class TestListSnapshotsRemoteSpaces:
     def test_found(self) -> None:
         runner = FakeCommandRunner().on(
             returns=completed(
@@ -267,9 +213,11 @@ class TestGetLatestSnapshotRemoteSpaces:
         config, sync = _remote_config_spaces()
         resolved = resolve_all_endpoints(config)
 
-        result = get_latest_snapshot(sync, config, resolved, run=runner)
-        assert result is not None
-        assert result.name == "2024-01-15T12:00:00.000Z"
+        result = list_snapshots(sync, config, resolved, run=runner)
+        assert [s.name for s in result] == [
+            "2024-01-01T00:00:00.000Z",
+            "2024-01-15T12:00:00.000Z",
+        ]
         assert runner.commands == [["ls", "/my backup/my data/snapshots"]]
         assert runner.calls[0].volume == config.volumes["dst"]
 

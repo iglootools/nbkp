@@ -160,20 +160,6 @@ def list_snapshots(
         raise SnapshotOperationError(SnapshotOp.LIST, path, result.stderr or "")
 
 
-def get_latest_snapshot(
-    sync: SyncConfig,
-    config: Config,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-    *,
-    run: VolumeCommandRunner = run_on_volume,
-) -> Snapshot | None:
-    snapshots = list_snapshots(sync, config, resolved_endpoints, run=run)
-    if snapshots:
-        return snapshots[-1]
-    else:
-        return None
-
-
 def _read_local_symlink_target(latest_path: str) -> str | None:
     p = Path(latest_path)
     if not local_fs_op(SnapshotOp.READ_LATEST, latest_path, p.is_symlink):

@@ -19,7 +19,6 @@ from nbkp.snapshots.btrfs import (
     prune_snapshots,
 )
 from nbkp.snapshots.common import (
-    get_latest_snapshot,
     list_snapshots,
     update_latest_symlink,
 )
@@ -80,38 +79,6 @@ def run_test_lists_sorted_oldest_first(env: BtrfsEnv) -> None:
     assert len(snapshots) == 2
     assert "2024-01-01" in snapshots[0].name
     assert "2024-01-02" in snapshots[1].name
-
-
-def run_test_returns_most_recent(env: BtrfsEnv) -> None:
-    env.create_staging()
-    env.seed_staging("test data")
-
-    now1 = datetime(2024, 1, 1, tzinfo=UTC)
-    now2 = datetime(2024, 1, 2, tzinfo=UTC)
-
-    create_snapshot(
-        env.sync,
-        env.config,
-        now=now1,
-        platform=sys.platform,
-        resolved_endpoints=env.resolved,
-    )
-    create_snapshot(
-        env.sync,
-        env.config,
-        now=now2,
-        platform=sys.platform,
-        resolved_endpoints=env.resolved,
-    )
-
-    latest = get_latest_snapshot(env.sync, env.config, env.resolved)
-    assert latest is not None
-    assert "2024-01-02" in latest.name
-
-
-def run_test_returns_none_when_empty(env: BtrfsEnv) -> None:
-    latest = get_latest_snapshot(env.sync, env.config, env.resolved)
-    assert latest is None
 
 
 def run_test_deletes_subvolume(env: BtrfsEnv) -> None:
