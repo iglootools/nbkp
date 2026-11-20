@@ -27,6 +27,7 @@ class ConfigValidationErrorKind(StrEnum):
     CROSS_SERVER_SYNC = "cross-server-sync"
     CREDENTIAL_COMMAND_REQUIRED = "credential-command-required"
     CREDENTIAL_COMMAND_PLACEHOLDER = "credential-command-placeholder"
+    PASSPHRASE_ENV_VAR_COLLISION = "passphrase-env-var-collision"
     PATH_REQUIRED = "path-required"
     RELATIVE_PATH = "relative-path"
     INVALID_FILTER = "invalid-filter"

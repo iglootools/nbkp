@@ -8,7 +8,10 @@ import pytest
 from nbkp.config import (
     Config,
     ConfigValidationErrorKind,
+    CredentialProvider,
     LocalVolume,
+    LuksEncryptionConfig,
+    MountConfig,
     RemoteVolume,
     RsyncOptions,
     SshConnectionOptions,
@@ -303,6 +306,43 @@ class TestCrossServerCandidates:
     def test_same_candidates_allowed(self) -> None:
         config = _remote_to_remote_config(["lan", "wan"], ["lan", "wan"])
         assert "x" in config.syncs
+
+
+def _encrypted_volumes_config(
+    provider: CredentialProvider, *passphrase_ids: str
+) -> Config:
+    return Config(
+        credential_provider=provider,
+        volumes={
+            f"v{i}": LocalVolume(
+                slug=f"v{i}",
+                mount=MountConfig(
+                    device_uuid=f"00000000-0000-0000-0000-00000000000{i}",
+                    encryption=LuksEncryptionConfig(passphrase_id=pid),
+                ),
+            )
+            for i, pid in enumerate(passphrase_ids)
+        },
+    )
+
+
+class TestPassphraseEnvVarCollision:
+    def test_ids_sharing_a_variable_rejected_with_env_provider(self) -> None:
+        with pytest.raises(pydantic.ValidationError) as excinfo:
+            _encrypted_volumes_config(CredentialProvider.ENV, "usb-drive", "usb_drive")
+        assert _error_types(excinfo.value) == {
+            ConfigValidationErrorKind.PASSPHRASE_ENV_VAR_COLLISION
+        }
+
+    def test_shared_id_allowed(self) -> None:
+        config = _encrypted_volumes_config(CredentialProvider.ENV, "usb", "usb")
+        assert len(config.volumes) == 2
+
+    def test_ids_sharing_a_variable_allowed_with_other_providers(self) -> None:
+        config = _encrypted_volumes_config(
+            CredentialProvider.KEYRING, "usb-drive", "usb_drive"
+        )
+        assert len(config.volumes) == 2
 
 
 class TestSlugValidation:

@@ -112,7 +112,7 @@ Top-level config fields for credential retrieval:
 Providers:
 - **keyring**: `keyring.get_password("nbkp", passphrase_id)` — uses macOS Keychain or Linux SecretService. Requires `pip install nbkp[keyring]`.
 - **prompt**: interactive hidden input prompt.
-- **env**: reads `NBKP_PASSPHRASE_<ID>` (uppercased, hyphens → underscores).
+- **env**: reads `NBKP_PASSPHRASE_<ID>`: the passphrase-id uppercased, with every character other than a letter or digit replaced by `_` (`nas.disk-1` → `NBKP_PASSPHRASE_NAS_DISK_1`). Two passphrase-ids that map to the same variable (`usb-drive` and `usb_drive`) are rejected when the config loads.
 - **command**: runs command template with `{id}` replaced by passphrase-id. The first line of its output, without the line break, is the passphrase (the `pass` convention: later lines hold metadata); spaces are kept.
 <!-- END CONFIGREF:VOLUMES -->
 

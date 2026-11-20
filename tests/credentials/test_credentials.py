@@ -144,6 +144,9 @@ class TestRetrievePassphraseEnv:
         )
         assert result == "env-secret"
 
+    def test_maps_every_non_alphanumeric_to_underscore(self) -> None:
+        assert passphrase_env_var("nas.disk-1") == "NBKP_PASSPHRASE_NAS_DISK_1"
+
     def test_raises_when_env_not_set(self) -> None:
         with pytest.raises(CredentialError) as excinfo:
             retrieve_passphrase("disk1", CredentialProvider.ENV, environ={})

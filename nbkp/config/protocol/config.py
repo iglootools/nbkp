@@ -1,4 +1,5 @@
 import enum
+import re
 from collections.abc import Iterable, Iterator, Mapping
 from graphlib import CycleError, TopologicalSorter
 from itertools import combinations
@@ -24,8 +25,13 @@ class CredentialProvider(enum.StrEnum):
 
 
 def passphrase_env_var(passphrase_id: str) -> str:
-    """Environment variable the ``env`` provider reads for ``passphrase_id``."""
-    return f"NBKP_PASSPHRASE_{passphrase_id.upper().replace('-', '_')}"
+    """Environment variable the ``env`` provider reads for ``passphrase_id``.
+
+    Every character outside ``[A-Z0-9]`` becomes ``_``, so the name is one a
+    POSIX shell can ``export``; distinct ids can then share a name, which
+    config validation rejects.
+    """
+    return "NBKP_PASSPHRASE_" + re.sub(r"[^A-Z0-9]", "_", passphrase_id.upper())
 
 
 # Key pairs where setting one half in a child endpoint must drop the other
@@ -271,6 +277,7 @@ class Config(ConfigModel):
                 self._cyclic_dependency_errors,
                 self._cross_server_errors,
                 self._credential_errors,
+                self._passphrase_env_var_errors,
             )
             for error in check()
         )
@@ -405,6 +412,28 @@ class Config(ConfigModel):
             if isinstance(src_vol, RemoteVolume)
             and isinstance(dst_vol, RemoteVolume)
             and src_vol.endpoint_candidates != dst_vol.endpoint_candidates
+        )
+
+    def _passphrase_env_var_errors(self) -> Iterator[ValueError]:
+        passphrase_ids = sorted(
+            {
+                vol.mount.encryption.passphrase_id
+                for vol in self.volumes.values()
+                if vol.mount is not None and vol.mount.encryption is not None
+            }
+        )
+        ids_by_var = {
+            var: [pid for pid in passphrase_ids if passphrase_env_var(pid) == var]
+            for var in dict.fromkeys(map(passphrase_env_var, passphrase_ids))
+        }
+        return (
+            config_error(
+                ConfigValidationErrorKind.PASSPHRASE_ENV_VAR_COLLISION,
+                f"passphrase-ids {', '.join(repr(pid) for pid in pids)} all read"
+                f" {var} with credential-provider 'env': rename all but one",
+            )
+            for var, pids in ids_by_var.items()
+            if self.credential_provider == CredentialProvider.ENV and len(pids) > 1
         )
 
     def _credential_errors(self) -> Iterator[ValueError]:

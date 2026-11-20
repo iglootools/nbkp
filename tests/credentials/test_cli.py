@@ -98,7 +98,7 @@ class TestKeyringStatus:
     def test_human_keeps_brackets_in_passphrase_id(self, tmp_path: Path) -> None:
         config_path = write_config(tmp_path, _config())
 
-        result = _invoke(config_path, environ={"NBKP_PASSPHRASE_DISK[1]": "secret"})
+        result = _invoke(config_path, environ={"NBKP_PASSPHRASE_DISK_1_": "secret"})
 
         assert result.exit_code == 0
         assert "disk[1]" in result.output
