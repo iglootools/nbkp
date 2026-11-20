@@ -7,9 +7,9 @@ chosen for each remote volume (:class:`ResolvedEndpoint`) comes out.
 
 from enum import StrEnum
 
-from pydantic import ConfigDict, Field
+from pydantic import Field
 
-from ..config.protocol import RemoteVolume, SshEndpoint, Volume, _BaseModel
+from ..config.protocol import ConfigModel, RemoteVolume, SshEndpoint, Volume
 
 
 class NetworkType(StrEnum):
@@ -17,17 +17,15 @@ class NetworkType(StrEnum):
     PUBLIC = "public"
 
 
-class EndpointFilter(_BaseModel):
+class EndpointFilter(ConfigModel):
     """Not serialized."""
 
-    model_config = ConfigDict(frozen=True)
     locations: list[str] = Field(default_factory=list)
     exclude_locations: list[str] = Field(default_factory=list)
     network: NetworkType | None = None
 
 
-class ResolvedEndpoint(_BaseModel):
-    model_config = ConfigDict(frozen=True)
+class ResolvedEndpoint(ConfigModel):
     server: SshEndpoint
     proxy_chain: list[SshEndpoint] = Field(default_factory=list)
 

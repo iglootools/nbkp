@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 
-from .base import _BaseModel
+from .base import ConfigModel
 from .errors import ConfigValidationErrorKind, config_error
 from .ssh_endpoint import SshEndpoint
 from .sync import SyncConfig
@@ -141,7 +141,7 @@ def _location_error(
         return None
 
 
-class Config(_BaseModel):
+class Config(ConfigModel):
     credential_provider: CredentialProvider = Field(
         default=CredentialProvider.KEYRING,
         description=(

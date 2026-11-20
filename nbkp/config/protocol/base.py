@@ -7,7 +7,7 @@ def _to_kebab(name: str) -> str:
     return name.replace("_", "-")
 
 
-class _BaseModel(BaseModel):
+class ConfigModel(BaseModel):
     model_config = ConfigDict(
         alias_generator=_to_kebab,
         populate_by_name=True,

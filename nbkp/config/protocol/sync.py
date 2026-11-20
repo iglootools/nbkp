@@ -1,14 +1,13 @@
 from pathlib import Path
 from typing import Any
 
-from pydantic import ConfigDict, Field, field_validator
+from pydantic import Field, field_validator
 
-from .base import Slug, _BaseModel
+from .base import ConfigModel, Slug
 from .errors import ConfigValidationErrorKind, config_error
 
 
-class RsyncOptions(_BaseModel):
-    model_config = ConfigDict(frozen=True)
+class RsyncOptions(ConfigModel):
     compress: bool = Field(default=False, description="Enable rsync `--compress`")
     checksum: bool = Field(default=False, description="Enable rsync `--checksum`")
     default_options_override: list[str] | None = Field(
@@ -65,7 +64,7 @@ def _filter_rules(item: Any) -> list[str]:
             )
 
 
-class SyncConfig(_BaseModel):
+class SyncConfig(ConfigModel):
     slug: Slug
     source: str = Field(..., min_length=1, description="Source sync endpoint slug")
     destination: str = Field(

@@ -1,18 +1,17 @@
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
-from .base import Slug, _BaseModel
+from .base import ConfigModel, Slug
 from .errors import ConfigValidationErrorKind, config_error
 
 
-class LuksEncryptionConfig(_BaseModel):
+class LuksEncryptionConfig(ConfigModel):
     """``type='luks'`` serves as discriminator for future encryption backends
     (e.g. VeraCrypt, BitLocker).
     """
 
-    model_config = ConfigDict(frozen=True)
     type: Literal["luks"] = "luks"
     passphrase_id: str = Field(
         ...,
@@ -30,14 +29,13 @@ _UUID_PATTERN = (
 )
 
 
-class MountConfig(_BaseModel):
+class MountConfig(ConfigModel):
     """Mount management config for a volume.
 
     When present, nbkp manages the volume's mount lifecycle:
     detect drive → (unlock LUKS if encrypted) → mount → backup → umount → (lock LUKS).
     """
 
-    model_config = ConfigDict(frozen=True)
     device_uuid: str = Field(
         ...,
         min_length=1,
@@ -57,8 +55,7 @@ class MountConfig(_BaseModel):
     )
 
 
-class LocalVolume(_BaseModel):
-    model_config = ConfigDict(frozen=True)
+class LocalVolume(ConfigModel):
     type: Literal["local"] = "local"
     slug: Slug
     path: str | None = Field(
@@ -106,8 +103,7 @@ class LocalVolume(_BaseModel):
         return self
 
 
-class RemoteVolume(_BaseModel):
-    model_config = ConfigDict(frozen=True)
+class RemoteVolume(ConfigModel):
     type: Literal["remote"] = "remote"
     slug: Slug
     ssh_endpoint: str = Field(

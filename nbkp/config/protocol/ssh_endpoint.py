@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import Any
 
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
-from .base import Slug, _BaseModel
+from .base import ConfigModel, Slug
 from .errors import ConfigValidationErrorKind, config_error
 
 
@@ -20,7 +20,7 @@ def _expand_user(v: Any) -> Any:
             return v
 
 
-class SshConnectionOptions(_BaseModel):
+class SshConnectionOptions(ConfigModel):
     """These fields map to parameters across three layers:
     - SSH client: ssh(1) -o options
     - Paramiko: SSHClient.connect() kwargs
@@ -28,8 +28,6 @@ class SshConnectionOptions(_BaseModel):
     - Fabric: Connection() constructor
       https://docs.fabfile.org/en/stable/api/connection.html
     """
-
-    model_config = ConfigDict(frozen=True)
 
     # SSH: ConnectTimeout | Paramiko: timeout | Fabric: connect_timeout
     connect_timeout: int = Field(
@@ -92,8 +90,7 @@ class SshConnectionOptions(_BaseModel):
     )
 
 
-class SshEndpoint(_BaseModel):
-    model_config = ConfigDict(frozen=True)
+class SshEndpoint(ConfigModel):
     slug: Slug
     host: str = Field(..., min_length=1, description="Hostname or SSH config alias")
     port: int = Field(default=22, ge=1, le=65535, description="SSH port")
