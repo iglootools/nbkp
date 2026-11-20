@@ -1,6 +1,6 @@
 """Integration test: end-to-end chain sync via generated script.
 
-Same 6-hop chain as test_chain.py, but executed through a
+Same 6-hop chain as test_pipeline.py, but executed through a
 generated bash script (`nbkp sh`) instead of `run_all_syncs`.
 """
 
