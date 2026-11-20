@@ -138,3 +138,4 @@ Built-in helpers make it easy to stand up a realistic test environment or previe
 ## Supported Commands
 
 See [Usage](./usage.md) for detailed command descriptions and examples.
+Every command and its options are listed in the [CLI Reference](cli-reference.md).
