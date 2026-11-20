@@ -164,3 +164,15 @@ class SshEndpoint(ConfigModel):
             return [self.location]
         else:
             return []
+
+    @property
+    def destination(self) -> str:
+        """``user@host``, or ``host`` when no user is set: ssh's destination."""
+        return f"{self.user}@{self.host}" if self.user else self.host
+
+    @property
+    def host_label(self) -> str:
+        """The destination with its port when not 22 (``user@host:2222``)."""
+        return (
+            f"{self.destination}:{self.port}" if self.port != 22 else self.destination
+        )

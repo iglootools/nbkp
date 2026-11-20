@@ -7,11 +7,6 @@ from ..config import LocalVolume, RemoteVolume, SshConnectionOptions, SshEndpoin
 lazy from .endpoints import ResolvedEndpoints
 
 
-# Kept in `ssh` instead of `output` as this is core to remote command execution, not just display formatting.
-def _format_host(endpoint: SshEndpoint) -> str:
-    return f"{endpoint.user}@{endpoint.host}" if endpoint.user else endpoint.host
-
-
 def format_known_hosts_option(known_hosts_file: str) -> str:
     """``UserKnownHostsFile=<path>``, the value double-quoted when it holds
     whitespace or a quote: OpenSSH splits the value on whitespace into several
@@ -58,17 +53,20 @@ def _ssh_o_options(opts: SshConnectionOptions) -> list[str]:
     ]
 
 
+def _port_and_key_args(endpoint: SshEndpoint) -> list[str]:
+    return [
+        *(["-p", str(endpoint.port)] if endpoint.port != 22 else []),
+        *(["-i", endpoint.key] if endpoint.key else []),
+    ]
+
+
 def _ssh_endpoint_args(endpoint: SshEndpoint) -> list[str]:
     o_args = [
         arg
         for opt in _ssh_o_options(endpoint.connection_options)
         for arg in ["-o", opt]
     ]
-    return [
-        *o_args,
-        *(["-p", str(endpoint.port)] if endpoint.port != 22 else []),
-        *(["-i", endpoint.key] if endpoint.key else []),
-    ]
+    return [*o_args, *_port_and_key_args(endpoint)]
 
 
 def _build_proxy_hop(proxy: SshEndpoint, inner_cmd: str | None) -> str:
@@ -77,18 +75,13 @@ def _build_proxy_hop(proxy: SshEndpoint, inner_cmd: str | None) -> str:
     command: ``%h:%p`` itself contains no shell metacharacters and stays
     unquoted for ssh to expand.
     """
-    o_args = [
-        arg for opt in _ssh_o_options(proxy.connection_options) for arg in ["-o", opt]
-    ]
     parts = [
         "ssh",
-        *o_args,
+        *_ssh_endpoint_args(proxy),
         *(["-o", f"ProxyCommand={inner_cmd.replace('%', '%%')}"] if inner_cmd else []),
-        *(["-p", str(proxy.port)] if proxy.port != 22 else []),
-        *(["-i", proxy.key] if proxy.key else []),
         "-W",
         "%h:%p",
-        _format_host(proxy),
+        proxy.destination,
     ]
     return shlex.join(parts)
 
@@ -124,7 +117,7 @@ def build_ssh_base_args(
     proxy_chain: list[SshEndpoint] | None = None,
 ) -> list[str]:
     """Returns args like ``ssh -o ConnectTimeout=10 -o BatchMode=yes [opts] host``."""
-    return ["ssh", *_build_ssh_core_args(server, proxy_chain), _format_host(server)]
+    return ["ssh", *_build_ssh_core_args(server, proxy_chain), server.destination]
 
 
 def build_ssh_e_option(
@@ -144,20 +137,15 @@ def build_ssh_e_option(
 
 
 def format_remote_path(server: SshEndpoint, path: str) -> str:
-    return f"{_format_host(server)}:{path}"
+    return f"{server.destination}:{path}"
 
 
 # Below: commands printed for the operator to copy-paste (troubleshooting
 # output), not run by nbkp itself.
 
 
-def _format_host_port(endpoint: SshEndpoint) -> str:
-    host = _format_host(endpoint)
-    return f"{host}:{endpoint.port}" if endpoint.port != 22 else host
-
-
 def format_proxy_jump_chain(proxies: list[SshEndpoint]) -> str:
-    return ",".join(_format_host_port(p) for p in proxies)
+    return ",".join(p.host_label for p in proxies)
 
 
 def ssh_prefix(
@@ -166,10 +154,9 @@ def ssh_prefix(
 ) -> list[str]:
     return [
         "ssh",
-        *(["-p", str(server.port)] if server.port != 22 else []),
-        *(["-i", server.key] if server.key else []),
+        *_port_and_key_args(server),
         *(["-J", format_proxy_jump_chain(proxy_chain)] if proxy_chain else []),
-        _format_host(server),
+        server.destination,
     ]
 
 
