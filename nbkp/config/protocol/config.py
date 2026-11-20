@@ -261,6 +261,7 @@ class Config(ConfigModel):
                 self._volume_reference_errors,
                 self._sync_endpoint_location_errors,
                 self._sync_reference_errors,
+                self._self_sync_errors,
                 self._shared_destination_errors,
                 self._cyclic_dependency_errors,
                 self._cross_server_errors,
@@ -335,6 +336,17 @@ class Config(ConfigModel):
                 ("destination", sync.destination),
             )
             if ref not in self.sync_endpoints
+        )
+
+    def _self_sync_errors(self) -> Iterator[ValueError]:
+        return (
+            config_error(
+                ConfigValidationErrorKind.SELF_SYNC,
+                f"Sync '{sync_slug}' has endpoint '{sync.source}' as both its"
+                " source and its destination",
+            )
+            for sync_slug, sync in self.syncs.items()
+            if sync.source == sync.destination
         )
 
     def _shared_destination_errors(self) -> Iterator[ValueError]:

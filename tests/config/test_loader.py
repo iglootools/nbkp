@@ -1153,6 +1153,15 @@ class TestLoadConfig:
         )
         assert ConfigValidationErrorKind.UNKNOWN_REFERENCE in _validation_error_types(p)
 
+    def test_sync_onto_its_own_source_rejected(self) -> None:
+        with pytest.raises(ValidationError) as excinfo:
+            Config(
+                volumes={"v": LocalVolume(slug="v", path="/x")},
+                sync_endpoints={"ep": SyncEndpoint(slug="ep", volume="v")},
+                syncs={"s": SyncConfig(slug="s", source="ep", destination="ep")},
+            )
+        assert _error_types(excinfo.value) == {ConfigValidationErrorKind.SELF_SYNC}
+
     def test_duplicate_destination_endpoint(self, tmp_path: Path) -> None:
         p = tmp_path / "dup_dst.yaml"
         p.write_text(
