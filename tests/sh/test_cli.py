@@ -104,3 +104,23 @@ class TestShCommand:
         assert result.exit_code == 1
         assert isinstance(result.exception, SystemExit)
         assert "volume 'dst' has no 'path'" in result.output
+
+    def test_output_file_is_replaced_not_rewritten_in_place(
+        self, tmp_path: Path
+    ) -> None:
+        """A copy of the script already running keeps reading the old file."""
+        config_path = write_config(tmp_path, sample_config())
+        out = tmp_path / "backup.sh"
+        out.write_text("#!/bin/bash\n# old\n", encoding="utf-8")
+        out.chmod(0o700)
+
+        with out.open(encoding="utf-8") as running:
+            result = runner.invoke(
+                app, ["sh", "--config", str(config_path), "-o", str(out)]
+            )
+            assert running.read() == "#!/bin/bash\n# old\n"
+
+        assert result.exit_code == 0
+        assert "sync_photos_to_nas()" in out.read_text(encoding="utf-8")
+        assert stat.S_IMODE(out.stat().st_mode) == 0o710
+        assert [p.name for p in tmp_path.iterdir() if p.name.startswith(".")] == []
