@@ -105,7 +105,7 @@ def format_mermaid_graph(config: Config) -> Text:
     return Text(build_mermaid_graph(config))
 
 
-def build_graph_json(config: Config) -> dict[str, object]:
+def build_graph_json(config: Config) -> dict[str, list[dict[str, object]]]:
     ep_slugs = {
         slug
         for sync in config.syncs.values()

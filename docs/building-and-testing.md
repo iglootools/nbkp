@@ -50,7 +50,7 @@ uv run pytest tests/integration_docker/ -n auto -v                   # Docker in
 uv run pytest tests/ -v                                              # All tests
 uv run ruff format .                                                 # formatting
 uv run ruff check nbkp/ tests/ build-scripts/                        # linting
-uv run pyright nbkp/ build-scripts/                                  # type-checking
+uv run pyright nbkp/ tests/ build-scripts/                           # type-checking
 uv run pytest tests/remote/test_ssh.py::TestBuildSshBaseArgs::test_full -v  # run a single test
 ```
 

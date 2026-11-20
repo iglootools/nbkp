@@ -12,6 +12,12 @@ from nbkp.remote.resolution import (
 )
 
 
+def _remote_volume(config: Config) -> RemoteVolume:
+    volume = config.volumes["remote"]
+    assert isinstance(volume, RemoteVolume)
+    return volume
+
+
 class TestResolveEndpoint:
     def test_location_filter_with_locations(
         self,
@@ -51,8 +57,8 @@ class TestResolveEndpoint:
         ef = EndpointFilter(locations=["travel"])
         result = resolve_endpoint_for_volume(
             config,
-            config.volumes["remote"],
-            ef,  # type: ignore[arg-type]
+            _remote_volume(config),
+            ef,
         )
         assert result.slug == "multi-server"
 
@@ -94,8 +100,8 @@ class TestResolveEndpoint:
         ef = EndpointFilter(exclude_locations=["home"])
         result = resolve_endpoint_for_volume(
             config,
-            config.volumes["remote"],
-            ef,  # type: ignore[arg-type]
+            _remote_volume(config),
+            ef,
         )
         assert result.slug == "travel-server"
 
@@ -140,8 +146,8 @@ class TestResolveEndpoint:
         )
         result = resolve_endpoint_for_volume(
             config,
-            config.volumes["remote"],
-            ef,  # type: ignore[arg-type]
+            _remote_volume(config),
+            ef,
         )
         assert result.slug == "office-server"
 
@@ -170,8 +176,8 @@ class TestResolveEndpoint:
         ef = EndpointFilter(exclude_locations=["home"])
         result = resolve_endpoint_for_volume(
             config,
-            config.volumes["remote"],
-            ef,  # type: ignore[arg-type]
+            _remote_volume(config),
+            ef,
         )
         assert result.slug == "home-server"
 

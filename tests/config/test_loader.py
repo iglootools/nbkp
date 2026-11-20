@@ -2,6 +2,7 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 from textwrap import dedent
+from typing import TypedDict
 
 import pytest
 import yaml
@@ -25,6 +26,7 @@ from nbkp.config import (
     find_config_file,
     load_config,
 )
+from nbkp.config.loader import ConfigDirFn
 from nbkp.config.testkit import config_to_yaml
 from nbkp.remote.resolution import resolve_proxy_chain
 
@@ -58,7 +60,13 @@ _SHIPPED_EXAMPLES = sorted(
 )
 
 
-def _search_in(tmp_path: Path) -> dict[str, object]:
+class _SearchArgs(TypedDict):
+    home: Path
+    user_dir: ConfigDirFn
+    site_dir: ConfigDirFn
+
+
+def _search_in(tmp_path: Path) -> _SearchArgs:
     """Search arguments that keep the lookup under *tmp_path*: a home there,
     and platform config directories there, none of which exists yet."""
     return {

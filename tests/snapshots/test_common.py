@@ -125,31 +125,6 @@ def _remote_config_spaces() -> tuple[Config, SyncConfig]:
     return config, sync
 
 
-def _hl_local_config() -> tuple[SyncConfig, Config]:
-    src = LocalVolume(slug="src", path="/src")
-    dst = LocalVolume(slug="dst", path="/dst")
-    sync = SyncConfig(
-        slug="s1",
-        source="ep-src",
-        destination="ep-dst",
-    )
-    config = Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                hard_link_snapshots=HardLinkSnapshotConfig(
-                    enabled=True, max_snapshots=5
-                ),
-            ),
-        },
-        syncs={"s1": sync},
-    )
-    return sync, config
-
-
 def _hl_remote_config() -> tuple[SyncConfig, Config, dict[str, ResolvedEndpoint]]:
     server = SshEndpoint(slug="nas", host="nas.local", user="backup")
     src = LocalVolume(slug="src", path="/src")
