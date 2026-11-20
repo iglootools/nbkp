@@ -75,9 +75,7 @@ def mount_cmd(
 
     results = _mount_with_progress(cfg, resolved, name, output, runtime)
     _show_results(cfg, resolved, results, name, output)
-    invocation = Invocation.of(
-        config, location, exclude_location, network.value if network else None
-    )
+    invocation = Invocation.of(config, location, exclude_location, network)
     if output is OutputFormat.HUMAN:
         _print_auth_hint(results, invocation)
     if any_failed(results):

@@ -50,9 +50,7 @@ def check_cmd(
     runtime = runtime_of(ctx)
     cfg = load_config_or_exit(runtime, config, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
-    invocation = Invocation.of(
-        config, location, exclude_location, network.value if network else None
-    )
+    invocation = Invocation.of(config, location, exclude_location, network)
 
     with managed_mount(
         cfg,

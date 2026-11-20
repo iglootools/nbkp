@@ -80,7 +80,7 @@ def umount_cmd(
                         config,
                         location,
                         exclude_location,
-                        network.value if network else None,
+                        network,
                     )
                 ),
                 soft_wrap=True,

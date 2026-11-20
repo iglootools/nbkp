@@ -107,9 +107,7 @@ def run_cmd(
     cfg = load_config_or_exit(runtime, config, output)
     require_known_syncs(cfg, sync, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
-    invocation = Invocation.of(
-        config, location, exclude_location, network.value if network else None
-    )
+    invocation = Invocation.of(config, location, exclude_location, network)
     hint = invocation.command("preflight", "troubleshoot")
     # Filled when the volumes are unmounted, so the outcome is printed after
     # the block: a drive left mounted or unlocked is part of the outcome.

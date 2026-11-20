@@ -30,6 +30,7 @@ class Invocation:
     locations: tuple[str, ...] = ()
     exclude_locations: tuple[str, ...] = ()
     network: str | None = None
+    """The ``--network`` value; a ``NetworkType``, which is a ``StrEnum``."""
     cwd: Path | None = None
     """Base for the relative config path; ``None`` means the working directory."""
 
