@@ -30,6 +30,7 @@ from ..sync.testkit.seed import (
 # _require_docker(has_docker) before anything here resolves these lazy names.
 lazy from ..remote.testkit.docker import (
     LUKS_PASSPHRASE,
+    DockerError,
     build_docker_image,
     create_docker_network,
     create_test_ssh_endpoint,
@@ -171,7 +172,11 @@ def _start_containers(base_dir: Path, luks: bool, steps: _Steps) -> _Containers:
     private_key, pub_key = generate_ssh_keypair(base_dir)
 
     steps.start("Building Docker image...")
-    build_docker_image()
+    try:
+        build_docker_image()
+    except DockerError as e:
+        steps.end("build Docker image", False, e.detail)
+        raise SeedError(f"Docker image build failed: {e.detail}") from e
     steps.end("build Docker image", True)
 
     steps.start("Creating Docker network...")

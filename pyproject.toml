@@ -205,9 +205,6 @@ ignore_imports = [
   "nbkp.**.output.** -> nbkp.clidisplay",
   "nbkp.**.output.** -> nbkp.clidisplay.**",
   "nbkp.**.output -> nbkp.clidisplay",
-  # Test and demo fixtures, not runtime code.
-  "nbkp.**.testkit.** -> **",
-  "nbkp.**.testkit -> **",
 ]
 
 [[tool.importlinter.contracts]]

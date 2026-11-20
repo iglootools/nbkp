@@ -166,7 +166,7 @@ Each domain module (`disks/`, `preflight/`, `snapshots/`, …) keeps its core lo
 - **`config/` is the base layer.** Its core (models, loader) imports nothing else from nbkp. Endpoint selection — the `EndpointFilter` / `ResolvedEndpoint` models (`remote/endpoints.py`) and the algorithm (`remote/resolution.py`) — lives in `remote/`; config's display code takes the selected endpoints through a structural protocol rather than importing them. Transport primitives (`run_on_volume`, `check_command_available`) are in `remote/dispatch.py`; preflight-only host probes (sentinels, directories, symlinks, rsync version) are in `preflight/probes.py`.
 - **Core packages are ordered.** From the top: `demo` → `run` | `sh` → `sync` → `snapshots` → `preflight` → `disks` → `credentials` | `ordering` → `remote` → `policy` | `fsprotocol` → `config`. A package imports only the packages below it, and siblings (`|`) do not import each other, so no import cycle can form between core packages. The ordering covers each package's core and its `output` code; `cli/` subpackages sit above all of it (they are constrained by the rules above instead), and testkits are exempt (see below). A new core package needs a place in this order, in the `layers` contract.
 - **`clidisplay/` is a presentation leaf.** It imports nothing from nbkp but `policy`.
-- **Test and demo fixtures (`testkit`) are exempt.** They build scenarios across modules for the tests and `nbkp demo`, and are not runtime code.
+- **Test and demo fixtures (`testkit`) are exempt from the layering.** They build scenarios across modules for the tests and `nbkp demo`, and are not runtime code. Like core code, they import neither Rich nor Typer: a Docker failure is a `DockerError` the demo CLI renders.
 
 ### Package Map
 

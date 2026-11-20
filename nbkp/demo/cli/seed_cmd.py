@@ -23,6 +23,7 @@ lazy from ...remote.testkit.docker import (
     DOCKER_DIR,
     LUKS_PASSPHRASE,
     STORAGE_CONTAINER_NAME,
+    DockerError,
     check_docker,
 )
 
@@ -178,7 +179,11 @@ def seed_cmd(
 
 def _check_docker_prerequisites() -> None:
     _require_docker_extra()
-    check_docker()
+    try:
+        check_docker()
+    except DockerError as e:
+        typer.echo(f"Error: Docker is not available: {e.detail}", err=True)
+        raise typer.Exit(1)
     if not DOCKER_DIR.is_dir():
         typer.echo(f"Error: Docker directory not found: {DOCKER_DIR}", err=True)
         raise typer.Exit(1)

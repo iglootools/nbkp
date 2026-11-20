@@ -4,11 +4,11 @@ import socket
 import subprocess
 import time
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
 import docker as dockerlib
 import docker.errors as docker_errors
-import typer
 lazy from cryptography.hazmat.primitives import serialization
 lazy from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -36,6 +36,21 @@ SSH_AUTHORIZED_KEYS_PATH = "/mnt/ssh-authorized-keys"
 # and the demo connects through 127.0.0.1 anyway, so nothing on the LAN
 # should reach it.
 _SSH_PORT_ON_LOOPBACK = {"22/tcp": ("127.0.0.1", 0)}
+
+
+class DockerErrorKind(StrEnum):
+    UNAVAILABLE = "unavailable"
+    IMAGE_BUILD_FAILED = "image-build-failed"
+
+
+class DockerError(OSError):
+    """A Docker step of the demo or test harness failed; *detail* is the
+    Docker SDK's message."""
+
+    def __init__(self, kind: DockerErrorKind, detail: str) -> None:
+        super().__init__(f"{kind}: {detail}")
+        self.kind = kind
+        self.detail = detail
 
 
 @dataclass(frozen=True)
@@ -74,11 +89,7 @@ def check_docker() -> None:
         client = dockerlib.from_env()
         client.ping()
     except docker_errors.DockerException as exc:
-        typer.echo(
-            f"Error: Docker is not available: {exc}",
-            err=True,
-        )
-        raise typer.Exit(1)
+        raise DockerError(DockerErrorKind.UNAVAILABLE, str(exc)) from exc
 
 
 def generate_ssh_keypair(
@@ -134,11 +145,7 @@ def build_docker_image() -> None:
             nocache=True,
         )
     except docker_errors.BuildError as exc:
-        typer.echo(
-            f"Error: Docker image build failed: {exc}",
-            err=True,
-        )
-        raise typer.Exit(1)
+        raise DockerError(DockerErrorKind.IMAGE_BUILD_FAILED, str(exc)) from exc
 
 
 def start_storage_container(
