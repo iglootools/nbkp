@@ -30,7 +30,11 @@ def keyring_status_cmd(
     config: CONFIG_OPTION = None,
     output: OUTPUT_OPTION = OutputFormat.HUMAN,
 ) -> None:
-    """Check whether LUKS passphrases are available in the credential store."""
+    """Check whether LUKS passphrases are available in the credential store.
+
+    Exits 1 when a passphrase the provider was asked for is missing, so a
+    setup script can check the store before scheduling a run.
+    """
     runtime = runtime_of(ctx)
     cfg = load_config_or_exit(runtime, config, output)
     # Same sweep as the one run/mount perform before touching any device, so
@@ -51,6 +55,8 @@ def keyring_status_cmd(
             echo_json(keyring_status_json(cfg, results))
         case OutputFormat.HUMAN:
             _print_human_status(cfg, results)
+    if any(not result.success for result in results):
+        raise typer.Exit(1)
 
 
 def keyring_status_json(

@@ -134,6 +134,9 @@ $ nbkp credentials [OPTIONS] COMMAND [ARGS]...
 
 Check whether LUKS passphrases are available in the credential store.
 
+Exits 1 when a passphrase the provider was asked for is missing, so a
+setup script can check the store before scheduling a run.
+
 **Usage**:
 
 ```console
