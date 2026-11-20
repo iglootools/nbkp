@@ -107,7 +107,7 @@ Each side of a sync is local or remote, giving four combinations:
 | remote → local | host → orchestrator over SSH |
 | remote → remote, **same host** | entirely on the host; the orchestrator only drives it |
 
-Remote → remote across *different* hosts is rejected: the orchestrator's credentials describe how *it* reaches each host, not how hosts reach each other. Two syncs through a local volume achieve the same result.
+Remote → remote across *different* hosts is rejected: the orchestrator's credentials describe how *it* reaches each host, not how hosts reach each other. Two syncs through a local volume achieve the same result. Since an endpoint is a route rather than a machine, "same host" is checked on routes: both volumes must offer the same SSH endpoints in the same order, so that runtime selection cannot send each side down a different one.
 
 ## The Backup Graph
 

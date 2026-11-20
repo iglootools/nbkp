@@ -141,7 +141,7 @@ def resolve_endpoint_for_volume(
     fallback. ``ssh_config`` and ``lookup`` resolve candidate hostnames for
     the DNS and network filters.
     """
-    candidates = list(vol.ssh_endpoints) if vol.ssh_endpoints else [vol.ssh_endpoint]
+    candidates = vol.endpoint_candidates
     eps = config.ssh_endpoints
 
     if len(candidates) == 1:
@@ -202,7 +202,7 @@ def _is_volume_excluded(
     vol: RemoteVolume,
     endpoint_filter: EndpointFilter | None,
 ) -> bool:
-    candidates = list(vol.ssh_endpoints) if vol.ssh_endpoints else [vol.ssh_endpoint]
+    candidates = vol.endpoint_candidates
     excl = endpoint_filter.exclude_locations if endpoint_filter else []
     return bool(excl) and all(
         endpoint_location_excluded(config.ssh_endpoints[slug], excl)

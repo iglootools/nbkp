@@ -142,6 +142,13 @@ class RemoteVolume(ConfigModel):
         stripped = v.rstrip("/")
         return stripped if stripped else "/"
 
+    @property
+    def endpoint_candidates(self) -> list[str]:
+        """The endpoints resolution picks from, in order: ``ssh-endpoints``
+        when set (``ssh-endpoint`` is then not a candidate), else the
+        primary alone."""
+        return list(self.ssh_endpoints) if self.ssh_endpoints else [self.ssh_endpoint]
+
     @model_validator(mode="after")
     def _require_path_without_mount(self) -> RemoteVolume:
         _validate_path_requirement(self)

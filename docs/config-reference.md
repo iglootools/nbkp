@@ -282,7 +282,7 @@ Checked when the config is loaded, before anything runs:
 - A sync's `source` and `destination` are different endpoints.
 - Each sync endpoint is the destination of at most one sync.
 - Syncs must not depend on each other in a cycle (e.g. `a: x → y` and `b: y → x`): the backup graph must have a topological order.
-- A remote-to-remote sync must stay on one server: both volumes must use the same primary `ssh-endpoint`.
+- A remote-to-remote sync must stay on one server: both volumes must offer the same SSH endpoints, in the same order (their `ssh-endpoints` lists, or their `ssh-endpoint` when the list is absent). The run reaches both paths through the destination's endpoint, and each volume picks its endpoint from its own list, so two different lists could land on two different hosts.
 - A volume without a `mount` section must declare `path`.
 - A local volume's `path` must be absolute once `~` is expanded: a relative path would resolve against whichever directory nbkp is started from.
 - `credential-command` is required when `credential-provider` is `command`, and must contain the `{id}` placeholder.

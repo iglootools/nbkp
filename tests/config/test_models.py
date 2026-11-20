@@ -254,6 +254,57 @@ class TestCrossServerValidation:
         assert "x" in config.syncs
 
 
+def _remote_to_remote_config(
+    src_candidates: list[str], dst_candidates: list[str]
+) -> Config:
+    return Config(
+        ssh_endpoints={
+            "lan": SshEndpoint(slug="lan", host="nas.lan"),
+            "wan": SshEndpoint(slug="wan", host="nas.example.com"),
+        },
+        volumes={
+            "src": RemoteVolume(
+                slug="src",
+                ssh_endpoint="lan",
+                ssh_endpoints=src_candidates,
+                path="/s",
+            ),
+            "dst": RemoteVolume(
+                slug="dst",
+                ssh_endpoint="lan",
+                ssh_endpoints=dst_candidates,
+                path="/d",
+            ),
+        },
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+        },
+        syncs={"x": SyncConfig(slug="x", source="ep-src", destination="ep-dst")},
+    )
+
+
+class TestCrossServerCandidates:
+    """Each volume resolves from its own candidates, so the lists must match."""
+
+    @pytest.mark.parametrize(
+        ("src_candidates", "dst_candidates"),
+        [(["lan", "wan"], ["lan"]), (["lan", "wan"], ["wan", "lan"])],
+    )
+    def test_differing_candidates_rejected(
+        self, src_candidates: list[str], dst_candidates: list[str]
+    ) -> None:
+        with pytest.raises(pydantic.ValidationError) as excinfo:
+            _remote_to_remote_config(src_candidates, dst_candidates)
+        assert _error_types(excinfo.value) == {
+            ConfigValidationErrorKind.CROSS_SERVER_SYNC
+        }
+
+    def test_same_candidates_allowed(self) -> None:
+        config = _remote_to_remote_config(["lan", "wan"], ["lan", "wan"])
+        assert "x" in config.syncs
+
+
 class TestSlugValidation:
     def test_valid_simple(self) -> None:
         vol = LocalVolume(slug="data", path="/mnt/data")

@@ -382,18 +382,24 @@ class Config(ConfigModel):
             )
             for sync_slug, sync in self.syncs.items()
         )
+        # The run reaches both paths through the destination's resolved
+        # endpoint. Resolution picks from each volume's candidate list on its
+        # own, so only identical lists are sure to land on the same endpoint:
+        # comparing the primaries alone would let a LAN/WAN pair diverge.
         return (
             config_error(
                 ConfigValidationErrorKind.CROSS_SERVER_SYNC,
-                f"Sync '{sync_slug}' has source on '{src_vol.ssh_endpoint}'"
-                f" and destination on '{dst_vol.ssh_endpoint}'."
-                " Cross-server remote-to-remote syncs are not supported."
+                f"Sync '{sync_slug}' has source on"
+                f" {', '.join(src_vol.endpoint_candidates)} and destination on"
+                f" {', '.join(dst_vol.endpoint_candidates)}."
+                " Cross-server remote-to-remote syncs are not supported: both"
+                " volumes must use the same SSH endpoints, in the same order."
                 " Use two separate syncs through the local machine instead.",
             )
             for sync_slug, src_vol, dst_vol in volume_pairs
             if isinstance(src_vol, RemoteVolume)
             and isinstance(dst_vol, RemoteVolume)
-            and src_vol.ssh_endpoint != dst_vol.ssh_endpoint
+            and src_vol.endpoint_candidates != dst_vol.endpoint_candidates
         )
 
     def _credential_errors(self) -> Iterator[ValueError]:
