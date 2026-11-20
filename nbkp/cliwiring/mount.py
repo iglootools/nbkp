@@ -22,7 +22,7 @@ from ..disks.output import (
 from ..policy import Strictness
 from ..remote.endpoints import ResolvedEndpoints
 from .credentials import prompt_passphrase
-from .mount_progress import LifecycleProgress
+from .mount_progress import LifecycleProgress, mount_display_names
 from .runtime import Runtime
 
 
@@ -123,6 +123,39 @@ def managed_mount(
     """
     use_progress = output_format is OutputFormat.HUMAN
     collected = umount_results if umount_results is not None else []
+    try:
+        yield from _managed_mount_with_progress(
+            cfg,
+            resolved,
+            runtime=runtime,
+            mount=mount,
+            umount=umount,
+            use_progress=use_progress,
+            strictness=strictness,
+            collected=collected,
+        )
+    except BaseException:
+        # The body failed (or was interrupted) and exits with its own error,
+        # but a drive left mounted or unlocked must still be reported: with
+        # -o json no progress line has shown it.
+        if umount_results is None:
+            _print_umount_failures(collected, mount_display_names(cfg))
+        raise
+    if umount_results is None:
+        _exit_on_umount_failure(collected, mount_display_names(cfg))
+
+
+def _managed_mount_with_progress(
+    cfg: Config,
+    resolved: ResolvedEndpoints,
+    *,
+    runtime: Runtime,
+    mount: bool,
+    umount: bool,
+    use_progress: bool,
+    strictness: Strictness,
+    collected: list[UmountResult],
+) -> Generator[tuple[Config, dict[str, MountObservation]]]:
     with lifecycle_session(
         cfg, resolved, runtime=runtime, enabled=use_progress, strictness=strictness
     ) as (passphrase_fn, progress):
@@ -150,21 +183,24 @@ def managed_mount(
             if use_progress and mount_observations:
                 Console().print(_format_mount_status(progress, mount_observations))
             yield result
-    if umount_results is None:
-        _exit_on_umount_failure(collected, progress.display_names)
+
+
+def _print_umount_failures(
+    results: list[UmountResult], display_names: dict[str, str]
+) -> None:
+    """Printed to stderr in every output format, since stdout already holds
+    the command's report."""
+    if any_failed(results):
+        Console(stderr=True).print(format_umount_failures(results, display_names))
 
 
 def _exit_on_umount_failure(
     results: list[UmountResult], display_names: dict[str, str]
 ) -> None:
-    """Fail the command when a volume could not be unmounted or locked.
-
-    Reached only when the command body completed: a body that already
-    failed exits with its own error.  Printed to stderr in every output
-    format, since stdout already holds the command's report.
-    """
+    """Fail a command whose body completed when a volume could not be
+    unmounted or locked."""
+    _print_umount_failures(results, display_names)
     if any_failed(results):
-        Console(stderr=True).print(format_umount_failures(results, display_names))
         raise typer.Exit(1)
 
 

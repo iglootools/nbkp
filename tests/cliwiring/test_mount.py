@@ -72,7 +72,9 @@ class TestUmountFailure:
         assert "Umount failed: enc: lock failed (exit 1): busy" in err
         assert "still unlocked" in err
 
-    def test_body_failure_wins(self) -> None:
+    def test_body_failure_wins_and_the_umount_failure_is_still_reported(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         runtime = fake_runtime(run=mounted_drive_host(BUSY))
         with (
             pytest.raises(ValueError),
@@ -81,6 +83,10 @@ class TestUmountFailure:
             ),
         ):
             raise ValueError("body failed")
+
+        assert "Umount failed: enc: lock failed (exit 1): busy" in (
+            capsys.readouterr().err
+        )
 
     def test_handed_to_a_caller_that_reports_it(self) -> None:
         results: list[UmountResult] = []
