@@ -28,8 +28,8 @@ from nbkp.demo.seed import (
     seed_steps,
 )
 from nbkp.remote.testkit.constants import LUKS_PASSPHRASE
-from tests.cliwiring.test_mount import UUID, encrypted_volume
 from tests.fakes import FakeCommandRunner, completed
+from tests.fixtures.disks import UUID, encrypted_volume
 
 
 class TestDryRun:

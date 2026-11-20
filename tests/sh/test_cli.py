@@ -4,11 +4,9 @@ from pathlib import Path
 
 from nbkp.cli import app
 from nbkp.config.testkit import write_config
-from tests.clidisplay import (
-    runner,
-    sample_config,
-)
 from tests.fakes import FIXED_NOW, fake_runtime
+from tests.fixtures.cli import runner
+from tests.fixtures.preflight import sample_config
 from tests.sh.test_sh import mount_managed_config
 
 

@@ -14,9 +14,9 @@ import pytest
 from nbkp.cli import app
 from nbkp.config import Config
 from nbkp.config.testkit import write_config
-from tests.clidisplay import runner
-from tests.cliwiring.test_mount import encrypted_volume
 from tests.fakes import FakeCommandRunner, completed, fake_runtime
+from tests.fixtures.cli import runner
+from tests.fixtures.disks import encrypted_volume
 from tests.nas import healthy_nas, nas_config
 from tests.preflight.fake_hosts import FAILS
 

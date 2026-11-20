@@ -9,8 +9,8 @@ from nbkp.config import Config, Volume
 from nbkp.config.testkit import write_config
 from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.remote.pool import ConnectionPool, active_pool
-from tests.cliwiring.test_mount import encrypted_volume
 from tests.fakes import completed, fake_runtime
+from tests.fixtures.disks import encrypted_volume
 
 
 def test_subcommands_run_in_one_ssh_connection_scope(tmp_path: Path) -> None:

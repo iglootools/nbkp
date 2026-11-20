@@ -4,12 +4,9 @@ from pathlib import Path
 from nbkp.cli import app
 from nbkp.config import ConfigErrorKind, ConfigValidationErrorKind
 from nbkp.config.testkit import write_config
-from tests.clidisplay import (
-    runner,
-    sample_config,
-    strip_panel,
-)
 from tests.fakes import fake_runtime
+from tests.fixtures.cli import runner, strip_panel
+from tests.fixtures.preflight import sample_config
 
 _MISSING = "/nonexistent/nbkp/config.yaml"
 """A config path no test machine has: the real file lookup fails on it."""

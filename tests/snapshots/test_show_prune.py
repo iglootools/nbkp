@@ -25,13 +25,13 @@ from nbkp.snapshots.models import (
     SnapshotResultError,
     SnapshotSkipReason,
 )
-from tests.clidisplay import (
+from tests.fakes import FakeCommandRunner, completed
+from tests.fixtures.preflight import (
     dst_ep_status,
     localhost_ssh_status,
     src_ep_status,
     vol_status,
 )
-from tests.fakes import FakeCommandRunner, completed
 from tests.nas import nas_config
 
 OLD = "2026-03-01T10:00:00.000Z"

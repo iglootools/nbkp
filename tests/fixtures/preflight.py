@@ -1,8 +1,4 @@
-"""Shared CLI test helpers: status builders, config fixtures, and runner."""
-
-import re
-
-from typer.testing import CliRunner
+"""Shared test fixtures: preflight status builders and sample configs."""
 
 from nbkp.config import (
     Config,
@@ -33,14 +29,6 @@ from nbkp.preflight import (
     VolumeErrorKind,
     VolumeStatus,
 )
-
-runner = CliRunner()
-
-
-def strip_panel(text: str) -> str:
-    """Strip Rich panel border characters and normalize whitespace."""
-    text = re.sub(r"[╭╮╰╯│─]", "", text)
-    return re.sub(r"\s+", " ", text).strip()
 
 
 def localhost_ssh_status(*, active: bool = True) -> SshEndpointStatus:
@@ -281,24 +269,6 @@ def sample_vol_statuses(
     return {
         "local-data": vol_status("local-data", config, local_ssh),
         "nas": vol_status("nas", config, nas_ssh),
-    }
-
-
-def sample_sync_statuses(
-    config: Config,
-    vol_statuses: dict[str, VolumeStatus],
-) -> dict[str, SyncStatus]:
-    """NAS unreachable -> sync inactive due to SSH-level error."""
-    src_ep = src_ep_status("ep-src", vol_statuses["local-data"])
-    dst_ep = dst_ep_status("ep-dst", vol_statuses["nas"])
-    return {
-        "photos-to-nas": SyncStatus(
-            slug="photos-to-nas",
-            config=config.syncs["photos-to-nas"],
-            source_endpoint_status=src_ep,
-            destination_endpoint_status=dst_ep,
-            errors=[SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE],
-        ),
     }
 
 
