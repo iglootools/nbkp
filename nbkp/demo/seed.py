@@ -13,7 +13,7 @@ from ..config import (
     SshEndpoint,
 )
 from ..config.testkit import write_config
-from ..disks import mount_volumes, umount_volumes
+from ..disks import mount_phase, umount_volumes
 from ..disks.output import mount_failure_detail, umount_failure_detail
 from ..policy import Severity
 from ..remote.dispatch import VolumeCommandRunner, run_on_volume
@@ -276,7 +276,9 @@ def _encrypted_volume_mounted(
         failed_mount = next(
             (
                 r
-                for r in mount_volumes(config, resolved, passphrase_fn, run=run)
+                for r in mount_phase(
+                    config, resolved, passphrase_fn=passphrase_fn, run=run
+                )
                 if not r.success
             ),
             None,
