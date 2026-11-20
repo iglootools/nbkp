@@ -11,20 +11,12 @@ from datetime import datetime
 from ..config import Config, sync_predecessors
 from ..ordering.graph import sort_syncs
 from ..policy import Strictness
-from ..preflight import SyncErrorKind, SyncStatus, format_problems
+from ..preflight import SyncErrorKind, SyncStatus
 from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 from .modes import RsyncRunner, RunContext, run_single_sync
 from .results import DISABLED_FAILURES, RUNTIME_FAILURES, SyncFailureKind, SyncResult
 from .rsync import ProgressMode, run_rsync
-
-
-def _collect_all_errors(status: SyncStatus) -> str:
-    """With cascade errors, ``status.errors`` is self-describing — it
-    contains sync-level errors plus cascade pointers to inactive lower
-    layers.  No need to walk the full 4-layer chain.
-    """
-    return format_problems(status.errors) or "unknown"
 
 
 def _presence_proven(status: SyncStatus) -> bool:
@@ -126,11 +118,10 @@ def _execute_or_skip(
     elif _should_attempt(status, strictness):
         return run_single_sync(status, ctx)
     else:
+        # With cascade errors, status.errors is self-describing: sync-level
+        # errors plus pointers to the inactive lower layers.
         return SyncResult.skipped(
-            status.slug,
-            ctx.dry_run,
-            _skip_kind(status),
-            "Sync not active: " + _collect_all_errors(status),
+            status.slug, ctx.dry_run, _skip_kind(status), tuple(status.errors)
         )
 
 

@@ -12,7 +12,7 @@ from ..config import (
 )
 from ..config.output import endpoint_path
 from ..fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
-from ..preflight import SyncStatus
+from ..preflight import SyncStatus, format_problems
 from ..remote.endpoints import ResolvedEndpoints
 from ..snapshots.output import retention_display as _retention_display
 from .results import SyncOutcome, SyncResult
@@ -196,6 +196,10 @@ def _outcome_text(outcome: SyncOutcome) -> Text:
 _FAILED_OUTPUT_LINES = 5
 
 
+def _skip_reason(r: SyncResult) -> str:
+    return f"Error: Sync not active: {format_problems(r.preflight_errors) or 'unknown'}"
+
+
 def _result_details(
     r: SyncResult,
     config: Config,
@@ -203,6 +207,7 @@ def _result_details(
 ) -> list[str]:
     return [
         *([f"Error: {r.detail}"] if r.detail else []),
+        *([_skip_reason(r)] if r.outcome is SyncOutcome.SKIPPED else []),
         *(
             [
                 "Snapshot: "

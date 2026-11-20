@@ -4,6 +4,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, computed_field, model_validator
 
 from ..policy import Severity, Strictness, classify_severity
+from ..preflight import SyncErrorKind
 
 
 class SyncOutcome(StrEnum):
@@ -104,7 +105,8 @@ class SyncWarning(BaseModel):
 
 class SyncResult(BaseModel):
     """``failure`` says why a sync did not succeed and determines
-    ``outcome``; ``detail`` is the human-readable rendering of it.
+    ``outcome``; ``detail`` describes a failed or cancelled step, and
+    ``preflight_errors`` the errors that kept a skipped sync from running.
     Prefer the constructors (:meth:`succeeded`, :meth:`failed`,
     :meth:`skipped`, :meth:`cancelled`), which keep the two consistent.
     """
@@ -123,6 +125,8 @@ class SyncResult(BaseModel):
     cancelled_by: str | None = None
     """For a cancelled sync, the upstream sync whose result caused it."""
     detail: str | None = None
+    preflight_errors: tuple[SyncErrorKind, ...] = ()
+    """For a skipped sync, its preflight errors (cascade pointers included)."""
     snapshot_path: str | None = None
     pruned_paths: tuple[str, ...] | None = None
     warnings: tuple[SyncWarning, ...] = ()
@@ -192,14 +196,17 @@ class SyncResult(BaseModel):
 
     @staticmethod
     def skipped(
-        slug: str, dry_run: bool, failure: SyncFailureKind, detail: str
+        slug: str,
+        dry_run: bool,
+        failure: SyncFailureKind,
+        preflight_errors: tuple[SyncErrorKind, ...],
     ) -> SyncResult:
         return SyncResult(
             sync_slug=slug,
             outcome=SyncOutcome.SKIPPED,
             dry_run=dry_run,
             failure=failure,
-            detail=detail,
+            preflight_errors=preflight_errors,
         )
 
     @staticmethod
