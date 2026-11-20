@@ -15,6 +15,7 @@ class ConfigValidationErrorKind(StrEnum):
     """``type`` of the pydantic errors raised by nbkp's config validators."""
 
     UNKNOWN_REFERENCE = "unknown-reference"
+    SLUG_MISMATCH = "slug-mismatch"
     CIRCULAR_EXTENDS = "circular-extends"
     CIRCULAR_PROXY_JUMP = "circular-proxy-jump"
     MUTUALLY_EXCLUSIVE = "mutually-exclusive"

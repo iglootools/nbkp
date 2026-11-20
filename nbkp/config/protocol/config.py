@@ -78,17 +78,27 @@ def _resolve_endpoint(
         return _merge_endpoint(parent, ep) if isinstance(parent, dict) else ep
 
 
+def _inject_slug(slug: str, data: Any) -> Any:
+    match data:
+        case {"slug": declared} if declared != slug:
+            # Sync endpoints and ``--name`` look entries up by key, endpoint
+            # resolution and mount results by ``slug``: if they differed,
+            # commands for one volume could reach another volume's host.
+            raise config_error(
+                ConfigValidationErrorKind.SLUG_MISMATCH,
+                f"Entry '{slug}' declares slug {declared!r}: omit 'slug',"
+                " or make it equal to the key the entry is declared under",
+            )
+        case dict() if "slug" not in data:
+            return {**data, "slug": slug}
+        case _:
+            return data
+
+
 def _inject_slugs(entries: Any) -> Any:
     match entries:
         case dict():
-            return {
-                slug: (
-                    {**data, "slug": slug}
-                    if isinstance(data, dict) and "slug" not in data
-                    else data
-                )
-                for slug, data in entries.items()
-            }
+            return {slug: _inject_slug(slug, data) for slug, data in entries.items()}
         case _:
             return entries
 

@@ -29,7 +29,7 @@ from tests.clidisplay import config_with_locations, sample_config
 def _chain_config() -> Config:
     bastion = SshEndpoint(slug="bastion", host="bastion.example.com", port=2222)
     proxied = SshEndpoint(
-        slug="proxied", host="storage", user="backup", proxy_jump="bastion"
+        slug="via-bastion", host="storage", user="backup", proxy_jump="bastion"
     )
     return build_chain_config(
         Path("/seed"),

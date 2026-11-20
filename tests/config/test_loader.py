@@ -1621,6 +1621,41 @@ class TestUnknownKeys:
         ]
 
 
+class TestSlugs:
+    def test_slug_differing_from_key_rejected(self, tmp_path: Path) -> None:
+        p = tmp_path / "slug.yaml"
+        p.write_text(
+            dedent("""\
+            volumes:
+              a:
+                type: local
+                slug: x
+                path: /mnt/a
+              b:
+                type: local
+                slug: x
+                path: /mnt/b
+        """)
+        )
+        errors = _validation_errors(p)
+        assert [(e["type"], e["loc"]) for e in errors] == [
+            (ConfigValidationErrorKind.SLUG_MISMATCH, ("volumes",))
+        ]
+
+    def test_slug_equal_to_key_accepted(self, tmp_path: Path) -> None:
+        p = tmp_path / "slug.yaml"
+        p.write_text(
+            dedent("""\
+            volumes:
+              a:
+                type: local
+                slug: a
+                path: /mnt/a
+        """)
+        )
+        assert load_config(p).volumes["a"].slug == "a"
+
+
 class TestShippedExamples:
     def test_examples_found(self) -> None:
         assert len(_SHIPPED_EXAMPLES) >= 2
