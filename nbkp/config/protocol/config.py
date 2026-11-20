@@ -58,15 +58,15 @@ def _overlay_field(key: str, parent_value: Any, child_value: Any) -> Any:
 def _merge_endpoint(
     parent: Mapping[str, Any], child: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """Overlay a child endpoint's raw fields on its resolved parent's."""
+    """Overlay a child endpoint's raw fields on its resolved parent's.
+
+    The child keeps its own ``extends`` (the parent's is not inherited), so
+    the merged endpoint still records which endpoint it was built from.
+    """
     stale = _stale_exclusive_keys(child)
     merged = {
-        **parent,
-        **{
-            k: _overlay_field(k, parent.get(k), v)
-            for k, v in child.items()
-            if k != "extends"
-        },
+        **{k: v for k, v in parent.items() if k != "extends"},
+        **{k: _overlay_field(k, parent.get(k), v) for k, v in child.items()},
     }
     return {k: v for k, v in merged.items() if k not in stale}
 
@@ -232,7 +232,11 @@ class Config(ConfigModel):
             for vol in self.volumes.values()
             if isinstance(vol, RemoteVolume)
             for ref in [vol.ssh_endpoint, *(vol.ssh_endpoints or [])]
-        } | {hop for ep in self.ssh_endpoints.values() for hop in ep.proxy_jump_chain}
+        } | {
+            ref
+            for ep in self.ssh_endpoints.values()
+            for ref in [*ep.proxy_jump_chain, *([ep.extends] if ep.extends else [])]
+        }
         return sorted(set(self.ssh_endpoints) - used)
 
     def orphan_volumes(self) -> list[str]:

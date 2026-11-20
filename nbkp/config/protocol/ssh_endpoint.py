@@ -124,7 +124,7 @@ class SshEndpoint(ConfigModel):
         default=None,
         description=("Multiple location tags (mutually exclusive with `location`)"),
     )
-    extends: str | None = Field(  # noqa: DC06 -- resolved from the raw config
+    extends: str | None = Field(
         default=None,
         description="Slug of parent endpoint to inherit from",
     )
