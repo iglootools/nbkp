@@ -2,7 +2,7 @@ import shlex
 import subprocess
 import tempfile
 from collections.abc import Callable, Generator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass
 from enum import StrEnum
 from importlib.util import find_spec
@@ -302,14 +302,31 @@ def _seed(
         _read_luks_uuid(containers, steps) if containers is not None and luks else None
     )
     config = (
-        _docker_config(base_dir, containers, luks_uuid, rsync_opts, credential_provider)
+        docker_demo_config(
+            base_dir,
+            bastion=containers.bastion,
+            private_key=containers.private_key,
+            luks_uuid=luks_uuid,
+            rsync_options=rsync_opts,
+            credential_provider=credential_provider,
+        )
         if containers is not None
         else build_local_chain_config(
             base_dir, rsync_options=rsync_opts, max_snapshots=5
         )
     )
     resolved = resolve_all_endpoints(config)
-    with _encrypted_volume_mounted(config, resolved, luks_uuid is not None, steps):
+    mounted: AbstractContextManager[None] = (
+        encrypted_volume_mounted(
+            config,
+            resolved,
+            on_step_start=steps.on_start,
+            on_step_end=steps.on_end,
+        )
+        if luks_uuid is not None
+        else nullcontext()
+    )
+    with mounted:
         _seed_data(config, containers, big_file_size, steps)
     config_path = write_config(base_dir, config)
     return SeedResult(
@@ -365,14 +382,21 @@ def _read_luks_uuid(containers: _Containers, steps: _Steps) -> str:
     return meta.uuid
 
 
-def _docker_config(
+def docker_demo_config(
     base_dir: Path,
-    containers: _Containers,
+    *,
+    bastion: SshEndpoint,
+    private_key: Path,
     luks_uuid: str | None,
-    rsync_opts: RsyncOptions,
+    rsync_options: RsyncOptions,
     credential_provider: CredentialProvider,
 ) -> Config:
-    """Chain layout matching the integration test, through the bastion."""
+    """Chain layout matching the integration test, through *bastion*.
+
+    The storage container is reached as ``backup-server`` behind the bastion,
+    with *private_key*. Without *luks_uuid* there is no encrypted volume, and
+    the config keeps the default credential provider.
+    """
     provider = (
         credential_provider if luks_uuid is not None else CredentialProvider.KEYRING
     )
@@ -380,15 +404,15 @@ def _docker_config(
         "via-bastion",
         "backup-server",
         22,
-        containers.private_key,
+        private_key,
         proxy_jump="bastion",
     )
     return build_chain_config(
         base_dir,
-        containers.bastion,
+        bastion,
         proxied,
         luks_uuid=luks_uuid,
-        rsync_options=rsync_opts,
+        rsync_options=rsync_options,
         max_snapshots=5,
         credential_provider=provider,
         credential_command=(
@@ -398,27 +422,26 @@ def _docker_config(
 
 
 @contextmanager
-def _encrypted_volume_mounted(
+def encrypted_volume_mounted(
     config: Config,
     resolved: ResolvedEndpoints,
-    enabled: bool,
-    steps: _Steps,
     *,
     passphrase_fn: Callable[[str], str] = lambda _: LUKS_PASSPHRASE,
     run: VolumeCommandRunner = run_on_volume,
+    on_step_start: Callable[[str], None] | None = None,
+    on_step_end: Callable[[str, Severity, str | None], None] | None = None,
 ) -> Generator[None]:
-    """Mount the encrypted volume around seeding, and check the umount.
+    """Mount the demo's encrypted volume around the block, and check the umount.
 
     The umount + lock also runs when mounting fails, as in
     ``disks/context.py``: the volume may already be unlocked by then.  A
     failed umount leaves the demo LUKS volume unlocked: it is reported and,
-    when seeding itself succeeded, turned into a ``SeedError``.  The udisks
+    when the block itself succeeded, turned into a ``SeedError``.  The udisks
     steps run through *run*, unlocking with the demo passphrase
-    (*passphrase_fn*).
+    (*passphrase_fn*). The mount and umount steps are reported through
+    *on_step_start* and *on_step_end*, as :func:`seed_demo` reports them.
     """
-    if not enabled:
-        yield
-        return
+    steps = _Steps(on_step_start, on_step_end)
     try:
         with steps.run(_MOUNT):
             failed_mount = next(
