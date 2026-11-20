@@ -1,5 +1,6 @@
 """Config loading and endpoint resolution shared by every command."""
 
+from collections.abc import Collection, Sequence
 from pathlib import Path
 from typing import NoReturn
 
@@ -50,36 +51,49 @@ def _exit_on_config_error(e: ConfigError, output_format: OutputFormat) -> NoRetu
     raise typer.Exit(2)
 
 
-def require_known_syncs(
-    cfg: Config,
-    names: list[str] | None,
+def require_known(
+    kind: str,
+    unknown: Sequence[str],
+    known: Collection[str],
     output_format: OutputFormat,
 ) -> None:
-    """Exit 2 when a ``--sync`` value names no sync.
+    """Exit 2 when an option names a *kind* of thing (``sync``, ``volume``,
+    ``location``) the config does not define.
 
-    Without this, a typo (in a timer entry, say) filters every sync out and
-    the command reports success having done nothing.
+    Without this, a typo (in a timer entry, say) filters everything out and
+    the command reports success having done nothing. The error is rendered in
+    the command's output format: text on stderr, or a JSON ``{"error": ...}``
+    object (reason ``unknown-<kind>``) on stdout for ``-o json``.
     """
-    unknown = [name for name in names or [] if name not in cfg.syncs]
     if unknown:
-        known = ", ".join(sorted(cfg.syncs)) or "(none)"
         message = (
-            f"Error: unknown sync name(s): {', '.join(unknown)}. Known syncs: {known}"
+            f"unknown {kind} name(s): {', '.join(unknown)}."
+            f" Known {kind}s: {', '.join(sorted(known)) or '(none)'}"
         )
         match output_format:
             case OutputFormat.JSON:
                 echo_json(
                     {
                         "error": {
-                            "reason": "unknown-sync",
+                            "reason": f"unknown-{kind}",
                             "message": message,
-                            "names": unknown,
+                            "names": list(unknown),
                         }
                     }
                 )
             case OutputFormat.HUMAN:
-                typer.echo(message, err=True)
+                typer.echo(f"Error: {message}", err=True)
         raise typer.Exit(2)
+
+
+def require_known_syncs(
+    cfg: Config,
+    names: list[str] | None,
+    output_format: OutputFormat,
+) -> None:
+    """Exit 2 when a ``--sync`` value names no sync."""
+    unknown = [name for name in names or [] if name not in cfg.syncs]
+    require_known("sync", unknown, cfg.syncs, output_format)
 
 
 def build_endpoint_filter(
@@ -97,48 +111,20 @@ def build_endpoint_filter(
     )
 
 
-UNKNOWN_LOCATION_REASON = "unknown-location"
-"""``reason`` of the JSON error for a location the config does not define."""
-
-
-def _validate_locations(
+def _require_known_locations(
     cfg: Config,
     locations: list[str] | None,
     exclude_locations: list[str] | None,
     output_format: OutputFormat,
 ) -> None:
-    """Exit with code 2 if any location value is not defined in the config.
-
-    Like a config error, it is rendered in the command's output format: text
-    on stderr, or a JSON ``{"error": ...}`` object on stdout for ``-o json``.
-    """
-    known = set(cfg.known_locations())
-    unknown = [
-        (label, value)
-        for label, values in [
-            ("--location", locations),
-            ("--exclude-location", exclude_locations),
-        ]
-        for value in values or []
-        if value not in known
-    ]
-    if unknown:
-        label, value = unknown[0]
-        message = (
-            f"unknown location '{value}' passed to {label}."
-            f" Known locations: {', '.join(sorted(known))}"
-            if known
-            else "no locations are defined in the configuration."
-            " --location and --exclude-location cannot be used."
-        )
-        match output_format:
-            case OutputFormat.JSON:
-                echo_json(
-                    {"error": {"reason": UNKNOWN_LOCATION_REASON, "message": message}}
-                )
-            case OutputFormat.HUMAN:
-                typer.echo(f"Error: {message}", err=True)
-        raise typer.Exit(2)
+    """Exit 2 when a ``--location`` or ``--exclude-location`` value is not
+    defined in the config."""
+    known = cfg.known_locations()
+    values: dict[str, None] = dict.fromkeys(
+        [*(locations or []), *(exclude_locations or [])]
+    )
+    unknown = [value for value in values if value not in known]
+    require_known("location", unknown, known, output_format)
 
 
 def resolve_endpoints(
@@ -150,7 +136,7 @@ def resolve_endpoints(
 ) -> ResolvedEndpoints:
     """Exit with code 2, like a config error, when the user's SSH config
     gives a host a value nbkp cannot use."""
-    _validate_locations(cfg, locations, exclude_locations, output_format)
+    _require_known_locations(cfg, locations, exclude_locations, output_format)
     ef = build_endpoint_filter(locations, exclude_locations, network)
     try:
         return resolve_all_endpoints(cfg, ef)

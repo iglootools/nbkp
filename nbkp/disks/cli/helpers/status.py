@@ -12,6 +12,7 @@ from ....clidisplay import (
     severity_style,
     severity_symbol,
 )
+from ....cliwiring.config import require_known
 from ....config import Config, LocalVolume, RemoteVolume
 from ....policy import Severity
 from ....remote.dispatch import VolumeCommandRunner
@@ -195,29 +196,7 @@ def require_known_names(
     names: list[str] | None,
     output_format: OutputFormat,
 ) -> None:
-    """Exit 1 when a ``--name`` matches no volume.
-
-    Without this, a typo filters every volume out and the command reports
-    success having done nothing.
-    """
-    unknown = unknown_volume_names(cfg, names)
-    if unknown:
-        known = ", ".join(sorted(cfg.volumes)) or "(none)"
-        message = (
-            f"Error: unknown volume name(s): {', '.join(unknown)}."
-            f" Known volumes: {known}"
-        )
-        match output_format:
-            case OutputFormat.JSON:
-                echo_json(
-                    {
-                        "error": {
-                            "reason": "unknown-volume",
-                            "message": message,
-                            "names": unknown,
-                        }
-                    }
-                )
-            case OutputFormat.HUMAN:
-                typer.echo(message, err=True)
-        raise typer.Exit(1)
+    """Exit 2 when a ``--name`` matches no volume."""
+    require_known(
+        "volume", unknown_volume_names(cfg, names), cfg.volumes, output_format
+    )

@@ -172,7 +172,7 @@ class TestUnknownNames:
 
         exit_code, output = _invoke(run, "mount", "-n", "typo")
 
-        assert exit_code == 1
+        assert exit_code == 2
         assert "unknown volume name(s): typo" in output
         assert run.calls == []
 
@@ -181,8 +181,9 @@ class TestUnknownNames:
 
         exit_code, output = _invoke(run, "umount", "-n", "typo", "-o", "json")
 
-        assert exit_code == 1
-        assert json.loads(output)["error"]["names"] == ["typo"]
+        assert exit_code == 2
+        error = json.loads(output)["error"]
+        assert (error["reason"], error["names"]) == ("unknown-volume", ["typo"])
         assert run.calls == []
 
 
