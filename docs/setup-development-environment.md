@@ -14,8 +14,8 @@
 
 5. Activate the virtual environment:
    ```bash
-   # - Install all the tools defined in mise.toml (python, uv, ...)
-   # - Create .venv on the pinned Python and activate it
+   # Install all the tools defined in mise.toml (python, uv, ...). This does not create
+   # .venv: the first `mise run <task>` does (see below), and mise activates it from then on.
    mise install
 
    # Usually unnecessary: [deps.uv] in mise.toml runs `uv sync --all-extras` automatically
