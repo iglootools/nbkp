@@ -441,6 +441,16 @@ class TestDisabledSync:
         assert "# sync_disabled_sync  # disabled" in script
 
 
+_SYMLINK_STEP = dedent("""\
+    # Update latest symlink (skip if dry-run)
+    if [ "$NBKP_DRY_RUN" = false ]; then
+        ln -sfn "snapshots/${NBKP_TS}" /mnt/dst/latest
+    fi
+""")
+"""The whole step: ``snapshots/${NBKP_TS}`` and the dry-run guard also
+appear in other steps, so matching them alone could not fail."""
+
+
 class TestBtrfs:
     def test_no_link_dest(self) -> None:
         config = _btrfs_config()
@@ -457,9 +467,25 @@ class TestBtrfs:
         assert "NBKP_TS=$(date -u" in script
 
     def test_snapshot_guarded_by_dry_run(self) -> None:
+        """The whole step: the guard also appears in other steps."""
         config = _btrfs_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert 'if [ "$NBKP_DRY_RUN" = false ]' in script
+        step = dedent("""\
+            # Btrfs snapshot (skip if dry-run)
+            if [ "$NBKP_DRY_RUN" = false ]; then
+                NBKP_TS=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+                NBKP_LATEST_LINK=$(readlink /mnt/dst/latest 2>/dev/null || true)
+                if [ -n "$NBKP_LATEST_LINK" ] && [ "$NBKP_LATEST_LINK" != "/dev/null" ]; then
+                    NBKP_LATEST_NAME="${NBKP_LATEST_LINK##*/}"
+                    if ! nbkp_snapshot_after "$NBKP_TS" "$NBKP_LATEST_NAME"; then
+                        nbkp_log "ERROR: new snapshot $NBKP_TS would not be after the latest snapshot $NBKP_LATEST_NAME; is the clock behind?"
+                        return 1
+                    fi
+                fi
+                btrfs subvolume snapshot -r /mnt/dst/staging "/mnt/dst/snapshots/${NBKP_TS}"
+            fi
+        """)
+        assert indent(step, "    ") in script
 
     def test_prune_with_max_snapshots(self) -> None:
         config = _btrfs_config()
@@ -484,11 +510,13 @@ class TestBtrfs:
         assert "staging/ directory not found" in script
         assert "snapshots/ directory not found" in script
 
-    def test_symlink_update_after_snapshot(self) -> None:
+    def test_symlink_update_after_snapshot_guarded_by_dry_run(self) -> None:
         config = _btrfs_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert "ln -sfn" in script
-        assert "snapshots/${NBKP_TS}" in script
+        assert indent(_SYMLINK_STEP, "    ") in script
+        assert script.index("# Btrfs snapshot") < script.index(
+            "# Update latest symlink"
+        )
 
 
 class TestPreflightChecks:
@@ -1022,16 +1050,10 @@ class TestHardLink:
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert "/mnt/dst/snapshots/${NBKP_TS}/" in script
 
-    def test_symlink_update(self) -> None:
+    def test_symlink_update_guarded_by_dry_run(self) -> None:
         config = self._hl_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert "ln -sfn" in script
-        assert "snapshots/${NBKP_TS}" in script
-
-    def test_symlink_guarded_by_dry_run(self) -> None:
-        config = self._hl_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
-        assert 'if [ "$NBKP_DRY_RUN" = false ]' in script
+        assert indent(_SYMLINK_STEP, "    ") in script
 
     def test_prune_with_max_snapshots(self) -> None:
         config = self._hl_config()
