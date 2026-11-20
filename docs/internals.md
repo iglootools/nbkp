@@ -104,7 +104,7 @@ Passphrases are cached in memory during a single run, so the user is only prompt
 
 **Authorization** — Mount management is authorized by **polkit only** (no sudoers). The `disks setup-auth` command generates a single polkit rule at `/etc/polkit-1/rules.d/50-nbkp.rules` for review and manual installation. See [Why polkit-only](#why-polkit-only).
 
-**Shell script limitation** — Mount management is excluded from `sh` script generation because credential retrieval depends on Python-specific backends (keyring, prompt). Volumes with mount config must be manually mounted/umounted before/after running the generated script.
+**Shell script limitation** — Mount management is excluded from `sh` script generation because credential retrieval depends on Python-specific backends (keyring, prompt). Volumes with mount config must be manually mounted/umounted before/after running the generated script. They also need a `path`: the script cannot discover a mountpoint, so `sh` refuses a volume without one, naming it, and exits 1.
 
 For a complete end-to-end setup guide, including the fstab × crypttab combinations and worked examples, see [Mount management with udisks2](./usage.md#mount-management-with-udisks2).
 

@@ -8,6 +8,7 @@ from tests.clidisplay import (
     runner,
     sample_config,
 )
+from tests.sh.test_sh import mount_managed_config
 
 
 class TestShCommand:
@@ -92,3 +93,14 @@ class TestShCommand:
 
         result = runner.invoke(app, ["sh", "--config", str(bad)])
         assert result.exit_code == 2
+
+    def test_volume_without_path_is_an_error_not_a_traceback(
+        self, tmp_path: Path
+    ) -> None:
+        config_path = write_config(tmp_path, mount_managed_config())
+
+        result = runner.invoke(app, ["sh", "--config", str(config_path)])
+
+        assert result.exit_code == 1
+        assert isinstance(result.exception, SystemExit)
+        assert "volume 'dst' has no 'path'" in result.output

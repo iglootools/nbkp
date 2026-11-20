@@ -15,7 +15,7 @@ from ...cliwiring.options import (
     NETWORK_OPTION,
 )
 from ...cliwiring.runtime import runtime_of
-from .. import ScriptOptions, generate_script
+from .. import ScriptOptions, VolumeWithoutPathError, generate_script
 
 
 def sh_cmd(
@@ -89,22 +89,35 @@ def sh_cmd(
 
     cfg = load_config_or_exit(runtime_of(ctx), config)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
-    script = generate_script(
-        cfg,
-        ScriptOptions(
-            config_path=config,
-            output_file=output_file,
-            relative_src=relative_src,
-            relative_dst=relative_dst,
-            portable=portable,
-            platform=platform,
-        ),
-        now=datetime.now(UTC),
-        resolved_endpoints=resolved,
-    )
+    try:
+        script = generate_script(
+            cfg,
+            ScriptOptions(
+                config_path=config,
+                output_file=output_file,
+                relative_src=relative_src,
+                relative_dst=relative_dst,
+                portable=portable,
+                platform=platform,
+            ),
+            now=datetime.now(UTC),
+            resolved_endpoints=resolved,
+        )
+    except VolumeWithoutPathError as e:
+        typer.echo(_format_volume_without_path(e), err=True)
+        raise typer.Exit(1) from e
     if output_file is not None:
         output_file.write_text(script, encoding="utf-8")
         output_file.chmod(output_file.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
         typer.echo(f"Written to {display_path(output_file)}", err=True)
     else:
         typer.echo(script)
+
+
+def _format_volume_without_path(error: VolumeWithoutPathError) -> str:
+    return (
+        f"Error: volume '{error.volume_slug}' has no 'path'. Generated scripts"
+        " do not manage mounts, so they need each volume's path: add 'path'"
+        " to the volume, and mount it with 'nbkp disks mount' before running"
+        " the script."
+    )

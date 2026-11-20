@@ -3,11 +3,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from textwrap import dedent, indent
 
+import pytest
+
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     HardLinkSnapshotConfig,
     LocalVolume,
+    MountConfig,
     RemoteVolume,
     RsyncOptions,
     SshConnectionOptions,
@@ -16,7 +19,7 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.remote.resolution import resolve_all_endpoints
-from nbkp.sh import ScriptOptions, generate_script
+from nbkp.sh import ScriptOptions, VolumeWithoutPathError, generate_script
 
 _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
 _OPTIONS = ScriptOptions(platform="linux", config_path="/etc/nbkp/config.yaml")
@@ -692,7 +695,23 @@ class TestShellValidity:
         _bash_n(script)
 
 
+def mount_managed_config() -> Config:
+    """A sync onto a mount-managed volume whose mountpoint is discovered."""
+    config = _local_to_local_config()
+    dst = LocalVolume(
+        slug="dst",
+        mount=MountConfig(device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6"),
+    )
+    return config.model_copy(update={"volumes": {**config.volumes, "dst": dst}})
+
+
 class TestEdgeCases:
+    def test_volume_without_path_is_refused(self) -> None:
+        with pytest.raises(
+            VolumeWithoutPathError, check=lambda e: e.volume_slug == "dst"
+        ):
+            generate_script(mount_managed_config(), _OPTIONS, now=_NOW)
+
     def test_empty_config(self) -> None:
         config = Config()
         script = generate_script(config, _OPTIONS, now=_NOW)
