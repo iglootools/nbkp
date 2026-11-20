@@ -236,7 +236,8 @@ def read_latest_symlink(
 
     Returns ``None`` if the symlink does not exist or points to
     ``/dev/null`` (the canonical "no snapshot yet" marker).  A target that
-    is not a snapshot name raises
+    is not ``snapshots/<name>`` (see :meth:`Snapshot.from_latest_target`)
+    raises
     :class:`~nbkp.snapshots.errors.SnapshotOperationError`: callers use it
     to protect the latest snapshot, so it must not be guessed at.
     """
@@ -249,9 +250,8 @@ def read_latest_symlink(
     if target is None or target == DEVNULL_TARGET:
         return None
     else:
-        name = target.rsplit("/", 1)[-1] if "/" in target else target
         try:
-            return Snapshot.from_name(name)
+            return Snapshot.from_latest_target(target)
         except ValueError as e:
             raise SnapshotOperationError(
                 SnapshotOp.READ_LATEST, latest_path, f"not a snapshot: {target}"

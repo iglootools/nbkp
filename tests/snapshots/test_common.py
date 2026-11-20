@@ -624,6 +624,24 @@ class TestReadLatestSymlinkFailures:
         ):
             read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
 
+    @pytest.mark.parametrize(
+        "target",
+        [
+            "../other/snapshots/2026-03-07T09:00:00.000Z",
+            "/mnt/elsewhere/snapshots/2026-03-07T09:00:00.000Z",
+            "2026-03-07T09:00:00.000Z",
+        ],
+    )
+    def test_target_outside_snapshots_dir_raises(self, target: str) -> None:
+        """Only ``snapshots/<name>`` designates one of this endpoint's snapshots."""
+        runner = FakeCommandRunner().on("readlink", returns=completed(0, f"{target}\n"))
+        sync, config, re = _hl_remote_config()
+
+        with pytest.raises(
+            SnapshotOperationError, check=_is_op(SnapshotOp.READ_LATEST)
+        ):
+            read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
+
     def test_prune_does_not_delete_when_latest_unknown(self) -> None:
         """An unreadable latest disables pruning instead of its protection."""
         runner = FakeCommandRunner().on(
