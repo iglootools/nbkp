@@ -70,6 +70,23 @@ class TestBuildSshBaseArgs:
             "host.example.com",
         ]
 
+    def test_known_hosts_file_with_whitespace_is_quoted(self) -> None:
+        server = SshEndpoint(
+            slug="host-server",
+            host="host.example.com",
+            connection_options=SshConnectionOptions(
+                known_hosts_file='/srv/my keys/"known" hosts',
+            ),
+        )
+        args = build_ssh_base_args(server)
+        assert args == [
+            "ssh",
+            *_DEFAULT_O_OPTIONS,
+            "-o",
+            'UserKnownHostsFile="/srv/my keys/\\"known\\" hosts"',
+            "host.example.com",
+        ]
+
     def test_custom_connect_timeout(self) -> None:
         server = SshEndpoint(
             slug="slow-server",

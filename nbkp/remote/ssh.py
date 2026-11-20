@@ -1,3 +1,4 @@
+import re
 import shlex
 from functools import reduce
 
@@ -8,6 +9,18 @@ lazy from .endpoints import ResolvedEndpoints
 # Kept in `ssh` instead of `output` as this is core to remote command execution, not just display formatting.
 def _format_host(endpoint: SshEndpoint) -> str:
     return f"{endpoint.user}@{endpoint.host}" if endpoint.user else endpoint.host
+
+
+def format_known_hosts_option(known_hosts_file: str) -> str:
+    """``UserKnownHostsFile=<path>``, the value double-quoted when it holds
+    whitespace or a quote: OpenSSH splits the value on whitespace into several
+    files unless it is quoted, and unescapes ``\\`` and ``\"`` inside quotes.
+    """
+    if re.search(r'[\s"\\]', known_hosts_file) is None:
+        return f"UserKnownHostsFile={known_hosts_file}"
+    else:
+        escaped = re.sub(r'(["\\])', r"\\\1", known_hosts_file)
+        return f'UserKnownHostsFile="{escaped}"'
 
 
 def _ssh_o_options(opts: SshConnectionOptions) -> list[str]:
@@ -24,7 +37,7 @@ def _ssh_o_options(opts: SshConnectionOptions) -> list[str]:
             ),
             "StrictHostKeyChecking=no" if not opts.strict_host_key_checking else None,
             (
-                f"UserKnownHostsFile={opts.known_hosts_file}"
+                format_known_hosts_option(opts.known_hosts_file)
                 if opts.known_hosts_file is not None
                 else None
             ),
