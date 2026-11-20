@@ -154,19 +154,12 @@ run = [
   { task = "build-verify" },
 ]
 
+# Run by the shared reusable-demo.yml workflow (iglootools/common) that demo.yml calls.
 [tasks.ci-demo-record]
 description = "Record the demo on CI"
 run = [
   { task = "install" },
   { task = "demo-record" },
-]
-
-[tasks.ci-demo]
-description = "Record and upload the demo on CI"
-run = [
-  { task = "install" },
-  { task = "demo-record" },
-  { task = "demo-upload" },
 ]
 
 [tasks.test-unit]
