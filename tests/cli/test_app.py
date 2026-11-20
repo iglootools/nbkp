@@ -1,3 +1,4 @@
+import importlib.metadata
 import subprocess
 from pathlib import Path
 
@@ -38,3 +39,19 @@ def test_subcommands_run_in_one_ssh_connection_scope(tmp_path: Path) -> None:
     assert isinstance(seen[0], ConnectionPool)
     assert all(pool is seen[0] for pool in seen)
     assert active_pool() is None
+
+
+def test_version_prints_the_installed_version_and_exits_before_any_command() -> None:
+    # --version is eager: it answers even next to an unknown subcommand, which
+    # would otherwise fail argument parsing.
+    result = CliRunner().invoke(app, ["--version", "no-such-command"])
+
+    assert result.exit_code == 0, result.output
+    assert result.output == f"{importlib.metadata.version('nbkp')}\n"
+
+
+def test_version_short_flag() -> None:
+    result = CliRunner().invoke(app, ["-V"])
+
+    assert result.exit_code == 0, result.output
+    assert result.output == f"{importlib.metadata.version('nbkp')}\n"
