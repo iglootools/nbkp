@@ -1,7 +1,6 @@
 import os
 import stat
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -88,7 +87,8 @@ def sh_cmd(
         )
         raise typer.Exit(2)
 
-    cfg = load_config_or_exit(runtime_of(ctx), config)
+    runtime = runtime_of(ctx)
+    cfg = load_config_or_exit(runtime, config)
     resolved = resolve_endpoints(cfg, location, exclude_location, network)
     try:
         script = generate_script(
@@ -101,7 +101,7 @@ def sh_cmd(
                 portable=portable,
                 platform=platform,
             ),
-            now=datetime.now(UTC),
+            now=runtime.clock(),
             resolved_endpoints=resolved,
         )
     except VolumeWithoutPathError as e:
