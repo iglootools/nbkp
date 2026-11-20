@@ -5,7 +5,7 @@ import typer
 from rich.console import Console
 from rich.text import Text
 
-from ...clidisplay import OutputFormat, echo_json
+from ...clidisplay import OutputFormat
 from ...clidisplay.invocation import Invocation, format_troubleshoot_hint
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...cliwiring.credentials import prompt_passphrase
@@ -23,21 +23,11 @@ from ...credentials import build_passphrase_fn, prefetch_passphrases
 from ...remote.endpoints import ResolvedEndpoints
 from ..lifecycle import MountResult, any_failed, mount_volumes, refused_by_polkit
 from ..mount_checks import check_mount_status
-from ..observation import build_mount_observations
-from ..output import (
-    build_mount_status_json,
-    mount_failure_detail,
-    mount_result_json,
-)
+from ..output import mount_result_json
 from ..plan import plan_lifecycle
+from ..status import mount_result_statuses, unprobed_volume_statuses
 from . import app
-from .helpers import (
-    ErrorStatus,
-    error_label,
-    require_known_names,
-    show_status_table,
-    unprobed_statuses,
-)
+from .helpers import require_known_names, show_volume_statuses
 from .helpers.plan_output import show_plan
 from .options import NAME_OPTION
 
@@ -154,67 +144,17 @@ def _show_results(
 ) -> None:
     """Status table: observed, unreachable, unmanaged and excluded volumes.
 
-    The JSON entries are built from the results themselves, so that they
-    carry why a mount failed, not only the state it left.
+    The JSON entries of the volumes acted on also carry why a mount failed,
+    not only the state it left.
     """
-    display_names = mount_display_names(cfg)
-    match output:
-        case OutputFormat.JSON:
-            echo_json(
-                [
-                    *(
-                        mount_result_entry(
-                            display_names.get(r.volume_slug, r.volume_slug), r
-                        )
-                        for r in results
-                    ),
-                    *build_mount_status_json(unprobed_statuses(cfg, resolved, names)),
-                ]
-            )
-        case OutputFormat.HUMAN:
-            _show_human_results(cfg, resolved, results, names, display_names)
-
-
-def mount_result_entry(name: str, result: MountResult) -> dict[str, object]:
-    """The ``-o json`` entry of a volume *disks mount* acted on: the state it
-    left and, on failure, why."""
-    return {
-        "volume": name,
-        "device_present": result.device_present,
-        "luks_unlocked": result.luks_unlocked,
-        "mounted": result.mounted,
-        **mount_result_json(result),
-    }
-
-
-def _show_human_results(
-    cfg: Config,
-    resolved: ResolvedEndpoints,
-    results: list[MountResult],
-    names: list[str] | None,
-    display_names: dict[str, str],
-) -> None:
-    observations = build_mount_observations(results)
-    show_status_table(
+    show_volume_statuses(
+        cfg,
         [
-            *(
-                (display_names.get(slug, slug), obs)
-                for slug, obs in observations.items()
-            ),
-            *(
-                (
-                    error_label(
-                        display_names.get(r.volume_slug, r.volume_slug),
-                        mount_failure_detail(r),
-                    ),
-                    ErrorStatus(),
-                )
-                for r in results
-                if not r.success and r.volume_slug not in observations
-            ),
-            *unprobed_statuses(cfg, resolved, names),
+            *mount_result_statuses(results),
+            *unprobed_volume_statuses(cfg, resolved, names),
         ],
-        OutputFormat.HUMAN,
+        output,
+        {r.volume_slug: mount_result_json(r) for r in results},
     )
 
 

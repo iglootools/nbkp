@@ -1,11 +1,10 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict
-from typing import Protocol
 
 from rich.table import Table
 from rich.text import Text
 
-from ..clidisplay import severity_icon
+from ..clidisplay import severity_icon, severity_style, severity_symbol
 from ..policy import Severity, Strictness
 from .lifecycle import MountResult, UmountResult
 from .models import (
@@ -15,33 +14,13 @@ from .models import (
     UmountFailureKind,
 )
 from .severity import device_fail_severity, luks_fail_severity, mounted_fail_severity
+from .status import MountStatusData, VolumeStatus, VolumeStatusKind
 
 # A row's display label.  ``Text`` when the label carries styling *and*
 # caller-supplied text (an error detail, a "not managed" marker): Rich parses
 # markup in a plain ``str``, so a detail containing ``[...]`` — udisksctl
-# stderr, an exception message — would lose it.  ``str(label)`` recovers the
-# plain text for JSON either way.
+# stderr, an exception message — would lose it.
 MountStatusLabel = str | Text
-
-
-class MountStatusData(Protocol):
-    """Structural protocol for mount runtime state.
-
-    Satisfied by both ``MountObservation`` (dataclass) and
-    ``MountCapabilities`` (Pydantic model).
-    """
-
-    @property
-    def device_present(self) -> bool | None: ...
-
-    @property
-    def luks_unlocked(self) -> bool | None: ...
-
-    @property
-    def mounted(self) -> bool | None: ...
-
-    @property
-    def mount_failure_reason(self) -> MountFailureKind | None: ...
 
 
 def mount_state_icon(
@@ -102,24 +81,87 @@ def build_mount_status_table(
     return table
 
 
-def build_mount_status_json(
-    statuses: Sequence[tuple[MountStatusLabel, MountStatusData]],
-) -> list[dict[str, object]]:
-    """Build a JSON-serializable list of mount status entries.
+def error_label(name: str, detail: str | None) -> Text:
+    """Fold an error detail into the volume's display name (red).
 
-    ``str(slug)`` rather than ``slug``: a ``Text`` label renders to its plain
-    content, so annotated labels reach JSON as readable text instead of the
-    Rich markup they used to leak (``vol [dim](not managed)[/dim]``).
+    Assembled as ``Text`` rather than a markup string: *detail* is external
+    text (an exception message, udisksctl's stderr) that Rich would otherwise
+    parse for ``[...]`` style tags.
     """
-    return [
-        {
-            "volume": str(slug),
-            "device_present": status.device_present,
-            "luks_unlocked": status.luks_unlocked,
-            "mounted": status.mounted,
-        }
-        for slug, status in statuses
-    ]
+    if detail is None:
+        return Text(name)
+    else:
+        return Text.assemble(
+            name,
+            " ",
+            (
+                f"{severity_symbol(Severity.ERROR)} {detail}",
+                severity_style(Severity.ERROR),
+            ),
+        )
+
+
+def volume_status_detail(status: VolumeStatus) -> str | None:
+    """Why a volume was not probed, as one line; ``None`` when it was."""
+    match status.kind:
+        case VolumeStatusKind.PROBED:
+            return None
+        case VolumeStatusKind.UNREACHABLE:
+            return f"unreachable: {status.error_message}"
+        case VolumeStatusKind.TOOL_NOT_INSTALLED:
+            return f"{status.missing_tool} not installed"
+        case VolumeStatusKind.NOT_MANAGED:
+            return "not managed"
+        case VolumeStatusKind.LOCATION_EXCLUDED:
+            return "location excluded"
+
+
+def format_volume_status_label(name: str, status: VolumeStatus) -> Text:
+    """The Name cell: the display name, with why the volume was not probed
+    (dim when it was never meant to be, red when probing failed)."""
+    match status.kind, volume_status_detail(status):
+        case VolumeStatusKind.NOT_MANAGED | VolumeStatusKind.LOCATION_EXCLUDED, str(
+            note
+        ):
+            return Text.assemble(name, " ", (f"({note})", "dim"))
+        case _, detail:
+            return error_label(name, detail)
+
+
+def build_volume_status_table(
+    statuses: Sequence[VolumeStatus], display_names: Mapping[str, str]
+) -> Table:
+    return build_mount_status_table(
+        [
+            (
+                format_volume_status_label(
+                    display_names.get(status.volume_slug, status.volume_slug), status
+                ),
+                status.state,
+            )
+            for status in statuses
+        ]
+    )
+
+
+def volume_status_json(status: VolumeStatus) -> dict[str, object]:
+    """A volume's ``-o json`` status entry: its slug, whether it was probed
+    (``status``) and why not, and the state observed."""
+    return {
+        "volume": status.volume_slug,
+        "status": status.kind.value,
+        "device_present": status.state.device_present,
+        "luks_unlocked": status.state.luks_unlocked,
+        "mounted": status.state.mounted,
+        **{
+            key: value
+            for key, value in {
+                "error": status.error_message,
+                "missing_tool": status.missing_tool,
+            }.items()
+            if value is not None
+        },
+    }
 
 
 def _step(failure: LifecycleFailure) -> str:

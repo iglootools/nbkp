@@ -1,144 +1,100 @@
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
 
 import typer
 from rich.console import Console
-from rich.text import Text
 
-from ....clidisplay import (
-    OutputFormat,
-    StepProgressBar,
-    echo_json,
-    severity_style,
-    severity_symbol,
-)
+from ....clidisplay import OutputFormat, StepProgressBar, echo_json
 from ....cliwiring.config import require_known
-from ....config import Config, LocalVolume, RemoteVolume
+from ....config import Config, Volume
 from ....policy import Severity
 from ....remote.dispatch import VolumeCommandRunner
-from ....remote.endpoints import ResolvedEndpoints, location_excluded
-from ....remote.errors import ssh_connection_errors
-from ...lifecycle import UmountResult, lifecycle_volumes, unknown_volume_names
-from ...models import MountFailureKind, display_name
-from ...mount_checks import check_mount_status
+from ....remote.endpoints import ResolvedEndpoints
+from ...lifecycle import UmountResult, unknown_volume_names
+from ...models import display_name
 from ...output import (
-    MountStatusData,
-    MountStatusLabel,
-    build_mount_status_json,
-    build_mount_status_table,
+    build_volume_status_table,
     umount_result_json,
+    volume_status_detail,
+    volume_status_json,
 )
-from ...plan import probe_error_detail
+from ...status import (
+    ProbeEndFn,
+    VolumeStatus,
+    managed_volumes,
+    probe_volume_statuses,
+)
 
 
-@dataclass(frozen=True)
-class ErrorStatus:
-    """Synthetic, all-unknown mount status for unreachable/unmanaged volumes.
-
-    The detail (error text, ``not managed``) is folded into the Name column
-    by the caller since the status table only shows device/unlock/mount state.
-    """
-
-    device_present: bool | None = None
-    luks_unlocked: bool | None = None
-    mounted: bool | None = None
-    mount_failure_reason: MountFailureKind | None = None
-
-
-def _unprobed_note(vol: LocalVolume | RemoteVolume, resolved: ResolvedEndpoints) -> str:
-    match vol.mount:
-        case None:
-            return "not managed"
-        case _ if location_excluded(vol, resolved):
-            return "location excluded"
-        case _:
-            return ""
-
-
-def unprobed_statuses(
+def show_volume_statuses(
     cfg: Config,
-    resolved: ResolvedEndpoints,
-    names: list[str] | None = None,
-) -> list[tuple[Text, MountStatusData]]:
-    """Volumes listed without a probe: unmanaged, or excluded by location."""
-    notes = {
-        slug: _unprobed_note(vol, resolved)
-        for slug, vol in cfg.volumes.items()
-        if names is None or slug in names
-    }
-    return [
-        (
-            Text.assemble(display_name(cfg.volumes[slug]), " ", (f"({note})", "dim")),
-            ErrorStatus(),
-        )
-        for slug, note in notes.items()
-        if note
-    ]
-
-
-def error_label(name: str, detail: str | None) -> Text:
-    """Fold an error detail into the volume's display name (red).
-
-    Assembled as ``Text`` rather than a markup string: *detail* is external
-    text (an exception message, udisksctl's stderr) that Rich would otherwise
-    parse for ``[...]`` style tags, and the same value is reused as the JSON
-    ``volume`` field — where markup has no business appearing at all.
-    """
-    if detail is None:
-        return Text(name)
-    else:
-        return Text.assemble(
-            name,
-            " ",
-            (
-                f"{severity_symbol(Severity.ERROR)} {detail}",
-                severity_style(Severity.ERROR),
-            ),
-        )
-
-
-def _probe_volume_status(
-    vol: LocalVolume | RemoteVolume,
-    resolved: ResolvedEndpoints,
-    bar: StepProgressBar | None,
-    run: VolumeCommandRunner,
-) -> tuple[MountStatusLabel, MountStatusData]:
-    """Probe a single volume's mount status with progress bar updates.
-
-    Per-volume result lines are prefixed with ``status`` so they're
-    distinguishable from ``mount`` / ``umount`` action lines printed by
-    the same Rich console (e.g. ``disks umount`` runs the umount step
-    and then this probe back-to-back).
-    """
-    assert vol.mount is not None
-    label = display_name(vol)
-    line = f"status {label}"
-    if bar is not None:
-        bar.on_start(line)
-    try:
-        status: MountStatusData = check_mount_status(vol, vol.mount, resolved, run=run)
-        if bar is not None:
-            bar.on_end(line, Severity.OK)
-        return label, status
-    except ssh_connection_errors() as e:
-        detail = probe_error_detail(vol, e)
-        if bar is not None:
-            bar.on_end(line, Severity.ERROR, detail)
-        return error_label(label, detail), ErrorStatus()
-
-
-def show_status_table(
-    statuses: list[tuple[MountStatusLabel, MountStatusData]],
+    statuses: Sequence[VolumeStatus],
     output_format: OutputFormat,
+    json_extras_by_slug: Mapping[str, dict[str, object]] | None = None,
 ) -> None:
+    """The status table, or one ``-o json`` entry per volume, merged with its
+    *json_extras_by_slug* entry (why a mount or umount failed)."""
+    extras = json_extras_by_slug or {}
     match output_format:
         case OutputFormat.JSON:
-            echo_json(build_mount_status_json(statuses))
+            echo_json(
+                [
+                    {**volume_status_json(s), **extras.get(s.volume_slug, {})}
+                    for s in statuses
+                ]
+            )
         case OutputFormat.HUMAN:
             if statuses:
-                Console().print(build_mount_status_table(statuses))
+                display_names = {
+                    slug: display_name(vol) for slug, vol in cfg.volumes.items()
+                }
+                Console().print(build_volume_status_table(statuses, display_names))
             else:
                 typer.echo("No volumes found.")
+
+
+def _status_line(volume: Volume) -> str:
+    """Prefixed with ``status`` so the line is told apart from the ``mount`` /
+    ``umount`` action lines the same console prints (``disks umount`` runs
+    the umount step and then this probe back-to-back)."""
+    return f"status {display_name(volume)}"
+
+
+def _on_probe_end(bar: StepProgressBar) -> ProbeEndFn:
+    def on_probe_end(volume: Volume, status: VolumeStatus) -> None:
+        detail = volume_status_detail(status)
+        severity = Severity.OK if detail is None else Severity.ERROR
+        bar.on_end(_status_line(volume), severity, detail)
+
+    return on_probe_end
+
+
+def _probe_with_progress(
+    cfg: Config,
+    resolved: ResolvedEndpoints,
+    names: list[str] | None,
+    output_format: OutputFormat,
+    run: VolumeCommandRunner,
+) -> list[VolumeStatus]:
+    managed = managed_volumes(cfg, resolved, names)
+    bar = (
+        StepProgressBar(len(managed))
+        if output_format is OutputFormat.HUMAN and managed
+        else None
+    )
+    try:
+        return probe_volume_statuses(
+            cfg,
+            resolved,
+            names,
+            run=run,
+            on_probe_start=(
+                (lambda vol: bar.on_start(_status_line(vol))) if bar else None
+            ),
+            on_probe_end=_on_probe_end(bar) if bar else None,
+        )
+    finally:
+        if bar is not None:
+            bar.stop()
 
 
 def probe_and_show_status(
@@ -150,45 +106,17 @@ def probe_and_show_status(
     *,
     run: VolumeCommandRunner,
 ) -> None:
-    """Probe and show the mount status of the managed volumes, through *run*.
+    """Probe and show the mount status of the volumes, through *run*.
 
     *umount_results* are the umounts just attempted: under ``-o json`` the
     entry of a volume whose umount failed also says why (``disks umount``).
     """
-    managed = [
-        (slug, vol) for slug, vol, _mount in lifecycle_volumes(cfg, resolved, names)
-    ]
-
-    bar = (
-        StepProgressBar(len(managed))
-        if output_format is OutputFormat.HUMAN and managed
-        else None
+    show_volume_statuses(
+        cfg,
+        _probe_with_progress(cfg, resolved, names, output_format, run),
+        output_format,
+        {r.volume_slug: umount_result_json(r) for r in umount_results},
     )
-    managed_statuses = [
-        _probe_volume_status(vol, resolved, bar, run) for _, vol in managed
-    ]
-    unmanaged_statuses = unprobed_statuses(cfg, resolved, names)
-    if bar is not None:
-        bar.stop()
-
-    match output_format:
-        case OutputFormat.JSON:
-            failures = {r.volume_slug: umount_result_json(r) for r in umount_results}
-            echo_json(
-                [
-                    *(
-                        {**entry, **failures.get(slug, {})}
-                        for (slug, _), entry in zip(
-                            managed, build_mount_status_json(managed_statuses)
-                        )
-                    ),
-                    *build_mount_status_json(unmanaged_statuses),
-                ]
-            )
-        case OutputFormat.HUMAN:
-            show_status_table(
-                [*managed_statuses, *unmanaged_statuses], OutputFormat.HUMAN
-            )
 
 
 def require_known_names(
