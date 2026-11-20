@@ -723,6 +723,40 @@ class TestLoadConfig:
         assert chain[0].host == "bastion2.example.com"
         assert chain[1].host == "bastion3.example.com"
 
+    def test_extends_merges_connection_options(self, tmp_path: Path) -> None:
+        p = tmp_path / "extends_options.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "ssh-endpoints": {
+                        "base": {
+                            "host": "nas.lan",
+                            "connection-options": {
+                                "known-hosts-file": "/etc/nbkp/kh",
+                                "strict-host-key-checking": False,
+                                "connect-timeout": 30,
+                            },
+                        },
+                        "nas-wan": {
+                            "extends": "base",
+                            "host": "nas.example.com",
+                            "connection-options": {
+                                "compress": True,
+                                "connect-timeout": 60,
+                            },
+                        },
+                    },
+                }
+            )
+        )
+        options = load_config(p).ssh_endpoints["nas-wan"].connection_options
+        assert options == SshConnectionOptions(
+            known_hosts_file="/etc/nbkp/kh",
+            strict_host_key_checking=False,
+            connect_timeout=60,
+            compress=True,
+        )
+
     def test_extends_proxy_jump_overrides_parent_proxy_jumps(
         self, tmp_path: Path
     ) -> None:

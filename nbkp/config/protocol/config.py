@@ -42,12 +42,32 @@ def _stale_exclusive_keys(child: Mapping[str, Any]) -> set[str]:
     }
 
 
+# Nested sections a child overlays key by key rather than replacing, so that
+# setting ``compress`` does not drop the parent's known-hosts file or timeouts.
+_MERGED_SECTIONS = frozenset({"connection-options", "connection_options"})
+
+
+def _overlay_field(key: str, parent_value: Any, child_value: Any) -> Any:
+    match parent_value, child_value:
+        case dict(), dict() if key in _MERGED_SECTIONS:
+            return {**parent_value, **child_value}
+        case _:
+            return child_value
+
+
 def _merge_endpoint(
     parent: Mapping[str, Any], child: Mapping[str, Any]
 ) -> dict[str, Any]:
     """Overlay a child endpoint's raw fields on its resolved parent's."""
     stale = _stale_exclusive_keys(child)
-    merged = {**parent, **{k: v for k, v in child.items() if k != "extends"}}
+    merged = {
+        **parent,
+        **{
+            k: _overlay_field(k, parent.get(k), v)
+            for k, v in child.items()
+            if k != "extends"
+        },
+    }
     return {k: v for k, v in merged.items() if k not in stale}
 
 
