@@ -204,6 +204,17 @@ class TestPreflightAbort:
         assert pipeline.has_preflight_errors is aborts
         assert (rsync.synced == []) is aborts
 
+    def test_abort_reports_no_sync_failure(self) -> None:
+        """No sync ran, so none failed: the abort is has_preflight_errors."""
+        config = _chain_config()
+        statuses = {"a": _infra_broken(_status(config, "a")), "b": _status(config, "b")}
+
+        pipeline = _run(config, statuses, Strictness.IGNORE_INACTIVE, FakeRsync())
+
+        assert pipeline.has_preflight_errors
+        assert pipeline.results == []
+        assert not pipeline.has_sync_failures
+
 
 class TestFatalSyncErrors:
     def test_lists_only_the_syncs_fatal_under_the_strictness(self) -> None:

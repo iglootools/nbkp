@@ -48,7 +48,8 @@ class PipelineResult:
     """Empty when preflight found fatal errors and syncs were not executed."""
     has_preflight_errors: bool
     has_sync_failures: bool
-    """True when any result is fatal under the strictness (see ``sync_failed``)."""
+    """True when any result is fatal under the strictness (see ``sync_failed``);
+    False when preflight aborted the run, as no sync ran."""
 
 
 @dataclass(frozen=True)
@@ -167,7 +168,7 @@ def run_checked(
             preflight=preflight,
             results=[],
             has_preflight_errors=True,
-            has_sync_failures=True,
+            has_sync_failures=False,
         )
     else:
         cb = callbacks or SyncCallbacks()
