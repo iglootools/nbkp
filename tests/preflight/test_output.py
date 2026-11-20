@@ -292,6 +292,39 @@ class TestTroubleshootBtrfsStagingNotFound:
         assert "/mnt/dst/backup/staging" in output
 
 
+class TestTroubleshootStagingNotBtrfsSubvolume:
+    def test_moves_the_plain_directory_aside_before_creating_the_subvolume(
+        self,
+    ) -> None:
+        """staging/ exists as a plain directory, so `subvolume create` on its
+        path alone would fail with "target path already exists"."""
+        config = _btrfs_config()
+        vol_statuses = _make_vol_statuses(config)
+        sync_statuses = {
+            "btrfs-sync": _make_sync_status(
+                config,
+                vol_statuses,
+                dst_ep_errors=[
+                    DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME
+                ],
+            )
+        }
+        console, buf = _make_console()
+        console.print(
+            format_human_troubleshoot(
+                _ssh_statuses_from(vol_statuses),
+                vol_statuses,
+                sync_statuses,
+                config,
+            )
+        )
+        output = buf.getvalue()
+        move = output.index("sudo mv /mnt/dst/staging /mnt/dst/staging.old")
+        create = output.index("sudo btrfs subvolume create /mnt/dst/staging")
+        assert move < create
+        assert "sudo mkdir -p /mnt/dst/snapshots" in output
+
+
 class TestTroubleshootDryRunPendingSnapshot:
     def test_dry_run_pending_snapshot_text(self) -> None:
         config = _btrfs_config()
