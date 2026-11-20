@@ -171,16 +171,9 @@ The following functionality is covered by unit tests but intentionally excluded 
 - **Shell script generation internals** — The `integration_fs` test suite already generates and executes a full backup script against real filesystems, validating the end-to-end sh path.
 
 ## Release Process
-- Trigger the `release` workflow: `gh workflow run release.yml`. The `release`, `publish` and
-  `demo` workflows take care of the rest — tag, GitHub release, PyPI upload, demo recording;
-  see [Releasing and Publishing](./releasing-and-publishing.md) for what each one does.
-- When this is a major release, manually:
-    - include additional demo scenarios in `demo/demo.sh` (before triggering the release, so
-      the recording shows them)
-    - once the release's `demo` workflow has succeeded, run `mise run demo-upload-latest`: it
-      downloads the cast CI recorded, uploads it to asciinema.org, and repoints and commits
-      the README's asciicast embed (CI cannot reach asciinema.org itself)
 
+The steps to cut a release are in
+[Releasing and Publishing › Release Process](releasing-and-publishing.md#release-process).
 
 ## GitHub Config
 - **Protect `main` and the release tags with rulesets.** Configured as the shared
