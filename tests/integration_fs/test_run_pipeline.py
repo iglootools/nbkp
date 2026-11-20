@@ -19,7 +19,13 @@ from nbkp.config import (
 from nbkp.fsprotocol import LATEST_LINK, SNAPSHOTS_DIR
 from nbkp.policy import Strictness
 from nbkp.run.pipeline import check_and_run
-from nbkp.sync import SyncFailureKind, SyncOutcome, SyncResult, SyncWarningKind
+from nbkp.sync import (
+    RunOptions,
+    SyncFailureKind,
+    SyncOutcome,
+    SyncResult,
+    SyncWarningKind,
+)
 from nbkp.sync.testkit.seed import create_seed_sentinels
 
 _NOW = datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC)
@@ -58,10 +64,12 @@ def _run(
 ) -> list[SyncResult]:
     pipeline = check_and_run(
         config,
-        clock=lambda: now,
-        platform=sys.platform,
-        strictness=Strictness.IGNORE_INACTIVE,
-        dry_run=dry_run,
+        RunOptions(
+            clock=lambda: now,
+            platform=sys.platform,
+            strictness=Strictness.IGNORE_INACTIVE,
+            dry_run=dry_run,
+        ),
     )
     assert not pipeline.has_preflight_errors, pipeline.preflight.sync_statuses
     return pipeline.results

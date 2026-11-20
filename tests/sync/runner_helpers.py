@@ -31,7 +31,7 @@ from nbkp.preflight import (
     VolumeErrorKind,
     VolumeStatus,
 )
-from nbkp.sync import SyncResult, run_all_syncs
+from nbkp.sync import RunOptions, SyncResult, run_all_syncs
 
 FIXED_NOW = datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC)
 # The snapshot a real run names from FIXED_NOW on a remote destination.
@@ -46,13 +46,17 @@ def run_syncs(
     Pass ``rsync=`` and ``run_command=`` fakes (``tests.fakes``) for any sync
     that is attempted: the defaults are the real rsync and transport.
     """
+    callbacks = {k: v for k, v in kwargs.items() if k in _CALLBACKS}
+    options = {k: v for k, v in kwargs.items() if k not in _CALLBACKS}
     return run_all_syncs(
         config,
         sync_statuses,
-        clock=lambda: FIXED_NOW,
-        platform="linux",
-        **kwargs,
+        RunOptions(clock=lambda: FIXED_NOW, platform="linux", **options),
+        **callbacks,
     )
+
+
+_CALLBACKS = frozenset({"on_rsync_output", "on_sync_start", "on_sync_end"})
 
 
 def active_ssh_status() -> SshEndpointStatus:

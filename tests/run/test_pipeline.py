@@ -23,7 +23,7 @@ from nbkp.run.pipeline import (
     run_checked,
     run_failed,
 )
-from nbkp.sync import SyncFailureKind, SyncOutcome
+from nbkp.sync import RunOptions, SyncFailureKind, SyncOutcome
 from tests.clidisplay import (
     dst_ep_status,
     localhost_ssh_status,
@@ -94,10 +94,12 @@ def _run(
     return run_checked(
         config,
         preflight({}, statuses),
-        clock=lambda: datetime(2026, 3, 6, tzinfo=UTC),
-        platform="linux",
-        strictness=strictness,
-        rsync=rsync,
+        RunOptions(
+            clock=lambda: datetime(2026, 3, 6, tzinfo=UTC),
+            platform="linux",
+            strictness=strictness,
+            rsync=rsync,
+        ),
     )
 
 

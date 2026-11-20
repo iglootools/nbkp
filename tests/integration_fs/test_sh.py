@@ -24,7 +24,7 @@ from nbkp.fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, VOLUME_SENTINEL
 from nbkp.policy import Strictness
 from nbkp.run.pipeline import check_and_run
 from nbkp.sh import ScriptOptions, generate_script
-from nbkp.sync import SyncFailureKind
+from nbkp.sync import RunOptions, SyncFailureKind
 from nbkp.sync.testkit.seed import (
     SEED_EXCLUDE_FILTERS,
     create_seed_sentinels,
@@ -329,7 +329,9 @@ class TestGeneratedScriptExecution:
         config = self._with_step_1_disabled(tmp_path)
 
         result = _run_script(config, tmp_path)
-        pipeline = check_and_run(config, clock=lambda: _NOW, platform=sys.platform)
+        pipeline = check_and_run(
+            config, RunOptions(clock=lambda: _NOW, platform=sys.platform)
+        )
 
         assert "SKIPPED step-1: disabled" in result.stderr
         assert "CANCELLED step-2: upstream sync is disabled" in result.stderr
@@ -350,9 +352,11 @@ class TestGeneratedScriptExecution:
         result = _run_script(config, tmp_path, "--strictness", "ignore-none")
         pipeline = check_and_run(
             config,
-            clock=lambda: _NOW,
-            platform=sys.platform,
-            strictness=Strictness.IGNORE_NONE,
+            RunOptions(
+                clock=lambda: _NOW,
+                platform=sys.platform,
+                strictness=Strictness.IGNORE_NONE,
+            ),
         )
 
         assert result.returncode == 0, result.stderr
