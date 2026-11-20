@@ -168,7 +168,7 @@ The `keyring` library provides a cross-platform abstraction over OS-native secre
 - **Interactive setup** — `keyring set nbkp <passphrase-id>` provides a simple one-time setup that non-technical users can follow.
 - **Session integration** — On desktop Linux, the keyring is typically unlocked at login and stays available for the session.
 
-The `keyring` package is an optional dependency (`pip install nbkp[keyring]`) to avoid pulling in D-Bus/SecretStorage libraries on headless servers where `env` or `command` providers are more appropriate.
+The `keyring` package is an optional dependency (`uv tool install 'nbkp[keyring]'`) to avoid pulling in D-Bus/SecretStorage libraries on headless servers where `env` or `command` providers are more appropriate.
 
 #### Why prefetch every passphrase
 
