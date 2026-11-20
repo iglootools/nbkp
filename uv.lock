@@ -527,7 +527,6 @@ name = "nbkp"
 source = { editable = "." }
 dependencies = [
     { name = "fabric" },
-    { name = "invoke" },
     { name = "jinja2" },
     { name = "mermaid-ascii-diagrams" },
     { name = "paramiko" },
@@ -563,7 +562,6 @@ dev = [
 requires-dist = [
     { name = "docker", marker = "extra == 'docker'", specifier = ">=7.2.0,<8.0" },
     { name = "fabric", specifier = ">=3.0,<4.0" },
-    { name = "invoke", specifier = ">=2.2,<3.0" },
     { name = "jinja2", specifier = ">=3.0,<4.0" },
     { name = "keyring", marker = "extra == 'keyring'", specifier = ">=25.0,<26.0" },
     { name = "mermaid-ascii-diagrams", specifier = ">=0.1.1,<0.2" },

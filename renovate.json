@@ -43,13 +43,6 @@
                 "ghcr.io/astral-sh/uv"
             ],
             "enabled": false
-        },
-        {
-            "description": "fabric caps invoke below 3 (`invoke<3.0,>=2.0` since fabric 3.2.3): invoke 3 is unsupported by the latest fabric, and resolving it only works by falling back to fabric 3.2.2, which predates the cap. Retire this rule once a fabric release allows invoke 3.",
-            "matchPackageNames": [
-                "invoke"
-            ],
-            "allowedVersions": "<3"
         }
     ],
     "dependencyDashboard": true
