@@ -7,7 +7,7 @@ Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/Q
 Run automated tests and checks (no external dependencies):
 ```bash
 # mise tasks
-mise run check              # Run all checks: format-check + lint + lint-shell + type-check + lock-check + lock-check-uv + clidocs-check + configdocs-check + depgraph-check + boundaries-check + dead-code-check
+mise run check              # Run all checks: format-check + lint + lint-shell + type-check + lock-check + lock-check-uv + toc-check + clidocs-check + configdocs-check + depgraph-check + boundaries-check + dead-code-check
 mise run check-all          # Run all checks: regular checks + all tests
 
 mise run test-all           # All tests
@@ -33,6 +33,9 @@ mise run lock-check-uv      # check uv.lock is consistent with pyproject.toml
 mise run install            # sync .venv with uv.lock (rarely needed by hand — see below)
 mise run reinstall          # delete .venv and sync from scratch
 
+mise run reference-doc      # regenerate every generated reference: clidocs + configdocs + depgraph
+mise run toc                # regenerate the tables of contents in the Markdown docs
+mise run toc-check          # check the tables of contents are up to date
 mise run clidocs            # regenerate CLI reference in docs/cli-reference.md
 mise run clidocs-check      # check CLI reference is up to date
 mise run configdocs         # regenerate config reference tables in docs/config-reference.md
