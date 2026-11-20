@@ -1,6 +1,7 @@
 """Docker helpers for the developer test CLI seed command."""
 
 import functools
+import os
 import socket
 import subprocess
 import time
@@ -95,20 +96,24 @@ def check_docker() -> None:
 def generate_ssh_keypair(
     seed_dir: Path,
 ) -> tuple[Path, Path]:
+    """The key logs into a privileged container with the host's /dev, and
+    the seed dir may be a predictable path under /tmp, so the key is never
+    readable by other users, not even until a chmod."""
     ssh_dir = seed_dir / "ssh"
-    ssh_dir.mkdir()
+    ssh_dir.mkdir(mode=0o700)
     private_key_path = ssh_dir / "id_ed25519"
     public_key_path = ssh_dir / "id_ed25519.pub"
 
     key = Ed25519PrivateKey.generate()
-    private_key_path.write_bytes(
-        key.private_bytes(
-            serialization.Encoding.PEM,
-            serialization.PrivateFormat.OpenSSH,
-            serialization.NoEncryption(),
+    fd = os.open(private_key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(
+            key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.OpenSSH,
+                serialization.NoEncryption(),
+            )
         )
-    )
-    private_key_path.chmod(0o600)
     pub_bytes = key.public_key().public_bytes(
         serialization.Encoding.OpenSSH,
         serialization.PublicFormat.OpenSSH,

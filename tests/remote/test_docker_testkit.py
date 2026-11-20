@@ -1,3 +1,4 @@
+import stat
 from pathlib import Path
 from unittest.mock import MagicMock, patch  # noqa: TID251 -- (a) the Docker SDK client
 
@@ -7,6 +8,7 @@ import pytest
 from nbkp.remote.testkit.constants import NETWORK_NAME
 from nbkp.remote.testkit.docker import (
     create_docker_network,
+    generate_ssh_keypair,
     start_bastion_container,
     start_storage_container,
 )
@@ -75,3 +77,11 @@ class TestNetworkRecreation:
         ):
             assert create_docker_network() == NETWORK_NAME
         client.networks.get.return_value.remove.assert_called_once()
+
+
+class TestSshKeypair:
+    def test_private_key_is_readable_by_its_owner_only(self, tmp_path: Path) -> None:
+        private_key, public_key = generate_ssh_keypair(tmp_path)
+        assert stat.S_IMODE(private_key.parent.stat().st_mode) == 0o700
+        assert stat.S_IMODE(private_key.stat().st_mode) == 0o600
+        assert public_key.read_text().startswith("ssh-ed25519 ")
