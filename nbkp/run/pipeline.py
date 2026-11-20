@@ -32,7 +32,6 @@ from ..sync.rsync import ProgressMode, run_rsync
 
 __all__ = [
     "PipelineResult",
-    "Strictness",
     "SyncCallbacks",
     "check_and_run",
     "fatal_sync_errors",
