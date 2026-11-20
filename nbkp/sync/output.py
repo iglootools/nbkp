@@ -192,6 +192,10 @@ def _outcome_text(outcome: SyncOutcome) -> Text:
             return Text("FAILED", style="red")
 
 
+# The last lines: rsync prints its error at the end, after any progress lines.
+_FAILED_OUTPUT_LINES = 5
+
+
 def _result_details(
     r: SyncResult,
     config: Config,
@@ -211,7 +215,11 @@ def _result_details(
         ),
         *([f"Pruned: {len(r.pruned_paths)} snapshot(s)"] if r.pruned_paths else []),
         *(f"Warning: {w.message}" for w in r.warnings),
-        *(r.output.strip().split("\n")[:5] if r.output and not r.success else []),
+        *(
+            r.output.strip().split("\n")[-_FAILED_OUTPUT_LINES:]
+            if r.output and not r.success
+            else []
+        ),
     ]
 
 

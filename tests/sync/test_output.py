@@ -292,6 +292,30 @@ class TestRunResultsMarkupSafety:
         assert "/mnt/x[1]" in self._render_with_markup([result])
 
 
+class TestRunResultsFailedOutput:
+    def test_shows_the_last_lines_where_rsyncs_error_is(self) -> None:
+        progress = [f"file-{i}.txt" for i in range(20)]
+        error = "rsync error: some files could not be transferred (code 23)"
+        result = SyncResult.failed(
+            "s",
+            False,
+            SyncFailureKind.RSYNC,
+            "rsync exited with code 23",
+            rsync_exit_code=23,
+            output="\n".join([*progress, error]) + "\n",
+        )
+
+        text = _render_sections(
+            build_human_results_sections(
+                [result], dry_run=False, config=Config(), resolved_endpoints={}
+            )
+        )
+
+        assert "(code 23)" in text
+        assert "file-0.txt" not in text
+        assert "file-19.txt" in text
+
+
 class TestRunResultsWarnings:
     def test_warnings_are_listed(self) -> None:
         result = SyncResult.failed(
