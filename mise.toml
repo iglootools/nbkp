@@ -90,10 +90,6 @@ run = "uv run --no-sync iglootools shell lint"
 description = "Check that mise.lock is up to date with mise.toml"
 run = "uv run --no-sync iglootools mise lock-check"
 
-[tasks.publish]
-description = "Publish to PyPI (requires authentication)"
-run = "uv publish"
-
 [tasks.install]
 description = "Install dependencies"
 # Delegates to the [deps.uv] provider rather than calling `uv sync` directly, so there is
