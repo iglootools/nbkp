@@ -104,7 +104,7 @@ class SyncStatus(BaseModel):
         src_endpoint: SyncEndpoint,
         src_ep_status: SourceEndpointStatus,
         dst_ep_status: DestinationEndpointStatus,
-        all_syncs: dict[str, SyncConfig],
+        selected_syncs: dict[str, SyncConfig],
         dry_run: bool,
     ) -> SyncStatus:
         dst_diag = dst_ep_status.diagnostics
@@ -117,7 +117,7 @@ class SyncStatus(BaseModel):
                 [
                     *_host_errors(src_ep_status, dst_ep_status),
                     *_sync_errors(
-                        sync, src_endpoint, src_ep_status, all_syncs, dry_run
+                        sync, src_endpoint, src_ep_status, selected_syncs, dry_run
                     ),
                     *(
                         [SyncErrorKind.SOURCE_ENDPOINT_INACTIVE]
@@ -162,7 +162,7 @@ def _sync_errors(
     sync: SyncConfig,
     src_endpoint: SyncEndpoint,
     src_ep_status: SourceEndpointStatus,
-    all_syncs: dict[str, SyncConfig],
+    selected_syncs: dict[str, SyncConfig],
     dry_run: bool,
 ) -> list[SyncErrorKind]:
     if not src_ep_status.active:
@@ -174,7 +174,7 @@ def _sync_errors(
         return []
     if diag.latest.raw_target != DEVNULL_TARGET:
         return []
-    if not _has_upstream_sync(sync, all_syncs):
+    if not _has_upstream_sync(sync, selected_syncs):
         return [SyncErrorKind.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM]
     elif dry_run:
         return [SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING]
@@ -184,9 +184,12 @@ def _sync_errors(
 
 def _has_upstream_sync(
     sync: SyncConfig,
-    all_syncs: dict[str, SyncConfig],
+    selected_syncs: dict[str, SyncConfig],
 ) -> bool:
+    # Only an upstream sync that is part of this run will replace the
+    # /dev/null marker before *sync* reads it; one left out by --sync never
+    # runs, and rsync would then fail on `latest/` with "Not a directory".
     return any(
         other.destination == sync.source and other.slug != sync.slug and other.enabled
-        for other in all_syncs.values()
+        for other in selected_syncs.values()
     )

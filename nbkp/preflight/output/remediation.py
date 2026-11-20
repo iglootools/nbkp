@@ -1085,9 +1085,10 @@ def format_sync_error_fix(
                     FIX,
                     "Source ",
                     f"{path}/{LATEST_LINK}",
-                    " points to /dev/null but there is no upstream sync that writes"
-                    " to this endpoint. Either run the upstream sync first or reset"
-                    " the symlink to point to a valid snapshot.",
+                    " points to /dev/null but no enabled upstream sync in this run"
+                    " writes to this endpoint. Either run the upstream sync first"
+                    " (or select it too with --sync) or reset the symlink to point"
+                    " to a valid snapshot.",
                 )
             ]
         case SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING:

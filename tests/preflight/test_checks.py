@@ -2173,12 +2173,9 @@ class TestCheckDevnullLatest:
         (dst / "backup").mkdir(exist_ok=True)
         (dst / "backup" / ".nbkp-dst").touch()
 
-    def test_source_devnull_accepted_with_upstream(
-        self,
-        tmp_path: Path,
-    ) -> None:
-        """Source latest → /dev/null is valid when an upstream
-        sync writes to this source endpoint."""
+    def _make_upstream_config(self, tmp_path: Path) -> Config:
+        """s1 reads endpoint ep-up-src, whose latest → /dev/null, and
+        upstream writes it."""
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         upstream_src = tmp_path / "upstream"
@@ -2191,24 +2188,11 @@ class TestCheckDevnullLatest:
         (dst / "backup" / "snapshots").mkdir()
         (dst / "backup" / "latest").symlink_to("/dev/null")
 
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = LocalVolume(slug="dst", path=str(dst))
-        upstream_vol = LocalVolume(slug="upstream", path=str(upstream_src))
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-up-src",
-            destination="ep-up-dst",
-        )
-        upstream = SyncConfig(
-            slug="upstream",
-            source="ep-up-usrc",
-            destination="ep-up-src",
-        )
-        config = Config(
+        return Config(
             volumes={
-                "src": src_vol,
-                "dst": dst_vol,
-                "upstream": upstream_vol,
+                "src": LocalVolume(slug="src", path=str(src)),
+                "dst": LocalVolume(slug="dst", path=str(dst)),
+                "upstream": LocalVolume(slug="upstream", path=str(upstream_src)),
             },
             sync_endpoints={
                 "ep-up-src": SyncEndpoint(
@@ -2228,9 +2212,24 @@ class TestCheckDevnullLatest:
                     volume="upstream",
                 ),
             },
-            syncs={"s1": sync, "upstream": upstream},
+            syncs={
+                "s1": SyncConfig(
+                    slug="s1", source="ep-up-src", destination="ep-up-dst"
+                ),
+                "upstream": SyncConfig(
+                    slug="upstream", source="ep-up-usrc", destination="ep-up-src"
+                ),
+            },
         )
-        status = _check(sync, config)
+
+    def test_source_devnull_accepted_with_upstream(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Source latest → /dev/null is valid when an upstream
+        sync writes to this source endpoint."""
+        config = self._make_upstream_config(tmp_path)
+        status = _check_all(config).sync_statuses["s1"]
         assert (
             SourceEndpointErrorKind.LATEST_SYMLINK_INVALID
             not in status.source_endpoint_status.errors
@@ -2239,6 +2238,17 @@ class TestCheckDevnullLatest:
             SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND
             not in status.source_endpoint_status.errors
         )
+        assert status.errors == []
+
+    def test_source_devnull_rejected_when_upstream_not_selected(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """An upstream sync left out by --sync never replaces the /dev/null
+        marker, so the downstream sync would read /dev/null."""
+        config = self._make_upstream_config(tmp_path)
+        status = _check_all(config, only_syncs=["s1"]).sync_statuses["s1"]
+        assert SyncErrorKind.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM in status.errors
 
     def test_source_devnull_inactive_in_dry_run_with_upstream(
         self,
@@ -2247,58 +2257,8 @@ class TestCheckDevnullLatest:
         """Source latest → /dev/null with upstream sync is marked
         inactive in dry-run mode because the upstream won't create
         a real snapshot."""
-        src = tmp_path / "src"
-        dst = tmp_path / "dst"
-        upstream_src = tmp_path / "upstream"
-        src.mkdir()
-        dst.mkdir()
-        upstream_src.mkdir()
-        self._setup_sentinels(src, dst)
-        (src / "data" / "snapshots").mkdir()
-        (src / "data" / "latest").symlink_to("/dev/null")
-        (dst / "backup" / "snapshots").mkdir()
-        (dst / "backup" / "latest").symlink_to("/dev/null")
-
-        src_vol = LocalVolume(slug="src", path=str(src))
-        dst_vol = LocalVolume(slug="dst", path=str(dst))
-        upstream_vol = LocalVolume(slug="upstream", path=str(upstream_src))
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-up-src",
-            destination="ep-up-dst",
-        )
-        upstream = SyncConfig(
-            slug="upstream",
-            source="ep-up-usrc",
-            destination="ep-up-src",
-        )
-        config = Config(
-            volumes={
-                "src": src_vol,
-                "dst": dst_vol,
-                "upstream": upstream_vol,
-            },
-            sync_endpoints={
-                "ep-up-src": SyncEndpoint(
-                    slug="ep-up-src",
-                    volume="src",
-                    subdir="data",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-                "ep-up-dst": SyncEndpoint(
-                    slug="ep-up-dst",
-                    volume="dst",
-                    subdir="backup",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-                "ep-up-usrc": SyncEndpoint(
-                    slug="ep-up-usrc",
-                    volume="upstream",
-                ),
-            },
-            syncs={"s1": sync, "upstream": upstream},
-        )
-        status = _check(sync, config, dry_run=True)
+        config = self._make_upstream_config(tmp_path)
+        status = _check_all(config, dry_run=True).sync_statuses["s1"]
         assert SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING in status.errors
         assert not status.active
 
