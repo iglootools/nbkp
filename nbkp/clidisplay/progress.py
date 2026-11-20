@@ -55,11 +55,13 @@ class StepProgressBar:
         label: str,
         severity: Severity,
         detail: str | None = None,
+        warning: str | None = None,
     ) -> None:
         """Call after each step completes.
 
         *label* is the result line printed above the bar
-        (e.g. ``"check nas-server"``).
+        (e.g. ``"check nas-server"``), followed by *detail* in parentheses
+        and *warning* in yellow (what a failed step leaves behind).
 
         The line is assembled as a :class:`~rich.text.Text` rather than a
         markup string because *detail* carries external text — an exception
@@ -74,6 +76,7 @@ class StepProgressBar:
                     (severity_symbol(severity), severity_style(severity)),
                     f" {label}",
                     *([f" ({detail})"] if detail else []),
+                    *([(f" warning: {warning}", "yellow")] if warning else []),
                 )
             )
             self._progress.advance(self._task_id)

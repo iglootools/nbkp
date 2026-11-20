@@ -16,11 +16,12 @@ def _run(
     capsys: pytest.CaptureFixture[str],
     severity: Severity,
     detail: str | None,
+    warning: str | None = None,
 ) -> str:
     """Run one start/end cycle and return what was printed."""
     bar = StepProgressBar(1)
-    bar.on_start("mount my-vol")
-    bar.on_end("mount my-vol", severity, detail)
+    bar.on_start("Mounting my-vol...")
+    bar.on_end("mount my-vol", severity, detail, warning)
     bar.stop()
     return capsys.readouterr().out
 
@@ -38,3 +39,7 @@ class TestStepProgressBarResultLine:
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         assert "(" not in _run(capsys, Severity.OK, None)
+
+    def test_warning_brackets_survive(self, capsys: pytest.CaptureFixture[str]) -> None:
+        line = _run(capsys, Severity.ERROR, "lock failed", "still held [see lsblk]")
+        assert "✗ mount my-vol (lock failed) warning: still held [see lsblk]" in line
