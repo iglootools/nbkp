@@ -20,6 +20,7 @@ from .protocol import (
     Volume,
     join_subdir,
     resolve_endpoint_path,
+    sync_predecessors,
 )
 
 __all__ = [
@@ -47,4 +48,5 @@ __all__ = [
     "join_subdir",
     "load_config",
     "resolve_endpoint_path",
+    "sync_predecessors",
 ]

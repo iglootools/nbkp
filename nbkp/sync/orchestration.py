@@ -8,8 +8,8 @@ itself to the sync's snapshot mode (:mod:`.modes`).
 from collections.abc import Callable
 from datetime import datetime
 
-from ..config import Config
-from ..ordering.graph import sort_syncs, sync_predecessors
+from ..config import Config, sync_predecessors
+from ..ordering.graph import sort_syncs
 from ..policy import Strictness
 from ..preflight import SyncErrorKind, SyncStatus, format_problems
 from ..remote.dispatch import VolumeCommandRunner, run_on_volume

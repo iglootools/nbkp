@@ -2,7 +2,7 @@ from .base import ConfigModel, Slug
 from .config import Config, CredentialProvider
 from .errors import ConfigValidationErrorKind
 from .ssh_endpoint import SshConnectionOptions, SshEndpoint
-from .sync import RsyncOptions, SyncConfig
+from .sync import RsyncOptions, SyncConfig, sync_predecessors
 from .sync_endpoint import (
     BtrfsSnapshotConfig,
     HardLinkSnapshotConfig,
@@ -42,4 +42,5 @@ __all__ = [
     "Volume",
     "join_subdir",
     "resolve_endpoint_path",
+    "sync_predecessors",
 ]

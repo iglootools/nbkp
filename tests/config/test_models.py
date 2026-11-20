@@ -15,6 +15,7 @@ from nbkp.config import (
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
+    sync_predecessors,
 )
 
 
@@ -288,3 +289,28 @@ class TestSlugValidation:
     def test_valid_max_length(self) -> None:
         vol = LocalVolume(slug="a" * 50, path="/mnt")
         assert len(vol.slug) == 50
+
+
+def _sync_between(slug: str, source: str, destination: str) -> SyncConfig:
+    return SyncConfig(slug=slug, source=source, destination=destination)
+
+
+class TestSyncPredecessors:
+    def test_no_dependencies(self) -> None:
+        syncs = {
+            "a": _sync_between("a", "ep-v1", "ep-v2"),
+            "b": _sync_between("b", "ep-v3", "ep-v4"),
+        }
+        preds = sync_predecessors(syncs)
+        assert preds == {"a": set(), "b": set()}
+
+    def test_chain_dependency(self) -> None:
+        syncs = {
+            "a": _sync_between("a", "ep-v0", "ep-v1"),
+            "b": _sync_between("b", "ep-v1", "ep-v2"),
+            "c": _sync_between("c", "ep-v2", "ep-v3"),
+        }
+        preds = sync_predecessors(syncs)
+        assert preds["a"] == set()
+        assert preds["b"] == {"a"}
+        assert preds["c"] == {"b"}

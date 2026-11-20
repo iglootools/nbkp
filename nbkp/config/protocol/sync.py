@@ -125,3 +125,21 @@ class SyncConfig(ConfigModel):
             case _:
                 # Let pydantic report the type mismatch (e.g. null, a number).
                 return v
+
+
+def sync_predecessors(
+    syncs: dict[str, SyncConfig],
+) -> dict[str, set[str]]:
+    """Direct upstream syncs for each sync slug.
+
+    A sync B depends on sync A when A's destination endpoint
+    slug matches B's source endpoint slug.
+    """
+    return {
+        sync_slug: {
+            writer
+            for writer, upstream in syncs.items()
+            if upstream.destination == sync.source and writer != sync_slug
+        }
+        for sync_slug, sync in syncs.items()
+    }

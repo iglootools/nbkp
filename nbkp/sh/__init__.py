@@ -14,8 +14,8 @@ from pathlib import Path
 
 lazy from jinja2 import Environment, Template
 
-from ..config import Config, LocalVolume, RemoteVolume
-from ..ordering.graph import sort_syncs, sync_predecessors
+from ..config import Config, LocalVolume, RemoteVolume, sync_predecessors
+from ..ordering.graph import sort_syncs
 from ..remote.endpoints import ResolvedEndpoints
 from .preflight import build_preflight_block
 from .quoting import SCRIPT_DIR, comment_out, comment_text, has_shell_var

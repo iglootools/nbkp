@@ -27,7 +27,6 @@ class ConfigErrorKind(StrEnum):
     INVALID_YAML = "invalid-yaml"
     NOT_A_MAPPING = "not-a-mapping"
     VALIDATION = "validation"
-    CYCLIC_DEPENDENCY = "cyclic-dependency"
 
 
 class ConfigError(Exception):

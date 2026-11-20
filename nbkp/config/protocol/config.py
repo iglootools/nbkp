@@ -9,7 +9,7 @@ from pydantic import Field, field_validator, model_validator
 from .base import ConfigModel
 from .errors import ConfigValidationErrorKind, config_error
 from .ssh_endpoint import SshEndpoint
-from .sync import SyncConfig
+from .sync import SyncConfig, sync_predecessors
 from .sync_endpoint import SyncEndpoint
 from .volume import RemoteVolume, Volume
 
@@ -365,16 +365,8 @@ class Config(ConfigModel):
     def _cyclic_dependency_errors(self) -> Iterator[ValueError]:
         # Checked here, not only when the syncs are ordered, so that a cycle
         # is a config error reported before anything is mounted or synced.
-        upstreams = {
-            slug: {
-                writer
-                for writer, upstream in self.syncs.items()
-                if upstream.destination == sync.source and writer != slug
-            }
-            for slug, sync in self.syncs.items()
-        }
         try:
-            TopologicalSorter(upstreams).prepare()
+            TopologicalSorter(sync_predecessors(self.syncs)).prepare()
         except CycleError as e:
             yield config_error(
                 ConfigValidationErrorKind.CYCLIC_DEPENDENCY,
