@@ -103,7 +103,7 @@ Tests run under [pytest-xdist](https://pytest-xdist.readthedocs.io/), with per-s
 
 | Suite | mise task | Workers | Why |
 |---|---|---|---|
-| Unit | `test-unit` | `-n auto` | Fully isolated (`tmp_path`, `monkeypatch`); no external state. |
+| Unit | `test-unit` | `-n auto` | Fully isolated (`tmp_path`, injected fakes); no external state. |
 | Filesystem integration | `test-integration-fs` | `-n auto` | Each test isolates real-rsync work under a unique `tmp_path`. |
 | Docker integration | `test-integration-docker` | `-n auto` | One privileged container per worker; testkit isolates shared kernel resources — see below. |
 | Local btrfs (privileged) | `test-integration-docker-btrfs` | serial | Single privileged container; real btrfs ops share one loopback mount. |
