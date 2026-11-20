@@ -447,7 +447,7 @@ SSH arguments are constructed dynamically per endpoint. Common options:
 | `-o ServerAliveInterval=X` | Keepalive interval |
 | `-o StrictHostKeyChecking=no` | Disable host key verification (when configured) |
 | `-o UserKnownHostsFile=X` | Custom known hosts file (double-quoted when the path holds whitespace, which OpenSSH would otherwise split into several files) |
-| `-o LogLevel=ERROR` | Suppress SSH warnings |
+| `-o LogLevel=ERROR` | Suppress SSH warnings, only when host key verification is fully disabled (`strict-host-key-checking: false` with `known-hosts-file: /dev/null`) |
 | `-o ForwardAgent=yes` | Forward SSH agent |
 | `-p PORT` | Custom SSH port |
 | `-i KEY_FILE` | SSH identity file |

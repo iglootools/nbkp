@@ -1,3 +1,4 @@
+import os
 import re
 import shlex
 from functools import reduce
@@ -41,11 +42,14 @@ def _ssh_o_options(opts: SshConnectionOptions) -> list[str]:
                 if opts.known_hosts_file is not None
                 else None
             ),
-            # Suppress "Permanently added ... to the list of known hosts"
-            # warnings when host-key verification is fully disabled.
+            # Suppress the "Permanently added ... to the list of known hosts"
+            # warning ssh would print on every connection when host-key
+            # verification is fully disabled. With a real file it is printed
+            # once per new host, and other warnings stay worth seeing.
             (
                 "LogLevel=ERROR"
-                if not opts.strict_host_key_checking and opts.known_hosts_file
+                if not opts.strict_host_key_checking
+                and opts.known_hosts_file == os.devnull
                 else None
             ),
             "ForwardAgent=yes" if opts.forward_agent else None,

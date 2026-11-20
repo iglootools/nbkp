@@ -70,6 +70,26 @@ class TestBuildSshBaseArgs:
             "host.example.com",
         ]
 
+    def test_disabled_checking_with_known_hosts_file_keeps_warnings(self) -> None:
+        server = SshEndpoint(
+            slug="host-server",
+            host="host.example.com",
+            connection_options=SshConnectionOptions(
+                strict_host_key_checking=False,
+                known_hosts_file="/etc/nbkp/known_hosts",
+            ),
+        )
+        args = build_ssh_base_args(server)
+        assert args == [
+            "ssh",
+            *_DEFAULT_O_OPTIONS,
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "UserKnownHostsFile=/etc/nbkp/known_hosts",
+            "host.example.com",
+        ]
+
     def test_known_hosts_file_with_whitespace_is_quoted(self) -> None:
         server = SshEndpoint(
             slug="host-server",
