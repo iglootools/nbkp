@@ -3,7 +3,7 @@ import io
 import locale
 import os
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from enum import StrEnum
 
 from ..config import (
@@ -206,23 +206,31 @@ def run_local_process(
 _STREAM_CHUNK_SIZE = 64 * 1024
 
 
+# The output was shown as it streamed, so only its end is kept for the result:
+# with --progress over millions of files the whole of it runs to hundreds of MB
+# per sync, all held until the run ends. rsync's error, when it fails, comes
+# last, so the tail is the part a failure report needs.
+_STREAM_TAIL_SIZE = 64 * 1024
+
+
 def _run_streaming(
     cmd: list[str],
     on_output: Callable[[str], None],
     chunk_size: int = _STREAM_CHUNK_SIZE,
+    tail_size: int = _STREAM_TAIL_SIZE,
 ) -> subprocess.CompletedProcess[str]:
     """Run *cmd*, forwarding its merged stdout/stderr to *on_output*, read at
-    most *chunk_size* bytes at a time."""
+    most *chunk_size* bytes at a time.  The result's ``stdout`` holds only the
+    last *tail_size* characters of it."""
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     assert proc.stdout is not None
     fd = proc.stdout.fileno()
-    decoder = _text_decoder()
     raw_chunks = iter(lambda: os.read(fd, chunk_size), b"")
+    tail = _OutputTail(tail_size)
     try:
-        output_chunks = [
-            *(_forward(decoder.decode(raw), on_output) for raw in raw_chunks),
-            _forward(decoder.decode(b"", final=True), on_output),
-        ]
+        for chunk in _decoded(raw_chunks):
+            _forward(chunk, on_output)
+            tail.append(chunk)
     except BaseException:
         # Forwarding failed (a closed pipe on our stdout, Ctrl-C): stop rsync
         # before the caller reacts, or it would go on writing into a snapshot
@@ -232,9 +240,38 @@ def _run_streaming(
         raise
     finally:
         proc.stdout.close()
-    return subprocess.CompletedProcess(
-        cmd, proc.wait(), stdout="".join(output_chunks), stderr=""
-    )
+    return subprocess.CompletedProcess(cmd, proc.wait(), stdout=tail.text(), stderr="")
+
+
+def _decoded(raw_chunks: Iterator[bytes]) -> Iterator[str]:
+    decoder = _text_decoder()
+    yield from (decoder.decode(raw) for raw in raw_chunks)
+    yield decoder.decode(b"", final=True)
+
+
+class _OutputTail:
+    """The last *size* characters appended.
+
+    Mutable so that appending stays cheap: rebuilding a bounded string on
+    every chunk would copy up to *size* characters per (often tiny) progress
+    update.  Chunks are joined only once they hold twice *size*, which keeps
+    the cost linear in the output and the memory under ``2 * size``.
+    """
+
+    def __init__(self, size: int) -> None:
+        self._size = size
+        self._chunks: list[str] = []
+        self._length = 0
+
+    def append(self, chunk: str) -> None:
+        self._chunks.append(chunk)
+        self._length += len(chunk)
+        if self._length > 2 * self._size:
+            self._chunks = [self.text()]
+            self._length = len(self._chunks[0])
+
+    def text(self) -> str:
+        return "".join(self._chunks)[-self._size :]
 
 
 def _text_decoder() -> io.IncrementalNewlineDecoder:
@@ -250,10 +287,9 @@ def _text_decoder() -> io.IncrementalNewlineDecoder:
     )
 
 
-def _forward(chunk: str, on_output: Callable[[str], None]) -> str:
+def _forward(chunk: str, on_output: Callable[[str], None]) -> None:
     if chunk:
         on_output(chunk)
-    return chunk
 
 
 def run_rsync(

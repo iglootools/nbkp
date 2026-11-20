@@ -1463,6 +1463,20 @@ class TestRunStreaming:
         # The child builds the payload: Linux caps one argument at 128 KiB.
         cmd = [sys.executable, "-c", f"import sys; sys.stdout.write('x' * {size})"]
         chunks: list[str] = []
-        result = _run_streaming(cmd, chunks.append)
-        assert result.stdout == "x" * size
+        _run_streaming(cmd, chunks.append)
+        assert "".join(chunks) == "x" * size
         assert len(chunks) < 1_000
+
+    def test_keeps_only_the_tail_of_the_output(self) -> None:
+        """The output was already forwarded; only its end, where rsync's error
+        lands, is kept for the result."""
+        code = "import sys\nfor i in range(10_000): sys.stdout.write(f'{i}\\n')\n"
+        chunks: list[str] = []
+
+        result = _run_streaming(
+            [sys.executable, "-c", code], chunks.append, chunk_size=7, tail_size=20
+        )
+
+        forwarded = "".join(chunks)
+        assert forwarded == "".join(f"{i}\n" for i in range(10_000))
+        assert result.stdout == forwarded[-20:]
