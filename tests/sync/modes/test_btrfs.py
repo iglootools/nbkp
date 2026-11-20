@@ -74,6 +74,21 @@ class TestBtrfsSync:
             ["ln", "-sfn", f"snapshots/{NEW_SNAPSHOT_NAME}", "/backup/latest"]
         ]
 
+    def test_rsync_failure_takes_no_snapshot(self) -> None:
+        """A half-written staging/ must never be snapshotted nor become latest."""
+        config = _btrfs_config()
+        _, sync_statuses = active_statuses(config)
+        rsync = FakeRsync([completed(23, stderr="rsync error: some files vanished")])
+        runner = FakeCommandRunner()
+
+        results = run_syncs(config, sync_statuses, rsync=rsync, run_command=runner)
+
+        assert results[0].outcome == SyncOutcome.FAILED
+        assert results[0].failure == SyncFailureKind.RSYNC
+        assert results[0].snapshot_path is None
+        assert runner.commands_starting_with("btrfs", "subvolume", "snapshot") == []
+        assert runner.commands_starting_with("ln") == []
+
     def test_snapshot_failure(self) -> None:
         config = _btrfs_config()
         _, sync_statuses = active_statuses(config)
