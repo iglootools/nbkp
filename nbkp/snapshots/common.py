@@ -1,4 +1,5 @@
 import os
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
@@ -23,6 +24,7 @@ from ..remote.endpoints import ResolvedEndpoints
 from .errors import (
     SnapshotOp,
     SnapshotOperationError,
+    SnapshotPruneError,
     local_fs_op,
     run_checked,
     run_snapshot_command,
@@ -337,7 +339,9 @@ def prune_oldest_snapshots(
     *delete_snapshot*.
 
     Never prunes the snapshot that the latest symlink points to.
-    Returns list of deleted (or would-be-deleted) paths.
+    Returns list of deleted (or would-be-deleted) paths.  A failed deletion
+    raises :class:`~nbkp.snapshots.errors.SnapshotPruneError`, which names
+    the snapshots deleted before it.
     """
     re = resolved_endpoints or {}
     snapshots = list_snapshots(sync, config, re, run=run)
@@ -357,7 +361,18 @@ def prune_oldest_snapshots(
 
         if not dry_run:
             dst_vol = destination_volume(sync, config)
-            for path in to_delete:
-                delete_snapshot(path, dst_vol, re, run=run)
+            _delete_in_order(
+                to_delete, lambda path: delete_snapshot(path, dst_vol, re, run=run)
+            )
 
         return to_delete
+
+
+def _delete_in_order(paths: list[str], delete: Callable[[str], None]) -> None:
+    """Delete *paths* in order; a failure raises :class:`SnapshotPruneError`
+    with the paths already deleted."""
+    for i, path in enumerate(paths):
+        try:
+            delete(path)
+        except SnapshotOperationError as e:
+            raise SnapshotPruneError(e, tuple(paths[:i])) from e

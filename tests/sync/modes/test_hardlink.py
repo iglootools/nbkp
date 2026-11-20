@@ -205,7 +205,35 @@ class TestHardLinkSync:
 
         assert results[0].outcome == SyncOutcome.SUCCESS
         assert results[0].snapshot_path == _NEW_SNAPSHOT
-        assert results[0].pruned_paths is None
+        assert results[0].pruned_paths == ()
+        assert [w.kind for w in results[0].warnings] == [SyncWarningKind.PRUNE]
+
+    def test_prune_failing_partway_reports_what_it_deleted(self) -> None:
+        config = _make_hard_link_config(max_snapshots=1)
+        _, statuses = active_statuses(config)
+        oldest = "2026-03-04T10:00:00.000Z"
+        runner = (
+            FakeCommandRunner()
+            .on(
+                "readlink",
+                returns=[
+                    completed(0, "/dev/null\n"),  # orphan cleanup, before rsync
+                    completed(0, f"snapshots/{NEW_SNAPSHOT_NAME}\n"),  # prune
+                ],
+            )
+            .on(
+                "ls",
+                returns=completed(
+                    0, f"{oldest}\n{_PREVIOUS.name}\n{NEW_SNAPSHOT_NAME}\n"
+                ),
+            )
+            .on("rm", returns=[completed(0), _DENIED])
+        )
+
+        results = run_syncs(config, statuses, rsync=FakeRsync(), run_command=runner)
+
+        assert results[0].outcome == SyncOutcome.SUCCESS
+        assert results[0].pruned_paths == (f"/dst/snapshots/{oldest}",)
         assert [w.kind for w in results[0].warnings] == [SyncWarningKind.PRUNE]
 
     def test_no_prune_keeps_snapshots_beyond_max(self) -> None:

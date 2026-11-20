@@ -204,6 +204,28 @@ class TestPrune:
             message="Permission denied",
         )
 
+    def test_delete_failing_partway_reports_what_was_deleted(self) -> None:
+        """With 4 snapshots and a limit of 2, the second deletion fails: the
+        first is gone, and the remaining 3 are counted afresh."""
+        older = "2026-02-01T10:00:00.000Z"
+        run = _nas_with((older, OLD, MID, NEW), (OLD, MID, NEW)).on(
+            "btrfs",
+            "subvolume",
+            "delete",
+            returns=[completed(0), completed(1, stderr="Permission denied")],
+        )
+
+        [result] = _prune(run)
+
+        assert result.deleted == (f"{SNAPSHOTS}/{older}",)
+        assert result.kept == 3
+        assert result.error == SnapshotResultError(
+            kind=SnapshotErrorKind.OPERATION_FAILED,
+            operation=SnapshotOp.DELETE,
+            path=f"{SNAPSHOTS}/{OLD}",
+            message="Permission denied",
+        )
+
     def test_infra_errors_fail_by_default(self) -> None:
         run = FakeCommandRunner()
 
