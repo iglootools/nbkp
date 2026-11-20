@@ -317,7 +317,7 @@ $ nbkp preflight check [OPTIONS]
 
 * `-c, --config <file>`: Path to config file
 * `-o, --output <human|json>`: Output format  [default: human]
-* `-S, --strictness <ignore-none|ignore-inactive|ignore-all>`: How to handle preflight errors: ignore-none (all errors fatal), ignore-inactive (skip expected-inactive, default), ignore-all (ignore all errors)  [default: ignore-inactive]
+* `-S, --strictness <ignore-none|ignore-inactive|ignore-all>`: Which sync problems make the command exit non-zero: ignore-none (any), ignore-inactive (all but expected-inactive, default), ignore-all (none). Problems on SSH endpoints or volumes no sync uses are shown but never fatal  [default: ignore-inactive]
 * `-l, --location <str>`: Prefer endpoints at these locations
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
@@ -339,7 +339,7 @@ $ nbkp preflight troubleshoot [OPTIONS]
 
 * `-c, --config <file>`: Path to config file
 * `-o, --output <human|json>`: Output format  [default: human]
-* `-S, --strictness <ignore-none|ignore-inactive|ignore-all>`: Which problems make the command exit non-zero: ignore-none (any), ignore-inactive (all but expected-inactive, default), ignore-all (none)  [default: ignore-inactive]
+* `-S, --strictness <ignore-none|ignore-inactive|ignore-all>`: Which sync problems make the command exit non-zero: ignore-none (any), ignore-inactive (all but expected-inactive, default), ignore-all (none). Problems on SSH endpoints or volumes no sync uses are shown but never fatal  [default: ignore-inactive]
 * `-l, --location <str>`: Prefer endpoints at these locations
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints

@@ -33,10 +33,10 @@ def check_cmd(
             "--strictness",
             "-S",
             help=(
-                "How to handle preflight errors:"
-                " ignore-none (all errors fatal),"
-                " ignore-inactive (skip expected-inactive, default),"
-                " ignore-all (ignore all errors)"
+                "Which sync problems make the command exit non-zero:"
+                " ignore-none (any), ignore-inactive (all but expected-inactive,"
+                " default), ignore-all (none). Problems on SSH endpoints or"
+                " volumes no sync uses are shown but never fatal"
             ),
         ),
     ] = Strictness.IGNORE_INACTIVE,
