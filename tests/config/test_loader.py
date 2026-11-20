@@ -1557,6 +1557,41 @@ class TestNoSilentCoercion:
         assert _error_types(excinfo.value) == {ConfigValidationErrorKind.INVALID_FILTER}
 
 
+class TestUnknownKeys:
+    """A misspelt key is rejected where it sits, not dropped for the defaults."""
+
+    @staticmethod
+    def _raw_config(sample_config: Config) -> dict:
+        return sample_config.model_dump(by_alias=True, mode="json")
+
+    def test_unknown_top_level_key_rejected(
+        self, sample_config: Config, tmp_path: Path
+    ) -> None:
+        raw = {**self._raw_config(sample_config), "credential-providr": "command"}
+        p = tmp_path / "typo.yaml"
+        p.write_text(yaml.safe_dump(raw))
+        errors = _validation_errors(p)
+        assert [(e["type"], e["loc"]) for e in errors] == [
+            ("extra_forbidden", ("credential-providr",))
+        ]
+
+    def test_unknown_nested_key_rejected(
+        self, sample_config: Config, tmp_path: Path
+    ) -> None:
+        raw = self._raw_config(sample_config)
+        slug, endpoint = next(iter(raw["sync-endpoints"].items()))
+        endpoint["hard-link-snapshots"] = {"enabled": True, "max-snapshot": 5}
+        p = tmp_path / "typo.yaml"
+        p.write_text(yaml.safe_dump(raw))
+        errors = _validation_errors(p)
+        assert [(e["type"], e["loc"]) for e in errors] == [
+            (
+                "extra_forbidden",
+                ("sync-endpoints", slug, "hard-link-snapshots", "max-snapshot"),
+            )
+        ]
+
+
 class TestFrozenModels:
     def test_config_is_immutable(self, sample_config: Config) -> None:
         with pytest.raises(ValidationError) as excinfo:

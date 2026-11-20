@@ -12,6 +12,7 @@ class ConfigModel(BaseModel):
         alias_generator=_to_kebab,
         populate_by_name=True,
         frozen=True,
+        extra="forbid",
     )
 
 

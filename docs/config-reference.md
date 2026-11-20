@@ -270,6 +270,7 @@ Filters are applied in order as `--filter=RULE` arguments. When `filter-file` is
 Checked when the config is loaded, before anything runs:
 
 - Slugs are lowercase alphanumeric with hyphens, at most 50 characters.
+- Every key must be one this page documents: an unknown key, such as a misspelt `max-snapshot` or `hard-link-snapshot`, is rejected (`extra_forbidden`) with its location, rather than ignored while its section falls back to the defaults.
 - Every slug reference (`ssh-endpoint`, `ssh-endpoints`, `proxy-jump(s)`, `extends`, `volume`, `source`, `destination`) must name an existing entry.
 - No circular `extends` or `proxy-jump` chains. Two hops sharing a bastion (e.g. `proxy-jumps: [b1, b2]` where `b1` itself jumps through `b2`) is not a cycle.
 - `proxy-jump` / `proxy-jumps` and `location` / `locations` are mutually exclusive.
