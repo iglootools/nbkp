@@ -1,7 +1,9 @@
+import subprocess
 import tempfile
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from enum import StrEnum
 from importlib.util import find_spec
 from pathlib import Path
 
@@ -20,6 +22,7 @@ from ..policy import Severity
 from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 from ..remote.resolution import resolve_all_endpoints
+from ..remote.testkit.errors import DockerError
 from ..sync.testkit.seed import (
     build_chain_config,
     build_local_chain_config,
@@ -32,7 +35,6 @@ from ..sync.testkit.seed import (
 lazy from ..remote.testkit.docker import (
     DOCKER_DIR,
     LUKS_PASSPHRASE,
-    DockerError,
     build_docker_image,
     check_docker,
     create_docker_network,
@@ -48,8 +50,40 @@ lazy from ..remote.testkit.docker import (
 _HAS_DOCKER = find_spec("docker") is not None
 
 
+class SeedErrorKind(StrEnum):
+    DOCKER_EXTRA_MISSING = "docker-extra-missing"
+    DOCKER_UNAVAILABLE = "docker-unavailable"
+    DOCKER_DIR_MISSING = "docker-dir-missing"
+    DOCKER_FAILED = "docker-failed"
+    SSH_NOT_READY = "ssh-not-ready"
+    REMOTE_COMMAND_FAILED = "remote-command-failed"
+    LUKS_UNAVAILABLE = "luks-unavailable"
+    MOUNT_FAILED = "mount-failed"
+    UMOUNT_FAILED = "umount-failed"
+
+
+# Raised before any container starts.
+_PREREQUISITE_KINDS = frozenset(
+    {
+        SeedErrorKind.DOCKER_EXTRA_MISSING,
+        SeedErrorKind.DOCKER_UNAVAILABLE,
+        SeedErrorKind.DOCKER_DIR_MISSING,
+    }
+)
+
+
 class SeedError(Exception):
-    """Its message is shown to the user as-is."""
+    """*detail* is the failing tool's message, or the missing path."""
+
+    def __init__(self, kind: SeedErrorKind, detail: str = "") -> None:
+        super().__init__(f"{kind}: {detail}" if detail else kind)
+        self.kind = kind
+        self.detail = detail
+
+    @property
+    def may_leave_containers(self) -> bool:
+        """Whether the demo containers may have started before the failure."""
+        return self.kind not in _PREREQUISITE_KINDS
 
 
 class SeedResult(BaseModel):
@@ -122,6 +156,9 @@ class _Steps:
         self.start(step)
         try:
             yield
+        except SeedError as e:
+            self.end(step, False, e.detail or None)
+            raise
         except Exception as e:
             self.end(step, False, str(e))
             raise
@@ -140,17 +177,13 @@ class _Containers:
 def _check_docker(has_docker: bool) -> None:
     """Fail before anything is created when the demo cannot use Docker."""
     if not has_docker:
-        raise SeedError(
-            "Docker support requires the 'docker' extra."
-            " Install it with: uv tool install 'nbkp[docker]'"
-            " (or use --no-docker)."
-        )
+        raise SeedError(SeedErrorKind.DOCKER_EXTRA_MISSING)
     try:
         check_docker()
     except DockerError as e:
-        raise SeedError(f"Docker is not available: {e.detail}") from e
+        raise SeedError(SeedErrorKind.DOCKER_UNAVAILABLE, e.detail) from e
     if not DOCKER_DIR.is_dir():
-        raise SeedError(f"Docker directory not found: {DOCKER_DIR}")
+        raise SeedError(SeedErrorKind.DOCKER_DIR_MISSING, str(DOCKER_DIR))
 
 
 def _seed_dir(base_dir: Path | None) -> Path:
@@ -207,6 +240,9 @@ def seed_demo(
     *on_step_start* and *on_step_end* receive each step of :func:`seed_steps`:
     its in-progress label (e.g. ``"Building Docker image..."``), then its
     result line. *has_docker* says whether the 'docker' extra is installed.
+
+    Every failure is a :class:`SeedError`; the containers it may have
+    started are left running (:attr:`SeedError.may_leave_containers`).
     """
     steps = _Steps(on_step_start, on_step_end)
     rsync_opts = (
@@ -216,7 +252,41 @@ def seed_demo(
     )
     if docker:
         _check_docker(has_docker)
-    base_dir = _seed_dir(base_dir)
+    try:
+        return _seed(
+            _seed_dir(base_dir),
+            docker=docker,
+            luks=luks,
+            big_file_size=big_file_size,
+            rsync_opts=rsync_opts,
+            credential_provider=credential_provider,
+            steps=steps,
+        )
+    except DockerError as e:
+        raise SeedError(SeedErrorKind.DOCKER_FAILED, e.detail) from e
+    except TimeoutError as e:
+        raise SeedError(SeedErrorKind.SSH_NOT_READY, str(e)) from e
+    except subprocess.CalledProcessError as e:
+        raise SeedError(
+            SeedErrorKind.REMOTE_COMMAND_FAILED, _called_process_detail(e)
+        ) from e
+
+
+def _called_process_detail(e: subprocess.CalledProcessError) -> str:
+    stderr = (e.stderr or "").strip()
+    return f"{e.cmd!r} exited {e.returncode}" + (f": {stderr}" if stderr else "")
+
+
+def _seed(
+    base_dir: Path,
+    *,
+    docker: bool,
+    luks: bool,
+    big_file_size: int,
+    rsync_opts: RsyncOptions,
+    credential_provider: CredentialProvider,
+    steps: _Steps,
+) -> SeedResult:
     containers = _start_containers(base_dir, luks, steps) if docker else None
     luks_uuid = (
         _read_luks_uuid(containers, steps) if containers is not None and luks else None
@@ -245,10 +315,7 @@ def _start_containers(base_dir: Path, luks: bool, steps: _Steps) -> _Containers:
     private_key, pub_key = generate_ssh_keypair(base_dir)
 
     with steps.run(_BUILD_IMAGE):
-        try:
-            build_docker_image()
-        except DockerError as e:
-            raise SeedError(f"Docker image build failed: {e.detail}") from e
+        build_docker_image()
 
     with steps.run(_CREATE_NETWORK):
         network_name = create_docker_network()
@@ -284,10 +351,7 @@ def _read_luks_uuid(containers: _Containers, steps: _Steps) -> str:
     with steps.run(_READ_LUKS):
         meta = read_luks_metadata(containers.storage)
         if not meta.available or meta.uuid is None:
-            raise SeedError(
-                "LUKS unavailable (dm-crypt kernel module missing?)."
-                " Use --no-luks to skip encrypted volume setup."
-            )
+            raise SeedError(SeedErrorKind.LUKS_UNAVAILABLE)
     return meta.uuid
 
 
@@ -354,15 +418,15 @@ def _encrypted_volume_mounted(
                 None,
             )
             if failed_mount is not None:
-                raise SeedError(f"Mount failed: {mount_failure_detail(failed_mount)}")
+                raise SeedError(
+                    SeedErrorKind.MOUNT_FAILED,
+                    mount_failure_detail(failed_mount) or "unknown error",
+                )
         yield
     finally:
         failed_umount = _umount_encrypted(config, resolved, steps, run=run)
     if failed_umount is not None:
-        raise SeedError(
-            f"Umount failed: {failed_umount}. The encrypted volume may still be"
-            " mounted; run nbkp disks umount on the seeded config."
-        )
+        raise SeedError(SeedErrorKind.UMOUNT_FAILED, failed_umount)
 
 
 def _umount_encrypted(

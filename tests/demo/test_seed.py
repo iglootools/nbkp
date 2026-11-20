@@ -10,9 +10,10 @@ from typer.testing import CliRunner
 from nbkp.config import Config, CredentialProvider, LocalVolume
 from nbkp.demo import seed as seed_module
 from nbkp.demo.cli import app
-from nbkp.demo.cli.seed_cmd import commands_script
+from nbkp.demo.cli.seed_cmd import commands_script, format_seed_error
 from nbkp.demo.seed import (
     SeedError,
+    SeedErrorKind,
     SeedResult,
     seed_demo,
     seed_plan,
@@ -53,8 +54,11 @@ class TestSteps:
 
 class TestDockerExtra:
     def test_missing_extra_is_a_clear_error(self, tmp_path: Path) -> None:
-        with pytest.raises(SeedError, match=r"nbkp\[docker\]"):
+        with pytest.raises(SeedError) as exc:
             seed_demo(tmp_path, docker=True, has_docker=False)
+        assert exc.value.kind == SeedErrorKind.DOCKER_EXTRA_MISSING
+        assert not exc.value.may_leave_containers
+        assert "nbkp[docker]" in format_seed_error(exc.value)
 
 
 _ENC = Config(volumes={"enc": encrypted_volume()})
@@ -91,9 +95,7 @@ class TestUmountFailure:
         ends: list[tuple[str, str]] = []
         run = _drive(unmount=completed(1, stderr="busy"))
         with (
-            pytest.raises(
-                SeedError, match=r"Umount failed: umount failed \(exit 1\): busy"
-            ),
+            pytest.raises(SeedError) as exc,
             seed_module._encrypted_volume_mounted(
                 _ENC,
                 {},
@@ -106,13 +108,15 @@ class TestUmountFailure:
             ),
         ):
             pass
+        assert exc.value.kind == SeedErrorKind.UMOUNT_FAILED
+        assert exc.value.detail == "umount failed (exit 1): busy"
         assert ends[-1] == ("umount encrypted volume", "error")
 
     def test_failed_mount_still_locks(self) -> None:
         """A mount that fails after unlocking must not leave LUKS unlocked."""
         run = _drive(mounts=False, mount=completed(1, stderr="no fs"))
         with (
-            pytest.raises(SeedError, match="Mount failed: .*no fs"),
+            pytest.raises(SeedError) as exc,
             seed_module._encrypted_volume_mounted(
                 _ENC,
                 {},
@@ -123,11 +127,39 @@ class TestUmountFailure:
             ),
         ):
             pass
+        assert exc.value.kind == SeedErrorKind.MOUNT_FAILED
+        assert "no fs" in exc.value.detail
         assert [c[1] for c in run.commands_starting_with("udisksctl")] == [
             "unlock",
             "mount",
             "lock",
         ]
+
+
+class TestStepFailure:
+    def test_a_raising_step_is_reported_failed(self) -> None:
+        ends: list[tuple[str, str, str | None]] = []
+        steps = seed_module._Steps(None, lambda *end: ends.append(end))
+        step = seed_steps(docker=True, luks=False)[0]
+        with pytest.raises(TimeoutError), steps.run(step):
+            raise TimeoutError("SSH not ready after 30s")
+        assert ends == [(step.done, "error", "SSH not ready after 30s")]
+
+
+class TestSeedErrorRendering:
+    @pytest.mark.parametrize(
+        "kind",
+        sorted(
+            set(SeedErrorKind)
+            - {SeedErrorKind.DOCKER_EXTRA_MISSING, SeedErrorKind.LUKS_UNAVAILABLE}
+        ),
+    )
+    def test_a_kind_with_a_detail_renders_it(self, kind: SeedErrorKind) -> None:
+        assert "DETAIL" in format_seed_error(SeedError(kind, "DETAIL"))
+
+    def test_a_failure_after_the_prerequisites_may_leave_containers(self) -> None:
+        assert SeedError(SeedErrorKind.SSH_NOT_READY, "x").may_leave_containers
+        assert not SeedError(SeedErrorKind.DOCKER_UNAVAILABLE, "x").may_leave_containers
 
 
 class TestCommandsScript:

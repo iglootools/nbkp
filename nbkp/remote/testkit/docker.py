@@ -1,10 +1,11 @@
 """Docker helpers for the developer test CLI seed command."""
 
+import functools
 import socket
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 
 import docker as dockerlib
@@ -25,6 +26,7 @@ from .constants import (  # noqa: F401
     REMOTE_UNENCRYPTED_PATH,
     STORAGE_CONTAINER_NAME,
 )
+from .errors import DockerError, DockerErrorKind
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"
 _IMAGE_TAG = "nbkp-demo-server:latest"
@@ -38,19 +40,17 @@ SSH_AUTHORIZED_KEYS_PATH = "/mnt/ssh-authorized-keys"
 _SSH_PORT_ON_LOOPBACK = {"22/tcp": ("127.0.0.1", 0)}
 
 
-class DockerErrorKind(StrEnum):
-    UNAVAILABLE = "unavailable"
-    IMAGE_BUILD_FAILED = "image-build-failed"
+def _as_docker_error[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
+    """Raise a Docker SDK failure of *fn* as a :class:`DockerError`."""
 
+    @functools.wraps(fn)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        try:
+            return fn(*args, **kwargs)
+        except docker_errors.DockerException as exc:
+            raise DockerError(DockerErrorKind.REQUEST_FAILED, str(exc)) from exc
 
-class DockerError(OSError):
-    """A Docker step of the demo or test harness failed; *detail* is the
-    Docker SDK's message."""
-
-    def __init__(self, kind: DockerErrorKind, detail: str) -> None:
-        super().__init__(f"{kind}: {detail}")
-        self.kind = kind
-        self.detail = detail
+    return wrapper
 
 
 @dataclass(frozen=True)
@@ -118,6 +118,7 @@ def generate_ssh_keypair(
     return private_key_path, public_key_path
 
 
+@_as_docker_error
 def create_docker_network() -> str:
     """Recreate the network, force-disconnecting containers left on the old one."""
     client = dockerlib.from_env()
@@ -136,6 +137,7 @@ def create_docker_network() -> str:
     return NETWORK_NAME
 
 
+@_as_docker_error
 def build_docker_image() -> None:
     client = dockerlib.from_env()
     try:
@@ -148,6 +150,7 @@ def build_docker_image() -> None:
         raise DockerError(DockerErrorKind.IMAGE_BUILD_FAILED, str(exc)) from exc
 
 
+@_as_docker_error
 def start_storage_container(
     pub_key: Path,
     network_name: str | None = None,
@@ -212,6 +215,7 @@ def start_storage_container(
     return int(port_info[0]["HostPort"])
 
 
+@_as_docker_error
 def start_bastion_container(
     pub_key: Path,
     network_name: str,

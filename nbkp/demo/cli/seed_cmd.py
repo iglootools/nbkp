@@ -18,7 +18,14 @@ from ...remote.testkit.constants import (
     NETWORK_NAME,
     STORAGE_CONTAINER_NAME,
 )
-from ..seed import SeedError, SeedResult, seed_demo, seed_plan, seed_steps
+from ..seed import (
+    SeedError,
+    SeedErrorKind,
+    SeedResult,
+    seed_demo,
+    seed_plan,
+    seed_steps,
+)
 from . import app, console as _console
 
 
@@ -127,10 +134,51 @@ def seed_cmd(
                 on_step_end=bar.on_end,
             )
         except SeedError as e:
-            _console.print(Text(str(e), style="red"), highlight=False)
+            _print_seed_error(e, docker)
             raise typer.Exit(1)
 
     _print_summary(result, docker, credential_provider)
+
+
+def format_seed_error(e: SeedError) -> str:
+    match e.kind:
+        case SeedErrorKind.DOCKER_EXTRA_MISSING:
+            return (
+                "Docker support requires the 'docker' extra."
+                " Install it with: uv tool install 'nbkp[docker]'"
+                " (or use --no-docker)."
+            )
+        case SeedErrorKind.DOCKER_UNAVAILABLE:
+            return f"Docker is not available: {e.detail}"
+        case SeedErrorKind.DOCKER_DIR_MISSING:
+            return f"Docker directory not found: {e.detail}"
+        case SeedErrorKind.DOCKER_FAILED:
+            return f"Docker failed: {e.detail}"
+        case SeedErrorKind.SSH_NOT_READY:
+            return f"A demo container did not start SSH: {e.detail}"
+        case SeedErrorKind.REMOTE_COMMAND_FAILED:
+            return f"A command in a demo container failed: {e.detail}"
+        case SeedErrorKind.LUKS_UNAVAILABLE:
+            return (
+                "LUKS unavailable (dm-crypt kernel module missing?)."
+                " Use --no-luks to skip encrypted volume setup."
+            )
+        case SeedErrorKind.MOUNT_FAILED:
+            return f"Mount failed: {e.detail}"
+        case SeedErrorKind.UMOUNT_FAILED:
+            return (
+                f"Umount failed: {e.detail}. The encrypted volume may still be"
+                " mounted; run nbkp disks umount on the seeded config."
+            )
+
+
+def _print_seed_error(e: SeedError, docker: bool) -> None:
+    _console.print(Text(format_seed_error(e), style="red"), highlight=False)
+    if docker and e.may_leave_containers:
+        _console.print(
+            Text("The demo containers may still be running. To remove them:")
+        )
+        _console.print(Text(_docker_teardown()), highlight=False)
 
 
 def _print_plan(steps: list[str]) -> None:
