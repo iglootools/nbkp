@@ -89,19 +89,11 @@ uv tool upgrade nbkp
 
 nbkp supports tab completion for Bash, Zsh, Fish, and PowerShell.
 
-Install completion for your current shell:
+Install completion for the shell you run it from, which nbkp detects (run it from each shell
+you want completion in):
 
 ```bash
 nbkp --install-completion
-```
-
-Or target a specific shell:
-
-```bash
-nbkp --install-completion bash
-nbkp --install-completion zsh
-nbkp --install-completion fish
-nbkp --install-completion powershell
 ```
 
 To preview the completion script without installing it:
