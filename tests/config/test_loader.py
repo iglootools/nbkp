@@ -132,6 +132,13 @@ class TestLoadConfig:
         assert excinfo.value.reason == ConfigErrorKind.INVALID_YAML
 
     @pytest.mark.skipif(os.geteuid() == 0, reason="root reads any file")
+    def test_non_utf8_file(self, tmp_path: Path) -> None:
+        p = tmp_path / "latin1.yaml"
+        p.write_bytes("# caf\u00e9\nvolumes: {}\n".encode("latin-1"))
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorKind.INVALID_YAML
+
     def test_unreadable_file(self, tmp_path: Path) -> None:
         p = tmp_path / "config.yaml"
         p.write_text("syncs: {}\n")

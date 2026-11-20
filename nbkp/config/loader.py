@@ -117,7 +117,7 @@ def load_config(
         config_path, environ, home=home, user_dir=user_dir, site_dir=site_dir
     )
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             raw = yaml.safe_load(f)
     except OSError as e:
         raise ConfigError(
@@ -127,6 +127,12 @@ def load_config(
     except yaml.YAMLError as e:
         raise ConfigError(
             f"Invalid YAML in {path}: {e}",
+            reason=ConfigErrorKind.INVALID_YAML,
+        ) from e
+    except UnicodeDecodeError as e:
+        raise ConfigError(
+            f"Invalid YAML in {path}: not UTF-8 (byte {e.object[e.start]:#04x}"
+            f" at offset {e.start})",
             reason=ConfigErrorKind.INVALID_YAML,
         ) from e
 
