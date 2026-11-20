@@ -2554,6 +2554,46 @@ class TestConnectionLostDuringPreflight:
         assert result.sync_statuses["remote"].is_expected_inactive()
         assert result.sync_statuses["local"].active
 
+    def test_during_destination_endpoint_observation(self, tmp_path: Path) -> None:
+        base = _nas_and_local_config(tmp_path)
+        config = Config(
+            ssh_endpoints=base.ssh_endpoints,
+            volumes=base.volumes,
+            sync_endpoints={
+                **{
+                    slug: ep
+                    for slug, ep in base.sync_endpoints.items()
+                    if slug != "ep-nas"
+                },
+                "ep-nas-dst": SyncEndpoint(
+                    slug="ep-nas-dst", volume="nas", subdir="backup"
+                ),
+            },
+            syncs={
+                "push": SyncConfig(
+                    slug="push", source="ep-b", destination="ep-nas-dst"
+                ),
+                "local": base.syncs["local"],
+            },
+        )
+        run = FakeCommandRunner().on(
+            "test",
+            "-f",
+            "/data/backup/.nbkp-dst",
+            returns=paramiko.SSHException("Error reading SSH protocol banner"),
+        )
+
+        result = _check_all(config, run, resolved_endpoints=_make_resolved(config))
+
+        assert result.volume_statuses["nas"].active
+        dst = result.destination_endpoint_statuses["ep-nas-dst"]
+        assert dst.errors == [DestinationEndpointErrorKind.VOLUME_INACTIVE]
+        assert dst.volume_status.ssh_endpoint_status.errors == [
+            SshEndpointErrorKind.UNREACHABLE
+        ]
+        assert result.sync_statuses["push"].is_expected_inactive()
+        assert result.sync_statuses["local"].active
+
     def test_local_errors_still_propagate(self, tmp_path: Path) -> None:
         config = _nas_and_local_config(tmp_path)
         run = FakeCommandRunner().on(
