@@ -247,11 +247,14 @@ The following functionality is covered by unit tests but intentionally excluded 
     gh api repos/iglootools/nbkp/dependency-graph/sbom -q '.sbom.name'
     # expect: com.github.iglootools/nbkp   (a 404 means the graph is off)
     ```
-- **Set the `ASCIINEMA_INSTALL_ID` Actions secret.** The `demo` workflow's upload steps use
-  it to publish the recording under the project's asciinema.org account (they are commented
-  out for now, uploads going through `mise run demo-upload-latest`; the workflow explains
-  why, and the secret stays set so they can be re-enabled). Run `asciinema auth` and open
-  the link it prints to tie the local install id to the account, then store it:
+- **Set the `ASCIINEMA_INSTALL_ID` Actions secret.** It ties uploads to the project's
+  asciinema.org account. No workflow uses it today: the `demo` workflow calls the shared
+  `reusable-demo.yml` from [iglootools/common](https://github.com/iglootools/common), which
+  records the demo and keeps the cast as an artifact but never publishes it, because
+  GitHub-hosted runners cannot reach asciinema.org. Uploads go through
+  `mise run demo-upload-latest` from a developer's machine instead. The secret stays set so
+  uploads from a workflow can be re-enabled. Run `asciinema auth` and open the link it prints
+  to tie the local install id to the account, then store it:
 
     ```bash
     gh secret set ASCIINEMA_INSTALL_ID -R iglootools/nbkp < ~/.local/state/asciinema/install-id
