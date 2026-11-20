@@ -1565,6 +1565,26 @@ class TestNoSilentCoercion:
             )
         assert _error_types(excinfo.value) == {ConfigValidationErrorKind.INVALID_FILTER}
 
+    @pytest.mark.parametrize(
+        "item",
+        [
+            {"include": "*.jpg", "exclude": "*"},
+            {"merge": "~/.rsync-filter", "exclude": "*"},
+            {"dir-merge": ".rsync-filter", "include": "*"},
+        ],
+    )
+    def test_filter_mapping_with_several_keys_rejected(
+        self, item: dict[str, str]
+    ) -> None:
+        with pytest.raises(ValidationError) as excinfo:
+            SyncConfig(
+                slug="s",
+                source="a",
+                destination="b",
+                filters=[item],  # type: ignore[list-item]
+            )
+        assert _error_types(excinfo.value) == {ConfigValidationErrorKind.INVALID_FILTER}
+
 
 class TestUnknownKeys:
     """A misspelt key is rejected where it sits, not dropped for the defaults."""

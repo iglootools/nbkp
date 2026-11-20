@@ -165,6 +165,8 @@ filters:
 
 **`dir-merge`** tells rsync to look for the named file in each directory as it walks the source tree. Rules from each file apply only to that directory and its subdirectories. The `exclude-self` option appends a `- <filename>` rule to prevent the filter files from being transferred (equivalent to rsync's `-FF` flag). Dir-merge paths are not tilde-expanded (they are relative filenames resolved by rsync per-directory).
 
+Each structured rule is a mapping with exactly one key: `{include: "*.jpg", exclude: "*"}` is rejected rather than read as one of its rules. Write two list items instead.
+
 Filters are applied in order as `--filter=RULE` arguments. When `filter-file` is also set, inline filters are applied first."""
 
 

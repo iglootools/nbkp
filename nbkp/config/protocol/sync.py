@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import Field, field_validator
+from pydantic_core import PydanticCustomError
 
 from .base import ConfigModel, Slug
 from .errors import ConfigValidationErrorKind, config_error
@@ -41,6 +42,11 @@ def _filter_rules(item: Any) -> list[str]:
     match item:
         case str():
             return [item]
+        case dict() if len(item) != 1:
+            # Mapping patterns ignore extra keys, so without this guard
+            # ``{include: a, exclude: b}`` would keep the include and drop
+            # the exclude.
+            raise _invalid_filter(item)
         case {"include": str() as pattern}:
             return [f"+ {pattern}"]
         case {"exclude": str() as pattern}:
@@ -56,12 +62,16 @@ def _filter_rules(item: Any) -> list[str]:
                 *([f"- {opts['path']}"] if opts.get("exclude-self") else []),
             ]
         case _:
-            raise config_error(
-                ConfigValidationErrorKind.INVALID_FILTER,
-                "Filter must be a string or a dict with"
-                " 'include'/'exclude'/'merge'/'dir-merge'"
-                f" key, got: {item!r}",
-            )
+            raise _invalid_filter(item)
+
+
+def _invalid_filter(item: Any) -> PydanticCustomError:
+    return config_error(
+        ConfigValidationErrorKind.INVALID_FILTER,
+        "Filter must be a string or a dict with exactly one"
+        " 'include'/'exclude'/'merge'/'dir-merge'"
+        f" key, got: {item!r}",
+    )
 
 
 class SyncConfig(ConfigModel):
