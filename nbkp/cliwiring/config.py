@@ -1,19 +1,25 @@
 """Config loading and endpoint resolution shared by every command."""
 
 from pathlib import Path
+from typing import NoReturn
 
 import typer
 from rich.console import Console
 
 from ..clidisplay import OutputFormat, echo_json
-from ..config import Config, ConfigError
+from ..config import Config, ConfigError, ConfigErrorKind
 from ..config.output import config_error_json, format_config_error
 from ..remote.endpoints import (
     EndpointFilter,
     NetworkType,
     ResolvedEndpoints,
 )
-from ..remote.resolution import resolve_all_endpoints
+from ..remote.resolution import (
+    SshConfigError,
+    SshConfigErrorKind,
+    default_ssh_config_path,
+    resolve_all_endpoints,
+)
 from .runtime import Runtime
 
 
@@ -32,12 +38,16 @@ def load_config_or_exit(
     try:
         return runtime.load_config(config_path)
     except ConfigError as e:
-        match output_format:
-            case OutputFormat.JSON:
-                echo_json(config_error_json(e))
-            case OutputFormat.HUMAN:
-                Console(stderr=True).print(format_config_error(e))
-        raise typer.Exit(2)
+        _exit_on_config_error(e, output_format)
+
+
+def _exit_on_config_error(e: ConfigError, output_format: OutputFormat) -> NoReturn:
+    match output_format:
+        case OutputFormat.JSON:
+            echo_json(config_error_json(e))
+        case OutputFormat.HUMAN:
+            Console(stderr=True).print(format_config_error(e))
+    raise typer.Exit(2)
 
 
 def require_known_syncs(
@@ -138,6 +148,21 @@ def resolve_endpoints(
     network: NetworkType | None,
     output_format: OutputFormat = OutputFormat.HUMAN,
 ) -> ResolvedEndpoints:
+    """Exit with code 2, like a config error, when the user's SSH config
+    gives a host a value nbkp cannot use."""
     _validate_locations(cfg, locations, exclude_locations, output_format)
     ef = build_endpoint_filter(locations, exclude_locations, network)
-    return resolve_all_endpoints(cfg, ef)
+    try:
+        return resolve_all_endpoints(cfg, ef)
+    except SshConfigError as e:
+        _exit_on_config_error(_ssh_config_error(e), output_format)
+
+
+def _ssh_config_error(e: SshConfigError) -> ConfigError:
+    match e.kind:
+        case SshConfigErrorKind.INVALID_PORT:
+            detail = f"Port {e.value!r} for host '{e.host}' is not a number"
+    return ConfigError(
+        f"Invalid SSH config {default_ssh_config_path()}: {detail}",
+        ConfigErrorKind.INVALID_SSH_CONFIG,
+    )

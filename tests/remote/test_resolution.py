@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import paramiko
+import pytest
 
 from nbkp.config import (
     Config,
@@ -12,6 +13,8 @@ from nbkp.config import (
 from nbkp.remote.endpoints import EndpointFilter, NetworkType
 from nbkp.remote.resolution import (
     AddressLookup,
+    SshConfigError,
+    SshConfigErrorKind,
     dns_lookup,
     enrich_from_ssh_config,
     is_private_host,
@@ -153,6 +156,23 @@ class TestEnrichFromSshConfig:
     def test_explicit_key_takes_precedence(self) -> None:
         ep = SshEndpoint(slug="nas", host="mynas", key="/my/key")
         assert enrich_from_ssh_config(ep, _NAS_SSH_CONFIG).key == "/my/key"
+
+    def test_non_numeric_port_is_an_ssh_config_error(self) -> None:
+        ep = SshEndpoint(slug="nas", host="mynas")
+        ssh_config = _ssh_config("Host mynas\n  Port ssh\n")
+
+        with pytest.raises(SshConfigError) as excinfo:
+            enrich_from_ssh_config(ep, ssh_config)
+        assert (excinfo.value.kind, excinfo.value.host, excinfo.value.value) == (
+            SshConfigErrorKind.INVALID_PORT,
+            "mynas",
+            "ssh",
+        )
+
+    def test_non_numeric_port_is_ignored_when_port_is_explicit(self) -> None:
+        ep = SshEndpoint(slug="nas", host="mynas", port=2222)
+        ssh_config = _ssh_config("Host mynas\n  Port ssh\n")
+        assert enrich_from_ssh_config(ep, ssh_config).port == 2222
 
     def test_no_ssh_config_returns_unchanged(self) -> None:
         ep = SshEndpoint(slug="nas", host="mynas")

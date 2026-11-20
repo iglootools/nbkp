@@ -3,6 +3,7 @@
 import ipaddress
 import socket
 from collections.abc import Callable, Collection
+from enum import StrEnum
 from functools import cache, partial, reduce
 from pathlib import Path
 
@@ -22,6 +23,20 @@ from .endpoints import (
 
 #: Resolves a hostname to its IP addresses, or ``None`` when it does not resolve.
 type AddressLookup = Callable[[str], set[str] | None]
+
+
+class SshConfigErrorKind(StrEnum):
+    INVALID_PORT = "invalid-port"
+
+
+class SshConfigError(ValueError):
+    """A value the user's SSH config gives a host that nbkp cannot use."""
+
+    def __init__(self, kind: SshConfigErrorKind, host: str, value: str) -> None:
+        super().__init__(f"{kind}: Host {host}: {value!r}")
+        self.kind = kind
+        self.host = host
+        self.value = value
 
 
 def default_ssh_config_path() -> Path:
@@ -84,16 +99,30 @@ def is_private_host(
         return all(ipaddress.ip_address(a).is_private for a in addrs)
 
 
+def _parse_port(host: str, value: str) -> int:
+    try:
+        return int(value)
+    except ValueError as e:
+        raise SshConfigError(SshConfigErrorKind.INVALID_PORT, host, value) from e
+
+
 def _ssh_config_updates(
     endpoint: SshEndpoint,
     result: paramiko.SSHConfigDict,
 ) -> dict[str, object]:
-    """Only fields NOT explicitly set on the endpoint are candidates."""
+    """Only fields NOT explicitly set on the endpoint are candidates.
+
+    Raises ``SshConfigError`` for a ``Port`` that is not a number.
+    """
     fields_set = endpoint.model_fields_set
     return {
         k: v
         for k, v in {
-            "port": int(result["port"]) if "port" in result else None,
+            "port": (
+                _parse_port(endpoint.host, result["port"])
+                if "port" in result and "port" not in fields_set
+                else None
+            ),
             "user": result.get("user"),
             "key": (
                 str(Path(result["identityfile"][0]).expanduser())
