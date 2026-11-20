@@ -13,6 +13,7 @@ from .models import (
     MountFailureKind,
     UmountFailureKind,
 )
+from .plan import VolumePlan
 from .severity import device_fail_severity, luks_fail_severity, mounted_fail_severity
 from .status import MountStatusData, VolumeStatus, VolumeStatusKind
 
@@ -286,4 +287,22 @@ def umount_result_json(result: UmountResult) -> dict[str, object]:
         }
         if result.failure_reason is not None and result.failure is not None
         else {}
+    )
+
+
+def format_plan_line(plan: VolumePlan, name: str) -> Text:
+    """One human line: ``would unlock, mount <name>``, ``nothing to do``, or
+    ``cannot plan`` when the state could not be probed."""
+    severity = Severity.ERROR if plan.probe_failed else Severity.OK
+    verbs = ", ".join(action.value for action in plan.actions)
+    return Text.assemble(
+        (severity_symbol(severity), severity_style(severity)),
+        (
+            f" cannot plan {name}"
+            if plan.probe_failed
+            else f" would {verbs} {name}"
+            if plan.actions
+            else f" nothing to do for {name}"
+        ),
+        *([(f" ({plan.detail})", "dim")] if plan.detail else []),
     )

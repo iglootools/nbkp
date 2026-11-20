@@ -19,12 +19,12 @@ from nbkp.cli import app
 from nbkp.config import Config, CredentialProvider
 from nbkp.config.testkit import write_config
 from nbkp.disks import MountResult, UmountResult, any_failed, refused_by_polkit
-from nbkp.disks.cli.helpers.plan_output import plan_line
 from nbkp.disks.models import (
     LifecycleFailure,
     LifecycleStep,
     MountFailureKind,
 )
+from nbkp.disks.output import format_plan_line
 from nbkp.disks.plan import MountAction, VolumePlan, plan_incomplete
 from tests.clidisplay import runner
 from tests.cliwiring.test_mount import UUID, encrypted_volume
@@ -122,7 +122,7 @@ class TestOutcomeDecisions:
 def _line(plan: VolumePlan) -> str:
     console = Console(width=200, color_system=None)
     with console.capture() as capture:
-        console.print(plan_line(plan, plan.volume_slug))
+        console.print(format_plan_line(plan, plan.volume_slug))
     return capture.get().strip()
 
 

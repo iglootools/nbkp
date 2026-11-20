@@ -1,28 +1,34 @@
+"""``disks`` command wiring shared by ``disks mount``, ``umount`` and
+``status``: the status table, the dry-run plan and the ``--name`` check."""
+
 from collections.abc import Mapping, Sequence
 
 import typer
 from rich.console import Console
+from rich.text import Text
 
-from ....clidisplay import OutputFormat, StepProgressBar, echo_json
-from ....cliwiring.config import require_known
-from ....config import Config, Volume
-from ....policy import Severity
-from ....remote.dispatch import VolumeCommandRunner
-from ....remote.endpoints import ResolvedEndpoints
-from ...lifecycle import UmountResult, unknown_volume_names
-from ...models import display_name
-from ...output import (
+from ..clidisplay import OutputFormat, StepProgressBar, echo_json
+from ..config import Config, Volume
+from ..disks.lifecycle import UmountResult, unknown_volume_names
+from ..disks.models import display_name
+from ..disks.output import (
     build_volume_status_table,
+    format_plan_line,
     umount_result_json,
     volume_status_detail,
     volume_status_json,
 )
-from ...status import (
+from ..disks.plan import VolumePlan, plan_incomplete, plan_json
+from ..disks.status import (
     ProbeEndFn,
     VolumeStatus,
     managed_volumes,
     probe_volume_statuses,
 )
+from ..policy import Severity
+from ..remote.dispatch import VolumeCommandRunner
+from ..remote.endpoints import ResolvedEndpoints
+from .config import require_known
 
 
 def show_volume_statuses(
@@ -128,3 +134,28 @@ def require_known_names(
     require_known(
         "volume", unknown_volume_names(cfg, names), cfg.volumes, output_format
     )
+
+
+def show_plan(
+    plans: list[VolumePlan],
+    display_names: dict[str, str],
+    output_format: OutputFormat,
+) -> None:
+    """Print a dry-run plan as lines (human) or ``{"dry_run": …}`` (JSON).
+
+    Exits 1 when the plan is incomplete (:func:`plan_incomplete`).
+    """
+    match output_format:
+        case OutputFormat.JSON:
+            echo_json({"dry_run": True, "volumes": plan_json(plans)})
+        case OutputFormat.HUMAN:
+            console = Console()
+            console.print(Text("Dry run — no udisksctl changes made.", style="bold"))
+            for plan in plans:
+                console.print(
+                    format_plan_line(
+                        plan, display_names.get(plan.volume_slug, plan.volume_slug)
+                    )
+                )
+    if plan_incomplete(plans):
+        raise typer.Exit(1)

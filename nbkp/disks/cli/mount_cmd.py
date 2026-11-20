@@ -8,6 +8,7 @@ from rich.text import Text
 from ...clidisplay import OutputFormat
 from ...clidisplay.invocation import Invocation, format_troubleshoot_hint
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
+from ...cliwiring.disks import require_known_names, show_plan, show_volume_statuses
 from ...cliwiring.mount import lifecycle_session
 from ...cliwiring.mount_progress import mount_display_names
 from ...cliwiring.options import (
@@ -27,8 +28,6 @@ from ..output import mount_result_json
 from ..plan import plan_lifecycle
 from ..status import mount_result_statuses, unprobed_volume_statuses
 from . import app
-from .helpers import require_known_names, show_volume_statuses
-from .helpers.plan_output import show_plan
 from .options import NAME_OPTION
 
 

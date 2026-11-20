@@ -15,11 +15,11 @@ from ...cliwiring.options import (
     OUTPUT_OPTION,
     UMOUNT_OPTION,
 )
+from ...cliwiring.preflight import check_and_display
 from ...cliwiring.runtime import runtime_of
 from ...policy import Strictness
 from ..status.result import PreflightResult
 from . import app
-from .helpers import check_and_display
 
 
 @app.command("check")
