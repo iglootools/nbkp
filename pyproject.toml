@@ -210,17 +210,14 @@ ignore_imports = [
 [[tool.importlinter.contracts]]
 name = "CLI sub-apps do not import each other (shared wiring lives in nbkp.cliwiring)"
 type = "independence"
-modules = [
-  "nbkp.config.cli",
-  "nbkp.credentials.cli",
-  "nbkp.demo.cli",
-  "nbkp.disks.cli",
-  "nbkp.ordering.cli",
-  "nbkp.preflight.cli",
-  "nbkp.run.cli",
-  "nbkp.sh.cli",
-  "nbkp.snapshots.cli",
-]
+# An expression rather than a list, so a new package's cli/ is covered too.
+modules = ["nbkp.*.cli"]
+
+[[tool.importlinter.contracts]]
+name = "Only the entry point imports the root CLI app"
+type = "protected"
+protected_modules = ["nbkp.cli"]
+allowed_importers = []
 
 [[tool.importlinter.contracts]]
 name = "Command wiring sits below the CLI sub-apps"
