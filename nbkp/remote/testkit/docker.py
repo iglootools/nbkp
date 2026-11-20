@@ -276,13 +276,15 @@ def wait_for_ssh(
     raise TimeoutError(f"SSH not ready after {timeout}s")
 
 
-def ssh_exec(
+def ssh_run(
     server: SshEndpoint,
-    command: str,
+    command: list[str],
     *,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    result = run_remote_command(server, ["sh", "-c", command])
+    """Run *command* on *server*, each element one argument: a path or a
+    value in it is never parsed by the remote shell."""
+    result = run_remote_command(server, command)
     if check and result.returncode != 0:
         raise subprocess.CalledProcessError(
             result.returncode,
@@ -293,13 +295,24 @@ def ssh_exec(
     return result
 
 
+def ssh_exec(
+    server: SshEndpoint,
+    command: str,
+    *,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    """Run a fixed shell script on *server*; :func:`ssh_run` takes anything
+    built from a path or a value."""
+    return ssh_run(server, ["sh", "-c", command], check=check)
+
+
 def create_sentinels(
     server: SshEndpoint,
     path: str,
     sentinels: list[str],
 ) -> None:
     for sentinel in sentinels:
-        result = ssh_exec(server, f"touch {path}/{sentinel}", check=False)
+        result = ssh_run(server, ["touch", f"{path}/{sentinel}"], check=False)
         if result.returncode != 0:
             raise RuntimeError(f"Failed to create sentinel {sentinel}: {result.stderr}")
 

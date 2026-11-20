@@ -1,4 +1,3 @@
-import shlex
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -58,16 +57,22 @@ def _write_zeroed_file(path: Path, size_bytes: int) -> None:
             remaining -= len(chunk)
 
 
+def _unless_exists(path: str, *command: str) -> list[str]:
+    """Run *command* unless *path* exists; the paths stay arguments, never
+    shell text."""
+    return ["sh", "-c", 'test -e "$1" || { shift; exec "$@"; }', "sh", path, *command]
+
+
 def create_seed_sentinels(
     config: Config,
-    remote_exec: Callable[[RemoteVolume, str], None] | None = None,
+    remote_exec: Callable[[RemoteVolume, list[str]], None] | None = None,
 ) -> None:
     """Create volume, source, and destination sentinels.
 
     For local volumes, creates directories and sentinel files directly.  For
-    remote volumes, uses *remote_exec(volume, command)* to run shell commands
-    on the remote host — the volume is passed so callers can route each
-    command over that volume's own SSH endpoint (e.g. through a bastion), which
+    remote volumes, uses *remote_exec(volume, argv)* to run each command on
+    the remote host — the volume is passed so callers can route each command
+    over that volume's own SSH endpoint (e.g. through a bastion), which
     matters when the volume is mounted by udisks over that same connection.
     """
     for vol in config.volumes.values():
@@ -79,8 +84,9 @@ def create_seed_sentinels(
                 (vol_path / VOLUME_SENTINEL).touch()
             case RemoteVolume():
                 if remote_exec is not None:
-                    remote_exec(vol, f"mkdir -p {vol.path}")
-                    remote_exec(vol, f"touch {vol.path}/{VOLUME_SENTINEL}")
+                    assert vol.path is not None
+                    remote_exec(vol, ["mkdir", "-p", vol.path])
+                    remote_exec(vol, ["touch", f"{vol.path}/{VOLUME_SENTINEL}"])
 
     seen_src: set[str] = set()
     seen_dst: set[str] = set()
@@ -103,7 +109,7 @@ def _create_endpoint_sentinels(
     vol: LocalVolume | RemoteVolume,
     ep: SyncEndpoint,
     sentinel_name: str,
-    remote_exec: Callable[[RemoteVolume, str], None] | None,
+    remote_exec: Callable[[RemoteVolume, list[str]], None] | None,
 ) -> None:
     """Create sentinels and snapshot infrastructure for an endpoint."""
     btrfs = ep.btrfs_snapshots
@@ -139,33 +145,29 @@ def _create_endpoint_sentinels(
                     latest.symlink_to(DEVNULL_TARGET)
         case RemoteVolume():
             if remote_exec is not None:
+                assert vol.path is not None
                 rp = vol.path
                 if ep.subdir:
                     rp = f"{rp}/{ep.subdir}"
-                remote_exec(vol, f"mkdir -p {rp}")
-                remote_exec(vol, f"touch {rp}/{sentinel_name}")
+                latest = f"{rp}/{LATEST_LINK}"
+                link_latest = _unless_exists(
+                    latest, "ln", "-sfn", DEVNULL_TARGET, latest
+                )
+                remote_exec(vol, ["mkdir", "-p", rp])
+                remote_exec(vol, ["touch", f"{rp}/{sentinel_name}"])
                 if hard_link.enabled:
-                    remote_exec(vol, f"mkdir -p {rp}/{SNAPSHOTS_DIR}")
-                    remote_exec(
-                        vol,
-                        f"test -e {rp}/{LATEST_LINK}"
-                        f" || ln -sfn {DEVNULL_TARGET}"
-                        f" {rp}/{LATEST_LINK}",
-                    )
+                    remote_exec(vol, ["mkdir", "-p", f"{rp}/{SNAPSHOTS_DIR}"])
+                    remote_exec(vol, link_latest)
                 elif btrfs.enabled:
+                    staging = f"{rp}/{STAGING_DIR}"
                     remote_exec(
                         vol,
-                        f"test -e {rp}/{STAGING_DIR}"
-                        " || btrfs subvolume create"
-                        f" {rp}/{STAGING_DIR}",
+                        _unless_exists(
+                            staging, "btrfs", "subvolume", "create", staging
+                        ),
                     )
-                    remote_exec(vol, f"mkdir -p {rp}/{SNAPSHOTS_DIR}")
-                    remote_exec(
-                        vol,
-                        f"test -e {rp}/{LATEST_LINK}"
-                        f" || ln -sfn {DEVNULL_TARGET}"
-                        f" {rp}/{LATEST_LINK}",
-                    )
+                    remote_exec(vol, ["mkdir", "-p", f"{rp}/{SNAPSHOTS_DIR}"])
+                    remote_exec(vol, link_latest)
 
 
 def seed_volume(
@@ -173,7 +175,7 @@ def seed_volume(
     subdir: str | None = None,
     *,
     big_file_size_bytes: int = 0,
-    remote_exec: Callable[[str], None] | None = None,
+    remote_exec: Callable[[list[str]], None] | None = None,
 ) -> None:
     match vol:
         case LocalVolume():
@@ -193,17 +195,22 @@ def seed_volume(
         case RemoteVolume():
             if remote_exec is None:
                 return
+            assert vol.path is not None
             rp = vol.path
             if subdir:
                 rp = f"{rp}/{subdir}"
-            remote_exec(f"mkdir -p {rp}")
+            remote_exec(["mkdir", "-p", rp])
             for name, content in _SAMPLE_FILES:
                 if "/" in name:
                     parent = name.rsplit("/", 1)[0]
-                    remote_exec(f"mkdir -p {rp}/{parent}")
-                remote_exec(f"printf %s {shlex.quote(content)} > {rp}/{name}")
+                    remote_exec(["mkdir", "-p", f"{rp}/{parent}"])
+                remote_exec(
+                    ["sh", "-c", 'printf %s "$1" > "$2"', "sh", content, f"{rp}/{name}"]
+                )
             if big_file_size_bytes:
-                remote_exec(f"truncate -s {big_file_size_bytes} {rp}/large-file.bin")
+                remote_exec(
+                    ["truncate", "-s", str(big_file_size_bytes), f"{rp}/large-file.bin"]
+                )
 
 
 def build_local_chain_config(

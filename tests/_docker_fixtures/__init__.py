@@ -56,6 +56,7 @@ from nbkp.remote.testkit.docker import (  # noqa: F401
     generate_ssh_keypair,
     read_luks_metadata,
     ssh_exec,
+    ssh_run,
     wait_for_ssh,
 )
 
@@ -96,7 +97,7 @@ def assert_sentinels_after_sync(
         sentinel_dir = vol_path
 
     def _remote_exists(path: str) -> bool:
-        r = ssh_exec(ssh_endpoint, f"test -f {path}", check=False)
+        r = ssh_run(ssh_endpoint, ["test", "-f", path], check=False)
         return r.returncode == 0
 
     def _check_exists(path: str) -> bool:

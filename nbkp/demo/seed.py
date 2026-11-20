@@ -42,7 +42,7 @@ lazy from ..remote.testkit.docker import (
     create_test_ssh_endpoint,
     generate_ssh_keypair,
     read_luks_metadata,
-    ssh_exec,
+    ssh_run,
     start_bastion_container,
     start_storage_container,
     wait_for_ssh,
@@ -472,9 +472,9 @@ def _seed_data(
 ) -> None:
     storage = containers.storage if containers is not None else None
 
-    def _run_remote(_vol: object, cmd: str) -> None:
+    def _run_remote(_vol: object, command: list[str]) -> None:
         assert storage is not None
-        ssh_exec(storage, cmd)
+        ssh_run(storage, command)
 
     with steps.run(_SEED_VOLUMES):
         create_seed_sentinels(
