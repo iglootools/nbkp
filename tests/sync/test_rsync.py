@@ -1,9 +1,12 @@
+import os
 import shlex
 import subprocess
 import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+
+import pytest
 
 from nbkp.config import (
     BtrfsSnapshotConfig,
@@ -1437,6 +1440,23 @@ class TestRunStreaming:
         assert result.returncode == 23
         assert result.stdout == "out\nerr\n"
         assert result.stderr == ""
+
+    def test_kills_the_child_when_forwarding_raises(self) -> None:
+        """Regression: `nbkp run -p overall | head` left rsync running once
+        echoing its output raised BrokenPipeError."""
+        code = "import os, time\nprint(os.getpid(), flush=True)\ntime.sleep(60)\n"
+        pids: list[int] = []
+
+        def on_output(chunk: str) -> None:
+            pids.append(int(chunk))
+            raise BrokenPipeError
+
+        with pytest.raises(BrokenPipeError):
+            _run_streaming([sys.executable, "-c", code], on_output)
+
+        # Killed and reaped: the pid no longer exists.
+        with pytest.raises(ProcessLookupError):
+            os.kill(pids[0], 0)
 
     def test_forwards_large_output_in_few_chunks(self) -> None:
         size = 1_000_000

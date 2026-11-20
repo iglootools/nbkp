@@ -218,11 +218,20 @@ def _run_streaming(
     fd = proc.stdout.fileno()
     decoder = _text_decoder()
     raw_chunks = iter(lambda: os.read(fd, chunk_size), b"")
-    output_chunks = [
-        *(_forward(decoder.decode(raw), on_output) for raw in raw_chunks),
-        _forward(decoder.decode(b"", final=True), on_output),
-    ]
-    proc.stdout.close()
+    try:
+        output_chunks = [
+            *(_forward(decoder.decode(raw), on_output) for raw in raw_chunks),
+            _forward(decoder.decode(b"", final=True), on_output),
+        ]
+    except BaseException:
+        # Forwarding failed (a closed pipe on our stdout, Ctrl-C): stop rsync
+        # before the caller reacts, or it would go on writing into a snapshot
+        # directory the caller is about to remove, and keep the drive busy.
+        proc.kill()
+        proc.wait()
+        raise
+    finally:
+        proc.stdout.close()
     return subprocess.CompletedProcess(
         cmd, proc.wait(), stdout="".join(output_chunks), stderr=""
     )
