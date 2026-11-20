@@ -1,4 +1,4 @@
-"""Constants for Docker test container paths and LUKS test setup.
+"""Constants for the Docker test containers, their paths and LUKS setup.
 
 Separated from ``docker.py`` so that modules without the optional
 ``docker`` pip package can import path constants without pulling in
@@ -13,3 +13,7 @@ REMOTE_UNENCRYPTED_PATH = "/srv/unencrypted-backups"
 
 LUKS_PASSPHRASE = "test-passphrase"
 LUKS_MAPPER_NAME = "test-encrypted"
+
+STORAGE_CONTAINER_NAME = "nbkp-demo"
+BASTION_CONTAINER_NAME = "nbkp-demo-bastion"
+NETWORK_NAME = "nbkp-demo-net"

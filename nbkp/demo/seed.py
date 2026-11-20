@@ -1,3 +1,4 @@
+import tempfile
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -27,11 +28,13 @@ from ..sync.testkit.seed import (
 )
 
 # The 'docker' extra is optional; seed_demo(docker=True) reports it through
-# _require_docker(has_docker) before anything here resolves these lazy names.
+# _check_docker(has_docker) before anything here resolves these lazy names.
 lazy from ..remote.testkit.docker import (
+    DOCKER_DIR,
     LUKS_PASSPHRASE,
     DockerError,
     build_docker_image,
+    check_docker,
     create_docker_network,
     create_test_ssh_endpoint,
     generate_ssh_keypair,
@@ -60,17 +63,69 @@ class SeedResult(BaseModel):
 
 
 @dataclass(frozen=True)
+class SeedStep:
+    """*running* is shown while the step runs, *done* is its result line."""
+
+    running: str
+    done: str
+
+
+_BUILD_IMAGE = SeedStep("Building Docker image...", "build Docker image")
+_CREATE_NETWORK = SeedStep("Creating Docker network...", "create Docker network")
+_START_BASTION = SeedStep("Starting bastion container...", "start bastion container")
+_WAIT_BASTION = SeedStep("Waiting for bastion SSH...", "bastion SSH")
+_START_STORAGE = SeedStep("Starting storage container...", "start storage container")
+_WAIT_STORAGE = SeedStep("Waiting for storage SSH...", "storage SSH")
+_READ_LUKS = SeedStep("Reading LUKS metadata...", "read LUKS metadata")
+_MOUNT = SeedStep("Mounting encrypted volume...", "mount encrypted volume")
+_UMOUNT = SeedStep("Unmounting encrypted volume...", "umount encrypted volume")
+_SEED_VOLUMES = SeedStep("Seeding volumes...", "seed volumes")
+
+
+def seed_steps(*, docker: bool, luks: bool) -> list[SeedStep]:
+    """The steps :func:`seed_demo` reports through its callbacks, in order."""
+    return [
+        *(
+            [
+                _BUILD_IMAGE,
+                _CREATE_NETWORK,
+                _START_BASTION,
+                _WAIT_BASTION,
+                _START_STORAGE,
+                _WAIT_STORAGE,
+            ]
+            if docker
+            else []
+        ),
+        *([_READ_LUKS, _MOUNT] if docker and luks else []),
+        _SEED_VOLUMES,
+        *([_UMOUNT] if docker and luks else []),
+    ]
+
+
+@dataclass(frozen=True)
 class _Steps:
     on_start: Callable[[str], None] | None
     on_end: Callable[[str, Severity, str | None], None] | None
 
-    def start(self, label: str) -> None:
+    def start(self, step: SeedStep) -> None:
         if self.on_start is not None:
-            self.on_start(label)
+            self.on_start(step.running)
 
-    def end(self, label: str, success: bool, detail: str | None = None) -> None:
+    def end(self, step: SeedStep, success: bool, detail: str | None = None) -> None:
         if self.on_end is not None:
-            self.on_end(label, Severity.OK if success else Severity.ERROR, detail)
+            self.on_end(step.done, Severity.OK if success else Severity.ERROR, detail)
+
+    @contextmanager
+    def run(self, step: SeedStep) -> Generator[None]:
+        """Report *step* around the block, as failed if the block raises."""
+        self.start(step)
+        try:
+            yield
+        except Exception as e:
+            self.end(step, False, str(e))
+            raise
+        self.end(step, True)
 
 
 @dataclass(frozen=True)
@@ -82,13 +137,28 @@ class _Containers:
     storage_port: int
 
 
-def _require_docker(has_docker: bool) -> None:
+def _check_docker(has_docker: bool) -> None:
+    """Fail before anything is created when the demo cannot use Docker."""
     if not has_docker:
         raise SeedError(
             "Docker support requires the 'docker' extra."
             " Install it with: uv tool install 'nbkp[docker]'"
             " (or use --no-docker)."
         )
+    try:
+        check_docker()
+    except DockerError as e:
+        raise SeedError(f"Docker is not available: {e.detail}") from e
+    if not DOCKER_DIR.is_dir():
+        raise SeedError(f"Docker directory not found: {DOCKER_DIR}")
+
+
+def _seed_dir(base_dir: Path | None) -> Path:
+    if base_dir is not None:
+        base_dir.mkdir(parents=True, exist_ok=True)
+        return base_dir
+    else:
+        return Path(tempfile.mkdtemp(prefix="nbkp-demo-"))
 
 
 def seed_plan(
@@ -121,7 +191,7 @@ def seed_plan(
 
 
 def seed_demo(
-    base_dir: Path,
+    base_dir: Path | None,
     *,
     docker: bool = True,
     luks: bool = True,
@@ -132,9 +202,11 @@ def seed_demo(
     on_step_end: Callable[[str, Severity, str | None], None] | None = None,
     has_docker: bool = _HAS_DOCKER,
 ) -> SeedResult:
-    """*on_step_start* receives an in-progress label (e.g.
-    ``"Building Docker image..."``), *on_step_end* the step's result line.
-    *has_docker* says whether the 'docker' extra is installed.
+    """Seed *base_dir*, or a new temp dir when it is ``None``.
+
+    *on_step_start* and *on_step_end* receive each step of :func:`seed_steps`:
+    its in-progress label (e.g. ``"Building Docker image..."``), then its
+    result line. *has_docker* says whether the 'docker' extra is installed.
     """
     steps = _Steps(on_step_start, on_step_end)
     rsync_opts = (
@@ -143,7 +215,8 @@ def seed_demo(
         else RsyncOptions()
     )
     if docker:
-        _require_docker(has_docker)
+        _check_docker(has_docker)
+    base_dir = _seed_dir(base_dir)
     containers = _start_containers(base_dir, luks, steps) if docker else None
     luks_uuid = (
         _read_luks_uuid(containers, steps) if containers is not None and luks else None
@@ -171,58 +244,50 @@ def seed_demo(
 def _start_containers(base_dir: Path, luks: bool, steps: _Steps) -> _Containers:
     private_key, pub_key = generate_ssh_keypair(base_dir)
 
-    steps.start("Building Docker image...")
-    try:
-        build_docker_image()
-    except DockerError as e:
-        steps.end("build Docker image", False, e.detail)
-        raise SeedError(f"Docker image build failed: {e.detail}") from e
-    steps.end("build Docker image", True)
+    with steps.run(_BUILD_IMAGE):
+        try:
+            build_docker_image()
+        except DockerError as e:
+            raise SeedError(f"Docker image build failed: {e.detail}") from e
 
-    steps.start("Creating Docker network...")
-    network_name = create_docker_network()
-    steps.end("create Docker network", True)
+    with steps.run(_CREATE_NETWORK):
+        network_name = create_docker_network()
 
-    steps.start("Starting bastion container...")
-    bastion_port = start_bastion_container(pub_key, network_name)
-    steps.end("start bastion container", True)
+    with steps.run(_START_BASTION):
+        bastion_port = start_bastion_container(pub_key, network_name)
     bastion = create_test_ssh_endpoint(
         "bastion", "127.0.0.1", bastion_port, private_key
     )
-    steps.start("Waiting for bastion SSH...")
-    wait_for_ssh(bastion)
-    steps.end("bastion SSH", True)
+    with steps.run(_WAIT_BASTION):
+        wait_for_ssh(bastion)
 
-    steps.start("Starting storage container...")
-    storage_port = start_storage_container(
-        pub_key,
-        network_name=network_name,
-        network_alias="backup-server",
-        luks_enabled=luks,
-    )
-    steps.end("start storage container", True)
+    with steps.run(_START_STORAGE):
+        storage_port = start_storage_container(
+            pub_key,
+            network_name=network_name,
+            network_alias="backup-server",
+            luks_enabled=luks,
+        )
     storage = create_test_ssh_endpoint(
         "storage", "127.0.0.1", storage_port, private_key
     )
-    steps.start("Waiting for storage SSH...")
-    # Generous timeout: the storage container formats a btrfs loop image and
-    # brings up dbus/udevd/udisksd (probing the shared host /dev) before sshd
-    # is ready, which can exceed the 30s default on a loaded machine.
-    wait_for_ssh(storage, timeout=90)
-    steps.end("storage SSH", True)
+    with steps.run(_WAIT_STORAGE):
+        # Generous timeout: the storage container formats a btrfs loop image
+        # and brings up dbus/udevd/udisksd (probing the shared host /dev)
+        # before sshd is ready, which can exceed the 30s default on a loaded
+        # machine.
+        wait_for_ssh(storage, timeout=90)
     return _Containers(private_key, bastion, storage, bastion_port, storage_port)
 
 
 def _read_luks_uuid(containers: _Containers, steps: _Steps) -> str:
-    steps.start("Reading LUKS metadata...")
-    meta = read_luks_metadata(containers.storage)
-    if not meta.available or meta.uuid is None:
-        steps.end("read LUKS metadata", False, "dm-crypt unavailable")
-        raise SeedError(
-            "LUKS unavailable (dm-crypt kernel module missing?)."
-            " Use --no-luks to skip encrypted volume setup."
-        )
-    steps.end("read LUKS metadata", True)
+    with steps.run(_READ_LUKS):
+        meta = read_luks_metadata(containers.storage)
+        if not meta.available or meta.uuid is None:
+            raise SeedError(
+                "LUKS unavailable (dm-crypt kernel module missing?)."
+                " Use --no-luks to skip encrypted volume setup."
+            )
     return meta.uuid
 
 
@@ -276,23 +341,20 @@ def _encrypted_volume_mounted(
     if not enabled:
         yield
         return
-    steps.start("Mounting encrypted volume...")
     try:
-        failed_mount = next(
-            (
-                r
-                for r in mount_phase(
-                    config, resolved, passphrase_fn=passphrase_fn, run=run
-                )
-                if not r.success
-            ),
-            None,
-        )
-        if failed_mount is not None:
-            detail = mount_failure_detail(failed_mount)
-            steps.end("mount encrypted volume", False, detail)
-            raise SeedError(f"Mount failed: {detail}")
-        steps.end("mount encrypted volume", True)
+        with steps.run(_MOUNT):
+            failed_mount = next(
+                (
+                    r
+                    for r in mount_phase(
+                        config, resolved, passphrase_fn=passphrase_fn, run=run
+                    )
+                    if not r.success
+                ),
+                None,
+            )
+            if failed_mount is not None:
+                raise SeedError(f"Mount failed: {mount_failure_detail(failed_mount)}")
         yield
     finally:
         failed_umount = _umount_encrypted(config, resolved, steps, run=run)
@@ -311,7 +373,7 @@ def _umount_encrypted(
     run: VolumeCommandRunner,
 ) -> str | None:
     """Umount + lock; returns the failure detail, if any."""
-    steps.start("Unmounting encrypted volume...")
+    steps.start(_UMOUNT)
     failed = next(
         (r for r in umount_volumes(config, resolved, run=run) if not r.success), None
     )
@@ -320,7 +382,7 @@ def _umount_encrypted(
         if failed is not None
         else None
     )
-    steps.end("umount encrypted volume", failed is None, detail)
+    steps.end(_UMOUNT, failed is None, detail)
     return detail
 
 
@@ -336,12 +398,11 @@ def _seed_data(
         assert storage is not None
         ssh_exec(storage, cmd)
 
-    steps.start("Seeding volumes...")
-    create_seed_sentinels(
-        config, remote_exec=_run_remote if storage is not None else None
-    )
-    seed_volume(
-        config.volumes["src-local-bare"],
-        big_file_size_bytes=big_file_size * 1024 * 1024,
-    )
-    steps.end("seed volumes", True)
+    with steps.run(_SEED_VOLUMES):
+        create_seed_sentinels(
+            config, remote_exec=_run_remote if storage is not None else None
+        )
+        seed_volume(
+            config.volumes["src-local-bare"],
+            big_file_size_bytes=big_file_size * 1024 * 1024,
+        )

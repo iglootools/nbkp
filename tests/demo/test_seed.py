@@ -11,7 +11,13 @@ from nbkp.config import Config, CredentialProvider, LocalVolume
 from nbkp.demo import seed as seed_module
 from nbkp.demo.cli import app
 from nbkp.demo.cli.seed_cmd import commands_script
-from nbkp.demo.seed import SeedError, SeedResult, seed_demo, seed_plan
+from nbkp.demo.seed import (
+    SeedError,
+    SeedResult,
+    seed_demo,
+    seed_plan,
+    seed_steps,
+)
 from tests.cliwiring.test_mount import UUID, encrypted_volume
 from tests.fakes import FakeCommandRunner, completed
 
@@ -31,6 +37,18 @@ class TestDryRun:
         assert result.exit_code == 0, result.output
         assert "nothing created" in result.output
         assert not target.exists()
+
+
+class TestSteps:
+    def test_local_seed_reports_the_listed_steps(self, tmp_path: Path) -> None:
+        ends: list[str] = []
+        seed_demo(
+            tmp_path,
+            docker=False,
+            big_file_size=0,
+            on_step_end=lambda label, _sev, _detail: ends.append(label),
+        )
+        assert ends == [s.done for s in seed_steps(docker=False, luks=False)]
 
 
 class TestDockerExtra:

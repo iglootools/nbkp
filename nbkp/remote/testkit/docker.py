@@ -15,19 +15,19 @@ lazy from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519Privat
 from ...config import SshConnectionOptions, SshEndpoint
 from ...remote.fabricssh import run_remote_command
 from .constants import (  # noqa: F401
+    BASTION_CONTAINER_NAME,
     LUKS_MAPPER_NAME,
     LUKS_PASSPHRASE,
+    NETWORK_NAME,
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_ENCRYPTED_PATH,
     REMOTE_BTRFS_PATH,
     REMOTE_UNENCRYPTED_PATH,
+    STORAGE_CONTAINER_NAME,
 )
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"
-STORAGE_CONTAINER_NAME = "nbkp-demo"
-BASTION_CONTAINER_NAME = "nbkp-demo-bastion"
 _IMAGE_TAG = "nbkp-demo-server:latest"
-_NETWORK_NAME = "nbkp-demo-net"
 
 SSH_AUTHORIZED_KEYS_PATH = "/mnt/ssh-authorized-keys"
 
@@ -122,7 +122,7 @@ def create_docker_network() -> str:
     """Recreate the network, force-disconnecting containers left on the old one."""
     client = dockerlib.from_env()
     try:
-        old = client.networks.get(_NETWORK_NAME)
+        old = client.networks.get(NETWORK_NAME)
         old.reload()
         for cid in list(old.attrs.get("Containers") or {}):
             try:
@@ -132,8 +132,8 @@ def create_docker_network() -> str:
         old.remove()
     except docker_errors.NotFound:
         pass
-    client.networks.create(_NETWORK_NAME, driver="bridge")
-    return _NETWORK_NAME
+    client.networks.create(NETWORK_NAME, driver="bridge")
+    return NETWORK_NAME
 
 
 def build_docker_image() -> None:
