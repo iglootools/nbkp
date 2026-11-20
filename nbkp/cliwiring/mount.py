@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 
 import typer
@@ -38,6 +38,42 @@ def _format_mount_status(
         ],
         strictness=progress.strictness,
     )
+
+
+@contextmanager
+def lifecycle_session(
+    cfg: Config,
+    resolved: ResolvedEndpoints,
+    *,
+    runtime: Runtime,
+    enabled: bool,
+    names: list[str] | None = None,
+    strictness: Strictness = Strictness.IGNORE_INACTIVE,
+    umounting: bool = True,
+) -> Generator[tuple[Callable[[str], str], LifecycleProgress]]:
+    """The passphrase function and the progress bars (shown when *enabled*)
+    for a mount lifecycle; on exit, the bars are stopped and the cached
+    passphrases cleared."""
+    passphrase_fn, cache = build_passphrase_fn(
+        cfg.credential_provider,
+        cfg.credential_command,
+        prompt=prompt_passphrase,
+        environ=runtime.environ,
+        run=runtime.run_credential_command,
+    )
+    progress = LifecycleProgress.create(
+        cfg,
+        resolved,
+        enabled=enabled,
+        names=names,
+        strictness=strictness,
+        umounting=umounting,
+    )
+    try:
+        yield passphrase_fn, progress
+    finally:
+        progress.stop_all()
+        cache.clear()
 
 
 @contextmanager
@@ -85,26 +121,16 @@ def managed_mount(
         or unlocked — is reported on stderr and fails a command that would
         have succeeded (exit 1).
     """
-    passphrase_fn, cache = build_passphrase_fn(
-        cfg.credential_provider,
-        cfg.credential_command,
-        prompt=prompt_passphrase,
-        environ=runtime.environ,
-        run=runtime.run_credential_command,
-    )
     use_progress = output_format is OutputFormat.HUMAN
-    progress = LifecycleProgress.create(
-        cfg, resolved, enabled=use_progress, strictness=strictness
-    )
     collected = umount_results if umount_results is not None else []
+    with lifecycle_session(
+        cfg, resolved, runtime=runtime, enabled=use_progress, strictness=strictness
+    ) as (passphrase_fn, progress):
 
-    def on_umount_end(slug: str, result: UmountResult) -> None:
-        collected.append(result)
-        progress.on_umount_end(slug, result)
+        def on_umount_end(slug: str, result: UmountResult) -> None:
+            collected.append(result)
+            progress.on_umount_end(slug, result)
 
-    # try/finally instead of `with` because the bars are conditionally
-    # created (None when output is JSON), and cache.clear() must also run.
-    try:
         with _disks_managed_mount(
             cfg,
             resolved,
@@ -124,9 +150,6 @@ def managed_mount(
             if use_progress and mount_observations:
                 Console().print(_format_mount_status(progress, mount_observations))
             yield result
-    finally:
-        progress.stop_all()
-        cache.clear()
     if umount_results is None:
         _exit_on_umount_failure(collected, progress.display_names)
 

@@ -15,7 +15,7 @@ from .auth import (
     generate_auth_rules,
     generate_polkit_rules,
 )
-from .context import managed_mount
+from .context import managed_mount, mount_phase
 from .detection import (
     DeviceProbeError,
     detect_device_present,
@@ -102,6 +102,7 @@ __all__ = [
     "luks_fail_severity",
     "managed_mount",
     "mount_count",
+    "mount_phase",
     "mount_result_severity",
     "mount_volume",
     "mount_volumes",

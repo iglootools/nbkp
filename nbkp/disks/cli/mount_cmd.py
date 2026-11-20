@@ -8,8 +8,8 @@ from rich.text import Text
 from ...clidisplay import OutputFormat
 from ...clidisplay.invocation import Invocation, format_troubleshoot_hint
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
-from ...cliwiring.credentials import prompt_passphrase
-from ...cliwiring.mount_progress import LifecycleProgress, mount_display_names
+from ...cliwiring.mount import lifecycle_session
+from ...cliwiring.mount_progress import mount_display_names
 from ...cliwiring.options import (
     CONFIG_OPTION,
     EXCLUDE_LOCATION_OPTION,
@@ -19,9 +19,9 @@ from ...cliwiring.options import (
 )
 from ...cliwiring.runtime import Runtime, runtime_of
 from ...config import Config
-from ...credentials import build_passphrase_fn, prefetch_passphrases
 from ...remote.endpoints import ResolvedEndpoints
-from ..lifecycle import MountResult, any_failed, mount_volumes, refused_by_polkit
+from ..context import mount_phase
+from ..lifecycle import MountResult, any_failed, refused_by_polkit
 from ..mount_checks import check_mount_status
 from ..output import mount_result_json
 from ..plan import plan_lifecycle
@@ -95,44 +95,25 @@ def _mount_with_progress(
     output: OutputFormat,
     runtime: Runtime,
 ) -> list[MountResult]:
-    passphrase_fn, cache = build_passphrase_fn(
-        cfg.credential_provider,
-        cfg.credential_command,
-        prompt=prompt_passphrase,
-        environ=runtime.environ,
-        run=runtime.run_credential_command,
-    )
-    progress = LifecycleProgress.create(
+    with lifecycle_session(
         cfg,
         resolved,
+        runtime=runtime,
         enabled=output is OutputFormat.HUMAN,
         names=names,
         umounting=False,
-    )
-    # try/finally instead of `with` because the bars are conditionally
-    # created (None when output is JSON), and cache.clear() must also run.
-    try:
-        # Retrieve every configured passphrase before touching a device —
-        # deliberately including the ones --name excludes and the ones whose
-        # drive is absent, so one approval pass covers every drive.
-        prefetch_passphrases(
-            cfg,
-            passphrase_fn,
-            on_prefetch_start=progress.on_prefetch_start,
-            on_prefetch_end=progress.on_prefetch_end,
-        )
-        return mount_volumes(
+    ) as (passphrase_fn, progress):
+        return mount_phase(
             cfg,
             resolved,
-            passphrase_fn,
+            passphrase_fn=passphrase_fn,
             names=names,
+            on_prefetch_start=progress.on_prefetch_start,
+            on_prefetch_end=progress.on_prefetch_end,
             on_mount_start=progress.on_mount_start,
             on_mount_end=progress.on_mount_end,
             run=runtime.run,
         )
-    finally:
-        progress.stop_all()
-        cache.clear()
 
 
 def _show_results(
