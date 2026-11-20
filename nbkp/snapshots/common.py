@@ -97,13 +97,18 @@ def parse_snapshot_listing(stdout: str) -> list[Snapshot]:
     left behind) are ignored rather than treated as errors: nbkp never
     created them, so it neither counts nor prunes them.  The generated
     shell script filters the same way (``nbkp_snapshot_names``).
+
+    Sorted by time, not by name: a destination written from both Linux
+    (``10:15``) and macOS (``10-30``) holds both name forms, and ``:``
+    sorts after ``-``, so name order would put the older one last.
     """
-    return [
+    snapshots = [
         snapshot
-        for name in sorted(line for line in stdout.splitlines() if line.strip())
-        for snapshot in [_parse_snapshot_name(name.strip())]
+        for line in stdout.splitlines()
+        for snapshot in [_parse_snapshot_name(line.strip())]
         if snapshot is not None
     ]
+    return sorted(snapshots, key=lambda s: (s.timestamp, s.name))
 
 
 def _snapshots_dir_exists(

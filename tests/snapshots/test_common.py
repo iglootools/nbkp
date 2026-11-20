@@ -564,6 +564,40 @@ class TestListSnapshotsFailures:
         result = list_snapshots(sync, config, run=runner)
         assert [s.name for s in result] == ["2026-03-01T10:00:00.000Z"]
 
+    def test_mixed_name_forms_are_sorted_by_time(self) -> None:
+        """Linux (colon) and macOS (hyphen) names in one hour sort by time."""
+        runner = FakeCommandRunner().on(
+            returns=completed(
+                returncode=0,
+                stdout="2026-03-01T10-30-00.000Z\n2026-03-01T10:15:00.000Z\n",
+            )
+        )
+        config, sync = _local_config()
+
+        result = list_snapshots(sync, config, run=runner)
+        assert [s.name for s in result] == [
+            "2026-03-01T10:15:00.000Z",
+            "2026-03-01T10-30-00.000Z",
+        ]
+
+    def test_prune_deletes_the_oldest_when_name_forms_are_mixed(self) -> None:
+        runner = FakeCommandRunner().on(
+            "ls",
+            returns=completed(
+                0,
+                "2026-03-01T10-30-00.000Z\n2026-03-01T10:15:00.000Z\n"
+                "2026-03-01T10-45-00.000Z\n",
+            ),
+        )
+        runner.on(
+            "readlink", returns=completed(0, "snapshots/2026-03-01T10-45-00.000Z\n")
+        )
+        runner.on("rm", returns=completed(0))
+        sync, config, re = _hl_remote_config()
+
+        deleted = hl_prune_snapshots(sync, config, 2, resolved_endpoints=re, run=runner)
+        assert [p.rsplit("/", 1)[-1] for p in deleted] == ["2026-03-01T10:15:00.000Z"]
+
     @pytest.mark.parametrize(
         "transport_error",
         [
