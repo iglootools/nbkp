@@ -1,4 +1,5 @@
 import os
+from collections.abc import Callable
 from pathlib import Path
 from textwrap import dedent
 
@@ -96,6 +97,19 @@ class TestFindConfigFile:
     def test_home_config_without_xdg(self, tmp_path: Path) -> None:
         cfg = _place_config(tmp_path / "home" / ".config" / "nbkp")
         assert find_config_file(environ={}, **_search_in(tmp_path)) == cfg
+
+    @pytest.mark.parametrize("xdg", ["", "relative"])
+    def test_empty_or_relative_xdg_ignored(
+        self, tmp_path: Path, chdir: Callable[[Path], None], xdg: str
+    ) -> None:
+        workdir = tmp_path / "workdir"
+        _place_config(workdir / (xdg or ".") / "nbkp")
+        cfg = _place_config(tmp_path / "home" / ".config" / "nbkp")
+        chdir(workdir)
+        result = find_config_file(
+            environ={"XDG_CONFIG_HOME": xdg}, **_search_in(tmp_path)
+        )
+        assert result == cfg
 
     def test_platform_user_dir_before_site_dir(self, tmp_path: Path) -> None:
         user = _place_config(tmp_path / "user-config" / "nbkp")

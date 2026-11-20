@@ -23,7 +23,7 @@ Everything between a `<!-- BEGIN CONFIGREF:… -->` and its `<!-- END … -->` m
 nbkp searches for the config in this order and uses the first match:
 
 1. Explicit `--config` path
-2. `$XDG_CONFIG_HOME/nbkp/config.yaml` (typically `~/.config/nbkp/config.yaml`)
+2. `$XDG_CONFIG_HOME/nbkp/config.yaml`, or `~/.config/nbkp/config.yaml` when `XDG_CONFIG_HOME` is unset, empty or not an absolute path
 3. Platform user config dir (Linux: same as above; macOS: `~/Library/Application Support/nbkp/config.yaml`)
 4. Platform site config dir (Linux: `/etc/xdg/nbkp/config.yaml`; macOS: `/Library/Application Support/nbkp/config.yaml`)
 
