@@ -5,7 +5,7 @@ module can use it without introducing circular dependencies.
 """
 
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from pydantic import BaseModel, ConfigDict
 
@@ -41,7 +41,14 @@ def format_snapshot_name(now: datetime, *, macos_local: bool = False) -> str:
     Standard form uses colons (``2026-03-06T14:30:00.000Z``).
     When *macos_local* is True, colons are replaced with hyphens
     because APFS/HFS+ forbids colons in filenames.
+
+    Raises :class:`ValueError` when *now* is naive or not at UTC: its name
+    would lack the ``Z`` that :func:`parse_snapshot_name` requires, and the
+    snapshot would be invisible to pruning and orphan cleanup.
     """
+    if now.utcoffset() != timedelta(0):
+        msg = f"snapshot time must be UTC-aware, got {now.isoformat()}"
+        raise ValueError(msg)
     ts = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
     return ts.replace(":", "-") if macos_local else ts
 
