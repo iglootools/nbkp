@@ -16,7 +16,7 @@ from ....config import Config, LocalVolume, RemoteVolume
 from ....policy import Severity
 from ....remote.dispatch import VolumeCommandRunner
 from ....remote.endpoints import ResolvedEndpoints, location_excluded
-from ....remote.errors import describe_error, ssh_connection_errors
+from ....remote.errors import ssh_connection_errors
 from ...lifecycle import UmountResult, lifecycle_volumes, unknown_volume_names
 from ...models import MountFailureKind, display_name
 from ...mount_checks import check_mount_status
@@ -27,6 +27,7 @@ from ...output import (
     build_mount_status_table,
     umount_result_json,
 )
+from ...plan import probe_error_detail
 
 
 @dataclass(frozen=True)
@@ -119,9 +120,10 @@ def _probe_volume_status(
             bar.on_end(line, Severity.OK)
         return label, status
     except ssh_connection_errors() as e:
+        detail = probe_error_detail(vol, e)
         if bar is not None:
-            bar.on_end(line, Severity.ERROR, describe_error(e))
-        return error_label(label, f"unreachable: {describe_error(e)}"), ErrorStatus()
+            bar.on_end(line, Severity.ERROR, detail)
+        return error_label(label, detail), ErrorStatus()
 
 
 def show_status_table(

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from ..config import Config, MountConfig, Volume
 from ..remote.endpoints import ResolvedEndpoints
 from ..remote.errors import describe_error, ssh_connection_errors
-from .lifecycle import lifecycle_volumes
+from .lifecycle import lifecycle_volumes, missing_local_tool
 from .models import MountCapabilities
 from .mount_checks import check_mount_status
 
@@ -85,7 +85,7 @@ def _plan_one(
         caps = probe(volume, mount, resolved)
     except ssh_connection_errors() as e:
         return VolumePlan(
-            volume.slug, (), f"unreachable: {describe_error(e)}", probe_failed=True
+            volume.slug, (), probe_error_detail(volume, e), probe_failed=True
         )
     if _state_unknown(mount, caps):
         return VolumePlan(volume.slug, (), "device state unknown", probe_failed=True)
@@ -94,6 +94,16 @@ def _plan_one(
             _mount_actions(mount, caps) if mounting else _umount_actions(mount, caps)
         )
         return VolumePlan(volume.slug, actions, detail)
+
+
+def probe_error_detail(volume: Volume, error: BaseException) -> str:
+    """Why a volume's state could not be probed: a local tool not installed,
+    or the host unreachable."""
+    match missing_local_tool(volume, error):
+        case str() as tool:
+            return f"{tool} not installed"
+        case None:
+            return f"unreachable: {describe_error(error)}"
 
 
 def _state_unknown(mount: MountConfig, caps: MountCapabilities) -> bool:

@@ -139,6 +139,15 @@ class TestPlanLifecycle:
 
         assert plan == VolumePlan("enc", (), "device state unknown", probe_failed=True)
 
+    def test_missing_local_tool_is_reported_as_not_installed(self) -> None:
+        states: dict[str, MountCapabilities | Exception] = {
+            "enc": FileNotFoundError(2, "No such file or directory", "lsblk")
+        }
+
+        [plan] = _plan(_config(_volume("enc")), states, mounting=False)
+
+        assert plan == VolumePlan("enc", (), "lsblk not installed", probe_failed=True)
+
     def test_umount_is_planned_in_reverse_order(self) -> None:
         config = _config(_volume("first"), _volume("second"))
         states: dict[str, MountCapabilities | Exception] = {

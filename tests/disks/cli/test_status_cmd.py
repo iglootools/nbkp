@@ -108,6 +108,25 @@ class TestVolumesStatusCommand:
         assert "unreachable: timed out" in entry["volume"]
         assert entry["mounted"] is None
 
+    def test_missing_local_tool_is_not_unreachable(self, tmp_path: Path) -> None:
+        no_test = FakeCommandRunner().on(
+            "test", returns=FileNotFoundError(2, "No such file or directory", "test")
+        )
+
+        exit_code, output = _status(
+            write_config(tmp_path, _mount_config_for_status()),
+            "-o",
+            "json",
+            "--name",
+            "plain-drive",
+            run=no_test,
+        )
+
+        assert exit_code == 0
+        [entry] = json.loads(output)
+        assert "test not installed" in entry["volume"]
+        assert "unreachable" not in entry["volume"]
+
     def test_name_filter(self, tmp_path: Path) -> None:
         run = _host()
 
