@@ -18,6 +18,9 @@ type ConfigDirFn = Callable[[str], str]
 _CONFIG_REFERENCE_URL = (
     "https://github.com/iglootools/nbkp/blob/main/docs/config-reference.md"
 )
+_CONFIG_EXAMPLES_URL = (
+    "https://github.com/iglootools/nbkp/tree/main/docs/config-examples"
+)
 
 
 class ConfigErrorKind(StrEnum):
@@ -103,8 +106,8 @@ def find_config_file(
             raise ConfigError(
                 f"No config file found. Searched: {', '.join(str(p) for p in search)}."
                 f" Create one at {search[0]} or pass --config PATH (format:"
-                f" {_CONFIG_REFERENCE_URL}), or run `nbkp demo seed` to"
-                " generate a sample config to start from.",
+                f" {_CONFIG_REFERENCE_URL}). Example configs to start from:"
+                f" {_CONFIG_EXAMPLES_URL}.",
                 reason=ConfigErrorKind.NO_CONFIG_FOUND,
             )
 

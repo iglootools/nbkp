@@ -125,6 +125,7 @@ class TestFindConfigFile:
             find_config_file(environ={}, **_search_in(tmp_path))
         assert excinfo.value.reason == ConfigErrorKind.NO_CONFIG_FOUND
         assert str(tmp_path / "home" / ".config" / "nbkp") in str(excinfo.value)
+        assert "docs/config-examples" in str(excinfo.value)
 
 
 class TestLoadConfig:
