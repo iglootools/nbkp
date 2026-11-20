@@ -35,8 +35,8 @@ from ..disks import (
 )
 from ..fsprotocol import VOLUME_SENTINEL
 from ..remote.dispatch import (
-    CommandLocator,
     VolumeCommandRunner,
+    WhichFn,
     check_command_available,
     run_on_volume,
 )
@@ -59,7 +59,7 @@ def observe_ssh_endpoint(
     probe_mount_tools: bool = False,
     *,
     run: VolumeCommandRunner = run_on_volume,
-    which: CommandLocator = shutil.which,
+    which: WhichFn = shutil.which,
 ) -> SshEndpointDiagnostics:
     """Uses *volume* as the dispatch target for running commands on the host.
     For local volumes, commands run locally (implicit localhost endpoint).
@@ -86,7 +86,7 @@ def _observe_ssh_endpoint_local(
     probe_mount_tools: bool,
     *,
     run: VolumeCommandRunner,
-    which: CommandLocator,
+    which: WhichFn,
 ) -> SshEndpointDiagnostics:
     host_tools = _probe_host_tools(volume, resolved_endpoints, run=run, which=which)
     mount_tools = (
@@ -106,7 +106,7 @@ def _observe_ssh_endpoint_remote(
     probe_mount_tools: bool,
     *,
     run: VolumeCommandRunner,
-    which: CommandLocator,
+    which: WhichFn,
 ) -> SshEndpointDiagnostics:
     """SSH reachability is tested implicitly via the first host tool probe
     (``which rsync``).  A connection failure — then or during a later probe,
@@ -145,7 +145,7 @@ def _probe_host_tools(
     resolved_endpoints: ResolvedEndpoints,
     *,
     run: VolumeCommandRunner,
-    which: CommandLocator,
+    which: WhichFn,
 ) -> HostToolCapabilities:
     """For remote volumes, any of these ``which`` probes implicitly tests
     SSH reachability — if the connection fails, the caller catches the

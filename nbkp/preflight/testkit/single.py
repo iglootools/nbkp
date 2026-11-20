@@ -3,7 +3,7 @@
 import shutil
 
 from ...config import Config, LocalVolume, RemoteVolume, SshEndpoint, SyncConfig, Volume
-from ...remote.dispatch import CommandLocator, VolumeCommandRunner, run_on_volume
+from ...remote.dispatch import VolumeCommandRunner, WhichFn, run_on_volume
 from ...remote.endpoints import ResolvedEndpoints
 from .. import SyncStatus, VolumeStatus, check_all_syncs
 
@@ -15,7 +15,7 @@ def check_sync(
     dry_run: bool = False,
     *,
     run: VolumeCommandRunner = run_on_volume,
-    which: CommandLocator = shutil.which,
+    which: WhichFn = shutil.which,
 ) -> SyncStatus:
     result = check_all_syncs(
         config,
@@ -33,7 +33,7 @@ def check_volume(
     resolved_endpoints: ResolvedEndpoints | None = None,
     *,
     run: VolumeCommandRunner = run_on_volume,
-    which: CommandLocator = shutil.which,
+    which: WhichFn = shutil.which,
 ) -> VolumeStatus:
     """Preflight a config holding only *volume*.
 

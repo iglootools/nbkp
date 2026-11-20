@@ -32,7 +32,7 @@ class SelectedEndpoint(Protocol):
     def server(self) -> SshEndpoint: ...
 
 
-SelectedEndpoints = Mapping[str, SelectedEndpoint]
+type SelectedEndpoints = Mapping[str, SelectedEndpoint]
 """Selected endpoint per remote volume slug (``remote.endpoints.SelectedEndpoints``)."""
 
 

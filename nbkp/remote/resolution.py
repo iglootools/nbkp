@@ -22,7 +22,7 @@ from .endpoints import (
 )
 
 #: Resolves a hostname to its IP addresses, or ``None`` when it does not resolve.
-type AddressLookup = Callable[[str], set[str] | None]
+type AddressLookupFn = Callable[[str], set[str] | None]
 
 
 class SshConfigErrorKind(StrEnum):
@@ -78,7 +78,7 @@ def resolve_hostname(
 def resolve_host(
     hostname: str,
     ssh_config: paramiko.SSHConfig | None = None,
-    lookup: AddressLookup = dns_lookup,
+    lookup: AddressLookupFn = dns_lookup,
 ) -> set[str] | None:
     return lookup(resolve_hostname(hostname, ssh_config))
 
@@ -86,7 +86,7 @@ def resolve_host(
 def is_private_host(
     hostname: str,
     ssh_config: paramiko.SSHConfig | None = None,
-    lookup: AddressLookup = dns_lookup,
+    lookup: AddressLookupFn = dns_lookup,
 ) -> bool | None:
     """True if all resolved addresses are private,
     False if any is public, or None if the hostname
@@ -159,7 +159,7 @@ def resolve_endpoint_for_volume(
     vol: RemoteVolume,
     endpoint_filter: EndpointFilter | None = None,
     ssh_config: paramiko.SSHConfig | None = None,
-    lookup: AddressLookup = dns_lookup,
+    lookup: AddressLookupFn = dns_lookup,
 ) -> SshEndpoint:
     """The first candidate left by the soft filters.
 
@@ -244,7 +244,7 @@ def _resolve_volume(
     vol: RemoteVolume,
     endpoint_filter: EndpointFilter | None,
     ssh_config: paramiko.SSHConfig,
-    lookup: AddressLookup,
+    lookup: AddressLookupFn,
 ) -> ResolvedEndpoint:
     server = enrich_from_ssh_config(
         resolve_endpoint_for_volume(config, vol, endpoint_filter, ssh_config, lookup),
@@ -262,7 +262,7 @@ def resolve_all_endpoints(
     endpoint_filter: EndpointFilter | None = None,
     *,
     ssh_config: paramiko.SSHConfig | None = None,
-    lookup: AddressLookup = dns_lookup,
+    lookup: AddressLookupFn = dns_lookup,
 ) -> ResolvedEndpoints:
     """Keyed by volume slug; local volumes are not included.
 
@@ -294,7 +294,7 @@ def _resolve_volumes(
     volumes: list[RemoteVolume],
     endpoint_filter: EndpointFilter | None,
     ssh_config: paramiko.SSHConfig,
-    lookup: AddressLookup,
+    lookup: AddressLookupFn,
 ) -> ResolvedEndpoints:
     # Volumes share hosts (one server, several drives), and an unresolvable
     # name pays its DNS timeout on every lookup: resolve each name once.

@@ -12,7 +12,7 @@ from nbkp.config import (
 )
 from nbkp.remote.endpoints import EndpointFilter, NetworkType
 from nbkp.remote.resolution import (
-    AddressLookup,
+    AddressLookupFn,
     SshConfigError,
     SshConfigErrorKind,
     dns_lookup,
@@ -31,7 +31,7 @@ def _ssh_config(text: str) -> paramiko.SSHConfig:
     return paramiko.SSHConfig.from_text(text)
 
 
-def _fixed_lookup(table: dict[str, set[str]]) -> AddressLookup:
+def _fixed_lookup(table: dict[str, set[str]]) -> AddressLookupFn:
     """An address lookup answering from ``table`` (unknown hosts: None)."""
     return lambda host: table.get(host)
 

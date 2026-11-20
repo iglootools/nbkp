@@ -8,7 +8,7 @@ from nbkp.config import (
     Volume,
 )
 from nbkp.disks.models import MountCapabilities
-from nbkp.disks.plan import MountAction, MountProbe, VolumePlan, plan_lifecycle
+from nbkp.disks.plan import MountAction, MountProbeFn, VolumePlan, plan_lifecycle
 from nbkp.remote.endpoints import ResolvedEndpoints
 
 _UNLOCK, _MOUNT = MountAction.UNLOCK, MountAction.MOUNT
@@ -31,7 +31,7 @@ def _config(*volumes: LocalVolume) -> Config:
     return Config(volumes={v.slug: v for v in volumes})
 
 
-def _probe(states: dict[str, MountCapabilities | Exception]) -> MountProbe:
+def _probe(states: dict[str, MountCapabilities | Exception]) -> MountProbeFn:
     def probe(
         volume: Volume, mount: MountConfig, resolved: ResolvedEndpoints
     ) -> MountCapabilities:

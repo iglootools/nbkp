@@ -20,7 +20,7 @@ from .status import MountStatusData, VolumeStatus, VolumeStatusKind
 # caller-supplied text (an error detail, a "not managed" marker): Rich parses
 # markup in a plain ``str``, so a detail containing ``[...]`` — udisksctl
 # stderr, an exception message — would lose it.
-MountStatusLabel = str | Text
+type MountStatusLabel = str | Text
 
 
 def mount_state_icon(

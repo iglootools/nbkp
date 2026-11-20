@@ -16,7 +16,7 @@ from typing import Any
 from nbkp.cliwiring.runtime import Runtime
 from nbkp.config import Config, SyncConfig, Volume
 from nbkp.credentials import CommandFn
-from nbkp.remote.dispatch import CommandLocator, VolumeCommandRunner
+from nbkp.remote.dispatch import VolumeCommandRunner, WhichFn
 from nbkp.remote.endpoints import ResolvedEndpoint, ResolvedEndpoints
 from nbkp.sync.modes import RsyncRunner
 
@@ -156,7 +156,7 @@ _NOWHERE = Path("/nonexistent-nbkp-test")
 def fake_runtime(
     *,
     run: VolumeCommandRunner | None = None,
-    which: CommandLocator | None = None,
+    which: WhichFn | None = None,
     rsync: RsyncRunner | None = None,
     environ: Mapping[str, str] | None = None,
     run_credential_command: CommandFn | None = None,

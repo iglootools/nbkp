@@ -17,7 +17,9 @@ from .lifecycle import lifecycle_volumes, missing_local_tool
 from .models import MountCapabilities
 from .mount_checks import check_mount_status
 
-type MountProbe = Callable[[Volume, MountConfig, ResolvedEndpoints], MountCapabilities]
+type MountProbeFn = Callable[
+    [Volume, MountConfig, ResolvedEndpoints], MountCapabilities
+]
 """Reads a volume's current mount state: :func:`check_mount_status` in
 production, a fake in tests."""
 
@@ -79,7 +81,7 @@ def _plan_one(
     resolved: ResolvedEndpoints,
     *,
     mounting: bool,
-    probe: MountProbe,
+    probe: MountProbeFn,
 ) -> VolumePlan:
     try:
         caps = probe(volume, mount, resolved)
@@ -122,7 +124,7 @@ def plan_lifecycle(
     *,
     mounting: bool,
     names: list[str] | None = None,
-    probe: MountProbe = check_mount_status,
+    probe: MountProbeFn = check_mount_status,
 ) -> list[VolumePlan]:
     """Plan mount (``mounting=True``) or umount steps for mount-managed volumes."""
     return [
