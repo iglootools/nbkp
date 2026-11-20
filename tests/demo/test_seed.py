@@ -8,10 +8,10 @@ import pytest
 from typer.testing import CliRunner
 
 from nbkp.config import Config, CredentialProvider, LocalVolume
+from nbkp.demo import seed as seed_module
 from nbkp.demo.cli import app
-from nbkp.demo.cli.cmd_handler import seed as seed_module
-from nbkp.demo.cli.cmd_handler.seed import SeedError, SeedResult, seed_demo, seed_plan
 from nbkp.demo.cli.seed_cmd import commands_script
+from nbkp.demo.seed import SeedError, SeedResult, seed_demo, seed_plan
 from tests.cliwiring.test_mount import UUID, encrypted_volume
 from tests.fakes import FakeCommandRunner, completed
 

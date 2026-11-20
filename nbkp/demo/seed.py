@@ -6,20 +6,20 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from ....config import (
+from ..config import (
     Config,
     CredentialProvider,
     RsyncOptions,
     SshEndpoint,
 )
-from ....config.testkit import write_config
-from ....disks import mount_volumes, umount_volumes
-from ....disks.output import mount_failure_detail, umount_failure_detail
-from ....policy import Severity
-from ....remote.dispatch import VolumeCommandRunner, run_on_volume
-from ....remote.endpoints import ResolvedEndpoints
-from ....remote.resolution import resolve_all_endpoints
-from ....sync.testkit.seed import (
+from ..config.testkit import write_config
+from ..disks import mount_volumes, umount_volumes
+from ..disks.output import mount_failure_detail, umount_failure_detail
+from ..policy import Severity
+from ..remote.dispatch import VolumeCommandRunner, run_on_volume
+from ..remote.endpoints import ResolvedEndpoints
+from ..remote.resolution import resolve_all_endpoints
+from ..sync.testkit.seed import (
     build_chain_config,
     build_local_chain_config,
     create_seed_sentinels,
@@ -28,7 +28,7 @@ from ....sync.testkit.seed import (
 
 # The 'docker' extra is optional; seed_demo(docker=True) reports it through
 # _require_docker(has_docker) before anything here resolves these lazy names.
-lazy from ....remote.testkit.docker import (
+lazy from ..remote.testkit.docker import (
     LUKS_PASSPHRASE,
     build_docker_image,
     create_docker_network,

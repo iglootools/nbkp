@@ -172,6 +172,7 @@ type = "forbidden"
 source_modules = [
   "nbkp.config",
   "nbkp.credentials",
+  "nbkp.demo",
   "nbkp.disks",
   "nbkp.fsprotocol",
   "nbkp.ordering",

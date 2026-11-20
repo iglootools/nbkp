@@ -27,8 +27,8 @@ lazy from ...remote.testkit.docker import (
 )
 
 _HAS_DOCKER = find_spec("docker") is not None
+from ..seed import SeedError, SeedResult, seed_demo, seed_plan
 from . import app, console as _console
-from .cmd_handler.seed import SeedError, SeedResult, seed_demo, seed_plan
 
 
 def _luks_setup_instructions(provider: CredentialProvider) -> list[str]:
