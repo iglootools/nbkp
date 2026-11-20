@@ -23,6 +23,11 @@ class CredentialProvider(enum.StrEnum):
     COMMAND = "command"
 
 
+def passphrase_env_var(passphrase_id: str) -> str:
+    """Environment variable the ``env`` provider reads for ``passphrase_id``."""
+    return f"NBKP_PASSPHRASE_{passphrase_id.upper().replace('-', '_')}"
+
+
 # Key pairs where setting one half in a child endpoint must drop the other
 # half inherited from its parent, so the merge does not trip the exclusivity
 # validators.

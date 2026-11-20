@@ -14,6 +14,7 @@ from nbkp.config import (
     LocalVolume,
     LuksEncryptionConfig,
     MountConfig,
+    passphrase_env_var,
 )
 from nbkp.credentials import (
     CommandFn,
@@ -21,7 +22,6 @@ from nbkp.credentials import (
     CredentialErrorKind,
     PassphraseCache,
     collect_passphrase_ids,
-    passphrase_env_var,
     prefetch_count,
     prefetch_passphrases,
     retrieve_passphrase,

@@ -1,5 +1,5 @@
 from .base import ConfigModel, Slug
-from .config import Config, CredentialProvider
+from .config import Config, CredentialProvider, passphrase_env_var
 from .errors import ConfigValidationErrorKind
 from .ssh_endpoint import SshConnectionOptions, SshEndpoint
 from .sync import RsyncOptions, SyncConfig, sync_predecessors
@@ -41,6 +41,7 @@ __all__ = [
     "SyncEndpoint",
     "Volume",
     "join_subdir",
+    "passphrase_env_var",
     "resolve_endpoint_path",
     "sync_predecessors",
 ]

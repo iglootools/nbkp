@@ -118,7 +118,6 @@ graph TD
     preflight --> clidisplay
     preflight --> cliwiring
     preflight --> config
-    preflight --> credentials
     preflight --> disks
     preflight --> fsprotocol
     preflight --> policy
