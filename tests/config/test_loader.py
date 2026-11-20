@@ -48,6 +48,15 @@ def _validation_error_types(path: Path) -> set[str]:
     return {err["type"] for err in _validation_errors(path)}
 
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_SHIPPED_EXAMPLES = sorted(
+    [
+        *(_PROJECT_ROOT / "docs" / "config-examples").glob("*.yaml"),
+        _PROJECT_ROOT / "marketing" / "r-backup-intro" / "config.yaml",
+    ]
+)
+
+
 def _search_in(tmp_path: Path) -> dict[str, object]:
     """Search arguments that keep the lookup under *tmp_path*: a home there,
     and platform config directories there, none of which exists yet."""
@@ -1590,6 +1599,18 @@ class TestUnknownKeys:
                 ("sync-endpoints", slug, "hard-link-snapshots", "max-snapshot"),
             )
         ]
+
+
+class TestShippedExamples:
+    def test_examples_found(self) -> None:
+        assert len(_SHIPPED_EXAMPLES) >= 2
+        assert all(path.is_file() for path in _SHIPPED_EXAMPLES)
+
+    @pytest.mark.parametrize(
+        "path", _SHIPPED_EXAMPLES, ids=lambda p: str(p.relative_to(_PROJECT_ROOT))
+    )
+    def test_example_loads(self, path: Path) -> None:
+        load_config(path)
 
 
 class TestFrozenModels:
