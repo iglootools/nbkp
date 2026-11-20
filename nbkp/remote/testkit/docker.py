@@ -128,8 +128,8 @@ def create_docker_network() -> str:
         for cid in list(old.attrs.get("Containers") or {}):
             try:
                 old.disconnect(cid, force=True)
-            except docker_errors.APIError:
-                pass
+            except docker_errors.NotFound:
+                pass  # The container left the network on its own meanwhile.
         old.remove()
     except docker_errors.NotFound:
         pass
