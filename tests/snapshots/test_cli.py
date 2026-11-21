@@ -152,7 +152,7 @@ class TestJsonErrors:
             "preflight_errors": [],
             "operation": "DELETE",
             "path": f"{SNAPSHOTS}/{OLD}",
-            "message": "denied",
+            "message": "denied; the snapshot was made read-only again",
         }
 
     @pytest.mark.parametrize("command", ["show", "prune"])

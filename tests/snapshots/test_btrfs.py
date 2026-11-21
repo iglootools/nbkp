@@ -256,12 +256,65 @@ class TestDeleteSnapshot:
             delete_snapshot(self._PATH, config.volumes["dst"], {}, run=runner)
         assert runner.commands_starting_with("btrfs", "subvolume") == []
 
-    def test_failure_on_delete(self) -> None:
+    def test_failed_delete_makes_the_snapshot_read_only_again(self) -> None:
         config, _ = _local_config()
         runner = FakeCommandRunner().on("btrfs", "subvolume", returns=_DENIED)
 
         with pytest.raises(
-            SnapshotOperationError, check=lambda e: e.op is SnapshotOp.DELETE
+            SnapshotOperationError,
+            check=lambda e: (
+                e.op is SnapshotOp.DELETE
+                and e.stderr
+                == "permission denied; the snapshot was made read-only again"
+            ),
+        ):
+            delete_snapshot(self._PATH, config.volumes["dst"], {}, run=runner)
+        assert runner.commands == [
+            ["btrfs", "property", "set", self._PATH, "ro", "false"],
+            ["btrfs", "subvolume", "delete", self._PATH],
+            ["btrfs", "property", "set", self._PATH, "ro", "true"],
+        ]
+
+    def test_failed_delete_reports_a_snapshot_left_writable(self) -> None:
+        config, _ = _local_config()
+        runner = (
+            FakeCommandRunner()
+            .on("btrfs", "subvolume", returns=_DENIED)
+            .on(
+                "btrfs",
+                "property",
+                returns=[completed(), completed(1, stderr="read-only filesystem")],
+            )
+        )
+
+        with pytest.raises(
+            SnapshotOperationError,
+            check=lambda e: (
+                e.op is SnapshotOp.DELETE
+                and e.stderr.endswith("so it is left writable: read-only filesystem")
+            ),
+        ):
+            delete_snapshot(self._PATH, config.volumes["dst"], {}, run=runner)
+
+    def test_connection_lost_while_restoring_keeps_the_delete_error(self) -> None:
+        config, _ = _local_config()
+        runner = (
+            FakeCommandRunner()
+            .on("btrfs", "subvolume", returns=_DENIED)
+            .on(
+                "btrfs",
+                "property",
+                returns=[completed(), ConnectionResetError("connection reset")],
+            )
+        )
+
+        with pytest.raises(
+            SnapshotOperationError,
+            check=lambda e: (
+                e.op is SnapshotOp.DELETE
+                and e.stderr.startswith("permission denied;")
+                and e.stderr.endswith("left writable: connection reset")
+            ),
         ):
             delete_snapshot(self._PATH, config.volumes["dst"], {}, run=runner)
 

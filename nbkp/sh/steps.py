@@ -293,9 +293,15 @@ def _delete_snapshot_cmds(spec: SyncSpec) -> list[str]:
     path = f"{spec.snapshots_dir}/{SNAP}"
     match spec.dst_ep.snapshot_mode:
         case "btrfs":
+            # A failed delete makes the snapshot read-only again, so one that
+            # stays is not left writable; ``false`` then fails the ``set -e``
+            # block as the delete would have.
+            delete = _on_dst(spec, ["btrfs", "subvolume", "delete", path])
+            restore = _on_dst(spec, ["btrfs", "property", "set", path, "ro", "true"])
+            left_writable = 'nbkp_log "WARN: snapshot $snap is left writable"'
             return [
                 _on_dst(spec, ["btrfs", "property", "set", path, "ro", "false"]),
-                _on_dst(spec, ["btrfs", "subvolume", "delete", path]),
+                f"{delete} || {{ {restore} || {left_writable}; false; }}",
             ]
         case _:
             return [_on_dst(spec, ["rm", "-rf", path])]

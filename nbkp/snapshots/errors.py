@@ -21,6 +21,7 @@ class SnapshotOp(enum.StrEnum):
     CREATE = "create"
     MKDIR = "mkdir"
     MAKE_WRITABLE = "make-writable"
+    MAKE_READONLY = "make-readonly"
     DELETE = "delete"
     LIST = "list"
     READ_LATEST = "read-latest"

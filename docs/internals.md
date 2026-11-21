@@ -48,7 +48,7 @@ Both snapshot backends follow the same directory layout and lifecycle. Snapshot 
 
 **Hard-link flow** — Rsync writes directly into a new `snapshots/{timestamp}/` directory, using `--link-dest` to hard-link unchanged files from the previous snapshot (saving disk space). On success, the `latest` symlink is updated. No special filesystem commands are needed for creation or pruning.
 
-**Pruning** — When `max-snapshots` is set, old snapshots beyond the limit are removed after each `run`. The snapshot that `latest` points to is never pruned: if `latest` exists but cannot be read, pruning stops with an error rather than proceeding without that protection. When a deletion fails partway, the snapshots already deleted are still reported (`pruned_paths` in `run`, `deleted` in `snapshots prune`, whose `kept` is then counted afresh). Pruning can also be triggered manually with the `snapshots prune` command.
+**Pruning** — When `max-snapshots` is set, old snapshots beyond the limit are removed after each `run`. The snapshot that `latest` points to is never pruned: if `latest` exists but cannot be read, pruning stops with an error rather than proceeding without that protection. When a deletion fails partway, the snapshots already deleted are still reported (`pruned_paths` in `run`, `deleted` in `snapshots prune`, whose `kept` is then counted afresh). Pruning can also be triggered manually with the `snapshots prune` command. Deleting a btrfs snapshot first clears its read-only flag, which `user_subvol_rm_allowed` requires. When the delete then fails, nbkp sets the flag again, so a snapshot that stays is never left writable; the error's message says whether that worked, and the generated script logs a warning when it did not.
 
 **Orphan cleanup** — Hard-link syncs detect and clean up orphaned snapshot directories before each run. An orphan is a `snapshots/{timestamp}/` directory newer than the snapshot `latest` points to: one left behind by a previously failed sync. After a failed rsync the new snapshot directory is also removed straight away. Btrfs snapshots do not need orphan cleanup because snapshots are created atomically from a complete sync to `staging/` — a failed sync leaves `staging/` in a partial state but never creates a snapshot directory.
 
@@ -399,6 +399,7 @@ This section documents every external command nbkp invokes on local or remote ho
 |---|---|
 | `btrfs subvolume snapshot -r <staging> <snapshots/timestamp>` | Create read-only snapshot |
 | `btrfs property set <snapshot> ro false` | Make snapshot writable (for deletion) |
+| `btrfs property set <snapshot> ro true` | Make snapshot read-only again when its deletion fails |
 | `btrfs subvolume delete <snapshot>` | Delete snapshot |
 
 ### Hard-link snapshot operations

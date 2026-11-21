@@ -23,6 +23,7 @@ _OPERATIONS: dict[SnapshotOp, str] = {
     SnapshotOp.CREATE: "create snapshot",
     SnapshotOp.MKDIR: "create snapshot directory",
     SnapshotOp.MAKE_WRITABLE: "make snapshot writable",
+    SnapshotOp.MAKE_READONLY: "make snapshot read-only",
     SnapshotOp.DELETE: "delete snapshot",
     SnapshotOp.LIST: "list snapshots",
     SnapshotOp.READ_LATEST: "read latest symlink",

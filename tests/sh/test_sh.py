@@ -1424,6 +1424,63 @@ def _remote_script(mode: str) -> str:
     return generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints=resolved)
 
 
+class TestBtrfsPruneFailedDelete:
+    """A failed delete makes the snapshot read-only again and still fails
+    the prune block, which ``nbkp_run_sync`` turns into a warning."""
+
+    _STUB = dedent("""\
+        btrfs() {
+            echo "btrfs $*"
+            case "$1 $2 $5" in
+                "subvolume delete "*) return "$DELETE_RC" ;;
+                "property set true") return "$RESTORE_RC" ;;
+            esac
+        }
+        nbkp_log() { echo "$*"; }
+        snap=2026-01-01T00:00:00.000Z
+        """)
+
+    def _run_delete(self, *, delete_rc: int, restore_rc: int) -> list[str]:
+        script = generate_script(_btrfs_config(), _OPTIONS, now=_NOW)
+        [delete_line] = [
+            line.strip()
+            for line in script.splitlines()
+            if "btrfs subvolume delete" in line
+        ]
+        block = (
+            f"{self._STUB}set +e\n( set -e\n{delete_line}\necho deleted )\necho rc=$?\n"
+        )
+        result = subprocess.run(
+            ["bash", "-c", block],
+            env={"DELETE_RC": str(delete_rc), "RESTORE_RC": str(restore_rc)},
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.splitlines()
+
+    def test_successful_delete_leaves_the_flag_alone(self) -> None:
+        lines = self._run_delete(delete_rc=0, restore_rc=0)
+        assert [line for line in lines if "ro true" in line] == []
+        assert lines[-2:] == ["deleted", "rc=0"]
+
+    def test_failed_delete_makes_the_snapshot_read_only_again(self) -> None:
+        lines = self._run_delete(delete_rc=1, restore_rc=0)
+        path = "/mnt/dst/snapshots/2026-01-01T00:00:00.000Z"
+        assert lines == [
+            f"btrfs subvolume delete {path}",
+            f"btrfs property set {path} ro true",
+            "rc=1",
+        ]
+
+    def test_failed_restore_is_logged(self) -> None:
+        lines = self._run_delete(delete_rc=1, restore_rc=1)
+        assert lines[-2:] == [
+            "WARN: snapshot 2026-01-01T00:00:00.000Z is left writable",
+            "rc=1",
+        ]
+
+
 class TestRemoteCommandQuoting:
     """Remote paths are quoted for the remote shell; only $NBKP_TS/$snap expand."""
 

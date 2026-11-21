@@ -201,7 +201,7 @@ class TestPrune:
             kind=SnapshotErrorKind.OPERATION_FAILED,
             operation=SnapshotOp.DELETE,
             path=f"{SNAPSHOTS}/{OLD}",
-            message="Permission denied",
+            message="Permission denied; the snapshot was made read-only again",
         )
 
     def test_delete_failing_partway_reports_what_was_deleted(self) -> None:
@@ -223,7 +223,7 @@ class TestPrune:
             kind=SnapshotErrorKind.OPERATION_FAILED,
             operation=SnapshotOp.DELETE,
             path=f"{SNAPSHOTS}/{OLD}",
-            message="Permission denied",
+            message="Permission denied; the snapshot was made read-only again",
         )
 
     def test_infra_errors_fail_by_default(self) -> None:
