@@ -288,9 +288,9 @@ The steps to cut a release are in
   shared
   [repository conventions](https://github.com/iglootools/common/blob/main/guidelines/project-setup/repository.md#protect-the-default-branch-and-release-tags)
   describe: `main` cannot be deleted or force-pushed, changes go through a pull
-  request merged with a merge commit, and the `test` check must pass first; `v*`
-  tags cannot be deleted or moved, so a published version keeps pointing at the
-  commit it was built from.
+  request merged with a merge commit, and the `preflight` check must pass first;
+  `v*` tags cannot be deleted or moved, so a published version keeps pointing at
+  the commit it was built from.
 
   ```bash
   gh api --method POST repos/iglootools/nbkp/rulesets --input - <<'JSON'
@@ -312,7 +312,7 @@ The steps to cut a release are in
       { "type": "required_status_checks", "parameters": {
           "strict_required_status_checks_policy": false,
           "do_not_enforce_on_create": false,
-          "required_status_checks": [{ "context": "test", "integration_id": 15368 }] } }
+          "required_status_checks": [{ "context": "preflight", "integration_id": 15368 }] } }
     ]
   }
   JSON

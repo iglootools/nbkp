@@ -39,8 +39,8 @@ env:
 
 jobs:
   # Three jobs in parallel, one per ci-* task, so the two minute-long Docker suites do not
-  # wait for each other. The `test` job at the end gathers them under the one check name
-  # the main ruleset requires.
+  # wait for each other. The `preflight` job at the end gathers them under the one check
+  # name the main ruleset requires, since together they are what `mise run preflight` runs.
   preflight-quick:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -91,8 +91,8 @@ jobs:
       contents: read
     steps: *steps
 
-  test:
-    # The main ruleset requires a check named "test". A job skipped because a dependency
+  preflight:
+    # The main ruleset requires a check named "preflight". A job skipped because a dependency
     # failed would count as passing, so this one always runs and fails unless all three did.
     if: always()
     needs: [preflight-quick, test-docker, test-e2e]
