@@ -10,7 +10,7 @@
 #
 # Requirements:
 #   uv tool install nbkp  # or: mise run install (dev)
-#   brew install pv   # for simulated typing
+#   pv, for simulated typing: mise run install provides it (or: brew install pv)
 
 set -euo pipefail
 IFS=$'\n\t'
