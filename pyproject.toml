@@ -172,6 +172,7 @@ type = "forbidden"
 source_modules = [
   "nbkp.config",
   "nbkp.credentials",
+  "nbkp.demo",
   "nbkp.disks",
   "nbkp.fsprotocol",
   "nbkp.ordering",
@@ -204,24 +205,46 @@ ignore_imports = [
   "nbkp.**.output.** -> nbkp.clidisplay",
   "nbkp.**.output.** -> nbkp.clidisplay.**",
   "nbkp.**.output -> nbkp.clidisplay",
-  # Test and demo fixtures, not runtime code.
-  "nbkp.**.testkit.** -> **",
-  "nbkp.**.testkit -> **",
 ]
 
 [[tool.importlinter.contracts]]
 name = "CLI sub-apps do not import each other (shared wiring lives in nbkp.cliwiring)"
 type = "independence"
-modules = [
-  "nbkp.config.cli",
-  "nbkp.credentials.cli",
-  "nbkp.demo.cli",
-  "nbkp.disks.cli",
-  "nbkp.ordering.cli",
-  "nbkp.preflight.cli",
-  "nbkp.run.cli",
-  "nbkp.sh.cli",
-  "nbkp.snapshots.cli",
+# An expression rather than a list, so a new package's cli/ is covered too.
+modules = ["nbkp.*.cli"]
+
+[[tool.importlinter.contracts]]
+name = "Only the entry point imports the root CLI app"
+type = "protected"
+protected_modules = ["nbkp.cli"]
+allowed_importers = []
+
+[[tool.importlinter.contracts]]
+name = "Only the root app imports a CLI sub-app"
+type = "protected"
+# The forbidden contract above cannot see a core module importing its own
+# cli/ package: it skips a source and a target that overlap.
+protected_modules = ["nbkp.*.cli"]
+allowed_importers = ["nbkp.cli"]
+ignore_imports = [
+  # The package re-exports its app for the nbkp-demo entry point.
+  "nbkp.demo -> nbkp.demo.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "Only presentation code imports output modules"
+type = "protected"
+# Core code never imports an output module, its own included, which the
+# forbidden contract above cannot check once output modules may use Rich.
+protected_modules = ["nbkp.**.output"]
+allowed_importers = [
+  "nbkp.cli",
+  "nbkp.*.cli",
+  "nbkp.clidisplay",
+  "nbkp.cliwiring",
+  "nbkp.**.output",
+  "nbkp.**.testkit",
+  "nbkp.demo",
 ]
 
 [[tool.importlinter.contracts]]
@@ -254,9 +277,6 @@ ignore_imports = [
   # are checked by the CLI contracts instead.
   "nbkp.*.cli.** -> **",
   "nbkp.*.cli -> **",
-  # Test and demo fixtures, not runtime code.
-  "nbkp.**.testkit.** -> **",
-  "nbkp.**.testkit -> **",
 ]
 
 [[tool.importlinter.contracts]]

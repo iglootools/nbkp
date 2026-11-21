@@ -41,7 +41,7 @@ from nbkp.remote.testkit.sshexec import (
 )
 from nbkp.sync.rsync import run_rsync
 from nbkp.sync.testkit.seed import create_seed_sentinels
-from tests._docker_fixtures import ssh_exec
+from tests._docker_fixtures import ssh_exec, ssh_run
 
 
 def _extract_host_key(endpoint: SshEndpoint) -> str:
@@ -280,8 +280,8 @@ class TestHostKeyVerification:
         )
         sync = config.syncs["test-sync"]
 
-        def _run_remote(_vol: object, cmd: str) -> None:
-            ssh_exec(docker_ssh_endpoint, cmd)
+        def _run_remote(_vol: object, command: list[str]) -> None:
+            ssh_run(docker_ssh_endpoint, command)
 
         create_seed_sentinels(config, remote_exec=_run_remote)
 
@@ -374,8 +374,8 @@ class TestExplicitKeyOnly:
         )
         sync = config.syncs["test-sync"]
 
-        def _run_remote(_vol: object, cmd: str) -> None:
-            ssh_exec(docker_ssh_endpoint, cmd)
+        def _run_remote(_vol: object, command: list[str]) -> None:
+            ssh_run(docker_ssh_endpoint, command)
 
         create_seed_sentinels(config, remote_exec=_run_remote)
 

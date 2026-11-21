@@ -58,8 +58,8 @@ def setup_chain(
     """
     re = resolved if resolved is not None else resolve_all_endpoints(config)
 
-    def _run_remote(vol: RemoteVolume, cmd: str) -> None:
-        run_on_volume(["sh", "-c", cmd], vol, re)
+    def _run_remote(vol: RemoteVolume, command: list[str]) -> None:
+        run_on_volume(command, vol, re)
 
     create_seed_sentinels(config, remote_exec=_run_remote)
 

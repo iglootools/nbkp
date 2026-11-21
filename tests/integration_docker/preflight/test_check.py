@@ -38,6 +38,7 @@ from tests._docker_fixtures import (
     create_sentinels,
     resolved_endpoints_for,
     ssh_exec,
+    ssh_run,
 )
 
 
@@ -117,8 +118,8 @@ class TestSyncCheck:
         )
         sync = config.syncs["test-sync"]
 
-        def _run_remote(_vol: object, cmd: str) -> None:
-            ssh_exec(docker_ssh_endpoint, cmd)
+        def _run_remote(_vol: object, command: list[str]) -> None:
+            ssh_run(docker_ssh_endpoint, command)
 
         create_seed_sentinels(config, remote_exec=_run_remote)
 
@@ -413,8 +414,8 @@ class TestObserveEndpoints:
             },
         )
 
-        def _run_remote(_vol: object, cmd: str) -> None:
-            ssh_exec(docker_ssh_endpoint, cmd)
+        def _run_remote(_vol: object, command: list[str]) -> None:
+            ssh_run(docker_ssh_endpoint, command)
 
         create_seed_sentinels(config, remote_exec=_run_remote)
         resolved = resolve_all_endpoints(config)
@@ -461,8 +462,8 @@ class TestObserveEndpoints:
             },
         )
 
-        def _run_remote(_vol: object, cmd: str) -> None:
-            ssh_exec(docker_ssh_endpoint, cmd)
+        def _run_remote(_vol: object, command: list[str]) -> None:
+            ssh_run(docker_ssh_endpoint, command)
 
         create_seed_sentinels(config, remote_exec=_run_remote)
         resolved = resolve_all_endpoints(config)

@@ -25,6 +25,12 @@ DEFERRED_MODULES = [
     "invoke",
     "paramiko",
     "cryptography",
+    # only `nbkp demo`
+    "nbkp.demo.seed",
+    "nbkp.config.testkit",
+    "nbkp.preflight.testkit",
+    "nbkp.remote.testkit",
+    "nbkp.sync.testkit",
 ]
 
 

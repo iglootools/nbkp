@@ -1,33 +1,36 @@
 """Docker helpers for the developer test CLI seed command."""
 
+import functools
+import os
 import socket
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 import docker as dockerlib
 import docker.errors as docker_errors
-import typer
 lazy from cryptography.hazmat.primitives import serialization
 lazy from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from ...config import SshConnectionOptions, SshEndpoint
 from ...remote.fabricssh import run_remote_command
 from .constants import (  # noqa: F401
+    BASTION_CONTAINER_NAME,
     LUKS_MAPPER_NAME,
     LUKS_PASSPHRASE,
+    NETWORK_NAME,
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_ENCRYPTED_PATH,
     REMOTE_BTRFS_PATH,
     REMOTE_UNENCRYPTED_PATH,
+    STORAGE_CONTAINER_NAME,
 )
+from .errors import DockerError, DockerErrorKind
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"
-STORAGE_CONTAINER_NAME = "nbkp-demo"
-BASTION_CONTAINER_NAME = "nbkp-demo-bastion"
 _IMAGE_TAG = "nbkp-demo-server:latest"
-_NETWORK_NAME = "nbkp-demo-net"
 
 SSH_AUTHORIZED_KEYS_PATH = "/mnt/ssh-authorized-keys"
 
@@ -36,6 +39,19 @@ SSH_AUTHORIZED_KEYS_PATH = "/mnt/ssh-authorized-keys"
 # and the demo connects through 127.0.0.1 anyway, so nothing on the LAN
 # should reach it.
 _SSH_PORT_ON_LOOPBACK = {"22/tcp": ("127.0.0.1", 0)}
+
+
+def _as_docker_error[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
+    """Raise a Docker SDK failure of *fn* as a :class:`DockerError`."""
+
+    @functools.wraps(fn)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        try:
+            return fn(*args, **kwargs)
+        except docker_errors.DockerException as exc:
+            raise DockerError(DockerErrorKind.REQUEST_FAILED, str(exc)) from exc
+
+    return wrapper
 
 
 @dataclass(frozen=True)
@@ -74,30 +90,30 @@ def check_docker() -> None:
         client = dockerlib.from_env()
         client.ping()
     except docker_errors.DockerException as exc:
-        typer.echo(
-            f"Error: Docker is not available: {exc}",
-            err=True,
-        )
-        raise typer.Exit(1)
+        raise DockerError(DockerErrorKind.UNAVAILABLE, str(exc)) from exc
 
 
 def generate_ssh_keypair(
     seed_dir: Path,
 ) -> tuple[Path, Path]:
+    """The key logs into a privileged container with the host's /dev, and
+    the seed dir may be a predictable path under /tmp, so the key is never
+    readable by other users, not even until a chmod."""
     ssh_dir = seed_dir / "ssh"
-    ssh_dir.mkdir()
+    ssh_dir.mkdir(mode=0o700)
     private_key_path = ssh_dir / "id_ed25519"
     public_key_path = ssh_dir / "id_ed25519.pub"
 
     key = Ed25519PrivateKey.generate()
-    private_key_path.write_bytes(
-        key.private_bytes(
-            serialization.Encoding.PEM,
-            serialization.PrivateFormat.OpenSSH,
-            serialization.NoEncryption(),
+    fd = os.open(private_key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(
+            key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.OpenSSH,
+                serialization.NoEncryption(),
+            )
         )
-    )
-    private_key_path.chmod(0o600)
     pub_bytes = key.public_key().public_bytes(
         serialization.Encoding.OpenSSH,
         serialization.PublicFormat.OpenSSH,
@@ -107,24 +123,26 @@ def generate_ssh_keypair(
     return private_key_path, public_key_path
 
 
+@_as_docker_error
 def create_docker_network() -> str:
     """Recreate the network, force-disconnecting containers left on the old one."""
     client = dockerlib.from_env()
     try:
-        old = client.networks.get(_NETWORK_NAME)
+        old = client.networks.get(NETWORK_NAME)
         old.reload()
         for cid in list(old.attrs.get("Containers") or {}):
             try:
                 old.disconnect(cid, force=True)
-            except docker_errors.APIError:
-                pass
+            except docker_errors.NotFound:
+                pass  # The container left the network on its own meanwhile.
         old.remove()
     except docker_errors.NotFound:
         pass
-    client.networks.create(_NETWORK_NAME, driver="bridge")
-    return _NETWORK_NAME
+    client.networks.create(NETWORK_NAME, driver="bridge")
+    return NETWORK_NAME
 
 
+@_as_docker_error
 def build_docker_image() -> None:
     client = dockerlib.from_env()
     try:
@@ -134,13 +152,10 @@ def build_docker_image() -> None:
             nocache=True,
         )
     except docker_errors.BuildError as exc:
-        typer.echo(
-            f"Error: Docker image build failed: {exc}",
-            err=True,
-        )
-        raise typer.Exit(1)
+        raise DockerError(DockerErrorKind.IMAGE_BUILD_FAILED, str(exc)) from exc
 
 
+@_as_docker_error
 def start_storage_container(
     pub_key: Path,
     network_name: str | None = None,
@@ -205,6 +220,7 @@ def start_storage_container(
     return int(port_info[0]["HostPort"])
 
 
+@_as_docker_error
 def start_bastion_container(
     pub_key: Path,
     network_name: str,
@@ -260,13 +276,15 @@ def wait_for_ssh(
     raise TimeoutError(f"SSH not ready after {timeout}s")
 
 
-def ssh_exec(
+def ssh_run(
     server: SshEndpoint,
-    command: str,
+    command: list[str],
     *,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    result = run_remote_command(server, ["sh", "-c", command])
+    """Run *command* on *server*, each element one argument: a path or a
+    value in it is never parsed by the remote shell."""
+    result = run_remote_command(server, command)
     if check and result.returncode != 0:
         raise subprocess.CalledProcessError(
             result.returncode,
@@ -277,13 +295,24 @@ def ssh_exec(
     return result
 
 
+def ssh_exec(
+    server: SshEndpoint,
+    command: str,
+    *,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    """Run a fixed shell script on *server*; :func:`ssh_run` takes anything
+    built from a path or a value."""
+    return ssh_run(server, ["sh", "-c", command], check=check)
+
+
 def create_sentinels(
     server: SshEndpoint,
     path: str,
     sentinels: list[str],
 ) -> None:
     for sentinel in sentinels:
-        result = ssh_exec(server, f"touch {path}/{sentinel}", check=False)
+        result = ssh_run(server, ["touch", f"{path}/{sentinel}"], check=False)
         if result.returncode != 0:
             raise RuntimeError(f"Failed to create sentinel {sentinel}: {result.stderr}")
 

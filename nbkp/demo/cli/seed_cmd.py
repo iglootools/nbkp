@@ -1,6 +1,4 @@
 import shlex
-import tempfile
-from importlib.util import find_spec
 from pathlib import Path
 from textwrap import dedent
 from typing import Annotated
@@ -14,21 +12,21 @@ from ...clidisplay import StepProgressBar
 from ...config import (
     CredentialProvider,
 )
-
-# Docker-dependent imports are deferred to seed --docker. They require the 'docker'
-# extra (uv tool install 'nbkp[docker]'), which _require_docker_extra() checks before
-# anything here resolves them: being lazy, a missing extra only fails on first use.
-lazy from ...remote.testkit.docker import (
-    BASTION_CONTAINER_NAME,
-    DOCKER_DIR,
-    LUKS_PASSPHRASE,
-    STORAGE_CONTAINER_NAME,
-    check_docker,
-)
-
-_HAS_DOCKER = find_spec("docker") is not None
 from . import app, console as _console
-from .cmd_handler.seed import SeedError, SeedResult, seed_demo, seed_plan
+lazy from ...remote.testkit.constants import (
+    BASTION_CONTAINER_NAME,
+    LUKS_PASSPHRASE,
+    NETWORK_NAME,
+    STORAGE_CONTAINER_NAME,
+)
+lazy from ..seed import (
+    SeedError,
+    SeedErrorKind,
+    SeedResult,
+    seed_demo,
+    seed_plan,
+    seed_steps,
+)
 
 
 def _luks_setup_instructions(provider: CredentialProvider) -> list[str]:
@@ -50,39 +48,9 @@ def _luks_setup_instructions(provider: CredentialProvider) -> list[str]:
             ]
         case CredentialProvider.COMMAND:
             return [
-                "# Configure a command provider in the config to retrieve",
-                f"# the passphrase. Passphrase: {LUKS_PASSPHRASE}",
+                "# The config's credential-command prints the passphrase.",
+                f"# Passphrase: {LUKS_PASSPHRASE}",
             ]
-
-
-def _require_docker_extra() -> None:
-    if not _HAS_DOCKER:
-        typer.echo(
-            "Docker support requires the 'docker' extra.\n"
-            "Install it with: uv tool install 'nbkp[docker]'",
-            err=True,
-        )
-        raise typer.Exit(1)
-
-
-_ALWAYS_STEPS = ("seed volumes",)
-_DOCKER_STEPS = (
-    "build image",
-    "create network",
-    "start bastion",
-    "wait bastion SSH",
-    "start storage",
-    "wait storage SSH",
-)
-_LUKS_STEPS = ("read metadata", "mount", "umount")
-
-
-def _step_count(docker: bool, luks: bool) -> int:
-    return (
-        len(_ALWAYS_STEPS)
-        + (len(_DOCKER_STEPS) if docker else 0)
-        + (len(_LUKS_STEPS) if docker and luks else 0)
-    )
 
 
 @app.command("seed")
@@ -153,14 +121,10 @@ def seed_cmd(
     if dry_run:
         _print_plan(seed_plan(base_dir, docker=docker, luks=luks))
         return
-    if docker:
-        _check_docker_prerequisites()
-
-    tmp = _seed_dir(base_dir)
-    with StepProgressBar(_step_count(docker, luks)) as bar:
+    with StepProgressBar(len(seed_steps(docker=docker, luks=luks))) as bar:
         try:
             result = seed_demo(
-                tmp,
+                base_dir,
                 docker=docker,
                 luks=luks,
                 big_file_size=big_file_size,
@@ -170,26 +134,51 @@ def seed_cmd(
                 on_step_end=bar.on_end,
             )
         except SeedError as e:
-            _console.print(Text(str(e), style="red"), highlight=False)
+            _print_seed_error(e, docker)
             raise typer.Exit(1)
 
     _print_summary(result, docker, credential_provider)
 
 
-def _check_docker_prerequisites() -> None:
-    _require_docker_extra()
-    check_docker()
-    if not DOCKER_DIR.is_dir():
-        typer.echo(f"Error: Docker directory not found: {DOCKER_DIR}", err=True)
-        raise typer.Exit(1)
+def format_seed_error(e: SeedError) -> str:
+    match e.kind:
+        case SeedErrorKind.DOCKER_EXTRA_MISSING:
+            return (
+                "Docker support requires the 'docker' extra."
+                " Install it with: uv tool install 'nbkp[docker]'"
+                " (or use --no-docker)."
+            )
+        case SeedErrorKind.DOCKER_UNAVAILABLE:
+            return f"Docker is not available: {e.detail}"
+        case SeedErrorKind.DOCKER_DIR_MISSING:
+            return f"Docker directory not found: {e.detail}"
+        case SeedErrorKind.DOCKER_FAILED:
+            return f"Docker failed: {e.detail}"
+        case SeedErrorKind.SSH_NOT_READY:
+            return f"A demo container did not start SSH: {e.detail}"
+        case SeedErrorKind.REMOTE_COMMAND_FAILED:
+            return f"A command in a demo container failed: {e.detail}"
+        case SeedErrorKind.LUKS_UNAVAILABLE:
+            return (
+                "LUKS unavailable (dm-crypt kernel module missing?)."
+                " Use --no-luks to skip encrypted volume setup."
+            )
+        case SeedErrorKind.MOUNT_FAILED:
+            return f"Mount failed: {e.detail}"
+        case SeedErrorKind.UMOUNT_FAILED:
+            return (
+                f"Umount failed: {e.detail}. The encrypted volume may still be"
+                " mounted; run nbkp disks umount on the seeded config."
+            )
 
 
-def _seed_dir(base_dir: Path | None) -> Path:
-    if base_dir is not None:
-        base_dir.mkdir(parents=True, exist_ok=True)
-        return base_dir
-    else:
-        return Path(tempfile.mkdtemp(prefix="nbkp-demo-"))
+def _print_seed_error(e: SeedError, docker: bool) -> None:
+    _console.print(Text(format_seed_error(e), style="red"), highlight=False)
+    if docker and e.may_leave_containers:
+        _console.print(
+            Text("The demo containers may still be running. To remove them:")
+        )
+        _console.print(Text(_docker_teardown()), highlight=False)
 
 
 def _print_plan(steps: list[str]) -> None:
@@ -279,7 +268,7 @@ def _docker_teardown() -> str:
     return dedent(f"""\
         # Teardown containers and network
         docker rm -f {STORAGE_CONTAINER_NAME} {BASTION_CONTAINER_NAME}
-        docker network rm nbkp-demo-net""")
+        docker network rm {NETWORK_NAME}""")
 
 
 def commands_script(
