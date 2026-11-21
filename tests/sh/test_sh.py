@@ -3,11 +3,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from textwrap import dedent, indent
 
+import pytest
+
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     HardLinkSnapshotConfig,
     LocalVolume,
+    MountConfig,
     RemoteVolume,
     RsyncOptions,
     SshConnectionOptions,
@@ -16,7 +19,7 @@ from nbkp.config import (
     SyncEndpoint,
 )
 from nbkp.remote.resolution import resolve_all_endpoints
-from nbkp.sh import ScriptOptions, generate_script
+from nbkp.sh import ScriptOptions, VolumeWithoutPathError, generate_script
 
 _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
 _OPTIONS = ScriptOptions(platform="linux", config_path="/etc/nbkp/config.yaml")
@@ -438,6 +441,16 @@ class TestDisabledSync:
         assert "# sync_disabled_sync  # disabled" in script
 
 
+_SYMLINK_STEP = dedent("""\
+    # Update latest symlink (skip if dry-run)
+    if [ "$NBKP_DRY_RUN" = false ]; then
+        ln -sfn "snapshots/${NBKP_TS}" /mnt/dst/latest
+    fi
+""")
+"""The whole step: ``snapshots/${NBKP_TS}`` and the dry-run guard also
+appear in other steps, so matching them alone could not fail."""
+
+
 class TestBtrfs:
     def test_no_link_dest(self) -> None:
         config = _btrfs_config()
@@ -454,9 +467,25 @@ class TestBtrfs:
         assert "NBKP_TS=$(date -u" in script
 
     def test_snapshot_guarded_by_dry_run(self) -> None:
+        """The whole step: the guard also appears in other steps."""
         config = _btrfs_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert 'if [ "$NBKP_DRY_RUN" = false ]' in script
+        step = dedent("""\
+            # Btrfs snapshot (skip if dry-run)
+            if [ "$NBKP_DRY_RUN" = false ]; then
+                NBKP_TS=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+                NBKP_LATEST_LINK=$(readlink /mnt/dst/latest 2>/dev/null || true)
+                if [ -n "$NBKP_LATEST_LINK" ] && [ "$NBKP_LATEST_LINK" != "/dev/null" ]; then
+                    NBKP_LATEST_NAME="${NBKP_LATEST_LINK##*/}"
+                    if ! nbkp_snapshot_after "$NBKP_TS" "$NBKP_LATEST_NAME"; then
+                        nbkp_log "ERROR: new snapshot $NBKP_TS would not be after the latest snapshot $NBKP_LATEST_NAME; is the clock behind?"
+                        return 1
+                    fi
+                fi
+                btrfs subvolume snapshot -r /mnt/dst/staging "/mnt/dst/snapshots/${NBKP_TS}"
+            fi
+        """)
+        assert indent(step, "    ") in script
 
     def test_prune_with_max_snapshots(self) -> None:
         config = _btrfs_config()
@@ -481,11 +510,13 @@ class TestBtrfs:
         assert "staging/ directory not found" in script
         assert "snapshots/ directory not found" in script
 
-    def test_symlink_update_after_snapshot(self) -> None:
+    def test_symlink_update_after_snapshot_guarded_by_dry_run(self) -> None:
         config = _btrfs_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert "ln -sfn" in script
-        assert "snapshots/${NBKP_TS}" in script
+        assert indent(_SYMLINK_STEP, "    ") in script
+        assert script.index("# Btrfs snapshot") < script.index(
+            "# Update latest symlink"
+        )
 
 
 class TestPreflightChecks:
@@ -692,7 +723,23 @@ class TestShellValidity:
         _bash_n(script)
 
 
+def mount_managed_config() -> Config:
+    """A sync onto a mount-managed volume whose mountpoint is discovered."""
+    config = _local_to_local_config()
+    dst = LocalVolume(
+        slug="dst",
+        mount=MountConfig(device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6"),
+    )
+    return config.model_copy(update={"volumes": {**config.volumes, "dst": dst}})
+
+
 class TestEdgeCases:
+    def test_volume_without_path_is_refused(self) -> None:
+        with pytest.raises(
+            VolumeWithoutPathError, check=lambda e: e.volume_slug == "dst"
+        ):
+            generate_script(mount_managed_config(), _OPTIONS, now=_NOW)
+
     def test_empty_config(self) -> None:
         config = Config()
         script = generate_script(config, _OPTIONS, now=_NOW)
@@ -964,7 +1011,7 @@ class TestHardLink:
                 if [ -n "$NBKP_LATEST_LINK" ] && [ "$NBKP_LATEST_LINK" != "/dev/null" ]; then
                     NBKP_LATEST_NAME="${NBKP_LATEST_LINK##*/}"
                     for snap in $(ls /mnt/dst/snapshots 2>/dev/null | nbkp_snapshot_names); do
-                        if [ "$snap" \\> "$NBKP_LATEST_NAME" ]; then
+                        if nbkp_snapshot_after "$snap" "$NBKP_LATEST_NAME"; then
                             nbkp_log "Removing orphaned snapshot: $snap"
                             rm -rf "/mnt/dst/snapshots/${snap}" || nbkp_log "WARN: failed to remove orphaned snapshot: $snap"
                         fi
@@ -1003,16 +1050,10 @@ class TestHardLink:
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert "/mnt/dst/snapshots/${NBKP_TS}/" in script
 
-    def test_symlink_update(self) -> None:
+    def test_symlink_update_guarded_by_dry_run(self) -> None:
         config = self._hl_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        assert "ln -sfn" in script
-        assert "snapshots/${NBKP_TS}" in script
-
-    def test_symlink_guarded_by_dry_run(self) -> None:
-        config = self._hl_config()
-        script = generate_script(config, _OPTIONS, now=_NOW)
-        assert 'if [ "$NBKP_DRY_RUN" = false ]' in script
+        assert indent(_SYMLINK_STEP, "    ") in script
 
     def test_prune_with_max_snapshots(self) -> None:
         config = self._hl_config()
@@ -1381,6 +1422,99 @@ def _remote_script(mode: str) -> str:
     config = _remote_snapshot_config(mode)
     resolved = resolve_all_endpoints(config)
     return generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints=resolved)
+
+
+class TestBtrfsPruneFailedDelete:
+    """A failed delete makes the snapshot read-only again and still fails
+    the prune block, which ``nbkp_run_sync`` turns into a warning."""
+
+    _STUB = dedent("""\
+        btrfs() {
+            echo "btrfs $*"
+            case "$1 $2 $5" in
+                "subvolume delete "*) return "$DELETE_RC" ;;
+                "property set true") return "$RESTORE_RC" ;;
+            esac
+        }
+        nbkp_log() { echo "$*"; }
+        snap=2026-01-01T00:00:00.000Z
+        """)
+
+    def _run_delete(self, *, delete_rc: int, restore_rc: int) -> list[str]:
+        script = generate_script(_btrfs_config(), _OPTIONS, now=_NOW)
+        [delete_line] = [
+            line.strip()
+            for line in script.splitlines()
+            if "btrfs subvolume delete" in line
+        ]
+        block = (
+            f"{self._STUB}set +e\n( set -e\n{delete_line}\necho deleted )\necho rc=$?\n"
+        )
+        result = subprocess.run(
+            ["bash", "-c", block],
+            env={"DELETE_RC": str(delete_rc), "RESTORE_RC": str(restore_rc)},
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.splitlines()
+
+    def test_successful_delete_leaves_the_flag_alone(self) -> None:
+        lines = self._run_delete(delete_rc=0, restore_rc=0)
+        assert [line for line in lines if "ro true" in line] == []
+        assert lines[-2:] == ["deleted", "rc=0"]
+
+    def test_failed_delete_makes_the_snapshot_read_only_again(self) -> None:
+        lines = self._run_delete(delete_rc=1, restore_rc=0)
+        path = "/mnt/dst/snapshots/2026-01-01T00:00:00.000Z"
+        assert lines == [
+            f"btrfs subvolume delete {path}",
+            f"btrfs property set {path} ro true",
+            "rc=1",
+        ]
+
+    def test_failed_restore_is_logged(self) -> None:
+        lines = self._run_delete(delete_rc=1, restore_rc=1)
+        assert lines[-2:] == [
+            "WARN: snapshot 2026-01-01T00:00:00.000Z is left writable",
+            "rc=1",
+        ]
+
+
+class TestBtrfsLatestReadOnlyWarning:
+    """Preflight warns, without failing, when ``latest``'s snapshot is writable."""
+
+    def _run(self, *, latest: str, ro: str) -> list[str]:
+        script = generate_script(_btrfs_config(), _OPTIONS, now=_NOW)
+        [line] = [
+            line.strip() for line in script.splitlines() if "not read-only" in line
+        ]
+        stub = dedent("""\
+            btrfs() { echo "$RO"; }
+            nbkp_log() { echo "$*"; }
+            """)
+        result = subprocess.run(
+            ["bash", "-c", f"{stub}set -e\n{line}\necho passed\n"],
+            env={"RO": ro, "NBKP_DST_LATEST": latest},
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.splitlines()
+
+    def test_writable_snapshot_is_a_warning(self) -> None:
+        warning = "WARN: the snapshot latest points to is not read-only"
+        assert self._run(latest="snapshots/S", ro="ro=false") == [
+            f"{warning} (/mnt/dst/snapshots/S)",
+            "passed",
+        ]
+
+    @pytest.mark.parametrize(
+        ("latest", "ro"),
+        [("snapshots/S", "ro=true"), ("snapshots/S", ""), ("/dev/null", "ro=false")],
+    )
+    def test_no_warning_otherwise(self, latest: str, ro: str) -> None:
+        assert self._run(latest=latest, ro=ro) == ["passed"]
 
 
 class TestRemoteCommandQuoting:

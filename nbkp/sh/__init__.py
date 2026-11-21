@@ -23,6 +23,20 @@ from .spec import build_sync_spec
 from .steps import Step, build_steps
 
 
+class VolumeWithoutPathError(ValueError):
+    """A volume the script would use has no ``path``.
+
+    The script is static, so it cannot discover a mount-managed volume's
+    mountpoint at run time (mount management is left out of ``sh``).
+    """
+
+    def __init__(self, volume_slug: str) -> None:
+        self.volume_slug = volume_slug
+        super().__init__(
+            f"volume '{volume_slug}': 'path' is required for shell script generation"
+        )
+
+
 @dataclass(frozen=True, kw_only=True)
 class ScriptOptions:
     """``platform`` (a ``sys.platform`` value) selects the snapshot timestamp
@@ -44,7 +58,10 @@ def generate_script(
     now: datetime,
     resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> str:
-    """*now* is the generation time written to the header."""
+    """*now* is the generation time written to the header.
+
+    Raises :class:`VolumeWithoutPathError` when a volume has no ``path``.
+    """
     re = resolved_endpoints or {}
     vol_paths = _build_vol_paths(config, options)
     ctx = _build_script_context(config, options, vol_paths, now, re)
@@ -99,16 +116,9 @@ def _resolve_vol_path(
     dst_slugs: set[str],
     options: ScriptOptions,
 ) -> str:
-    """The generated script is static, so a volume must have a declared ``path``
-    (mount management — including discovery-model volumes with no ``path`` —
-    is excluded from ``sh``).
-    """
+    """Raises :class:`VolumeWithoutPathError` for a volume with no ``path``."""
     if vol.path is None:
-        msg = (
-            f"volume '{slug}': 'path' is required for shell script generation"
-            " (mount management is not supported in generated scripts)"
-        )
-        raise ValueError(msg)
+        raise VolumeWithoutPathError(slug)
     match vol:
         case RemoteVolume():
             return vol.path

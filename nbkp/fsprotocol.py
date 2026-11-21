@@ -115,3 +115,19 @@ class Snapshot(BaseModel):
     @staticmethod
     def from_path(path: str) -> Snapshot:
         return Snapshot.from_name(path.rsplit("/", 1)[-1])
+
+    @staticmethod
+    def from_latest_target(target: str) -> Snapshot:
+        """The snapshot a ``latest`` symlink *target* designates.
+
+        Only ``snapshots/<name>``, as nbkp writes it, qualifies: a hand-edited
+        target whose last component merely looks like a timestamp
+        (``../other/snapshots/<name>``) would make downstream syncs read
+        another tree, and pruning or orphan cleanup key off a snapshot that
+        is not this endpoint's.  Anything else raises :class:`ValueError`.
+        """
+        snapshot = Snapshot.from_path(target)
+        if target != f"{SNAPSHOTS_DIR}/{snapshot.name}":
+            msg = f"not a target under {SNAPSHOTS_DIR}/: {target!r}"
+            raise ValueError(msg)
+        return snapshot

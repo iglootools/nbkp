@@ -44,7 +44,12 @@ from ...fsprotocol import (
 )
 from ...remote.endpoints import ResolvedEndpoints
 from ...remote.ssh import format_proxy_jump_chain, ssh_prefix, wrap_cmd
-from ..status.endpoint import DestinationEndpointErrorKind, SourceEndpointErrorKind
+from ..status.endpoint import (
+    DestinationEndpointErrorKind,
+    DestinationEndpointStatus,
+    DestinationEndpointWarningKind,
+    SourceEndpointErrorKind,
+)
 from ..status.ssh import SshEndpointErrorKind, SshEndpointStatus, SshEndpointWarningKind
 from ..status.sync import SyncErrorKind
 from ..status.volume import VolumeErrorKind, VolumeStatus
@@ -897,6 +902,42 @@ def format_destination_endpoint_error_fix(
             return _destination_layout_fix(error, dst_vol, path, ctx)
         case _:
             return _destination_snapshot_backend_fix(error, dst_vol, path, ctx)
+
+
+def format_destination_endpoint_warning_fix(
+    warning: DestinationEndpointWarningKind,
+    sync: SyncConfig,
+    status: DestinationEndpointStatus,
+    ctx: TroubleshootContext,
+) -> Lines:
+    dst_ep = ctx.config.destination_endpoint(sync)
+    dst_vol = ctx.config.volumes[dst_ep.volume]
+    match warning:
+        case DestinationEndpointWarningKind.LATEST_SNAPSHOT_WRITABLE:
+            latest = status.diagnostics.latest if status.diagnostics else None
+            target = (
+                latest.raw_target
+                if latest is not None and latest.raw_target is not None
+                else f"{SNAPSHOTS_DIR}/<snapshot>"
+            )
+            snapshot = f"{endpoint_path(dst_vol, dst_ep.subdir)}/{target}"
+            return [
+                format_line(
+                    FIX,
+                    "The snapshot ",
+                    snapshot,
+                    " can be modified: a delete that failed after clearing its"
+                    " read-only flag, or a manual change, left it writable."
+                    " Make it read-only again:",
+                ),
+                format_command(
+                    wrap_cmd(
+                        ["btrfs", "property", "set", snapshot, "ro", "true"],
+                        dst_vol,
+                        ctx.resolved_endpoints,
+                    )
+                ),
+            ]
 
 
 def _destination_layout_fix(

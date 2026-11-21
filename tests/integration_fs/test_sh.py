@@ -515,6 +515,42 @@ class TestGeneratedScriptExecution:
         for name in lookalikes:
             assert (snapshots / name).is_dir()
 
+    def _mixed_name_forms(self, tmp_path: Path) -> tuple[str, str]:
+        """An older Linux (colon) snapshot and a newer macOS (hyphen) one that
+        latest points to: ':' sorts after '-', so name order inverts them."""
+        older, newer = "2020-01-01T10:15:00.000Z", "2020-01-01T10-30-00.000Z"
+        for name in (older, newer):
+            (_stage(tmp_path) / SNAPSHOTS_DIR / name).mkdir()
+        latest = _stage(tmp_path) / LATEST_LINK
+        latest.unlink()
+        latest.symlink_to(f"{SNAPSHOTS_DIR}/{newer}")
+        return older, newer
+
+    def test_orphan_cleanup_keeps_older_snapshot_of_other_name_form(
+        self, tmp_path: Path
+    ) -> None:
+        config = _seeded_chain(tmp_path)
+        older, newer = self._mixed_name_forms(tmp_path)
+
+        result = _run_script(config, tmp_path)
+
+        assert result.returncode == 0, result.stderr
+        assert {older, newer} <= set(_snapshot_names(tmp_path))
+
+    def test_prune_removes_oldest_snapshot_when_name_forms_are_mixed(
+        self, tmp_path: Path
+    ) -> None:
+        config = _seeded_chain(tmp_path, max_snapshots=2)
+        older, newer = self._mixed_name_forms(tmp_path)
+
+        result = _run_script(config, tmp_path)
+
+        assert result.returncode == 0, result.stderr
+        names = _snapshot_names(tmp_path)
+        assert older not in names
+        assert newer in names
+        assert len(names) == 2
+
     def test_refuses_snapshot_not_after_latest(self, tmp_path: Path) -> None:
         """With the clock behind latest, latest is not moved back in time."""
         config = _seeded_chain(tmp_path)

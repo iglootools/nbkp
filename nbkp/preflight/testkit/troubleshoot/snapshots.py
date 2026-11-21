@@ -9,11 +9,13 @@ from ....config import (
     SyncConfig,
     SyncEndpoint,
 )
+from ....fsprotocol import Snapshot
 from ... import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
     DestinationEndpointErrorKind,
     DestinationEndpointStatus,
+    DestinationEndpointWarningKind,
     LatestSymlinkState,
     SnapshotDirsDiagnostics,
     SourceEndpointDiagnostics,
@@ -489,4 +491,68 @@ FS_TYPE_UNKNOWN = Scenario(
         ),
     ),
     syncs=(sync_from_laptop("fs-type-unknown", "dst-fs-unknown"),),
+)
+
+
+_WRITABLE_SNAPSHOT = "2024-01-01T00:00:00.000Z"
+
+
+def _latest_snapshot_writable_statuses(
+    config: Config, shared: SharedStatuses
+) -> ScenarioStatuses:
+    # DestinationEndpointWarningKind.LATEST_SNAPSHOT_WRITABLE: a warning on an
+    # active endpoint, so the sync stays active.
+    usb16 = volume_status(
+        config, "usb-16", LOCALHOST_SSH_STATUS_BTRFS, healthy_caps(btrfs=True)
+    )
+    return ScenarioStatuses(
+        volumes=(usb16,),
+        syncs=(
+            SyncStatus(
+                slug="latest-snapshot-writable",
+                config=config.syncs["latest-snapshot-writable"],
+                source_endpoint_status=active_src_ep_status(
+                    LAPTOP_SRC, shared.laptop_active
+                ),
+                destination_endpoint_status=DestinationEndpointStatus(
+                    endpoint_slug="dst-latest-writable",
+                    volume_status=usb16,
+                    diagnostics=DestinationEndpointDiagnostics(
+                        endpoint_slug="dst-latest-writable",
+                        sentinel_exists=True,
+                        endpoint_writable=True,
+                        btrfs=BtrfsStagingSubvolumeDiagnostics(
+                            staging_exists=True,
+                            staging_is_subvolume=True,
+                            staging_writable=True,
+                        ),
+                        snapshot_dirs=_HEALTHY_SNAPSHOT_DIRS,
+                        latest=LatestSymlinkState(
+                            exists=True,
+                            raw_target=f"snapshots/{_WRITABLE_SNAPSHOT}",
+                            target_valid=True,
+                            snapshot=Snapshot.from_name(_WRITABLE_SNAPSHOT),
+                        ),
+                        latest_snapshot_readonly=False,
+                    ),
+                    errors=[],
+                    warnings=[DestinationEndpointWarningKind.LATEST_SNAPSHOT_WRITABLE],
+                ),
+                errors=[],
+            ),
+        ),
+    )
+
+
+LATEST_SNAPSHOT_WRITABLE = Scenario(
+    statuses=_latest_snapshot_writable_statuses,
+    volumes=(LocalVolume(slug="usb-16", path="/mnt/usb-16"),),
+    sync_endpoints=(
+        SyncEndpoint(
+            slug="dst-latest-writable",
+            volume="usb-16",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+        ),
+    ),
+    syncs=(sync_from_laptop("latest-snapshot-writable", "dst-latest-writable"),),
 )

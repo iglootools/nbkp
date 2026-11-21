@@ -50,15 +50,24 @@ def check_btrfs_subvolume(
     return result.returncode == 0 and result.stdout.strip() == "256"
 
 
-def check_btrfs_readonly(
+def probe_btrfs_readonly(
     volume: Volume,
     path: str,
     resolved_endpoints: ResolvedEndpoints,
     *,
     run: VolumeCommandRunner = run_on_volume,
-) -> bool:
+) -> bool | None:
+    """Whether the subvolume at *path* is read-only (``btrfs property get``
+    prints ``ro=true`` or ``ro=false``); ``None`` when that cannot be told.
+    """
     result = run(["btrfs", "property", "get", path, "ro"], volume, resolved_endpoints)
-    return result.returncode == 0 and "ro=true" in result.stdout
+    match result.stdout.strip() if result.returncode == 0 else None:
+        case "ro=true":
+            return True
+        case "ro=false":
+            return False
+        case _:
+            return None
 
 
 def check_btrfs_mount_option(

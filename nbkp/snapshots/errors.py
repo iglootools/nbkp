@@ -21,6 +21,7 @@ class SnapshotOp(enum.StrEnum):
     CREATE = "create"
     MKDIR = "mkdir"
     MAKE_WRITABLE = "make-writable"
+    MAKE_READONLY = "make-readonly"
     DELETE = "delete"
     LIST = "list"
     READ_LATEST = "read-latest"
@@ -40,6 +41,18 @@ class SnapshotOperationError(Exception):
         self.path = path
         self.stderr = stderr
         super().__init__(f"{op.value} failed for {path}: {stderr.strip()}")
+
+
+class SnapshotPruneError(SnapshotOperationError):
+    """A deletion failed partway through pruning.
+
+    ``deleted`` holds the snapshots removed before the failure, oldest
+    first, so callers can still report them.
+    """
+
+    def __init__(self, cause: SnapshotOperationError, deleted: tuple[str, ...]) -> None:
+        super().__init__(cause.op, cause.path, cause.stderr)
+        self.deleted = deleted
 
 
 def run_snapshot_command(

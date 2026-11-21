@@ -9,7 +9,7 @@ from ..remote.endpoints import ResolvedEndpoints
 from .btrfs import prune_snapshots as btrfs_prune_snapshots
 from .common import list_snapshots
 from .disposition import preflight_disposition
-from .errors import SnapshotOperationError
+from .errors import SnapshotOperationError, SnapshotPruneError
 from .hardlinks import prune_snapshots as hl_prune_snapshots
 from .models import PruneResult, SnapshotResultError, SnapshotSkipReason
 
@@ -106,10 +106,13 @@ def _execute_prune(
             dry_run=dry_run,
         )
     except SnapshotOperationError as e:
+        # A deletion that fails partway has already removed some snapshots:
+        # report them, and count what is left afresh (0 if that fails too).
+        kept, _ = _count_snapshots(sync, config, re, run)
         return PruneResult(
             sync_slug=slug,
-            deleted=(),
-            kept=0,
+            deleted=e.deleted if isinstance(e, SnapshotPruneError) else (),
+            kept=kept,
             dry_run=dry_run,
             error=SnapshotResultError.from_operation(e),
         )

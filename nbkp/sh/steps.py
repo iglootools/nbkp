@@ -106,7 +106,7 @@ def _orphan_cleanup_block(spec: SyncSpec) -> str:
             if [ -n "$NBKP_LATEST_LINK" ] && [ "$NBKP_LATEST_LINK" != "/dev/null" ]; then
                 NBKP_LATEST_NAME="${{NBKP_LATEST_LINK##*/}}"
                 for snap in {_list_snapshots(spec, quiet=True)}; do
-                    if [ "$snap" \\> "$NBKP_LATEST_NAME" ]; then
+                    if nbkp_snapshot_after "$snap" "$NBKP_LATEST_NAME"; then
                         nbkp_log "Removing orphaned snapshot: $snap"
                         {rm} || nbkp_log "WARN: failed to remove orphaned snapshot: $snap"
                     fi
@@ -140,8 +140,8 @@ def _after_latest_guard(spec: SyncSpec) -> str:
     As ``ensure_after_latest`` in ``nbkp run``: a snapshot taken with the
     clock behind would move ``latest`` back in time, and the next orphan
     cleanup would remove every complete snapshot after it; an equal name
-    would reuse the latest snapshot.  Names are fixed-width timestamps, so
-    ``test``'s byte-wise ``>`` orders them by time.
+    would reuse the latest snapshot.  ``nbkp_snapshot_after`` compares the
+    names by time, whichever name form each uses.
     """
     error = (
         "ERROR: new snapshot $NBKP_TS would not be after the latest"
@@ -151,7 +151,7 @@ def _after_latest_guard(spec: SyncSpec) -> str:
         NBKP_LATEST_LINK={_readlink_latest(spec)}
         if [ -n "$NBKP_LATEST_LINK" ] && [ "$NBKP_LATEST_LINK" != "/dev/null" ]; then
             NBKP_LATEST_NAME="${{NBKP_LATEST_LINK##*/}}"
-            if ! [ "$NBKP_TS" \\> "$NBKP_LATEST_NAME" ]; then
+            if ! nbkp_snapshot_after "$NBKP_TS" "$NBKP_LATEST_NAME"; then
                 nbkp_log "{error}"
                 return 1
             fi
@@ -293,9 +293,15 @@ def _delete_snapshot_cmds(spec: SyncSpec) -> list[str]:
     path = f"{spec.snapshots_dir}/{SNAP}"
     match spec.dst_ep.snapshot_mode:
         case "btrfs":
+            # A failed delete makes the snapshot read-only again, so one that
+            # stays is not left writable; ``false`` then fails the ``set -e``
+            # block as the delete would have.
+            delete = _on_dst(spec, ["btrfs", "subvolume", "delete", path])
+            restore = _on_dst(spec, ["btrfs", "property", "set", path, "ro", "true"])
+            left_writable = 'nbkp_log "WARN: snapshot $snap is left writable"'
             return [
                 _on_dst(spec, ["btrfs", "property", "set", path, "ro", "false"]),
-                _on_dst(spec, ["btrfs", "subvolume", "delete", path]),
+                f"{delete} || {{ {restore} || {left_writable}; false; }}",
             ]
         case _:
             return [_on_dst(spec, ["rm", "-rf", path])]

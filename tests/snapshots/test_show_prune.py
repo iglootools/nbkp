@@ -201,7 +201,29 @@ class TestPrune:
             kind=SnapshotErrorKind.OPERATION_FAILED,
             operation=SnapshotOp.DELETE,
             path=f"{SNAPSHOTS}/{OLD}",
-            message="Permission denied",
+            message="Permission denied; the snapshot was made read-only again",
+        )
+
+    def test_delete_failing_partway_reports_what_was_deleted(self) -> None:
+        """With 4 snapshots and a limit of 2, the second deletion fails: the
+        first is gone, and the remaining 3 are counted afresh."""
+        older = "2026-02-01T10:00:00.000Z"
+        run = _nas_with((older, OLD, MID, NEW), (OLD, MID, NEW)).on(
+            "btrfs",
+            "subvolume",
+            "delete",
+            returns=[completed(0), completed(1, stderr="Permission denied")],
+        )
+
+        [result] = _prune(run)
+
+        assert result.deleted == (f"{SNAPSHOTS}/{older}",)
+        assert result.kept == 3
+        assert result.error == SnapshotResultError(
+            kind=SnapshotErrorKind.OPERATION_FAILED,
+            operation=SnapshotOp.DELETE,
+            path=f"{SNAPSHOTS}/{OLD}",
+            message="Permission denied; the snapshot was made read-only again",
         )
 
     def test_infra_errors_fail_by_default(self) -> None:
@@ -226,6 +248,44 @@ class TestPrune:
         assert result.skip_reason is SnapshotSkipReason.PREFLIGHT_ERRORS
         assert result.error is None
         assert run.calls == []
+
+    def test_hard_link_snapshots_are_deleted_with_rm(self) -> None:
+        config = nas_config(snapshots="hard-link", max_snapshots=2)
+        run = _nas_with((OLD, MID, NEW), (MID, NEW)).on("rm", returns=completed())
+
+        [result] = _prune(run, config=config)
+
+        assert (result.deleted, result.kept) == ((f"{SNAPSHOTS}/{OLD}",), 2)
+        assert run.commands_starting_with("rm") == [["rm", "-rf", f"{SNAPSHOTS}/{OLD}"]]
+
+    def test_sync_without_max_snapshots_is_skipped_and_counted(self) -> None:
+        config = nas_config(snapshots="btrfs")
+
+        [result] = _prune(_nas_with((OLD, MID, NEW)), config=config)
+
+        assert result == PruneResult(
+            sync_slug="photos",
+            deleted=(),
+            kept=3,
+            dry_run=False,
+            skip_reason=SnapshotSkipReason.NO_MAX_SNAPSHOTS,
+        )
+
+    def test_listing_failure_without_max_snapshots_is_an_error(self) -> None:
+        """Not ``kept: 0``: an unreadable destination must not pass for empty."""
+        config = nas_config(snapshots="btrfs")
+        run = FakeCommandRunner().on("ls", returns=OSError("connection failed"))
+
+        [result] = _prune(run, config=config)
+
+        assert result.skip_reason is SnapshotSkipReason.NO_MAX_SNAPSHOTS
+        assert result.error == SnapshotResultError(
+            kind=SnapshotErrorKind.OPERATION_FAILED,
+            operation=SnapshotOp.LIST,
+            path=SNAPSHOTS,
+            message="connection failed",
+        )
+        assert has_errors([result])
 
     def test_only_selected_syncs(self) -> None:
         config = nas_config(snapshots="btrfs", max_snapshots=2, syncs=("a", "b"))

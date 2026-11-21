@@ -10,7 +10,7 @@ from ...remote.dispatch import VolumeCommandRunner, run_on_volume
 from ...remote.endpoints import ResolvedEndpoints
 from ...remote.errors import ssh_connection_errors
 from ...snapshots.common import update_latest_symlink
-from ...snapshots.errors import SnapshotOperationError
+from ...snapshots.errors import SnapshotOperationError, SnapshotPruneError
 from ..results import SyncFailureKind, SyncResult, SyncWarning, SyncWarningKind
 from ..rsync import ProgressMode, run_rsync
 
@@ -137,7 +137,8 @@ def _prune(
         return (tuple(pruned), ())
     except SnapshotOperationError as e:
         warning = SyncWarning(kind=SyncWarningKind.PRUNE, message=f"Prune failed: {e}")
-        return (None, (warning,))
+        deleted = e.deleted if isinstance(e, SnapshotPruneError) else None
+        return (deleted, (warning,))
 
 
 def publish_snapshot(

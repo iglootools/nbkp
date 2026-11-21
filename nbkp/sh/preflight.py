@@ -33,6 +33,7 @@ from .commands import (
     vol_cmd,
     which_cmd,
 )
+from .quoting import quote, shell_var
 from .spec import SyncSpec
 
 # Tools the snapshot steps run on the destination host.
@@ -175,6 +176,7 @@ def _destination_snapshot_checks(spec: SyncSpec) -> list[str]:
                 *_latest_checks(
                     spec.dst_vol, spec.dst_path, "destination", "NBKP_DST_LATEST", spec
                 ),
+                _latest_readonly_warning(spec),
             ]
         case "hard-link":
             return [
@@ -226,6 +228,24 @@ def _btrfs_checks(spec: SyncSpec) -> list[str]:
             BROKEN,
         ),
     ]
+
+
+def _latest_readonly_warning(spec: SyncSpec) -> str:
+    """Warn, without failing, when the snapshot ``latest`` points to has lost
+    its read-only flag, as ``nbkp preflight`` does."""
+    snapshot = f"{spec.dst_path}/{shell_var('NBKP_DST_LATEST')}"
+    ro = output_of(
+        spec.dst_vol,
+        ["btrfs", "property", "get", snapshot, "ro"],
+        spec.resolved_endpoints,
+    )
+    message = quote(
+        f"WARN: the snapshot {LATEST_LINK} points to is not read-only ({snapshot})"
+    )
+    return (
+        f'if [ "$NBKP_DST_LATEST" != /dev/null ] && [ {ro} = ro=false ]; then'
+        f" nbkp_log {message}; fi"
+    )
 
 
 def _hardlink_support_check(spec: SyncSpec) -> str:

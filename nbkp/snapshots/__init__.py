@@ -15,7 +15,6 @@ from .btrfs import (
     create_snapshot as create_snapshot,
 )
 from .common import (
-    get_latest_snapshot as get_latest_snapshot,
     list_snapshots as list_snapshots,
     read_latest_symlink as read_latest_symlink,
     resolve_dest_path as resolve_dest_path,

@@ -13,6 +13,7 @@ import pytest
 
 from nbkp.config import (
     BtrfsSnapshotConfig,
+    HardLinkSnapshotConfig,
     LocalVolume,
     RemoteVolume,
     SshEndpoint,
@@ -21,12 +22,16 @@ from nbkp.config import (
 )
 from nbkp.disks import MountToolCapabilities
 from nbkp.policy import Strictness
-from nbkp.preflight.endpoint_checks import _read_latest_state
+from nbkp.preflight.endpoint_checks import (
+    _read_latest_state,
+    observe_destination_endpoint,
+)
 from nbkp.preflight.ssh_checks import observe_standalone_endpoint
 from nbkp.preflight.status.endpoint import (
     DestinationEndpointDiagnostics,
     DestinationEndpointErrorKind,
     DestinationEndpointStatus,
+    DestinationEndpointWarningKind,
     SourceEndpointDiagnostics,
     SourceEndpointStatus,
 )
@@ -48,7 +53,7 @@ from nbkp.preflight.status.volume import (
 from nbkp.preflight.strictness import has_fatal_errors
 from nbkp.preflight.volume_checks import observe_ssh_endpoint
 from nbkp.remote.endpoints import ResolvedEndpoint
-from tests.fakes import FakeCommandRunner
+from tests.fakes import FakeCommandRunner, completed
 
 _TOOLS = HostToolCapabilities(
     has_rsync=True,
@@ -334,6 +339,106 @@ class TestLatestSymlinkTarget:
         state = self._state(tmp_path, "/dev/null")
         assert state.raw_target == "/dev/null"
         assert state.target_valid is None
+
+
+_SNAPSHOT = "2024-01-01T00:00:00.000Z"
+_BTRFS_CAPS = VolumeCapabilities(
+    sentinel_exists=True,
+    is_btrfs_filesystem=True,
+    hardlink_supported=True,
+    btrfs_user_subvol_rm=True,
+)
+
+
+class TestLatestSnapshotReadOnly:
+    """A writable ``latest`` snapshot is probed on btrfs destinations and
+    reported as a warning that leaves the endpoint active."""
+
+    def _observe(
+        self,
+        run: FakeCommandRunner,
+        *,
+        btrfs: bool = True,
+        latest: str = f"snapshots/{_SNAPSHOT}",
+    ) -> DestinationEndpointDiagnostics:
+        vol, resolved = _remote_volume()
+        endpoint = SyncEndpoint(
+            slug="ep",
+            volume="data",
+            btrfs_snapshots=BtrfsSnapshotConfig(enabled=btrfs),
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=not btrfs),
+        )
+        return observe_destination_endpoint(
+            endpoint,
+            vol,
+            _BTRFS_CAPS,
+            resolved,
+            host_tools=_TOOLS,
+            run=run.on("readlink", returns=completed(0, f"{latest}\n")),
+        )
+
+    @pytest.mark.parametrize(
+        ("stdout", "readonly"), [("ro=true\n", True), ("ro=false\n", False)]
+    )
+    def test_probes_the_snapshot_latest_points_to(
+        self, stdout: str, readonly: bool
+    ) -> None:
+        run = FakeCommandRunner().on("btrfs", "property", returns=completed(0, stdout))
+        assert self._observe(run).latest_snapshot_readonly is readonly
+        assert run.commands_starting_with("btrfs") == [
+            ["btrfs", "property", "get", f"/data/snapshots/{_SNAPSHOT}", "ro"]
+        ]
+
+    def test_a_failed_probe_is_unknown(self) -> None:
+        run = FakeCommandRunner().on("btrfs", "property", returns=completed(1))
+        assert self._observe(run).latest_snapshot_readonly is None
+
+    def test_not_probed_for_hard_link_snapshots(self) -> None:
+        run = FakeCommandRunner()
+        assert self._observe(run, btrfs=False).latest_snapshot_readonly is None
+        assert run.commands_starting_with("btrfs") == []
+
+    def test_not_probed_while_latest_is_dev_null(self) -> None:
+        run = FakeCommandRunner()
+        diag = self._observe(run, latest="/dev/null")
+        assert diag.latest_snapshot_readonly is None
+        assert run.commands_starting_with("btrfs") == []
+
+    @pytest.mark.parametrize(
+        ("readonly", "warnings"),
+        [
+            (False, [DestinationEndpointWarningKind.LATEST_SNAPSHOT_WRITABLE]),
+            (True, []),
+            (None, []),
+        ],
+    )
+    def test_writable_is_a_warning_not_an_error(
+        self,
+        readonly: bool | None,
+        warnings: list[DestinationEndpointWarningKind],
+    ) -> None:
+        vol_status = VolumeStatus(
+            slug="dst",
+            config=LocalVolume(slug="dst", path="/mnt/dst"),
+            ssh_endpoint_status=_ssh(SshEndpointDiagnostics(host_tools=_TOOLS)),
+            diagnostics=VolumeDiagnostics(capabilities=_BTRFS_CAPS),
+            errors=[],
+        )
+        status = DestinationEndpointStatus.from_diagnostics(
+            SyncEndpoint(slug="ep", volume="dst"),
+            vol_status,
+            DestinationEndpointDiagnostics(
+                endpoint_slug="ep",
+                sentinel_exists=True,
+                endpoint_writable=True,
+                latest_snapshot_readonly=readonly,
+            ),
+        )
+        assert (status.warnings, status.errors, status.active) == (
+            warnings,
+            [],
+            True,
+        )
 
 
 class TestFsTypeUnknown:

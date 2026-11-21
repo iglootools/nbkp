@@ -21,7 +21,6 @@ from nbkp.remote.endpoints import ResolvedEndpoint
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.snapshots.common import (
     create_snapshot_timestamp,
-    get_latest_snapshot,
     list_snapshots,
     read_latest_symlink,
     update_latest_symlink,
@@ -203,60 +202,7 @@ class TestCreateSnapshotTimestamp:
         assert result.name == "2026-02-21T12:00:00.000Z"
 
 
-class TestGetLatestSnapshotLocal:
-    def test_found(self) -> None:
-        runner = FakeCommandRunner().on(
-            returns=completed(
-                returncode=0,
-                stdout="2024-01-01T00:00:00.000Z\n2024-01-15T12:00:00.000Z\n",
-            )
-        )
-        config, sync = _local_config()
-
-        result = get_latest_snapshot(sync, config, run=runner)
-        assert result is not None
-        assert result.name == "2024-01-15T12:00:00.000Z"
-
-    def test_empty(self) -> None:
-        runner = FakeCommandRunner().on(returns=completed(returncode=0, stdout=""))
-        config, sync = _local_config()
-
-        result = get_latest_snapshot(sync, config, run=runner)
-        assert result is None
-
-    def test_dir_missing(self) -> None:
-        # ls fails, then `test -d` reports the directory absent
-        runner = FakeCommandRunner().on(
-            returns=[
-                completed(returncode=2, stdout="", stderr="No such file"),
-                completed(returncode=1, stdout="", stderr=""),
-            ]
-        )
-        config, sync = _local_config()
-
-        result = get_latest_snapshot(sync, config, run=runner)
-        assert result is None
-
-
-class TestGetLatestSnapshotRemote:
-    def test_found(self) -> None:
-        runner = FakeCommandRunner().on(
-            returns=completed(
-                returncode=0,
-                stdout="2024-01-01T00:00:00.000Z\n2024-01-15T12:00:00.000Z\n",
-            )
-        )
-        config, sync = _remote_config()
-        resolved = resolve_all_endpoints(config)
-
-        result = get_latest_snapshot(sync, config, resolved, run=runner)
-        assert result is not None
-        assert result.name == "2024-01-15T12:00:00.000Z"
-        assert runner.commands == [["ls", "/backup/data/snapshots"]]
-        assert runner.calls[0].volume == config.volumes["dst"]
-
-
-class TestGetLatestSnapshotRemoteSpaces:
+class TestListSnapshotsRemoteSpaces:
     def test_found(self) -> None:
         runner = FakeCommandRunner().on(
             returns=completed(
@@ -267,9 +213,11 @@ class TestGetLatestSnapshotRemoteSpaces:
         config, sync = _remote_config_spaces()
         resolved = resolve_all_endpoints(config)
 
-        result = get_latest_snapshot(sync, config, resolved, run=runner)
-        assert result is not None
-        assert result.name == "2024-01-15T12:00:00.000Z"
+        result = list_snapshots(sync, config, resolved, run=runner)
+        assert [s.name for s in result] == [
+            "2024-01-01T00:00:00.000Z",
+            "2024-01-15T12:00:00.000Z",
+        ]
         assert runner.commands == [["ls", "/my backup/my data/snapshots"]]
         assert runner.calls[0].volume == config.volumes["dst"]
 
@@ -564,6 +512,40 @@ class TestListSnapshotsFailures:
         result = list_snapshots(sync, config, run=runner)
         assert [s.name for s in result] == ["2026-03-01T10:00:00.000Z"]
 
+    def test_mixed_name_forms_are_sorted_by_time(self) -> None:
+        """Linux (colon) and macOS (hyphen) names in one hour sort by time."""
+        runner = FakeCommandRunner().on(
+            returns=completed(
+                returncode=0,
+                stdout="2026-03-01T10-30-00.000Z\n2026-03-01T10:15:00.000Z\n",
+            )
+        )
+        config, sync = _local_config()
+
+        result = list_snapshots(sync, config, run=runner)
+        assert [s.name for s in result] == [
+            "2026-03-01T10:15:00.000Z",
+            "2026-03-01T10-30-00.000Z",
+        ]
+
+    def test_prune_deletes_the_oldest_when_name_forms_are_mixed(self) -> None:
+        runner = FakeCommandRunner().on(
+            "ls",
+            returns=completed(
+                0,
+                "2026-03-01T10-30-00.000Z\n2026-03-01T10:15:00.000Z\n"
+                "2026-03-01T10-45-00.000Z\n",
+            ),
+        )
+        runner.on(
+            "readlink", returns=completed(0, "snapshots/2026-03-01T10-45-00.000Z\n")
+        )
+        runner.on("rm", returns=completed(0))
+        sync, config, re = _hl_remote_config()
+
+        deleted = hl_prune_snapshots(sync, config, 2, resolved_endpoints=re, run=runner)
+        assert [p.rsplit("/", 1)[-1] for p in deleted] == ["2026-03-01T10:15:00.000Z"]
+
     @pytest.mark.parametrize(
         "transport_error",
         [
@@ -621,6 +603,24 @@ class TestReadLatestSymlinkFailures:
         with pytest.raises(
             SnapshotOperationError,
             check=lambda e: e.op is SnapshotOp.READ_LATEST and "foo" in e.stderr,
+        ):
+            read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
+
+    @pytest.mark.parametrize(
+        "target",
+        [
+            "../other/snapshots/2026-03-07T09:00:00.000Z",
+            "/mnt/elsewhere/snapshots/2026-03-07T09:00:00.000Z",
+            "2026-03-07T09:00:00.000Z",
+        ],
+    )
+    def test_target_outside_snapshots_dir_raises(self, target: str) -> None:
+        """Only ``snapshots/<name>`` designates one of this endpoint's snapshots."""
+        runner = FakeCommandRunner().on("readlink", returns=completed(0, f"{target}\n"))
+        sync, config, re = _hl_remote_config()
+
+        with pytest.raises(
+            SnapshotOperationError, check=_is_op(SnapshotOp.READ_LATEST)
         ):
             read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
 

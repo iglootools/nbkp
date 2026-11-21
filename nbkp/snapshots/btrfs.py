@@ -15,7 +15,7 @@ from .common import (
     resolve_dest_path,
     snapshots_dir,
 )
-from .errors import SnapshotOp, run_checked
+from .errors import SnapshotOp, SnapshotOperationError, run_checked
 
 
 def create_snapshot(
@@ -49,21 +49,30 @@ def create_snapshot(
     return snapshot_path
 
 
-def _make_snapshot_writable(
+def _readonly_cmd(path: str, readonly: bool) -> list[str]:
+    return ["btrfs", "property", "set", path, "ro", "true" if readonly else "false"]
+
+
+def _restore_readonly_failure(
     path: str,
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
     run: VolumeCommandRunner,
-) -> None:
-    """Unset the readonly property so the snapshot can be deleted."""
-    run_checked(
-        SnapshotOp.MAKE_WRITABLE,
-        path,
-        ["btrfs", "property", "set", path, "ro", "false"],
-        volume,
-        resolved_endpoints,
-        run=run,
-    )
+) -> str | None:
+    """Make *path* read-only again; why that failed, or ``None``."""
+    try:
+        run_checked(
+            SnapshotOp.MAKE_READONLY,
+            path,
+            _readonly_cmd(path, True),
+            volume,
+            resolved_endpoints,
+            run=run,
+        )
+    except SnapshotOperationError as e:
+        return e.stderr.strip()
+    else:
+        return None
 
 
 def delete_snapshot(
@@ -77,17 +86,40 @@ def delete_snapshot(
 
     First unsets the readonly property (needed when the filesystem
     is mounted with user_subvol_rm_allowed instead of granting
-    CAP_SYS_ADMIN), then deletes the subvolume.
+    CAP_SYS_ADMIN), then deletes the subvolume.  When the delete fails,
+    the snapshot is made read-only again, so one that stays is not left
+    writable; the error says whether that worked.
     """
-    _make_snapshot_writable(path, volume, resolved_endpoints, run)
     run_checked(
-        SnapshotOp.DELETE,
+        SnapshotOp.MAKE_WRITABLE,
         path,
-        ["btrfs", "subvolume", "delete", path],
+        _readonly_cmd(path, False),
         volume,
         resolved_endpoints,
         run=run,
     )
+    try:
+        run_checked(
+            SnapshotOp.DELETE,
+            path,
+            ["btrfs", "subvolume", "delete", path],
+            volume,
+            resolved_endpoints,
+            run=run,
+        )
+    except SnapshotOperationError as e:
+        restore_failure = _restore_readonly_failure(
+            path, volume, resolved_endpoints, run
+        )
+        note = (
+            "the snapshot was made read-only again"
+            if restore_failure is None
+            else "making the snapshot read-only again also failed, so it is left"
+            f" writable: {restore_failure}"
+        )
+        raise SnapshotOperationError(
+            SnapshotOp.DELETE, path, f"{e.stderr.strip()}; {note}"
+        ) from e
 
 
 def prune_snapshots(

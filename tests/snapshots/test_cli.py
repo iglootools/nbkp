@@ -135,6 +135,47 @@ class TestPruneCommand:
         assert "preflight troubleshoot" not in output
 
 
+class TestJsonErrors:
+    """The error codes scripts match on: enum member names, not prose."""
+
+    def test_failed_delete(self, tmp_path: Path) -> None:
+        _write(tmp_path)
+        run = _nas((OLD, MID, NEW)).on(
+            "btrfs", "subvolume", "delete", returns=completed(1, stderr="denied")
+        )
+
+        exit_code, output = _invoke(run, "prune", "-o", "json")
+
+        assert exit_code == 1
+        assert json.loads(output)[0]["error"] == {
+            "kind": "operation-failed",
+            "preflight_errors": [],
+            "operation": "DELETE",
+            "path": f"{SNAPSHOTS}/{OLD}",
+            "message": "denied; the snapshot was made read-only again",
+        }
+
+    @pytest.mark.parametrize("command", ["show", "prune"])
+    def test_preflight_failure(self, command: str, tmp_path: Path) -> None:
+        _write(tmp_path)
+        no_snapshots_dir = healthy_nas(
+            FakeCommandRunner().on("test", "-d", SNAPSHOTS, returns=FAILS)
+        )
+
+        exit_code, output = _invoke(
+            no_snapshots_dir, command, "-S", "ignore-none", "-o", "json"
+        )
+
+        assert exit_code == 1
+        assert json.loads(output)[0]["error"] == {
+            "kind": "preflight-errors",
+            "preflight_errors": ["DESTINATION_ENDPOINT_INACTIVE"],
+            "operation": None,
+            "path": None,
+            "message": None,
+        }
+
+
 class TestPreflightFailure:
     """A preflight failure points at ``preflight troubleshoot``, like ``run``."""
 

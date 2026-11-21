@@ -29,7 +29,7 @@ from .probes import (
     check_symlink_exists,
     read_symlink_target,
 )
-from .snapshot_checks import check_btrfs_subvolume
+from .snapshot_checks import check_btrfs_subvolume, probe_btrfs_readonly
 from .status.endpoint import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
@@ -84,6 +84,11 @@ def observe_destination_endpoint(
         volume, endpoint.subdir, DESTINATION_SENTINEL, resolved_endpoints, run=run
     )
     dst_ep = resolve_endpoint_path(volume, endpoint.subdir)
+    latest = (
+        _read_latest_state(volume, dst_ep, resolved_endpoints, run=run)
+        if endpoint.snapshot_mode != "none"
+        else None
+    )
 
     return DestinationEndpointDiagnostics(
         endpoint_slug=endpoint.slug,
@@ -100,17 +105,22 @@ def observe_destination_endpoint(
             host_tools,
             run=run,
         ),
-        **(
-            {
-                "snapshot_dirs": _check_snapshot_dirs(
-                    volume, dst_ep, resolved_endpoints, run=run
-                ),
-                "latest": _read_latest_state(
-                    volume, dst_ep, resolved_endpoints, run=run
-                ),
-            }
+        snapshot_dirs=(
+            _check_snapshot_dirs(volume, dst_ep, resolved_endpoints, run=run)
             if endpoint.snapshot_mode != "none"
-            else {}
+            else None
+        ),
+        latest=latest,
+        latest_snapshot_readonly=(
+            probe_btrfs_readonly(
+                volume, f"{dst_ep}/{latest.raw_target}", resolved_endpoints, run=run
+            )
+            if endpoint.btrfs_snapshots.enabled
+            and host_tools.has_btrfs
+            and capabilities.is_btrfs_filesystem
+            and latest is not None
+            and latest.snapshot is not None
+            else None
         ),
     )
 
@@ -207,15 +217,8 @@ def _read_latest_state(
 
 
 def _parse_snapshot(target: str) -> Snapshot | None:
-    """The snapshot *target* designates, if it is one of this endpoint's.
-
-    Only ``snapshots/<name>`` qualifies: a hand-edited target whose last
-    component merely looks like a timestamp (``../other/snapshots/<name>``)
-    would make downstream syncs read another tree, and pruning protect a
-    same-named snapshot here instead.
-    """
+    """The snapshot *target* designates, if it is one of this endpoint's."""
     try:
-        snapshot = Snapshot.from_path(target)
+        return Snapshot.from_latest_target(target)
     except ValueError:
         return None
-    return snapshot if target == f"{SNAPSHOTS_DIR}/{snapshot.name}" else None

@@ -34,8 +34,10 @@ from nbkp.preflight.output import format_human_troubleshoot
 from nbkp.preflight.output.check import (
     _format_destination_diagnostics,
     _format_latest,
+    format_human_check,
 )
 from nbkp.preflight.status.endpoint import LatestSymlinkState
+from nbkp.preflight.testkit import troubleshoot_config, troubleshoot_data
 
 
 def _make_console() -> tuple[Console, StringIO]:
@@ -422,6 +424,19 @@ class TestCheckLatestColumn:
 
     def test_missing_shown_as_error(self) -> None:
         assert str(_format_latest(LatestSymlinkState(exists=False))) == "✗latest"
+
+
+class TestCheckLatestSnapshotWritable:
+    def test_shown_as_a_warning_with_the_troubleshoot_hint(self) -> None:
+        config = troubleshoot_config()
+        sync = troubleshoot_data(config).sync_statuses["latest-snapshot-writable"]
+        buf = StringIO()
+        Console(file=buf, highlight=False, markup=False, width=400).print(
+            format_human_check({}, {}, {sync.slug: sync}, config, wrap_in_panel=False)
+        )
+        output = buf.getvalue()
+        assert "the snapshot latest points to is not read-only" in output
+        assert "preflight troubleshoot" in output
 
 
 class TestCheckDestinationColumn:

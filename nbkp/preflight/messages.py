@@ -16,9 +16,10 @@ from ..fsprotocol import (
     STAGING_DIR,
     VOLUME_SENTINEL,
 )
-from .severity import PreflightErrorKind
+from .severity import PreflightErrorKind, PreflightWarningKind
 from .status import (
     DestinationEndpointErrorKind,
+    DestinationEndpointWarningKind,
     SourceEndpointErrorKind,
     SshEndpointErrorKind,
     SshEndpointWarningKind,
@@ -59,6 +60,12 @@ _SSH_ENDPOINT: dict[SshEndpointErrorKind, str] = {
 _SSH_ENDPOINT_WARNING: dict[SshEndpointWarningKind, str] = {
     SshEndpointWarningKind.UDISKS_BTRFS_MODULE_MISSING: (
         "udisks2 btrfs module not installed"
+    ),
+}
+
+_DESTINATION_ENDPOINT_WARNING: dict[DestinationEndpointWarningKind, str] = {
+    DestinationEndpointWarningKind.LATEST_SNAPSHOT_WRITABLE: (
+        f"the snapshot {LATEST_LINK} points to is not read-only"
     ),
 }
 
@@ -127,7 +134,7 @@ _DESTINATION_ENDPOINT: dict[DestinationEndpointErrorKind, str] = {
 }
 
 
-def format_problem(kind: PreflightErrorKind | SshEndpointWarningKind) -> str:
+def format_problem(kind: PreflightErrorKind | PreflightWarningKind) -> str:
     match kind:
         case VolumeErrorKind():
             return _VOLUME[kind]
@@ -141,9 +148,11 @@ def format_problem(kind: PreflightErrorKind | SshEndpointWarningKind) -> str:
             return _SOURCE_ENDPOINT[kind]
         case DestinationEndpointErrorKind():
             return _DESTINATION_ENDPOINT[kind]
+        case DestinationEndpointWarningKind():
+            return _DESTINATION_ENDPOINT_WARNING[kind]
 
 
 def format_problems(
-    kinds: Iterable[PreflightErrorKind | SshEndpointWarningKind],
+    kinds: Iterable[PreflightErrorKind | PreflightWarningKind],
 ) -> str:
     return ", ".join(format_problem(kind) for kind in kinds)

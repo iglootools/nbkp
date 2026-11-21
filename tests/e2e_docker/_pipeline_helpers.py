@@ -6,9 +6,10 @@ from nbkp.config import (
     Config,
     RemoteVolume,
     SshEndpoint,
+    Volume,
 )
 from nbkp.preflight.probes import check_directory_exists, read_symlink_target
-from nbkp.preflight.snapshot_checks import check_btrfs_readonly, check_btrfs_subvolume
+from nbkp.preflight.snapshot_checks import check_btrfs_subvolume
 from nbkp.remote.dispatch import run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.remote.resolution import resolve_all_endpoints
@@ -23,6 +24,15 @@ from nbkp.sync.testkit.seed import (
 
 # Re-export so test modules can import from here
 __all__ = ["build_chain_config"]
+
+
+def _is_btrfs_readonly(
+    volume: Volume, path: str, resolved_endpoints: ResolvedEndpoints
+) -> bool:
+    result = run_on_volume(
+        ["btrfs", "property", "get", path, "ro"], volume, resolved_endpoints
+    )
+    return result.returncode == 0 and "ro=true" in result.stdout
 
 
 def setup_chain(
@@ -147,7 +157,7 @@ def assert_chain_results(
     assert check_btrfs_subvolume(btrfs_vol, btrfs_snapshot_subdir, resolved), (
         f"btrfs latest target is not a subvolume: {btrfs_latest_abs}"
     )
-    assert check_btrfs_readonly(btrfs_vol, btrfs_latest_abs, resolved), (
+    assert _is_btrfs_readonly(btrfs_vol, btrfs_latest_abs, resolved), (
         f"btrfs snapshot is not read-only: {btrfs_latest_abs}"
     )
 

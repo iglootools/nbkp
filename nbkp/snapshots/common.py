@@ -1,4 +1,5 @@
 import os
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
@@ -23,6 +24,7 @@ from ..remote.endpoints import ResolvedEndpoints
 from .errors import (
     SnapshotOp,
     SnapshotOperationError,
+    SnapshotPruneError,
     local_fs_op,
     run_checked,
     run_snapshot_command,
@@ -97,13 +99,18 @@ def parse_snapshot_listing(stdout: str) -> list[Snapshot]:
     left behind) are ignored rather than treated as errors: nbkp never
     created them, so it neither counts nor prunes them.  The generated
     shell script filters the same way (``nbkp_snapshot_names``).
+
+    Sorted by time, not by name: a destination written from both Linux
+    (``10:15``) and macOS (``10-30``) holds both name forms, and ``:``
+    sorts after ``-``, so name order would put the older one last.
     """
-    return [
+    snapshots = [
         snapshot
-        for name in sorted(line for line in stdout.splitlines() if line.strip())
-        for snapshot in [_parse_snapshot_name(name.strip())]
+        for line in stdout.splitlines()
+        for snapshot in [_parse_snapshot_name(line.strip())]
         if snapshot is not None
     ]
+    return sorted(snapshots, key=lambda s: (s.timestamp, s.name))
 
 
 def _snapshots_dir_exists(
@@ -151,20 +158,6 @@ def list_snapshots(
         return []
     else:
         raise SnapshotOperationError(SnapshotOp.LIST, path, result.stderr or "")
-
-
-def get_latest_snapshot(
-    sync: SyncConfig,
-    config: Config,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-    *,
-    run: VolumeCommandRunner = run_on_volume,
-) -> Snapshot | None:
-    snapshots = list_snapshots(sync, config, resolved_endpoints, run=run)
-    if snapshots:
-        return snapshots[-1]
-    else:
-        return None
 
 
 def _read_local_symlink_target(latest_path: str) -> str | None:
@@ -236,7 +229,8 @@ def read_latest_symlink(
 
     Returns ``None`` if the symlink does not exist or points to
     ``/dev/null`` (the canonical "no snapshot yet" marker).  A target that
-    is not a snapshot name raises
+    is not ``snapshots/<name>`` (see :meth:`Snapshot.from_latest_target`)
+    raises
     :class:`~nbkp.snapshots.errors.SnapshotOperationError`: callers use it
     to protect the latest snapshot, so it must not be guessed at.
     """
@@ -249,9 +243,8 @@ def read_latest_symlink(
     if target is None or target == DEVNULL_TARGET:
         return None
     else:
-        name = target.rsplit("/", 1)[-1] if "/" in target else target
         try:
-            return Snapshot.from_name(name)
+            return Snapshot.from_latest_target(target)
         except ValueError as e:
             raise SnapshotOperationError(
                 SnapshotOp.READ_LATEST, latest_path, f"not a snapshot: {target}"
@@ -332,7 +325,9 @@ def prune_oldest_snapshots(
     *delete_snapshot*.
 
     Never prunes the snapshot that the latest symlink points to.
-    Returns list of deleted (or would-be-deleted) paths.
+    Returns list of deleted (or would-be-deleted) paths.  A failed deletion
+    raises :class:`~nbkp.snapshots.errors.SnapshotPruneError`, which names
+    the snapshots deleted before it.
     """
     re = resolved_endpoints or {}
     snapshots = list_snapshots(sync, config, re, run=run)
@@ -352,7 +347,18 @@ def prune_oldest_snapshots(
 
         if not dry_run:
             dst_vol = destination_volume(sync, config)
-            for path in to_delete:
-                delete_snapshot(path, dst_vol, re, run=run)
+            _delete_in_order(
+                to_delete, lambda path: delete_snapshot(path, dst_vol, re, run=run)
+            )
 
         return to_delete
+
+
+def _delete_in_order(paths: list[str], delete: Callable[[str], None]) -> None:
+    """Delete *paths* in order; a failure raises :class:`SnapshotPruneError`
+    with the paths already deleted."""
+    for i, path in enumerate(paths):
+        try:
+            delete(path)
+        except SnapshotOperationError as e:
+            raise SnapshotPruneError(e, tuple(paths[:i])) from e

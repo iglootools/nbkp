@@ -11,9 +11,14 @@ from .status.endpoint import (
     INACTIVE_DST_ENDPOINT_ERRORS,
     INACTIVE_SRC_ENDPOINT_ERRORS,
     DestinationEndpointErrorKind,
+    DestinationEndpointWarningKind,
     SourceEndpointErrorKind,
 )
-from .status.ssh import INACTIVE_SSH_ERRORS, SshEndpointErrorKind
+from .status.ssh import (
+    INACTIVE_SSH_ERRORS,
+    SshEndpointErrorKind,
+    SshEndpointWarningKind,
+)
 from .status.sync import INACTIVE_SYNC_ERRORS, SyncErrorKind
 from .status.volume import INACTIVE_VOLUME_ERRORS, VolumeErrorKind
 
@@ -24,6 +29,9 @@ PreflightErrorKind = (
     | DestinationEndpointErrorKind
     | SyncErrorKind
 )
+
+PreflightWarningKind = SshEndpointWarningKind | DestinationEndpointWarningKind
+"""Findings shown as warnings that never make anything inactive."""
 
 
 def _is_inactive(error: PreflightErrorKind) -> bool:

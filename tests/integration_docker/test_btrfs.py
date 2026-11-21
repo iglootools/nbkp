@@ -29,7 +29,6 @@ from nbkp.snapshots.btrfs import (
     prune_snapshots,
 )
 from nbkp.snapshots.common import (
-    get_latest_snapshot,
     list_snapshots,
     update_latest_symlink,
 )
@@ -43,8 +42,6 @@ from tests.integration_docker._btrfs_helpers import (
     run_test_dry_run_preserves_all,
     run_test_lists_sorted_oldest_first,
     run_test_prunes_oldest_beyond_limit,
-    run_test_returns_most_recent,
-    run_test_returns_none_when_empty,
 )
 
 
@@ -140,14 +137,6 @@ class TestCreateSnapshot:
 class TestListSnapshots:
     def test_lists_sorted_oldest_first(self, btrfs_env_remote: BtrfsEnv) -> None:
         run_test_lists_sorted_oldest_first(btrfs_env_remote)
-
-
-class TestGetLatestSnapshot:
-    def test_returns_most_recent(self, btrfs_env_remote: BtrfsEnv) -> None:
-        run_test_returns_most_recent(btrfs_env_remote)
-
-    def test_returns_none_when_empty(self, btrfs_env_remote: BtrfsEnv) -> None:
-        run_test_returns_none_when_empty(btrfs_env_remote)
 
 
 class TestDeleteSnapshot:
@@ -303,12 +292,7 @@ class TestBtrfsSnapshots:
         time.sleep(0.1)
 
         # Second sync should use link-dest from first snapshot
-        latest_snap = get_latest_snapshot(
-            sync,
-            config,
-            resolved_endpoints=resolved,
-        )
-        assert latest_snap is not None
+        latest_snap = list_snapshots(sync, config, resolved)[-1]
 
         link_dest = f"../snapshots/{latest_snap.name}"
         result = run_rsync(

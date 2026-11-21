@@ -48,7 +48,7 @@ Both snapshot backends follow the same directory layout and lifecycle. Snapshot 
 
 **Hard-link flow** — Rsync writes directly into a new `snapshots/{timestamp}/` directory, using `--link-dest` to hard-link unchanged files from the previous snapshot (saving disk space). On success, the `latest` symlink is updated. No special filesystem commands are needed for creation or pruning.
 
-**Pruning** — When `max-snapshots` is set, old snapshots beyond the limit are removed after each `run`. The snapshot that `latest` points to is never pruned: if `latest` exists but cannot be read, pruning stops with an error rather than proceeding without that protection. Pruning can also be triggered manually with the `snapshots prune` command.
+**Pruning** — When `max-snapshots` is set, old snapshots beyond the limit are removed after each `run`. The snapshot that `latest` points to is never pruned: if `latest` exists but cannot be read, pruning stops with an error rather than proceeding without that protection. When a deletion fails partway, the snapshots already deleted are still reported (`pruned_paths` in `run`, `deleted` in `snapshots prune`, whose `kept` is then counted afresh). Pruning can also be triggered manually with the `snapshots prune` command. Deleting a btrfs snapshot first clears its read-only flag, which `user_subvol_rm_allowed` requires. When the delete then fails, nbkp sets the flag again, so a snapshot that stays is never left writable; the error's message says whether that worked, and the generated script logs a warning when it did not.
 
 **Orphan cleanup** — Hard-link syncs detect and clean up orphaned snapshot directories before each run. An orphan is a `snapshots/{timestamp}/` directory newer than the snapshot `latest` points to: one left behind by a previously failed sync. After a failed rsync the new snapshot directory is also removed straight away. Btrfs snapshots do not need orphan cleanup because snapshots are created atomically from a complete sync to `staging/` — a failed sync leaves `staging/` in a partial state but never creates a snapshot directory.
 
@@ -58,7 +58,7 @@ Both snapshot backends follow the same directory layout and lifecycle. Snapshot 
 
 **Dry runs** — `--dry-run` never modifies a destination: no orphan cleanup, no snapshot directory, no `latest` update, no pruning. Hard-link rsync previews its transfer into the snapshot directory it would create (`snapshots/<timestamp>/`, with `--link-dest` to the current `latest`).
 
-**Listing** — Only entries of `snapshots/` named exactly as nbkp names snapshots (`2026-03-06T14:30:00.000Z`, or `2026-03-06T14-30-00.000Z` on macOS local volumes) count as snapshots. Anything else (`lost+found` at the root of a dedicated filesystem, `.DS_Store`, a stray file, a directory named like a shorter timestamp such as `2026-01-01T00`) is ignored: it is neither listed, pruned, nor removed as an orphan. A `latest` symlink whose target is not such a name is an error rather than a guess. An absent `snapshots/` directory lists as empty; any other listing failure is an error, so pruning never acts on a partial listing.
+**Listing** — Only entries of `snapshots/` named exactly as nbkp names snapshots (`2026-03-06T14:30:00.000Z`, or `2026-03-06T14-30-00.000Z` on macOS local volumes) count as snapshots. Anything else (`lost+found` at the root of a dedicated filesystem, `.DS_Store`, a stray file, a directory named like a shorter timestamp such as `2026-01-01T00`) is ignored: it is neither listed, pruned, nor removed as an orphan. A `latest` symlink whose target is not `snapshots/<such a name>` is an error rather than a guess, so a hand-edited target elsewhere (`../other/snapshots/<timestamp>`) never decides what pruning or orphan cleanup keeps. An absent `snapshots/` directory lists as empty; any other listing failure is an error, so pruning never acts on a partial listing.
 
 **Errors** — Every failing snapshot operation (a non-zero exit status, a local `OSError`, an SSH transport error) is reported as one structured error naming the operation (create, mkdir, delete, list, read/update `latest`, …), the path, and the underlying message. `run` turns it into a failed sync (`failure`: `snapshot`, `mkdir` or `symlink`) or a warning; `snapshots show` / `prune` report it in the result's `error` object (`kind`: `operation-failed`, with `operation`, `path` and `message`); a sync failed by preflight carries `kind` `inactive` or `preflight-errors` and the `preflight_errors` codes instead.
 
@@ -104,7 +104,7 @@ Passphrases are cached in memory during a single run, so the user is only prompt
 
 **Authorization** — Mount management is authorized by **polkit only** (no sudoers). The `disks setup-auth` command generates a single polkit rule at `/etc/polkit-1/rules.d/50-nbkp.rules` for review and manual installation. See [Why polkit-only](#why-polkit-only).
 
-**Shell script limitation** — Mount management is excluded from `sh` script generation because credential retrieval depends on Python-specific backends (keyring, prompt). Volumes with mount config must be manually mounted/umounted before/after running the generated script.
+**Shell script limitation** — Mount management is excluded from `sh` script generation because credential retrieval depends on Python-specific backends (keyring, prompt). Volumes with mount config must be manually mounted/umounted before/after running the generated script. They also need a `path`: the script cannot discover a mountpoint, so `sh` refuses a volume without one, naming it, and exits 1.
 
 For a complete end-to-end setup guide, including the fstab × crypttab combinations and worked examples, see [Mount management with udisks2](./usage.md#mount-management-with-udisks2).
 
@@ -215,7 +215,7 @@ Checks include:
 - **Rsync availability** — rsync must be installed and version 3.0+ (macOS `openrsync` is rejected). Host tool errors apply to localhost too: a remote host's errors cascade to its volumes (`SSH_ENDPOINT_INACTIVE`), while the orchestrator's own errors — localhost is always "reachable" — mark every sync with a side on it `ENDPOINT_HOST_ERRORS`, so a missing local rsync fails preflight instead of failing every sync at run time.
 - **Btrfs readiness** — Correct filesystem type, subvolume existence, mount options, required directories
 - **Hard-link readiness** — Filesystem hard-link support, required directory structure
-- **`latest` symlink validity** — Must exist and point to `/dev/null` or to an existing snapshot of the endpoint, written `snapshots/<timestamp>` (see [The `latest` Symlink](#the-latest-symlink))
+- **`latest` symlink validity** — Must exist and point to `/dev/null` or to an existing snapshot of the endpoint, written `snapshots/<timestamp>` (see [The `latest` Symlink](#the-latest-symlink)). On a btrfs destination, a snapshot `latest` points to that is no longer read-only (left by a delete that failed after clearing the flag, or changed by hand) is a **warning** (`LATEST_SNAPSHOT_WRITABLE`): `check` and `troubleshoot` show it, with the command that sets the flag again, but the sync still runs.
 - **Mount infrastructure** — For volumes with mount config: `udisksctl` availability and a running `udisksd` daemon, `lsblk` and `findmnt`, the `50-nbkp.rules` polkit rule, and (for volumes with a declared `path`) an `/etc/fstab` entry whose mountpoint is that path *and* whose device spec designates the volume's device (`UUID=<device-uuid>` / `/dev/disk/by-uuid/…`, or for encrypted volumes the cleartext mapper — never the LUKS container itself). Specs that cannot be resolved without extra probes (`LABEL=`, `/dev/sdX`, an encrypted volume's inner-filesystem `UUID=`) are accepted. A drive that is plugged in but whose passphrase cannot be retrieved is `PASSPHRASE_NOT_AVAILABLE`, an infrastructure error. For btrfs volumes, a missing `udisks2-btrfs` module is a **warning**: it is shown by `check` and `troubleshoot` but never makes anything inactive or fatal.
 - **Strictness mode** — See below
 
@@ -228,7 +228,7 @@ Pre-flight checks distinguish between two categories of errors:
 - **Inactive errors** — Missing sentinel files (`.nbkp-vol`, `.nbkp-src`, `.nbkp-dst`), unavailable volumes, disabled syncs, and pending snapshots in dry-run mode. These represent expected situations where a sync is not ready to run (e.g. a removable drive is not plugged in, a remote host is unreachable, or a volume is not mounted at the expected path).
 - **Infrastructure errors** — Everything else: missing rsync or other tools (on localhost as well as remote hosts), SSH authentication / host key failures, wrong or undeterminable filesystem type, broken symlinks, a missing polkit rule or fstab entry, an unavailable passphrase for a plugged-in drive, an unreachable udisks daemon, etc. These indicate real problems that need fixing.
 
-A sync with `enabled: false` is never fatal, under any strictness: the runner never attempts it, its result is `skipped` with `failure: disabled`, and the syncs it cancels are never fatal either. Warnings (currently only the missing udisks btrfs module) are outside this classification altogether.
+A sync with `enabled: false` is never fatal, under any strictness: the runner never attempts it, its result is `skipped` with `failure: disabled`, and the syncs it cancels are never fatal either. Warnings (the missing udisks btrfs module, a writable `latest` snapshot) are outside this classification altogether.
 
 The `--strictness` flag controls how preflight errors affect the run and its exit code:
 
@@ -332,7 +332,7 @@ The `sh` command compiles a config into a self-contained bash script that reprod
 
 It follows the same run structure as `nbkp run`:
 
-1. **Preflight, for every sync, before any sync starts.** Each sync has a generated `<sync>_preflight` function that classifies it as *active*, *inactive* (missing `.nbkp-vol` / `.nbkp-src` / `.nbkp-dst`, unreachable host — checked first), *broken* (rsync missing or older than 3.0 / openrsync, missing snapshot tools, wrong filesystem, missing `user_subvol_rm_allowed`, staging not a subvolume, FAT/exFAT under hard links, missing or invalid `latest`, unwritable directories), or *pending* (a dry-run whose source snapshot only an upstream sync would create).
+1. **Preflight, for every sync, before any sync starts.** Each sync has a generated `<sync>_preflight` function that classifies it as *active*, *inactive* (missing `.nbkp-vol` / `.nbkp-src` / `.nbkp-dst`, unreachable host — checked first), *broken* (rsync missing or older than 3.0 / openrsync, missing snapshot tools, wrong filesystem, missing `user_subvol_rm_allowed`, staging not a subvolume, FAT/exFAT under hard links, missing or invalid `latest`, unwritable directories), or *pending* (a dry-run whose source snapshot only an upstream sync would create). Like `nbkp preflight`, it also logs a warning, without failing, when the snapshot a btrfs destination's `latest` points to is not read-only.
 2. **Strictness.** `--strictness` (default `ignore-inactive`) decides whether those results abort the run, with the same matrix as [Strictness](#strictness).
 3. **Syncs in dependency order.** Inactive syncs are skipped without counting as failures; syncs downstream of a failed, skipped or disabled sync are cancelled, as in `run`, and a cancellation caused by a disabled sync never counts as a failure. Each sync function runs in a `set -e` subshell, so any failing step — not only rsync — stops that sync before `latest` moves. (Calling a bash function in a `||` or `if` context silently disables `set -e` inside it, which is why the script never does.)
 
@@ -375,6 +375,7 @@ This section documents every external command nbkp invokes on local or remote ho
 | `rsync --version` | Rsync version check (>= 3.0, reject macOS openrsync) |
 | `stat -f -c %T <path>` | Detect btrfs filesystem type |
 | `stat -c %i <path>` | Check btrfs subvolume (inode == 256) |
+| `btrfs property get <snapshot> ro` | Check that the snapshot `latest` points to is still read-only |
 | `findmnt -T <path> -n -o OPTIONS` | Check btrfs mount options (e.g. `user_subvol_rm_allowed`) |
 | `readlink <path>` | Read `latest` symlink target |
 | `udisksctl status` | Check the udisks daemon is reachable |
@@ -399,6 +400,7 @@ This section documents every external command nbkp invokes on local or remote ho
 |---|---|
 | `btrfs subvolume snapshot -r <staging> <snapshots/timestamp>` | Create read-only snapshot |
 | `btrfs property set <snapshot> ro false` | Make snapshot writable (for deletion) |
+| `btrfs property set <snapshot> ro true` | Make snapshot read-only again when its deletion fails |
 | `btrfs subvolume delete <snapshot>` | Delete snapshot |
 
 ### Hard-link snapshot operations
