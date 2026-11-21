@@ -114,7 +114,7 @@ Top-level config fields for credential retrieval:
 Providers:
 - **keyring**: `keyring.get_password("nbkp", passphrase_id)` — uses macOS Keychain or Linux SecretService. Requires `pip install nbkp[keyring]`.
 - **prompt**: interactive hidden input prompt.
-- **env**: reads `NBKP_PASSPHRASE_<ID>` (uppercased, hyphens → underscores).
+- **env**: reads `NBKP_PASSPHRASE_<ID>`: the passphrase-id uppercased, with every character other than a letter or digit replaced by `_` (`nas.disk-1` → `NBKP_PASSPHRASE_NAS_DISK_1`). Two passphrase-ids that map to the same variable (`usb-drive` and `usb_drive`) are rejected when the config loads.
 - **command**: runs command template with `{id}` replaced by passphrase-id. The first line of its output, without the line break, is the passphrase (the `pass` convention: later lines hold metadata); spaces are kept."""
 
 _SYNC_ENDPOINT_NOTES = """\
@@ -164,6 +164,8 @@ filters:
 **`merge`** reads a file of filter rules once and applies them at the point where they appear in the list. Tilde (`~`) is expanded in merge paths. This is similar to `filter-file`, but `filter-file` is always appended after all inline filters, while `merge` respects its position in the list.
 
 **`dir-merge`** tells rsync to look for the named file in each directory as it walks the source tree. Rules from each file apply only to that directory and its subdirectories. The `exclude-self` option appends a `- <filename>` rule to prevent the filter files from being transferred (equivalent to rsync's `-FF` flag). Dir-merge paths are not tilde-expanded (they are relative filenames resolved by rsync per-directory).
+
+Each structured rule is a mapping with exactly one key: `{include: "*.jpg", exclude: "*"}` is rejected rather than read as one of its rules. Write two list items instead.
 
 Filters are applied in order as `--filter=RULE` arguments. When `filter-file` is also set, inline filters are applied first."""
 

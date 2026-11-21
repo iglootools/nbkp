@@ -19,7 +19,9 @@ from .protocol import (
     SyncEndpoint,
     Volume,
     join_subdir,
+    passphrase_env_var,
     resolve_endpoint_path,
+    sync_predecessors,
 )
 
 __all__ = [
@@ -46,5 +48,7 @@ __all__ = [
     "find_config_file",
     "join_subdir",
     "load_config",
+    "passphrase_env_var",
     "resolve_endpoint_path",
+    "sync_predecessors",
 ]

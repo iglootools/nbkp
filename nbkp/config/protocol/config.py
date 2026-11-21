@@ -1,4 +1,5 @@
 import enum
+import re
 from collections.abc import Iterable, Iterator, Mapping
 from graphlib import CycleError, TopologicalSorter
 from itertools import combinations
@@ -6,10 +7,10 @@ from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 
-from .base import _BaseModel
+from .base import ConfigModel
 from .errors import ConfigValidationErrorKind, config_error
 from .ssh_endpoint import SshEndpoint
-from .sync import SyncConfig
+from .sync import SyncConfig, sync_predecessors
 from .sync_endpoint import SyncEndpoint
 from .volume import RemoteVolume, Volume
 
@@ -21,6 +22,16 @@ class CredentialProvider(enum.StrEnum):
     PROMPT = "prompt"
     ENV = "env"
     COMMAND = "command"
+
+
+def passphrase_env_var(passphrase_id: str) -> str:
+    """Environment variable the ``env`` provider reads for ``passphrase_id``.
+
+    Every character outside ``[A-Z0-9]`` becomes ``_``, so the name is one a
+    POSIX shell can ``export``; distinct ids can then share a name, which
+    config validation rejects.
+    """
+    return "NBKP_PASSPHRASE_" + re.sub(r"[^A-Z0-9]", "_", passphrase_id.upper())
 
 
 # Key pairs where setting one half in a child endpoint must drop the other
@@ -42,12 +53,32 @@ def _stale_exclusive_keys(child: Mapping[str, Any]) -> set[str]:
     }
 
 
+# Nested sections a child overlays key by key rather than replacing, so that
+# setting ``compress`` does not drop the parent's known-hosts file or timeouts.
+_MERGED_SECTIONS = frozenset({"connection-options", "connection_options"})
+
+
+def _overlay_field(key: str, parent_value: Any, child_value: Any) -> Any:
+    match parent_value, child_value:
+        case dict(), dict() if key in _MERGED_SECTIONS:
+            return {**parent_value, **child_value}
+        case _:
+            return child_value
+
+
 def _merge_endpoint(
     parent: Mapping[str, Any], child: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """Overlay a child endpoint's raw fields on its resolved parent's."""
+    """Overlay a child endpoint's raw fields on its resolved parent's.
+
+    The child keeps its own ``extends`` (the parent's is not inherited), so
+    the merged endpoint still records which endpoint it was built from.
+    """
     stale = _stale_exclusive_keys(child)
-    merged = {**parent, **{k: v for k, v in child.items() if k != "extends"}}
+    merged = {
+        **{k: v for k, v in parent.items() if k != "extends"},
+        **{k: _overlay_field(k, parent.get(k), v) for k, v in child.items()},
+    }
     return {k: v for k, v in merged.items() if k not in stale}
 
 
@@ -78,17 +109,27 @@ def _resolve_endpoint(
         return _merge_endpoint(parent, ep) if isinstance(parent, dict) else ep
 
 
+def _inject_slug(slug: str, data: Any) -> Any:
+    match data:
+        case {"slug": declared} if declared != slug:
+            # Sync endpoints and ``--name`` look entries up by key, endpoint
+            # resolution and mount results by ``slug``: if they differed,
+            # commands for one volume could reach another volume's host.
+            raise config_error(
+                ConfigValidationErrorKind.SLUG_MISMATCH,
+                f"Entry '{slug}' declares slug {declared!r}: omit 'slug',"
+                " or make it equal to the key the entry is declared under",
+            )
+        case dict() if "slug" not in data:
+            return {**data, "slug": slug}
+        case _:
+            return data
+
+
 def _inject_slugs(entries: Any) -> Any:
     match entries:
         case dict():
-            return {
-                slug: (
-                    {**data, "slug": slug}
-                    if isinstance(data, dict) and "slug" not in data
-                    else data
-                )
-                for slug, data in entries.items()
-            }
+            return {slug: _inject_slug(slug, data) for slug, data in entries.items()}
         case _:
             return entries
 
@@ -141,7 +182,7 @@ def _location_error(
         return None
 
 
-class Config(_BaseModel):
+class Config(ConfigModel):
     credential_provider: CredentialProvider = Field(
         default=CredentialProvider.KEYRING,
         description=(
@@ -202,7 +243,11 @@ class Config(_BaseModel):
             for vol in self.volumes.values()
             if isinstance(vol, RemoteVolume)
             for ref in [vol.ssh_endpoint, *(vol.ssh_endpoints or [])]
-        } | {hop for ep in self.ssh_endpoints.values() for hop in ep.proxy_jump_chain}
+        } | {
+            ref
+            for ep in self.ssh_endpoints.values()
+            for ref in [*ep.proxy_jump_chain, *([ep.extends] if ep.extends else [])]
+        }
         return sorted(set(self.ssh_endpoints) - used)
 
     def orphan_volumes(self) -> list[str]:
@@ -227,10 +272,12 @@ class Config(_BaseModel):
                 self._volume_reference_errors,
                 self._sync_endpoint_location_errors,
                 self._sync_reference_errors,
+                self._self_sync_errors,
                 self._shared_destination_errors,
                 self._cyclic_dependency_errors,
                 self._cross_server_errors,
                 self._credential_errors,
+                self._passphrase_env_var_errors,
             )
             for error in check()
         )
@@ -303,6 +350,17 @@ class Config(_BaseModel):
             if ref not in self.sync_endpoints
         )
 
+    def _self_sync_errors(self) -> Iterator[ValueError]:
+        return (
+            config_error(
+                ConfigValidationErrorKind.SELF_SYNC,
+                f"Sync '{sync_slug}' has endpoint '{sync.source}' as both its"
+                " source and its destination",
+            )
+            for sync_slug, sync in self.syncs.items()
+            if sync.source == sync.destination
+        )
+
     def _shared_destination_errors(self) -> Iterator[ValueError]:
         return (
             config_error(
@@ -319,16 +377,8 @@ class Config(_BaseModel):
     def _cyclic_dependency_errors(self) -> Iterator[ValueError]:
         # Checked here, not only when the syncs are ordered, so that a cycle
         # is a config error reported before anything is mounted or synced.
-        upstreams = {
-            slug: {
-                writer
-                for writer, upstream in self.syncs.items()
-                if upstream.destination == sync.source and writer != slug
-            }
-            for slug, sync in self.syncs.items()
-        }
         try:
-            TopologicalSorter(upstreams).prepare()
+            TopologicalSorter(sync_predecessors(self.syncs)).prepare()
         except CycleError as e:
             yield config_error(
                 ConfigValidationErrorKind.CYCLIC_DEPENDENCY,
@@ -344,18 +394,46 @@ class Config(_BaseModel):
             )
             for sync_slug, sync in self.syncs.items()
         )
+        # The run reaches both paths through the destination's resolved
+        # endpoint. Resolution picks from each volume's candidate list on its
+        # own, so only identical lists are sure to land on the same endpoint:
+        # comparing the primaries alone would let a LAN/WAN pair diverge.
         return (
             config_error(
                 ConfigValidationErrorKind.CROSS_SERVER_SYNC,
-                f"Sync '{sync_slug}' has source on '{src_vol.ssh_endpoint}'"
-                f" and destination on '{dst_vol.ssh_endpoint}'."
-                " Cross-server remote-to-remote syncs are not supported."
+                f"Sync '{sync_slug}' has source on"
+                f" {', '.join(src_vol.endpoint_candidates)} and destination on"
+                f" {', '.join(dst_vol.endpoint_candidates)}."
+                " Cross-server remote-to-remote syncs are not supported: both"
+                " volumes must use the same SSH endpoints, in the same order."
                 " Use two separate syncs through the local machine instead.",
             )
             for sync_slug, src_vol, dst_vol in volume_pairs
             if isinstance(src_vol, RemoteVolume)
             and isinstance(dst_vol, RemoteVolume)
-            and src_vol.ssh_endpoint != dst_vol.ssh_endpoint
+            and src_vol.endpoint_candidates != dst_vol.endpoint_candidates
+        )
+
+    def _passphrase_env_var_errors(self) -> Iterator[ValueError]:
+        passphrase_ids = sorted(
+            {
+                vol.mount.encryption.passphrase_id
+                for vol in self.volumes.values()
+                if vol.mount is not None and vol.mount.encryption is not None
+            }
+        )
+        ids_by_var = {
+            var: [pid for pid in passphrase_ids if passphrase_env_var(pid) == var]
+            for var in dict.fromkeys(map(passphrase_env_var, passphrase_ids))
+        }
+        return (
+            config_error(
+                ConfigValidationErrorKind.PASSPHRASE_ENV_VAR_COLLISION,
+                f"passphrase-ids {', '.join(repr(pid) for pid in pids)} all read"
+                f" {var} with credential-provider 'env': rename all but one",
+            )
+            for var, pids in ids_by_var.items()
+            if self.credential_provider == CredentialProvider.ENV and len(pids) > 1
         )
 
     def _credential_errors(self) -> Iterator[ValueError]:

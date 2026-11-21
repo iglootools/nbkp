@@ -9,7 +9,7 @@ from enum import StrEnum
 
 from pydantic import SecretStr
 
-from ..config import Config, CredentialProvider
+from ..config import Config, CredentialProvider, passphrase_env_var
 
 
 class CredentialErrorKind(StrEnum):
@@ -77,11 +77,6 @@ def _from_prompt(passphrase_id: str, prompt: PromptFn | None) -> str:
             "credential-provider 'prompt' needs a prompt function; none was supplied"
         )
     return prompt(passphrase_id)
-
-
-def passphrase_env_var(passphrase_id: str) -> str:
-    """Environment variable the ``env`` provider reads for ``passphrase_id``."""
-    return f"NBKP_PASSPHRASE_{passphrase_id.upper().replace('-', '_')}"
 
 
 def _from_env(passphrase_id: str, environ: Mapping[str, str]) -> str:

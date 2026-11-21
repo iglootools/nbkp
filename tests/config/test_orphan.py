@@ -105,6 +105,21 @@ class TestOrphanSshEndpoints:
         )
         assert cfg.orphan_ssh_endpoints() == []
 
+    def test_used_as_extends_parent(self) -> None:
+        cfg = Config.model_validate(
+            {
+                "ssh-endpoints": {
+                    "base": {"host": "nas.lan", "user": "backup"},
+                    "nas-wan": {"extends": "base", "host": "nas.example.com"},
+                },
+                "volumes": {
+                    "v": {"type": "remote", "ssh-endpoint": "nas-wan", "path": "/d"},
+                },
+            }
+        )
+        assert cfg.ssh_endpoints["nas-wan"].extends == "base"
+        assert cfg.orphan_ssh_endpoints() == []
+
     def test_orphan_detected(self) -> None:
         cfg = _minimal_config(
             ssh_endpoints={

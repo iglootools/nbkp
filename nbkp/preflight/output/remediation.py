@@ -30,9 +30,9 @@ from ...config import (
     RemoteVolume,
     SshEndpoint,
     SyncConfig,
+    passphrase_env_var,
 )
 from ...config.output import endpoint_path, host_label
-from ...credentials import passphrase_env_var
 from ...disks import AuthRuleBlock, cleartext_mapper_name
 from ...fsprotocol import (
     DESTINATION_SENTINEL,

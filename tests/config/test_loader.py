@@ -1,4 +1,5 @@
 import os
+from collections.abc import Callable
 from pathlib import Path
 from textwrap import dedent
 
@@ -48,6 +49,15 @@ def _validation_error_types(path: Path) -> set[str]:
     return {err["type"] for err in _validation_errors(path)}
 
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_SHIPPED_EXAMPLES = sorted(
+    [
+        *(_PROJECT_ROOT / "docs" / "config-examples").glob("*.yaml"),
+        _PROJECT_ROOT / "marketing" / "r-backup-intro" / "config.yaml",
+    ]
+)
+
+
 def _search_in(tmp_path: Path) -> dict[str, object]:
     """Search arguments that keep the lookup under *tmp_path*: a home there,
     and platform config directories there, none of which exists yet."""
@@ -88,6 +98,19 @@ class TestFindConfigFile:
         cfg = _place_config(tmp_path / "home" / ".config" / "nbkp")
         assert find_config_file(environ={}, **_search_in(tmp_path)) == cfg
 
+    @pytest.mark.parametrize("xdg", ["", "relative"])
+    def test_empty_or_relative_xdg_ignored(
+        self, tmp_path: Path, chdir: Callable[[Path], None], xdg: str
+    ) -> None:
+        workdir = tmp_path / "workdir"
+        _place_config(workdir / (xdg or ".") / "nbkp")
+        cfg = _place_config(tmp_path / "home" / ".config" / "nbkp")
+        chdir(workdir)
+        result = find_config_file(
+            environ={"XDG_CONFIG_HOME": xdg}, **_search_in(tmp_path)
+        )
+        assert result == cfg
+
     def test_platform_user_dir_before_site_dir(self, tmp_path: Path) -> None:
         user = _place_config(tmp_path / "user-config" / "nbkp")
         _place_config(tmp_path / "site-config" / "nbkp")
@@ -102,6 +125,7 @@ class TestFindConfigFile:
             find_config_file(environ={}, **_search_in(tmp_path))
         assert excinfo.value.reason == ConfigErrorKind.NO_CONFIG_FOUND
         assert str(tmp_path / "home" / ".config" / "nbkp") in str(excinfo.value)
+        assert "docs/config-examples" in str(excinfo.value)
 
 
 class TestLoadConfig:
@@ -123,6 +147,13 @@ class TestLoadConfig:
         assert excinfo.value.reason == ConfigErrorKind.INVALID_YAML
 
     @pytest.mark.skipif(os.geteuid() == 0, reason="root reads any file")
+    def test_non_utf8_file(self, tmp_path: Path) -> None:
+        p = tmp_path / "latin1.yaml"
+        p.write_bytes("# caf\u00e9\nvolumes: {}\n".encode("latin-1"))
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        assert excinfo.value.reason == ConfigErrorKind.INVALID_YAML
+
     def test_unreadable_file(self, tmp_path: Path) -> None:
         p = tmp_path / "config.yaml"
         p.write_text("syncs: {}\n")
@@ -714,6 +745,40 @@ class TestLoadConfig:
         assert chain[0].host == "bastion2.example.com"
         assert chain[1].host == "bastion3.example.com"
 
+    def test_extends_merges_connection_options(self, tmp_path: Path) -> None:
+        p = tmp_path / "extends_options.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "ssh-endpoints": {
+                        "base": {
+                            "host": "nas.lan",
+                            "connection-options": {
+                                "known-hosts-file": "/etc/nbkp/kh",
+                                "strict-host-key-checking": False,
+                                "connect-timeout": 30,
+                            },
+                        },
+                        "nas-wan": {
+                            "extends": "base",
+                            "host": "nas.example.com",
+                            "connection-options": {
+                                "compress": True,
+                                "connect-timeout": 60,
+                            },
+                        },
+                    },
+                }
+            )
+        )
+        options = load_config(p).ssh_endpoints["nas-wan"].connection_options
+        assert options == SshConnectionOptions(
+            known_hosts_file="/etc/nbkp/kh",
+            strict_host_key_checking=False,
+            connect_timeout=60,
+            compress=True,
+        )
+
     def test_extends_proxy_jump_overrides_parent_proxy_jumps(
         self, tmp_path: Path
     ) -> None:
@@ -1109,6 +1174,15 @@ class TestLoadConfig:
         """)
         )
         assert ConfigValidationErrorKind.UNKNOWN_REFERENCE in _validation_error_types(p)
+
+    def test_sync_onto_its_own_source_rejected(self) -> None:
+        with pytest.raises(ValidationError) as excinfo:
+            Config(
+                volumes={"v": LocalVolume(slug="v", path="/x")},
+                sync_endpoints={"ep": SyncEndpoint(slug="ep", volume="v")},
+                syncs={"s": SyncConfig(slug="s", source="ep", destination="ep")},
+            )
+        assert _error_types(excinfo.value) == {ConfigValidationErrorKind.SELF_SYNC}
 
     def test_duplicate_destination_endpoint(self, tmp_path: Path) -> None:
         p = tmp_path / "dup_dst.yaml"
@@ -1555,6 +1629,108 @@ class TestNoSilentCoercion:
                 filters=[{"badkey": "value"}],  # type: ignore[list-item]
             )
         assert _error_types(excinfo.value) == {ConfigValidationErrorKind.INVALID_FILTER}
+
+    @pytest.mark.parametrize(
+        "item",
+        [
+            {"include": "*.jpg", "exclude": "*"},
+            {"merge": "~/.rsync-filter", "exclude": "*"},
+            {"dir-merge": ".rsync-filter", "include": "*"},
+        ],
+    )
+    def test_filter_mapping_with_several_keys_rejected(
+        self, item: dict[str, str]
+    ) -> None:
+        with pytest.raises(ValidationError) as excinfo:
+            SyncConfig(
+                slug="s",
+                source="a",
+                destination="b",
+                filters=[item],  # type: ignore[list-item]
+            )
+        assert _error_types(excinfo.value) == {ConfigValidationErrorKind.INVALID_FILTER}
+
+
+class TestUnknownKeys:
+    """A misspelt key is rejected where it sits, not dropped for the defaults."""
+
+    @staticmethod
+    def _raw_config(sample_config: Config) -> dict:
+        return sample_config.model_dump(by_alias=True, mode="json")
+
+    def test_unknown_top_level_key_rejected(
+        self, sample_config: Config, tmp_path: Path
+    ) -> None:
+        raw = {**self._raw_config(sample_config), "credential-providr": "command"}
+        p = tmp_path / "typo.yaml"
+        p.write_text(yaml.safe_dump(raw))
+        errors = _validation_errors(p)
+        assert [(e["type"], e["loc"]) for e in errors] == [
+            ("extra_forbidden", ("credential-providr",))
+        ]
+
+    def test_unknown_nested_key_rejected(
+        self, sample_config: Config, tmp_path: Path
+    ) -> None:
+        raw = self._raw_config(sample_config)
+        slug, endpoint = next(iter(raw["sync-endpoints"].items()))
+        endpoint["hard-link-snapshots"] = {"enabled": True, "max-snapshot": 5}
+        p = tmp_path / "typo.yaml"
+        p.write_text(yaml.safe_dump(raw))
+        errors = _validation_errors(p)
+        assert [(e["type"], e["loc"]) for e in errors] == [
+            (
+                "extra_forbidden",
+                ("sync-endpoints", slug, "hard-link-snapshots", "max-snapshot"),
+            )
+        ]
+
+
+class TestSlugs:
+    def test_slug_differing_from_key_rejected(self, tmp_path: Path) -> None:
+        p = tmp_path / "slug.yaml"
+        p.write_text(
+            dedent("""\
+            volumes:
+              a:
+                type: local
+                slug: x
+                path: /mnt/a
+              b:
+                type: local
+                slug: x
+                path: /mnt/b
+        """)
+        )
+        errors = _validation_errors(p)
+        assert [(e["type"], e["loc"]) for e in errors] == [
+            (ConfigValidationErrorKind.SLUG_MISMATCH, ("volumes",))
+        ]
+
+    def test_slug_equal_to_key_accepted(self, tmp_path: Path) -> None:
+        p = tmp_path / "slug.yaml"
+        p.write_text(
+            dedent("""\
+            volumes:
+              a:
+                type: local
+                slug: a
+                path: /mnt/a
+        """)
+        )
+        assert load_config(p).volumes["a"].slug == "a"
+
+
+class TestShippedExamples:
+    def test_examples_found(self) -> None:
+        assert len(_SHIPPED_EXAMPLES) >= 2
+        assert all(path.is_file() for path in _SHIPPED_EXAMPLES)
+
+    @pytest.mark.parametrize(
+        "path", _SHIPPED_EXAMPLES, ids=lambda p: str(p.relative_to(_PROJECT_ROOT))
+    )
+    def test_example_loads(self, path: Path) -> None:
+        load_config(path)
 
 
 class TestFrozenModels:

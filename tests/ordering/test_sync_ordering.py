@@ -1,11 +1,9 @@
+from graphlib import CycleError
+
 import pytest
 
-from nbkp.config import (
-    ConfigError,
-    ConfigErrorKind,
-    SyncConfig,
-)
-from nbkp.ordering.graph import sort_syncs, sync_predecessors
+from nbkp.config import SyncConfig
+from nbkp.ordering.graph import sort_syncs
 
 
 def _sync(
@@ -55,16 +53,15 @@ class TestSortSyncs:
         assert result.index("a") < result.index("b")
         assert result.index("b") < result.index("c")
 
-    def test_cycle_raises_config_error(self) -> None:
+    def test_cycle_raises(self) -> None:
         # a writes to ep-v1, b reads from ep-v1 and writes to ep-v2,
         # a reads from ep-v2 → cycle
         syncs = {
             "a": _sync("a", "ep-v2", "ep-v1"),
             "b": _sync("b", "ep-v1", "ep-v2"),
         }
-        with pytest.raises(ConfigError) as excinfo:
+        with pytest.raises(CycleError):
             sort_syncs(syncs)
-        assert excinfo.value.reason == ConfigErrorKind.CYCLIC_DEPENDENCY
 
     def test_empty_syncs(self) -> None:
         assert sort_syncs({}) == []
@@ -79,24 +76,3 @@ class TestSortSyncs:
             "a": _sync("a", "ep-v1", "ep-v1"),
         }
         assert sort_syncs(syncs) == ["a"]
-
-
-class TestSyncPredecessors:
-    def test_no_dependencies(self) -> None:
-        syncs = {
-            "a": _sync("a", "ep-v1", "ep-v2"),
-            "b": _sync("b", "ep-v3", "ep-v4"),
-        }
-        preds = sync_predecessors(syncs)
-        assert preds == {"a": set(), "b": set()}
-
-    def test_chain_dependency(self) -> None:
-        syncs = {
-            "a": _sync("a", "ep-v0", "ep-v1"),
-            "b": _sync("b", "ep-v1", "ep-v2"),
-            "c": _sync("c", "ep-v2", "ep-v3"),
-        }
-        preds = sync_predecessors(syncs)
-        assert preds["a"] == set()
-        assert preds["b"] == {"a"}
-        assert preds["c"] == {"b"}

@@ -98,7 +98,7 @@ class TestKeyringStatus:
     def test_human_keeps_brackets_in_passphrase_id(self, tmp_path: Path) -> None:
         config_path = write_config(tmp_path, _config())
 
-        result = _invoke(config_path, environ={"NBKP_PASSPHRASE_DISK[1]": "secret"})
+        result = _invoke(config_path, environ={"NBKP_PASSPHRASE_DISK_1_": "secret"})
 
         assert result.exit_code == 0
         assert "disk[1]" in result.output
@@ -114,10 +114,19 @@ class TestKeyringStatus:
 
         result = _invoke(config_path, "-o", "json", run_credential_command=pass_show)
 
+        assert result.exit_code == 1
         assert commands == [["pass", "show", "disk[1]"]]
         [entry] = json.loads(result.stdout)["passphrases"].values()
         assert (entry["available"], entry["reason"]) == (False, "command-failed")
         assert "not in the password store" in entry["error"]
+
+    def test_human_exits_1_when_a_passphrase_is_missing(self, tmp_path: Path) -> None:
+        config_path = write_config(tmp_path, _config())
+
+        result = _invoke(config_path, environ={})
+
+        assert result.exit_code == 1
+        assert "missing" in result.output
 
     def test_prompt_provider_never_prompts(self, tmp_path: Path) -> None:
         config_path = write_config(

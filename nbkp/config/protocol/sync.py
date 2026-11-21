@@ -1,14 +1,14 @@
 from pathlib import Path
 from typing import Any
 
-from pydantic import ConfigDict, Field, field_validator
+from pydantic import Field, field_validator
+from pydantic_core import PydanticCustomError
 
-from .base import Slug, _BaseModel
+from .base import ConfigModel, Slug
 from .errors import ConfigValidationErrorKind, config_error
 
 
-class RsyncOptions(_BaseModel):
-    model_config = ConfigDict(frozen=True)
+class RsyncOptions(ConfigModel):
     compress: bool = Field(default=False, description="Enable rsync `--compress`")
     checksum: bool = Field(default=False, description="Enable rsync `--checksum`")
     default_options_override: list[str] | None = Field(
@@ -42,6 +42,11 @@ def _filter_rules(item: Any) -> list[str]:
     match item:
         case str():
             return [item]
+        case dict() if len(item) != 1:
+            # Mapping patterns ignore extra keys, so without this guard
+            # ``{include: a, exclude: b}`` would keep the include and drop
+            # the exclude.
+            raise _invalid_filter(item)
         case {"include": str() as pattern}:
             return [f"+ {pattern}"]
         case {"exclude": str() as pattern}:
@@ -57,15 +62,19 @@ def _filter_rules(item: Any) -> list[str]:
                 *([f"- {opts['path']}"] if opts.get("exclude-self") else []),
             ]
         case _:
-            raise config_error(
-                ConfigValidationErrorKind.INVALID_FILTER,
-                "Filter must be a string or a dict with"
-                " 'include'/'exclude'/'merge'/'dir-merge'"
-                f" key, got: {item!r}",
-            )
+            raise _invalid_filter(item)
 
 
-class SyncConfig(_BaseModel):
+def _invalid_filter(item: Any) -> PydanticCustomError:
+    return config_error(
+        ConfigValidationErrorKind.INVALID_FILTER,
+        "Filter must be a string or a dict with exactly one"
+        " 'include'/'exclude'/'merge'/'dir-merge'"
+        f" key, got: {item!r}",
+    )
+
+
+class SyncConfig(ConfigModel):
     slug: Slug
     source: str = Field(..., min_length=1, description="Source sync endpoint slug")
     destination: str = Field(
@@ -116,3 +125,21 @@ class SyncConfig(_BaseModel):
             case _:
                 # Let pydantic report the type mismatch (e.g. null, a number).
                 return v
+
+
+def sync_predecessors(
+    syncs: dict[str, SyncConfig],
+) -> dict[str, set[str]]:
+    """Direct upstream syncs for each sync slug.
+
+    A sync B depends on sync A when A's destination endpoint
+    slug matches B's source endpoint slug.
+    """
+    return {
+        sync_slug: {
+            writer
+            for writer, upstream in syncs.items()
+            if upstream.destination == sync.source and writer != sync_slug
+        }
+        for sync_slug, sync in syncs.items()
+    }

@@ -38,7 +38,6 @@ volumes:
       device-uuid: 256c3f2b-6f62-4213-b278-fae76c35b804
       encryption:
         type: luks
-        mapper-name: seagate1tb
         passphrase-id: seagate1tb
 
   # btrfs, luks
@@ -50,7 +49,6 @@ volumes:
       device-uuid: 791586c3-5947-46bf-bb5e-fc1a35084a4b
       encryption:
         type: luks
-        mapper-name: seagate2tb
         passphrase-id: seagate2tb
 
   # btrfs, luks
@@ -62,7 +60,6 @@ volumes:
       device-uuid: 5941f273-f73c-44c5-a3ef-fae7248db1b6
       encryption:
         type: luks
-        mapper-name: seagate8tb
         passphrase-id: seagate8tb
 
   wd6tb:
@@ -73,7 +70,6 @@ volumes:
       device-uuid: 1467358c-d25f-44c7-a330-9cc6576075b7
       encryption:
         type: luks
-        mapper-name: wd6tb
         passphrase-id: wd6tb
 
   # btrfs, luks
@@ -85,7 +81,6 @@ volumes:
       device-uuid: ad5542e5-5365-4951-a1f2-fe81c4d6fe43
       encryption:
         type: luks
-        mapper-name: iomega1tb
         passphrase-id: iomega1tb
     
 sync-endpoints:

@@ -1,8 +1,8 @@
-from .base import Slug, _BaseModel
-from .config import Config, CredentialProvider
+from .base import ConfigModel, Slug
+from .config import Config, CredentialProvider, passphrase_env_var
 from .errors import ConfigValidationErrorKind
 from .ssh_endpoint import SshConnectionOptions, SshEndpoint
-from .sync import RsyncOptions, SyncConfig
+from .sync import RsyncOptions, SyncConfig, sync_predecessors
 from .sync_endpoint import (
     BtrfsSnapshotConfig,
     HardLinkSnapshotConfig,
@@ -23,6 +23,7 @@ from .volume import (
 __all__ = [
     "BtrfsSnapshotConfig",
     "Config",
+    "ConfigModel",
     "ConfigValidationErrorKind",
     "CredentialProvider",
     "EncryptionConfig",
@@ -39,7 +40,8 @@ __all__ = [
     "SyncConfig",
     "SyncEndpoint",
     "Volume",
-    "_BaseModel",
     "join_subdir",
+    "passphrase_env_var",
     "resolve_endpoint_path",
+    "sync_predecessors",
 ]

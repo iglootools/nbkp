@@ -8,13 +8,17 @@ import pytest
 from nbkp.config import (
     Config,
     ConfigValidationErrorKind,
+    CredentialProvider,
     LocalVolume,
+    LuksEncryptionConfig,
+    MountConfig,
     RemoteVolume,
     RsyncOptions,
     SshConnectionOptions,
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
+    sync_predecessors,
 )
 
 
@@ -253,6 +257,94 @@ class TestCrossServerValidation:
         assert "x" in config.syncs
 
 
+def _remote_to_remote_config(
+    src_candidates: list[str], dst_candidates: list[str]
+) -> Config:
+    return Config(
+        ssh_endpoints={
+            "lan": SshEndpoint(slug="lan", host="nas.lan"),
+            "wan": SshEndpoint(slug="wan", host="nas.example.com"),
+        },
+        volumes={
+            "src": RemoteVolume(
+                slug="src",
+                ssh_endpoint="lan",
+                ssh_endpoints=src_candidates,
+                path="/s",
+            ),
+            "dst": RemoteVolume(
+                slug="dst",
+                ssh_endpoint="lan",
+                ssh_endpoints=dst_candidates,
+                path="/d",
+            ),
+        },
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+        },
+        syncs={"x": SyncConfig(slug="x", source="ep-src", destination="ep-dst")},
+    )
+
+
+class TestCrossServerCandidates:
+    """Each volume resolves from its own candidates, so the lists must match."""
+
+    @pytest.mark.parametrize(
+        ("src_candidates", "dst_candidates"),
+        [(["lan", "wan"], ["lan"]), (["lan", "wan"], ["wan", "lan"])],
+    )
+    def test_differing_candidates_rejected(
+        self, src_candidates: list[str], dst_candidates: list[str]
+    ) -> None:
+        with pytest.raises(pydantic.ValidationError) as excinfo:
+            _remote_to_remote_config(src_candidates, dst_candidates)
+        assert _error_types(excinfo.value) == {
+            ConfigValidationErrorKind.CROSS_SERVER_SYNC
+        }
+
+    def test_same_candidates_allowed(self) -> None:
+        config = _remote_to_remote_config(["lan", "wan"], ["lan", "wan"])
+        assert "x" in config.syncs
+
+
+def _encrypted_volumes_config(
+    provider: CredentialProvider, *passphrase_ids: str
+) -> Config:
+    return Config(
+        credential_provider=provider,
+        volumes={
+            f"v{i}": LocalVolume(
+                slug=f"v{i}",
+                mount=MountConfig(
+                    device_uuid=f"00000000-0000-0000-0000-00000000000{i}",
+                    encryption=LuksEncryptionConfig(passphrase_id=pid),
+                ),
+            )
+            for i, pid in enumerate(passphrase_ids)
+        },
+    )
+
+
+class TestPassphraseEnvVarCollision:
+    def test_ids_sharing_a_variable_rejected_with_env_provider(self) -> None:
+        with pytest.raises(pydantic.ValidationError) as excinfo:
+            _encrypted_volumes_config(CredentialProvider.ENV, "usb-drive", "usb_drive")
+        assert _error_types(excinfo.value) == {
+            ConfigValidationErrorKind.PASSPHRASE_ENV_VAR_COLLISION
+        }
+
+    def test_shared_id_allowed(self) -> None:
+        config = _encrypted_volumes_config(CredentialProvider.ENV, "usb", "usb")
+        assert len(config.volumes) == 2
+
+    def test_ids_sharing_a_variable_allowed_with_other_providers(self) -> None:
+        config = _encrypted_volumes_config(
+            CredentialProvider.KEYRING, "usb-drive", "usb_drive"
+        )
+        assert len(config.volumes) == 2
+
+
 class TestSlugValidation:
     def test_valid_simple(self) -> None:
         vol = LocalVolume(slug="data", path="/mnt/data")
@@ -288,3 +380,28 @@ class TestSlugValidation:
     def test_valid_max_length(self) -> None:
         vol = LocalVolume(slug="a" * 50, path="/mnt")
         assert len(vol.slug) == 50
+
+
+def _sync_between(slug: str, source: str, destination: str) -> SyncConfig:
+    return SyncConfig(slug=slug, source=source, destination=destination)
+
+
+class TestSyncPredecessors:
+    def test_no_dependencies(self) -> None:
+        syncs = {
+            "a": _sync_between("a", "ep-v1", "ep-v2"),
+            "b": _sync_between("b", "ep-v3", "ep-v4"),
+        }
+        preds = sync_predecessors(syncs)
+        assert preds == {"a": set(), "b": set()}
+
+    def test_chain_dependency(self) -> None:
+        syncs = {
+            "a": _sync_between("a", "ep-v0", "ep-v1"),
+            "b": _sync_between("b", "ep-v1", "ep-v2"),
+            "c": _sync_between("c", "ep-v2", "ep-v3"),
+        }
+        preds = sync_predecessors(syncs)
+        assert preds["a"] == set()
+        assert preds["b"] == {"a"}
+        assert preds["c"] == {"b"}

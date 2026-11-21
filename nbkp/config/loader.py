@@ -18,6 +18,9 @@ type ConfigDirFn = Callable[[str], str]
 _CONFIG_REFERENCE_URL = (
     "https://github.com/iglootools/nbkp/blob/main/docs/config-reference.md"
 )
+_CONFIG_EXAMPLES_URL = (
+    "https://github.com/iglootools/nbkp/tree/main/docs/config-examples"
+)
 
 
 class ConfigErrorKind(StrEnum):
@@ -27,13 +30,20 @@ class ConfigErrorKind(StrEnum):
     INVALID_YAML = "invalid-yaml"
     NOT_A_MAPPING = "not-a-mapping"
     VALIDATION = "validation"
-    CYCLIC_DEPENDENCY = "cyclic-dependency"
 
 
 class ConfigError(Exception):
     def __init__(self, message: str, reason: ConfigErrorKind) -> None:
         super().__init__(message)
         self.reason = reason
+
+
+def _xdg_config_home(environ: Mapping[str, str], home: Path) -> Path:
+    """The XDG spec says an empty or relative ``$XDG_CONFIG_HOME`` is invalid
+    and must be ignored: honouring it would search the working directory.
+    """
+    xdg = Path(environ.get("XDG_CONFIG_HOME", ""))
+    return xdg if xdg.is_absolute() else home / ".config"
 
 
 def _config_search_paths(
@@ -50,9 +60,8 @@ def _config_search_paths(
     Added explicitly so that ~/.config/nbkp/config.yml works on Mac OS X
     (for which user_config_dir(_APP) defaults to ~/Library/Application Support/nbkp).
     """
-    xdg = environ.get("XDG_CONFIG_HOME", str(home / ".config"))
     candidates = [
-        Path(xdg) / _APP / _FILENAME,
+        _xdg_config_home(environ, home) / _APP / _FILENAME,
         Path(user_dir(_APP)) / _FILENAME,
         Path(site_dir(_APP)) / _FILENAME,
     ]
@@ -97,8 +106,8 @@ def find_config_file(
             raise ConfigError(
                 f"No config file found. Searched: {', '.join(str(p) for p in search)}."
                 f" Create one at {search[0]} or pass --config PATH (format:"
-                f" {_CONFIG_REFERENCE_URL}), or run `nbkp demo seed` to"
-                " generate a sample config to start from.",
+                f" {_CONFIG_REFERENCE_URL}). Example configs to start from:"
+                f" {_CONFIG_EXAMPLES_URL}.",
                 reason=ConfigErrorKind.NO_CONFIG_FOUND,
             )
 
@@ -118,7 +127,7 @@ def load_config(
         config_path, environ, home=home, user_dir=user_dir, site_dir=site_dir
     )
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             raw = yaml.safe_load(f)
     except OSError as e:
         raise ConfigError(
@@ -128,6 +137,12 @@ def load_config(
     except yaml.YAMLError as e:
         raise ConfigError(
             f"Invalid YAML in {path}: {e}",
+            reason=ConfigErrorKind.INVALID_YAML,
+        ) from e
+    except UnicodeDecodeError as e:
+        raise ConfigError(
+            f"Invalid YAML in {path}: not UTF-8 (byte {e.object[e.start]:#04x}"
+            f" at offset {e.start})",
             reason=ConfigErrorKind.INVALID_YAML,
         ) from e
 

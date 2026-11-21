@@ -23,7 +23,7 @@ Everything between a `<!-- BEGIN CONFIGREF:… -->` and its `<!-- END … -->` m
 nbkp searches for the config in this order and uses the first match:
 
 1. Explicit `--config` path
-2. `$XDG_CONFIG_HOME/nbkp/config.yaml` (typically `~/.config/nbkp/config.yaml`)
+2. `$XDG_CONFIG_HOME/nbkp/config.yaml`, or `~/.config/nbkp/config.yaml` when `XDG_CONFIG_HOME` is unset, empty or not an absolute path
 3. Platform user config dir (Linux: same as above; macOS: `~/Library/Application Support/nbkp/config.yaml`)
 4. Platform site config dir (Linux: `/etc/xdg/nbkp/config.yaml`; macOS: `/Library/Application Support/nbkp/config.yaml`)
 
@@ -112,13 +112,13 @@ Top-level config fields for credential retrieval:
 Providers:
 - **keyring**: `keyring.get_password("nbkp", passphrase_id)` — uses macOS Keychain or Linux SecretService. Requires `pip install nbkp[keyring]`.
 - **prompt**: interactive hidden input prompt.
-- **env**: reads `NBKP_PASSPHRASE_<ID>` (uppercased, hyphens → underscores).
+- **env**: reads `NBKP_PASSPHRASE_<ID>`: the passphrase-id uppercased, with every character other than a letter or digit replaced by `_` (`nas.disk-1` → `NBKP_PASSPHRASE_NAS_DISK_1`). Two passphrase-ids that map to the same variable (`usb-drive` and `usb_drive`) are rejected when the config loads.
 - **command**: runs command template with `{id}` replaced by passphrase-id. The first line of its output, without the line break, is the passphrase (the `pass` convention: later lines hold metadata); spaces are kept.
 <!-- END CONFIGREF:VOLUMES -->
 
 ## SSH Endpoints
 
-**`extends`** — An endpoint inherits every field of the endpoint it extends and overrides only the fields it sets. Setting one field of a mutually exclusive pair (`proxy-jump` / `proxy-jumps`, `location` / `locations`) drops the inherited other half. Circular `extends` chains are rejected at load time.
+**`extends`** — An endpoint inherits every field of the endpoint it extends and overrides only the fields it sets. `connection-options` is merged the same way, option by option: a child that sets only `compress` keeps the parent's `known-hosts-file` and timeouts. One level only: a child's `disabled-algorithms` replaces the parent's. Setting one field of a mutually exclusive pair (`proxy-jump` / `proxy-jumps`, `location` / `locations`) drops the inherited other half. Circular `extends` chains are rejected at load time.
 
 **`proxy-jump` / `proxy-jumps`** — Reference other endpoints by slug to reach the host through one bastion (`proxy-jump`) or a multi-hop chain (`proxy-jumps`). Hops are traversed in order, like SSH's `-J`, but nbkp does not use `-J`: the rsync and generated-script SSH commands nest one `-o ProxyCommand=ssh … -W %h:%p <hop>` per hop, so each hop gets its own port, key and `connection-options` (with `-J`, a hop's options would come only from `~/.ssh/config`), and Fabric/Paramiko opens each hop as a gateway connection. See [SSH transport](./internals.md#ssh-transport). Circular chains are rejected at load time.
 
@@ -262,6 +262,8 @@ filters:
 
 **`dir-merge`** tells rsync to look for the named file in each directory as it walks the source tree. Rules from each file apply only to that directory and its subdirectories. The `exclude-self` option appends a `- <filename>` rule to prevent the filter files from being transferred (equivalent to rsync's `-FF` flag). Dir-merge paths are not tilde-expanded (they are relative filenames resolved by rsync per-directory).
 
+Each structured rule is a mapping with exactly one key: `{include: "*.jpg", exclude: "*"}` is rejected rather than read as one of its rules. Write two list items instead.
+
 Filters are applied in order as `--filter=RULE` arguments. When `filter-file` is also set, inline filters are applied first.
 <!-- END CONFIGREF:SYNCS -->
 
@@ -270,14 +272,17 @@ Filters are applied in order as `--filter=RULE` arguments. When `filter-file` is
 Checked when the config is loaded, before anything runs:
 
 - Slugs are lowercase alphanumeric with hyphens, at most 50 characters.
+- An entry's slug is the key it is declared under. An entry may also write `slug`, but only with that same value: a different one is rejected (`slug-mismatch`), since some lookups go by key and others by slug.
+- Every key must be one this page documents: an unknown key, such as a misspelt `max-snapshot` or `hard-link-snapshot`, is rejected (`extra_forbidden`) with its location, rather than ignored while its section falls back to the defaults.
 - Every slug reference (`ssh-endpoint`, `ssh-endpoints`, `proxy-jump(s)`, `extends`, `volume`, `source`, `destination`) must name an existing entry.
 - No circular `extends` or `proxy-jump` chains. Two hops sharing a bastion (e.g. `proxy-jumps: [b1, b2]` where `b1` itself jumps through `b2`) is not a cycle.
 - `proxy-jump` / `proxy-jumps` and `location` / `locations` are mutually exclusive.
 - Each sync endpoint targets a unique `(volume, subdir)` pair, and no endpoint may be nested inside another on the same volume (e.g. `subdir: photos` and `subdir: photos/2024`): sync dependencies cannot be detected between overlapping paths. The check compares subdirs within one volume only: it does not see two volumes whose paths overlap (`/mnt/a` and `/mnt/a/b`, or a remote `~` and an absolute path on the same host), so endpoints on such volumes can overlap undetected. Declare a directory tree as one volume and split it with `subdir`s rather than as nested volumes.
 - At most one of `btrfs-snapshots` and `hard-link-snapshots` is enabled per sync endpoint.
+- A sync's `source` and `destination` are different endpoints.
 - Each sync endpoint is the destination of at most one sync.
 - Syncs must not depend on each other in a cycle (e.g. `a: x → y` and `b: y → x`): the backup graph must have a topological order.
-- A remote-to-remote sync must stay on one server: both volumes must use the same primary `ssh-endpoint`.
+- A remote-to-remote sync must stay on one server: both volumes must offer the same SSH endpoints, in the same order (their `ssh-endpoints` lists, or their `ssh-endpoint` when the list is absent). The run reaches both paths through the destination's endpoint, and each volume picks its endpoint from its own list, so two different lists could land on two different hosts.
 - A volume without a `mount` section must declare `path`.
 - A local volume's `path` must be absolute once `~` is expanded: a relative path would resolve against whichever directory nbkp is started from.
 - `credential-command` is required when `credential-provider` is `command`, and must contain the `{id}` placeholder.

@@ -14,6 +14,7 @@ from nbkp.config import (
     LocalVolume,
     LuksEncryptionConfig,
     MountConfig,
+    passphrase_env_var,
 )
 from nbkp.credentials import (
     CommandFn,
@@ -21,7 +22,6 @@ from nbkp.credentials import (
     CredentialErrorKind,
     PassphraseCache,
     collect_passphrase_ids,
-    passphrase_env_var,
     prefetch_count,
     prefetch_passphrases,
     retrieve_passphrase,
@@ -143,6 +143,9 @@ class TestRetrievePassphraseEnv:
             environ={"NBKP_PASSPHRASE_MY_DISK": "env-secret"},
         )
         assert result == "env-secret"
+
+    def test_maps_every_non_alphanumeric_to_underscore(self) -> None:
+        assert passphrase_env_var("nas.disk-1") == "NBKP_PASSPHRASE_NAS_DISK_1"
 
     def test_raises_when_env_not_set(self) -> None:
         with pytest.raises(CredentialError) as excinfo:

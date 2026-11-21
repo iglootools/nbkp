@@ -95,6 +95,7 @@ graph TD
     credentials --> clidisplay
     credentials --> cliwiring
     credentials --> config
+    credentials --> policy
     demo --> clidisplay
     demo --> cliwiring
     demo --> config
@@ -118,7 +119,6 @@ graph TD
     preflight --> clidisplay
     preflight --> cliwiring
     preflight --> config
-    preflight --> credentials
     preflight --> disks
     preflight --> fsprotocol
     preflight --> policy

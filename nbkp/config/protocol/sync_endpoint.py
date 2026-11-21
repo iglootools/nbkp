@@ -1,15 +1,14 @@
 from typing import Any, Literal
 
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
-from .base import Slug, _BaseModel
+from .base import ConfigModel, Slug
 from .errors import ConfigValidationErrorKind, config_error
 
 SnapshotMode = Literal["none", "btrfs", "hard-link"]
 
 
-class BtrfsSnapshotConfig(_BaseModel):
-    model_config = ConfigDict(frozen=True)
+class BtrfsSnapshotConfig(ConfigModel):
     enabled: bool = Field(default=False, description="Enable snapshot management")
     max_snapshots: int | None = Field(
         default=None,
@@ -18,8 +17,7 @@ class BtrfsSnapshotConfig(_BaseModel):
     )
 
 
-class HardLinkSnapshotConfig(_BaseModel):
-    model_config = ConfigDict(frozen=True)
+class HardLinkSnapshotConfig(ConfigModel):
     enabled: bool = Field(default=False, description="Enable snapshot management")
     max_snapshots: int | None = Field(
         default=None,
@@ -28,7 +26,7 @@ class HardLinkSnapshotConfig(_BaseModel):
     )
 
 
-class SyncEndpoint(_BaseModel):
+class SyncEndpoint(ConfigModel):
     """A reusable sync endpoint: volume + optional subdir + snapshots.
 
     Defined at the top level of the config under ``sync-endpoints``

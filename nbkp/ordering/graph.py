@@ -1,41 +1,15 @@
-from graphlib import CycleError, TopologicalSorter
+from graphlib import TopologicalSorter
 
-from ..config import ConfigError
-from ..config.loader import ConfigErrorKind
-from ..config.protocol import SyncConfig
-
-
-def sync_predecessors(
-    syncs: dict[str, SyncConfig],
-) -> dict[str, set[str]]:
-    """Direct upstream syncs for each sync slug.
-
-    A sync B depends on sync A when A's destination endpoint
-    slug matches B's source endpoint slug.
-    """
-    return {
-        sync_slug: {
-            writer
-            for writer, upstream in syncs.items()
-            if upstream.destination == sync.source and writer != sync_slug
-        }
-        for sync_slug, sync in syncs.items()
-    }
+from ..config.protocol import SyncConfig, sync_predecessors
 
 
 def sort_syncs(syncs: dict[str, SyncConfig]) -> list[str]:
-    """Raises ``ConfigError`` when a dependency cycle is detected."""
-    graph = sync_predecessors(syncs)
+    """Slugs in dependency order, upstream first.
 
-    ts = TopologicalSorter(graph)
-    try:
-        return list(ts.static_order())
-    except CycleError as exc:
-        cycle = exc.args[1]
-        raise ConfigError(
-            "Cyclic sync dependency detected: " + " -> ".join(cycle),
-            reason=ConfigErrorKind.CYCLIC_DEPENDENCY,
-        ) from exc
+    ``Config`` validation rejects dependency cycles, so the ``CycleError``
+    ``static_order`` raises on one would mean a bug, not a config error.
+    """
+    return list(TopologicalSorter(sync_predecessors(syncs)).static_order())
 
 
 def build_adjacency(
