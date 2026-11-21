@@ -257,14 +257,18 @@ dependencies; the contracts are what reject a new import that breaks a rule:
   (`run_on_volume`, `check_command_available`) are in `remote/dispatch.py`;
   preflight-only host probes (sentinels, directories, symlinks, rsync version)
   are in `preflight/probes.py`.
-- **Core packages are ordered.** From the top: `demo` → `run` | `sh` → `sync` →
-  `snapshots` → `preflight` → `disks` → `credentials` | `ordering` → `remote` →
-  `policy` | `fsprotocol` → `config`. A package imports only the packages below
-  it, and siblings (`|`) do not import each other, so no import cycle can form
-  between core packages. The ordering covers each package's core, its `output`
-  code and its testkit; `cli/` subpackages sit above all of it (they are
-  constrained by the rules above instead). A new core package needs a place in
-  this order, in the `layers` contract.
+- **Core packages are ordered.** From the top:
+
+  ```text
+  demo → run | sh → sync → snapshots → preflight → disks → credentials | ordering → remote → policy | fsprotocol → config
+  ```
+
+  A package imports only the packages below it, and siblings (`|`) do not import
+  each other, so no import cycle can form between core packages. The ordering
+  covers each package's core, its `output` code and its testkit; `cli/`
+  subpackages sit above all of it (they are constrained by the rules above
+  instead). A new core package needs a place in this order, in the `layers`
+  contract.
 - **`clidisplay/` is a presentation leaf.** It imports nothing from nbkp but
   `policy`.
 - **Test and demo fixtures (`testkit`) follow the same rules as core code.**

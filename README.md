@@ -30,6 +30,9 @@ restoring is just a copy.
 - [Non-Goals](#non-goals)
 - [Known Limitations](#known-limitations)
 - [Philosophy](#philosophy)
+  - [Design Principles](#design-principles)
+  - [Implementation Principles](#implementation-principles)
+  - [Nomad backup metaphor](#nomad-backup-metaphor)
 - [Contribute](#contribute)
 - [Resources](#resources)
 - [Related Projects](#related-projects)
@@ -136,7 +139,7 @@ If you need server-to-server replication:
 
 ## Philosophy
 
-**Design Principles**
+### Design Principles
 
 - Laptop-centric workflows
 - Changing networks
@@ -145,7 +148,7 @@ If you need server-to-server replication:
 - Not always-on infrastructure
 - Personal homelab / Raspberry Pi setups
 
-**Implementation Principles**
+### Implementation Principles
 
 No custom storage format, protocol, or encryption — just proven tools composed
 together:
@@ -162,7 +165,7 @@ together:
   created once with `cryptsetup`; nbkp unlocks and locks it through udisks2.
   Data in transit is protected by SSH
 
-**Nomad backup metaphor**
+### Nomad backup metaphor
 
 A nomad:
 

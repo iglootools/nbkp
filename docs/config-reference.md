@@ -396,9 +396,12 @@ Checked when the config is loaded, before anything runs:
 Each failure nbkp reports itself carries a stable error code
 (`unknown-reference`, `circular-proxy-jump`, `nested-endpoint`, …; see
 `ConfigValidationErrorKind` in `nbkp/config/protocol/errors.py`). With
-`--output json`, a command that cannot load its config prints
-`{"error": {"reason": ..., "message": ..., "errors": [{"loc": ..., "type": ..., "message": ...}]}}`
-on stdout instead of the human-readable panel, and exits with code 2.
+`--output json`, a command that cannot load its config prints this on stdout
+instead of the human-readable panel, and exits with code 2:
+
+```text
+{"error": {"reason": ..., "message": ..., "errors": [{"loc": ..., "type": ..., "message": ...}]}}
+```
 
 A `--location` or `--exclude-location` value that no SSH endpoint declares, a
 `--sync` that names no sync, and a `disks --name` that names no volume are

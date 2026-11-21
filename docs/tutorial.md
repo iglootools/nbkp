@@ -544,6 +544,8 @@ step for non-btrfs drives.)
 > volume here needs the option anyway. On a multi-user host, scope it. See
 > `man udisks2.conf`.
 
+<!-- Two separate notes: without a line between them, some renderers merge them. -->
+
 > **Advanced — fixed `/mnt/<drive>` paths via crypttab + fstab.** If you'd
 > rather pin each drive to a stable path (for other tools, or to avoid
 > `mount_options.conf`), set up `/etc/crypttab` (friendly mapper names) and

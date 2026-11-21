@@ -260,8 +260,12 @@ must therefore be supplied by operator configuration, through whichever of the
 two mount-point models applies:
 
 - **fstab route (declared `path`)** — include the option directly in the
-  volume's `/etc/fstab` line (e.g.
-  `/dev/mapper/luks-<uuid>  /mnt/x  btrfs  noauto,nofail,x-udisks-auth,user_subvol_rm_allowed  0 0`).
+  volume's `/etc/fstab` line, for example:
+
+  ```text
+  /dev/mapper/luks-<uuid>  /mnt/x  btrfs  noauto,nofail,x-udisks-auth,user_subvol_rm_allowed  0 0
+  ```
+
   udisks honors fstab options verbatim, bypassing the allowlist. This is the
   simplest and most robust route.
 - **discovered route (omitted `path`)** — extend udisks's own allowlist in
