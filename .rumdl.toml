@@ -14,7 +14,7 @@ headings = false
 
 [global]
 # Generated whole by `iglootools docs cli` (mise run clidocs). Reformatting it would fail
-# clidocs-check on the next regeneration; its generator owns its format. Generated sections
+# lint-clidocs on the next regeneration; its generator owns its format. Generated sections
 # inside hand-written documents are fenced with <!-- rumdl-disable --> / <!-- rumdl-enable -->
 # outside their markers instead.
 exclude = ["docs/cli-reference.md"]

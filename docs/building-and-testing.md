@@ -12,10 +12,15 @@ testing/QA. The `seed --docker` command requires the `docker` extra:
 
 Run automated tests and checks (no external dependencies):
 
+Tasks come in families, as guidelines/project-setup/mise.md in iglootools/common
+describes: `fmt*`, `toc` and the reference generators rewrite files, `lint*`
+fail without writing, and `lint` runs every one of them.
+
 ```bash
 # mise tasks
-mise run check              # Run all checks: format-check + lint + lint-shell + lint-markdown + type-check + lock-check + lock-check-uv + toc-check + clidocs-check + configdocs-check + depgraph-check + boundaries-check + dead-code-check
-mise run check-all          # Run all checks: regular checks + all tests
+mise run preflight          # every lint and every test, Docker suites included (what CI runs)
+mise run preflight-quick    # every lint, and the unit and filesystem tests (no Docker)
+mise run lint               # every lint below
 
 mise run test-all           # All tests
 
@@ -29,29 +34,29 @@ mise run test-integration-docker  # Docker integration tests (tests/integration_
 mise run test-integration-docker-btrfs   # Local btrfs tests inside Docker (privileged)
 mise run test-integration-fs     # Filesystem integration tests
 
-mise run format             # ruff, dprint and rumdl format every file (rewrites files)
-mise run format-check       # ruff format --check + dprint check (verifies only; what check runs)
-mise run lint               # ruff check
+mise run fmt                # ruff, dprint and rumdl format every file (fmt-ruff, fmt-dprint, fmt-rumdl)
+mise run lint-fmt           # ruff format --check + dprint check (lint-fmt-ruff, lint-fmt-dprint)
+mise run lint-ruff          # ruff check
 mise run lint-shell         # shellcheck on the tracked shell scripts
 mise run lint-markdown      # rumdl check (also what rumdl fmt would change)
-mise run type-check         # pyright
-mise run lock-check         # check mise.lock is up to date
-mise run lock-check-uv      # check uv.lock is consistent with pyproject.toml
+mise run lint-types         # pyright
+mise run lint-lock-mise     # check mise.lock is up to date
+mise run lint-lock-uv       # check uv.lock is consistent with pyproject.toml
+mise run lint-boundaries    # check the module layering rules (import-linter)
+mise run lint-dead-code     # check for unused code (deadcode)
 
 mise run install            # sync .venv with uv.lock (rarely needed by hand — see below)
 mise run reinstall          # delete .venv and sync from scratch
 
 mise run reference-doc      # regenerate every generated reference: clidocs + configdocs + depgraph
 mise run toc                # regenerate the tables of contents in the Markdown docs
-mise run toc-check          # check the tables of contents are up to date
+mise run lint-toc           # check the tables of contents are up to date
 mise run clidocs            # regenerate CLI reference in docs/cli-reference.md
-mise run clidocs-check      # check CLI reference is up to date
+mise run lint-clidocs       # check CLI reference is up to date
 mise run configdocs         # regenerate config reference tables in docs/config-reference.md
-mise run configdocs-check   # check config reference tables in docs/config-reference.md are up to date
+mise run lint-configdocs    # check config reference tables in docs/config-reference.md are up to date
 mise run depgraph           # regenerate Module Overview in docs/architecture.md
-mise run depgraph-check     # check Module Overview is up to date
-mise run boundaries-check   # check the module layering rules (import-linter)
-mise run dead-code-check    # check for unused code (deadcode)
+mise run lint-depgraph      # check Module Overview is up to date
 
 # Running tools directly
 uv run --no-sync pytest tests/ --ignore=tests/e2e_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -n auto -v  # Unit tests only

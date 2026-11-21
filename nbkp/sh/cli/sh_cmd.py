@@ -71,7 +71,7 @@ def sh_cmd(
                 " (e.g. 'darwin', 'linux'). Defaults to the current OS."
             ),
             # sys.platform varies by OS, so the generated CLI docs would differ
-            # between macOS and Linux, breaking CI's clidocs-check.
+            # between macOS and Linux, breaking CI's lint-clidocs.
             show_default=False,
         ),
     ] = sys.platform,

@@ -91,7 +91,7 @@ run = "uv run --no-sync iglootools python reinstall"
 description = "Lint the tracked shell scripts with shellcheck"
 run = "uv run --no-sync iglootools shell lint"
 
-[tasks.lock-check]
+[tasks.lint-lock-mise]
 description = "Check that mise.lock is up to date with mise.toml"
 run = "uv run --no-sync iglootools mise lock-check"
 
@@ -102,40 +102,33 @@ description = "Install dependencies"
 # experimental deps engine has to be abandoned, this is the single place to change.
 run = "mise deps install uv"
 
-[tasks.check]
-description = "Run all checks (format-check, lint, lint-shell, lint-markdown, type-check, lock-check, lock-check-uv, toc-check, clidocs-check, configdocs-check, depgraph-check, boundaries-check, dead-code-check)"
+# Task families (guidelines/project-setup/mise.md in iglootools/common, "Name tasks by
+# family"): a task that rewrites files is named for what it writes (fmt, toc, clidocs), anything
+# that fails without writing is a lint-*, and preflight runs every lint and test before a push.
+
+[tasks.preflight]
+description = "Run every lint and every test, Docker suites included (what CI runs, across its three jobs)"
 run = [
-  { task = "format-check" },
   { task = "lint" },
-  { task = "lint-shell" },
-  { task = "lint-markdown" },
-  { task = "type-check" },
-  { task = "lock-check" },
-  { task = "lock-check-uv" },
-  { task = "toc-check" },
-  { task = "clidocs-check" },
-  { task = "configdocs-check" },
-  { task = "depgraph-check" },
-  { task = "boundaries-check" },
-  { task = "dead-code-check" },
+  { task = "test-all" },
 ]
 
-[tasks.check-all]
-description = "Run all checks (format, lint, type-check, test)"
+[tasks.preflight-quick]
+description = "Run every lint and the tests that need no Docker (unit and filesystem)"
 run = [
-  { task = "check" },
-  { task = "test-all" },
+  { task = "lint" },
+  { tasks = ["test-unit", "test-integration-fs"] },
 ]
 
 # CI runs three jobs in parallel, one per ci-* task: the two Docker suites take about a
 # minute each and do not need each other, so running them one after the other only made
-# CI wait. Together the three cover check-all.
-[tasks.ci-check]
-description = "Build, run the static checks, and the unit and filesystem tests (CI job 1/3)"
+# CI wait. Together the three cover preflight.
+[tasks.ci-preflight-quick]
+description = "Build, then run every lint and the unit and filesystem tests (CI job 1/3)"
 run = [
   { task = "install" },
   { task = "build" },
-  { tasks = ["check", "test-unit", "test-integration-fs"] },
+  { task = "preflight-quick" },
 ]
 
 [tasks.ci-test-docker]
@@ -226,46 +219,84 @@ run = [
   { task = "test-e2e" },
 ]
 
-# ruff formats the Python, dprint the JSON, TOML, YAML and Dockerfiles, rumdl the Markdown. See
-# guidelines/project-setup/formatting.md in iglootools/common.
-[tasks.format]
-description = "Format every file with ruff, dprint and rumdl (rewrites files; see format-check to verify only)"
+# Writers. ruff formats the Python, dprint the JSON, TOML, YAML and Dockerfiles, rumdl the
+# Markdown. See guidelines/project-setup/formatting.md in iglootools/common.
+[tasks.fmt]
+description = "Format every file with ruff, dprint and rumdl (rewrites files; lint-fmt verifies only)"
 run = [
-  "uv run --no-sync ruff format .",
-  "dprint fmt",
-  "rumdl fmt .",
+  { task = "fmt-ruff" },
+  { task = "fmt-dprint" },
+  { task = "fmt-rumdl" },
 ]
 
-# The variant `check` depends on, and the reason there are two. `ruff format` rewrites files
-# and exits 0 whether or not it changed anything, so as a gate it cannot fail: on CI it
-# reformatted inside the runner, threw the result away with the workspace, and reported
-# success, leaving formatting the one member of `check` that was never actually enforced.
-# `--check` reports the same diff but writes nothing and exits non-zero, so run `mise run
-# format` to fix what it reports. dprint's formatter has the same split. rumdl's check is
-# lint-markdown, which reports what `rumdl fmt` would change along with what it cannot.
-[tasks.format-check]
-description = "Check that every file is formatted (fails instead of reformatting; fix with `mise run format`)"
+[tasks.fmt-ruff]
+description = "Format the Python with ruff"
+run = "uv run --no-sync ruff format ."
+
+[tasks.fmt-dprint]
+description = "Format the JSON, TOML, YAML and Dockerfiles with dprint"
+run = "dprint fmt"
+
+[tasks.fmt-rumdl]
+description = "Format the Markdown with rumdl"
+run = "rumdl fmt ."
+
+# Lints: each fails without writing anything.
+[tasks.lint]
+description = "Run every lint"
 run = [
-  "uv run --no-sync ruff format --check .",
-  "dprint check",
+  { task = "lint-fmt" },
+  { task = "lint-ruff" },
+  { task = "lint-shell" },
+  { task = "lint-markdown" },
+  { task = "lint-types" },
+  { task = "lint-lock-mise" },
+  { task = "lint-lock-uv" },
+  { task = "lint-toc" },
+  { task = "lint-clidocs" },
+  { task = "lint-configdocs" },
+  { task = "lint-depgraph" },
+  { task = "lint-boundaries" },
+  { task = "lint-dead-code" },
 ]
+
+# Why the formatters need a lint of their own: `ruff format` rewrites files and exits 0 whether
+# or not it changed anything, so as a gate it cannot fail. On CI it reformatted inside the
+# runner, threw the result away with the workspace, and reported success, leaving formatting
+# the one check that was never actually enforced. `--check` reports the same diff but writes
+# nothing and exits non-zero. dprint has the same split. rumdl has no lint-fmt-* of its own:
+# lint-markdown reports what `rumdl fmt` would change along with what it cannot fix.
+[tasks.lint-fmt]
+description = "Check that every file is formatted (fix with `mise run fmt`)"
+run = [
+  { task = "lint-fmt-ruff" },
+  { task = "lint-fmt-dprint" },
+]
+
+[tasks.lint-fmt-ruff]
+description = "Check that the Python is formatted (fix with `mise run fmt-ruff`)"
+run = "uv run --no-sync ruff format --check ."
+
+[tasks.lint-fmt-dprint]
+description = "Check that the JSON, TOML, YAML and Dockerfiles are formatted (fix with `mise run fmt-dprint`)"
+run = "dprint check"
 
 [tasks.lint-markdown]
-description = "Lint the Markdown with rumdl (configured in .rumdl.toml; fix what it can with `mise run format`)"
+description = "Lint the Markdown with rumdl (configured in .rumdl.toml; fix what it can with `mise run fmt-rumdl`)"
 run = "rumdl check ."
 
-[tasks.lint]
-description = "Run ruff linting"
+[tasks.lint-ruff]
+description = "Lint the Python with ruff"
 run = "uv run --no-sync ruff check nbkp/ tests/ build-scripts/"
 
-[tasks.type-check]
-description = "Run pyright type checking"
+[tasks.lint-types]
+description = "Type-check with pyright"
 run = "uv run --no-sync pyright nbkp/ tests/ build-scripts/"
 
 # The uv.lock counterpart of lock-check, and the replacement for `poetry check --lock`:
 # asserts uv.lock is consistent with pyproject.toml. Distinct from UV_LOCKED in CI, which
 # asserts a sync would not *change* the lock. --check does not write.
-[tasks.lock-check-uv]
+[tasks.lint-lock-uv]
 description = "Check that uv.lock is up to date with pyproject.toml"
 run = "uv lock --check"
 
@@ -307,7 +338,7 @@ run = "uv run --no-sync iglootools demo upload"
 description = "Regenerate the tables of contents in the Markdown docs (add one with --add <file>)"
 run = "uv run --no-sync iglootools docs toc"
 
-[tasks.toc-check]
+[tasks.lint-toc]
 description = "Check that the Markdown tables of contents are up to date (fix with `mise run toc`)"
 run = "uv run --no-sync iglootools docs toc --check"
 
@@ -323,31 +354,31 @@ run = [
 description = "Regenerate CLI reference in docs/cli-reference.md"
 run = "uv run --no-sync iglootools docs cli"
 
-[tasks.clidocs-check]
-description = "Check that CLI reference in docs/cli-reference.md is up to date"
+[tasks.lint-clidocs]
+description = "Check that the CLI reference in docs/cli-reference.md is up to date (fix with `mise run clidocs`)"
 run = "uv run --no-sync iglootools docs cli --check"
 
 [tasks.configdocs]
 description = "Regenerate config reference tables in docs/config-reference.md"
 run = "uv run --no-sync python build-scripts/configdocs.py"
 
-[tasks.configdocs-check]
-description = "Check that config reference tables in docs/config-reference.md are up to date"
+[tasks.lint-configdocs]
+description = "Check that the config reference tables in docs/config-reference.md are up to date (fix with `mise run configdocs`)"
 run = "uv run --no-sync python build-scripts/configdocs.py --check"
 
 [tasks.depgraph]
 description = "Regenerate Module Overview in docs/architecture.md"
 run = "uv run --no-sync iglootools docs depgraph"
 
-[tasks.depgraph-check]
-description = "Check that Module Overview in docs/architecture.md is up to date"
+[tasks.lint-depgraph]
+description = "Check that the Module Overview in docs/architecture.md is up to date (fix with `mise run depgraph`)"
 run = "uv run --no-sync iglootools docs depgraph --check"
 
-[tasks.boundaries-check]
+[tasks.lint-boundaries]
 description = "Check module boundaries (import-linter contracts in pyproject.toml)"
 run = "uv run --no-sync lint-imports"
 
-[tasks.dead-code-check]
+[tasks.lint-dead-code]
 description = "Check for unused code (deadcode, configured in pyproject.toml)"
 run = "uv run --no-sync deadcode nbkp tests"
 

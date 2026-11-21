@@ -24,7 +24,7 @@ def _raise_fd_soft_limit(target: int = 8192) -> None:
     The Docker test suites (testcontainers' docker-py client + containers +
     SSH connections + the generated backup script's subprocess pipes) need far
     more than macOS's default soft ``RLIMIT_NOFILE`` of 256.  When ``pytest``
-    is launched from a plain login shell (e.g. via ``mise run check-all``) it
+    is launched from a plain login shell (e.g. via ``mise run preflight``) it
     inherits that 256 and the e2e session exhausts it mid-run — the test fails
     and even pytest's tmp-dir ``cleanup_dead_symlinks`` can't ``scandir``,
     raising ``OSError: [Errno 24] Too many open files``.  A process may always

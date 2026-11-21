@@ -16,7 +16,7 @@ git config --global --add safe.directory /app
 # never the host's bind-mounted .venv. --frozen so the container cannot rewrite the host's
 # uv.lock; --all-extras to match the host-side [deps.uv] command.
 #
-# import-linter and grimp are skipped: only the host-side boundaries-check uses them, and
+# import-linter and grimp are skipped: only the host-side lint-boundaries uses them, and
 # grimp publishes no linux-aarch64 wheel for Python 3.15, which this image (no C toolchain)
 # cannot build — so on an Apple Silicon host the whole sync would fail. Drop the two
 # --no-install-package flags once grimp ships that wheel.

@@ -55,7 +55,7 @@
     }
   ],
   // Format on save with the tool the `format` task runs for each language, so a saved file
-  // passes `format-check`: tombi and VSCode's built-in formatters would otherwise claim TOML,
+  // passes `lint-fmt`: tombi and VSCode's built-in formatters would otherwise claim TOML,
   // JSON and Markdown. See guidelines/project-setup/ide.md in iglootools/common.
   "editor.formatOnSave": true,
   "[json]": { "editor.defaultFormatter": "dprint.dprint" },

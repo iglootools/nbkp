@@ -214,7 +214,7 @@ graph TD
 Each domain module (`disks/`, `preflight/`, `snapshots/`, …) keeps its core
 logic, its presentation (`output.py` / `output/`), and its Typer sub-app
 (`cli/`) side by side. These rules keep them decoupled, and
-`mise run boundaries-check` (part of `mise run check`) enforces them through the
+`mise run lint-boundaries` (part of `mise run lint`) enforces them through the
 [import-linter](https://import-linter.readthedocs.io/) contracts in
 `pyproject.toml` (`[tool.importlinter]`). The generated graph above only *shows*
 dependencies; the contracts are what reject a new import that breaks a rule:

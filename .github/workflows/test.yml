@@ -41,7 +41,7 @@ jobs:
   # Three jobs in parallel, one per ci-* task, so the two minute-long Docker suites do not
   # wait for each other. The `test` job at the end gathers them under the one check name
   # the main ruleset requires.
-  check:
+  preflight-quick:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Checkout only. Declared so the job does not inherit the repository's read-write default.
@@ -70,7 +70,8 @@ jobs:
         with:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-      # Each job is named after its task: check runs ci-check, test-docker ci-test-docker.
+      # Each job is named after its task: preflight-quick runs ci-preflight-quick, test-docker
+      # ci-test-docker.
       - run: mise run ci-${{ github.job }}
       - run: uv cache prune --ci
 
@@ -94,7 +95,7 @@ jobs:
     # The main ruleset requires a check named "test". A job skipped because a dependency
     # failed would count as passing, so this one always runs and fails unless all three did.
     if: always()
-    needs: [check, test-docker, test-e2e]
+    needs: [preflight-quick, test-docker, test-e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
