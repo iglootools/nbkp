@@ -8,6 +8,8 @@ github-cli = "2.103.3"
 # current pv binaries, and it has none for Windows, where the demo does not run anyway.
 "conda:pv" = { version = "1.12.7", os = ["linux", "macos"] }
 shellcheck = "0.11.0"
+dprint = "0.64.3"
+rumdl = "0.3.4"
 
 [env]
 # Pin uv to the interpreter mise installed, by absolute path. mise's own docs are explicit
