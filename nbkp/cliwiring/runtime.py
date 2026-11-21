@@ -11,7 +11,8 @@ test drives a whole command against fake hosts by passing its own::
 Only the boundaries a command cannot avoid live here: commands on the hosts
 holding the volumes, tools on the orchestrator's ``PATH``, rsync, the clock
 and platform that name snapshots, where the config file is searched for, and
-where credentials and the local user name come from.
+where credentials and the local user name come from, and the lock that
+keeps two commands touching the drives and destinations apart.
 """
 
 import getpass
@@ -32,6 +33,7 @@ from ..credentials import CommandFn, run_captured
 from ..remote.dispatch import VolumeCommandRunner, WhichFn, run_on_volume
 from ..sync.modes import RsyncRunner
 from ..sync.rsync import run_rsync
+from .lock import RunLockFn, hold_run_lock, resolve_run_lock_path
 
 
 def utc_now() -> datetime:
@@ -65,6 +67,14 @@ class Runtime:
     """Runs the ``command`` credential provider's command."""
     local_user: Callable[[], str] = getpass.getuser
     """The orchestrator user named in suggested polkit rules."""
+    run_lock: RunLockFn = hold_run_lock
+    """Holds the lock that keeps two commands touching the drives and
+    destinations apart (``run``, ``disks mount``, …), at the path
+    :meth:`run_lock_path` gives."""
+
+    def run_lock_path(self) -> Path:
+        """The run lock under this runtime's ``XDG_STATE_HOME`` or home."""
+        return resolve_run_lock_path(self.environ, self.home())
 
     def load_config(self, config_path: str | Path | None) -> Config:
         """Load *config_path*, or search for the config in this runtime's

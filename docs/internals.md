@@ -10,6 +10,7 @@ For the domain model (volumes, endpoints, syncs, snapshots), see [Domain](./doma
 - [Runtime Behavior](#runtime-behavior)
   - [Snapshot Lifecycle](#snapshot-lifecycle)
   - [The `latest` Symlink](#the-latest-symlink)
+  - [The Run Lock](#the-run-lock)
   - [Volume Mount Management](#volume-mount-management)
   - [Pre-flight Checks](#pre-flight-checks)
   - [Endpoint Filtering](#endpoint-filtering)
@@ -74,6 +75,25 @@ The `latest` symlink is only updated after a successful sync. If a sync fails mi
 When `latest` is used as a **source** (in chained syncs), `latest → /dev/null` is accepted only when an enabled upstream sync that is part of the same run writes to that endpoint (a sync left out by `--sync` never replaces the marker). Otherwise, it is flagged as an error during pre-flight checks.
 
 **Repairing `latest`** — When `latest` is missing or does not point to a snapshot of the endpoint, `preflight troubleshoot` lists the endpoint's `snapshots/` and suggests pointing `latest` at the newest one (`ln -sfn snapshots/<newest> latest`), and at `/dev/null` only when there is none, since a hard-link sync deletes every snapshot while `latest` points to `/dev/null`. When the listing fails, it shows a `<newest-snapshot>` placeholder to replace. If the newest snapshot was being written when a run was interrupted, point `latest` at the one before it.
+
+### The Run Lock
+
+Two runs writing the same destination at once would corrupt it: the second run's orphan cleanup deletes the snapshot the first is still writing, two btrfs syncs share one `staging/`, and the second run's umount pulls a drive from under the first. A scheduled run that is still going when the next one starts is the usual way to get there. Other commands do the same damage from the side: a `disks umount`, or the umount at the end of a `preflight check`, pulls a drive from under a run, and a run's umount pulls it from under a `snapshots prune` that is deleting snapshots on it.
+
+Every command that mounts or umounts a drive, or modifies a destination, therefore holds an exclusive, non-blocking `flock(2)` on `$XDG_STATE_HOME/nbkp/run.lock` (`~/.local/state/nbkp/run.lock` when `XDG_STATE_HOME` is unset, empty or relative):
+
+| Command | Holds the lock |
+|---|---|
+| `run` | from before the first mount to after the last umount |
+| `snapshots prune` | the same, and also with `--no-mount --no-umount`, since it deletes snapshots |
+| `snapshots show`, `preflight check`, `preflight troubleshoot` | from before the first mount to after the last umount |
+| `disks mount`, `disks umount` | while they unlock and mount, or umount and lock; drives `disks mount` mounted stay mounted after it exits, unlocked |
+
+A command that neither mounts, umounts nor writes runs without it, alongside anything else: a dry run (`run --dry-run`, `snapshots prune --dry-run`) or a check with `--no-mount --no-umount`, and `disks mount --dry-run` / `disks umount --dry-run`, `disks status`, `config show`. A dry run that mounts or umounts still takes it.
+
+When another command holds the lock, the command stops before mounting, prompting for a passphrase or checking anything and exits 1 with `another nbkp command (a run, a mount, a prune, …) is in progress` on stderr, or a JSON `{"error": ...}` object (reason `run-in-progress`, with `lock_path`) under `-o json`: wait for the other command to finish. A lock file that cannot be created or locked fails the same way (reason `run-lock-unavailable`) rather than running unprotected. The lock goes with the process, so a command that is killed releases it; there is no stale lock to remove. The lock is per user and per machine: commands on two machines writing one destination, or run as two users, are not kept apart.
+
+The generated script takes the same lock with `flock -n` on the same path (resolved on the host that runs the script), so it and the commands above exclude each other. Its dry runs, which never mount or modify anything, skip it. Where `flock(1)` is missing — it comes with util-linux, which stock macOS lacks — the script logs a warning and runs unlocked.
 
 ### Volume Mount Management
 
@@ -337,6 +357,8 @@ It follows the same run structure as `nbkp run`:
 1. **Preflight, for every sync, before any sync starts.** Each sync has a generated `<sync>_preflight` function that classifies it as *active*, *inactive* (missing `.nbkp-vol` / `.nbkp-src` / `.nbkp-dst`, unreachable host — checked first), *broken* (rsync missing or older than 3.0 / openrsync, missing snapshot tools, wrong filesystem, missing `user_subvol_rm_allowed`, staging not a subvolume, FAT/exFAT under hard links, missing or invalid `latest`, unwritable directories), or *pending* (a dry-run whose source snapshot only an upstream sync would create). Like `nbkp preflight`, it also logs a warning, without failing, when the snapshot a btrfs destination's `latest` points to is not read-only.
 2. **Strictness.** `--strictness` (default `ignore-inactive`) decides whether those results abort the run, with the same matrix as [Strictness](#strictness).
 3. **Syncs in dependency order.** Inactive syncs are skipped without counting as failures; syncs downstream of a failed, skipped or disabled sync are cancelled, as in `run`, and a cancellation caused by a disabled sync never counts as a failure. Each sync function runs in a `set -e` subshell, so any failing step — not only rsync — stops that sync before `latest` moves. (Calling a bash function in a `||` or `if` context silently disables `set -e` inside it, which is why the script never does.)
+
+The script takes the run lock `nbkp run` holds, with `flock(1)` where it is installed (see [The Run Lock](#the-run-lock)).
 
 Paths are quoted for each shell that interprets them: locally, and once more inside the command string sent over SSH. Only the snapshot timestamp and the snapshot-name loop variable are expanded at runtime, and snapshot names read back from the destination are filtered to timestamp-shaped names before use. What `sh` deliberately leaves out of `run` — mount management, endpoint re-selection, Rich and JSON output, Paramiko-only SSH options, the orchestrator's own coreutils checks — is listed with reasons in the header of every generated script.
 

@@ -25,7 +25,11 @@ class TestUmountFailure:
         with (
             pytest.raises(typer.Exit) as excinfo,
             managed_mount(
-                _CONFIG, {}, runtime=runtime, output_format=OutputFormat.JSON
+                _CONFIG,
+                {},
+                runtime=runtime,
+                writes=False,
+                output_format=OutputFormat.JSON,
             ),
         ):
             pass
@@ -42,7 +46,11 @@ class TestUmountFailure:
         with (
             pytest.raises(ValueError),
             managed_mount(
-                _CONFIG, {}, runtime=runtime, output_format=OutputFormat.JSON
+                _CONFIG,
+                {},
+                runtime=runtime,
+                writes=False,
+                output_format=OutputFormat.JSON,
             ),
         ):
             raise ValueError("body failed")
@@ -58,6 +66,7 @@ class TestUmountFailure:
             _CONFIG,
             {},
             runtime=runtime,
+            writes=False,
             output_format=OutputFormat.JSON,
             umount_results=results,
         ):
@@ -68,7 +77,11 @@ class TestUmountFailure:
     def test_successful_umount_passes(self) -> None:
         run = mounted_drive_host(completed())
         with managed_mount(
-            _CONFIG, {}, runtime=fake_runtime(run=run), output_format=OutputFormat.JSON
+            _CONFIG,
+            {},
+            runtime=fake_runtime(run=run),
+            writes=False,
+            output_format=OutputFormat.JSON,
         ):
             pass
 

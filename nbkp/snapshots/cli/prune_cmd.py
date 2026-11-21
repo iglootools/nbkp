@@ -61,6 +61,7 @@ def prune_cmd(
             run=run,
         ),
         lambda results: _print_results(results, dry_run, output),
+        writes=not dry_run,
     )
 
 

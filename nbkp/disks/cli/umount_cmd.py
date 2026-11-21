@@ -8,6 +8,7 @@ from ...clidisplay import OutputFormat
 from ...clidisplay.invocation import Invocation, format_troubleshoot_hint
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...cliwiring.disks import probe_and_show_status, require_known_names, show_plan
+from ...cliwiring.lock import run_lock_or_exit
 from ...cliwiring.mount_progress import LifecycleProgress, mount_display_names
 from ...cliwiring.options import (
     CONFIG_OPTION,
@@ -94,23 +95,24 @@ def _umount_with_progress(
     output: OutputFormat,
     runtime: Runtime,
 ) -> list[UmountResult]:
-    """Umount and lock, with a progress bar for humans."""
-    progress = LifecycleProgress.create(
-        cfg,
-        resolved,
-        enabled=output is OutputFormat.HUMAN,
-        names=names,
-        credentials=False,
-        mounting=False,
-    )
-    try:
-        return umount_volumes(
+    """Umount and lock, holding the run lock, with a progress bar for humans."""
+    with run_lock_or_exit(runtime.run_lock, runtime.run_lock_path(), output):
+        progress = LifecycleProgress.create(
             cfg,
             resolved,
+            enabled=output is OutputFormat.HUMAN,
             names=names,
-            on_umount_start=progress.on_umount_start,
-            on_umount_end=progress.on_umount_end,
-            run=runtime.run,
+            credentials=False,
+            mounting=False,
         )
-    finally:
-        progress.stop_all()
+        try:
+            return umount_volumes(
+                cfg,
+                resolved,
+                names=names,
+                on_umount_start=progress.on_umount_start,
+                on_umount_end=progress.on_umount_end,
+                run=runtime.run,
+            )
+        finally:
+            progress.stop_all()

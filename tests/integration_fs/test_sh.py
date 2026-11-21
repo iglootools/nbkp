@@ -1,6 +1,7 @@
 """Integration tests: generate scripts from chain configs and execute them."""
 
 import os
+import shlex
 import shutil
 import stat
 import subprocess
@@ -11,6 +12,7 @@ from textwrap import dedent
 
 import pytest
 
+from nbkp.cliwiring.lock import hold_run_lock, resolve_run_lock_path
 from nbkp.config import (
     Config,
     HardLinkSnapshotConfig,
@@ -133,8 +135,42 @@ def _run_script(
         capture_output=True,
         text=True,
         check=False,
-        env=env,
+        # The run lock goes under the test's directory, not the developer's.
+        env={**(env or os.environ), "XDG_STATE_HOME": str(_state_home(tmp_path))},
     )
+
+
+def _state_home(tmp_path: Path) -> Path:
+    return tmp_path / "state"
+
+
+def _with_flock(tmp_path: Path) -> dict[str, str]:
+    """The environment, with ``flock`` on ``PATH``.
+
+    Where util-linux's flock(1) is missing (macOS), a stand-in makes the
+    same ``flock(2)`` call on the descriptor the script passes.
+    """
+    if shutil.which("flock") is not None:
+        return dict(os.environ)
+    bin_dir = tmp_path / "flock-bin"
+    bin_dir.mkdir()
+    flock = bin_dir / "flock"
+    flock.write_text(
+        dedent(f"""\
+            #!/bin/sh
+            # flock -n FD
+            exec {shlex.quote(sys.executable)} -c '
+            import fcntl, sys
+            try:
+                fcntl.flock(int(sys.argv[2]), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                sys.exit(1)
+            ' "$@"
+        """),
+        encoding="utf-8",
+    )
+    flock.chmod(0o755)
+    return {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
 
 
 def _stage(tmp_path: Path) -> Path:
@@ -251,6 +287,48 @@ class TestGeneratedScriptExecution:
         assert f"Removing orphaned snapshot: {leftover}" in result.stderr
         assert not (snapshots / leftover).exists()
         assert len(_snapshot_names(tmp_path)) == 1
+
+    def test_held_run_lock_stops_the_script(self, tmp_path: Path) -> None:
+        """The script and nbkp run share one lock: no two runs at once."""
+        config = _seeded_chain(tmp_path)
+        environ = {"XDG_STATE_HOME": str(_state_home(tmp_path))}
+
+        with hold_run_lock(resolve_run_lock_path(environ, Path.home())):
+            result = _run_script(config, tmp_path, env=_with_flock(tmp_path))
+
+        assert result.returncode == 1
+        assert (
+            "another nbkp command (a run, a mount, a prune, …) is in progress"
+            in result.stderr
+        )
+        assert _snapshot_names(tmp_path) == []
+
+    def test_free_run_lock_lets_the_script_run(self, tmp_path: Path) -> None:
+        config = _seeded_chain(tmp_path)
+
+        result = _run_script(config, tmp_path, env=_with_flock(tmp_path))
+
+        assert result.returncode == 0, result.stderr
+        assert "run lock" not in result.stderr
+
+    @pytest.mark.skipif(shutil.which("flock") is not None, reason="flock installed")
+    def test_runs_unlocked_without_flock(self, tmp_path: Path) -> None:
+        config = _seeded_chain(tmp_path)
+
+        result = _run_script(config, tmp_path)
+
+        assert result.returncode == 0, result.stderr
+        assert "WARN: flock not found" in result.stderr
+
+    def test_dry_run_does_not_take_the_run_lock(self, tmp_path: Path) -> None:
+        config = _seeded_chain(tmp_path)
+        environ = {"XDG_STATE_HOME": str(_state_home(tmp_path))}
+
+        with hold_run_lock(resolve_run_lock_path(environ, Path.home())):
+            result = _run_script(config, tmp_path, "--dry-run")
+
+        assert result.returncode == 0, result.stderr
+        assert "run lock" not in result.stderr
 
     def test_progress_flags_reach_rsync(self, tmp_path: Path) -> None:
         """--progress modes pass several rsync flags as separate words."""

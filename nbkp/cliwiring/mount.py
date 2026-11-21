@@ -22,6 +22,7 @@ from ..disks.output import (
 from ..policy import Strictness
 from ..remote.endpoints import ResolvedEndpoints
 from .credentials import prompt_passphrase
+from .lock import is_run_lock_needed, run_lock_or_exit
 from .mount_progress import LifecycleProgress, mount_display_names
 from .runtime import Runtime
 
@@ -82,6 +83,7 @@ def managed_mount(
     resolved: ResolvedEndpoints,
     *,
     runtime: Runtime,
+    writes: bool,
     mount: bool = True,
     umount: bool = True,
     output_format: OutputFormat = OutputFormat.HUMAN,
@@ -89,7 +91,7 @@ def managed_mount(
     umount_results: list[UmountResult] | None = None,
 ) -> Generator[tuple[Config, dict[str, MountObservation]]]:
     """Thin wrapper around :func:`disks.context.managed_mount` that adds
-    Rich display callbacks and credential management.
+    Rich display callbacks, credential management and the run lock.
 
     Yields ``(resolved_config, mount_observations)``.  ``resolved_config``
     is *cfg* with discovered mountpoints filled in for mount-managed volumes
@@ -100,7 +102,13 @@ def managed_mount(
     ----------
     runtime:
         Runs the udisks commands and the probes on the volumes' hosts, and
-        supplies the credential providers' environment and command runner.
+        supplies the credential providers' environment and command runner,
+        and the run lock.
+    writes:
+        Whether the block modifies a destination (a sync, a prune).  The run
+        lock is held from before the first mount to after the last umount
+        when the block writes, mounts or umounts; when another command holds
+        it, the command exits 1 before mounting anything.
     mount:
         When ``False`` (or no volumes have mount config), mounting and
         umounting are both skipped.
@@ -121,6 +129,35 @@ def managed_mount(
         or unlocked — is reported on stderr and fails a command that would
         have succeeded (exit 1).
     """
+    with run_lock_or_exit(
+        runtime.run_lock,
+        runtime.run_lock_path(),
+        output_format,
+        needed=is_run_lock_needed(writes=writes, mount=mount, umount=umount),
+    ):
+        yield from _managed_mount_reporting_umount_failures(
+            cfg,
+            resolved,
+            runtime=runtime,
+            mount=mount,
+            umount=umount,
+            output_format=output_format,
+            strictness=strictness,
+            umount_results=umount_results,
+        )
+
+
+def _managed_mount_reporting_umount_failures(
+    cfg: Config,
+    resolved: ResolvedEndpoints,
+    *,
+    runtime: Runtime,
+    mount: bool,
+    umount: bool,
+    output_format: OutputFormat,
+    strictness: Strictness,
+    umount_results: list[UmountResult] | None,
+) -> Generator[tuple[Config, dict[str, MountObservation]]]:
     use_progress = output_format is OutputFormat.HUMAN
     collected = umount_results if umount_results is not None else []
     try:

@@ -42,7 +42,7 @@ Each sync can optionally maintain point-in-time snapshots of the destination. Tw
 - **Btrfs snapshots**: rsync to staging area, then create read-only btrfs snapshot with `latest` symlink
 - **Hard-link snapshots**: rsync with `--link-dest` for space-efficient incremental snapshots on any filesystem supporting hard links (ext4, xfs, btrfs, etc.)
 - **Automatic pruning**: configurable `max-snapshots` limit, pruned after each run
-- **Safety**: `latest` symlink only updated after successful sync; orphaned snapshot directories cleaned up automatically
+- **Safety**: `latest` symlink only updated after successful sync; orphaned snapshot directories cleaned up automatically; one run at a time per machine (a run lock shared by `run`, generated scripts and every command that mounts or umounts drives or deletes snapshots)
 
 ## SSH and Remote Access
 

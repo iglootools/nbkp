@@ -58,6 +58,7 @@ def show_cmd(
             run=run,
         ),
         lambda results: _print_results(results, output),
+        writes=False,
     )
 
 
