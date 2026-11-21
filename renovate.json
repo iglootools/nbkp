@@ -21,5 +21,7 @@
             "automerge": false
         }
     ],
-    "dependencyDashboard": true
+    "dependencyDashboard": {
+        "enabled": true
+    }
 }
