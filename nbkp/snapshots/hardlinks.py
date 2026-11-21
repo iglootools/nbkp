@@ -73,26 +73,26 @@ def cleanup_orphaned_snapshots(
     resolved_endpoints: ResolvedEndpoints | None = None,
     run: VolumeCommandRunner = run_on_volume,
 ) -> list[str]:
-    """Remove snapshots newer than the latest symlink target.
+    """Remove the snapshots newer than the one ``latest`` designates: the
+    leftovers of failed syncs.  Returns the deleted paths.
 
-    These are leftover directories from failed syncs.
-    Returns list of deleted paths.
+    When ``latest`` is absent or points to ``/dev/null``, no sync has
+    completed yet, so every snapshot directory is a leftover, including one
+    a first run left half-written.  Kept, it would sort before the next
+    complete snapshot and pass for a complete one itself.
     """
     re = resolved_endpoints or {}
     latest = read_latest_symlink(sync, config, resolved_endpoints=re, run=run)
-    if latest is None:
-        return []
-    else:
-        base = snapshots_dir(sync, config)
-        orphans = [
-            f"{base}/{s.name}"
-            for s in list_snapshots(sync, config, re, run=run)
-            if s.timestamp > latest.timestamp
-        ]
-        dst_vol = destination_volume(sync, config)
-        for path in orphans:
-            delete_snapshot(path, dst_vol, re, run=run)
-        return orphans
+    base = snapshots_dir(sync, config)
+    orphans = [
+        f"{base}/{s.name}"
+        for s in list_snapshots(sync, config, re, run=run)
+        if latest is None or s.timestamp > latest.timestamp
+    ]
+    dst_vol = destination_volume(sync, config)
+    for path in orphans:
+        delete_snapshot(path, dst_vol, re, run=run)
+    return orphans
 
 
 def delete_snapshot(

@@ -391,7 +391,7 @@ class TestHardLinkOrphanCleanup:
         )
         assert check.returncode == 0
 
-    def test_no_cleanup_without_latest(
+    def test_nothing_to_clean_without_latest(
         self,
         tmp_path: Path,
         docker_ssh_endpoint: SshEndpoint,
@@ -404,7 +404,7 @@ class TestHardLinkOrphanCleanup:
             str(src), remote_hardlink_volume, docker_ssh_endpoint
         )
 
-        # No latest symlink -> no cleanup possible
+        # No latest symlink and no snapshot yet: nothing to remove
         deleted = cleanup_orphaned_snapshots(sync, config, resolved_endpoints=resolved)
         assert deleted == []
 

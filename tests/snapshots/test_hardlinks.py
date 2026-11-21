@@ -183,14 +183,11 @@ class TestCleanupOrphanedSnapshots:
         deleted = cleanup_orphaned_snapshots(sync, config)
         assert deleted == []
 
-    def test_no_latest_symlink(self, tmp_path: Path) -> None:
+    @staticmethod
+    def _leftover_config(tmp_path: Path) -> tuple[SyncConfig, Config]:
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
+        sync = SyncConfig(slug="s1", source="ep-src", destination="ep-dst")
         config = Config(
             volumes={"src": src, "dst": dst},
             sync_endpoints={
@@ -203,12 +200,36 @@ class TestCleanupOrphanedSnapshots:
             },
             syncs={"s1": sync},
         )
+        (tmp_path / "snapshots" / "2024-01-01T00:00:00.000Z").mkdir(parents=True)
+        return sync, config
 
-        runner = FakeCommandRunner()
+    def test_deletes_a_first_run_leftover_when_latest_is_dev_null(
+        self, tmp_path: Path
+    ) -> None:
+        """A first run interrupted before ``latest`` moved leaves a partial
+        snapshot that would otherwise pass for a complete one later on."""
+        sync, config = self._leftover_config(tmp_path)
+        (tmp_path / "latest").symlink_to("/dev/null")
 
-        deleted = cleanup_orphaned_snapshots(sync, config, run=runner)
-        assert deleted == []
-        assert runner.commands == []
+        deleted = cleanup_orphaned_snapshots(sync, config)
+
+        assert deleted == [f"{tmp_path}/snapshots/2024-01-01T00:00:00.000Z"]
+        assert list((tmp_path / "snapshots").iterdir()) == []
+
+    def test_deletes_every_snapshot_when_latest_is_absent(self, tmp_path: Path) -> None:
+        sync, config = self._leftover_config(tmp_path)
+
+        deleted = cleanup_orphaned_snapshots(sync, config)
+
+        assert deleted == [f"{tmp_path}/snapshots/2024-01-01T00:00:00.000Z"]
+
+    def test_nothing_to_delete_without_snapshots_dir(self, tmp_path: Path) -> None:
+        sync, config = self._leftover_config(tmp_path)
+        (tmp_path / "snapshots" / "2024-01-01T00:00:00.000Z").rmdir()
+        (tmp_path / "snapshots").rmdir()
+        (tmp_path / "latest").symlink_to("/dev/null")
+
+        assert cleanup_orphaned_snapshots(sync, config) == []
 
 
 class TestDeleteSnapshot:

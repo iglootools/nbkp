@@ -110,6 +110,9 @@ class TestPruneFailure:
         self, tmp_path: Path, undeletable_snapshot: Path
     ) -> None:
         config = _config(tmp_path, max_snapshots=1)
+        latest = tmp_path / "dst" / LATEST_LINK
+        latest.unlink(missing_ok=True)
+        latest.symlink_to(f"{SNAPSHOTS_DIR}/{undeletable_snapshot.name}")
         results = _run(config)
 
         assert results[0].outcome == SyncOutcome.SUCCESS

@@ -145,6 +145,24 @@ def _snapshot_names(tmp_path: Path) -> list[str]:
     return sorted(p.name for p in (_stage(tmp_path) / SNAPSHOTS_DIR).iterdir())
 
 
+def _write_rm_refusing(bin_dir: Path, name: str) -> None:
+    """An ``rm`` on *bin_dir* that fails for paths containing *name*.
+
+    While ``latest`` points to /dev/null, orphan cleanup removes every
+    snapshot; this keeps one in place, as a cleanup that failed would.
+    """
+    fake_rm = bin_dir / "rm"
+    fake_rm.write_text(
+        dedent(f"""\
+            #!/bin/sh
+            case "$*" in *{name}*) exit 1 ;; esac
+            exec {shutil.which("rm")} "$@"
+        """),
+        encoding="utf-8",
+    )
+    fake_rm.chmod(0o755)
+
+
 class TestGeneratedScriptSyntax:
     @_requires_bash4
     def test_chain_config_valid_bash_no_portable(self, tmp_path: Path) -> None:
@@ -214,6 +232,25 @@ class TestGeneratedScriptExecution:
         assert f"Removing orphaned snapshot: {orphan}" in result.stderr
         assert not (snapshots / orphan).exists()
         assert (snapshots / previous).exists()
+
+    def test_first_run_leftover_is_removed_when_latest_is_dev_null(
+        self, tmp_path: Path
+    ) -> None:
+        """Before the first complete snapshot, every snapshot is a leftover."""
+        config = _seeded_chain(tmp_path)
+        snapshots = _stage(tmp_path) / SNAPSHOTS_DIR
+        leftover = "2021-01-01T00-00-00.000Z"
+        (snapshots / leftover).mkdir()
+        latest = _stage(tmp_path) / LATEST_LINK
+        latest.unlink(missing_ok=True)
+        latest.symlink_to("/dev/null")
+
+        result = _run_script(config, tmp_path)
+
+        assert result.returncode == 0, result.stderr
+        assert f"Removing orphaned snapshot: {leftover}" in result.stderr
+        assert not (snapshots / leftover).exists()
+        assert len(_snapshot_names(tmp_path)) == 1
 
     def test_progress_flags_reach_rsync(self, tmp_path: Path) -> None:
         """--progress modes pass several rsync flags as separate words."""
@@ -431,6 +468,7 @@ class TestGeneratedScriptExecution:
             encoding="utf-8",
         )
         flaky_readlink.chmod(0o755)
+        _write_rm_refusing(bin_dir, future)
         env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
 
         result = _run_script(config, tmp_path, env=env)
@@ -568,8 +606,9 @@ class TestGeneratedScriptExecution:
         assert os.readlink(latest) == f"{SNAPSHOTS_DIR}/{future}"
 
     def test_existing_snapshot_dir_is_not_reused(self, tmp_path: Path) -> None:
-        """mkdir without -p: a name collision fails the sync, so a failed
-        rsync never removes a snapshot it did not create.
+        """mkdir without -p: a name collision (here with a leftover that
+        orphan cleanup failed to remove) fails the sync, so a failed rsync
+        never removes a snapshot it did not create.
         """
         config = _seeded_chain(tmp_path)
         fake_bin = tmp_path / "bin"
@@ -581,6 +620,7 @@ class TestGeneratedScriptExecution:
         fake_date = fake_bin / "date"
         fake_date.write_text(f"#!/bin/sh\necho '{fixed}'\n")
         fake_date.chmod(0o755)
+        _write_rm_refusing(fake_bin, fixed)
         existing = _stage(tmp_path) / SNAPSHOTS_DIR / fixed
         existing.mkdir()
         (existing / "keep.txt").write_text("keep")
