@@ -5,6 +5,8 @@
     "ms-python.vscode-python-envs",
     "charliermarsh.ruff",
     "hverlin.mise-vscode",
-    "tombi-toml.tombi"
+    "tombi-toml.tombi",
+    "dprint.dprint",
+    "rvben.rumdl"
   ]
 }
