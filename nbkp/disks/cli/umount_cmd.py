@@ -7,6 +7,7 @@ from rich.console import Console
 from ...clidisplay import OutputFormat
 from ...clidisplay.invocation import Invocation, format_troubleshoot_hint
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
+from ...cliwiring.disks import probe_and_show_status, require_known_names, show_plan
 from ...cliwiring.mount_progress import LifecycleProgress, mount_display_names
 from ...cliwiring.options import (
     CONFIG_OPTION,
@@ -22,8 +23,6 @@ from ..lifecycle import UmountResult, any_failed, umount_volumes
 from ..mount_checks import check_mount_status
 from ..plan import plan_lifecycle
 from . import app
-from .helpers import probe_and_show_status, require_known_names
-from .helpers.plan_output import show_plan
 from .options import NAME_OPTION
 
 
@@ -80,7 +79,7 @@ def umount_cmd(
                         config,
                         location,
                         exclude_location,
-                        network.value if network else None,
+                        network,
                     )
                 ),
                 soft_wrap=True,

@@ -70,6 +70,43 @@ class TestBuildSshBaseArgs:
             "host.example.com",
         ]
 
+    def test_disabled_checking_with_known_hosts_file_keeps_warnings(self) -> None:
+        server = SshEndpoint(
+            slug="host-server",
+            host="host.example.com",
+            connection_options=SshConnectionOptions(
+                strict_host_key_checking=False,
+                known_hosts_file="/etc/nbkp/known_hosts",
+            ),
+        )
+        args = build_ssh_base_args(server)
+        assert args == [
+            "ssh",
+            *_DEFAULT_O_OPTIONS,
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "UserKnownHostsFile=/etc/nbkp/known_hosts",
+            "host.example.com",
+        ]
+
+    def test_known_hosts_file_with_whitespace_is_quoted(self) -> None:
+        server = SshEndpoint(
+            slug="host-server",
+            host="host.example.com",
+            connection_options=SshConnectionOptions(
+                known_hosts_file='/srv/my keys/"known" hosts',
+            ),
+        )
+        args = build_ssh_base_args(server)
+        assert args == [
+            "ssh",
+            *_DEFAULT_O_OPTIONS,
+            "-o",
+            'UserKnownHostsFile="/srv/my keys/\\"known\\" hosts"',
+            "host.example.com",
+        ]
+
     def test_custom_connect_timeout(self) -> None:
         server = SshEndpoint(
             slug="slow-server",
@@ -229,8 +266,8 @@ class TestBuildSshBaseArgs:
         # shell word, so it must be quoted.
         proxy_cmd = (
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
-            f" -o {shlex.quote(f'ProxyCommand={inner}')}"
             " -p 2222"
+            f" -o {shlex.quote(f'ProxyCommand={inner}')}"
             " -W %h:%p bastion2.example.com"
         )
         assert args == [
@@ -330,8 +367,8 @@ class TestBuildSshEOption:
         # shell word, so it must be quoted.
         proxy_cmd = (
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
-            f" -o {shlex.quote(f'ProxyCommand={inner}')}"
             " -p 2222"
+            f" -o {shlex.quote(f'ProxyCommand={inner}')}"
             " -W %h:%p bastion2.example.com"
         )
         quoted = shlex.quote(f"ProxyCommand={proxy_cmd}")

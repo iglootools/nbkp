@@ -142,6 +142,18 @@ class TestStrictHostKeyChecking:
             run_remote_command(_endpoint(ssh_server.port, options), ["true"])
         assert not isinstance(excinfo.value, UnknownHostKeyError)
 
+    def test_disabled_checking_accepts_missing_known_hosts_file(
+        self, ssh_server: _LocalSshServer, tmp_path: Path
+    ) -> None:
+        options = SshConnectionOptions(
+            strict_host_key_checking=False,
+            known_hosts_file=str(tmp_path / "absent"),
+        )
+
+        with pytest.raises(paramiko.SSHException) as excinfo:
+            run_remote_command(_endpoint(ssh_server.port, options), ["true"])
+        assert not isinstance(excinfo.value, UnknownHostKeyError)
+
 
 def test_unknown_host_is_an_auth_failure() -> None:
     diagnostics = unreachable_diagnostics(UnknownHostKeyError("nas.example.com"))

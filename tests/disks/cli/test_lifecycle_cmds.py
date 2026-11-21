@@ -19,13 +19,12 @@ from nbkp.cli import app
 from nbkp.config import Config, CredentialProvider
 from nbkp.config.testkit import write_config
 from nbkp.disks import MountResult, UmountResult, any_failed, refused_by_polkit
-from nbkp.disks.cli.helpers.plan_output import plan_line
-from nbkp.disks.cli.mount_cmd import mount_result_entry
 from nbkp.disks.models import (
     LifecycleFailure,
     LifecycleStep,
     MountFailureKind,
 )
+from nbkp.disks.output import format_plan_line
 from nbkp.disks.plan import MountAction, VolumePlan, plan_incomplete
 from tests.clidisplay import runner
 from tests.cliwiring.test_mount import UUID, encrypted_volume
@@ -119,25 +118,11 @@ class TestOutcomeDecisions:
         assert refused_by_polkit([bad_key, refused])
         assert not refused_by_polkit([bad_key])
 
-    def test_mount_result_entry_says_why_it_failed(self) -> None:
-        result = _failed_mount(
-            MountFailureKind.UNLOCK_FAILED, LifecycleStep.UNLOCK, "bad key"
-        )
-        assert mount_result_entry("enc", result) == {
-            "volume": "enc",
-            "device_present": True,
-            "luks_unlocked": False,
-            "mounted": None,
-            "failure_reason": "unlock-failed",
-            "detail": "unlock failed (exit 1): bad key",
-            "failure": {"step": "unlock", "exit_code": 1, "message": "bad key"},
-        }
-
 
 def _line(plan: VolumePlan) -> str:
     console = Console(width=200, color_system=None)
     with console.capture() as capture:
-        console.print(plan_line(plan, plan.volume_slug))
+        console.print(format_plan_line(plan, plan.volume_slug))
     return capture.get().strip()
 
 
@@ -172,7 +157,7 @@ class TestUnknownNames:
 
         exit_code, output = _invoke(run, "mount", "-n", "typo")
 
-        assert exit_code == 1
+        assert exit_code == 2
         assert "unknown volume name(s): typo" in output
         assert run.calls == []
 
@@ -181,8 +166,9 @@ class TestUnknownNames:
 
         exit_code, output = _invoke(run, "umount", "-n", "typo", "-o", "json")
 
-        assert exit_code == 1
-        assert json.loads(output)["error"]["names"] == ["typo"]
+        assert exit_code == 2
+        error = json.loads(output)["error"]
+        assert (error["reason"], error["names"]) == ("unknown-volume", ["typo"])
         assert run.calls == []
 
 
@@ -208,8 +194,16 @@ class TestMount:
 
         assert exit_code == 1
         [entry] = json.loads(output)
-        assert entry["failure_reason"] == "unlock-failed"
-        assert entry["detail"] == "unlock failed (exit 1): bad key"
+        assert entry == {
+            "volume": "enc",
+            "status": "probed",
+            "device_present": True,
+            "luks_unlocked": False,
+            "mounted": None,
+            "failure_reason": "unlock-failed",
+            "detail": "unlock failed (exit 1): bad key",
+            "failure": {"step": "unlock", "exit_code": 1, "message": "bad key"},
+        }
 
     def test_polkit_refusal_suggests_setup_auth(self) -> None:
         run = _locked_drive().on(

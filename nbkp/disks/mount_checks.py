@@ -14,8 +14,8 @@ from ..config import (
     Volume,
 )
 from ..remote.dispatch import (
-    CommandLocator,
     VolumeCommandRunner,
+    WhichFn,
     check_command_available,
     run_on_volume,
 )
@@ -45,7 +45,7 @@ def probe_mount_tools(
     resolved_endpoints: ResolvedEndpoints,
     *,
     run: VolumeCommandRunner = run_on_volume,
-    which: CommandLocator = shutil.which,
+    which: WhichFn = shutil.which,
 ) -> MountToolCapabilities:
     """Probe mount management tool availability on the host.
 

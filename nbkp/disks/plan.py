@@ -13,11 +13,13 @@ from dataclasses import dataclass
 from ..config import Config, MountConfig, Volume
 from ..remote.endpoints import ResolvedEndpoints
 from ..remote.errors import describe_error, ssh_connection_errors
-from .lifecycle import lifecycle_volumes
+from .lifecycle import lifecycle_volumes, missing_local_tool
 from .models import MountCapabilities
 from .mount_checks import check_mount_status
 
-type MountProbe = Callable[[Volume, MountConfig, ResolvedEndpoints], MountCapabilities]
+type MountProbeFn = Callable[
+    [Volume, MountConfig, ResolvedEndpoints], MountCapabilities
+]
 """Reads a volume's current mount state: :func:`check_mount_status` in
 production, a fake in tests."""
 
@@ -79,18 +81,41 @@ def _plan_one(
     resolved: ResolvedEndpoints,
     *,
     mounting: bool,
-    probe: MountProbe,
+    probe: MountProbeFn,
 ) -> VolumePlan:
     try:
         caps = probe(volume, mount, resolved)
     except ssh_connection_errors() as e:
         return VolumePlan(
-            volume.slug, (), f"unreachable: {describe_error(e)}", probe_failed=True
+            volume.slug, (), probe_error_detail(volume, e), probe_failed=True
         )
-    actions, detail = (
-        _mount_actions(mount, caps) if mounting else _umount_actions(mount, caps)
+    if _state_unknown(mount, caps):
+        return VolumePlan(volume.slug, (), "device state unknown", probe_failed=True)
+    else:
+        actions, detail = (
+            _mount_actions(mount, caps) if mounting else _umount_actions(mount, caps)
+        )
+        return VolumePlan(volume.slug, actions, detail)
+
+
+def probe_error_detail(volume: Volume, error: BaseException) -> str:
+    """Why a volume's state could not be probed: a local tool not installed,
+    or the host unreachable."""
+    match missing_local_tool(volume, error):
+        case str() as tool:
+            return f"{tool} not installed"
+        case None:
+            return f"unreachable: {describe_error(error)}"
+
+
+def _state_unknown(mount: MountConfig, caps: MountCapabilities) -> bool:
+    """A failed ``lsblk``/``findmnt`` probe leaves the state ``None`` rather
+    than raising, and a plan built on it would read ``None`` as "not mounted".
+    """
+    return caps.device_present is not False and (
+        caps.mounted is None
+        or (mount.encryption is not None and caps.luks_unlocked is None)
     )
-    return VolumePlan(volume.slug, actions, detail)
 
 
 def plan_lifecycle(
@@ -99,7 +124,7 @@ def plan_lifecycle(
     *,
     mounting: bool,
     names: list[str] | None = None,
-    probe: MountProbe = check_mount_status,
+    probe: MountProbeFn = check_mount_status,
 ) -> list[VolumePlan]:
     """Plan mount (``mounting=True``) or umount steps for mount-managed volumes."""
     return [

@@ -30,6 +30,7 @@ class ConfigErrorKind(StrEnum):
     INVALID_YAML = "invalid-yaml"
     NOT_A_MAPPING = "not-a-mapping"
     VALIDATION = "validation"
+    INVALID_SSH_CONFIG = "invalid-ssh-config"
 
 
 class ConfigError(Exception):

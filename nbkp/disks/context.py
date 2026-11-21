@@ -121,6 +121,41 @@ def _mount_phase(
     on_mount_end: Callable[[str, MountResult], None] | None,
     run: VolumeCommandRunner,
 ) -> tuple[Config, dict[str, MountObservation]]:
+    mount_results = mount_phase(
+        config,
+        resolved,
+        passphrase_fn=passphrase_fn,
+        names=names,
+        on_prefetch_start=on_prefetch_start,
+        on_prefetch_end=on_prefetch_end,
+        on_mount_start=on_mount_start,
+        on_mount_end=on_mount_end,
+        run=run,
+    )
+    observations = build_mount_observations(mount_results)
+    return apply_effective_paths(config, observations), observations
+
+
+def mount_phase(
+    config: Config,
+    resolved: ResolvedEndpoints,
+    *,
+    passphrase_fn: Callable[[str], str],
+    run: VolumeCommandRunner = run_on_volume,
+    names: list[str] | None = None,
+    on_prefetch_start: Callable[[str], None] | None = None,
+    on_prefetch_end: Callable[[str, PassphrasePrefetch], None] | None = None,
+    on_mount_start: Callable[[str], None] | None = None,
+    on_mount_end: Callable[[str, MountResult], None] | None = None,
+) -> list[MountResult]:
+    """Retrieve every configured passphrase, then unlock and mount the
+    mount-managed volumes (*names* only, when given) through *run*.
+
+    The mount half of :func:`managed_mount`, for callers that umount on their
+    own terms (``disks mount`` never does). It does not umount what it
+    mounted when it is interrupted: a caller that needs that wraps it in a
+    ``try``/``finally``, as :func:`managed_mount` does.
+    """
     # Retrieve *every* configured passphrase before touching a device, not
     # just the ones this run needs.  Unfiltered by *names* on purpose: the
     # point is that one approval pass covers every drive, so a later run with
@@ -132,7 +167,7 @@ def _mount_phase(
         on_prefetch_start=on_prefetch_start,
         on_prefetch_end=on_prefetch_end,
     )
-    mount_results = mount_volumes(
+    return mount_volumes(
         config,
         resolved,
         passphrase_fn,
@@ -141,5 +176,3 @@ def _mount_phase(
         on_mount_end=on_mount_end,
         run=run,
     )
-    observations = build_mount_observations(mount_results)
-    return apply_effective_paths(config, observations), observations

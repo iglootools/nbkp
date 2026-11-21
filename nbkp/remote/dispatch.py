@@ -61,7 +61,7 @@ class VolumeCommandRunner(Protocol):
     ) -> subprocess.CompletedProcess[str]: ...
 
 
-type CommandLocator = Callable[[str], str | None]
+type WhichFn = Callable[[str], str | None]
 """Finds a command on the orchestrator's ``PATH``: :func:`shutil.which` in
 production, a fake in tests."""
 
@@ -72,7 +72,7 @@ def check_command_available(
     resolved_endpoints: ResolvedEndpoints,
     *,
     run: VolumeCommandRunner = run_on_volume,
-    which: CommandLocator = shutil.which,
+    which: WhichFn = shutil.which,
 ) -> bool:
     """Whether *command* is on the ``PATH`` of the host holding *volume*.
 

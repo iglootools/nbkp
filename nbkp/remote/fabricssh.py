@@ -72,20 +72,23 @@ def _configure_host_key_verification(
     ``~/.ssh/known_hosts``, like ``UserKnownHostsFile``). Fabric's own default
     is to trust any host key without loading a known_hosts file at all.
     """
+    # A missing file is an empty one for OpenSSH: every host is unknown.
+    known_hosts = (
+        Path(opts.known_hosts_file).expanduser()
+        if opts.known_hosts_file is not None
+        else None
+    )
     if not opts.strict_host_key_checking:
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        if opts.known_hosts_file is not None:
-            client.load_host_keys(opts.known_hosts_file)
+        if known_hosts is not None and known_hosts.exists():
+            client.load_host_keys(str(known_hosts))
         return
 
     client.set_missing_host_key_policy(_RejectUnknownHostKey())
-    if opts.known_hosts_file is None:
+    if known_hosts is None:
         client.load_system_host_keys()
-    else:
-        # A missing file is an empty one for OpenSSH: every host is unknown.
-        known_hosts = Path(opts.known_hosts_file).expanduser()
-        if known_hosts.exists():
-            client.load_system_host_keys(str(known_hosts))
+    elif known_hosts.exists():
+        client.load_system_host_keys(str(known_hosts))
 
 
 def _build_hops(

@@ -2,6 +2,7 @@ import typer
 
 from ...clidisplay import OutputFormat
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
+from ...cliwiring.disks import probe_and_show_status, require_known_names
 from ...cliwiring.options import (
     CONFIG_OPTION,
     EXCLUDE_LOCATION_OPTION,
@@ -11,7 +12,6 @@ from ...cliwiring.options import (
 )
 from ...cliwiring.runtime import runtime_of
 from . import app
-from .helpers import probe_and_show_status, require_known_names
 from .options import NAME_OPTION
 
 

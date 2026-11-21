@@ -3,6 +3,7 @@
 import ipaddress
 import socket
 from collections.abc import Callable, Collection
+from enum import StrEnum
 from functools import cache, partial, reduce
 from pathlib import Path
 
@@ -21,7 +22,21 @@ from .endpoints import (
 )
 
 #: Resolves a hostname to its IP addresses, or ``None`` when it does not resolve.
-type AddressLookup = Callable[[str], set[str] | None]
+type AddressLookupFn = Callable[[str], set[str] | None]
+
+
+class SshConfigErrorKind(StrEnum):
+    INVALID_PORT = "invalid-port"
+
+
+class SshConfigError(ValueError):
+    """A value the user's SSH config gives a host that nbkp cannot use."""
+
+    def __init__(self, kind: SshConfigErrorKind, host: str, value: str) -> None:
+        super().__init__(f"{kind}: Host {host}: {value!r}")
+        self.kind = kind
+        self.host = host
+        self.value = value
 
 
 def default_ssh_config_path() -> Path:
@@ -63,7 +78,7 @@ def resolve_hostname(
 def resolve_host(
     hostname: str,
     ssh_config: paramiko.SSHConfig | None = None,
-    lookup: AddressLookup = dns_lookup,
+    lookup: AddressLookupFn = dns_lookup,
 ) -> set[str] | None:
     return lookup(resolve_hostname(hostname, ssh_config))
 
@@ -71,7 +86,7 @@ def resolve_host(
 def is_private_host(
     hostname: str,
     ssh_config: paramiko.SSHConfig | None = None,
-    lookup: AddressLookup = dns_lookup,
+    lookup: AddressLookupFn = dns_lookup,
 ) -> bool | None:
     """True if all resolved addresses are private,
     False if any is public, or None if the hostname
@@ -84,16 +99,30 @@ def is_private_host(
         return all(ipaddress.ip_address(a).is_private for a in addrs)
 
 
+def _parse_port(host: str, value: str) -> int:
+    try:
+        return int(value)
+    except ValueError as e:
+        raise SshConfigError(SshConfigErrorKind.INVALID_PORT, host, value) from e
+
+
 def _ssh_config_updates(
     endpoint: SshEndpoint,
     result: paramiko.SSHConfigDict,
 ) -> dict[str, object]:
-    """Only fields NOT explicitly set on the endpoint are candidates."""
+    """Only fields NOT explicitly set on the endpoint are candidates.
+
+    Raises ``SshConfigError`` for a ``Port`` that is not a number.
+    """
     fields_set = endpoint.model_fields_set
     return {
         k: v
         for k, v in {
-            "port": int(result["port"]) if "port" in result else None,
+            "port": (
+                _parse_port(endpoint.host, result["port"])
+                if "port" in result and "port" not in fields_set
+                else None
+            ),
             "user": result.get("user"),
             "key": (
                 str(Path(result["identityfile"][0]).expanduser())
@@ -130,7 +159,7 @@ def resolve_endpoint_for_volume(
     vol: RemoteVolume,
     endpoint_filter: EndpointFilter | None = None,
     ssh_config: paramiko.SSHConfig | None = None,
-    lookup: AddressLookup = dns_lookup,
+    lookup: AddressLookupFn = dns_lookup,
 ) -> SshEndpoint:
     """The first candidate left by the soft filters.
 
@@ -215,7 +244,7 @@ def _resolve_volume(
     vol: RemoteVolume,
     endpoint_filter: EndpointFilter | None,
     ssh_config: paramiko.SSHConfig,
-    lookup: AddressLookup,
+    lookup: AddressLookupFn,
 ) -> ResolvedEndpoint:
     server = enrich_from_ssh_config(
         resolve_endpoint_for_volume(config, vol, endpoint_filter, ssh_config, lookup),
@@ -233,7 +262,7 @@ def resolve_all_endpoints(
     endpoint_filter: EndpointFilter | None = None,
     *,
     ssh_config: paramiko.SSHConfig | None = None,
-    lookup: AddressLookup = dns_lookup,
+    lookup: AddressLookupFn = dns_lookup,
 ) -> ResolvedEndpoints:
     """Keyed by volume slug; local volumes are not included.
 
@@ -265,7 +294,7 @@ def _resolve_volumes(
     volumes: list[RemoteVolume],
     endpoint_filter: EndpointFilter | None,
     ssh_config: paramiko.SSHConfig,
-    lookup: AddressLookup,
+    lookup: AddressLookupFn,
 ) -> ResolvedEndpoints:
     # Volumes share hosts (one server, several drives), and an unresolvable
     # name pays its DNS timeout on every lookup: resolve each name once.

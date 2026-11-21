@@ -7,6 +7,7 @@ to each carry their own copy of these callbacks.
 
 from dataclasses import dataclass
 
+from ..clidisplay import StepProgressBar
 from ..config import Config
 from ..credentials import PassphrasePrefetch, prefetch_count
 from ..disks import (
@@ -23,12 +24,6 @@ from ..disks.output import (
 )
 from ..policy import Severity, Strictness
 from ..remote.endpoints import ResolvedEndpoints
-from .mount_progress_bar import (
-    DisksProgressBar,
-    format_credential_result,
-    format_mount_result,
-    format_umount_result,
-)
 
 
 def mount_display_names(cfg: Config) -> dict[str, str]:
@@ -49,9 +44,9 @@ class LifecycleProgress:
 
     display_names: dict[str, str]
     strictness: Strictness
-    credential_bar: DisksProgressBar | None
-    mount_bar: DisksProgressBar | None
-    umount_bar: DisksProgressBar | None
+    credential_bar: StepProgressBar | None
+    mount_bar: StepProgressBar | None
+    umount_bar: StepProgressBar | None
 
     @staticmethod
     def create(
@@ -72,22 +67,12 @@ class LifecycleProgress:
             display_names=mount_display_names(cfg),
             strictness=strictness,
             credential_bar=(
-                DisksProgressBar(
-                    credentials_total, "Loading credential", format_credential_result
-                )
+                StepProgressBar(credentials_total)
                 if enabled and credentials_total > 0
                 else None
             ),
-            mount_bar=(
-                DisksProgressBar(total, "Mounting", format_mount_result)
-                if enabled and mounting
-                else None
-            ),
-            umount_bar=(
-                DisksProgressBar(total, "Umounting", format_umount_result)
-                if enabled and umounting
-                else None
-            ),
+            mount_bar=(StepProgressBar(total) if enabled and mounting else None),
+            umount_bar=(StepProgressBar(total) if enabled and umounting else None),
         )
 
     def _name(self, slug: str) -> str:
@@ -95,12 +80,12 @@ class LifecycleProgress:
 
     def on_prefetch_start(self, passphrase_id: str) -> None:
         if self.credential_bar is not None:
-            self.credential_bar.on_start(passphrase_id)
+            self.credential_bar.on_start(f"Loading credential {passphrase_id}...")
 
     def on_prefetch_end(self, passphrase_id: str, result: PassphrasePrefetch) -> None:
         if self.credential_bar is not None:
             self.credential_bar.on_end(
-                passphrase_id,
+                f"credential {passphrase_id}",
                 # A passphrase that cannot be retrieved is only a problem for
                 # a drive that is actually plugged in, and the mount step
                 # reports that.  Prefetch failures are therefore warnings
@@ -112,24 +97,24 @@ class LifecycleProgress:
     def on_mount_start(self, slug: str) -> None:
         self.stop_credentials()
         if self.mount_bar is not None:
-            self.mount_bar.on_start(self._name(slug))
+            self.mount_bar.on_start(f"Mounting {self._name(slug)}...")
 
     def on_mount_end(self, slug: str, result: MountResult) -> None:
         if self.mount_bar is not None:
             self.mount_bar.on_end(
-                self._name(slug),
+                f"mount {self._name(slug)}",
                 mount_result_severity(result, self.strictness),
                 mount_failure_detail(result),
             )
 
     def on_umount_start(self, slug: str) -> None:
         if self.umount_bar is not None:
-            self.umount_bar.on_start(self._name(slug))
+            self.umount_bar.on_start(f"Umounting {self._name(slug)}...")
 
     def on_umount_end(self, slug: str, result: UmountResult) -> None:
         if self.umount_bar is not None:
             self.umount_bar.on_end(
-                self._name(slug),
+                f"umount {self._name(slug)}",
                 Severity.OK if result.success else Severity.ERROR,
                 umount_failure_detail(result),
                 umount_failure_warning(result),

@@ -32,7 +32,7 @@ class SelectedEndpoint(Protocol):
     def server(self) -> SshEndpoint: ...
 
 
-SelectedEndpoints = Mapping[str, SelectedEndpoint]
+type SelectedEndpoints = Mapping[str, SelectedEndpoint]
 """Selected endpoint per remote volume slug (``remote.endpoints.SelectedEndpoints``)."""
 
 
@@ -46,13 +46,7 @@ def format_volume_display(
             if ep is None:
                 return f"{vol.ssh_endpoint}:{vol.path}"
             else:
-                host_part = (
-                    f"{ep.server.user}@{ep.server.host}"
-                    if ep.server.user
-                    else ep.server.host
-                )
-                port_suffix = f":{ep.server.port}" if ep.server.port != 22 else ""
-                return f"{host_part}{port_suffix}:{vol.path}"
+                return f"{ep.server.host_label}:{vol.path}"
         case LocalVolume():
             return _display_path(vol)
 

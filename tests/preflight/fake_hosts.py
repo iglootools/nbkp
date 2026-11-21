@@ -17,7 +17,7 @@ Local sentinels, directories and symlinks are read from the real filesystem
 
 from collections.abc import Collection
 
-from nbkp.remote.dispatch import CommandLocator
+from nbkp.remote.dispatch import WhichFn
 from tests.fakes import FakeCommandRunner, completed
 
 GNU_RSYNC_VERSION = "rsync  version 3.2.7  protocol version 31\n"
@@ -26,7 +26,7 @@ FAILS = completed(returncode=1)
 """The answer of a probe that says no (``which``, ``test``) or fails."""
 
 
-def local_tools(*, missing: Collection[str] = ()) -> CommandLocator:
+def local_tools(*, missing: Collection[str] = ()) -> WhichFn:
     """The orchestrator's ``PATH``: every tool but *missing*."""
     return lambda tool: None if tool in missing else f"/usr/bin/{tool}"
 

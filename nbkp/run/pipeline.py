@@ -22,7 +22,7 @@ from ..preflight import (
     has_fatal_errors,
     is_fatal,
 )
-from ..remote.dispatch import CommandLocator
+from ..remote.dispatch import WhichFn
 from ..sync.orchestration import RunOptions, run_all_syncs
 from ..sync.results import SyncResult, result_severity
 
@@ -76,7 +76,7 @@ def check_and_run(
     callbacks: SyncCallbacks | None = None,
     mount_observations: dict[str, MountObservation] | None = None,
     exclude_locations: Collection[str] = (),
-    which: CommandLocator = shutil.which,
+    which: WhichFn = shutil.which,
 ) -> PipelineResult:
     """Run preflight checks, then execute syncs if no fatal errors.
 

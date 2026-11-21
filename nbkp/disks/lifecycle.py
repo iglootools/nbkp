@@ -157,10 +157,8 @@ def _probe_failure(error: DeviceProbeError) -> LifecycleFailure:
     )
 
 
-def _connection_failure(
-    volume: Volume, error: BaseException
-) -> tuple[bool, LifecycleFailure]:
-    """``(tool_missing, failure)`` for an error caught as a connection failure.
+def missing_local_tool(volume: Volume, error: BaseException) -> str | None:
+    """The tool an error caught as a connection failure says is not installed.
 
     Locally, a ``FileNotFoundError`` means ``udisksctl``, ``lsblk`` or
     ``findmnt`` is not installed; it is only a connection failure for a
@@ -168,8 +166,19 @@ def _connection_failure(
     """
     match volume, error:
         case LocalVolume(), FileNotFoundError(filename=str() as tool):
-            return True, LifecycleFailure(command=tool)
+            return tool
         case _:
+            return None
+
+
+def _connection_failure(
+    volume: Volume, error: BaseException
+) -> tuple[bool, LifecycleFailure]:
+    """``(tool_missing, failure)`` for an error caught as a connection failure."""
+    match missing_local_tool(volume, error):
+        case str() as tool:
+            return True, LifecycleFailure(command=tool)
+        case None:
             return False, LifecycleFailure(message=describe_error(error))
 
 

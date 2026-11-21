@@ -29,7 +29,7 @@ from platformdirs import site_config_dir, user_config_dir
 from ..config import Config, load_config
 from ..config.loader import ConfigDirFn
 from ..credentials import CommandFn, run_captured
-from ..remote.dispatch import CommandLocator, VolumeCommandRunner, run_on_volume
+from ..remote.dispatch import VolumeCommandRunner, WhichFn, run_on_volume
 from ..sync.modes import RsyncRunner
 from ..sync.rsync import run_rsync
 
@@ -44,7 +44,7 @@ class Runtime:
 
     run: VolumeCommandRunner = run_on_volume
     """Runs a command on the host holding a volume (probes, udisks, snapshots)."""
-    which: CommandLocator = shutil.which
+    which: WhichFn = shutil.which
     """Finds a tool on the orchestrator's ``PATH``."""
     rsync: RsyncRunner = run_rsync
     """Runs the transfer of a sync."""

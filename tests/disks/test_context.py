@@ -11,7 +11,7 @@ from nbkp.config import (
     MountConfig,
 )
 from nbkp.credentials import CredentialError, CredentialErrorKind
-from nbkp.disks.context import managed_mount
+from nbkp.disks.context import managed_mount, mount_phase
 from tests.fakes import FakeCommandRunner, completed
 
 _ONLINE_UUID = "5941f273-f73c-44c5-a3ef-fae7248db1b6"
@@ -137,6 +137,22 @@ class TestPassphrasePrefetch:
         ):
             assert resolved_config is not None
             assert set(observations) == {"online", "offline"}
+
+
+class TestMountPhase:
+    def test_prefetches_every_passphrase_then_mounts_only_named_volumes(
+        self,
+    ) -> None:
+        calls: list[str] = []
+        run = FakeCommandRunner().on("test", "-e", returns=completed(1))
+
+        results = mount_phase(
+            _config(), {}, passphrase_fn=_recorder(calls), names=["online"], run=run
+        )
+
+        assert calls == ["offline-luks", "online-luks"]
+        assert [r.volume_slug for r in results] == ["online"]
+        assert run.commands_starting_with("udisksctl") == []
 
 
 class TestUmountOnInterruption:

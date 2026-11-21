@@ -904,8 +904,8 @@ class TestBuildRsyncCommandMultiHopProxy:
         )
         proxy_cmd = (
             "ssh -o ConnectTimeout=10 -o BatchMode=yes"
-            f" -o {shlex.quote(f'ProxyCommand={inner}')}"
             " -p 2222"
+            f" -o {shlex.quote(f'ProxyCommand={inner}')}"
             " -W %h:%p bastion2.example.com"
         )
         quoted = shlex.quote(f"ProxyCommand={proxy_cmd}")

@@ -101,7 +101,7 @@ def _print_troubleshoot_hint(options: SnapshotCommandOptions) -> None:
                 options.config,
                 options.location,
                 options.exclude_location,
-                options.network.value if options.network else None,
+                options.network,
             )
         ),
         soft_wrap=True,

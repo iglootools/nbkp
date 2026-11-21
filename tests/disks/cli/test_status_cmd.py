@@ -78,10 +78,8 @@ class TestVolumesStatusCommand:
         assert data[0]["mounted"] is False
         assert data[1]["volume"] == "plain-drive"
         assert data[1]["mounted"] is True
-        # Unmanaged volumes are folded into the Name column with a
-        # "(not managed)" marker and carry all-None mount state.
-        assert "no-mount" in data[2]["volume"]
-        assert "not managed" in data[2]["volume"]
+        assert data[2]["volume"] == "no-mount"
+        assert data[2]["status"] == "not-managed"
         assert data[2]["device_present"] is None
         assert data[2]["mounted"] is None
 
@@ -105,8 +103,35 @@ class TestVolumesStatusCommand:
 
         assert exit_code == 0
         [entry] = json.loads(output)
-        assert "unreachable: timed out" in entry["volume"]
-        assert entry["mounted"] is None
+        assert entry == {
+            "volume": "plain-drive",
+            "status": "unreachable",
+            "error": "timed out",
+            "device_present": None,
+            "luks_unlocked": None,
+            "mounted": None,
+        }
+
+    def test_missing_local_tool_is_not_unreachable(self, tmp_path: Path) -> None:
+        no_test = FakeCommandRunner().on(
+            "test", returns=FileNotFoundError(2, "No such file or directory", "test")
+        )
+
+        exit_code, output = _status(
+            write_config(tmp_path, _mount_config_for_status()),
+            "-o",
+            "json",
+            "--name",
+            "plain-drive",
+            run=no_test,
+        )
+
+        assert exit_code == 0
+        [entry] = json.loads(output)
+        assert (entry["status"], entry["missing_tool"]) == (
+            "tool-not-installed",
+            "test",
+        )
 
     def test_name_filter(self, tmp_path: Path) -> None:
         run = _host()
@@ -132,9 +157,7 @@ class TestVolumesStatusCommand:
 
         assert exit_code == 0
         data = json.loads(output)
-        assert len(data) == 1
-        assert "plain" in data[0]["volume"]
-        assert "not managed" in data[0]["volume"]
+        assert [(e["volume"], e["status"]) for e in data] == [("plain", "not-managed")]
 
     def test_location_excluded_volume_not_probed(self, tmp_path: Path) -> None:
         config_path = write_config(
@@ -161,5 +184,8 @@ class TestVolumesStatusCommand:
         assert run.calls == []
         data = json.loads(output)
         assert len(data) == 1
-        assert "location excluded" in data[0]["volume"]
+        assert (data[0]["volume"], data[0]["status"]) == (
+            "nas-drive",
+            "location-excluded",
+        )
         assert data[0]["mounted"] is None

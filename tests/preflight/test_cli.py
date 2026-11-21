@@ -168,7 +168,7 @@ class TestLocationValidation:
         )
 
         assert exit_code == 2
-        assert f"unknown location 'office' passed to {flag}" in output
+        assert "unknown location name(s): office" in output
         assert "home" in output
         assert "travel" in output
         assert run.calls == []
@@ -187,9 +187,9 @@ class TestLocationValidation:
 
         assert exit_code == 2
         error = json.loads(output)["error"]
-        assert error["reason"] == "unknown-location"
-        assert "unknown location 'office'" in error["message"]
+        assert (error["reason"], error["names"]) == ("unknown-location", ["office"])
         assert "home" in error["message"]
+        assert not error["message"].startswith("Error")
         assert run.calls == []
 
     def test_known_location_accepted(self, tmp_path: Path) -> None:
@@ -205,4 +205,4 @@ class TestLocationValidation:
         )
 
         assert exit_code == 2
-        assert "no locations are defined" in output
+        assert "Known locations: (none)" in output

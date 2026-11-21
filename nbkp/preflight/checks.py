@@ -36,7 +36,7 @@ from ..config import (
     Volume,
 )
 from ..disks import MountObservation
-from ..remote.dispatch import CommandLocator, VolumeCommandRunner, run_on_volume
+from ..remote.dispatch import VolumeCommandRunner, WhichFn, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints, location_excluded
 from ..remote.errors import ssh_connection_errors
 from ..remote.resolution import (
@@ -98,7 +98,7 @@ def check_all_syncs(
     exclude_locations: Collection[str] = (),
     *,
     run: VolumeCommandRunner = run_on_volume,
-    which: CommandLocator = shutil.which,
+    which: WhichFn = shutil.which,
     ssh_config: paramiko.SSHConfig | None = None,
 ) -> PreflightResult:
     """Check SSH endpoints, volumes, and syncs in staged passes.
@@ -222,7 +222,7 @@ class _Host:
     """How the SSH endpoint phase reaches hosts (see :func:`check_all_syncs`)."""
 
     run: VolumeCommandRunner
-    which: CommandLocator
+    which: WhichFn
     enrich: Callable[[SshEndpoint], SshEndpoint]
 
 

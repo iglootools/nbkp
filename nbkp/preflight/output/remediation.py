@@ -43,7 +43,12 @@ from ...fsprotocol import (
     VOLUME_SENTINEL,
 )
 from ...remote.endpoints import ResolvedEndpoints
-from ...remote.ssh import format_proxy_jump_chain, ssh_prefix, wrap_cmd
+from ...remote.ssh import (
+    format_known_hosts_option,
+    format_proxy_jump_chain,
+    ssh_prefix,
+    wrap_cmd,
+)
 from ..status.endpoint import (
     DestinationEndpointErrorKind,
     DestinationEndpointStatus,
@@ -369,7 +374,7 @@ def _unknown_host_key_steps(
                 [
                     ssh[0],
                     *(
-                        ["-o", f"UserKnownHostsFile={known_hosts_file}"]
+                        ["-o", format_known_hosts_option(known_hosts_file)]
                         if known_hosts_file
                         else []
                     ),

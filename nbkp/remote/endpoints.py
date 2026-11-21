@@ -30,7 +30,7 @@ class ResolvedEndpoint(ConfigModel):
     proxy_chain: list[SshEndpoint] = Field(default_factory=list)
 
 
-ResolvedEndpoints = dict[str, ResolvedEndpoint]
+type ResolvedEndpoints = dict[str, ResolvedEndpoint]
 
 
 def location_excluded(volume: Volume, resolved: ResolvedEndpoints) -> bool:

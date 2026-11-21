@@ -15,11 +15,11 @@ from ...cliwiring.options import (
     OUTPUT_OPTION,
     UMOUNT_OPTION,
 )
+from ...cliwiring.preflight import check_and_display
 from ...cliwiring.runtime import runtime_of
 from ...policy import Strictness
 from ..status.result import PreflightResult
 from . import app
-from .helpers import check_and_display
 
 
 @app.command("check")
@@ -50,9 +50,7 @@ def check_cmd(
     runtime = runtime_of(ctx)
     cfg = load_config_or_exit(runtime, config, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
-    invocation = Invocation.of(
-        config, location, exclude_location, network.value if network else None
-    )
+    invocation = Invocation.of(config, location, exclude_location, network)
 
     with managed_mount(
         cfg,

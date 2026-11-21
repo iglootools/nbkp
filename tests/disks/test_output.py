@@ -3,20 +3,22 @@ from io import StringIO
 
 import pytest
 from rich.console import Console
-from rich.text import Text
 
 from nbkp.disks import MountCapabilities
 from nbkp.disks.lifecycle import MountFailureKind, MountResult, UmountResult
 from nbkp.disks.models import LifecycleFailure, LifecycleStep, UmountFailureKind
 from nbkp.disks.observation import MountObservation
 from nbkp.disks.output import (
-    build_mount_status_json,
     build_mount_status_table,
+    error_label,
+    format_volume_status_label,
     mount_failure_detail,
     mount_state_icon,
     umount_failure_detail,
     umount_failure_warning,
+    volume_status_json,
 )
+from nbkp.disks.status import VolumeStatus, VolumeStatusKind
 from nbkp.policy import Severity
 
 
@@ -169,62 +171,81 @@ class TestBuildMountStatusTable:
         assert len(table.rows) == 2
 
 
-class TestBuildMountStatusJson:
-    def test_with_mount_observation(self) -> None:
-        obs = MountObservation(
-            device_present=True,
-            luks_unlocked=True,
-            mounted=True,
-        )
-        result = build_mount_status_json([("my-vol", obs)])
-        assert result == [
-            {
-                "volume": "my-vol",
-                "device_present": True,
-                "luks_unlocked": True,
-                "mounted": True,
-            }
-        ]
+class TestVolumeStatusJson:
+    def test_probed_volume_carries_its_state(self) -> None:
+        obs = MountObservation(device_present=True, luks_unlocked=True, mounted=True)
+        status = VolumeStatus("my-vol", VolumeStatusKind.PROBED, obs)
+        assert volume_status_json(status) == {
+            "volume": "my-vol",
+            "status": "probed",
+            "device_present": True,
+            "luks_unlocked": True,
+            "mounted": True,
+        }
 
-    def test_with_mount_capabilities(self) -> None:
-        caps = MountCapabilities(
-            device_present=True,
-            luks_unlocked=None,
-            mounted=False,
+    def test_unreachable_volume_keeps_slug_and_error_apart(self) -> None:
+        status = VolumeStatus(
+            "my-vol", VolumeStatusKind.UNREACHABLE, error_message="timed out [x]"
         )
-        result = build_mount_status_json([("vol", caps)])
-        assert result == [
-            {
-                "volume": "vol",
-                "device_present": True,
-                "luks_unlocked": None,
-                "mounted": False,
-            }
-        ]
+        assert volume_status_json(status) == {
+            "volume": "my-vol",
+            "status": "unreachable",
+            "error": "timed out [x]",
+            "device_present": None,
+            "luks_unlocked": None,
+            "mounted": None,
+        }
 
     def test_json_serializable(self) -> None:
-        obs = MountObservation(
-            device_present=True,
-            luks_unlocked=None,
-            mounted=True,
-        )
-        result = build_mount_status_json([("vol", obs)])
-        serialized = json.dumps(result)
-        assert json.loads(serialized) == result
+        caps = MountCapabilities(device_present=True, mounted=False)
+        entry = volume_status_json(VolumeStatus("v", VolumeStatusKind.PROBED, caps))
+        assert json.loads(json.dumps(entry)) == entry
 
-    def test_empty(self) -> None:
-        assert build_mount_status_json([]) == []
 
-    def test_text_label_reaches_json_as_plain_text(self) -> None:
-        """A styled label must not leak Rich markup into JSON output."""
-        obs = MountObservation(
-            device_present=None,
-            luks_unlocked=None,
-            mounted=None,
+class TestFormatVolumeStatusLabel:
+    @pytest.mark.parametrize(
+        ("status", "expected"),
+        [
+            (VolumeStatus("v", VolumeStatusKind.PROBED), "nas:v"),
+            (VolumeStatus("v", VolumeStatusKind.NOT_MANAGED), "nas:v (not managed)"),
+            (
+                VolumeStatus("v", VolumeStatusKind.LOCATION_EXCLUDED),
+                "nas:v (location excluded)",
+            ),
+            (
+                VolumeStatus("v", VolumeStatusKind.UNREACHABLE, error_message="down"),
+                "nas:v ✗ unreachable: down",
+            ),
+            (
+                VolumeStatus(
+                    "v", VolumeStatusKind.TOOL_NOT_INSTALLED, missing_tool="lsblk"
+                ),
+                "nas:v ✗ lsblk not installed",
+            ),
+        ],
+    )
+    def test_label(self, status: VolumeStatus, expected: str) -> None:
+        assert format_volume_status_label("nas:v", status).plain == expected
+
+
+# Real-world details that contain square brackets.  Rich reads "[...]" in a
+# markup string as a style tag, so these are the strings a markup-formatted
+# line would silently truncate.
+_KEYRING_HINT = "unreachable: keyring missing. Install: uv tool install 'nbkp[keyring]'"
+
+
+class TestErrorLabel:
+    def test_detail_brackets_survive(self) -> None:
+        rendered = _render(error_label("my-vol", _KEYRING_HINT))
+        assert "nbkp[keyring]" in rendered
+
+    def test_plain_text_carries_no_markup(self) -> None:
+        assert error_label("my-vol", _KEYRING_HINT).plain == (
+            f"my-vol ✗ {_KEYRING_HINT}"
         )
-        label = Text.assemble("my-vol", " ", ("(not managed)", "dim"))
-        result = build_mount_status_json([(label, obs)])
-        assert result[0]["volume"] == "my-vol (not managed)"
+
+    def test_no_detail_is_bare_name(self) -> None:
+        assert error_label("my-vol", None).plain == "my-vol"
 
 
 _UUID = "5941f273-f73c-44c5-a3ef-fae7248db1b6"
