@@ -24,7 +24,18 @@ The following GitHub workflows are set up to automate the release and publishing
      also be re-triggered manually if needed using `gh workflow run publish.yml --ref <tag>`
 3. The `demo` workflow records the demo for the new tag and keeps it as a workflow artifact.
    Publishing it to asciinema.org is a manual step on major releases: see the
-   [Release Process](./building-and-testing.md#release-process).
+   [Release Process](#release-process).
+
+## Release Process
+- Trigger the `release` workflow: `gh workflow run release.yml`. The `release`, `publish` and
+  `demo` workflows take care of the rest — tag, GitHub release, PyPI upload, demo recording;
+  see the workflows above for what each one does.
+- When this is a major release, manually:
+    - include additional demo scenarios in `demo/demo.sh` (before triggering the release, so
+      the recording shows them)
+    - once the release's `demo` workflow has succeeded, run `mise run demo-upload-latest`: it
+      downloads the cast CI recorded, uploads it to asciinema.org, and repoints and commits
+      the README's asciicast embed (CI cannot reach asciinema.org itself)
 
 ## PyPI Config
 

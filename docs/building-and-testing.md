@@ -2,12 +2,12 @@
 
 The unit tests cover the core logic of the tool. Integration and end-to-end tests exercise the real rsync/SSH/btrfs pipeline against Docker containers and local filesystems. See [Testing Strategy](#testing-strategy) for details on each test category.
 
-Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/QA. The `seed --docker` command requires the `docker` extra: `uv tool install 'nbkp[docker]'`. In dev, run it from the project environment: `uv run nbkp demo seed` (or `uv run nbkp demo output`).
+Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/QA. The `seed --docker` command requires the `docker` extra: `uv tool install 'nbkp[docker]'`. In dev, run it from the project environment: `uv run --no-sync nbkp demo seed` (or `uv run --no-sync nbkp demo output`).
 
 Run automated tests and checks (no external dependencies):
 ```bash
 # mise tasks
-mise run check              # Run all checks: format-check + lint + lint-shell + type-check + lock-check + lock-check-uv + clidocs-check + configdocs-check + depgraph-check + boundaries-check + dead-code-check
+mise run check              # Run all checks: format-check + lint + lint-shell + type-check + lock-check + lock-check-uv + toc-check + clidocs-check + configdocs-check + depgraph-check + boundaries-check + dead-code-check
 mise run check-all          # Run all checks: regular checks + all tests
 
 mise run test-all           # All tests
@@ -33,6 +33,9 @@ mise run lock-check-uv      # check uv.lock is consistent with pyproject.toml
 mise run install            # sync .venv with uv.lock (rarely needed by hand — see below)
 mise run reinstall          # delete .venv and sync from scratch
 
+mise run reference-doc      # regenerate every generated reference: clidocs + configdocs + depgraph
+mise run toc                # regenerate the tables of contents in the Markdown docs
+mise run toc-check          # check the tables of contents are up to date
 mise run clidocs            # regenerate CLI reference in docs/cli-reference.md
 mise run clidocs-check      # check CLI reference is up to date
 mise run configdocs         # regenerate config reference tables in docs/config-reference.md
@@ -43,21 +46,23 @@ mise run boundaries-check   # check the module layering rules (import-linter)
 mise run dead-code-check    # check for unused code (deadcode)
 
 # Running tools directly
-uv run pytest tests/ --ignore=tests/e2e_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -n auto -v  # Unit tests only
-uv run pytest tests/e2e_docker/ -v                                   # End-to-end sync tests
-uv run pytest tests/integration_fs/ -n auto -v                       # Filesystem integration tests
-uv run pytest tests/integration_docker/ -n auto -v                   # Docker integration tests
-uv run pytest tests/ -v                                              # All tests
-uv run ruff format .                                                 # formatting
-uv run ruff check nbkp/ tests/ build-scripts/                        # linting
-uv run pyright nbkp/ tests/ build-scripts/                           # type-checking
-uv run pytest tests/remote/test_ssh.py::TestBuildSshBaseArgs::test_full -v  # run a single test
+uv run --no-sync pytest tests/ --ignore=tests/e2e_docker/ --ignore=tests/integration_docker/ --ignore=tests/integration_fs/ -n auto -v  # Unit tests only
+uv run --no-sync pytest tests/e2e_docker/ -v                         # End-to-end sync tests
+uv run --no-sync pytest tests/integration_fs/ -n auto -v             # Filesystem integration tests
+uv run --no-sync pytest tests/integration_docker/ -n auto -v         # Docker integration tests
+uv run --no-sync pytest tests/ -v                                    # All tests
+uv run --no-sync ruff format .                                       # formatting
+uv run --no-sync ruff check nbkp/ tests/ build-scripts/              # linting
+uv run --no-sync pyright nbkp/ tests/ build-scripts/                 # type-checking
+uv run --no-sync pytest tests/remote/test_ssh.py::TestBuildSshBaseArgs::test_full -v  # run a single test
 ```
 
-`uv run` is the prefix to use rather than a bare `pytest`/`ruff`. It resolves the
-environment from the project root, so it is correct regardless of what is on `PATH` — a bare
-command in a shell that has *another* project's `.venv` active silently runs that project's
-copy of the tool. The mise tasks above use `uv run --no-sync` for the same reason.
+`uv run --no-sync` is the prefix to use rather than a bare `pytest`/`ruff`, as the mise tasks
+above do. `uv run` resolves the environment from the project root, so it is correct regardless
+of what is on `PATH` — a bare command in a shell that has *another* project's `.venv` active
+silently runs that project's copy of the tool. `--no-sync` stops it from syncing `.venv` on
+every call, leaving installation to `[deps.uv]` (below). From a shell where mise is not
+activated, run a tool with `mise exec -- <tool>` instead.
 
 Dependencies install themselves: `[deps.uv]` in `mise.toml` runs `uv sync --all-extras` before
 any `mise run` whenever `uv.lock` or `pyproject.toml` has changed, or `.venv` has gone missing.
@@ -98,7 +103,7 @@ Tests run under [pytest-xdist](https://pytest-xdist.readthedocs.io/), with per-s
 
 | Suite | mise task | Workers | Why |
 |---|---|---|---|
-| Unit | `test-unit` | `-n auto` | Fully isolated (`tmp_path`, `monkeypatch`); no external state. |
+| Unit | `test-unit` | `-n auto` | Fully isolated (`tmp_path`, injected fakes); no external state. |
 | Filesystem integration | `test-integration-fs` | `-n auto` | Each test isolates real-rsync work under a unique `tmp_path`. |
 | Docker integration | `test-integration-docker` | `-n auto` | One privileged container per worker; testkit isolates shared kernel resources — see below. |
 | Local btrfs (privileged) | `test-integration-docker-btrfs` | serial | Single privileged container; real btrfs ops share one loopback mount. |
@@ -166,16 +171,9 @@ The following functionality is covered by unit tests but intentionally excluded 
 - **Shell script generation internals** — The `integration_fs` test suite already generates and executes a full backup script against real filesystems, validating the end-to-end sh path.
 
 ## Release Process
-- Trigger the `release` workflow: `gh workflow run release.yml`. The `release`, `publish` and
-  `demo` workflows take care of the rest — tag, GitHub release, PyPI upload, demo recording;
-  see [Releasing and Publishing](./releasing-and-publishing.md) for what each one does.
-- When this is a major release, manually:
-    - include additional demo scenarios in `demo/demo.sh` (before triggering the release, so
-      the recording shows them)
-    - once the release's `demo` workflow has succeeded, run `mise run demo-upload-latest`: it
-      downloads the cast CI recorded, uploads it to asciinema.org, and repoints and commits
-      the README's asciicast embed (CI cannot reach asciinema.org itself)
 
+The steps to cut a release are in
+[Releasing and Publishing › Release Process](releasing-and-publishing.md#release-process).
 
 ## GitHub Config
 - **Protect `main` and the release tags with rulesets.** Configured as the shared
@@ -242,11 +240,14 @@ The following functionality is covered by unit tests but intentionally excluded 
     gh api repos/iglootools/nbkp/dependency-graph/sbom -q '.sbom.name'
     # expect: com.github.iglootools/nbkp   (a 404 means the graph is off)
     ```
-- **Set the `ASCIINEMA_INSTALL_ID` Actions secret.** The `demo` workflow's upload steps use
-  it to publish the recording under the project's asciinema.org account (they are commented
-  out for now, uploads going through `mise run demo-upload-latest`; the workflow explains
-  why, and the secret stays set so they can be re-enabled). Run `asciinema auth` and open
-  the link it prints to tie the local install id to the account, then store it:
+- **Set the `ASCIINEMA_INSTALL_ID` Actions secret.** It ties uploads to the project's
+  asciinema.org account. No workflow uses it today: the `demo` workflow calls the shared
+  `reusable-demo.yml` from [iglootools/common](https://github.com/iglootools/common), which
+  records the demo and keeps the cast as an artifact but never publishes it, because
+  GitHub-hosted runners cannot reach asciinema.org. Uploads go through
+  `mise run demo-upload-latest` from a developer's machine instead. The secret stays set so
+  uploads from a workflow can be re-enabled. Run `asciinema auth` and open the link it prints
+  to tie the local install id to the account, then store it:
 
     ```bash
     gh secret set ASCIINEMA_INSTALL_ID -R iglootools/nbkp < ~/.local/state/asciinema/install-id
