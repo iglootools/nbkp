@@ -103,11 +103,12 @@ description = "Install dependencies"
 run = "mise deps install uv"
 
 [tasks.check]
-description = "Run all checks (format-check, lint, lint-shell, type-check, lock-check, lock-check-uv, toc-check, clidocs-check, configdocs-check, depgraph-check, boundaries-check, dead-code-check)"
+description = "Run all checks (format-check, lint, lint-shell, lint-markdown, type-check, lock-check, lock-check-uv, toc-check, clidocs-check, configdocs-check, depgraph-check, boundaries-check, dead-code-check)"
 run = [
   { task = "format-check" },
   { task = "lint" },
   { task = "lint-shell" },
+  { task = "lint-markdown" },
   { task = "type-check" },
   { task = "lock-check" },
   { task = "lock-check-uv" },
@@ -225,19 +226,33 @@ run = [
   { task = "test-e2e" },
 ]
 
+# ruff formats the Python, dprint the JSON, TOML, YAML and Dockerfiles, rumdl the Markdown. See
+# guidelines/project-setup/formatting.md in iglootools/common.
 [tasks.format]
-description = "Format code with ruff (rewrites files; see format-check to verify only)"
-run = "uv run --no-sync ruff format ."
+description = "Format every file with ruff, dprint and rumdl (rewrites files; see format-check to verify only)"
+run = [
+  "uv run --no-sync ruff format .",
+  "dprint fmt",
+  "rumdl fmt .",
+]
 
 # The variant `check` depends on, and the reason there are two. `ruff format` rewrites files
 # and exits 0 whether or not it changed anything, so as a gate it cannot fail: on CI it
 # reformatted inside the runner, threw the result away with the workspace, and reported
 # success, leaving formatting the one member of `check` that was never actually enforced.
 # `--check` reports the same diff but writes nothing and exits non-zero, so run `mise run
-# format` to fix what it reports.
+# format` to fix what it reports. dprint's formatter has the same split. rumdl's check is
+# lint-markdown, which reports what `rumdl fmt` would change along with what it cannot.
 [tasks.format-check]
-description = "Check that code is formatted (fails instead of reformatting; fix with `mise run format`)"
-run = "uv run --no-sync ruff format --check ."
+description = "Check that every file is formatted (fails instead of reformatting; fix with `mise run format`)"
+run = [
+  "uv run --no-sync ruff format --check .",
+  "dprint check",
+]
+
+[tasks.lint-markdown]
+description = "Lint the Markdown with rumdl (configured in .rumdl.toml; fix what it can with `mise run format`)"
+run = "rumdl check ."
 
 [tasks.lint]
 description = "Run ruff linting"
