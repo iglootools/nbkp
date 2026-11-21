@@ -1,5 +1,10 @@
 """Shared CLI helpers used across multiple domain CLI subpackages."""
 
+from .dryrun import (
+    DRY_RUN_LABEL as DRY_RUN_LABEL,
+    dry_run_labeled as dry_run_labeled,
+    dry_run_table_title as dry_run_table_title,
+)
 from .output import OutputFormat as OutputFormat, echo_json as echo_json
 from .progress import StepProgressBar as StepProgressBar
 from .severity import (
