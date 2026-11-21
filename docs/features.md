@@ -2,8 +2,10 @@
 
 This section provides a high-level overview of nbkp's core capabilities.
 
-To understand how to use these features, refer to the [Usage](./usage.md) documentation. 
-To understand how these features are implemented, refer to the [Domain](./domain.md) and [Internals](./internals.md) documentation. Every config field is listed in the [Configuration Reference](./config-reference.md).
+To understand how to use these features, refer to the [Usage](./usage.md)
+documentation. To understand how these features are implemented, refer to the
+[Domain](./domain.md) and [Internals](./internals.md) documentation. Every
+config field is listed in the [Configuration Reference](./config-reference.md).
 
 <!-- toc -->
 **On this page**
@@ -24,118 +26,226 @@ To understand how these features are implemented, refer to the [Domain](./domain
 
 ## Sync Engine
 
-nbkp uses rsync under the hood to synchronize files between volumes. Syncs can flow in any direction between local and remote filesystems, are automatically ordered based on their dependencies, and support fine-grained control over rsync behavior.
+nbkp uses rsync under the hood to synchronize files between volumes. Syncs can
+flow in any direction between local and remote filesystems, are automatically
+ordered based on their dependencies, and support fine-grained control over rsync
+behavior.
 
 - **Rsync-based backups** with configurable flags, filters, and compression
-- **All direction combinations**: local-to-local, local-to-remote, remote-to-local, remote-to-remote (same server)
-- **Sync dependencies**: when one sync's destination endpoint is another's source endpoint, syncs are automatically ordered topologically
-- **Failure propagation**: a failed sync cancels all downstream dependents; independent syncs continue normally
+- **All direction combinations**: local-to-local, local-to-remote,
+  remote-to-local, remote-to-remote (same server)
+- **Sync dependencies**: when one sync's destination endpoint is another's
+  source endpoint, syncs are automatically ordered topologically
+- **Failure propagation**: a failed sync cancels all downstream dependents;
+  independent syncs continue normally
 - **Dry-run mode**: preview what would happen without making changes
 - **Real-time progress**: four display modes (none, overall, per-file, full)
-- **Per-sync rsync options**: checksum, compression, custom flags, default overrides, extra options
-- **Rsync filters**: structured include/exclude rules, `merge`/`dir-merge` directives (per-directory filter files), raw rsync filter strings, and external filter files
+- **Per-sync rsync options**: checksum, compression, custom flags, default
+  overrides, extra options
+- **Rsync filters**: structured include/exclude rules, `merge`/`dir-merge`
+  directives (per-directory filter files), raw rsync filter strings, and
+  external filter files
 
 ## Snapshots
 
-Each sync can optionally maintain point-in-time snapshots of the destination. Two snapshot backends are supported: btrfs (for btrfs filesystems) and hard-link (for any filesystem with hard-link support). Both provide space-efficient incremental history with automatic pruning.
+Each sync can optionally maintain point-in-time snapshots of the destination.
+Two snapshot backends are supported: btrfs (for btrfs filesystems) and hard-link
+(for any filesystem with hard-link support). Both provide space-efficient
+incremental history with automatic pruning.
 
-- **Btrfs snapshots**: rsync to staging area, then create read-only btrfs snapshot with `latest` symlink
-- **Hard-link snapshots**: rsync with `--link-dest` for space-efficient incremental snapshots on any filesystem supporting hard links (ext4, xfs, btrfs, etc.)
-- **Automatic pruning**: configurable `max-snapshots` limit, pruned after each run
-- **Safety**: `latest` symlink only updated after successful sync; orphaned snapshot directories cleaned up automatically; one run at a time per machine (a run lock shared by `run`, generated scripts and every command that mounts or umounts drives or deletes snapshots)
+- **Btrfs snapshots**: rsync to staging area, then create read-only btrfs
+  snapshot with `latest` symlink
+- **Hard-link snapshots**: rsync with `--link-dest` for space-efficient
+  incremental snapshots on any filesystem supporting hard links (ext4, xfs,
+  btrfs, etc.)
+- **Automatic pruning**: configurable `max-snapshots` limit, pruned after each
+  run
+- **Safety**: `latest` symlink only updated after successful sync; orphaned
+  snapshot directories cleaned up automatically; one run at a time per machine
+  (a run lock shared by `run`, generated scripts and every command that mounts
+  or umounts drives or deletes snapshots)
 
 ## SSH and Remote Access
 
-Remote volumes are accessed over SSH. Endpoints are defined once and shared across volumes, with support for bastion hosts, agent forwarding, and automatic enrichment from `~/.ssh/config`. Connection options are fully configurable per endpoint.
+Remote volumes are accessed over SSH. Endpoints are defined once and shared
+across volumes, with support for bastion hosts, agent forwarding, and automatic
+enrichment from `~/.ssh/config`. Connection options are fully configurable per
+endpoint.
 
 - **Reusable SSH endpoints** shared across multiple remote volumes
-- **Proxy jump / bastion hosts**: single-hop (`proxy-jump`) or multi-hop chains (`proxy-jumps`) through bastion hosts
+- **Proxy jump / bastion hosts**: single-hop (`proxy-jump`) or multi-hop chains
+  (`proxy-jumps`) through bastion hosts
 - **SSH agent forwarding**: forward the local agent to the destination host
-- **`~/.ssh/config` integration**: unset endpoint fields (`port`, `user`, `key`) are automatically filled from SSH config
-- **Endpoint inheritance** (`extends`): child endpoints inherit and selectively override parent fields
-- **Structured connection options**: connect timeout, compression, keepalive, host key verification, known hosts file, agent forwarding, algorithm selection
-- **Dual SSH paths**: SSH CLI for rsync, Fabric/Paramiko for status checks and btrfs operations
+- **`~/.ssh/config` integration**: unset endpoint fields (`port`, `user`, `key`)
+  are automatically filled from SSH config
+- **Endpoint inheritance** (`extends`): child endpoints inherit and selectively
+  override parent fields
+- **Structured connection options**: connect timeout, compression, keepalive,
+  host key verification, known hosts file, agent forwarding, algorithm selection
+- **Dual SSH paths**: SSH CLI for rsync, Fabric/Paramiko for status checks and
+  btrfs operations
 
 ## Nomadic usage / Endpoint Filtering
 
-A single remote volume can declare multiple SSH endpoints for different network contexts (home network access vs WAN). At runtime, nbkp selects the best reachable endpoint based on location tags or network type, so the same config works whether you're on the home LAN or on the road.
+A single remote volume can declare multiple SSH endpoints for different network
+contexts (home network access vs WAN). At runtime, nbkp selects the best
+reachable endpoint based on location tags or network type, so the same config
+works whether you're on the home LAN or on the road.
 
-- **Location-aware endpoints**: tag endpoints with a `location` (e.g. `home`, `travel`) and select at runtime with `--location` (prefer) or `--exclude-location` (skip)
-- **Network-aware selection**: `--network private` prefers LAN endpoints, `--network public` prefers WAN endpoints
-- **Multiple endpoints per volume**: declare candidate endpoints and let the tool pick the best reachable one
-- **DNS-based filtering**: unreachable endpoints (failed DNS resolution) are automatically excluded
+- **Location-aware endpoints**: tag endpoints with a `location` (e.g. `home`,
+  `travel`) and select at runtime with `--location` (prefer) or
+  `--exclude-location` (skip)
+- **Network-aware selection**: `--network private` prefers LAN endpoints,
+  `--network public` prefers WAN endpoints
+- **Multiple endpoints per volume**: declare candidate endpoints and let the
+  tool pick the best reachable one
+- **DNS-based filtering**: unreachable endpoints (failed DNS resolution) are
+  automatically excluded
 
 ## Volume Safety
 
-nbkp uses lightweight sentinel files to guard against syncing to the wrong place. A sync only activates when both its source and destination volumes are confirmed present, which is especially important for removable drives that may not always be mounted.
+nbkp uses lightweight sentinel files to guard against syncing to the wrong
+place. A sync only activates when both its source and destination volumes are
+confirmed present, which is especially important for removable drives that may
+not always be mounted.
 
-- **Sentinel files**: volumes require `.nbkp-vol`, sources require `.nbkp-src`, destinations require `.nbkp-dst`
-- **Removable drive awareness**: syncs only activate when both source and destination sentinels are present, preventing data loss from unmounted drives
-- **Remote reachability checks**: SSH connectivity verified before attempting any sync
+- **Sentinel files**: volumes require `.nbkp-vol`, sources require `.nbkp-src`,
+  destinations require `.nbkp-dst`
+- **Removable drive awareness**: syncs only activate when both source and
+  destination sentinels are present, preventing data loss from unmounted drives
+- **Remote reachability checks**: SSH connectivity verified before attempting
+  any sync
 
 ## Mount Management (Linux only)
 
-nbkp can automatically mount and umount volumes before and after backups, including LUKS-encrypted drives, via [udisks2](https://www.freedesktop.org/wiki/Software/udisks/). This is especially useful for removable drives that need to be unlocked (LUKS) and mounted before syncing, and umounted and locked (LUKS) afterward. See [Mount management with udisks2](./usage.md#mount-management-with-udisks2) for the full setup guide.
+nbkp can automatically mount and umount volumes before and after backups,
+including LUKS-encrypted drives, via
+[udisks2](https://www.freedesktop.org/wiki/Software/udisks/). This is especially
+useful for removable drives that need to be unlocked (LUKS) and mounted before
+syncing, and umounted and locked (LUKS) afterward. See
+[Mount management with udisks2](./usage.md#mount-management-with-udisks2) for
+the full setup guide.
 
-nbkp does not encrypt anything itself: LUKS provides encryption at rest, SSH protection in transit, and mount management only automates the unlock/lock routine. Encrypted volumes work without it too, unlocked by hand. What this protects against, and what it doesn't: [Encryption](./domain.md#encryption).
+nbkp does not encrypt anything itself: LUKS provides encryption at rest, SSH
+protection in transit, and mount management only automates the unlock/lock
+routine. Encrypted volumes work without it too, unlocked by hand. What this
+protects against, and what it doesn't: [Encryption](./domain.md#encryption).
 
-- **udisks-based, single backend**: all unlock/mount/unmount/lock operations go through `udisksctl`. There is no `strategy` field and no `sudo` in the mount path
-- **LUKS encryption support**: automatic unlock via `udisksctl unlock`, lock via `udisksctl lock`. Passphrases come from the operator's own machine (e.g. the laptop's keyring) and are sent to the server only transiently at unlock time — **no passwords are stored on the server**, which holds only the encrypted drives. The unlocked device is discovered at runtime — no `mapper-name` to configure
-- **Hybrid mount-point model**: declare `path` (backed by an `/etc/fstab` entry) to mount at a fixed path, or omit it to let udisks mount at `/run/media/<user>/<label>`, which nbkp discovers at runtime
-- **Credential providers**: retrieve LUKS passphrases from keyring, interactive prompt, environment variable, or external command (e.g. `pass`, 1Password CLI). The keyring provider delegates to the [keyring](https://github.com/jaraco/keyring) library, which supports macOS Keychain, GNOME Keyring / libsecret, KDE Wallet, and Windows Credential Locker. The `keyring` package is an optional dependency (`uv tool install 'nbkp[keyring]'`)
+- **udisks-based, single backend**: all unlock/mount/unmount/lock operations go
+  through `udisksctl`. There is no `strategy` field and no `sudo` in the mount
+  path
+- **LUKS encryption support**: automatic unlock via `udisksctl unlock`, lock via
+  `udisksctl lock`. Passphrases come from the operator's own machine (e.g. the
+  laptop's keyring) and are sent to the server only transiently at unlock time —
+  **no passwords are stored on the server**, which holds only the encrypted
+  drives. The unlocked device is discovered at runtime — no `mapper-name` to
+  configure
+- **Hybrid mount-point model**: declare `path` (backed by an `/etc/fstab` entry)
+  to mount at a fixed path, or omit it to let udisks mount at
+  `/run/media/<user>/<label>`, which nbkp discovers at runtime
+- **Credential providers**: retrieve LUKS passphrases from keyring, interactive
+  prompt, environment variable, or external command (e.g. `pass`, 1Password
+  CLI). The keyring provider delegates to the
+  [keyring](https://github.com/jaraco/keyring) library, which supports macOS
+  Keychain, GNOME Keyring / libsecret, KDE Wallet, and Windows Credential
+  Locker. The `keyring` package is an optional dependency
+  (`uv tool install 'nbkp[keyring]'`)
 - **Idempotent**: skips already-unlocked and already-mounted volumes
-- **Integrated into `run`, `preflight check`, `preflight troubleshoot`, `snapshots show` and `snapshots prune`**: mount before running, umount in `finally` block (even on failure). Controllable via `--mount/--no-mount` and `--umount/--no-umount`
-- **Standalone commands**: `disks mount` and `disks umount` for manual lifecycle management
-- **Polkit-only authorization**: `disks setup-auth` generates a single polkit rule (`/etc/polkit-1/rules.d/50-nbkp.rules`) granting the backup user the udisks actions for passwordless mount/umount — required because nbkp runs over SSH / in inactive sessions
-- **Pre-flight validation**: checks `udisksctl` availability and a running `udisksd`, the polkit rule, fstab mapping for declared paths, and (for btrfs volumes) the `udisks2-btrfs` module, with actionable troubleshoot output
+- **Integrated into `run`, `preflight check`, `preflight troubleshoot`,
+  `snapshots show` and `snapshots prune`**: mount before running, umount in
+  `finally` block (even on failure). Controllable via `--mount/--no-mount` and
+  `--umount/--no-umount`
+- **Standalone commands**: `disks mount` and `disks umount` for manual lifecycle
+  management
+- **Polkit-only authorization**: `disks setup-auth` generates a single polkit
+  rule (`/etc/polkit-1/rules.d/50-nbkp.rules`) granting the backup user the
+  udisks actions for passwordless mount/umount — required because nbkp runs over
+  SSH / in inactive sessions
+- **Pre-flight validation**: checks `udisksctl` availability and a running
+  `udisksd`, the polkit rule, fstab mapping for declared paths, and (for btrfs
+  volumes) the `udisks2-btrfs` module, with actionable troubleshoot output
 
 ## Pre-flight Checks
 
-Before running any sync, nbkp validates that all required infrastructure is in place: volumes are reachable, tools are installed at the right version, and filesystem capabilities match the configured snapshot mode.
+Before running any sync, nbkp validates that all required infrastructure is in
+place: volumes are reachable, tools are installed at the right version, and
+filesystem capabilities match the configured snapshot mode.
 
 - **Volume reachability**: sentinel files, SSH connectivity, DNS resolution
-- **Rsync verification**: checks rsync is installed and version is 3.0+ (rejects macOS openrsync)
-- **Btrfs readiness**: filesystem type, subvolume existence, mount options (`user_subvol_rm_allowed`), required directories
-- **Hard-link readiness**: filesystem hard-link support, required directory structure
-- **Orphan detection**: warns about SSH endpoints, volumes, and sync endpoints that are defined but not referenced by anything
-- **Strictness control**: three modes (`ignore-none`, `ignore-inactive`, `ignore-all`) to control how preflight errors affect the run and its exit code, for `run`, `preflight check`, `preflight troubleshoot`, `snapshots show` and `snapshots prune`
+- **Rsync verification**: checks rsync is installed and version is 3.0+ (rejects
+  macOS openrsync)
+- **Btrfs readiness**: filesystem type, subvolume existence, mount options
+  (`user_subvol_rm_allowed`), required directories
+- **Hard-link readiness**: filesystem hard-link support, required directory
+  structure
+- **Orphan detection**: warns about SSH endpoints, volumes, and sync endpoints
+  that are defined but not referenced by anything
+- **Strictness control**: three modes (`ignore-none`, `ignore-inactive`,
+  `ignore-all`) to control how preflight errors affect the run and its exit
+  code, for `run`, `preflight check`, `preflight troubleshoot`, `snapshots show`
+  and `snapshots prune`
 
 ## Configuration
 
-Backup configuration is expressed in a single YAML file that defines SSH endpoints, volumes, sync endpoints, and syncs. The config is validated at load time with detailed error messages.
+Backup configuration is expressed in a single YAML file that defines SSH
+endpoints, volumes, sync endpoints, and syncs. The config is validated at load
+time with detailed error messages.
 
-- **YAML config** with standard search order: explicit path, `$XDG_CONFIG_HOME/nbkp/config.yaml`, then the platform user and site config directories (see [Config File Location](./config-reference.md#config-file-location))
-- **Reusable sync endpoints**: define (volume, subdir, snapshot config) once, reference by slug from syncs — prevents duplication and conflicting configurations
+- **YAML config** with standard search order: explicit path,
+  `$XDG_CONFIG_HOME/nbkp/config.yaml`, then the platform user and site config
+  directories (see
+  [Config File Location](./config-reference.md#config-file-location))
+- **Reusable sync endpoints**: define (volume, subdir, snapshot config) once,
+  reference by slug from syncs — prevents duplication and conflicting
+  configurations
 - **Pydantic validation**: structured errors with context for invalid configs
 - **Config display**: `config show` renders parsed config as tables or JSON
-- **Graph visualization**: `ordering graph` displays the backup chain as a Rich tree, ASCII art (mermaid-ascii), raw mermaid syntax, or JSON
-- **Cross-reference validation**: circular `extends` and `proxy-jump` chains, unique (volume, subdir) per endpoint, unique destination per sync — all detected at load time
+- **Graph visualization**: `ordering graph` displays the backup chain as a Rich
+  tree, ASCII art (mermaid-ascii), raw mermaid syntax, or JSON
+- **Cross-reference validation**: circular `extends` and `proxy-jump` chains,
+  unique (volume, subdir) per endpoint, unique destination per sync — all
+  detected at load time
 
 ## Shell Script Generation (`sh`)
 
-The `sh` command compiles a config into a self-contained bash script that reproduces the same backup operations as `run`, without requiring Python or the config file at runtime. Useful for deploying backups on minimal systems or embedding scripts alongside the data they protect.
+The `sh` command compiles a config into a self-contained bash script that
+reproduces the same backup operations as `run`, without requiring Python or the
+config file at runtime. Useful for deploying backups on minimal systems or
+embedding scripts alongside the data they protect.
 
 - **Standalone bash scripts**: no Python or config file required at runtime
-- **Portable paths**: `--relative-src` / `--relative-dst` make paths relative to the script location
-- **Runtime flags**: generated scripts support `--dry-run`, `--progress` and `--strictness`
-- **Full feature parity**: rsync, SSH options, filters, btrfs snapshots, hard-link snapshots, pre-flight checks (sentinels gate syncs exactly as in `run`), strictness, dependency ordering, failure propagation
-- **Disabled syncs preserved**: appear as commented-out blocks for easy re-enabling
+- **Portable paths**: `--relative-src` / `--relative-dst` make paths relative to
+  the script location
+- **Runtime flags**: generated scripts support `--dry-run`, `--progress` and
+  `--strictness`
+- **Full feature parity**: rsync, SSH options, filters, btrfs snapshots,
+  hard-link snapshots, pre-flight checks (sentinels gate syncs exactly as in
+  `run`), strictness, dependency ordering, failure propagation
+- **Disabled syncs preserved**: appear as commented-out blocks for easy
+  re-enabling
 
 ## Outputs
 
-Commands support both human-friendly and machine-readable output, making nbkp suitable for interactive use and scripting alike:
+Commands support both human-friendly and machine-readable output, making nbkp
+suitable for interactive use and scripting alike:
 
 - **Human-readable output**: Rich-formatted tables, spinners, and progress bars
-- **JSON output** (`--output json`): machine-readable format for scripting and automation, on every command except `sh` (which writes a script) and the `demo` helpers
+- **JSON output** (`--output json`): machine-readable format for scripting and
+  automation, on every command except `sh` (which writes a script) and the
+  `demo` helpers
 
 ## Testing and QA
 
-Built-in helpers make it easy to stand up a realistic test environment or preview all output formats without a real backup config.
+Built-in helpers make it easy to stand up a realistic test environment or
+preview all output formats without a real backup config.
 
-- **Demo/Docker environment setup**: Easily create a reproducible test environment with volumes, syncs, optional Docker containers (bastion + storage with btrfs), and test data
-- **Output rendering demo**: Render all formatting functions with sample data for visual QA and documentation examples
+- **Demo/Docker environment setup**: Easily create a reproducible test
+  environment with volumes, syncs, optional Docker containers (bastion + storage
+  with btrfs), and test data
+- **Output rendering demo**: Render all formatting functions with sample data
+  for visual QA and documentation examples
 
 ## Supported Commands
 
-See [Usage](./usage.md) for detailed command descriptions and examples.
-Every command and its options are listed in the [CLI Reference](cli-reference.md).
+See [Usage](./usage.md) for detailed command descriptions and examples. Every
+command and its options are listed in the [CLI Reference](cli-reference.md).

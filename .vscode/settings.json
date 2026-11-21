@@ -1,61 +1,61 @@
 {
-    "mise.enable": true,
-    // Let mise-vscode derive tool paths from mise.toml rather than hand-maintaining a key
-    // per extension. UseSymLinks writes ${workspaceFolder}/.vscode/mise-tools/<tool>, the
-    // only shareable form — an absolute ~/.local/share/mise path is version- and
-    // home-specific. IncludeGlobalTools is off (the extension's own recommendation) so
-    // tools from ~/.config/mise/config.toml cannot add keys this project has no use for.
-    //
-    // All mise.* keys are window-scoped, so these apply when nbkp is opened as the single
-    // root and are ignored when it is one folder of a multi-root .code-workspace. That is
-    // deliberate: mise-vscode configures only one folder there and writes the result to
-    // the workspace file for all of them, so it must not be allowed to generate.
-    "mise.configureExtensionsAutomatically": true,
-    "mise.configureExtensionsUseSymLinks": true,
-    "mise.configureExtensionsIncludeGlobalTools": false,
-    // Three entries, excluded for two different reasons.
-    //
-    // ms-python.python: its generated value is simply wrong. The extension writes
-    // mise's VIRTUAL_ENV verbatim, which is the venv *directory*
-    // (${workspaceFolder}/.venv), while this key wants the interpreter. Left in, it
-    // silently overwrites the pin below.
-    //
-    // biomejs.biome and oxc.oxc-vscode are the extension's own defaults, repeated
-    // because supplying this setting *replaces* the default array rather than
-    // extending it — drop them and generation silently turns back on for both. They
-    // are worth keeping on the merits anyway: both write absolute
-    // ~/.local/share/mise paths regardless of configureExtensionsUseSymLinks above,
-    // which is the un-shareable form this file must not carry. oxc is the worse of
-    // the two, having a registry entry keyed on `node`, so it fires for any project
-    // with node in mise.toml whether or not oxc is used at all. Upstream ships both
-    // as opt-in for that reason ("biome extension support (disabled by default)",
-    // 0.57.0; "optional oxc-vscode support", 1.8.0).
-    "mise.configureExtensionsAutomaticallyIgnoreList": [
-        "biomejs.biome",
-        "oxc.oxc-vscode",
-        "ms-python.python"
-    ],
-    // Written out by hand, and mise-vscode is excluded from generating it (see the
-    // ignore list above). Its generated value is the venv *directory* rather than the
-    // interpreter, and when .venv does not exist yet — the state of a fresh clone, since
-    // the first `mise install` deliberately does not create it — it writes the mise
-    // toolchain interpreter, which has none of this project's dependencies.
-    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
-    // "packageManager" is deliberately omitted: ms-python.vscode-python-envs registers
-    // only conda, pip, pipenv, poetry, pyenv, system and venv — there is no
-    // "ms-python.python:uv". Naming ":poetry" would point at a tool this project no longer
-    // uses, so the key is left to default to python-envs.defaultPackageManager (":pip"),
-    // which is inaccurate but inert: it affects only the extension's own install/uninstall
-    // UI, not interpreter resolution or type checking ([tool.pyright] covers those).
-    // Re-add it once the extension registers a uv package manager.
-    "python-envs.pythonProjects": [
-        {
-            "path": ".",
-            "envManager": "ms-python.python:venv"
-        }
-    ],
-    "[python]": {
-        "editor.defaultFormatter": "charliermarsh.ruff",
-        "editor.formatOnSave": true
+  "mise.enable": true,
+  // Let mise-vscode derive tool paths from mise.toml rather than hand-maintaining a key
+  // per extension. UseSymLinks writes ${workspaceFolder}/.vscode/mise-tools/<tool>, the
+  // only shareable form — an absolute ~/.local/share/mise path is version- and
+  // home-specific. IncludeGlobalTools is off (the extension's own recommendation) so
+  // tools from ~/.config/mise/config.toml cannot add keys this project has no use for.
+  //
+  // All mise.* keys are window-scoped, so these apply when nbkp is opened as the single
+  // root and are ignored when it is one folder of a multi-root .code-workspace. That is
+  // deliberate: mise-vscode configures only one folder there and writes the result to
+  // the workspace file for all of them, so it must not be allowed to generate.
+  "mise.configureExtensionsAutomatically": true,
+  "mise.configureExtensionsUseSymLinks": true,
+  "mise.configureExtensionsIncludeGlobalTools": false,
+  // Three entries, excluded for two different reasons.
+  //
+  // ms-python.python: its generated value is simply wrong. The extension writes
+  // mise's VIRTUAL_ENV verbatim, which is the venv *directory*
+  // (${workspaceFolder}/.venv), while this key wants the interpreter. Left in, it
+  // silently overwrites the pin below.
+  //
+  // biomejs.biome and oxc.oxc-vscode are the extension's own defaults, repeated
+  // because supplying this setting *replaces* the default array rather than
+  // extending it — drop them and generation silently turns back on for both. They
+  // are worth keeping on the merits anyway: both write absolute
+  // ~/.local/share/mise paths regardless of configureExtensionsUseSymLinks above,
+  // which is the un-shareable form this file must not carry. oxc is the worse of
+  // the two, having a registry entry keyed on `node`, so it fires for any project
+  // with node in mise.toml whether or not oxc is used at all. Upstream ships both
+  // as opt-in for that reason ("biome extension support (disabled by default)",
+  // 0.57.0; "optional oxc-vscode support", 1.8.0).
+  "mise.configureExtensionsAutomaticallyIgnoreList": [
+    "biomejs.biome",
+    "oxc.oxc-vscode",
+    "ms-python.python"
+  ],
+  // Written out by hand, and mise-vscode is excluded from generating it (see the
+  // ignore list above). Its generated value is the venv *directory* rather than the
+  // interpreter, and when .venv does not exist yet — the state of a fresh clone, since
+  // the first `mise install` deliberately does not create it — it writes the mise
+  // toolchain interpreter, which has none of this project's dependencies.
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  // "packageManager" is deliberately omitted: ms-python.vscode-python-envs registers
+  // only conda, pip, pipenv, poetry, pyenv, system and venv — there is no
+  // "ms-python.python:uv". Naming ":poetry" would point at a tool this project no longer
+  // uses, so the key is left to default to python-envs.defaultPackageManager (":pip"),
+  // which is inaccurate but inert: it affects only the extension's own install/uninstall
+  // UI, not interpreter resolution or type checking ([tool.pyright] covers those).
+  // Re-add it once the extension registers a uv package manager.
+  "python-envs.pythonProjects": [
+    {
+      "path": ".",
+      "envManager": "ms-python.python:venv"
     }
+  ],
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true
+  }
 }

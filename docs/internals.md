@@ -1,8 +1,14 @@
 # Internals
 
-How nbkp works at runtime: execution flow, mount lifecycle, pre-flight validation, snapshot management, and the design decisions behind them. For users and contributors who want to understand what happens when nbkp runs, or audit the external commands it invokes.
+How nbkp works at runtime: execution flow, mount lifecycle, pre-flight
+validation, snapshot management, and the design decisions behind them. For users
+and contributors who want to understand what happens when nbkp runs, or audit
+the external commands it invokes.
 
-For the domain model (volumes, endpoints, syncs, snapshots), see [Domain](./domain.md); for every config field, see the [Configuration Reference](./config-reference.md). For the module dependency graph, see [Architecture](./architecture.md).
+For the domain model (volumes, endpoints, syncs, snapshots), see
+[Domain](./domain.md); for every config field, see the
+[Configuration Reference](./config-reference.md). For the module dependency
+graph, see [Architecture](./architecture.md).
 
 <!-- toc -->
 **On this page**
@@ -29,13 +35,21 @@ For the domain model (volumes, endpoints, syncs, snapshots), see [Domain](./doma
 
 ## Runtime Behavior
 
-Domain rules — sentinels and the active/inactive distinction, the backup graph (execution order and failure propagation), and the meaning of snapshots — are described in [Domain](./domain.md). This document covers how they are carried out.
+Domain rules — sentinels and the active/inactive distinction, the backup graph
+(execution order and failure propagation), and the meaning of snapshots — are
+described in [Domain](./domain.md). This document covers how they are carried
+out.
 
 ### Snapshot Lifecycle
 
-Both snapshot backends follow the same directory layout and lifecycle. Snapshot directories are named with ISO 8601 UTC timestamps (e.g. `2026-03-06T14:30:00.000Z`). On macOS local volumes, colons are replaced with hyphens (`2026-03-06T14-30-00.000Z`) because APFS/HFS+ forbids colons in filenames — the OS silently converts them to slashes, corrupting the directory name.
+Both snapshot backends follow the same directory layout and lifecycle. Snapshot
+directories are named with ISO 8601 UTC timestamps (e.g.
+`2026-03-06T14:30:00.000Z`). On macOS local volumes, colons are replaced with
+hyphens (`2026-03-06T14-30-00.000Z`) because APFS/HFS+ forbids colons in
+filenames — the OS silently converts them to slashes, corrupting the directory
+name.
 
-```
+```text
 {destination}/
   latest           → symlink to the most recent complete snapshot
   snapshots/
@@ -45,42 +59,131 @@ Both snapshot backends follow the same directory layout and lifecycle. Snapshot 
   staging/         (btrfs only — writable subvolume for rsync)
 ```
 
-**Btrfs flow** — Rsync writes to a `staging/` subvolume. After a successful sync, a read-only btrfs snapshot is created at `snapshots/{timestamp}`, and the `latest` symlink is updated.
+**Btrfs flow** — Rsync writes to a `staging/` subvolume. After a successful
+sync, a read-only btrfs snapshot is created at `snapshots/{timestamp}`, and the
+`latest` symlink is updated.
 
-**Hard-link flow** — Rsync writes directly into a new `snapshots/{timestamp}/` directory, using `--link-dest` to hard-link unchanged files from the previous snapshot (saving disk space). On success, the `latest` symlink is updated. No special filesystem commands are needed for creation or pruning.
+**Hard-link flow** — Rsync writes directly into a new `snapshots/{timestamp}/`
+directory, using `--link-dest` to hard-link unchanged files from the previous
+snapshot (saving disk space). On success, the `latest` symlink is updated. No
+special filesystem commands are needed for creation or pruning.
 
-**Pruning** — When `max-snapshots` is set, old snapshots beyond the limit are removed after each `run`. The snapshot that `latest` points to is never pruned: if `latest` exists but cannot be read, pruning stops with an error rather than proceeding without that protection. When a deletion fails partway, the snapshots already deleted are still reported (`pruned_paths` in `run`, `deleted` in `snapshots prune`, whose `kept` is then counted afresh). Pruning can also be triggered manually with the `snapshots prune` command. Deleting a btrfs snapshot first clears its read-only flag, which `user_subvol_rm_allowed` requires. When the delete then fails, nbkp sets the flag again, so a snapshot that stays is never left writable; the error's message says whether that worked, and the generated script logs a warning when it did not.
+**Pruning** — When `max-snapshots` is set, old snapshots beyond the limit are
+removed after each `run`. The snapshot that `latest` points to is never pruned:
+if `latest` exists but cannot be read, pruning stops with an error rather than
+proceeding without that protection. When a deletion fails partway, the snapshots
+already deleted are still reported (`pruned_paths` in `run`, `deleted` in
+`snapshots prune`, whose `kept` is then counted afresh). Pruning can also be
+triggered manually with the `snapshots prune` command. Deleting a btrfs snapshot
+first clears its read-only flag, which `user_subvol_rm_allowed` requires. When
+the delete then fails, nbkp sets the flag again, so a snapshot that stays is
+never left writable; the error's message says whether that worked, and the
+generated script logs a warning when it did not.
 
-**Orphan cleanup** — Hard-link syncs detect and clean up orphaned snapshot directories before each run. An orphan is a `snapshots/{timestamp}/` directory newer than the snapshot `latest` points to: one left behind by a previously failed sync. While `latest` is absent or points to `/dev/null`, no sync has completed yet, so every snapshot directory is an orphan: a first run interrupted before `latest` moved leaves a partial snapshot, which would otherwise sort before the next complete one and pass for complete. The generated script does the same when `latest` points to `/dev/null`, but skips the cleanup when it cannot read `latest`, since it cannot tell a missing link from a failed `readlink` (its preflight has already required the link). After a failed rsync the new snapshot directory is also removed straight away. Btrfs snapshots do not need orphan cleanup because snapshots are created atomically from a complete sync to `staging/` — a failed sync leaves `staging/` in a partial state but never creates a snapshot directory.
+**Orphan cleanup** — Hard-link syncs detect and clean up orphaned snapshot
+directories before each run. An orphan is a `snapshots/{timestamp}/` directory
+newer than the snapshot `latest` points to: one left behind by a previously
+failed sync. While `latest` is absent or points to `/dev/null`, no sync has
+completed yet, so every snapshot directory is an orphan: a first run interrupted
+before `latest` moved leaves a partial snapshot, which would otherwise sort
+before the next complete one and pass for complete. The generated script does
+the same when `latest` points to `/dev/null`, but skips the cleanup when it
+cannot read `latest`, since it cannot tell a missing link from a failed
+`readlink` (its preflight has already required the link). After a failed rsync
+the new snapshot directory is also removed straight away. Btrfs snapshots do not
+need orphan cleanup because snapshots are created atomically from a complete
+sync to `staging/` — a failed sync leaves `staging/` in a partial state but
+never creates a snapshot directory.
 
-**Snapshots only move forward** — A new snapshot must be named after the one `latest` designates. When the clock is behind it (a host whose clock is not yet set by NTP, a manual change) or the name would equal it (two runs within the same name resolution), the sync fails before writing — `failure`: `mkdir` for hard-link, `snapshot` for btrfs — and `latest` stays where it was. Otherwise `latest` would move back in time, and the next orphan cleanup would remove every complete snapshot newer than it. The generated script applies the same rule.
+**Snapshots only move forward** — A new snapshot must be named after the one
+`latest` designates. When the clock is behind it (a host whose clock is not yet
+set by NTP, a manual change) or the name would equal it (two runs within the
+same name resolution), the sync fails before writing — `failure`: `mkdir` for
+hard-link, `snapshot` for btrfs — and `latest` stays where it was. Otherwise
+`latest` would move back in time, and the next orphan cleanup would remove every
+complete snapshot newer than it. The generated script applies the same rule.
 
-**Best-effort steps** — Orphan cleanup, pruning, and removal of the snapshot directory after a failed rsync never fail a sync: the snapshot that matters is either complete (pruning runs after `latest` moved) or absent, and a leftover directory is removed by the next run's orphan cleanup. A failure in one of these steps is recorded as a warning on the sync's result (`warnings` in JSON, a `Warning:` line in the results table) instead of being silently ignored, and the remaining syncs carry on.
+**Best-effort steps** — Orphan cleanup, pruning, and removal of the snapshot
+directory after a failed rsync never fail a sync: the snapshot that matters is
+either complete (pruning runs after `latest` moved) or absent, and a leftover
+directory is removed by the next run's orphan cleanup. A failure in one of these
+steps is recorded as a warning on the sync's result (`warnings` in JSON, a
+`Warning:` line in the results table) instead of being silently ignored, and the
+remaining syncs carry on.
 
-**Dry runs** — `--dry-run` never modifies a destination: no orphan cleanup, no snapshot directory, no `latest` update, no pruning. Hard-link rsync previews its transfer into the snapshot directory it would create (`snapshots/<timestamp>/`, with `--link-dest` to the current `latest`).
+**Dry runs** — `--dry-run` never modifies a destination: no orphan cleanup, no
+snapshot directory, no `latest` update, no pruning. Hard-link rsync previews its
+transfer into the snapshot directory it would create (`snapshots/<timestamp>/`,
+with `--link-dest` to the current `latest`).
 
-**Listing** — Only entries of `snapshots/` named exactly as nbkp names snapshots (`2026-03-06T14:30:00.000Z`, or `2026-03-06T14-30-00.000Z` on macOS local volumes) count as snapshots. Anything else (`lost+found` at the root of a dedicated filesystem, `.DS_Store`, a stray file, a directory named like a shorter timestamp such as `2026-01-01T00`) is ignored: it is neither listed, pruned, nor removed as an orphan. A `latest` symlink whose target is not `snapshots/<such a name>` is an error rather than a guess, so a hand-edited target elsewhere (`../other/snapshots/<timestamp>`) never decides what pruning or orphan cleanup keeps. An absent `snapshots/` directory lists as empty; any other listing failure is an error, so pruning never acts on a partial listing.
+**Listing** — Only entries of `snapshots/` named exactly as nbkp names snapshots
+(`2026-03-06T14:30:00.000Z`, or `2026-03-06T14-30-00.000Z` on macOS local
+volumes) count as snapshots. Anything else (`lost+found` at the root of a
+dedicated filesystem, `.DS_Store`, a stray file, a directory named like a
+shorter timestamp such as `2026-01-01T00`) is ignored: it is neither listed,
+pruned, nor removed as an orphan. A `latest` symlink whose target is not
+`snapshots/<such a name>` is an error rather than a guess, so a hand-edited
+target elsewhere (`../other/snapshots/<timestamp>`) never decides what pruning
+or orphan cleanup keeps. An absent `snapshots/` directory lists as empty; any
+other listing failure is an error, so pruning never acts on a partial listing.
 
-**Errors** — Every failing snapshot operation (a non-zero exit status, a local `OSError`, an SSH transport error) is reported as one structured error naming the operation (create, mkdir, delete, list, read/update `latest`, …), the path, and the underlying message. `run` turns it into a failed sync (`failure`: `snapshot`, `mkdir` or `symlink`) or a warning; `snapshots show` / `prune` report it in the result's `error` object (`kind`: `operation-failed`, with `operation`, `path` and `message`); a sync failed by preflight carries `kind` `inactive` or `preflight-errors` and the `preflight_errors` codes instead.
+**Errors** — Every failing snapshot operation (a non-zero exit status, a local
+`OSError`, an SSH transport error) is reported as one structured error naming
+the operation (create, mkdir, delete, list, read/update `latest`, …), the path,
+and the underlying message. `run` turns it into a failed sync (`failure`:
+`snapshot`, `mkdir` or `symlink`) or a warning; `snapshots show` / `prune`
+report it in the result's `error` object (`kind`: `operation-failed`, with
+`operation`, `path` and `message`); a sync failed by preflight carries `kind`
+`inactive` or `preflight-errors` and the `preflight_errors` codes instead.
 
 ### The `latest` Symlink
 
-Snapshot-enabled syncs (btrfs and hard-link) maintain a `latest` symlink at the destination endpoint root. It always uses a relative target:
+Snapshot-enabled syncs (btrfs and hard-link) maintain a `latest` symlink at the
+destination endpoint root. It always uses a relative target:
 
-- **`/dev/null`** — The canonical "no snapshot yet" marker. This is the initial state before the first successful sync. For hard-link syncs, `--link-dest` is not used when `latest` points to `/dev/null`, and the next run deletes every snapshot directory as an orphan (see [Snapshot Lifecycle](#snapshot-lifecycle)). **Never point `latest` at `/dev/null` by hand while the endpoint holds snapshots**: the next hard-link sync deletes them all.
+- **`/dev/null`** — The canonical "no snapshot yet" marker. This is the initial
+  state before the first successful sync. For hard-link syncs, `--link-dest` is
+  not used when `latest` points to `/dev/null`, and the next run deletes every
+  snapshot directory as an orphan (see
+  [Snapshot Lifecycle](#snapshot-lifecycle)). **Never point `latest` at
+  `/dev/null` by hand while the endpoint holds snapshots**: the next hard-link
+  sync deletes them all.
 - **`snapshots/{timestamp}`** — Points to the most recent complete snapshot.
 
-The `latest` symlink is only updated after a successful sync. If a sync fails midway, `latest` still points to the previous complete snapshot (or `/dev/null` if no sync has ever succeeded). This guarantees that `latest` always references a consistent state.
+The `latest` symlink is only updated after a successful sync. If a sync fails
+midway, `latest` still points to the previous complete snapshot (or `/dev/null`
+if no sync has ever succeeded). This guarantees that `latest` always references
+a consistent state.
 
-When `latest` is used as a **source** (in chained syncs), `latest → /dev/null` is accepted only when an enabled upstream sync that is part of the same run writes to that endpoint (a sync left out by `--sync` never replaces the marker). Otherwise, it is flagged as an error during pre-flight checks.
+When `latest` is used as a **source** (in chained syncs), `latest → /dev/null`
+is accepted only when an enabled upstream sync that is part of the same run
+writes to that endpoint (a sync left out by `--sync` never replaces the marker).
+Otherwise, it is flagged as an error during pre-flight checks.
 
-**Repairing `latest`** — When `latest` is missing or does not point to a snapshot of the endpoint, `preflight troubleshoot` lists the endpoint's `snapshots/` and suggests pointing `latest` at the newest one (`ln -sfn snapshots/<newest> latest`), and at `/dev/null` only when there is none, since a hard-link sync deletes every snapshot while `latest` points to `/dev/null`. When the listing fails, it shows a `<newest-snapshot>` placeholder to replace. If the newest snapshot was being written when a run was interrupted, point `latest` at the one before it.
+**Repairing `latest`** — When `latest` is missing or does not point to a
+snapshot of the endpoint, `preflight troubleshoot` lists the endpoint's
+`snapshots/` and suggests pointing `latest` at the newest one
+(`ln -sfn snapshots/<newest> latest`), and at `/dev/null` only when there is
+none, since a hard-link sync deletes every snapshot while `latest` points to
+`/dev/null`. When the listing fails, it shows a `<newest-snapshot>` placeholder
+to replace. If the newest snapshot was being written when a run was interrupted,
+point `latest` at the one before it.
 
 ### The Run Lock
 
-Two runs writing the same destination at once would corrupt it: the second run's orphan cleanup deletes the snapshot the first is still writing, two btrfs syncs share one `staging/`, and the second run's umount pulls a drive from under the first. A scheduled run that is still going when the next one starts is the usual way to get there. Other commands do the same damage from the side: a `disks umount`, or the umount at the end of a `preflight check`, pulls a drive from under a run, and a run's umount pulls it from under a `snapshots prune` that is deleting snapshots on it.
+Two runs writing the same destination at once would corrupt it: the second run's
+orphan cleanup deletes the snapshot the first is still writing, two btrfs syncs
+share one `staging/`, and the second run's umount pulls a drive from under the
+first. A scheduled run that is still going when the next one starts is the usual
+way to get there. Other commands do the same damage from the side: a
+`disks umount`, or the umount at the end of a `preflight check`, pulls a drive
+from under a run, and a run's umount pulls it from under a `snapshots prune`
+that is deleting snapshots on it.
 
-Every command that mounts or umounts a drive, or modifies a destination, therefore holds an exclusive, non-blocking `flock(2)` on `$XDG_STATE_HOME/nbkp/run.lock` (`~/.local/state/nbkp/run.lock` when `XDG_STATE_HOME` is unset, empty or relative):
+Every command that mounts or umounts a drive, or modifies a destination,
+therefore holds an exclusive, non-blocking `flock(2)` on
+`$XDG_STATE_HOME/nbkp/run.lock` (`~/.local/state/nbkp/run.lock` when
+`XDG_STATE_HOME` is unset, empty or relative):
 
 | Command | Holds the lock |
 |---|---|
@@ -89,59 +192,186 @@ Every command that mounts or umounts a drive, or modifies a destination, therefo
 | `snapshots show`, `preflight check`, `preflight troubleshoot` | from before the first mount to after the last umount |
 | `disks mount`, `disks umount` | while they unlock and mount, or umount and lock; drives `disks mount` mounted stay mounted after it exits, unlocked |
 
-A command that neither mounts, umounts nor writes runs without it, alongside anything else: a dry run (`run --dry-run`, `snapshots prune --dry-run`) or a check with `--no-mount --no-umount`, and `disks mount --dry-run` / `disks umount --dry-run`, `disks status`, `config show`. A dry run that mounts or umounts still takes it.
+A command that neither mounts, umounts nor writes runs without it, alongside
+anything else: a dry run (`run --dry-run`, `snapshots prune --dry-run`) or a
+check with `--no-mount --no-umount`, and `disks mount --dry-run` /
+`disks umount --dry-run`, `disks status`, `config show`. A dry run that mounts
+or umounts still takes it.
 
-When another command holds the lock, the command stops before mounting, prompting for a passphrase or checking anything and exits 1 with `another nbkp command (a run, a mount, a prune, …) is in progress` on stderr, or a JSON `{"error": ...}` object (reason `run-in-progress`, with `lock_path`) under `-o json`: wait for the other command to finish. A lock file that cannot be created or locked fails the same way (reason `run-lock-unavailable`) rather than running unprotected. The lock goes with the process, so a command that is killed releases it; there is no stale lock to remove. The lock is per user and per machine: commands on two machines writing one destination, or run as two users, are not kept apart.
+When another command holds the lock, the command stops before mounting,
+prompting for a passphrase or checking anything and exits 1 with
+`another nbkp command (a run, a mount, a prune, …) is in progress` on stderr, or
+a JSON `{"error": ...}` object (reason `run-in-progress`, with `lock_path`)
+under `-o json`: wait for the other command to finish. A lock file that cannot
+be created or locked fails the same way (reason `run-lock-unavailable`) rather
+than running unprotected. The lock goes with the process, so a command that is
+killed releases it; there is no stale lock to remove. The lock is per user and
+per machine: commands on two machines writing one destination, or run as two
+users, are not kept apart.
 
-The generated script takes the same lock with `flock -n` on the same path (resolved on the host that runs the script), so it and the commands above exclude each other. Its dry runs, which never mount or modify anything, skip it. Where `flock(1)` is missing — it comes with util-linux, which stock macOS lacks — the script logs a warning and runs unlocked.
+The generated script takes the same lock with `flock -n` on the same path
+(resolved on the host that runs the script), so it and the commands above
+exclude each other. Its dry runs, which never mount or modify anything, skip it.
+Where `flock(1)` is missing — it comes with util-linux, which stock macOS lacks
+— the script logs a warning and runs unlocked.
 
 ### Volume Mount Management
 
-Volumes can optionally declare a `mount` section to automate the mount/umount lifecycle. This is useful for removable drives (encrypted or not) that need to be mounted before syncing and umounted afterward. nbkp drives the lifecycle entirely through [udisks2](https://www.freedesktop.org/wiki/Software/udisks/) (`udisksctl`), a single D-Bus daemon authorized by polkit — there is no `sudo`, no `systemd-cryptsetup`, and no `systemctl` in the mount path.
+Volumes can optionally declare a `mount` section to automate the mount/umount
+lifecycle. This is useful for removable drives (encrypted or not) that need to
+be mounted before syncing and umounted afterward. nbkp drives the lifecycle
+entirely through [udisks2](https://www.freedesktop.org/wiki/Software/udisks/)
+(`udisksctl`), a single D-Bus daemon authorized by polkit — there is no `sudo`,
+no `systemd-cryptsetup`, and no `systemctl` in the mount path.
 
-**Mount config** — The `mount` section specifies a `device-uuid` for drive detection (via `/dev/disk/by-uuid/`) and an optional `encryption` block for LUKS-encrypted volumes. The `device-uuid` is the LUKS container UUID for encrypted volumes, or the filesystem UUID for unencrypted volumes. There is no `strategy` field — udisks is the sole backend.
+**Mount config** — The `mount` section specifies a `device-uuid` for drive
+detection (via `/dev/disk/by-uuid/`) and an optional `encryption` block for
+LUKS-encrypted volumes. The `device-uuid` is the LUKS container UUID for
+encrypted volumes, or the filesystem UUID for unencrypted volumes. There is no
+`strategy` field — udisks is the sole backend.
 
-**Encrypted volumes** — For LUKS-encrypted volumes, the `encryption` block specifies only a `passphrase-id` (credential lookup key). nbkp does not assume a mapper name: it unlocks the container with `udisksctl unlock -b /dev/disk/by-uuid/<luks-uuid> --key-file /dev/stdin --no-user-interaction` (passphrase piped without a trailing newline) and then **discovers** the cleartext device with `lsblk -rno NAME,TYPE /dev/disk/by-uuid/<luks-uuid>` (the `crypt` child → `/dev/mapper/<name>`). udisks names the unlocked device `luks-<luks-uuid>` only by default: a **LUKS2 header label** takes precedence (a container labelled `seagate8tb-luks` unlocks as `/dev/mapper/seagate8tb-luks`), as does a crypttab custom name. All three are supported transparently because the name is discovered rather than hardcoded. The discovered cleartext device is then mounted with `udisksctl mount -b <device>` and, after the run, unmounted with `udisksctl unmount -b <device>` and locked with `udisksctl lock -b /dev/disk/by-uuid/<luks-uuid>`.
+**Encrypted volumes** — For LUKS-encrypted volumes, the `encryption` block
+specifies only a `passphrase-id` (credential lookup key). nbkp does not assume a
+mapper name: it unlocks the container with
+`udisksctl unlock -b /dev/disk/by-uuid/<luks-uuid> --key-file /dev/stdin --no-user-interaction`
+(passphrase piped without a trailing newline) and then **discovers** the
+cleartext device with `lsblk -rno NAME,TYPE /dev/disk/by-uuid/<luks-uuid>` (the
+`crypt` child → `/dev/mapper/<name>`). udisks names the unlocked device
+`luks-<luks-uuid>` only by default: a **LUKS2 header label** takes precedence (a
+container labelled `seagate8tb-luks` unlocks as `/dev/mapper/seagate8tb-luks`),
+as does a crypttab custom name. All three are supported transparently because
+the name is discovered rather than hardcoded. The discovered cleartext device is
+then mounted with `udisksctl mount -b <device>` and, after the run, unmounted
+with `udisksctl unmount -b <device>` and locked with
+`udisksctl lock -b /dev/disk/by-uuid/<luks-uuid>`.
 
-**Unencrypted volumes** — For unencrypted volumes, only `device-uuid` (the filesystem UUID) is needed. The volume is mounted with `udisksctl mount -b /dev/disk/by-uuid/<fs-uuid>` and unmounted with `udisksctl unmount -b /dev/disk/by-uuid/<fs-uuid>`.
+**Unencrypted volumes** — For unencrypted volumes, only `device-uuid` (the
+filesystem UUID) is needed. The volume is mounted with
+`udisksctl mount -b /dev/disk/by-uuid/<fs-uuid>` and unmounted with
+`udisksctl unmount -b /dev/disk/by-uuid/<fs-uuid>`.
 
-**Mount options (e.g. `user_subvol_rm_allowed`)** — nbkp invokes `udisksctl mount` **without `-o`**: it never injects mount options. udisks validates every `-o` option against an allowlist and rejects anything not on it (`OptionNotPermitted`), so injecting an option like btrfs's `user_subvol_rm_allowed` (needed for snapshot pruning, and not allowlisted by default) would fail the mount outright on an un-configured host. Mount options must therefore be supplied by operator configuration, through whichever of the two mount-point models applies:
+**Mount options (e.g. `user_subvol_rm_allowed`)** — nbkp invokes
+`udisksctl mount` **without `-o`**: it never injects mount options. udisks
+validates every `-o` option against an allowlist and rejects anything not on it
+(`OptionNotPermitted`), so injecting an option like btrfs's
+`user_subvol_rm_allowed` (needed for snapshot pruning, and not allowlisted by
+default) would fail the mount outright on an un-configured host. Mount options
+must therefore be supplied by operator configuration, through whichever of the
+two mount-point models applies:
 
-- **fstab route (declared `path`)** — include the option directly in the volume's `/etc/fstab` line (e.g. `/dev/mapper/luks-<uuid>  /mnt/x  btrfs  noauto,nofail,x-udisks-auth,user_subvol_rm_allowed  0 0`). udisks honors fstab options verbatim, bypassing the allowlist. This is the simplest and most robust route.
-- **discovered route (omitted `path`)** — extend udisks's own allowlist in `/etc/udisks2/mount_options.conf`. The option must appear in **both** `<fstype>_allow` (to *permit* it) **and** `<fstype>_defaults` (to *apply* it by default) — `_defaults` alone still yields `OptionNotPermitted` — and `udisksd` must be restarted to reload the file. udisks then applies it when mounting at `/run/media/<user>/<label>`. The section can be global (`[defaults]`) or per-device (`[/dev/disk/by-uuid/<uuid>]`, matching the *mounted* device — the unlocked cleartext mapper for encrypted volumes).
+- **fstab route (declared `path`)** — include the option directly in the
+  volume's `/etc/fstab` line (e.g.
+  `/dev/mapper/luks-<uuid>  /mnt/x  btrfs  noauto,nofail,x-udisks-auth,user_subvol_rm_allowed  0 0`).
+  udisks honors fstab options verbatim, bypassing the allowlist. This is the
+  simplest and most robust route.
+- **discovered route (omitted `path`)** — extend udisks's own allowlist in
+  `/etc/udisks2/mount_options.conf`. The option must appear in **both**
+  `<fstype>_allow` (to *permit* it) **and** `<fstype>_defaults` (to *apply* it
+  by default) — `_defaults` alone still yields `OptionNotPermitted` — and
+  `udisksd` must be restarted to reload the file. udisks then applies it when
+  mounting at `/run/media/<user>/<label>`. The section can be global
+  (`[defaults]`) or per-device (`[/dev/disk/by-uuid/<uuid>]`, matching the
+  *mounted* device — the unlocked cleartext mapper for encrypted volumes).
 
-Regardless of route, nbkp **verifies** the result rather than trusting the configuration: a preflight check runs `findmnt -T <path> -n -o OPTIONS` against the live mount and flags `VOL_NOT_MOUNTED_USER_SUBVOL_RM` if a btrfs volume is missing `user_subvol_rm_allowed`. This route-agnostic verification is the safety net — the option is guaranteed present at run time however it was configured.
+Regardless of route, nbkp **verifies** the result rather than trusting the
+configuration: a preflight check runs `findmnt -T <path> -n -o OPTIONS` against
+the live mount and flags `VOL_NOT_MOUNTED_USER_SUBVOL_RM` if a btrfs volume is
+missing `user_subvol_rm_allowed`. This route-agnostic verification is the safety
+net — the option is guaranteed present at run time however it was configured.
 
-**Credential providers** — LUKS passphrases are retrieved using the configured `credential-provider`:
-- **keyring** (default): `keyring.get_password("nbkp", passphrase_id)` — uses macOS Keychain or Linux SecretService. Store via `keyring set nbkp <passphrase-id>`.
+**Credential providers** — LUKS passphrases are retrieved using the configured
+`credential-provider`:
+
+- **keyring** (default): `keyring.get_password("nbkp", passphrase_id)` — uses
+  macOS Keychain or Linux SecretService. Store via
+  `keyring set nbkp <passphrase-id>`.
 - **prompt**: interactive password prompt via Typer's hidden input.
-- **env**: reads `NBKP_PASSPHRASE_<ID>` environment variable (uppercased, every character other than a letter or digit replaced with an underscore, so the name can always be exported; ids that would share a variable are rejected at load time).
-- **command**: runs a configurable command template (e.g. `["pass", "show", "nbkp/{id}"]`) with `{id}` replaced by the passphrase-id, and uses the first line of its output, without the line break, as the passphrase.
+- **env**: reads `NBKP_PASSPHRASE_<ID>` environment variable (uppercased, every
+  character other than a letter or digit replaced with an underscore, so the
+  name can always be exported; ids that would share a variable are rejected at
+  load time).
+- **command**: runs a configurable command template (e.g.
+  `["pass", "show", "nbkp/{id}"]`) with `{id}` replaced by the passphrase-id,
+  and uses the first line of its output, without the line break, as the
+  passphrase.
 
-Passphrases are cached in memory during a single run, so the user is only prompted once per unique passphrase-id even if multiple volumes share it.
+Passphrases are cached in memory during a single run, so the user is only
+prompted once per unique passphrase-id even if multiple volumes share it.
 
-**Passphrase prefetching** — Before the first device is touched, nbkp retrieves *every* passphrase-id the config declares — including the ones this run has no use for, because their drive is not plugged in or `--name` excluded them. All credential-store access therefore happens up front, in one burst. See [Why prefetch every passphrase](#why-prefetch-every-passphrase).
+**Passphrase prefetching** — Before the first device is touched, nbkp retrieves
+*every* passphrase-id the config declares — including the ones this run has no
+use for, because their drive is not plugged in or `--name` excluded them. All
+credential-store access therefore happens up front, in one burst. See
+[Why prefetch every passphrase](#why-prefetch-every-passphrase).
 
-**Lifecycle** — The `run`, `preflight check`, `preflight troubleshoot`, `snapshots show` and `snapshots prune` commands prefetch passphrases and mount volumes before running, and umount in a `finally` block (even on failure). Mount is idempotent: already-unlocked and already-mounted volumes are skipped. A remote volume excluded by `--exclude-location` (see [Endpoint Filtering](#endpoint-filtering)) is left out of mount, umount and their dry runs, and `disks status` lists it as excluded without probing it. With `-o json`, each `disks status` and `disks mount` entry names the volume by slug and says whether it was probed in `status` (`probed`, `unreachable` with its `error`, `tool-not-installed` with its `missing_tool`, `not-managed`, `location-excluded`). Umount always attempts to unmount and lock for all volumes with mount config, regardless of who mounted them — this avoids fragile action tracking across failed/restarted runs. A volume that cannot be unmounted or locked fails the command (exit 1), with a `Umount failed:` line on stderr, since the drive may have been left mounted or unlocked (a command that failed or was interrupted on its own keeps its exit code, and still prints the line); `run -o json` also lists every umount under `umount`, each failure with its `failure_reason`, `detail` and `warning`.
+**Lifecycle** — The `run`, `preflight check`, `preflight troubleshoot`,
+`snapshots show` and `snapshots prune` commands prefetch passphrases and mount
+volumes before running, and umount in a `finally` block (even on failure). Mount
+is idempotent: already-unlocked and already-mounted volumes are skipped. A
+remote volume excluded by `--exclude-location` (see
+[Endpoint Filtering](#endpoint-filtering)) is left out of mount, umount and
+their dry runs, and `disks status` lists it as excluded without probing it. With
+`-o json`, each `disks status` and `disks mount` entry names the volume by slug
+and says whether it was probed in `status` (`probed`, `unreachable` with its
+`error`, `tool-not-installed` with its `missing_tool`, `not-managed`,
+`location-excluded`). Umount always attempts to unmount and lock for all volumes
+with mount config, regardless of who mounted them — this avoids fragile action
+tracking across failed/restarted runs. A volume that cannot be unmounted or
+locked fails the command (exit 1), with a `Umount failed:` line on stderr, since
+the drive may have been left mounted or unlocked (a command that failed or was
+interrupted on its own keeps its exit code, and still prints the line);
+`run -o json` also lists every umount under `umount`, each failure with its
+`failure_reason`, `detail` and `warning`.
 
-**Authorization** — Mount management is authorized by **polkit only** (no sudoers). The `disks setup-auth` command generates a single polkit rule at `/etc/polkit-1/rules.d/50-nbkp.rules` for review and manual installation. See [Why polkit-only](#why-polkit-only).
+**Authorization** — Mount management is authorized by **polkit only** (no
+sudoers). The `disks setup-auth` command generates a single polkit rule at
+`/etc/polkit-1/rules.d/50-nbkp.rules` for review and manual installation. See
+[Why polkit-only](#why-polkit-only).
 
-**Shell script limitation** — Mount management is excluded from `sh` script generation because credential retrieval depends on Python-specific backends (keyring, prompt). Volumes with mount config must be manually mounted/umounted before/after running the generated script. They also need a `path`: the script cannot discover a mountpoint, so `sh` refuses a volume without one, naming it, and exits 1.
+**Shell script limitation** — Mount management is excluded from `sh` script
+generation because credential retrieval depends on Python-specific backends
+(keyring, prompt). Volumes with mount config must be manually mounted/umounted
+before/after running the generated script. They also need a `path`: the script
+cannot discover a mountpoint, so `sh` refuses a volume without one, naming it,
+and exits 1.
 
-For a complete end-to-end setup guide, including the fstab × crypttab combinations and worked examples, see [Mount management with udisks2](./usage.md#mount-management-with-udisks2).
+For a complete end-to-end setup guide, including the fstab × crypttab
+combinations and worked examples, see
+[Mount management with udisks2](./usage.md#mount-management-with-udisks2).
 
 #### Why udisks2
 
-Earlier versions of nbkp shipped two hand-rolled mount backends — a systemd strategy (`systemctl start/stop` + `sudo systemd-cryptsetup attach`) and a direct strategy (raw `sudo mount/umount` + `sudo cryptsetup open/close`) — selected by a `strategy: auto|systemd|direct` config field. udisks2 already solves the entire problem through a single D-Bus daemon, so nbkp now delegates to it exclusively:
+Earlier versions of nbkp shipped two hand-rolled mount backends — a systemd
+strategy (`systemctl start/stop` + `sudo systemd-cryptsetup attach`) and a
+direct strategy (raw `sudo mount/umount` + `sudo cryptsetup open/close`) —
+selected by a `strategy: auto|systemd|direct` config field. udisks2 already
+solves the entire problem through a single D-Bus daemon, so nbkp now delegates
+to it exclusively:
 
-- **One backend** — udisks handles unlocking, mounting, unmounting, and locking uniformly across removable and system devices, on systemd and non-systemd hosts alike. The strategy split and its config field are gone.
-- **No `sudo` anywhere** — udisks operations are authorized purely by polkit (see below), eliminating the sudoers half of the old hybrid authorization model.
-- **No mapper-name in config** — udisks derives the unlocked device name itself (`luks-<luks-uuid>`, or the LUKS2 header label, or a crypttab name), and nbkp discovers whichever it chose at runtime, so the user-chosen `mapper-name` field is no longer needed.
-- **Smaller config and code** — one authorization artifact (a single polkit rule), no `systemd-escape` mount-unit derivation, no `systemd-cryptsetup` binary-path detection.
+- **One backend** — udisks handles unlocking, mounting, unmounting, and locking
+  uniformly across removable and system devices, on systemd and non-systemd
+  hosts alike. The strategy split and its config field are gone.
+- **No `sudo` anywhere** — udisks operations are authorized purely by polkit
+  (see below), eliminating the sudoers half of the old hybrid authorization
+  model.
+- **No mapper-name in config** — udisks derives the unlocked device name itself
+  (`luks-<luks-uuid>`, or the LUKS2 header label, or a crypttab name), and nbkp
+  discovers whichever it chose at runtime, so the user-chosen `mapper-name`
+  field is no longer needed.
+- **Smaller config and code** — one authorization artifact (a single polkit
+  rule), no `systemd-escape` mount-unit derivation, no `systemd-cryptsetup`
+  binary-path detection.
 
 #### Why polkit-only
 
-udisks consults polkit (over D-Bus) for every privileged operation, so there is exactly one authorization mechanism. A polkit rule at `/etc/polkit-1/rules.d/50-nbkp.rules` grants the backup user — without a password — the following udisks actions (all prefixed `org.freedesktop.udisks2.`). The set is deliberately scoped to the unlock → mount → umount → lock lifecycle across removable, system (fstab-listed), and multi-seat devices; it includes no configuration-modifying or destructive actions.
+udisks consults polkit (over D-Bus) for every privileged operation, so there is
+exactly one authorization mechanism. A polkit rule at
+`/etc/polkit-1/rules.d/50-nbkp.rules` grants the backup user — without a
+password — the following udisks actions (all prefixed
+`org.freedesktop.udisks2.`). The set is deliberately scoped to the unlock →
+mount → umount → lock lifecycle across removable, system (fstab-listed), and
+multi-seat devices; it includes no configuration-modifying or destructive
+actions.
 
 | Action | What it grants | Why nbkp needs it |
 |---|---|---|
@@ -156,103 +386,266 @@ udisks consults polkit (over D-Bus) for every privileged operation, so there is 
 | `encrypted-unlock-crypttab` | Unlock a LUKS container listed in `/etc/crypttab` | crypttab-configured containers: a *separate* action from `filesystem-fstab`, needed for the fixed-path model and for hosts mid-migration away from it |
 | `encrypted-lock-others` | Lock a LUKS container unlocked by a *different* user | lock drives left unlocked by another session or a prior run |
 
-The `-system` variants cover devices udisks treats as internal/fixed rather than removable; the `-others` / `-other-seat` variants cover acting on a device that another user or seat set up — which is exactly nbkp's situation when it runs in an inactive SSH/timer session. udisks checks a *distinct* action per device class, so the mount and unlock halves must be granted symmetrically: authorizing `filesystem-mount-other-seat` alone would let nbkp mount a drive from an inactive session but not unlock it. Each action's upstream description and prompt text live in the udisks2 polkit policy file, [`org.freedesktop.UDisks2.policy`](https://github.com/storaged-project/udisks/blob/master/data/org.freedesktop.UDisks2.policy.in) (see also the [udisks2 reference manual](https://storaged.org/doc/udisks2-api/latest/)).
+The `-system` variants cover devices udisks treats as internal/fixed rather than
+removable; the `-others` / `-other-seat` variants cover acting on a device that
+another user or seat set up — which is exactly nbkp's situation when it runs in
+an inactive SSH/timer session. udisks checks a *distinct* action per device
+class, so the mount and unlock halves must be granted symmetrically: authorizing
+`filesystem-mount-other-seat` alone would let nbkp mount a drive from an
+inactive session but not unlock it. Each action's upstream description and
+prompt text live in the udisks2 polkit policy file,
+[`org.freedesktop.UDisks2.policy`](https://github.com/storaged-project/udisks/blob/master/data/org.freedesktop.UDisks2.policy.in)
+(see also the
+[udisks2 reference manual](https://storaged.org/doc/udisks2-api/latest/)).
 
-udisks defines many **other** actions that nbkp deliberately does *not* grant — among them `manage-configuration` (edit `/etc/fstab` and `/etc/crypttab`), `encrypted-change-passphrase`, `filesystem-take-ownership`, `power-off-drive` / `eject-media`, `modify-device`, and the partition/format/SMART actions. Limiting the grant to the lifecycle subset above means the backup user can mount, unmount, unlock, and lock the configured drives, but cannot reconfigure, repartition, reformat, re-key, or power them off.
+udisks defines many **other** actions that nbkp deliberately does *not* grant —
+among them `manage-configuration` (edit `/etc/fstab` and `/etc/crypttab`),
+`encrypted-change-passphrase`, `filesystem-take-ownership`, `power-off-drive` /
+`eject-media`, `modify-device`, and the partition/format/SMART actions. Limiting
+the grant to the lifecycle subset above means the backup user can mount,
+unmount, unlock, and lock the configured drives, but cannot reconfigure,
+repartition, reformat, re-key, or power them off.
 
-This rule is **required** even though udisks normally allows an interactively-logged-in user to mount removable media without authentication: nbkp typically runs over SSH or from a cron/timer in an *inactive* login session, where udisks would otherwise demand administrator authentication. The polkit rule grants the backup user the actions unconditionally so the unattended path works.
+This rule is **required** even though udisks normally allows an
+interactively-logged-in user to mount removable media without authentication:
+nbkp typically runs over SSH or from a cron/timer in an *inactive* login
+session, where udisks would otherwise demand administrator authentication. The
+polkit rule grants the backup user the actions unconditionally so the unattended
+path works.
 
-The rule is generated by `nbkp disks setup-auth`, which reads the config only to check that *some* volume declares a `mount` section — the udisks actions are not device-specific, so a single rule covers every mount-managed volume and adding a drive needs no regeneration. Only the `--user` value affects the output.
+The rule is generated by `nbkp disks setup-auth`, which reads the config only to
+check that *some* volume declares a `mount` section — the udisks actions are not
+device-specific, so a single rule covers every mount-managed volume and adding a
+drive needs no regeneration. Only the `--user` value affects the output.
 
-**The grant covers every block device, deliberately.** The rule says *which* operations the backup user may perform, not *on which devices*: whoever holds the backup account (or its SSH key) can mount any internal partition, unlock any LUKS container whose passphrase they know, and unmount or lock other users' filesystems, without a password. Scoping the rule to the configured drives was considered and rejected for now:
+**The grant covers every block device, deliberately.** The rule says *which*
+operations the backup user may perform, not *on which devices*: whoever holds
+the backup account (or its SSH key) can mount any internal partition, unlock any
+LUKS container whose passphrase they know, and unmount or lock other users'
+filesystems, without a password. Scoping the rule to the configured drives was
+considered and rejected for now:
 
-- **The identifier the config holds is not the one udisks reports for every action.** udisks passes per-device details to polkit (`device`, `drive.serial`, `id.uuid`, …, see the [udisks polkit actions](https://storaged.org/doc/udisks2-api/latest/udisks-polkit-actions.html)), so `encrypted-unlock*` and `encrypted-lock-others` could match the LUKS container's `id.uuid`, which is the config's `device-uuid`. But mount and unmount act on the *cleartext* device, whose `id.uuid` is the inner filesystem's UUID and whose `device` is a mapper name nbkp only discovers after unlocking; neither is in the config, and a cleartext dm device has no `drive.*` to fall back on. A scoped rule would need an extra config field, or a rule regenerated after each unlock.
-- **The details are not a stable interface.** udisks documents its polkit actions and their variables as "not considered stable and may change from release to release", and any key "may not be set" for a given request. A scoped rule that silently stops matching after a udisks upgrade turns into an unattended backup that fails to mount, on every host at once.
-- **It would make the rule device-specific**, so every new drive would need the rule regenerated and reinstalled as root, which is the step the single-rule design removes.
-- **The exposure is bounded by the account.** The grant adds nothing for someone who already has root, and the actions it lists exclude everything destructive (format, repartition, re-key, edit fstab/crypttab). Use a dedicated, unprivileged backup account whose SSH key is held only by the orchestrator, so that holding the account is already a trusted position.
+- **The identifier the config holds is not the one udisks reports for every
+  action.** udisks passes per-device details to polkit (`device`,
+  `drive.serial`, `id.uuid`, …, see the
+  [udisks polkit actions](https://storaged.org/doc/udisks2-api/latest/udisks-polkit-actions.html)),
+  so `encrypted-unlock*` and `encrypted-lock-others` could match the LUKS
+  container's `id.uuid`, which is the config's `device-uuid`. But mount and
+  unmount act on the *cleartext* device, whose `id.uuid` is the inner
+  filesystem's UUID and whose `device` is a mapper name nbkp only discovers
+  after unlocking; neither is in the config, and a cleartext dm device has no
+  `drive.*` to fall back on. A scoped rule would need an extra config field, or
+  a rule regenerated after each unlock.
+- **The details are not a stable interface.** udisks documents its polkit
+  actions and their variables as "not considered stable and may change from
+  release to release", and any key "may not be set" for a given request. A
+  scoped rule that silently stops matching after a udisks upgrade turns into an
+  unattended backup that fails to mount, on every host at once.
+- **It would make the rule device-specific**, so every new drive would need the
+  rule regenerated and reinstalled as root, which is the step the single-rule
+  design removes.
+- **The exposure is bounded by the account.** The grant adds nothing for someone
+  who already has root, and the actions it lists exclude everything destructive
+  (format, repartition, re-key, edit fstab/crypttab). Use a dedicated,
+  unprivileged backup account whose SSH key is held only by the orchestrator, so
+  that holding the account is already a trusted position.
 
-Revisit this when nbkp records the cleartext filesystem's identity (for example an optional `filesystem-uuid` in the `mount` section), or when udisks makes its polkit details a stable interface: either removes the first reason, and then the rule can match `id.uuid` against the configured devices.
+Revisit this when nbkp records the cleartext filesystem's identity (for example
+an optional `filesystem-uuid` in the `mount` section), or when udisks makes its
+polkit details a stable interface: either removes the first reason, and then the
+rule can match `id.uuid` against the configured devices.
 
 #### Mount-point resolution (fstab vs discovered)
 
-`path` is **optional** for mount-managed volumes, which gives two mount-point models:
+`path` is **optional** for mount-managed volumes, which gives two mount-point
+models:
 
-- **Declared `path` (fstab)** — When `volume.path` is set, the operator is expected to have an `/etc/fstab` entry mapping the device to that path (`noauto,nofail`). udisks honors the fstab entry and mounts the volume at the declared path. Preflight verifies that the fstab entry for `path` names this device (its SOURCE, not just its TARGET); if none does, the volume is flagged with `FSTAB_MOUNTPOINT_MISMATCH` (udisks would otherwise land it elsewhere).
-- **Omitted `path` (discovered)** — When `volume.path` is omitted, udisks mounts the volume at its default `/run/media/<user>/<label>` location. nbkp **discovers** the effective mountpoint after mounting (via `findmnt --source <device> -n -o TARGET`) and uses it as the volume's path for the rest of the run — sentinels, rsync source/destination, snapshot directories, and directory checks all use the discovered path. This requires zero system configuration beyond the polkit rule.
+- **Declared `path` (fstab)** — When `volume.path` is set, the operator is
+  expected to have an `/etc/fstab` entry mapping the device to that path
+  (`noauto,nofail`). udisks honors the fstab entry and mounts the volume at the
+  declared path. Preflight verifies that the fstab entry for `path` names this
+  device (its SOURCE, not just its TARGET); if none does, the volume is flagged
+  with `FSTAB_MOUNTPOINT_MISMATCH` (udisks would otherwise land it elsewhere).
+- **Omitted `path` (discovered)** — When `volume.path` is omitted, udisks mounts
+  the volume at its default `/run/media/<user>/<label>` location. nbkp
+  **discovers** the effective mountpoint after mounting (via
+  `findmnt --source <device> -n -o TARGET`) and uses it as the volume's path for
+  the rest of the run — sentinels, rsync source/destination, snapshot
+  directories, and directory checks all use the discovered path. This requires
+  zero system configuration beyond the polkit rule.
 
-**Safety model** — In both models, udisks mounts strictly by UUID, so the *correct physical device* is guaranteed regardless of where it lands in the mount tree. The `.nbkp-vol` sentinel then confirms the mounted content is the expected volume. Together, UUID matching plus the sentinel replace the old reliance on a fixed, pre-configured mount unit for the wrong-drive guarantee.
+**Safety model** — In both models, udisks mounts strictly by UUID, so the
+*correct physical device* is guaranteed regardless of where it lands in the
+mount tree. The `.nbkp-vol` sentinel then confirms the mounted content is the
+expected volume. Together, UUID matching plus the sentinel replace the old
+reliance on a fixed, pre-configured mount unit for the wrong-drive guarantee.
 
 #### Why keyring as the default credential provider
 
-The `keyring` library provides a cross-platform abstraction over OS-native secret stores (macOS Keychain, Linux SecretService/GNOME Keyring, KDE Wallet). This was chosen as the default because:
+The `keyring` library provides a cross-platform abstraction over OS-native
+secret stores (macOS Keychain, Linux SecretService/GNOME Keyring, KDE Wallet).
+This was chosen as the default because:
 
-- **No plaintext secrets** — Passphrases are stored in the OS credential store, encrypted at rest.
-- **Interactive setup** — `keyring set nbkp <passphrase-id>` provides a simple one-time setup that non-technical users can follow.
-- **Session integration** — On desktop Linux, the keyring is typically unlocked at login and stays available for the session.
+- **No plaintext secrets** — Passphrases are stored in the OS credential store,
+  encrypted at rest.
+- **Interactive setup** — `keyring set nbkp <passphrase-id>` provides a simple
+  one-time setup that non-technical users can follow.
+- **Session integration** — On desktop Linux, the keyring is typically unlocked
+  at login and stays available for the session.
 
-The `keyring` package is an optional dependency (`uv tool install 'nbkp[keyring]'`) to avoid pulling in D-Bus/SecretStorage libraries on headless servers where `env` or `command` providers are more appropriate.
+The `keyring` package is an optional dependency
+(`uv tool install 'nbkp[keyring]'`) to avoid pulling in D-Bus/SecretStorage
+libraries on headless servers where `env` or `command` providers are more
+appropriate.
 
 #### Why prefetch every passphrase
 
-OS secret stores gate access **per item and per accessing binary**. macOS Keychain, for instance, records an ACL entry for the exact `python` binary that read an item, and re-prompts for approval when that binary changes — which it does on every Python or nbkp upgrade, or a `uv tool` reinstall. Linux SecretService behaves similarly when the collection needs unlocking.
+OS secret stores gate access **per item and per accessing binary**. macOS
+Keychain, for instance, records an ACL entry for the exact `python` binary that
+read an item, and re-prompts for approval when that binary changes — which it
+does on every Python or nbkp upgrade, or a `uv tool` reinstall. Linux
+SecretService behaves similarly when the collection needs unlocking.
 
-Retrieving passphrases lazily — only for the drives that happen to be plugged in — spreads that approval across runs: the drive attached in January gets approved, and the one attached in February blocks on a dialog nobody is there to answer. An unattended `nbkp run` from a timer then hangs or fails on a drive whose passphrase was never approved for the current binary.
+Retrieving passphrases lazily — only for the drives that happen to be plugged in
+— spreads that approval across runs: the drive attached in January gets
+approved, and the one attached in February blocks on a dialog nobody is there to
+answer. An unattended `nbkp run` from a timer then hangs or fails on a drive
+whose passphrase was never approved for the current binary.
 
-So nbkp reads **all** configured passphrases before touching any device, deliberately including the ones it does not need:
+So nbkp reads **all** configured passphrases before touching any device,
+deliberately including the ones it does not need:
 
-- **One approval pass covers every drive.** After a single interactive run following an upgrade, drives can be plugged and unplugged freely and subsequent runs are unattended.
-- **It happens before device probing and mounting**, so the approval prompts arrive together at the start rather than interleaved with mount output.
-- **It is not filtered by `--name`.** Narrowing the mount set would defeat the purpose.
-- **It is best-effort.** A passphrase that cannot be retrieved is reported as a warning and skipped, not fatal. Missing credentials only matter for a drive that is actually present, and that case surfaces at unlock time with the same error. Retrieval failures are not cached, so the unlock path retries.
-- **The `prompt` provider is excluded.** Prefetching an interactive prompt would ask the operator to type the passphrase of every encrypted volume, absent drives included — the opposite of the unattended goal. `keyring`, `env`, and `command` are prefetched.
+- **One approval pass covers every drive.** After a single interactive run
+  following an upgrade, drives can be plugged and unplugged freely and
+  subsequent runs are unattended.
+- **It happens before device probing and mounting**, so the approval prompts
+  arrive together at the start rather than interleaved with mount output.
+- **It is not filtered by `--name`.** Narrowing the mount set would defeat the
+  purpose.
+- **It is best-effort.** A passphrase that cannot be retrieved is reported as a
+  warning and skipped, not fatal. Missing credentials only matter for a drive
+  that is actually present, and that case surfaces at unlock time with the same
+  error. Retrieval failures are not cached, so the unlock path retries.
+- **The `prompt` provider is excluded.** Prefetching an interactive prompt would
+  ask the operator to type the passphrase of every encrypted volume, absent
+  drives included — the opposite of the unattended goal. `keyring`, `env`, and
+  `command` are prefetched.
 
-`nbkp credentials keyring-status` performs the same sweep on demand, without mounting anything, and is the way to trigger the approval pass deliberately after an upgrade.
+`nbkp credentials keyring-status` performs the same sweep on demand, without
+mounting anything, and is the way to trigger the approval pass deliberately
+after an upgrade.
 
 #### Why no action tracking for umount
 
-`umount_volumes` always attempts to unmount and lock for every volume with mount config, rather than tracking which volumes were actually mounted by the current run. This avoids fragile state tracking across scenarios like:
+`umount_volumes` always attempts to unmount and lock for every volume with mount
+config, rather than tracking which volumes were actually mounted by the current
+run. This avoids fragile state tracking across scenarios like:
 
 - A `run` that fails partway through and is restarted
 - A `disks mount` followed by a `run --no-mount` followed by `disks umount`
 - A volume that was already mounted before nbkp started
 
-The cost is negligible — `udisksctl unmount`/`lock` on an already-unmounted or already-locked device is effectively a no-op — and the benefit is that cleanup is always complete regardless of how the session progressed.
+The cost is negligible — `udisksctl unmount`/`lock` on an already-unmounted or
+already-locked device is effectively a no-op — and the benefit is that cleanup
+is always complete regardless of how the session progressed.
 
 #### Why no `dm-crypt` kernel module check
 
-Pre-flight checks verify that udisks (`udisksctl` + a running `udisksd`) is available, but deliberately do not probe for the `dm-crypt` kernel module:
+Pre-flight checks verify that udisks (`udisksctl` + a running `udisksd`) is
+available, but deliberately do not probe for the `dm-crypt` kernel module:
 
-- On any system where udisks/LUKS tooling is installed, `dm-crypt` is almost always available (built-in or auto-loaded on first use).
-- The kernel may auto-load the module when udisks unlocks a container, so a pre-check could give false negatives.
-- When `dm-crypt` is genuinely missing (e.g. Docker without `--privileged`), `udisksctl unlock` fails with a clear error — the failure is not silent.
+- On any system where udisks/LUKS tooling is installed, `dm-crypt` is almost
+  always available (built-in or auto-loaded on first use).
+- The kernel may auto-load the module when udisks unlocks a container, so a
+  pre-check could give false negatives.
+- When `dm-crypt` is genuinely missing (e.g. Docker without `--privileged`),
+  `udisksctl unlock` fails with a clear error — the failure is not silent.
 
 ### Pre-flight Checks
 
-Before running any sync, nbkp validates that all required infrastructure is in place. The `preflight check` command runs these validations independently; the `run` command runs them before executing syncs.
+Before running any sync, nbkp validates that all required infrastructure is in
+place. The `preflight check` command runs these validations independently; the
+`run` command runs them before executing syncs.
 
 Checks include:
 
-- **Sentinel files** — `.nbkp-vol`, `.nbkp-src`, `.nbkp-dst` must exist at the expected paths
-- **SSH connectivity** — Remote endpoints must be reachable; DNS resolution must succeed. A connection failure is `UNREACHABLE` (inactive) and records its cause; a host that answers but refuses our key, or whose host key is unknown or changed, is `AUTH_FAILED`, an infrastructure error. The Paramiko/Fabric connections behind checks, snapshot operations and the mount lifecycle verify host keys like OpenSSH does for rsync: with `strict-host-key-checking` on (the default), against `~/.ssh/known_hosts` or `known-hosts-file`, refusing any host not listed there. Fabric's own default trusts every host key, which would let a host impersonating a NAS on an untrusted network receive a LUKS passphrase at unlock time, so nbkp replaces it. A connection lost later in preflight (each remote command connects anew, so a host can fall asleep half-way) makes the volume or sync endpoint being probed unreachable in the same way, with its cause, instead of aborting the checks of every other host. Any other exception during the probe is a bug and propagates instead of being reported as an unreachable host.
-- **Rsync availability** — rsync must be installed and version 3.0+ (macOS `openrsync` is rejected). Host tool errors apply to localhost too: a remote host's errors cascade to its volumes (`SSH_ENDPOINT_INACTIVE`), while the orchestrator's own errors — localhost is always "reachable" — mark every sync with a side on it `ENDPOINT_HOST_ERRORS`, so a missing local rsync fails preflight instead of failing every sync at run time.
-- **Btrfs readiness** — Correct filesystem type, subvolume existence, mount options, required directories
-- **Hard-link readiness** — Filesystem hard-link support, required directory structure
-- **`latest` symlink validity** — Must exist and point to `/dev/null` or to an existing snapshot of the endpoint, written `snapshots/<timestamp>` (see [The `latest` Symlink](#the-latest-symlink)). On a btrfs destination, a snapshot `latest` points to that is no longer read-only (left by a delete that failed after clearing the flag, or changed by hand) is a **warning** (`LATEST_SNAPSHOT_WRITABLE`): `check` and `troubleshoot` show it, with the command that sets the flag again, but the sync still runs.
-- **Mount infrastructure** — For volumes with mount config: `udisksctl` availability and a running `udisksd` daemon, `lsblk` and `findmnt`, the `50-nbkp.rules` polkit rule, and (for volumes with a declared `path`) an `/etc/fstab` entry whose mountpoint is that path *and* whose device spec designates the volume's device (`UUID=<device-uuid>` / `/dev/disk/by-uuid/…`, or for encrypted volumes the cleartext mapper — never the LUKS container itself). Specs that cannot be resolved without extra probes (`LABEL=`, `/dev/sdX`, an encrypted volume's inner-filesystem `UUID=`) are accepted. A drive that is plugged in but whose passphrase cannot be retrieved is `PASSPHRASE_NOT_AVAILABLE`, an infrastructure error. For btrfs volumes, a missing `udisks2-btrfs` module is a **warning**: it is shown by `check` and `troubleshoot` but never makes anything inactive or fatal.
+- **Sentinel files** — `.nbkp-vol`, `.nbkp-src`, `.nbkp-dst` must exist at the
+  expected paths
+- **SSH connectivity** — Remote endpoints must be reachable; DNS resolution must
+  succeed. A connection failure is `UNREACHABLE` (inactive) and records its
+  cause; a host that answers but refuses our key, or whose host key is unknown
+  or changed, is `AUTH_FAILED`, an infrastructure error. The Paramiko/Fabric
+  connections behind checks, snapshot operations and the mount lifecycle verify
+  host keys like OpenSSH does for rsync: with `strict-host-key-checking` on (the
+  default), against `~/.ssh/known_hosts` or `known-hosts-file`, refusing any
+  host not listed there. Fabric's own default trusts every host key, which would
+  let a host impersonating a NAS on an untrusted network receive a LUKS
+  passphrase at unlock time, so nbkp replaces it. A connection lost later in
+  preflight (each remote command connects anew, so a host can fall asleep
+  half-way) makes the volume or sync endpoint being probed unreachable in the
+  same way, with its cause, instead of aborting the checks of every other host.
+  Any other exception during the probe is a bug and propagates instead of being
+  reported as an unreachable host.
+- **Rsync availability** — rsync must be installed and version 3.0+ (macOS
+  `openrsync` is rejected). Host tool errors apply to localhost too: a remote
+  host's errors cascade to its volumes (`SSH_ENDPOINT_INACTIVE`), while the
+  orchestrator's own errors — localhost is always "reachable" — mark every sync
+  with a side on it `ENDPOINT_HOST_ERRORS`, so a missing local rsync fails
+  preflight instead of failing every sync at run time.
+- **Btrfs readiness** — Correct filesystem type, subvolume existence, mount
+  options, required directories
+- **Hard-link readiness** — Filesystem hard-link support, required directory
+  structure
+- **`latest` symlink validity** — Must exist and point to `/dev/null` or to an
+  existing snapshot of the endpoint, written `snapshots/<timestamp>` (see
+  [The `latest` Symlink](#the-latest-symlink)). On a btrfs destination, a
+  snapshot `latest` points to that is no longer read-only (left by a delete that
+  failed after clearing the flag, or changed by hand) is a **warning**
+  (`LATEST_SNAPSHOT_WRITABLE`): `check` and `troubleshoot` show it, with the
+  command that sets the flag again, but the sync still runs.
+- **Mount infrastructure** — For volumes with mount config: `udisksctl`
+  availability and a running `udisksd` daemon, `lsblk` and `findmnt`, the
+  `50-nbkp.rules` polkit rule, and (for volumes with a declared `path`) an
+  `/etc/fstab` entry whose mountpoint is that path *and* whose device spec
+  designates the volume's device (`UUID=<device-uuid>` / `/dev/disk/by-uuid/…`,
+  or for encrypted volumes the cleartext mapper — never the LUKS container
+  itself). Specs that cannot be resolved without extra probes (`LABEL=`,
+  `/dev/sdX`, an encrypted volume's inner-filesystem `UUID=`) are accepted. A
+  drive that is plugged in but whose passphrase cannot be retrieved is
+  `PASSPHRASE_NOT_AVAILABLE`, an infrastructure error. For btrfs volumes, a
+  missing `udisks2-btrfs` module is a **warning**: it is shown by `check` and
+  `troubleshoot` but never makes anything inactive or fatal.
 - **Strictness mode** — See below
 
-The `preflight troubleshoot` command runs the same checks and displays step-by-step remediation instructions for each failure. It takes `--strictness` and exits 1 under the same conditions as `check`, and `-o json` emits each issue with its layer, subject, stable `code` (the enum member name), severity, and the remediation as plain text.
+The `preflight troubleshoot` command runs the same checks and displays
+step-by-step remediation instructions for each failure. It takes `--strictness`
+and exits 1 under the same conditions as `check`, and `-o json` emits each issue
+with its layer, subject, stable `code` (the enum member name), severity, and the
+remediation as plain text.
 
 #### Strictness
 
 Pre-flight checks distinguish between two categories of errors:
 
-- **Inactive errors** — Missing sentinel files (`.nbkp-vol`, `.nbkp-src`, `.nbkp-dst`), unavailable volumes, disabled syncs, and pending snapshots in dry-run mode. These represent expected situations where a sync is not ready to run (e.g. a removable drive is not plugged in, a remote host is unreachable, or a volume is not mounted at the expected path).
-- **Infrastructure errors** — Everything else: missing rsync or other tools (on localhost as well as remote hosts), SSH authentication / host key failures, wrong or undeterminable filesystem type, broken symlinks, a missing polkit rule or fstab entry, an unavailable passphrase for a plugged-in drive, an unreachable udisks daemon, etc. These indicate real problems that need fixing.
+- **Inactive errors** — Missing sentinel files (`.nbkp-vol`, `.nbkp-src`,
+  `.nbkp-dst`), unavailable volumes, disabled syncs, and pending snapshots in
+  dry-run mode. These represent expected situations where a sync is not ready to
+  run (e.g. a removable drive is not plugged in, a remote host is unreachable,
+  or a volume is not mounted at the expected path).
+- **Infrastructure errors** — Everything else: missing rsync or other tools (on
+  localhost as well as remote hosts), SSH authentication / host key failures,
+  wrong or undeterminable filesystem type, broken symlinks, a missing polkit
+  rule or fstab entry, an unavailable passphrase for a plugged-in drive, an
+  unreachable udisks daemon, etc. These indicate real problems that need fixing.
 
-A sync with `enabled: false` is never fatal, under any strictness: the runner never attempts it, its result is `skipped` with `failure: disabled`, and the syncs it cancels are never fatal either. Warnings (the missing udisks btrfs module, a writable `latest` snapshot) are outside this classification altogether.
+A sync with `enabled: false` is never fatal, under any strictness: the runner
+never attempts it, its result is `skipped` with `failure: disabled`, and the
+syncs it cancels are never fatal either. Warnings (the missing udisks btrfs
+module, a writable `latest` snapshot) are outside this classification
+altogether.
 
-The `--strictness` flag controls how preflight errors affect the run and its exit code:
+The `--strictness` flag controls how preflight errors affect the run and its
+exit code:
 
 | | `ignore-inactive` (default) | `ignore-none` | `ignore-all` |
 |---|---|---|---|
@@ -262,129 +655,299 @@ The `--strictness` flag controls how preflight errors affect the run and its exi
 | **Downstream of a failed sync** | Cancelled, fatal | Cancelled, fatal | Cancelled, fatal |
 | **Exit code** | 0 if only inactive syncs were skipped (and their downstream syncs cancelled) | 1 if any sync is inactive | 0 unless sync execution itself fails |
 
-A cancellation inherits the severity of its root cause: a sync cancelled because an upstream sync was skipped for inactivity is as expected as that skip, while one cancelled because an upstream sync failed is part of that failure. A sync cancelled because an upstream sync is disabled is never fatal, as the disabled sync is not. Each result records the cause (`failure`: `upstream-failed`, `upstream-skipped` or `upstream-disabled`, plus `cancelled_by`), and the cause propagates through a chain: in `A → B → C` with `A` inactive, both `B` and `C` are `upstream-skipped`.
+A cancellation inherits the severity of its root cause: a sync cancelled because
+an upstream sync was skipped for inactivity is as expected as that skip, while
+one cancelled because an upstream sync failed is part of that failure. A sync
+cancelled because an upstream sync is disabled is never fatal, as the disabled
+sync is not. Each result records the cause (`failure`: `upstream-failed`,
+`upstream-skipped` or `upstream-disabled`, plus `cancelled_by`), and the cause
+propagates through a chain: in `A → B → C` with `A` inactive, both `B` and `C`
+are `upstream-skipped`.
 
-**`ignore-inactive`** (default) is designed for configs that include syncs which are not always runnable — for example, a backup to a USB drive that is only connected on weekends, or a remote server that is only reachable from a specific network. The run succeeds as long as all *active* syncs complete, and inactive ones are skipped without noise.
+**`ignore-inactive`** (default) is designed for configs that include syncs which
+are not always runnable — for example, a backup to a USB drive that is only
+connected on weekends, or a remote server that is only reachable from a specific
+network. The run succeeds as long as all *active* syncs complete, and inactive
+ones are skipped without noise.
 
-**`ignore-none`** is useful for scheduled/automated runs where every sync is expected to be active. A missing sentinel or unreachable volume likely indicates a problem (drive not mounted, server down) rather than an expected absence, and the operator wants to be alerted.
+**`ignore-none`** is useful for scheduled/automated runs where every sync is
+expected to be active. A missing sentinel or unreachable volume likely indicates
+a problem (drive not mounted, server down) rather than an expected absence, and
+the operator wants to be alerted.
 
-**`ignore-all`** ignores all preflight errors — only sync execution failures cause a non-zero exit. Syncs with infrastructure errors are attempted (and fail at execution if the problem is real), which is useful to try a sync despite a check you know to be wrong. The sentinel guarantee is kept even here: a sync is only attempted when preflight observed all four of its sentinels, so an absent drive or unreachable host is still skipped rather than written to, and so is a sync whose volume problems kept preflight from checking its endpoint sentinels. The generated shell script applies the same rule with its own sentinel checks, which always run first.
+**`ignore-all`** ignores all preflight errors — only sync execution failures
+cause a non-zero exit. Syncs with infrastructure errors are attempted (and fail
+at execution if the problem is real), which is useful to try a sync despite a
+check you know to be wrong. The sentinel guarantee is kept even here: a sync is
+only attempted when preflight observed all four of its sentinels, so an absent
+drive or unreachable host is still skipped rather than written to, and so is a
+sync whose volume problems kept preflight from checking its endpoint sentinels.
+The generated shell script applies the same rule with its own sentinel checks,
+which always run first.
 
-**Results** — Each sync result carries an `outcome` (`success`, `failed`, `skipped`, `cancelled`) and, unless successful, a `failure` saying why: `rsync`, `mkdir`, `snapshot`, `symlink` (a step failed), `inactive`, `dry-run-pending`, `preflight`, `disabled` (not attempted), `upstream-failed`, `upstream-skipped`, `upstream-disabled` (cancelled). `run -o json` exposes them, along with `warnings` for best-effort steps.
+**Results** — Each sync result carries an `outcome` (`success`, `failed`,
+`skipped`, `cancelled`) and, unless successful, a `failure` saying why: `rsync`,
+`mkdir`, `snapshot`, `symlink` (a step failed), `inactive`, `dry-run-pending`,
+`preflight`, `disabled` (not attempted), `upstream-failed`, `upstream-skipped`,
+`upstream-disabled` (cancelled). `run -o json` exposes them, along with
+`warnings` for best-effort steps.
 
-**Aborted runs** — When preflight aborts a run, `run` lists the offending syncs and suggests the matching `nbkp preflight troubleshoot` command — same config file (relative to the current directory) and endpoint-selection flags — for step-by-step fixes. In JSON mode the command is the `hint` field. `snapshots show` / `prune` (when a sync failed preflight) and `disks mount` / `umount` (when a volume failed) print the same suggestion, in human output only: their JSON output is a bare list, with no object to carry a `hint` field.
+**Aborted runs** — When preflight aborts a run, `run` lists the offending syncs
+and suggests the matching `nbkp preflight troubleshoot` command — same config
+file (relative to the current directory) and endpoint-selection flags — for
+step-by-step fixes. In JSON mode the command is the `hint` field.
+`snapshots show` / `prune` (when a sync failed preflight) and `disks mount` /
+`umount` (when a volume failed) print the same suggestion, in human output only:
+their JSON output is a bare list, with no object to carry a `hint` field.
 
-**`snapshots show` / `snapshots prune`** — accept the same `--strictness`. A sync without snapshots (or, for prune, without `max-snapshots`) is skipped. A disabled sync is always skipped. Otherwise an expected-inactive sync is skipped (an error under `ignore-none`), and a sync with infrastructure errors is an error, or a skip under `ignore-all` — these commands never read or delete snapshots on a destination preflight could not vouch for. Any error makes the command exit 1.
+**`snapshots show` / `snapshots prune`** — accept the same `--strictness`. A
+sync without snapshots (or, for prune, without `max-snapshots`) is skipped. A
+disabled sync is always skipped. Otherwise an expected-inactive sync is skipped
+(an error under `ignore-none`), and a sync with infrastructure errors is an
+error, or a skip under `ignore-all` — these commands never read or delete
+snapshots on a destination preflight could not vouch for. Any error makes the
+command exit 1.
 
 #### Probe real state, not proxies
 
-Checks observe the actual condition that matters rather than an indirect stand-in:
+Checks observe the actual condition that matters rather than an indirect
+stand-in:
 
-- **Daemon reachability** via `udisksctl status` (can we actually talk to udisks?), not `systemctl is-active udisks2`.
-- **Live mount options** (e.g. `user_subvol_rm_allowed`) via `findmnt -o OPTIONS` on the mounted filesystem, not the `/etc/fstab` line or the config.
-- **Authorization** by attempting the operation (`udisksctl unlock`/`mount --no-user-interaction`) and classifying a `NotAuthorized` failure, not by stat-ing the `50-nbkp.rules` polkit file. This stays correct however the grant is configured (a differently-named rule, a group-scoped rule, …) and avoids guessing the file's name or location on a remote host.
-- **The unlocked cleartext device** by discovering it via `lsblk` (the `crypt` child of the LUKS container), not by assuming the `luks-<uuid>` mapper name — a LUKS2 label or crypttab entry changes it.
+- **Daemon reachability** via `udisksctl status` (can we actually talk to
+  udisks?), not `systemctl is-active udisks2`.
+- **Live mount options** (e.g. `user_subvol_rm_allowed`) via
+  `findmnt -o OPTIONS` on the mounted filesystem, not the `/etc/fstab` line or
+  the config.
+- **Authorization** by attempting the operation
+  (`udisksctl unlock`/`mount --no-user-interaction`) and classifying a
+  `NotAuthorized` failure, not by stat-ing the `50-nbkp.rules` polkit file. This
+  stays correct however the grant is configured (a differently-named rule, a
+  group-scoped rule, …) and avoids guessing the file's name or location on a
+  remote host.
+- **The unlocked cleartext device** by discovering it via `lsblk` (the `crypt`
+  child of the LUKS container), not by assuming the `luks-<uuid>` mapper name —
+  a LUKS2 label or crypttab entry changes it.
 - **Filesystem type** via `stat -f` on the real filesystem, not a config hint.
 
-The deliberate exception is the **fstab-mapping** check (`findmnt --fstab --target <path> -P -o SOURCE,TARGET`), which reads `/etc/fstab` — the configuration that *determines* where udisks will mount — rather than performing a trial mount. So the principle is "observe the actual state or outcome; only fall back to reading the input config when attempting the real operation would be destructive or premature." The cost is that detection does real work (and real SSH round-trips) during preflight, in exchange for accuracy that doesn't depend on how the host happens to be configured.
+The deliberate exception is the **fstab-mapping** check
+(`findmnt --fstab --target <path> -P -o SOURCE,TARGET`), which reads
+`/etc/fstab` — the configuration that *determines* where udisks will mount —
+rather than performing a trial mount. So the principle is "observe the actual
+state or outcome; only fall back to reading the input config when attempting the
+real operation would be destructive or premature." The cost is that detection
+does real work (and real SSH round-trips) during preflight, in exchange for
+accuracy that doesn't depend on how the host happens to be configured.
 
 #### Preflight Conditional Probing
 
-The preflight check system uses two layers: an **observation layer** (`volume_checks.py`, `endpoint_checks.py`, built on the host probes in `probes.py`) that probes raw state, and an **error interpretation layer** (the `status/` package, one module per layer) that decides what constitutes a problem based on config. Not all capabilities are checked for every volume or endpoint — probing is selective. This is an intentional design choice driven by three categories of conditional logic.
+The preflight check system uses two layers: an **observation layer**
+(`volume_checks.py`, `endpoint_checks.py`, built on the host probes in
+`probes.py`) that probes raw state, and an **error interpretation layer** (the
+`status/` package, one module per layer) that decides what constitutes a problem
+based on config. Not all capabilities are checked for every volume or endpoint —
+probing is selective. This is an intentional design choice driven by three
+categories of conditional logic.
 
 ##### Physical cascade dependencies
 
-Probe B requires the result of probe A as input. These conditions live in the observation layer because they represent physical impossibilities, not policy decisions:
+Probe B requires the result of probe A as input. These conditions live in the
+observation layer because they represent physical impossibilities, not policy
+decisions:
 
-- `rsync_version_ok` requires `has_rsync` — can't run `rsync --version` if rsync isn't installed
+- `rsync_version_ok` requires `has_rsync` — can't run `rsync --version` if rsync
+  isn't installed
 - `is_btrfs_filesystem` requires `has_stat` — needs `stat -f -c %T`
 - `btrfs_user_subvol_rm` requires `has_findmnt AND is_btrfs`
-- the cleartext device discovery (`lsblk` of the LUKS container) requires `has_udisksctl` and a present LUKS container — can't mount/unmount/lock without the discovered device
+- the cleartext device discovery (`lsblk` of the LUKS container) requires
+  `has_udisksctl` and a present LUKS container — can't mount/unmount/lock
+  without the discovered device
 - `staging_writable` requires `staging_exists`
 
 ##### Config-as-input probing
 
-The probe itself needs config values as parameters — without them, the probe cannot be formulated. These also live in the observation layer:
+The probe itself needs config values as parameters — without them, the probe
+cannot be formulated. These also live in the observation layer:
 
-- Device-present and unlock/discovery probes need `device_uuid` from `mount` — the LUKS container or filesystem UUID is the only thing to query
-- The fstab-mapping check needs `volume.path` — without a declared path there is no expected mountpoint to verify (the discovery model applies instead)
+- Device-present and unlock/discovery probes need `device_uuid` from `mount` —
+  the LUKS container or filesystem UUID is the only thing to query
+- The fstab-mapping check needs `volume.path` — without a declared path there is
+  no expected mountpoint to verify (the discovery model applies instead)
 
 ##### Config-as-filter probing
 
-The probe is independent of config values, but only relevant when a feature is enabled. These are skipped in the observation layer to avoid unnecessary SSH round-trips (each check is a remote call):
+The probe is independent of config values, but only relevant when a feature is
+enabled. These are skipped in the observation layer to avoid unnecessary SSH
+round-trips (each check is a remote call):
 
-- `snapshot_dirs` and `latest` symlink checks only run when `endpoint.snapshot_mode != "none"`
-- `BtrfsStagingSubvolumeDiagnostics` only probed when `btrfs_snapshots.enabled` (plus physical prerequisites)
+- `snapshot_dirs` and `latest` symlink checks only run when
+  `endpoint.snapshot_mode != "none"`
+- `BtrfsStagingSubvolumeDiagnostics` only probed when `btrfs_snapshots.enabled`
+  (plus physical prerequisites)
 
-The error interpretation layer already filters based on these same config flags, so these probes could theoretically always run. However, always-probing would add 2–5 extra SSH calls per non-snapshot endpoint, which adds up across configs with many endpoints.
+The error interpretation layer already filters based on these same config flags,
+so these probes could theoretically always run. However, always-probing would
+add 2–5 extra SSH calls per non-snapshot endpoint, which adds up across configs
+with many endpoints.
 
 ##### Why not always-probe
 
-Consolidating all conditional logic in the error interpretation layer was considered and rejected:
+Consolidating all conditional logic in the error interpretation layer was
+considered and rejected:
 
-- **Categories 1 and 2 cannot move** — they encode physical prerequisites, not policy. Moving them downstream would just replace cascade conditionals with null-checks in the error layer.
-- **Category 3 saves real SSH round-trips** with minimal code complexity (2–3 lines of guards per check site).
-- **The `| None` type convention** (meaning "not probed / not applicable") is consistently applied across all diagnostics models and well-understood by the error interpretation layer.
+- **Categories 1 and 2 cannot move** — they encode physical prerequisites, not
+  policy. Moving them downstream would just replace cascade conditionals with
+  null-checks in the error layer.
+- **Category 3 saves real SSH round-trips** with minimal code complexity (2–3
+  lines of guards per check site).
+- **The `| None` type convention** (meaning "not probed / not applicable") is
+  consistently applied across all diagnostics models and well-understood by the
+  error interpretation layer.
 
 ### Endpoint Filtering
 
-When a remote volume declares multiple SSH endpoints, nbkp selects the best reachable one at runtime. This enables nomadic usage where the same config works across different network contexts (e.g. home LAN vs public internet).
+When a remote volume declares multiple SSH endpoints, nbkp selects the best
+reachable one at runtime. This enables nomadic usage where the same config works
+across different network contexts (e.g. home LAN vs public internet).
 
-**Volume-level exclusion** — When `--exclude-location` is set and *all* candidate endpoints for a volume have a matching location tag, the volume is skipped entirely (no SSH connection is attempted). Syncs referencing the skipped volume are marked inactive with a `LOCATION_EXCLUDED` reason. This is the only hard filter — it prevents slow SSH timeouts when a location is known to be unreachable. Preflight's reachability-only probes of the other endpoints (bastions, unselected alternates, unused endpoints) likewise skip every endpoint tagged with an excluded location, and under `--sync` cover only the endpoints the selected syncs' volumes can be reached through.
+**Volume-level exclusion** — When `--exclude-location` is set and *all*
+candidate endpoints for a volume have a matching location tag, the volume is
+skipped entirely (no SSH connection is attempted). Syncs referencing the skipped
+volume are marked inactive with a `LOCATION_EXCLUDED` reason. This is the only
+hard filter — it prevents slow SSH timeouts when a location is known to be
+unreachable. Preflight's reachability-only probes of the other endpoints
+(bastions, unselected alternates, unused endpoints) likewise skip every endpoint
+tagged with an excluded location, and under `--sync` cover only the endpoints
+the selected syncs' volumes can be reached through.
 
-**Per-endpoint selection** — For volumes that are not excluded, the best endpoint is selected using a soft filter chain:
+**Per-endpoint selection** — For volumes that are not excluded, the best
+endpoint is selected using a soft filter chain:
 
-1. Gather candidate endpoints: the volume's `ssh-endpoints` list, in order, or its `ssh-endpoint` alone when no list is set
+1. Gather candidate endpoints: the volume's `ssh-endpoints` list, in order, or
+   its `ssh-endpoint` alone when no list is set
 2. Exclude endpoints whose host cannot be DNS-resolved
 3. If `--exclude-location` is set, remove endpoints with a matching location tag
 4. If `--location` is set, prefer endpoints with a matching location tag
-5. If `--network` is set, prefer endpoints with matching network type (`private` for LAN, `public` for WAN)
+5. If `--network` is set, prefer endpoints with matching network type (`private`
+   for LAN, `public` for WAN)
 
-Each filter step is a **soft filter**, applied per volume: if it would eliminate all of that volume's remaining candidates, it is silently skipped and the previous candidate list is preserved. This means filters degrade gracefully — `--location office` has no effect on a volume none of whose endpoints is tagged `office`, rather than causing a failure. The first remaining candidate is used. Step 2 applies even when no flag is given; a volume with a single candidate skips it, since no filter could change the choice.
+Each filter step is a **soft filter**, applied per volume: if it would eliminate
+all of that volume's remaining candidates, it is silently skipped and the
+previous candidate list is preserved. This means filters degrade gracefully —
+`--location office` has no effect on a volume none of whose endpoints is tagged
+`office`, rather than causing a failure. The first remaining candidate is used.
+Step 2 applies even when no flag is given; a volume with a single candidate
+skips it, since no filter could change the choice.
 
-**Unknown locations are rejected** — The location *values* themselves are checked against the config before any selection: a `--location` or `--exclude-location` value that no SSH endpoint in the config declares (via `location` / `locations`) is treated as a typo, and the command exits with code 2 without running anything, with the error on stderr, or as a JSON `{"error": ...}` object (reason `unknown-location`) on stdout under `-o json`. So `--location office` is only accepted when at least one endpoint somewhere in the config is tagged `office`.
+**Unknown locations are rejected** — The location *values* themselves are
+checked against the config before any selection: a `--location` or
+`--exclude-location` value that no SSH endpoint in the config declares (via
+`location` / `locations`) is treated as a typo, and the command exits with code
+2 without running anything, with the error on stderr, or as a JSON
+`{"error": ...}` object (reason `unknown-location`) on stdout under `-o json`.
+So `--location office` is only accepted when at least one endpoint somewhere in
+the config is tagged `office`.
 
-Preflight probes each remote volume through the endpoint selected for it and reports the result under that endpoint, so two volumes sharing a primary endpoint can be reached (and reported) through different routes.
+Preflight probes each remote volume through the endpoint selected for it and
+reports the result under that endpoint, so two volumes sharing a primary
+endpoint can be reached (and reported) through different routes.
 
-Both `--location` and `--exclude-location` can be used together. Exclude is applied first, then include narrows further. This is useful when most endpoints lack location tags — instead of listing every location to include, you can exclude the ones you want to skip (e.g. `--exclude-location home`).
+Both `--location` and `--exclude-location` can be used together. Exclude is
+applied first, then include narrows further. This is useful when most endpoints
+lack location tags — instead of listing every location to include, you can
+exclude the ones you want to skip (e.g. `--exclude-location home`).
 
 ### Shell Script Generation
 
-The `sh` command compiles a config into a self-contained bash script that reproduces the same backup operations as `run`, without requiring Python or the config file at runtime. The generated script preserves all sync functionality: rsync commands, SSH options, filters, snapshot creation and pruning, pre-flight checks, dependency ordering, and failure propagation. See [Usage](./usage.md#sh--generate-a-standalone-backup-shell-script) for details.
+The `sh` command compiles a config into a self-contained bash script that
+reproduces the same backup operations as `run`, without requiring Python or the
+config file at runtime. The generated script preserves all sync functionality:
+rsync commands, SSH options, filters, snapshot creation and pruning, pre-flight
+checks, dependency ordering, and failure propagation. See
+[Usage](./usage.md#sh--generate-a-standalone-backup-shell-script) for details.
 
 It follows the same run structure as `nbkp run`:
 
-1. **Preflight, for every sync, before any sync starts.** Each sync has a generated `<sync>_preflight` function that classifies it as *active*, *inactive* (missing `.nbkp-vol` / `.nbkp-src` / `.nbkp-dst`, unreachable host — checked first), *broken* (rsync missing or older than 3.0 / openrsync, missing snapshot tools, wrong filesystem, missing `user_subvol_rm_allowed`, staging not a subvolume, FAT/exFAT under hard links, missing or invalid `latest`, unwritable directories), or *pending* (a dry-run whose source snapshot only an upstream sync would create). Like `nbkp preflight`, it also logs a warning, without failing, when the snapshot a btrfs destination's `latest` points to is not read-only.
-2. **Strictness.** `--strictness` (default `ignore-inactive`) decides whether those results abort the run, with the same matrix as [Strictness](#strictness).
-3. **Syncs in dependency order.** Inactive syncs are skipped without counting as failures; syncs downstream of a failed, skipped or disabled sync are cancelled, as in `run`, and a cancellation caused by a disabled sync never counts as a failure. Each sync function runs in a `set -e` subshell, so any failing step — not only rsync — stops that sync before `latest` moves. (Calling a bash function in a `||` or `if` context silently disables `set -e` inside it, which is why the script never does.)
+1. **Preflight, for every sync, before any sync starts.** Each sync has a
+   generated `<sync>_preflight` function that classifies it as *active*,
+   *inactive* (missing `.nbkp-vol` / `.nbkp-src` / `.nbkp-dst`, unreachable host
+   — checked first), *broken* (rsync missing or older than 3.0 / openrsync,
+   missing snapshot tools, wrong filesystem, missing `user_subvol_rm_allowed`,
+   staging not a subvolume, FAT/exFAT under hard links, missing or invalid
+   `latest`, unwritable directories), or *pending* (a dry-run whose source
+   snapshot only an upstream sync would create). Like `nbkp preflight`, it also
+   logs a warning, without failing, when the snapshot a btrfs destination's
+   `latest` points to is not read-only.
+2. **Strictness.** `--strictness` (default `ignore-inactive`) decides whether
+   those results abort the run, with the same matrix as
+   [Strictness](#strictness).
+3. **Syncs in dependency order.** Inactive syncs are skipped without counting as
+   failures; syncs downstream of a failed, skipped or disabled sync are
+   cancelled, as in `run`, and a cancellation caused by a disabled sync never
+   counts as a failure. Each sync function runs in a `set -e` subshell, so any
+   failing step — not only rsync — stops that sync before `latest` moves.
+   (Calling a bash function in a `||` or `if` context silently disables `set -e`
+   inside it, which is why the script never does.)
 
-The script takes the run lock `nbkp run` holds, with `flock(1)` where it is installed (see [The Run Lock](#the-run-lock)).
+The script takes the run lock `nbkp run` holds, with `flock(1)` where it is
+installed (see [The Run Lock](#the-run-lock)).
 
-Paths are quoted for each shell that interprets them: locally, and once more inside the command string sent over SSH. Only the snapshot timestamp and the snapshot-name loop variable are expanded at runtime, and snapshot names read back from the destination are filtered to timestamp-shaped names before use. What `sh` deliberately leaves out of `run` — mount management, endpoint re-selection, Rich and JSON output, Paramiko-only SSH options, the orchestrator's own coreutils checks — is listed with reasons in the header of every generated script.
+Paths are quoted for each shell that interprets them: locally, and once more
+inside the command string sent over SSH. Only the snapshot timestamp and the
+snapshot-name loop variable are expanded at runtime, and snapshot names read
+back from the destination are filtered to timestamp-shaped names before use.
+What `sh` deliberately leaves out of `run` — mount management, endpoint
+re-selection, Rich and JSON output, Paramiko-only SSH options, the
+orchestrator's own coreutils checks — is listed with reasons in the header of
+every generated script.
 
 ### Outputs
 
-All commands support both human-readable output (Rich-formatted tables, spinners, progress bars) and machine-readable JSON output for scripting and automation. The `run` command additionally supports four progress display modes: `none`, `overall`, `per-file`, and `full`. In human output with any of them but `none`, rsync's output is shown as it streams, and a sync's result keeps only its last 65,536 characters: the whole of it can run to hundreds of megabytes over millions of files, and rsync's error, when it fails, comes last. JSON output does not stream, and keeps rsync's output whole.
+All commands support both human-readable output (Rich-formatted tables,
+spinners, progress bars) and machine-readable JSON output for scripting and
+automation. The `run` command additionally supports four progress display modes:
+`none`, `overall`, `per-file`, and `full`. In human output with any of them but
+`none`, rsync's output is shown as it streams, and a sync's result keeps only
+its last 65,536 characters: the whole of it can run to hundreds of megabytes
+over millions of files, and rsync's error, when it fails, comes last. JSON
+output does not stream, and keeps rsync's output whole.
 
 ### Rsync Defaults
 
 #### Why `--hard-links` is not enabled by default
 
-The default rsync flags use `-a` (archive mode), which expands to `-rlptgoD`. This preserves symlinks (`-l`) but does **not** include `-H` (`--hard-links`). Hard-link preservation is deliberately left opt-in for four reasons:
+The default rsync flags use `-a` (archive mode), which expands to `-rlptgoD`.
+This preserves symlinks (`-l`) but does **not** include `-H` (`--hard-links`).
+Hard-link preservation is deliberately left opt-in for four reasons:
 
-1. **Memory overhead** — rsync must build an in-memory hash table of every `(device, inode)` pair on the source to detect hard-link relationships. For large file trees with millions of files, this can consume significant RAM on both the sending and receiving side.
+1. **Memory overhead** — rsync must build an in-memory hash table of every
+   `(device, inode)` pair on the source to detect hard-link relationships. For
+   large file trees with millions of files, this can consume significant RAM on
+   both the sending and receiving side.
 
-2. **Slower transfer startup** — The hard-link detection pass adds time proportional to the number of files, even when no hard links exist in the source.
+2. **Slower transfer startup** — The hard-link detection pass adds time
+   proportional to the number of files, even when no hard links exist in the
+   source.
 
-3. **Interaction with `--link-dest` in hard-link snapshots** — nbkp's hard-link snapshot mode uses `--link-dest` to deduplicate unchanged files across snapshots. Adding `-H` on top means rsync must also track *source-side* hard-link groups, which can interact unpredictably with `--link-dest` (e.g. files that are hard-linked on the source might get deduplicated differently than intended across snapshots).
+3. **Interaction with `--link-dest` in hard-link snapshots** — nbkp's hard-link
+   snapshot mode uses `--link-dest` to deduplicate unchanged files across
+   snapshots. Adding `-H` on top means rsync must also track *source-side*
+   hard-link groups, which can interact unpredictably with `--link-dest` (e.g.
+   files that are hard-linked on the source might get deduplicated differently
+   than intended across snapshots).
 
-4. **No benefit for most backup workloads** — Typical user data (documents, photos, media) rarely contains intentional hard links. The overhead would be paid on every run for no practical gain.
+4. **No benefit for most backup workloads** — Typical user data (documents,
+   photos, media) rarely contains intentional hard links. The overhead would be
+   paid on every run for no practical gain.
 
-Users who need hard-link preservation for a specific sync (e.g. backing up a filesystem that heavily uses hard links like a mail spool or package cache) can enable it per-sync via `extra-options: ["--hard-links"]`.
+Users who need hard-link preservation for a specific sync (e.g. backing up a
+filesystem that heavily uses hard links like a mail spool or package cache) can
+enable it per-sync via `extra-options: ["--hard-links"]`.
 
 ## External Commands Reference
 
-This section documents every external command nbkp invokes on local or remote hosts, organized by category. This gives users full visibility into what nbkp does on their system.
+This section documents every external command nbkp invokes on local or remote
+hosts, organized by category. This gives users full visibility into what nbkp
+does on their system.
 
 ### Preflight checks
 
@@ -445,7 +1008,8 @@ This section documents every external command nbkp invokes on local or remote ho
 
 ### Mount management (udisks)
 
-All mount operations go through `udisksctl`, authorized by polkit (no `sudo`); `udevadm settle` only waits for udev to catch up with device changes:
+All mount operations go through `udisksctl`, authorized by polkit (no `sudo`);
+`udevadm settle` only waits for udev to catch up with device changes:
 
 | Command | Purpose |
 |---|---|
@@ -459,7 +1023,12 @@ All mount operations go through `udisksctl`, authorized by polkit (no `sudo`); `
 
 ### SSH transport
 
-Remote commands other than rsync (preflight probes, snapshot operations, the mount lifecycle) run over Fabric/Paramiko. Within one `nbkp` invocation they share a single connection per endpoint and proxy chain: it is opened on first use and closed when the command ends, after unmounting. A reused connection found dead is replaced, and a command it failed to start is retried once on the new connection. rsync opens its own `ssh` process for each sync.
+Remote commands other than rsync (preflight probes, snapshot operations, the
+mount lifecycle) run over Fabric/Paramiko. Within one `nbkp` invocation they
+share a single connection per endpoint and proxy chain: it is opened on first
+use and closed when the command ends, after unmounting. A reused connection
+found dead is replaced, and a command it failed to start is retried once on the
+new connection. rsync opens its own `ssh` process for each sync.
 
 SSH arguments are constructed dynamically per endpoint. Common options:
 

@@ -29,8 +29,9 @@ See [Installation instructions](./installation.md)
 
 ## Quick Start
 
-1. Create a config file at `~/.config/nbkp/config.yaml` (see [Example 1](#example-1-home-nas-backup) and the examples after it below, or start from a
-   file in [config-examples/](config-examples/))
+1. Create a config file at `~/.config/nbkp/config.yaml` (see
+   [Example 1](#example-1-home-nas-backup) and the examples after it below, or
+   start from a file in [config-examples/](config-examples/))
 2. Create sentinel files on each volume:
 
 For regular destinations (without snapshots):
@@ -48,7 +49,8 @@ mkdir -p /mnt/backups/photos
 touch /mnt/backups/photos/.nbkp-dst
 ```
 
-For **btrfs snapshot** destinations, create the staging subvolume and snapshots directory:
+For **btrfs snapshot** destinations, create the staging subvolume and snapshots
+directory:
 
 ```bash
 sudo btrfs subvolume create /mnt/backups/photos/staging
@@ -56,7 +58,8 @@ sudo mkdir /mnt/backups/photos/snapshots
 sudo chown <user>:<group> /mnt/backups/photos/staging /mnt/backups/photos/snapshots
 ```
 
-The btrfs volume must also be mounted with `user_subvol_rm_allowed` for pruning to work:
+The btrfs volume must also be mounted with `user_subvol_rm_allowed` for pruning
+to work:
 
 ```bash
 sudo mount -o remount,user_subvol_rm_allowed /mnt/backups
@@ -67,7 +70,6 @@ For **hard-link snapshot** destinations, create the snapshots directory:
 ```bash
 mkdir -p /mnt/backups/photos/snapshots
 ```
-
 
 3. Verify everything is healthy:
 
@@ -83,35 +85,53 @@ nbkp run
 
 ## Commands
 
-See the [CLI Reference](./cli-reference.md) for the full list of commands and options.
+See the [CLI Reference](./cli-reference.md) for the full list of commands and
+options.
 
 ### Scheduled runs
 
-`nbkp run` suits a cron entry or a systemd timer, since inactive syncs are skipped without failing the run:
+`nbkp run` suits a cron entry or a systemd timer, since inactive syncs are
+skipped without failing the run:
 
 ```bash
 # crontab: every hour
 0 * * * * nbkp run -o json >> "$HOME/nbkp-run.log" 2>&1
 ```
 
-Only one run at a time goes ahead on a machine: a run that starts while another is still going exits 1 at once, before mounting anything, with `another nbkp command (a run, a mount, a prune, …) is in progress` (`run-in-progress` under `-o json`), and the next scheduled run picks up the work. The other commands that mount or umount drives or delete snapshots (`disks mount` and `umount`, `snapshots show` and `prune`, `preflight check` and `troubleshoot`) take the same lock and fail the same way while a run is going, and a run fails while one of them is; dry runs and checks with `--no-mount --no-umount` run alongside anything. A generated script shares the same lock where `flock` is installed. See [The Run Lock](./internals.md#the-run-lock).
+Only one run at a time goes ahead on a machine: a run that starts while another
+is still going exits 1 at once, before mounting anything, with
+`another nbkp command (a run, a mount, a prune, …) is in progress`
+(`run-in-progress` under `-o json`), and the next scheduled run picks up the
+work. The other commands that mount or umount drives or delete snapshots
+(`disks mount` and `umount`, `snapshots show` and `prune`, `preflight check` and
+`troubleshoot`) take the same lock and fail the same way while a run is going,
+and a run fails while one of them is; dry runs and checks with
+`--no-mount --no-umount` run alongside anything. A generated script shares the
+same lock where `flock` is installed. See
+[The Run Lock](./internals.md#the-run-lock).
 
 ## Config
 
 ### Config File Location
 
-nbkp looks for `config.yaml` in `--config`, then the XDG and platform config directories. See [Config File Location](./config-reference.md#config-file-location) for the exact search order.
+nbkp looks for `config.yaml` in `--config`, then the XDG and platform config
+directories. See
+[Config File Location](./config-reference.md#config-file-location) for the exact
+search order.
 
 ### Configuration Reference
 
-See the [Configuration Reference](./config-reference.md) for every field, and [Domain](./domain.md) for what the entities mean and how they relate.
-
+See the [Configuration Reference](./config-reference.md) for every field, and
+[Domain](./domain.md) for what the entities mean and how they relate.
 
 ### Example 1: Home NAS backup
 
-A laptop backing up photos and documents to a Linux-powered NAS, with a USB drive as a secondary destination. The NAS is accessible both on the home LAN and remotely via a public hostname.
+A laptop backing up photos and documents to a Linux-powered NAS, with a USB
+drive as a secondary destination. The NAS is accessible both on the home LAN and
+remotely via a public hostname.
 
-See [config-examples/home-nas-backup.yaml](config-examples/home-nas-backup.yaml).
+See
+[config-examples/home-nas-backup.yaml](config-examples/home-nas-backup.yaml).
 
 Usage:
 
@@ -139,7 +159,11 @@ nbkp sh -o /mnt/usb-backup/backup.sh --relative-dst
 
 ### `sh` — generate a standalone backup shell script
 
-`nbkp sh` compiles the config into a bash script with every path and option baked in, for hosts without Python or to review the exact commands before running them. Endpoints are resolved once, at generation time (`--location`, `--exclude-location` and `--network` apply then). Volumes with mount management must be mounted beforehand (`nbkp disks mount`).
+`nbkp sh` compiles the config into a bash script with every path and option
+baked in, for hosts without Python or to review the exact commands before
+running them. Endpoints are resolved once, at generation time (`--location`,
+`--exclude-location` and `--network` apply then). Volumes with mount management
+must be mounted beforehand (`nbkp disks mount`).
 
 ```bash
 nbkp sh -o backup.sh                    # write an executable script
@@ -150,15 +174,34 @@ nbkp sh -o /mnt/usb/backup.sh --relative-dst   # paths relative to the script
 ./backup.sh --strictness ignore-none    # any inactive sync aborts the run
 ```
 
-The script behaves like `nbkp run`: it checks every sync first (sentinels, tools, snapshot layout), skips inactive syncs without failing (`--strictness ignore-inactive`, the default), aborts on infrastructure errors before syncing anything, runs the syncs in dependency order, and cancels syncs downstream of a failed or skipped one. It exits non-zero when a sync fails or is cancelled because of a failure; a cancellation caused by an inactive (skipped) upstream sync is no more an error than that skip, unless `--strictness ignore-none`. With `--strictness ignore-all`, syncs with infrastructure errors are attempted once their sentinels are present. Pruning failures are logged as warnings, as in `nbkp run`. It also takes the lock `nbkp run` holds, so the script never runs at the same time as a run or another command that mounts drives or modifies destinations; without `flock` (util-linux, missing on stock macOS) it warns and runs unlocked.
+The script behaves like `nbkp run`: it checks every sync first (sentinels,
+tools, snapshot layout), skips inactive syncs without failing
+(`--strictness ignore-inactive`, the default), aborts on infrastructure errors
+before syncing anything, runs the syncs in dependency order, and cancels syncs
+downstream of a failed or skipped one. It exits non-zero when a sync fails or is
+cancelled because of a failure; a cancellation caused by an inactive (skipped)
+upstream sync is no more an error than that skip, unless
+`--strictness ignore-none`. With `--strictness ignore-all`, syncs with
+infrastructure errors are attempted once their sentinels are present. Pruning
+failures are logged as warnings, as in `nbkp run`. It also takes the lock
+`nbkp run` holds, so the script never runs at the same time as a run or another
+command that mounts drives or modifies destinations; without `flock`
+(util-linux, missing on stock macOS) it warns and runs unlocked.
 
 ### Example 2: Multi-hop chained backups
 
-A more complex setup with a bastion host, chained syncs across local and remote volumes, mixed snapshot modes (btrfs and hard-link), and strict connection options. Data flows through a 6-step pipeline: local source, through a bastion to a remote server, across different snapshot backends, and back to a local destination.
+A more complex setup with a bastion host, chained syncs across local and remote
+volumes, mixed snapshot modes (btrfs and hard-link), and strict connection
+options. Data flows through a 6-step pipeline: local source, through a bastion
+to a remote server, across different snapshot backends, and back to a local
+destination.
 
-See [config-examples/multi-hop-chain.yaml](config-examples/multi-hop-chain.yaml).
+See
+[config-examples/multi-hop-chain.yaml](config-examples/multi-hop-chain.yaml).
 
-The syncs form a chain: `step-1 → step-2 → step-3 → step-4 → step-5 → step-6`. nbkp detects these dependencies automatically and runs them in order. If any step fails, all downstream steps are cancelled.
+The syncs form a chain: `step-1 → step-2 → step-3 → step-4 → step-5 → step-6`.
+nbkp detects these dependencies automatically and runs them in order. If any
+step fails, all downstream steps are cancelled.
 
 Usage:
 
@@ -181,9 +224,12 @@ nbkp sh -o backup.sh
 
 ### Example 3: Encrypted removable drives with mount management
 
-A laptop backing up to two LUKS-encrypted external drives and one unencrypted USB drive. nbkp automatically unlocks, mounts, syncs, umounts, and locks the drives via udisks2.
+A laptop backing up to two LUKS-encrypted external drives and one unencrypted
+USB drive. nbkp automatically unlocks, mounts, syncs, umounts, and locks the
+drives via udisks2.
 
-See [config-examples/encrypted-removable-drives.yaml](config-examples/encrypted-removable-drives.yaml).
+See
+[config-examples/encrypted-removable-drives.yaml](config-examples/encrypted-removable-drives.yaml).
 
 System setup (one-time, on the target host):
 
@@ -215,7 +261,8 @@ nbkp disks setup-auth -c config.yaml
 touch /mnt/seagate8tb/.nbkp-vol /mnt/iomega1tb/.nbkp-vol /mnt/usb-plain/.nbkp-vol
 ```
 
-See [Mount management with udisks2](#mount-management-with-udisks2) below for the full reference on fstab/crypttab combinations and mount-point resolution.
+See [Mount management with udisks2](#mount-management-with-udisks2) below for
+the full reference on fstab/crypttab combinations and mount-point resolution.
 
 Usage:
 
@@ -234,9 +281,16 @@ nbkp disks umount --name seagate8tb
 nbkp preflight troubleshoot
 ```
 
-With `-o json`, `disks mount` and `disks umount` print one entry per volume with its state (`device_present`, `luks_unlocked`, `mounted`). The entry of a volume that failed also has a `failure_reason` (e.g. `unlock-failed`, `not-authorized`, `lock-failed`), a one-line `detail`, a `failure` object with the facts behind it (the failed `step`, its `exit_code` and `message`, a failed probe `command`, …) and, for `umount`, a `warning` saying what was left mounted or unlocked.
+With `-o json`, `disks mount` and `disks umount` print one entry per volume with
+its state (`device_present`, `luks_unlocked`, `mounted`). The entry of a volume
+that failed also has a `failure_reason` (e.g. `unlock-failed`, `not-authorized`,
+`lock-failed`), a one-line `detail`, a `failure` object with the facts behind it
+(the failed `step`, its `exit_code` and `message`, a failed probe `command`, …)
+and, for `umount`, a `warning` saying what was left mounted or unlocked.
 
-In the JSON output of every command, an error, failure or skip reason is a kebab-case token (`unlock-failed`, `destination-endpoint-inactive`, `no-snapshots`); the human output words it.
+In the JSON output of every command, an error, failure or skip reason is a
+kebab-case token (`unlock-failed`, `destination-endpoint-inactive`,
+`no-snapshots`); the human output words it.
 
 ### Example 4: Sami's Personal Config
 
@@ -246,13 +300,20 @@ See [config-examples/personal-setup.yaml](config-examples/personal-setup.yaml).
 
 ## Mount management with udisks2
 
-nbkp can manage the mount/umount lifecycle of removable drives (encrypted or not) so that a backup automatically unlocks, mounts, syncs, umounts, and locks each drive. All of this is driven by [udisks2](https://www.freedesktop.org/wiki/Software/udisks/) (`udisksctl`), authorized purely by polkit — there is no `sudo`, no `systemd-cryptsetup`, and no `systemctl` involved.
+nbkp can manage the mount/umount lifecycle of removable drives (encrypted or
+not) so that a backup automatically unlocks, mounts, syncs, umounts, and locks
+each drive. All of this is driven by
+[udisks2](https://www.freedesktop.org/wiki/Software/udisks/) (`udisksctl`),
+authorized purely by polkit — there is no `sudo`, no `systemd-cryptsetup`, and
+no `systemctl` involved.
 
-This is a Linux-only feature. The target host (local or remote) must have udisks2 installed and running.
+This is a Linux-only feature. The target host (local or remote) must have
+udisks2 installed and running.
 
 ### Prerequisites
 
-1. **Install udisks2** (and `udisks2-btrfs` if any mount-managed volume holds a btrfs filesystem):
+1. **Install udisks2** (and `udisks2-btrfs` if any mount-managed volume holds a
+   btrfs filesystem):
 
    ```bash
    sudo apt install udisks2 udisks2-btrfs        # Debian/Ubuntu
@@ -266,7 +327,10 @@ This is a Linux-only feature. The target host (local or remote) must have udisks
    udisksctl status   # should list block devices
    ```
 
-3. **Install the polkit rule.** nbkp runs over SSH or from a cron/timer in an *inactive* login session, where udisks would normally demand administrator authentication. A polkit rule grants the backup user the udisks actions unconditionally so the unattended path works. Generate and install it with:
+3. **Install the polkit rule.** nbkp runs over SSH or from a cron/timer in an
+   *inactive* login session, where udisks would normally demand administrator
+   authentication. A polkit rule grants the backup user the udisks actions
+   unconditionally so the unattended path works. Generate and install it with:
 
    ```bash
    nbkp disks setup-auth -c config.yaml
@@ -274,16 +338,34 @@ This is a Linux-only feature. The target host (local or remote) must have udisks
    #   /etc/polkit-1/rules.d/50-nbkp.rules
    ```
 
-   `--user` is the user nbkp runs as on the host (the SSH user for remote volumes); it defaults to the user running `setup-auth`, so pass `-u <user>` when generating the rule on another machine. `-o json` emits the rule text and install path for scripting.
+   `--user` is the user nbkp runs as on the host (the SSH user for remote
+   volumes); it defaults to the user running `setup-auth`, so pass `-u <user>`
+   when generating the rule on another machine. `-o json` emits the rule text
+   and install path for scripting.
 
-   The rule is the **only** authorization artifact — no sudoers file is generated. It grants the backup user the udisks actions (`filesystem-mount[-system]`, `filesystem-fstab`, `encrypted-unlock[-system]`, `encrypted-lock-others`, etc.) and is not specific to any device, so one rule covers every mount-managed volume: adding a drive needs no new rule, only a change of `--user` does. The config is read only to check that some volume declares a `mount` section.
+   The rule is the **only** authorization artifact — no sudoers file is
+   generated. It grants the backup user the udisks actions
+   (`filesystem-mount[-system]`, `filesystem-fstab`,
+   `encrypted-unlock[-system]`, `encrypted-lock-others`, etc.) and is not
+   specific to any device, so one rule covers every mount-managed volume: adding
+   a drive needs no new rule, only a change of `--user` does. The config is read
+   only to check that some volume declares a `mount` section.
 
 ### Mount-point models: fstab × crypttab
 
-For an encrypted volume, two independent and optional system files influence where and how it is mounted:
+For an encrypted volume, two independent and optional system files influence
+where and how it is mounted:
 
-- **crypttab** controls the *name* of the unlocked device mapper — but so does the LUKS2 header label. With neither, udisks names the unlocked device `/dev/mapper/luks-<luks-uuid>`; with a labelled LUKS2 header it uses the label (`/dev/mapper/seagate8tb-luks`); with a crypttab entry (`name UUID=<luks-uuid> none luks,noauto`) it honors the custom name. nbkp **discovers** the actual name at runtime (via `lsblk`), so both work transparently — a crypttab entry is never required.
-- **fstab** controls the *mount point*. With an fstab entry mapping the device to a fixed path, udisks mounts the volume there. Without one, udisks mounts at `/run/media/<user>/<label>`.
+- **crypttab** controls the *name* of the unlocked device mapper — but so does
+  the LUKS2 header label. With neither, udisks names the unlocked device
+  `/dev/mapper/luks-<luks-uuid>`; with a labelled LUKS2 header it uses the label
+  (`/dev/mapper/seagate8tb-luks`); with a crypttab entry
+  (`name UUID=<luks-uuid> none luks,noauto`) it honors the custom name. nbkp
+  **discovers** the actual name at runtime (via `lsblk`), so both work
+  transparently — a crypttab entry is never required.
+- **fstab** controls the *mount point*. With an fstab entry mapping the device
+  to a fixed path, udisks mounts the volume there. Without one, udisks mounts at
+  `/run/media/<user>/<label>`.
 
 This gives four valid combinations:
 
@@ -294,11 +376,20 @@ This gives four valid combinations:
 | `name=X` | none | `/dev/mapper/X` | `/run/media/<user>/<label>` (discovered) | omit |
 | `name=X` | yes | `/dev/mapper/X` | declared path | set |
 
-Set `volume.path` **when and only when** there is an fstab entry mapping the device to a fixed path; otherwise omit it and let nbkp discover the `/run/media` mountpoint. **Consistency rule:** when both files exist, the fstab device must reference the mapper's *actual* name — the crypttab `name` if there is one, else the LUKS2 header label if the header has one, else `luks-<uuid>`. Check with `lsblk` on an unlocked container rather than assuming. For unencrypted volumes crypttab is N/A — only the fstab dimension applies.
+Set `volume.path` **when and only when** there is an fstab entry mapping the
+device to a fixed path; otherwise omit it and let nbkp discover the `/run/media`
+mountpoint. **Consistency rule:** when both files exist, the fstab device must
+reference the mapper's *actual* name — the crypttab `name` if there is one, else
+the LUKS2 header label if the header has one, else `luks-<uuid>`. Check with
+`lsblk` on an unlocked container rather than assuming. For unencrypted volumes
+crypttab is N/A — only the fstab dimension applies.
 
 ### Worked examples
 
-**Encrypted, Option A — fixed path via fstab.** Set `path` in the config and add an fstab entry. No crypttab needed — but the fstab device must match whatever udisks actually names the mapper (`luks-<uuid>` for an unlabelled LUKS2 header, the label otherwise):
+**Encrypted, Option A — fixed path via fstab.** Set `path` in the config and add
+an fstab entry. No crypttab needed — but the fstab device must match whatever
+udisks actually names the mapper (`luks-<uuid>` for an unlabelled LUKS2 header,
+the label otherwise):
 
 ```yaml
 # config.yaml
@@ -314,16 +405,22 @@ volumes:
         passphrase-id: seagate8tb
 ```
 
-```
+```text
 # /etc/fstab on the Pi
 /dev/mapper/luks-5941f273-f73c-44c5-a3ef-fae7248db1b6  /mnt/seagate8tb  ext4  noauto,nofail,x-udisks-auth  0 0
 ```
 
-udisks unlocks the container, mounts it at `/mnt/seagate8tb`, and preflight verifies the fstab entry maps the device to that path (a mismatch yields `FSTAB_MOUNTPOINT_MISMATCH`).
+udisks unlocks the container, mounts it at `/mnt/seagate8tb`, and preflight
+verifies the fstab entry maps the device to that path (a mismatch yields
+`FSTAB_MOUNTPOINT_MISMATCH`).
 
-> To keep a friendly device name like `/dev/mapper/seagate8tb`, add an optional crypttab entry `seagate8tb UUID=5941f273-... none luks,noauto` and point the fstab device at `/dev/mapper/seagate8tb` instead.
+> To keep a friendly device name like `/dev/mapper/seagate8tb`, add an optional
+> crypttab entry `seagate8tb UUID=5941f273-... none luks,noauto` and point the
+> fstab device at `/dev/mapper/seagate8tb` instead.
 
-**Encrypted, Option B — discovered path via `/run/media`.** Omit `path` (and add no fstab entry). udisks mounts at `/run/media/<ssh-user>/<label>`, which nbkp discovers at runtime:
+**Encrypted, Option B — discovered path via `/run/media`.** Omit `path` (and add
+no fstab entry). udisks mounts at `/run/media/<ssh-user>/<label>`, which nbkp
+discovers at runtime:
 
 ```yaml
 # config.yaml
@@ -338,9 +435,11 @@ volumes:
         passphrase-id: seagate8tb
 ```
 
-This requires zero system configuration beyond the polkit rule. Sentinels, rsync paths, and snapshot directories all use the discovered mountpoint for the run.
+This requires zero system configuration beyond the polkit rule. Sentinels, rsync
+paths, and snapshot directories all use the discovered mountpoint for the run.
 
-**Unencrypted volume.** Provide only the filesystem UUID. With an fstab entry, set `path`; without one, omit it for the discovered mountpoint:
+**Unencrypted volume.** Provide only the filesystem UUID. With an fstab entry,
+set `path`; without one, omit it for the discovered mountpoint:
 
 ```yaml
 volumes:
@@ -351,7 +450,7 @@ volumes:
       device-uuid: 8a3b2c1d-1111-2222-3333-444455556666
 ```
 
-```
+```text
 # /etc/fstab (only needed when `path` is set)
 UUID=8a3b2c1d-1111-2222-3333-444455556666  /mnt/usb-plain  ext4  noauto,nofail  0 0
 ```
@@ -375,8 +474,31 @@ nbkp preflight troubleshoot
 
 ### Consequences and gotchas
 
-- **`/run/media` is per-user.** udisks mounts unconfigured volumes under `/run/media/<user>/<label>`, where `<user>` is the account running the operation — for remote volumes, the **SSH user** on the target host. The same drive plugged into a different account lands at a different path.
-- **`/run/media` is tmpfs-backed and label-derived.** The mount point is created on demand and named after the filesystem **label**; an unlabeled filesystem falls back to its UUID. If you need a stable, predictable path, use the fstab (Option A) model instead.
-- **Wrong-drive safety comes from UUID + sentinel.** udisks mounts strictly by UUID, so the correct physical device is always selected regardless of where it lands. The `.nbkp-vol` sentinel then confirms the mounted content is the expected volume. There is no longer any reliance on a pre-configured systemd mount unit for this guarantee.
-- **The passphrase is piped without a trailing newline.** udisks `--key-file /dev/stdin` reads the raw bytes as the key, so nbkp delivers the passphrase exactly (no newline). This is transparent to the credential provider configuration.
-- **All passphrases are read up front, even for absent drives.** Before probing any device, nbkp retrieves every passphrase-id in the config — including drives that are not plugged in and volumes `--name` excluded. OS secret stores re-prompt for approval after the accessing binary changes (a Python or nbkp upgrade), so reading them all means one interactive run grants approval for every drive and later runs stay unattended. Failures are warnings, not errors: a missing passphrase only breaks a drive that is actually present, and the mount step reports that. The `prompt` provider is not prefetched. Run `nbkp credentials keyring-status` to trigger the approval pass on demand, without mounting anything. See [Why prefetch every passphrase](./internals.md#why-prefetch-every-passphrase).
+- **`/run/media` is per-user.** udisks mounts unconfigured volumes under
+  `/run/media/<user>/<label>`, where `<user>` is the account running the
+  operation — for remote volumes, the **SSH user** on the target host. The same
+  drive plugged into a different account lands at a different path.
+- **`/run/media` is tmpfs-backed and label-derived.** The mount point is created
+  on demand and named after the filesystem **label**; an unlabeled filesystem
+  falls back to its UUID. If you need a stable, predictable path, use the fstab
+  (Option A) model instead.
+- **Wrong-drive safety comes from UUID + sentinel.** udisks mounts strictly by
+  UUID, so the correct physical device is always selected regardless of where it
+  lands. The `.nbkp-vol` sentinel then confirms the mounted content is the
+  expected volume. There is no longer any reliance on a pre-configured systemd
+  mount unit for this guarantee.
+- **The passphrase is piped without a trailing newline.** udisks
+  `--key-file /dev/stdin` reads the raw bytes as the key, so nbkp delivers the
+  passphrase exactly (no newline). This is transparent to the credential
+  provider configuration.
+- **All passphrases are read up front, even for absent drives.** Before probing
+  any device, nbkp retrieves every passphrase-id in the config — including
+  drives that are not plugged in and volumes `--name` excluded. OS secret stores
+  re-prompt for approval after the accessing binary changes (a Python or nbkp
+  upgrade), so reading them all means one interactive run grants approval for
+  every drive and later runs stay unattended. Failures are warnings, not errors:
+  a missing passphrase only breaks a drive that is actually present, and the
+  mount step reports that. The `prompt` provider is not prefetched. Run
+  `nbkp credentials keyring-status` to trigger the approval pass on demand,
+  without mounting anything. See
+  [Why prefetch every passphrase](./internals.md#why-prefetch-every-passphrase).

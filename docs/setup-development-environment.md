@@ -6,13 +6,15 @@
 
 2. Install Docker Desktop (or Docker Engine on Linux)
 
-3. Configure github CLI with `gh auth login` and ensure you have access to the repository (optional, for convenience).
+3. Configure github CLI with `gh auth login` and ensure you have access to the
+   repository (optional, for convenience).
 
 4. Install the graphviz dependency
    - macOS: `brew install graphviz`
    - Linux: `apt install graphviz`
 
 5. Activate the virtual environment:
+
    ```bash
    # Install all the tools defined in mise.toml (python, uv, ...). This does not create
    # .venv: the first `mise run <task>` does (see below), and mise activates it from then on.
@@ -26,19 +28,24 @@
    mise run reinstall
    ```
 
-   Add and remove dependencies with `uv add` / `uv remove`, which update `pyproject.toml`
-   and `uv.lock` together. (`mise deps add` does not support uv.)
+   Add and remove dependencies with `uv add` / `uv remove`, which update
+   `pyproject.toml` and `uv.lock` together. (`mise deps add` does not support
+   uv.)
 
-   Run tools with `uv run --no-sync <tool>` rather than bare, or `mise exec -- <tool>` from a
-   shell where mise is not activated — see [Building and Testing](building-and-testing.md) for
-   why that matters when more than one project's virtualenv is in play.
+   Run tools with `uv run --no-sync <tool>` rather than bare, or
+   `mise exec -- <tool>` from a shell where mise is not activated — see
+   [Building and Testing](building-and-testing.md) for why that matters when
+   more than one project's virtualenv is in play.
 
-6. Upgrade rsync if you're on macOS, as the default version is too old and lacks some features nbkp relies on:
+6. Upgrade rsync if you're on macOS, as the default version is too old and lacks
+   some features nbkp relies on:
+
    ```bash
    brew install rsync
    ```
 
 7. (Optional) If you want to record the demo, install pv:
+
    ```bash
    brew install pv
    ```
@@ -48,16 +55,18 @@
 The repository is already configured; what is left is per-machine installation.
 
 - **Extensions** — accept the prompt on first open; the set is committed in
-  [.vscode/extensions.json](../.vscode/extensions.json). [What each one is for, and which
-  committed settings silently stop working without it][vscode].
-- **Interpreter** — nothing to select. `.vscode/settings.json` and `[tool.pyright]` already
-  point at `.venv`. [What those settings do, and why a reload is needed after changing
-  them][pyright].
-- **Plugins** — `.claude/settings.json` enables `iglootools` for the shared guidelines and
-  `pyright-lsp` so Claude resolves symbols instead of grepping for them. A plugin the project
-  enables still installs once per machine: [install per project][install], then
-  [update one][update-one] or [all at once][update-all] on each release. For `pyright-lsp` see
-  [Claude Code setup][claude-code] — it needs the virtualenv step above done first.
+  [.vscode/extensions.json](../.vscode/extensions.json).
+  [What each one is for, and which committed settings silently stop working without it][vscode].
+- **Interpreter** — nothing to select. `.vscode/settings.json` and
+  `[tool.pyright]` already point at `.venv`.
+  [What those settings do, and why a reload is needed after changing them][pyright].
+- **Plugins** — `.claude/settings.json` enables `iglootools` for the shared
+  guidelines and `pyright-lsp` so Claude resolves symbols instead of grepping
+  for them. A plugin the project enables still installs once per machine:
+  [install per project][install], then [update one][update-one] or
+  [all at once][update-all] on each release. For `pyright-lsp` see
+  [Claude Code setup][claude-code] — it needs the virtualenv step above done
+  first.
 
 [vscode]: https://github.com/iglootools/common/blob/main/guidelines/project-setup/ide.md#vscode
 [pyright]: https://github.com/iglootools/common/blob/main/guidelines/project-setup/ide.md#pyright-environment-resolution

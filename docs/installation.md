@@ -11,30 +11,35 @@
 
 ## System Requirements
 
-- Python 3.15 (installed for you by `uv tool install` if your system lacks it — see below)
-- rsync 3.0+ (macOS ships with openrsync which is not supported — install GNU rsync via `brew install rsync`)
+- Python 3.15 (installed for you by `uv tool install` if your system lacks it —
+  see below)
+- rsync 3.0+ (macOS ships with openrsync which is not supported — install GNU
+  rsync via `brew install rsync`)
 - `btrfs-progs` (only if using btrfs snapshots)
 
-nbkp targets the latest stable Python rather than the one your distribution ships. See the
+nbkp targets the latest stable Python rather than the one your distribution
+ships. See the
 [Python Version Policy](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#python-version-policy)
 for the rationale.
 
 ## Install with uv
 
-[uv](https://docs.astral.sh/uv/) installs CLI tools in isolated environments, keeping your system Python clean:
+[uv](https://docs.astral.sh/uv/) installs CLI tools in isolated environments,
+keeping your system Python clean:
 
 ```bash
 uv tool install nbkp
 ```
 
-If no Python 3.15 is installed, uv downloads a managed one and builds nbkp's environment on
-it, leaving your system Python untouched.
+If no Python 3.15 is installed, uv downloads a managed one and builds nbkp's
+environment on it, leaving your system Python untouched.
 
-[pipx](https://pipx.pypa.io/) does the same thing and is a fine alternative if you already
-have it — substitute `pipx install` for `uv tool install` throughout this page, and
-`pipx upgrade` for `uv tool upgrade`. The one command that differs in name is noted below.
-Unlike uv, pipx does not fetch an interpreter for you by default: point it at a Python 3.15
-you installed yourself, or the install fails on the version requirement:
+[pipx](https://pipx.pypa.io/) does the same thing and is a fine alternative if
+you already have it — substitute `pipx install` for `uv tool install` throughout
+this page, and `pipx upgrade` for `uv tool upgrade`. The one command that
+differs in name is noted below. Unlike uv, pipx does not fetch an interpreter
+for you by default: point it at a Python 3.15 you installed yourself, or the
+install fails on the version requirement:
 
 ```bash
 pipx install --python python3.15 nbkp
@@ -61,16 +66,18 @@ Install with all extras:
 uv tool install 'nbkp[keyring,docker]'
 ```
 
-Add a package to an existing install without reinstalling (`pipx inject nbkp keyring`):
+Add a package to an existing install without reinstalling
+(`pipx inject nbkp keyring`):
 
 ```bash
 uv tool install nbkp --with keyring
 ```
 
-Note that the `keyring` extra gives *nbkp* access to the Keychain / SecretService, but
-does not put the `keyring` **command** on your PATH — only the entry points of the package
-you installed are exposed, not its dependencies'. Storing a passphrase with
-`keyring set nbkp <id>` needs the CLI as well, as its own app:
+Note that the `keyring` extra gives *nbkp* access to the Keychain /
+SecretService, but does not put the `keyring` **command** on your PATH — only
+the entry points of the package you installed are exposed, not its
+dependencies'. Storing a passphrase with `keyring set nbkp <id>` needs the CLI
+as well, as its own app:
 
 ```bash
 uv tool install keyring
@@ -89,8 +96,8 @@ uv tool upgrade nbkp
 
 nbkp supports tab completion for Bash, Zsh, Fish, and PowerShell.
 
-Install completion for the shell you run it from, which nbkp detects (run it from each shell
-you want completion in):
+Install completion for the shell you run it from, which nbkp detects (run it
+from each shell you want completion in):
 
 ```bash
 nbkp --install-completion
@@ -102,4 +109,5 @@ To preview the completion script without installing it:
 nbkp --show-completion
 ```
 
-Restart your shell (or source the relevant config file) for completions to take effect.
+Restart your shell (or source the relevant config file) for completions to take
+effect.

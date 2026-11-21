@@ -1,45 +1,62 @@
 # Releasing and Publishing
 
-The build uses the [uv-dynamic-versioning](https://github.com/ninoseki/uv-dynamic-versioning)
-hatchling plugin to automatically set the version based on git tags. It is powered by the same
-[dunamai](https://github.com/mtkennerly/dunamai) library as the `poetry-dynamic-versioning` plugin
-used before the move to uv, so version strings are unchanged: a tagged commit builds as `0.2.1`, and
-an untagged one as `0.2.1.post5.dev0+4de5b15`.
+The build uses the
+[uv-dynamic-versioning](https://github.com/ninoseki/uv-dynamic-versioning)
+hatchling plugin to automatically set the version based on git tags. It is
+powered by the same [dunamai](https://github.com/mtkennerly/dunamai) library as
+the `poetry-dynamic-versioning` plugin used before the move to uv, so version
+strings are unchanged: a tagged commit builds as `0.2.1`, and an untagged one as
+`0.2.1.post5.dev0+4de5b15`.
 
-Because the version comes from git rather than from `pyproject.toml`, a build that cannot see the
-repository history has no version to report. `[tool.uv-dynamic-versioning] fallback-version` makes
-that case produce `0.0.0` instead of failing — which is required, since Renovate builds the project
-without git context — so a build from a shallow checkout or an exported archive succeeds while
-producing a mis-versioned artifact. `mise run build-verify` (wired into `ci-build`) inspects the built
-wheel's metadata and fails on `0.0.0`, because PyPI does not allow a version to be re-uploaded once
-taken. That is also why the publish workflows check out with `fetch-depth: 0` and `fetch-tags: true`.
+Because the version comes from git rather than from `pyproject.toml`, a build
+that cannot see the repository history has no version to report.
+`[tool.uv-dynamic-versioning] fallback-version` makes that case produce `0.0.0`
+instead of failing — which is required, since Renovate builds the project
+without git context — so a build from a shallow checkout or an exported archive
+succeeds while producing a mis-versioned artifact. `mise run build-verify`
+(wired into `ci-build`) inspects the built wheel's metadata and fails on
+`0.0.0`, because PyPI does not allow a version to be re-uploaded once taken.
+That is also why the publish workflows check out with `fetch-depth: 0` and
+`fetch-tags: true`.
 
-The following GitHub workflows are set up to automate the release and publishing process:
-1. The `release` workflow takes care of pushing a tag based on conventional commits and creating the Github release.
-   - This workflow uses the [github-tag](https://github.com/marketplace/actions/github-tag) action
+The following GitHub workflows are set up to automate the release and publishing
+process:
+
+1. The `release` workflow takes care of pushing a tag based on conventional
+   commits and creating the Github release.
+   - This workflow uses the
+     [github-tag](https://github.com/marketplace/actions/github-tag) action
    - It is triggered manually using `gh workflow run release.yml`
 2. The `publish` workflow takes care of publishing the package to PyPI
-   - This workflow uses the [pypa/gh-action-pypi-publish](https://github.com/pypa/gh-action-pypi-publish) action
-   - It is triggered automatically when the `release` workflow completes, but it can
-     also be re-triggered manually if needed using `gh workflow run publish.yml --ref <tag>`
-3. The `demo` workflow records the demo for the new tag and keeps it as a workflow artifact.
-   Publishing it to asciinema.org is a manual step on major releases: see the
-   [Release Process](#release-process).
+   - This workflow uses the
+     [pypa/gh-action-pypi-publish](https://github.com/pypa/gh-action-pypi-publish)
+     action
+   - It is triggered automatically when the `release` workflow completes, but it
+     can also be re-triggered manually if needed using
+     `gh workflow run publish.yml --ref <tag>`
+3. The `demo` workflow records the demo for the new tag and keeps it as a
+   workflow artifact. Publishing it to asciinema.org is a manual step on major
+   releases: see the [Release Process](#release-process).
 
 ## Release Process
-- Trigger the `release` workflow: `gh workflow run release.yml`. The `release`, `publish` and
-  `demo` workflows take care of the rest — tag, GitHub release, PyPI upload, demo recording;
-  see the workflows above for what each one does.
+
+- Trigger the `release` workflow: `gh workflow run release.yml`. The `release`,
+  `publish` and `demo` workflows take care of the rest — tag, GitHub release,
+  PyPI upload, demo recording; see the workflows above for what each one does.
 - When this is a major release, manually:
-    - include additional demo scenarios in `demo/demo.sh` (before triggering the release, so
-      the recording shows them)
-    - once the release's `demo` workflow has succeeded, run `mise run demo-upload-latest`: it
-      downloads the cast CI recorded, uploads it to asciinema.org, and repoints and commits
-      the README's asciicast embed (CI cannot reach asciinema.org itself)
+  - include additional demo scenarios in `demo/demo.sh` (before triggering the
+    release, so the recording shows them)
+  - once the release's `demo` workflow has succeeded, run
+    `mise run demo-upload-latest`: it downloads the cast CI recorded, uploads it
+    to asciinema.org, and repoints and commits the README's asciicast embed (CI
+    cannot reach asciinema.org itself)
 
 ## PyPI Config
 
-[PyPI](https://pypi.org/) and [Test PyPI](https://test.pypi.org/) have been configured to allow the `nbkp` project to be published using OpenID Connect (OIDC) authentication. Each index trusts a different workflow file — the one that uploads to it:
+[PyPI](https://pypi.org/) and [Test PyPI](https://test.pypi.org/) have been
+configured to allow the `nbkp` project to be published using OpenID Connect
+(OIDC) authentication. Each index trusts a different workflow file — the one
+that uploads to it:
 
 | Field | PyPI | Test PyPI |
 |---|---|---|
@@ -48,6 +65,11 @@ The following GitHub workflows are set up to automate the release and publishing
 | Workflow name | `publish.yml` | `publish-test.yml` |
 | Environment name | `pypi` | `testpypi` |
 
-A mismatch in any field is only reported when an upload is attempted, as an `invalid-publisher` error. Rehearse the publish path on Test PyPI with `gh workflow run publish-test.yml --ref main` after changing the workflows, the build backend, or these settings.
+A mismatch in any field is only reported when an upload is attempted, as an
+`invalid-publisher` error. Rehearse the publish path on Test PyPI with
+`gh workflow run publish-test.yml --ref main` after changing the workflows, the
+build backend, or these settings.
 
-Check [Publishing to PyPI with a Trusted Publisher](https://docs.pypi.org/trusted-publishers/) for more details on OIDC authentication.
+Check
+[Publishing to PyPI with a Trusted Publisher](https://docs.pypi.org/trusted-publishers/)
+for more details on OIDC authentication.

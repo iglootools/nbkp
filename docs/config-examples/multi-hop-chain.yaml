@@ -96,7 +96,7 @@ syncs:
 
   # Step 2: local → remote (through bastion), bare
   step-2:
-    source: ep-stage-local        # reads from latest/ snapshot
+    source: ep-stage-local # reads from latest/ snapshot
     destination: ep-remote-bare
     rsync-options:
       compress: true
@@ -108,7 +108,7 @@ syncs:
 
   # Step 4: remote → remote (same server), bare on btrfs
   step-4:
-    source: ep-remote-btrfs       # reads from latest/ snapshot
+    source: ep-remote-btrfs # reads from latest/ snapshot
     destination: ep-remote-btrfs-bare
 
   # Step 5: remote → remote (same server), hard-link snapshots
@@ -118,7 +118,7 @@ syncs:
 
   # Step 6: remote → local, bare
   step-6:
-    source: ep-remote-hl          # reads from latest/ snapshot
+    source: ep-remote-hl # reads from latest/ snapshot
     destination: ep-dst
     rsync-options:
       compress: true

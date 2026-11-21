@@ -11,7 +11,7 @@ on:
     branches:
       - main
     paths:
-      - '**/uv.lock'
+      - "**/uv.lock"
   schedule:
     - cron: "30 18 * * 1"
   workflow_dispatch:

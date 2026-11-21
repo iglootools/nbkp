@@ -3,7 +3,7 @@ name: renovate-mise-lock
 on:
   push:
     branches:
-      - 'renovate/**'
+      - "renovate/**"
 
 # Avoid overlapping runs racing to push to the same branch. Stays here rather than in the shared
 # workflow because concurrency governs the run these triggers create.
