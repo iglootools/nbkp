@@ -2396,6 +2396,7 @@ class TestCheckRemoteVolumeSpaces:
         run = healthy_host()
         status = check_volume(vol, resolved, run=run)
         assert status.active is True
+        assert status.diagnostics is not None
         assert status.diagnostics.capabilities is not None
         assert run.commands_starting_with("test", "-f") == [
             ["test", "-f", "/my backup/.nbkp-vol"]

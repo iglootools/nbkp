@@ -42,6 +42,7 @@ from nbkp.disks.lifecycle import (
     umount_volumes,
 )
 from nbkp.disks.observation import build_mount_observations
+from nbkp.disks.output import mount_failure_detail
 from nbkp.disks.udisks import (
     build_lock_command,
     build_unlock_command,
@@ -269,12 +270,10 @@ class TestFindMountpoint:
         luks_uuid: str,
     ) -> None:
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
+        mount_config = remote_encrypted_volume.mount
+        assert mount_config is not None
         # While locked there is no cleartext device, so target resolves to None.
-        device = resolve_target_device(
-            remote_encrypted_volume,
-            remote_encrypted_volume.mount,
-            resolved,  # type: ignore[arg-type]
-        )
+        device = resolve_target_device(remote_encrypted_volume, mount_config, resolved)
         assert (
             device is None
             or find_mountpoint(remote_encrypted_volume, device, resolved) is None
@@ -327,7 +326,7 @@ class TestMountVolumeIdempotency:
             resolved,
             lambda _: LUKS_PASSPHRASE,
         )
-        assert result1.success, result1.detail
+        assert result1.success, mount_failure_detail(result1)
         try:
             result2 = mount_volume(
                 remote_encrypted_volume,
@@ -335,7 +334,7 @@ class TestMountVolumeIdempotency:
                 resolved,
                 lambda _: LUKS_PASSPHRASE,
             )
-            assert result2.success, result2.detail
+            assert result2.success, mount_failure_detail(result2)
         finally:
             _cleanup(remote_encrypted_volume, resolved, luks_uuid)
 

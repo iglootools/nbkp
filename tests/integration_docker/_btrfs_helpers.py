@@ -135,16 +135,17 @@ def run_test_dry_run_preserves_all(env: BtrfsEnv) -> None:
     env.create_staging()
     env.seed_staging("test data")
 
-    for i in range(3):
-        now = datetime(2024, 1, 1 + i, tzinfo=UTC)
-        path = create_snapshot(
+    paths = [
+        create_snapshot(
             env.sync,
             env.config,
-            now=now,
+            now=datetime(2024, 1, 1 + i, tzinfo=UTC),
             platform=sys.platform,
             resolved_endpoints=env.resolved,
         )
-    snapshot = Snapshot.from_path(path)
+        for i in range(3)
+    ]
+    snapshot = Snapshot.from_path(paths[-1])
     update_latest_symlink(
         env.sync, env.config, snapshot, resolved_endpoints=env.resolved
     )

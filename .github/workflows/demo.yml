@@ -41,7 +41,10 @@ jobs:
     # The job lives in iglootools/common (guidelines/project-setup/shared-workflows.md): it
     # records the demo with `mise run ci-demo-record` and keeps the cast as the
     # demo-recording artifact. Publishing from CI stays off, because GitHub-hosted runners
-    # cannot reach asciinema.org; publish with `mise run demo-upload-latest`.
+    # cannot reach asciinema.org; publish with `mise run demo-upload-latest`. It also
+    # holds the guards publish.yml has: a workflow_run is skipped unless the release run
+    # succeeded and its commit carries a v* tag, so a failed or dry-run release records
+    # nothing.
     uses: iglootools/common/.github/workflows/reusable-demo.yml@e1f2a8b7d4cfe38267f95cceebb41646f658b421 # v1.28.0
     with:
       # Pinned here, matching the version mise.lock was generated with; the custom manager in

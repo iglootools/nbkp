@@ -10,6 +10,8 @@ produces a valid ``Config`` and that the full ``output`` command renders every
 section without raising.
 """
 
+from collections.abc import Callable
+
 import pytest
 from typer.testing import CliRunner
 
@@ -25,7 +27,7 @@ from tests.fakes import FakeCommandRunner, fake_runtime
     [config_show_config, check_config, troubleshoot_config],
     ids=lambda fn: fn.__name__,
 )
-def test_demo_config_builder_validates(builder) -> None:
+def test_demo_config_builder_validates(builder: Callable[[], Config]) -> None:
     """Each demo config builder must produce a config that passes validation.
 
     Constructing a ``Config`` runs the cross-reference validators (unique

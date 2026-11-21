@@ -12,6 +12,7 @@ import os
 import platform
 import shutil
 import subprocess
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -72,7 +73,7 @@ def _make_btrfs_config(
 
 
 @pytest.fixture()
-def btrfs_dst(tmp_path: Path) -> Path:
+def btrfs_dst(tmp_path: Path) -> Generator[Path]:
     """Create a destination directory on the btrfs mount.
 
     Uses a subdirectory of BTRFS_MOUNT to ensure btrfs ops work.

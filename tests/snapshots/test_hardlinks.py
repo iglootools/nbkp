@@ -106,7 +106,7 @@ class TestCreateSnapshotDir:
             ["mkdir", "-p", "/backup/snapshots"],
             ["mkdir", path],
         ]
-        assert {c.volume for c in runner.calls} == {config.volumes["dst"]}
+        assert {c.volume.slug for c in runner.calls} == {"dst"}
 
     def test_failure_raises(self) -> None:
         sync, config = _local_config()

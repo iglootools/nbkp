@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 import docker as dockerlib
+import docker.errors as docker_errors
 import pytest
 
 from nbkp.config import (
@@ -139,7 +140,7 @@ def _docker_available() -> bool:
         client = dockerlib.from_env()
         client.ping()
         return True
-    except dockerlib.errors.DockerException:
+    except docker_errors.DockerException:
         return False
 
 
@@ -197,7 +198,7 @@ def _docker_network() -> Generator[Any]:
 
     try:
         network.remove()
-    except dockerlib.errors.APIError:
+    except docker_errors.APIError:
         pass
 
 
