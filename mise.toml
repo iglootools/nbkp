@@ -259,8 +259,15 @@ run = [
   { task = "demo-upload" },
 ]
 
+[tasks.demo-preflight]
+description = "Check that the demo's dependencies (Docker, pv, asciinema, nbkp) are installed"
+run = "demo/preflight.sh"
+
 [tasks.demo-record]
 description = "Record the demo to demo/demo.cast"
+# The recording reports only that the session failed; a missing tool shows up only in
+# the cast, so check first.
+depends = ["demo-preflight"]
 run = "uv run --no-sync iglootools demo record"
 
 [tasks.demo-upload]
