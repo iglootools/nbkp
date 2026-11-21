@@ -48,7 +48,7 @@ jobs:
     uses: iglootools/common/.github/workflows/reusable-demo.yml@e1f2a8b7d4cfe38267f95cceebb41646f658b421 # v1.28.0
     with:
       # Pinned here, matching the version mise.lock was generated with; the custom manager in
-      # renovate.json keeps it current.
+      # the shared iglootools/common renovate/base preset keeps it current.
       # renovate: datasource=github-releases depName=jdx/mise
       version: 2026.11.3
       # pv: demo-magic's simulated typing.

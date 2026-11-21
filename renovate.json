@@ -9,19 +9,6 @@
         "github>iglootools/common//renovate/python#v1.28.0"
     ],
     "separateMajorMinor": false,
-    "customManagers": [
-        {
-            "customType": "regex",
-            "description": "Dockerfile pins that duplicate a mise.toml [tools] pin carry a `# renovate: datasource=… depName=…` comment naming the datasource the mise manager uses for that tool, and this manager reads them, so the Dockerfile copy updates in step with mise.toml (see the packageRule that turns off the dockerfile manager for the same images). The version is the first `X.Y.Z` after the image name's colon, so a suffix such as `-slim` is kept. python/cpython tags carry a leading `v`, which extractVersionTemplate drops, as the mise manager does.",
-            "managerFilePatterns": [
-                "/(^|/)Dockerfile[^/]*$/"
-            ],
-            "matchStrings": [
-                "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n(?:FROM|COPY --from=)\\s*[^:\\s]+:(?<currentValue>\\d+\\.\\d+\\.\\d+)"
-            ],
-            "extractVersionTemplate": "^v?(?<version>.+)$"
-        }
-    ],
     "packageRules": [
         {
             "groupName": "all dependencies",
@@ -32,17 +19,6 @@
                 "at any time"
             ],
             "automerge": false
-        },
-        {
-            "description": "The btrfs test image pins Python and uv twice: in mise.toml and in Dockerfile.btrfs-local-test. Its dockerfile-manager deps are turned off here because the custom manager below tracks those two pins through the same datasources as the mise manager (github-tags python/cpython, github-releases astral-sh/uv). Tracked as image tags instead, the uv tag has no release timestamp, so minimumReleaseAgeBehaviour: timestamp-optional let it through at once while mise.toml's uv waited 14 days, and the two pins drifted apart. With one datasource each pin's two copies become eligible on the same day and land in the same update. The Debian base image of the other Dockerfile is pinned once and stays with the dockerfile manager.",
-            "matchManagers": [
-                "dockerfile"
-            ],
-            "matchDepNames": [
-                "python",
-                "ghcr.io/astral-sh/uv"
-            ],
-            "enabled": false
         }
     ],
     "dependencyDashboard": true
