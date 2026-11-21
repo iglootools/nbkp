@@ -1,4 +1,8 @@
 {
+  "excludes": [
+    // Dependency locks mise writes for npm tools (npm:renovate), in its own style.
+    ".mise/locks/"
+  ],
   "plugins": [
     "npm:@dprint/json@0.26.0",
     "npm:@dprint/toml@0.10.0",

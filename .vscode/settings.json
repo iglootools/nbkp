@@ -64,5 +64,8 @@
   "[yaml]": { "editor.defaultFormatter": "dprint.dprint" },
   "[dockerfile]": { "editor.defaultFormatter": "dprint.dprint" },
   "[markdown]": { "editor.defaultFormatter": "rvben.rumdl" },
-  "[python]": { "editor.defaultFormatter": "charliermarsh.ruff" }
+  "[python]": { "editor.defaultFormatter": "charliermarsh.ruff" },
+  "debug.javascript.defaultRuntimeExecutable": {
+    "pwa-node": "${workspaceFolder}/.vscode/mise-tools/node"
+  }
 }
