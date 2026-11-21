@@ -19,7 +19,7 @@
 
 nbkp targets the latest stable Python rather than the one your distribution
 ships. See the
-[Python Version Policy](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#python-version-policy)
+[Target only the latest stable Python](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#target-only-the-latest-stable-python)
 for the rationale.
 
 ## Install with uv

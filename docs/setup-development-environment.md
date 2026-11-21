@@ -69,7 +69,7 @@ The repository is already configured; what is left is per-machine installation.
   first.
 
 [vscode]: https://github.com/iglootools/common/blob/main/guidelines/project-setup/ide.md#vscode
-[pyright]: https://github.com/iglootools/common/blob/main/guidelines/project-setup/ide.md#pyright-environment-resolution
+[pyright]: https://github.com/iglootools/common/blob/main/guidelines/project-setup/ide.md#pin-the-venv-for-pyright-in-toolpyright
 [claude-code]: https://github.com/iglootools/common/blob/main/guidelines/project-setup/claude-code.md
 [install]: https://github.com/iglootools/common/blob/main/docs/installation.md#install-it-per-project-not-per-user
 [update-one]: https://github.com/iglootools/common/blob/main/docs/installation.md#updating-one-project

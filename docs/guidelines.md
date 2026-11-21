@@ -96,7 +96,7 @@ For general coding, Python, and tooling guidelines, see the
   - No real rsync/ssh/btrfs calls in unit tests: they run against fakes, and the
     Docker-enabled integration tests cover the real interactions.
   - **Test without patching**, as the common
-    [Mocks](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#mocks)
+    [Mocks](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#testability)
     and
     [Tests](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#tests)
     rules describe. nbkp's building blocks for it:
