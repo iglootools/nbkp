@@ -27,10 +27,9 @@ from nbkp.snapshots.models import (
 )
 from tests.fakes import FakeCommandRunner, completed
 from tests.fixtures.preflight import (
-    dst_ep_status,
-    localhost_ssh_status,
+    local_vol_statuses,
     src_ep_status,
-    vol_status,
+    sync_status,
 )
 from tests.nas import nas_config
 
@@ -45,22 +44,8 @@ def _listing(*names: str) -> subprocess.CompletedProcess[str]:
 
 
 def active_statuses(config: Config) -> dict[str, SyncStatus]:
-    local_ssh = localhost_ssh_status()
-    vols = {name: vol_status(name, config, local_ssh) for name in config.volumes}
-    return {
-        name: SyncStatus(
-            slug=name,
-            config=sync,
-            source_endpoint_status=src_ep_status(
-                sync.source, vols[config.sync_endpoints[sync.source].volume]
-            ),
-            destination_endpoint_status=dst_ep_status(
-                sync.destination, vols[config.sync_endpoints[sync.destination].volume]
-            ),
-            errors=[],
-        )
-        for name, sync in config.syncs.items()
-    }
+    vols = local_vol_statuses(config)
+    return {name: sync_status(config, vols, name) for name in config.syncs}
 
 
 def infra_error_statuses(config: Config) -> dict[str, SyncStatus]:

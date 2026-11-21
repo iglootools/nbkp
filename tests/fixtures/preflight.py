@@ -1,6 +1,7 @@
 """Shared test fixtures: preflight status builders and sample configs."""
 
 from nbkp.config import (
+    BtrfsSnapshotConfig,
     Config,
     LocalVolume,
     RemoteVolume,
@@ -229,6 +230,70 @@ def preflight(
         source_endpoint_statuses=src_ep_statuses,
         destination_endpoint_statuses=dst_ep_statuses,
         sync_statuses=sync_statuses,
+    )
+
+
+def sync_status(
+    config: Config,
+    vol_statuses: dict[str, VolumeStatus],
+    sync_slug: str,
+    *,
+    src_ep_errors: list[SourceEndpointErrorKind] | None = None,
+    dst_ep_errors: list[DestinationEndpointErrorKind] | None = None,
+    sync_errors: list[SyncErrorKind] | None = None,
+    destination_latest_snapshot: Snapshot | None = None,
+) -> SyncStatus:
+    """*sync_slug*'s status over *vol_statuses*, its endpoints built by
+    :func:`src_ep_status` and :func:`dst_ep_status` with the given errors
+    added."""
+    sync = config.syncs[sync_slug]
+    src = src_ep_status(
+        sync.source, vol_statuses[config.sync_endpoints[sync.source].volume]
+    )
+    dst = dst_ep_status(
+        sync.destination,
+        vol_statuses[config.sync_endpoints[sync.destination].volume],
+    )
+    return SyncStatus(
+        slug=sync_slug,
+        config=sync,
+        source_endpoint_status=src.model_copy(
+            update={"errors": [*src.errors, *(src_ep_errors or [])]}
+        ),
+        destination_endpoint_status=dst.model_copy(
+            update={"errors": [*dst.errors, *(dst_ep_errors or [])]}
+        ),
+        errors=sync_errors or [],
+        destination_latest_snapshot=destination_latest_snapshot,
+    )
+
+
+def local_vol_statuses(config: Config) -> dict[str, VolumeStatus]:
+    """Every volume of *config*, active on ``localhost``."""
+    ssh = localhost_ssh_status()
+    return {name: vol_status(name, config, ssh) for name in config.volumes}
+
+
+def btrfs_config() -> Config:
+    """``btrfs-sync``: local ``src`` to local ``dst``, which takes btrfs
+    snapshots."""
+    src = LocalVolume(slug="src", path="/mnt/src")
+    dst = LocalVolume(slug="dst", path="/mnt/dst")
+    ep_src = SyncEndpoint(slug="ep-src", volume="src")
+    ep_dst = SyncEndpoint(
+        slug="ep-dst",
+        volume="dst",
+        btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+    )
+    sync = SyncConfig(
+        slug="btrfs-sync",
+        source="ep-src",
+        destination="ep-dst",
+    )
+    return Config(
+        volumes={"src": src, "dst": dst},
+        sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
+        syncs={"btrfs-sync": sync},
     )
 
 
