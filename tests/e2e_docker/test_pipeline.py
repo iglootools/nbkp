@@ -39,7 +39,7 @@ from nbkp.disks.context import managed_mount
 from nbkp.policy import Strictness
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.testkit.docker import REMOTE_BACKUP_PATH
-from nbkp.run.pipeline import check_and_run
+from nbkp.run.pipeline import check_and_run, fatal_sync_errors
 from nbkp.sync import RunOptions
 from nbkp.sync.results import SyncFailureKind, SyncOutcome
 from nbkp.sync.testkit.seed import build_chain_config
@@ -142,6 +142,11 @@ class TestChainSync:
                     resolved_endpoints=resolved,
                 ),
                 mount_observations=mount_observations,
+            )
+            # Only the expected-inactive skips are tolerated: any other
+            # preflight error aborts the run before a sync starts.
+            assert not pipeline.has_preflight_errors, fatal_sync_errors(
+                pipeline.preflight.sync_statuses, Strictness.IGNORE_INACTIVE
             )
 
             results_by_slug = {r.sync_slug: r for r in pipeline.results}
