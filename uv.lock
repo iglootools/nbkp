@@ -327,8 +327,8 @@ wheels = [
 
 [[package]]
 name = "iglootools"
-version = "1.29.0"
-source = { git = "https://github.com/iglootools/common?rev=v1.29.0#3f0f2af9ba49ddbad6da52788dc0a9ff17b343e5" }
+version = "1.30.0"
+source = { git = "https://github.com/iglootools/common?rev=v1.30.0#4de2f56f5a4e0a1625d072f8656b75428a84688a" }
 dependencies = [
     { name = "mermaid-ascii-diagrams" },
     { name = "pydeps" },
@@ -579,7 +579,7 @@ provides-extras = ["docker", "keyring"]
 [package.metadata.requires-dev]
 dev = [
     { name = "deadcode", specifier = ">=2.7.0,<3.0" },
-    { name = "iglootools", git = "https://github.com/iglootools/common?rev=v1.29.0" },
+    { name = "iglootools", git = "https://github.com/iglootools/common?rev=v1.30.0" },
     { name = "import-linter", specifier = ">=2.15,<3.0" },
     { name = "keyring", specifier = ">=25.0,<26.0" },
     { name = "pyright", specifier = ">=1.1,<2.0" },
