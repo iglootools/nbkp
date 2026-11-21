@@ -215,7 +215,7 @@ Checks include:
 - **Rsync availability** — rsync must be installed and version 3.0+ (macOS `openrsync` is rejected). Host tool errors apply to localhost too: a remote host's errors cascade to its volumes (`SSH_ENDPOINT_INACTIVE`), while the orchestrator's own errors — localhost is always "reachable" — mark every sync with a side on it `ENDPOINT_HOST_ERRORS`, so a missing local rsync fails preflight instead of failing every sync at run time.
 - **Btrfs readiness** — Correct filesystem type, subvolume existence, mount options, required directories
 - **Hard-link readiness** — Filesystem hard-link support, required directory structure
-- **`latest` symlink validity** — Must exist and point to `/dev/null` or to an existing snapshot of the endpoint, written `snapshots/<timestamp>` (see [The `latest` Symlink](#the-latest-symlink))
+- **`latest` symlink validity** — Must exist and point to `/dev/null` or to an existing snapshot of the endpoint, written `snapshots/<timestamp>` (see [The `latest` Symlink](#the-latest-symlink)). On a btrfs destination, a snapshot `latest` points to that is no longer read-only (left by a delete that failed after clearing the flag, or changed by hand) is a **warning** (`LATEST_SNAPSHOT_WRITABLE`): `check` and `troubleshoot` show it, with the command that sets the flag again, but the sync still runs.
 - **Mount infrastructure** — For volumes with mount config: `udisksctl` availability and a running `udisksd` daemon, `lsblk` and `findmnt`, the `50-nbkp.rules` polkit rule, and (for volumes with a declared `path`) an `/etc/fstab` entry whose mountpoint is that path *and* whose device spec designates the volume's device (`UUID=<device-uuid>` / `/dev/disk/by-uuid/…`, or for encrypted volumes the cleartext mapper — never the LUKS container itself). Specs that cannot be resolved without extra probes (`LABEL=`, `/dev/sdX`, an encrypted volume's inner-filesystem `UUID=`) are accepted. A drive that is plugged in but whose passphrase cannot be retrieved is `PASSPHRASE_NOT_AVAILABLE`, an infrastructure error. For btrfs volumes, a missing `udisks2-btrfs` module is a **warning**: it is shown by `check` and `troubleshoot` but never makes anything inactive or fatal.
 - **Strictness mode** — See below
 
@@ -228,7 +228,7 @@ Pre-flight checks distinguish between two categories of errors:
 - **Inactive errors** — Missing sentinel files (`.nbkp-vol`, `.nbkp-src`, `.nbkp-dst`), unavailable volumes, disabled syncs, and pending snapshots in dry-run mode. These represent expected situations where a sync is not ready to run (e.g. a removable drive is not plugged in, a remote host is unreachable, or a volume is not mounted at the expected path).
 - **Infrastructure errors** — Everything else: missing rsync or other tools (on localhost as well as remote hosts), SSH authentication / host key failures, wrong or undeterminable filesystem type, broken symlinks, a missing polkit rule or fstab entry, an unavailable passphrase for a plugged-in drive, an unreachable udisks daemon, etc. These indicate real problems that need fixing.
 
-A sync with `enabled: false` is never fatal, under any strictness: the runner never attempts it, its result is `skipped` with `failure: disabled`, and the syncs it cancels are never fatal either. Warnings (currently only the missing udisks btrfs module) are outside this classification altogether.
+A sync with `enabled: false` is never fatal, under any strictness: the runner never attempts it, its result is `skipped` with `failure: disabled`, and the syncs it cancels are never fatal either. Warnings (the missing udisks btrfs module, a writable `latest` snapshot) are outside this classification altogether.
 
 The `--strictness` flag controls how preflight errors affect the run and its exit code:
 
@@ -332,7 +332,7 @@ The `sh` command compiles a config into a self-contained bash script that reprod
 
 It follows the same run structure as `nbkp run`:
 
-1. **Preflight, for every sync, before any sync starts.** Each sync has a generated `<sync>_preflight` function that classifies it as *active*, *inactive* (missing `.nbkp-vol` / `.nbkp-src` / `.nbkp-dst`, unreachable host — checked first), *broken* (rsync missing or older than 3.0 / openrsync, missing snapshot tools, wrong filesystem, missing `user_subvol_rm_allowed`, staging not a subvolume, FAT/exFAT under hard links, missing or invalid `latest`, unwritable directories), or *pending* (a dry-run whose source snapshot only an upstream sync would create).
+1. **Preflight, for every sync, before any sync starts.** Each sync has a generated `<sync>_preflight` function that classifies it as *active*, *inactive* (missing `.nbkp-vol` / `.nbkp-src` / `.nbkp-dst`, unreachable host — checked first), *broken* (rsync missing or older than 3.0 / openrsync, missing snapshot tools, wrong filesystem, missing `user_subvol_rm_allowed`, staging not a subvolume, FAT/exFAT under hard links, missing or invalid `latest`, unwritable directories), or *pending* (a dry-run whose source snapshot only an upstream sync would create). Like `nbkp preflight`, it also logs a warning, without failing, when the snapshot a btrfs destination's `latest` points to is not read-only.
 2. **Strictness.** `--strictness` (default `ignore-inactive`) decides whether those results abort the run, with the same matrix as [Strictness](#strictness).
 3. **Syncs in dependency order.** Inactive syncs are skipped without counting as failures; syncs downstream of a failed, skipped or disabled sync are cancelled, as in `run`, and a cancellation caused by a disabled sync never counts as a failure. Each sync function runs in a `set -e` subshell, so any failing step — not only rsync — stops that sync before `latest` moves. (Calling a bash function in a `||` or `if` context silently disables `set -e` inside it, which is why the script never does.)
 
@@ -375,6 +375,7 @@ This section documents every external command nbkp invokes on local or remote ho
 | `rsync --version` | Rsync version check (>= 3.0, reject macOS openrsync) |
 | `stat -f -c %T <path>` | Detect btrfs filesystem type |
 | `stat -c %i <path>` | Check btrfs subvolume (inode == 256) |
+| `btrfs property get <snapshot> ro` | Check that the snapshot `latest` points to is still read-only |
 | `findmnt -T <path> -n -o OPTIONS` | Check btrfs mount options (e.g. `user_subvol_rm_allowed`) |
 | `readlink <path>` | Read `latest` symlink target |
 | `udisksctl status` | Check the udisks daemon is reachable |

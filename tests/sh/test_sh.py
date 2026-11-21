@@ -1481,6 +1481,42 @@ class TestBtrfsPruneFailedDelete:
         ]
 
 
+class TestBtrfsLatestReadOnlyWarning:
+    """Preflight warns, without failing, when ``latest``'s snapshot is writable."""
+
+    def _run(self, *, latest: str, ro: str) -> list[str]:
+        script = generate_script(_btrfs_config(), _OPTIONS, now=_NOW)
+        [line] = [
+            line.strip() for line in script.splitlines() if "not read-only" in line
+        ]
+        stub = dedent("""\
+            btrfs() { echo "$RO"; }
+            nbkp_log() { echo "$*"; }
+            """)
+        result = subprocess.run(
+            ["bash", "-c", f"{stub}set -e\n{line}\necho passed\n"],
+            env={"RO": ro, "NBKP_DST_LATEST": latest},
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.splitlines()
+
+    def test_writable_snapshot_is_a_warning(self) -> None:
+        warning = "WARN: the snapshot latest points to is not read-only"
+        assert self._run(latest="snapshots/S", ro="ro=false") == [
+            f"{warning} (/mnt/dst/snapshots/S)",
+            "passed",
+        ]
+
+    @pytest.mark.parametrize(
+        ("latest", "ro"),
+        [("snapshots/S", "ro=true"), ("snapshots/S", ""), ("/dev/null", "ro=false")],
+    )
+    def test_no_warning_otherwise(self, latest: str, ro: str) -> None:
+        assert self._run(latest=latest, ro=ro) == ["passed"]
+
+
 class TestRemoteCommandQuoting:
     """Remote paths are quoted for the remote shell; only $NBKP_TS/$snap expand."""
 

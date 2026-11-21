@@ -74,6 +74,20 @@ INACTIVE_DST_ENDPOINT_ERRORS: frozenset[DestinationEndpointErrorKind] = frozense
 )
 
 
+class DestinationEndpointWarningKind(enum.StrEnum):
+    """Endpoint findings worth fixing that do not make the endpoint inactive.
+
+    Kept apart from ``DestinationEndpointErrorKind`` so they never reach
+    ``active`` or the strictness policy: ``check`` and ``troubleshoot``
+    display them, and the sync still runs.
+    """
+
+    # The snapshot ``latest`` points to has lost its btrfs read-only flag
+    # (a delete that failed after clearing it, or a manual change), so it
+    # can be modified.
+    LATEST_SNAPSHOT_WRITABLE = "latest-snapshot-writable"
+
+
 class LatestSymlinkState(BaseModel):
     """Captures the raw readlink result and whether the resolved
     target directory exists, without interpreting what constitutes
@@ -153,6 +167,10 @@ class DestinationEndpointDiagnostics(BaseModel):
     btrfs: BtrfsStagingSubvolumeDiagnostics | None = None
     snapshot_dirs: SnapshotDirsDiagnostics | None = None
     latest: LatestSymlinkState | None = None
+    latest_snapshot_readonly: bool | None = None
+    """Whether the btrfs snapshot ``latest`` points to is read-only.  ``None``
+    when not probed (no btrfs snapshots, no valid ``latest``, no ``btrfs``
+    tool, not on btrfs) or when the probe failed."""
 
 
 class SourceEndpointStatus(BaseModel):
@@ -197,6 +215,8 @@ class DestinationEndpointStatus(BaseModel):
     diagnostics: DestinationEndpointDiagnostics | None
     """``None`` when the volume is inactive."""
     errors: list[DestinationEndpointErrorKind]
+    warnings: list[DestinationEndpointWarningKind] = []
+    """Non-fatal findings; never affect ``active``."""
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -231,6 +251,13 @@ class DestinationEndpointStatus(BaseModel):
                     endpoint,
                 )
                 if diagnostics is not None
+                else []
+            ),
+            warnings=(
+                [DestinationEndpointWarningKind.LATEST_SNAPSHOT_WRITABLE]
+                if volume_status.active
+                and diagnostics is not None
+                and diagnostics.latest_snapshot_readonly is False
                 else []
             ),
         )

@@ -17,7 +17,9 @@ from nbkp.config import (
 )
 from nbkp.disks import MountToolCapabilities
 from nbkp.preflight.output import (
+    RemediationFacts,
     TroubleshootContext,
+    TroubleshootIssue,
     collect_issues,
     format_human_troubleshoot,
     troubleshoot_json,
@@ -33,6 +35,7 @@ from nbkp.preflight.status.volume import (
     VolumeErrorKind,
     VolumeStatus,
 )
+from nbkp.preflight.testkit import troubleshoot_config, troubleshoot_data
 
 
 def _render(
@@ -171,6 +174,30 @@ class TestWarnings:
         assert issue["kind"] == "warning"
         assert issue["code"] == "UDISKS_BTRFS_MODULE_MISSING"
         assert "udisks2-btrfs" in issue["remediation"]
+
+
+class TestLatestSnapshotWritable:
+    def _issues_and_ctx(self) -> tuple[list[TroubleshootIssue], TroubleshootContext]:
+        config = troubleshoot_config()
+        sync = troubleshoot_data(config).sync_statuses["latest-snapshot-writable"]
+        return (
+            collect_issues({}, {}, {sync.slug: sync}),
+            TroubleshootContext(config=config, facts=RemediationFacts()),
+        )
+
+    def test_fix_makes_the_snapshot_read_only_again(self) -> None:
+        issues, ctx = self._issues_and_ctx()
+        data = troubleshoot_json(issues, ctx, has_fatal_errors=False)
+        [issue] = data["issues"]  # type: ignore[misc]
+        assert (issue["kind"], issue["code"], issue["severity"]) == (
+            "warning",
+            "LATEST_SNAPSHOT_WRITABLE",
+            "warning",
+        )
+        assert (
+            "btrfs property set /mnt/usb-16/snapshots/2024-01-01T00:00:00.000Z ro true"
+            in issue["remediation"]
+        )
 
 
 class TestAuthFailedFix:

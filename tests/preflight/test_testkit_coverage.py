@@ -16,6 +16,7 @@ import pytest
 
 from nbkp.preflight import (
     DestinationEndpointErrorKind,
+    DestinationEndpointWarningKind,
     SourceEndpointErrorKind,
     SshEndpointErrorKind,
     SyncErrorKind,
@@ -73,6 +74,7 @@ _REPORTED_ERRORS = pytest.mark.parametrize(
             VolumeErrorKind,
             SourceEndpointErrorKind,
             DestinationEndpointErrorKind,
+            DestinationEndpointWarningKind,
             SyncErrorKind,
         )
         for member in enum_type

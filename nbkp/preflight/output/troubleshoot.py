@@ -23,10 +23,11 @@ from ...remote.dispatch import VolumeCommandRunner, run_on_volume
 from ...remote.endpoints import ResolvedEndpoints
 from ...remote.errors import ssh_connection_errors
 from ..messages import format_problem
-from ..severity import PreflightErrorKind, severity_for_error
+from ..severity import PreflightErrorKind, PreflightWarningKind, severity_for_error
 from ..status.endpoint import (
     DestinationEndpointErrorKind,
     DestinationEndpointStatus,
+    DestinationEndpointWarningKind,
     SourceEndpointErrorKind,
     SourceEndpointStatus,
 )
@@ -40,6 +41,7 @@ from .remediation import (
     RemediationFacts,
     TroubleshootContext,
     format_destination_endpoint_error_fix,
+    format_destination_endpoint_warning_fix,
     format_line,
     format_source_endpoint_error_fix,
     format_ssh_endpoint_error_fix,
@@ -88,9 +90,12 @@ class TroubleshootIssue:
     layer: Layer
     subject: str
     """Slug of the SSH endpoint / volume / sync endpoint / sync."""
-    error: PreflightErrorKind | SshEndpointWarningKind
+    error: PreflightErrorKind | PreflightWarningKind
     severity: Severity
     ssh_status: SshEndpointStatus | None = None
+    dst_status: DestinationEndpointStatus | None = None
+    """The destination endpoint a warning is about, whose diagnostics its
+    fix names."""
     vol_status: VolumeStatus | None = None
     sync: SyncConfig | None = None
     """A sync using the endpoint (endpoint layers) or the sync itself."""
@@ -170,6 +175,30 @@ def _endpoint_issues(
     ]
 
 
+def _destination_warning_issues(
+    sync_statuses: dict[str, SyncStatus],
+) -> list[TroubleshootIssue]:
+    """Warnings of destination endpoints, reported once per endpoint."""
+    candidates = [
+        ((ss.destination_endpoint_status.endpoint_slug, warning), ss)
+        for ss in sync_statuses.values()
+        for warning in ss.destination_endpoint_status.warnings
+    ]
+    first = {key: ss for key, ss in reversed(candidates)}
+    return [
+        TroubleshootIssue(
+            Layer.DESTINATION_ENDPOINT,
+            slug,
+            warning,
+            Severity.WARNING,
+            sync=first[key].config,
+            dst_status=first[key].destination_endpoint_status,
+        )
+        for key in dict.fromkeys(key for key, _ in candidates)
+        for slug, warning in [key]
+    ]
+
+
 def _sync_issues(
     sync_statuses: dict[str, SyncStatus], strictness: Strictness
 ) -> list[TroubleshootIssue]:
@@ -210,6 +239,7 @@ def collect_issues(
             ],
             strictness,
         ),
+        *_destination_warning_issues(sync_statuses),
         *_sync_issues(sync_statuses, strictness),
     ]
 
@@ -325,6 +355,12 @@ def format_issue_fix(issue: TroubleshootIssue, ctx: TroubleshootContext) -> Line
         ):
             return format_ssh_endpoint_warning_fix(st, warning)
         case TroubleshootIssue(
+            error=DestinationEndpointWarningKind() as warning,
+            sync=SyncConfig() as sync,
+            dst_status=DestinationEndpointStatus() as st,
+        ):
+            return format_destination_endpoint_warning_fix(warning, sync, st, ctx)
+        case TroubleshootIssue(
             error=SshEndpointErrorKind() as error, ssh_status=SshEndpointStatus() as st
         ):
             return format_ssh_endpoint_error_fix(st, error, ctx)
@@ -351,7 +387,7 @@ def format_issue_fix(issue: TroubleshootIssue, ctx: TroubleshootContext) -> Line
 def _issue_label(issue: TroubleshootIssue) -> tuple[str, str]:
     return (
         (f"warning: {format_problem(issue.error)}", "yellow")
-        if isinstance(issue.error, SshEndpointWarningKind)
+        if isinstance(issue.error, PreflightWarningKind)
         else (format_problem(issue.error), "")
     )
 
@@ -453,7 +489,7 @@ def troubleshoot_json(
                 "subject": issue.subject,
                 "kind": (
                     "warning"
-                    if isinstance(issue.error, SshEndpointWarningKind)
+                    if isinstance(issue.error, PreflightWarningKind)
                     else "error"
                 ),
                 "code": issue.error.name,

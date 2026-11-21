@@ -141,6 +141,13 @@ def _format_destination_diagnostics(ss: SyncStatus, strictness: Strictness) -> T
                 else []
             ),
             *_destination_snapshot_items(diag, strictness),
+            *(
+                Text(
+                    f"{severity_symbol(Severity.WARNING)}{format_problem(w)}",
+                    style=severity_style(Severity.WARNING),
+                )
+                for w in dst_ep.warnings
+            ),
         ]
     )
 
@@ -415,9 +422,13 @@ def _troubleshoot_hint(
     sync_statuses: dict[str, SyncStatus],
     invocation: Invocation,
 ) -> list[RenderableType]:
-    needs_attention = any(not s.active for s in sync_statuses.values()) or any(
-        (set(s.errors) - INACTIVE_SSH_ERRORS) or s.warnings
-        for s in ssh_statuses.values()
+    needs_attention = (
+        any(not s.active for s in sync_statuses.values())
+        or any(
+            (set(s.errors) - INACTIVE_SSH_ERRORS) or s.warnings
+            for s in ssh_statuses.values()
+        )
+        or any(s.destination_endpoint_status.warnings for s in sync_statuses.values())
     )
     return (
         [
