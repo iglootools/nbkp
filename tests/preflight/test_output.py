@@ -13,7 +13,6 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
-from nbkp.policy import Strictness
 from nbkp.preflight import (
     DestinationEndpointDiagnostics,
     DestinationEndpointErrorKind,
@@ -26,11 +25,7 @@ from nbkp.preflight import (
     VolumeStatus,
 )
 from nbkp.preflight.output import format_human_troubleshoot
-from nbkp.preflight.output.check import (
-    _format_destination_diagnostics,
-    _format_latest,
-    format_human_check,
-)
+from nbkp.preflight.output.check import format_human_check
 from nbkp.preflight.status.endpoint import LatestSymlinkState
 from nbkp.preflight.testkit import troubleshoot_config, troubleshoot_data
 from tests.fixtures.preflight import (
@@ -313,28 +308,73 @@ class TestTroubleshootLocationExcluded:
         assert "--exclude-location" in output
 
 
+def _check_output(sync: SyncStatus, config: Config) -> str:
+    """``preflight check``'s human output for *sync*, on one line per row."""
+    buf = StringIO()
+    console = Console(file=buf, highlight=False, markup=False, width=400)
+    console.print(
+        format_human_check(
+            {},
+            {},
+            {sync.slug: sync},
+            config,
+            wrap_in_panel=False,
+        )
+    )
+    return buf.getvalue()
+
+
+def _with_destination_diagnostics(
+    sync: SyncStatus, **diagnostics: object
+) -> SyncStatus:
+    dst = sync.destination_endpoint_status
+    return sync.model_copy(
+        update={
+            "destination_endpoint_status": dst.model_copy(
+                update={
+                    "diagnostics": DestinationEndpointDiagnostics.model_validate(
+                        {"endpoint_slug": dst.endpoint_slug, **diagnostics}
+                    )
+                }
+            )
+        }
+    )
+
+
 class TestCheckLatestColumn:
+    def _output(self, latest: LatestSymlinkState) -> str:
+        config = btrfs_config()
+        sync = sync_status(config, local_vol_statuses(config), "btrfs-sync")
+        return _check_output(
+            _with_destination_diagnostics(
+                sync, sentinel_exists=True, endpoint_writable=True, latest=latest
+            ),
+            config,
+        )
+
     def test_invalid_target_shown_as_error(self) -> None:
-        text = _format_latest(
+        output = self._output(
             LatestSymlinkState(
                 exists=True, raw_target="snapshots/foo", target_valid=False
             )
         )
-        assert str(text) == "✗latest → snapshots/foo"
+        assert "✗latest → snapshots/foo" in output
 
     def test_valid_target_shown_as_ok(self) -> None:
         target = "snapshots/2026-03-06T14:30:00.000Z"
-        text = _format_latest(
+        output = self._output(
             LatestSymlinkState(exists=True, raw_target=target, target_valid=True)
         )
-        assert str(text) == f"✓latest → {target}"
+        assert f"✓latest → {target}" in output
 
     def test_devnull_shown_as_ok(self) -> None:
-        text = _format_latest(LatestSymlinkState(exists=True, raw_target="/dev/null"))
-        assert str(text) == "✓latest → /dev/null"
+        output = self._output(LatestSymlinkState(exists=True, raw_target="/dev/null"))
+        assert "✓latest → /dev/null" in output
 
     def test_missing_shown_as_error(self) -> None:
-        assert str(_format_latest(LatestSymlinkState(exists=False))) == "✗latest"
+        output = self._output(LatestSymlinkState(exists=False))
+        assert "✗latest" in output
+        assert "✓latest" not in output
 
 
 class TestCheckLatestSnapshotWritable:
@@ -351,33 +391,19 @@ class TestCheckLatestSnapshotWritable:
 
 
 class TestCheckDestinationColumn:
-    def _status(self, *, sentinel_exists: bool) -> SyncStatus:
+    def _output(self, *, sentinel_exists: bool) -> str:
         config = btrfs_config()
-        status = sync_status(config, local_vol_statuses(config), "btrfs-sync")
-        dst = status.destination_endpoint_status
-        return status.model_copy(
-            update={
-                "destination_endpoint_status": dst.model_copy(
-                    update={
-                        "diagnostics": DestinationEndpointDiagnostics(
-                            endpoint_slug=dst.endpoint_slug,
-                            sentinel_exists=sentinel_exists,
-                            endpoint_writable=False,
-                        )
-                    }
-                )
-            }
+        sync = sync_status(config, local_vol_statuses(config), "btrfs-sync")
+        return _check_output(
+            _with_destination_diagnostics(
+                sync, sentinel_exists=sentinel_exists, endpoint_writable=False
+            ),
+            config,
         )
 
     def test_writable_hidden_when_sentinel_missing(self) -> None:
         """The status layer suppresses NOT_WRITABLE then: no ✗writable."""
-        text = _format_destination_diagnostics(
-            self._status(sentinel_exists=False), Strictness.IGNORE_INACTIVE
-        )
-        assert "writable" not in str(text)
+        assert "writable" not in self._output(sentinel_exists=False)
 
     def test_writable_shown_when_sentinel_present(self) -> None:
-        text = _format_destination_diagnostics(
-            self._status(sentinel_exists=True), Strictness.IGNORE_INACTIVE
-        )
-        assert "✗writable" in str(text)
+        assert "✗writable" in self._output(sentinel_exists=True)

@@ -196,7 +196,7 @@ def run_local_process(
     if on_output is None:
         return subprocess.run(cmd, capture_output=True, text=True, check=False)
     else:
-        return _run_streaming(cmd, on_output)
+        return run_streaming(cmd, on_output)
 
 
 # os.read returns as soon as any output is available, so progress updates still
@@ -213,9 +213,10 @@ _STREAM_CHUNK_SIZE = 64 * 1024
 _STREAM_TAIL_SIZE = 64 * 1024
 
 
-def _run_streaming(
+def run_streaming(
     cmd: list[str],
     on_output: Callable[[str], None],
+    *,
     chunk_size: int = _STREAM_CHUNK_SIZE,
     tail_size: int = _STREAM_TAIL_SIZE,
 ) -> subprocess.CompletedProcess[str]:

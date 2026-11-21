@@ -23,8 +23,8 @@ from nbkp.config import (
 from nbkp.disks import MountToolCapabilities
 from nbkp.policy import Strictness
 from nbkp.preflight.endpoint_checks import (
-    _read_latest_state,
     observe_destination_endpoint,
+    observe_source_endpoint,
 )
 from nbkp.preflight.ssh_checks import observe_standalone_endpoint
 from nbkp.preflight.status.endpoint import (
@@ -32,6 +32,7 @@ from nbkp.preflight.status.endpoint import (
     DestinationEndpointErrorKind,
     DestinationEndpointStatus,
     DestinationEndpointWarningKind,
+    LatestSymlinkState,
     SourceEndpointDiagnostics,
     SourceEndpointStatus,
 )
@@ -294,10 +295,18 @@ class TestObservationExceptions:
 
 
 class TestLatestSymlinkTarget:
-    def _state(self, tmp_path: Path, target: str):  # type: ignore[no-untyped-def]
+    def _state(self, tmp_path: Path, target: str) -> LatestSymlinkState:
+        """The ``latest`` a source endpoint at *tmp_path* reports."""
         vol = LocalVolume(slug="v", path=str(tmp_path))
+        endpoint = SyncEndpoint(
+            slug="ep",
+            volume="v",
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+        )
         (tmp_path / "latest").symlink_to(target)
-        return _read_latest_state(vol, str(tmp_path), {}, run=FakeCommandRunner())
+        diag = observe_source_endpoint(endpoint, vol, {}, run=FakeCommandRunner())
+        assert diag.latest is not None
+        return diag.latest
 
     def test_non_snapshot_directory_is_invalid(self, tmp_path: Path) -> None:
         """Regression: ``latest -> snapshots/foo`` used to raise ValueError."""
