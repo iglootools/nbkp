@@ -1,9 +1,9 @@
-name: test
+name: preflight
 
 on:
   # Manually trigger the workflow using
-  # gh workflow run test.yml # --ref <branch>
-  # gh run list --workflow test.yml # --branch <branch>
+  # gh workflow run preflight.yml # --ref <branch>
+  # gh run list --workflow preflight.yml # --branch <branch>
   workflow_dispatch:
   repository_dispatch:
   pull_request:

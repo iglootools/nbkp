@@ -6,7 +6,7 @@
 ![Download Stats](https://img.shields.io/pypi/dm/nbkp)
 ![GitHub Stars](https://img.shields.io/github/stars/iglootools/nbkp)
 ![License](https://img.shields.io/github/license/iglootools/nbkp)
-![CI Status](https://github.com/iglootools/nbkp/actions/workflows/test.yml/badge.svg?branch=main)
+![CI Status](https://github.com/iglootools/nbkp/actions/workflows/preflight.yml/badge.svg?branch=main)
 
 A Linux-and-macOS-compatible rsync-based backup tool for nomadic setups where
 sources and destinations aren't always available — laptops on the move,
