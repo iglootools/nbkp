@@ -14,7 +14,7 @@ Run automated tests and checks (no external dependencies):
 
 ```bash
 # mise tasks
-mise run check              # Run all checks: format-check + lint + lint-shell + type-check + lock-check + lock-check-uv + toc-check + clidocs-check + configdocs-check + depgraph-check + boundaries-check + dead-code-check
+mise run check              # Run all checks: format-check + lint + lint-shell + lint-markdown + type-check + lock-check + lock-check-uv + toc-check + clidocs-check + configdocs-check + depgraph-check + boundaries-check + dead-code-check
 mise run check-all          # Run all checks: regular checks + all tests
 
 mise run test-all           # All tests
@@ -29,10 +29,11 @@ mise run test-integration-docker  # Docker integration tests (tests/integration_
 mise run test-integration-docker-btrfs   # Local btrfs tests inside Docker (privileged)
 mise run test-integration-fs     # Filesystem integration tests
 
-mise run format             # ruff format (rewrites files)
-mise run format-check       # ruff format --check (verifies only; what check runs)
+mise run format             # ruff, dprint and rumdl format every file (rewrites files)
+mise run format-check       # ruff format --check + dprint check (verifies only; what check runs)
 mise run lint               # ruff check
 mise run lint-shell         # shellcheck on the tracked shell scripts
+mise run lint-markdown      # rumdl check (also what rumdl fmt would change)
 mise run type-check         # pyright
 mise run lock-check         # check mise.lock is up to date
 mise run lock-check-uv      # check uv.lock is consistent with pyproject.toml
