@@ -4,6 +4,9 @@ uv = "0.13.7"
 github-cli = "2.103.3"
 "aqua:asciinema/asciinema" = "3.2.1"
 "aqua:asciinema/agg" = "1.9.0"
+# demo-magic's simulated typing (demo-record). conda-forge is the only mise source with
+# current pv binaries, and it has none for Windows, where the demo does not run anyway.
+"conda:pv" = { version = "1.12.7", os = ["linux", "macos"] }
 shellcheck = "0.11.0"
 
 [env]

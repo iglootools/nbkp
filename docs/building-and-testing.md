@@ -135,7 +135,7 @@ In addition to the automated tests, the `nbkp demo seed --docker` command can be
 1. a similar environment as the one used in the Docker-enabled tests
 2. a set of pre-configured test data.
 
-`mise run demo-record` is a great way to iterate quickly on test scenarios: it runs the `demo seed` command as well as a few test scenarios exercising different features of the tool.
+`mise run demo-record` is a great way to iterate quickly on test scenarios: it runs the `demo seed` command as well as a few test scenarios exercising different features of the tool. It needs Docker, plus `pv` for the simulated typing; `mise run install` provides `pv`, from conda-forge, on Linux and macOS.
 
 The demo uses the same real udisks path as production: the Docker harness runs `dbus-daemon`, `polkitd`, and `udisksd`, installs the generated `50-nbkp.rules` polkit rule, and connects as the non-root backup user, so the demo exercises the actual `udisksctl unlock/mount/unmount/lock` lifecycle and the polkit grant — not a bypassed simplified setup.
 
