@@ -6,7 +6,7 @@ can be eyeballed; an enum member missing from it is a fix nobody ever looks
 at.  The fix printers end in a catch-all ``case _`` that returns no lines or
 a generic pointer, so a new member without a ``case`` of its own would
 otherwise render an empty or unhelpful fix.  This guards the checklist item
-in docs/guidelines.md.
+in nbkp/preflight/guidelines.md.
 """
 
 import enum

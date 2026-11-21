@@ -217,7 +217,7 @@ infrastructure they require:
 
 1. **Unit tests** (`tests/`, `tests/sync/`, `tests/remote/`, `tests/disks/`, …)
    — Run every external call (rsync, SSH, host commands) against fakes rather
-   than patches; see [Testing](guidelines.md#coding) in the project guidelines.
+   than patches; see [Testing](guidelines/testing.md) in the project guidelines.
    Test logic and command building. No external dependencies.
 
 2. **E2E (Docker)** (`tests/e2e_docker/`) — Full pipeline tests against Docker

@@ -33,51 +33,7 @@ For general coding, Python, and tooling guidelines, see the
     each field's description and the config reference. Retire this exception in
     a major release that accepts durations with a unit (`10s`), keeping a bare
     number as seconds.
-  - *Exception — options whose help is per command:* `--strictness` in `run`,
-    `preflight check` and `preflight troubleshoot`, and the long-only
-    `--dry-run` of `disks mount` and `disks umount` and the one of `demo seed`,
-    are written inline in each command rather than as a shared `<NAME>_OPTION`
-    constant. The flag is shared but what it does is not: each help text says
-    what that command does at each strictness level, or what a dry run skips
-    there, and one constant would carry one wording for all of them. The other
-    shared options live in `cliwiring/options.py`, and those shared within one
-    sub-app in its `cli/options.py`. Retire this exception for a flag once its
-    commands behave alike, or if Typer lets a shared option take per-command
-    help.
-- **CLI**
-  - Use `typer` for CLI implementation (argument parsing, formatting, etc.)
-  - Provide both human-readable and JSON output formats for all commands, with
-    human-readable as the default.
-    - *Exception — `sh`:* its output is a bash script, not a report, so there is
-      no JSON mode, and `-o` means `--output-file` (where to write the script)
-      rather than the `--output` format selector other commands use. Renaming
-      the flag would break existing invocations and cron entries for no gain in
-      function. Retire this exception if `sh` gains a structured report worth
-      emitting (e.g. the list of generated syncs), at which point it takes
-      `--output human|json` and the script path moves to a long-only
-      `--output-file` in a major release.
-    - *Exception — `-n` in `disks`:* in `run` and `snapshots prune` (and
-      `demo seed`) `-n` is `--dry-run`, but in `disks mount|umount|status` it is
-      `--name`, so their `--dry-run` is long-only. `-n` meant `--name` there
-      first; swapping it would turn existing `disks mount -n <volume>`
-      invocations into silent dry runs. Retire this exception in the next major
-      release by moving `--name` to a long-only flag (or `-V`) and giving `-n`
-      to `--dry-run` everywhere.
-    - *Exception — `demo`:* `demo seed` and `demo output` take neither
-      `--output` nor `--config`. They are manual-QA helpers, not backup
-      commands: `seed` *writes* a config (to `<base-dir>/config.yaml`) rather
-      than reading one, and `output` renders the human formatters with built-in
-      fake data, so human output is its whole purpose and there is no config for
-      it to load. `seed`'s report is a summary for the person running the demo,
-      and the one scripted caller, `demo/demo.sh`, already knows where the
-      config lands because it passes `--base-dir`. Retire this exception, by
-      giving `seed` `--output json` (the base directory, config path and
-      container ports), once a script or workflow has to read what `seed`
-      created; drop it if `demo` leaves the user-facing `nbkp` app for a
-      development-only entry point, where these rules no longer apply.
-  - Provide ability to pass a config file to all commands (except `demo`, see
-    its exception above)
-  - Provide a dry-run parameter for all data-mutating or long-running operations
+- **CLI**: see [docs/guidelines/cli.md](guidelines/cli.md).
 - **Rich output**
   - Rich parses `[...]` in a plain `str` as a style tag and drops it. Never
     interpolate text nbkp did not author — an exception message, a command's
@@ -93,24 +49,12 @@ For general coding, Python, and tooling guidelines, see the
 - **Config**
   - Perform `~` expansion for all file paths in the config
 - **Testing**
-  - No real rsync/ssh/btrfs calls in unit tests: they run against fakes, and the
-    Docker-enabled integration tests cover the real interactions.
   - **Test without patching**, as the common
     [Mocks](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#testability)
     and
     [Tests](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#tests)
-    rules describe. nbkp's building blocks for it:
-    - **Deciders**: the preflight `*Status.from_diagnostics` interpretation, and
-      the CLI deciders over `PreflightResult` / `SyncResult` / mount results.
-    - **Fakes**, in `tests/fakes.py`: `FakeCommandRunner` for any
-      `run: VolumeCommandRunner`, `FakeRsync`, and for CLI tests a fake
-      `Runtime` passed as `CliRunner.invoke(..., obj=fake_runtime(...))`.
-      Smaller seams follow the same shape: `environ`, `which`, `run_process`,
-      `has_docker`. `completed()` builds a real `CompletedProcess`.
-    - **Real local resources**: a Python child process, a file under `tmp_path`,
-      the in-process SSH server of `tests/remote/test_host_key_verification.py`.
-    - **`chdir`** (`tests/conftest.py`): changes the working directory until the
-      end of the test, so relative config paths are predictable.
+    rules describe. nbkp's building blocks for it are in
+    [docs/guidelines/testing.md](guidelines/testing.md).
   - **Enforced** by pytest and ruff. `tests/conftest.py` replaces the
     `monkeypatch` fixture with one that fails the test, and ruff's `TID251` bans
     `unittest.mock` and `pytest.MonkeyPatch`, the only ways left to patch. Each
@@ -157,29 +101,9 @@ In general, keep the documentation in sync with the codebase. In particular:
 
 ### Domain Logic
 
-- When making changes to the config schema/models or preflight checks, make sure
-  to update **all** of the following:
-  - **Troubleshoot output** (`nbkp/preflight/output/remediation.py`): add a
-    `case` in the per-layer fix printer for every new `SshEndpointErrorKind`,
-    `SshEndpointWarningKind`, `VolumeErrorKind`, `SourceEndpointErrorKind`,
-    `DestinationEndpointErrorKind`, `DestinationEndpointWarningKind` or
-    `SyncErrorKind`, with actionable remediation text. Fix printers are pure
-    rendering: a fix that needs a probed or generated fact (like the discovered
-    cleartext mapper or the polkit rule) gets it from `RemediationFacts`,
-    gathered up front in `nbkp/preflight/output/troubleshoot.py`.
-  - **Seed / demo test data** (`nbkp/preflight/testkit/troubleshoot/`): add a
-    `Scenario` that exercises the new error — its config entries and its
-    statuses — to the module for its area, and list it in `SCENARIOS`, so
-    `nbkp-demo output` renders it. `tests/preflight/test_testkit_coverage.py`
-    fails until every member is covered.
-  - **Inactive-errors sets** (`INACTIVE_*_ERRORS`, defined next to each error
-    enum in `nbkp/preflight/status/` — `ssh.py`, `volume.py`, `endpoint.py`,
-    `sync.py`): if the new error should be treated as a non-fatal skip (like
-    missing sentinels), add it to its layer's set.
-  - The demo CLI (`nbkp/demo/`) to generate new test data that reflects the
-    changes.
-  - The `cli` CLI app to support the new functionality, and update the
-    formatting logic in `output.py` if necessary.
+- When making changes to the config schema/models or preflight checks, follow
+  the checklist in
+  [nbkp/preflight/guidelines.md](../nbkp/preflight/guidelines.md).
 - When making changes to the `run` command and/or `sync` logic, make sure to
   update **all** of the following:
   - Either mirror the behavior in the `sh` command, or explicitly add comments
@@ -190,5 +114,4 @@ In general, keep the documentation in sync with the codebase. In particular:
 
 ### Tests
 
-- Ensure that all new functionality is covered by tests according to the
-  [testing strategy](building-and-testing.md#testing-strategy).
+- See [docs/guidelines/testing.md](guidelines/testing.md).
