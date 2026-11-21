@@ -107,7 +107,7 @@ cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true 
 #     | uv pip compile - --no-annotate --no-header --quiet
 # [build-system].requires is left unpinned so the two can never contradict each other.
 build-constraint-dependencies = [
-  "dunamai==1.26.3",
+  "dunamai==1.26.4",
   "hatchling==1.33.0",
   "jinja2==3.1.6",
   "markupsafe==3.0.4",
