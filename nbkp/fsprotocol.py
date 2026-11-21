@@ -131,3 +131,32 @@ class Snapshot(BaseModel):
             msg = f"not a target under {SNAPSHOTS_DIR}/: {target!r}"
             raise ValueError(msg)
         return snapshot
+
+
+def _parse_snapshot_name(name: str) -> Snapshot | None:
+    try:
+        return Snapshot.from_name(name)
+    except ValueError:
+        return None
+
+
+def parse_snapshot_listing(stdout: str) -> list[Snapshot]:
+    """Parse ``ls`` output into snapshots sorted oldest-first.
+
+    Entries that are not snapshot timestamps (``lost+found`` at the root
+    of a dedicated filesystem, ``.DS_Store``, a stray file an operator
+    left behind) are ignored rather than treated as errors: nbkp never
+    created them, so it neither counts nor prunes them.  The generated
+    shell script filters the same way (``nbkp_snapshot_names``).
+
+    Sorted by time, not by name: a destination written from both Linux
+    (``10:15``) and macOS (``10-30``) holds both name forms, and ``:``
+    sorts after ``-``, so name order would put the older one last.
+    """
+    snapshots = [
+        snapshot
+        for line in stdout.splitlines()
+        for snapshot in [_parse_snapshot_name(line.strip())]
+        if snapshot is not None
+    ]
+    return sorted(snapshots, key=lambda s: (s.timestamp, s.name))
