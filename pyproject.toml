@@ -159,7 +159,7 @@ pythonVersion = "3.15"
 venvPath = "."
 venv = ".venv"
 
-# Module layering rules, enforced by `mise run boundaries-check` (part of `check`).
+# Module layering rules, enforced by `mise run lint-boundaries` (part of `lint`).
 # The rationale for each rule is in docs/architecture.md#layering.
 [tool.importlinter]
 root_package = "nbkp"
@@ -302,7 +302,7 @@ forbidden_modules = [
   "nbkp.sync",
 ]
 
-# Unused code, enforced by `mise run dead-code-check` (part of `check`). Each entry is code
+# Unused code, enforced by `mise run lint-dead-code` (part of `lint`). Each entry is code
 # that runs without being named in the project, so the scan cannot see it used.
 [tool.deadcode]
 ignore-names-if-decorated-with = [

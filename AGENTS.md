@@ -6,9 +6,9 @@ uv, Typer; tasks run through mise.
 
 ## Commands
 
-- `mise run check-all`: every check and test CI runs. `mise run check` is the
-  static checks alone, `mise run test-unit` the fast tests; `mise tasks` lists
-  the rest.
+- `mise run preflight`: every lint and test CI runs. `mise run preflight-quick`
+  leaves out the Docker suites, `mise run lint` runs the lints alone, and
+  `mise run fmt` formats every file; `mise tasks` lists the rest.
 - Run a mise task when one does the job, and `uv run --no-sync <tool>`
   otherwise, never a bare tool: another project's virtualenv on `PATH` could
   stand in for this one.
