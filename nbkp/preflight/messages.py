@@ -66,7 +66,7 @@ _SYNC: dict[SyncErrorKind, str] = {
     SyncErrorKind.DISABLED: "disabled",
     SyncErrorKind.ENDPOINT_HOST_ERRORS: "a host this sync runs on has tool errors",
     SyncErrorKind.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM: (
-        "source latest → /dev/null with no upstream sync"
+        "source latest → /dev/null with no upstream sync in the run"
     ),
     SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING: (
         "source snapshot not yet available (dry-run; upstream has not run)"

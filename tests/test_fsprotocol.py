@@ -1,6 +1,6 @@
 """Tests for nbkp.fsprotocol (snapshot name format)."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -38,3 +38,17 @@ class TestParseSnapshotName:
     def test_rejects_other_names(self, name: str) -> None:
         with pytest.raises(ValueError):
             parse_snapshot_name(name)
+
+
+class TestFormatSnapshotName:
+    @pytest.mark.parametrize(
+        "now",
+        [
+            datetime(2026, 3, 6, 14, 30),
+            datetime(2026, 3, 6, 14, 30, tzinfo=timezone(timedelta(hours=1))),
+        ],
+    )
+    def test_rejects_a_time_not_at_utc(self, now: datetime) -> None:
+        """Its name would lack the Z, so parse_snapshot_name would not see it."""
+        with pytest.raises(ValueError, match="UTC-aware"):
+            format_snapshot_name(now)

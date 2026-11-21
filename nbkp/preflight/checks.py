@@ -707,7 +707,7 @@ def _sync_statuses(
             src_endpoint=config.source_endpoint(sync),
             src_ep_status=src_ep_statuses[config.source_endpoint(sync).slug],
             dst_ep_status=dst_ep_statuses[config.destination_endpoint(sync).slug],
-            all_syncs=config.syncs,
+            selected_syncs=syncs,
             dry_run=dry_run,
         )
         for slug, sync in syncs.items()

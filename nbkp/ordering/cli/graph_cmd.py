@@ -31,7 +31,7 @@ def graph_cmd(
     ctx: typer.Context,
     config: CONFIG_OPTION = None,
     output: OUTPUT_OPTION = OutputFormat.HUMAN,
-    format: Annotated[
+    graph_format: Annotated[
         GraphFormat,
         typer.Option("--format", "-f", help="Graph format (human output only)"),
     ] = GraphFormat.RICH_TREE,
@@ -42,7 +42,7 @@ def graph_cmd(
         case OutputFormat.JSON:
             echo_json(build_graph_json(cfg))
         case OutputFormat.HUMAN:
-            match format:
+            match graph_format:
                 case GraphFormat.RICH_TREE:
                     Console().print(format_rich_tree_graph(cfg))
                 case GraphFormat.MERMAID_ASCII:

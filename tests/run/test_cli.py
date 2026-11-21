@@ -79,7 +79,7 @@ def _aborted(config: Config) -> PipelineResult:
         preflight=preflight(vol_s, sample_error_sync_statuses(config, vol_s)),
         results=[],
         has_preflight_errors=True,
-        has_sync_failures=True,
+        has_sync_failures=False,
     )
 
 
@@ -188,7 +188,7 @@ class TestAbortMessage:
             preflight=preflight(vol_s, sync_s),
             results=[],
             has_preflight_errors=True,
-            has_sync_failures=True,
+            has_sync_failures=False,
         )
 
         text = _render(abort_message(pipeline, Strictness.IGNORE_NONE, _HINT))

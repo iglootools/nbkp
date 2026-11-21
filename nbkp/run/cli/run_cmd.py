@@ -49,7 +49,7 @@ from ...preflight import (
 )
 from ...preflight.output import format_human_check
 from ...remote.endpoints import ResolvedEndpoints
-from ...sync import ProgressMode, SyncResult, result_severity
+from ...sync import ProgressMode, RunOptions, SyncResult, result_severity
 from ...sync.output import build_human_results_sections
 from ..pipeline import (
     PipelineResult,
@@ -137,8 +137,7 @@ def run_cmd(
             if output is OutputFormat.HUMAN
             else None
         )
-        pipeline = check_and_run(
-            cfg,
+        options = RunOptions(
             clock=runtime.clock,
             platform=runtime.platform,
             strictness=strictness,
@@ -146,15 +145,19 @@ def run_cmd(
             only_syncs=sync,
             progress=progress,
             prune=prune,
+            resolved_endpoints=resolved,
+            rsync=runtime.rsync,
+            run_command=runtime.run,
+        )
+        pipeline = check_and_run(
+            cfg,
+            options,
             on_check_start=display.on_check_start if display else None,
             on_check_end=display.on_check_end if display else None,
             on_checks_done=display.on_checks_done if display else None,
             callbacks=display.sync_callbacks() if display else None,
-            resolved_endpoints=resolved,
             mount_observations=mount_observations,
             exclude_locations=exclude_location or [],
-            rsync=runtime.rsync,
-            run=runtime.run,
             which=runtime.which,
         )
     _print_outcome(

@@ -171,7 +171,7 @@ def _sync_status(ssh_status: SshEndpointStatus) -> SyncStatus:
                 endpoint_slug="ep-dst", sentinel_exists=True, endpoint_writable=True
             ),
         ),
-        all_syncs={"s": sync},
+        selected_syncs={"s": sync},
         dry_run=False,
     )
 

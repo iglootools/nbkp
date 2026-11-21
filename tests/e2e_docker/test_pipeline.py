@@ -40,6 +40,7 @@ from nbkp.policy import Strictness
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.remote.testkit.docker import REMOTE_BACKUP_PATH
 from nbkp.run.pipeline import check_and_run
+from nbkp.sync import RunOptions
 from nbkp.sync.results import SyncFailureKind, SyncOutcome
 from nbkp.sync.testkit.seed import build_chain_config
 from tests._docker_fixtures import LUKS_PASSPHRASE, ssh_exec
@@ -77,10 +78,12 @@ class TestChainSync:
 
             pipeline = check_and_run(
                 config,
-                clock=lambda: datetime.now(UTC),
-                platform=sys.platform,
-                strictness=Strictness.IGNORE_NONE,
-                resolved_endpoints=resolved,
+                RunOptions(
+                    clock=lambda: datetime.now(UTC),
+                    platform=sys.platform,
+                    strictness=Strictness.IGNORE_NONE,
+                    resolved_endpoints=resolved,
+                ),
                 mount_observations=mount_observations,
             )
             assert not pipeline.has_preflight_errors, {
@@ -132,10 +135,12 @@ class TestChainSync:
             # a hard preflight failure.
             pipeline = check_and_run(
                 config,
-                clock=lambda: datetime.now(UTC),
-                platform=sys.platform,
-                strictness=Strictness.IGNORE_INACTIVE,
-                resolved_endpoints=resolved,
+                RunOptions(
+                    clock=lambda: datetime.now(UTC),
+                    platform=sys.platform,
+                    strictness=Strictness.IGNORE_INACTIVE,
+                    resolved_endpoints=resolved,
+                ),
                 mount_observations=mount_observations,
             )
 

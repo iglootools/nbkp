@@ -83,10 +83,16 @@ def rsync_step(
             SyncFailureKind.RSYNC,
             f"rsync exited with code {proc.returncode}",
             rsync_exit_code=proc.returncode,
-            output=proc.stdout + proc.stderr,
+            output=_rsync_output(proc),
         )
     else:
         return proc
+
+
+def _rsync_output(proc: subprocess.CompletedProcess[str]) -> str:
+    """rsync's stdout and stderr: apart when captured, merged into stdout
+    (with an empty stderr) when streamed."""
+    return proc.stdout + proc.stderr
 
 
 def failed_after_rsync(
@@ -102,7 +108,7 @@ def failed_after_rsync(
         failure,
         detail,
         rsync_exit_code=proc.returncode,
-        output=proc.stdout,
+        output=_rsync_output(proc),
     )
 
 

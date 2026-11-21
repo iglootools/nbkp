@@ -20,6 +20,7 @@ from nbkp.preflight import (
     SourceEndpointStatus,
     SshEndpointDiagnostics,
     SshEndpointStatus,
+    SyncErrorKind,
     SyncStatus,
     VolumeDiagnostics,
     VolumeErrorKind,
@@ -290,6 +291,48 @@ class TestRunResultsMarkupSafety:
             "Snapshot failed: mkdir '/mnt/x[1]' failed",
         )
         assert "/mnt/x[1]" in self._render_with_markup([result])
+
+
+class TestRunResultsFailedOutput:
+    def test_shows_the_last_lines_where_rsyncs_error_is(self) -> None:
+        progress = [f"file-{i}.txt" for i in range(20)]
+        error = "rsync error: some files could not be transferred (code 23)"
+        result = SyncResult.failed(
+            "s",
+            False,
+            SyncFailureKind.RSYNC,
+            "rsync exited with code 23",
+            rsync_exit_code=23,
+            output="\n".join([*progress, error]) + "\n",
+        )
+
+        text = _render_sections(
+            build_human_results_sections(
+                [result], dry_run=False, config=Config(), resolved_endpoints={}
+            )
+        )
+
+        assert "(code 23)" in text
+        assert "file-0.txt" not in text
+        assert "file-19.txt" in text
+
+
+class TestRunResultsSkipped:
+    def test_words_the_preflight_errors(self) -> None:
+        result = SyncResult.skipped(
+            "s",
+            False,
+            SyncFailureKind.INACTIVE,
+            (SyncErrorKind.SOURCE_ENDPOINT_INACTIVE,),
+        )
+
+        text = _render_sections(
+            build_human_results_sections(
+                [result], dry_run=False, config=Config(), resolved_endpoints={}
+            )
+        )
+
+        assert "Sync not active: source endpoint inactive" in text
 
 
 class TestRunResultsWarnings:

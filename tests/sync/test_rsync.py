@@ -1,9 +1,12 @@
+import os
 import shlex
 import subprocess
 import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+
+import pytest
 
 from nbkp.config import (
     BtrfsSnapshotConfig,
@@ -1438,11 +1441,42 @@ class TestRunStreaming:
         assert result.stdout == "out\nerr\n"
         assert result.stderr == ""
 
+    def test_kills_the_child_when_forwarding_raises(self) -> None:
+        """Regression: `nbkp run -p overall | head` left rsync running once
+        echoing its output raised BrokenPipeError."""
+        code = "import os, time\nprint(os.getpid(), flush=True)\ntime.sleep(60)\n"
+        pids: list[int] = []
+
+        def on_output(chunk: str) -> None:
+            pids.append(int(chunk))
+            raise BrokenPipeError
+
+        with pytest.raises(BrokenPipeError):
+            _run_streaming([sys.executable, "-c", code], on_output)
+
+        # Killed and reaped: the pid no longer exists.
+        with pytest.raises(ProcessLookupError):
+            os.kill(pids[0], 0)
+
     def test_forwards_large_output_in_few_chunks(self) -> None:
         size = 1_000_000
         # The child builds the payload: Linux caps one argument at 128 KiB.
         cmd = [sys.executable, "-c", f"import sys; sys.stdout.write('x' * {size})"]
         chunks: list[str] = []
-        result = _run_streaming(cmd, chunks.append)
-        assert result.stdout == "x" * size
+        _run_streaming(cmd, chunks.append)
+        assert "".join(chunks) == "x" * size
         assert len(chunks) < 1_000
+
+    def test_keeps_only_the_tail_of_the_output(self) -> None:
+        """The output was already forwarded; only its end, where rsync's error
+        lands, is kept for the result."""
+        code = "import sys\nfor i in range(10_000): sys.stdout.write(f'{i}\\n')\n"
+        chunks: list[str] = []
+
+        result = _run_streaming(
+            [sys.executable, "-c", code], chunks.append, chunk_size=7, tail_size=20
+        )
+
+        forwarded = "".join(chunks)
+        assert forwarded == "".join(f"{i}\n" for i in range(10_000))
+        assert result.stdout == forwarded[-20:]

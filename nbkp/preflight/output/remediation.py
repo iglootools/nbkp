@@ -970,13 +970,32 @@ def _destination_snapshot_backend_fix(
     snapshots = f"{path}/{SNAPSHOTS_DIR}"
     match error:
         case DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME:
+            # staging/ exists as a plain directory, so `subvolume create` on its
+            # path fails until the directory is moved out of the way.
+            staging_aside = f"{staging}.old"
             return [
-                format_command(wrap_cmd(cmd, vol, ctx.resolved_endpoints))
-                for cmd in (
-                    ["sudo", "btrfs", "subvolume", "create", staging],
-                    ["sudo", "mkdir", snapshots],
-                    ["sudo", "chown", "<user>:<group>", staging, snapshots],
-                )
+                format_line(
+                    FIX,
+                    f"The destination {STAGING_DIR}/ directory (",
+                    staging,
+                    ") is a plain directory, not a btrfs subvolume."
+                    " Move it aside and create the subvolume in its place:",
+                ),
+                *[
+                    format_command(wrap_cmd(cmd, vol, ctx.resolved_endpoints))
+                    for cmd in (
+                        ["sudo", "mv", staging, staging_aside],
+                        ["sudo", "btrfs", "subvolume", "create", staging],
+                        ["sudo", "mkdir", "-p", snapshots],
+                        ["sudo", "chown", "<user>:<group>", staging, snapshots],
+                    )
+                ],
+                format_line(
+                    FIX,
+                    "Remove ",
+                    staging_aside,
+                    " once the next sync has succeeded.",
+                ),
             ]
         case DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND:
             # Endpoint dir is expected to be user-writable by this point
@@ -1066,9 +1085,10 @@ def format_sync_error_fix(
                     FIX,
                     "Source ",
                     f"{path}/{LATEST_LINK}",
-                    " points to /dev/null but there is no upstream sync that writes"
-                    " to this endpoint. Either run the upstream sync first or reset"
-                    " the symlink to point to a valid snapshot.",
+                    " points to /dev/null but no enabled upstream sync in this run"
+                    " writes to this endpoint. Either run the upstream sync first"
+                    " (or select it too with --sync) or reset the symlink to point"
+                    " to a valid snapshot.",
                 )
             ]
         case SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING:

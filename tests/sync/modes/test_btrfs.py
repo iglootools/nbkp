@@ -74,6 +74,21 @@ class TestBtrfsSync:
             ["ln", "-sfn", f"snapshots/{NEW_SNAPSHOT_NAME}", "/backup/latest"]
         ]
 
+    def test_rsync_failure_takes_no_snapshot(self) -> None:
+        """A half-written staging/ must never be snapshotted nor become latest."""
+        config = _btrfs_config()
+        _, sync_statuses = active_statuses(config)
+        rsync = FakeRsync([completed(23, stderr="rsync error: some files vanished")])
+        runner = FakeCommandRunner()
+
+        results = run_syncs(config, sync_statuses, rsync=rsync, run_command=runner)
+
+        assert results[0].outcome == SyncOutcome.FAILED
+        assert results[0].failure == SyncFailureKind.RSYNC
+        assert results[0].snapshot_path is None
+        assert runner.commands_starting_with("btrfs", "subvolume", "snapshot") == []
+        assert runner.commands_starting_with("ln") == []
+
     def test_snapshot_failure(self) -> None:
         config = _btrfs_config()
         _, sync_statuses = active_statuses(config)
@@ -88,6 +103,20 @@ class TestBtrfsSync:
         assert results[0].outcome == SyncOutcome.FAILED
         assert results[0].failure == SyncFailureKind.SNAPSHOT
         assert runner.commands_starting_with("ln") == []
+
+    def test_snapshot_failure_keeps_rsync_stderr(self) -> None:
+        """rsync's warnings on stderr belong in the failure report too."""
+        config = _btrfs_config()
+        _, sync_statuses = active_statuses(config)
+        rsync = FakeRsync([completed(0, "sent 10 bytes\n", "file vanished: a\n")])
+        runner = FakeCommandRunner().on(
+            "btrfs", "subvolume", "snapshot", returns=completed(1, stderr="no space")
+        )
+
+        results = run_syncs(config, sync_statuses, rsync=rsync, run_command=runner)
+
+        assert results[0].failure == SyncFailureKind.SNAPSHOT
+        assert results[0].output == "sent 10 bytes\nfile vanished: a\n"
 
     def test_refuses_snapshot_not_after_latest(self) -> None:
         """A clock behind latest must not move latest back in time."""

@@ -5,6 +5,7 @@ import subprocess
 import pytest
 
 from nbkp.policy import Severity, Strictness
+from nbkp.preflight import SyncErrorKind
 from nbkp.sync.results import SyncFailureKind, SyncResult, result_severity
 
 _OK_PROC = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
@@ -19,7 +20,7 @@ def _failed() -> SyncResult:
 
 
 def _skipped(kind: SyncFailureKind) -> SyncResult:
-    return SyncResult.skipped("s", False, kind, "not active")
+    return SyncResult.skipped("s", False, kind, (SyncErrorKind.DISABLED,))
 
 
 def _cancelled(kind: SyncFailureKind) -> SyncResult:

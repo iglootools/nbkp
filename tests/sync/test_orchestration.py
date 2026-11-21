@@ -47,6 +47,22 @@ class TestRunAllSyncs:
         assert results[0].outcome == SyncOutcome.SKIPPED
         assert results[0].failure == SyncFailureKind.INACTIVE
 
+    def test_skipped_sync_carries_its_preflight_errors_as_kinds(self) -> None:
+        """The reason leaves the core as error kinds, worded at the edge."""
+        config = make_local_config()
+        _, sync_statuses = inactive_statuses(config)
+
+        [result] = run_syncs(config, sync_statuses)
+
+        assert result.preflight_errors == (
+            SyncErrorKind.SOURCE_ENDPOINT_INACTIVE,
+            SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE,
+        )
+        assert result.detail is None
+        assert result.model_dump(mode="json")["preflight_errors"] == [
+            e.value for e in result.preflight_errors
+        ]
+
     def test_rsync_failure(self) -> None:
         config = make_local_config()
         _, sync_statuses = active_statuses(config)

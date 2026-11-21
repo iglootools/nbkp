@@ -71,7 +71,7 @@ Snapshot-enabled syncs (btrfs and hard-link) maintain a `latest` symlink at the 
 
 The `latest` symlink is only updated after a successful sync. If a sync fails midway, `latest` still points to the previous complete snapshot (or `/dev/null` if no sync has ever succeeded). This guarantees that `latest` always references a consistent state.
 
-When `latest` is used as a **source** (in chained syncs), `latest → /dev/null` is accepted only when an enabled upstream sync writes to that endpoint. Otherwise, it is flagged as an error during pre-flight checks.
+When `latest` is used as a **source** (in chained syncs), `latest → /dev/null` is accepted only when an enabled upstream sync that is part of the same run writes to that endpoint (a sync left out by `--sync` never replaces the marker). Otherwise, it is flagged as an error during pre-flight checks.
 
 ### Volume Mount Management
 
@@ -340,7 +340,7 @@ Paths are quoted for each shell that interprets them: locally, and once more ins
 
 ### Outputs
 
-All commands support both human-readable output (Rich-formatted tables, spinners, progress bars) and machine-readable JSON output for scripting and automation. The `run` command additionally supports four progress display modes: `none`, `overall`, `per-file`, and `full`.
+All commands support both human-readable output (Rich-formatted tables, spinners, progress bars) and machine-readable JSON output for scripting and automation. The `run` command additionally supports four progress display modes: `none`, `overall`, `per-file`, and `full`. In human output with any of them but `none`, rsync's output is shown as it streams, and a sync's result keeps only its last 65,536 characters: the whole of it can run to hundreds of megabytes over millions of files, and rsync's error, when it fails, comes last. JSON output does not stream, and keeps rsync's output whole.
 
 ### Rsync Defaults
 

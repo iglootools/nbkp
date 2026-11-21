@@ -41,9 +41,10 @@ def troubleshoot_cmd(
             "--strictness",
             "-S",
             help=(
-                "Which problems make the command exit non-zero:"
+                "Which sync problems make the command exit non-zero:"
                 " ignore-none (any), ignore-inactive (all but expected-inactive,"
-                " default), ignore-all (none)"
+                " default), ignore-all (none). Problems on SSH endpoints or"
+                " volumes no sync uses are shown but never fatal"
             ),
         ),
     ] = Strictness.IGNORE_INACTIVE,

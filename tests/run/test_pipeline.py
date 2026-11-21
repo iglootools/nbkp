@@ -23,7 +23,7 @@ from nbkp.run.pipeline import (
     run_checked,
     run_failed,
 )
-from nbkp.sync import SyncFailureKind, SyncOutcome
+from nbkp.sync import RunOptions, SyncFailureKind, SyncOutcome
 from tests.clidisplay import (
     dst_ep_status,
     localhost_ssh_status,
@@ -94,10 +94,12 @@ def _run(
     return run_checked(
         config,
         preflight({}, statuses),
-        clock=lambda: datetime(2026, 3, 6, tzinfo=UTC),
-        platform="linux",
-        strictness=strictness,
-        rsync=rsync,
+        RunOptions(
+            clock=lambda: datetime(2026, 3, 6, tzinfo=UTC),
+            platform="linux",
+            strictness=strictness,
+            rsync=rsync,
+        ),
     )
 
 
@@ -203,6 +205,17 @@ class TestPreflightAbort:
 
         assert pipeline.has_preflight_errors is aborts
         assert (rsync.synced == []) is aborts
+
+    def test_abort_reports_no_sync_failure(self) -> None:
+        """No sync ran, so none failed: the abort is has_preflight_errors."""
+        config = _chain_config()
+        statuses = {"a": _infra_broken(_status(config, "a")), "b": _status(config, "b")}
+
+        pipeline = _run(config, statuses, Strictness.IGNORE_INACTIVE, FakeRsync())
+
+        assert pipeline.has_preflight_errors
+        assert pipeline.results == []
+        assert not pipeline.has_sync_failures
 
 
 class TestFatalSyncErrors:

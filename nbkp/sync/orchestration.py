@@ -6,25 +6,18 @@ itself to the sync's snapshot mode (:mod:`.modes`).
 """
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 
 from ..config import Config, sync_predecessors
 from ..ordering.graph import sort_syncs
 from ..policy import Strictness
-from ..preflight import SyncErrorKind, SyncStatus, format_problems
+from ..preflight import SyncErrorKind, SyncStatus
 from ..remote.dispatch import VolumeCommandRunner, run_on_volume
 from ..remote.endpoints import ResolvedEndpoints
 from .modes import RsyncRunner, RunContext, run_single_sync
 from .results import DISABLED_FAILURES, RUNTIME_FAILURES, SyncFailureKind, SyncResult
 from .rsync import ProgressMode, run_rsync
-
-
-def _collect_all_errors(status: SyncStatus) -> str:
-    """With cascade errors, ``status.errors`` is self-describing — it
-    contains sync-level errors plus cascade pointers to inactive lower
-    layers.  No need to walk the full 4-layer chain.
-    """
-    return format_problems(status.errors) or "unknown"
 
 
 def _presence_proven(status: SyncStatus) -> bool:
@@ -126,40 +119,50 @@ def _execute_or_skip(
     elif _should_attempt(status, strictness):
         return run_single_sync(status, ctx)
     else:
+        # With cascade errors, status.errors is self-describing: sync-level
+        # errors plus pointers to the inactive lower layers.
         return SyncResult.skipped(
-            status.slug,
-            ctx.dry_run,
-            _skip_kind(status),
-            "Sync not active: " + _collect_all_errors(status),
+            status.slug, ctx.dry_run, _skip_kind(status), tuple(status.errors)
         )
+
+
+@dataclass(frozen=True)
+class RunOptions:
+    """How a run executes its syncs, chosen once at the entry point.
+
+    *clock* names snapshots (read once per snapshot-enabled sync) and
+    *platform* (``sys.platform``) decides the macOS-safe snapshot name form.
+    *only_syncs* selects syncs (all when ``None``).  *rsync* and
+    *run_command* run the transfer and the commands on the volume hosts;
+    tests replace them with fakes instead of patching the transport.
+    """
+
+    clock: Callable[[], datetime]
+    platform: str
+    strictness: Strictness = Strictness.IGNORE_INACTIVE
+    dry_run: bool = False
+    only_syncs: list[str] | None = None
+    progress: ProgressMode | None = None
+    prune: bool = True
+    resolved_endpoints: ResolvedEndpoints | None = None
+    rsync: RsyncRunner = run_rsync
+    run_command: VolumeCommandRunner = run_on_volume
 
 
 def run_all_syncs(
     config: Config,
     sync_statuses: dict[str, SyncStatus],
+    options: RunOptions,
     *,
-    clock: Callable[[], datetime],
-    platform: str,
-    strictness: Strictness = Strictness.IGNORE_INACTIVE,
-    dry_run: bool = False,
-    only_syncs: list[str] | None = None,
-    progress: ProgressMode | None = None,
-    prune: bool = True,
     on_rsync_output: Callable[[str], None] | None = None,
     on_sync_start: Callable[[str], None] | None = None,
     on_sync_end: Callable[[str, SyncResult], None] | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-    rsync: RsyncRunner = run_rsync,
-    run_command: VolumeCommandRunner = run_on_volume,
 ) -> list[SyncResult]:
     """Run all (or selected) syncs in dependency order.
 
-    Expects pre-computed sync statuses from ``check_all_syncs``.  *clock*
-    names snapshots (read once per snapshot-enabled sync) and *platform*
-    (``sys.platform``) decides the macOS-safe snapshot name form; both are
-    supplied by the entry point.  *rsync* and *run_command* run the
-    transfer and the snapshot commands on the destination.
+    Expects pre-computed sync statuses from ``check_all_syncs``.
     """
+    only_syncs = options.only_syncs
     selected = {
         s: st for s, st in sync_statuses.items() if not only_syncs or s in only_syncs
     }
@@ -167,15 +170,15 @@ def run_all_syncs(
     predecessors = sync_predecessors(selected_syncs)
     ctx = RunContext(
         config=config,
-        dry_run=dry_run,
-        progress=progress,
-        prune=prune,
+        dry_run=options.dry_run,
+        progress=options.progress,
+        prune=options.prune,
         on_rsync_output=on_rsync_output,
-        resolved_endpoints=resolved_endpoints or {},
-        clock=clock,
-        platform=platform,
-        rsync=rsync,
-        run_command=run_command,
+        resolved_endpoints=options.resolved_endpoints or {},
+        clock=options.clock,
+        platform=options.platform,
+        rsync=options.rsync,
+        run_command=options.run_command,
     )
 
     # An explicit loop rather than a comprehension: each sync's
@@ -186,7 +189,11 @@ def run_all_syncs(
         if on_sync_start:
             on_sync_start(slug)
         result = _execute_or_skip(
-            selected[slug], predecessors.get(slug, set()), results, strictness, ctx
+            selected[slug],
+            predecessors.get(slug, set()),
+            results,
+            options.strictness,
+            ctx,
         )
         results[slug] = result
         if on_sync_end:
