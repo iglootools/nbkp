@@ -38,7 +38,8 @@ behavior.
   source endpoint, syncs are automatically ordered topologically
 - **Failure propagation**: a failed sync cancels all downstream dependents;
   independent syncs continue normally
-- **Dry-run mode**: preview what would happen without making changes
+- **Dry-run mode**: preview what would happen without making changes; the
+  output is labeled `[dry-run]`, and its JSON carries `"dry_run": true`
 - **Real-time progress**: four display modes (none, overall, per-file, full)
 - **Per-sync rsync options**: checksum, compression, custom flags, default
   overrides, extra options

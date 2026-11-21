@@ -117,8 +117,10 @@ class TestPruneCommand:
         exit_code, output = _invoke(run, "prune", "--dry-run", "-o", "json")
 
         assert exit_code == 0
-        [data] = json.loads(output)
-        assert (data["deleted"], data["dry_run"]) == ([f"{SNAPSHOTS}/{OLD}"], True)
+        data = json.loads(output)
+        assert data["dry_run"] is True
+        [result] = data["results"]
+        assert (result["deleted"], result["dry_run"]) == ([f"{SNAPSHOTS}/{OLD}"], True)
         assert run.commands_starting_with("btrfs", "subvolume") == []
 
     def test_failed_delete_fails_without_troubleshoot_hint(

@@ -68,8 +68,13 @@ def prune_cmd(
 def _print_results(
     results: list[PruneResult], dry_run: bool, output: OutputFormat
 ) -> None:
-    match output:
-        case OutputFormat.JSON:
+    match (output, dry_run):
+        case (OutputFormat.JSON, True):
+            # An object, as `disks mount --dry-run` prints: a list has no
+            # top-level field to say the run was dry. A real prune keeps its
+            # list, so scripts reading it are unaffected.
+            echo_json({"dry_run": True, "results": list(results)})
+        case (OutputFormat.JSON, False):
             echo_json(list(results))
-        case OutputFormat.HUMAN:
+        case (OutputFormat.HUMAN, _):
             Console().print(format_human_prune_results(results, dry_run))

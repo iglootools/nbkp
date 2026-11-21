@@ -8,7 +8,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
-from ...clidisplay import StepProgressBar
+from ...clidisplay import StepProgressBar, dry_run_labeled
 from ...config import (
     CredentialProvider,
 )
@@ -182,9 +182,8 @@ def _print_seed_error(e: SeedError, docker: bool) -> None:
 
 
 def _print_plan(steps: list[str]) -> None:
-    _console.print(Text("Dry run — nothing created. Seed would:", style="bold"))
     for step in steps:
-        _console.print(Text(f"  - {step}"), highlight=False)
+        _console.print(dry_run_labeled(f"Would {step}"), highlight=False)
 
 
 def _print_summary(

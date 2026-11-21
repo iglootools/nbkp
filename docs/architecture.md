@@ -198,6 +198,7 @@ graph TD
     snapshots --> policy
     snapshots --> preflight
     snapshots --> remote
+    sync --> clidisplay
     sync --> config
     sync --> fsprotocol
     sync --> ordering

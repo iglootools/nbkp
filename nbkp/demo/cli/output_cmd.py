@@ -126,7 +126,7 @@ def _show_results() -> None:
         format_human_results(run_results(config), False, config, resolved),
     )
     _show(
-        "format_human_results (dry run)",
+        "format_human_results (--dry-run)",
         format_human_results(dry_run_results(config), True, config, resolved),
     )
 
@@ -138,7 +138,7 @@ def _show_prune() -> None:
         format_human_prune_results(prune_results(config), dry_run=False),
     )
     _show(
-        "format_human_prune_results (dry run)",
+        "format_human_prune_results (--dry-run)",
         format_human_prune_results(prune_dry_run_results(config), dry_run=True),
     )
 
