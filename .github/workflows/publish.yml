@@ -8,7 +8,7 @@ name: publish
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   # Tags created by a workflow using GITHUB_TOKEN do not trigger other workflows,
   # so we use workflow_run to publish after the release workflow creates a tag.
   workflow_run:
@@ -56,36 +56,36 @@ jobs:
       # which is the actual URL of the repository where the package is published
       url: https://pypi.org/p/nbkp/
     permissions:
-      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
-      contents: read   # checkout; a permissions block sets every scope it omits to none
+      id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
+      contents: read # checkout; a permissions block sets every scope it omits to none
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      with:
-        fetch-depth: 0
-        fetch-tags: true
-        ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-    # A `release` run completes successfully whether or not it released: a dry run, or a run
-    # dispatched on another branch, starts this workflow too. Only a commit carrying a v* tag
-    # was released. A dry run from a test branch once got as far as the upload, refused only
-    # because PyPI rejects local versions; see "Skip a release run that did not release" in
-    # guidelines/project-setup/pypi-publishing.md in iglootools/common.
-    - name: Check that the release run released
-      id: released
-      if: github.event_name == 'workflow_run'
-      run: |
-        if tag=$(git describe --exact-match --tags --match 'v*' HEAD 2>/dev/null); then
-          echo "Publishing $tag"
-        else
-          echo "skip=true" >> "$GITHUB_OUTPUT"
-          echo "::notice::$(git rev-parse --short HEAD) carries no v* tag, so the release run did not release. Nothing to publish."
-        fi
-    - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5
-      if: steps.released.outputs.skip != 'true'
-      with:
-        # renovate: datasource=github-releases depName=jdx/mise
-        version: 2026.11.3
-    - run: mise run ci-build
-      if: steps.released.outputs.skip != 'true'
-    - name: Publish package distributions to PyPI
-      if: steps.released.outputs.skip != 'true'
-      uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      # A `release` run completes successfully whether or not it released: a dry run, or a run
+      # dispatched on another branch, starts this workflow too. Only a commit carrying a v* tag
+      # was released. A dry run from a test branch once got as far as the upload, refused only
+      # because PyPI rejects local versions; see "Skip a release run that did not release" in
+      # guidelines/project-setup/pypi-publishing.md in iglootools/common.
+      - name: Check that the release run released
+        id: released
+        if: github.event_name == 'workflow_run'
+        run: |
+          if tag=$(git describe --exact-match --tags --match 'v*' HEAD 2>/dev/null); then
+            echo "Publishing $tag"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$(git rev-parse --short HEAD) carries no v* tag, so the release run did not release. Nothing to publish."
+          fi
+      - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5
+        if: steps.released.outputs.skip != 'true'
+        with:
+          # renovate: datasource=github-releases depName=jdx/mise
+          version: 2026.11.3
+      - run: mise run ci-build
+        if: steps.released.outputs.skip != 'true'
+      - name: Publish package distributions to PyPI
+        if: steps.released.outputs.skip != 'true'
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1

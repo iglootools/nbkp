@@ -1,13 +1,20 @@
 # Building and Testing
 
-The unit tests cover the core logic of the tool. Integration and end-to-end tests exercise the real rsync/SSH/btrfs pipeline against Docker containers and local filesystems. See [Testing Strategy](#testing-strategy) for details on each test category.
+The unit tests cover the core logic of the tool. Integration and end-to-end
+tests exercise the real rsync/SSH/btrfs pipeline against Docker containers and
+local filesystems. See [Testing Strategy](#testing-strategy) for details on each
+test category.
 
-Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual testing/QA. The `seed --docker` command requires the `docker` extra: `uv tool install 'nbkp[docker]'`. In dev, run it from the project environment: `uv run --no-sync nbkp demo seed` (or `uv run --no-sync nbkp demo output`).
+Additionally, `nbkp demo` (or `nbkp-demo`) provides helpers for manual
+testing/QA. The `seed --docker` command requires the `docker` extra:
+`uv tool install 'nbkp[docker]'`. In dev, run it from the project environment:
+`uv run --no-sync nbkp demo seed` (or `uv run --no-sync nbkp demo output`).
 
 Run automated tests and checks (no external dependencies):
+
 ```bash
 # mise tasks
-mise run check              # Run all checks: format-check + lint + lint-shell + type-check + lock-check + lock-check-uv + toc-check + clidocs-check + configdocs-check + depgraph-check + boundaries-check + dead-code-check
+mise run check              # Run all checks: format-check + lint + lint-shell + lint-markdown + type-check + lock-check + lock-check-uv + toc-check + clidocs-check + configdocs-check + depgraph-check + boundaries-check + dead-code-check
 mise run check-all          # Run all checks: regular checks + all tests
 
 mise run test-all           # All tests
@@ -22,10 +29,11 @@ mise run test-integration-docker  # Docker integration tests (tests/integration_
 mise run test-integration-docker-btrfs   # Local btrfs tests inside Docker (privileged)
 mise run test-integration-fs     # Filesystem integration tests
 
-mise run format             # ruff format (rewrites files)
-mise run format-check       # ruff format --check (verifies only; what check runs)
+mise run format             # ruff, dprint and rumdl format every file (rewrites files)
+mise run format-check       # ruff format --check + dprint check (verifies only; what check runs)
 mise run lint               # ruff check
 mise run lint-shell         # shellcheck on the tracked shell scripts
+mise run lint-markdown      # rumdl check (also what rumdl fmt would change)
 mise run type-check         # pyright
 mise run lock-check         # check mise.lock is up to date
 mise run lock-check-uv      # check uv.lock is consistent with pyproject.toml
@@ -57,24 +65,27 @@ uv run --no-sync pyright nbkp/ tests/ build-scripts/                 # type-chec
 uv run --no-sync pytest tests/remote/test_ssh.py::TestBuildSshBaseArgs::test_full -v  # run a single test
 ```
 
-`uv run --no-sync` is the prefix to use rather than a bare `pytest`/`ruff`, as the mise tasks
-above do. `uv run` resolves the environment from the project root, so it is correct regardless
-of what is on `PATH` — a bare command in a shell that has *another* project's `.venv` active
-silently runs that project's copy of the tool. `--no-sync` stops it from syncing `.venv` on
-every call, leaving installation to `[deps.uv]` (below). From a shell where mise is not
+`uv run --no-sync` is the prefix to use rather than a bare `pytest`/`ruff`, as
+the mise tasks above do. `uv run` resolves the environment from the project
+root, so it is correct regardless of what is on `PATH` — a bare command in a
+shell that has *another* project's `.venv` active silently runs that project's
+copy of the tool. `--no-sync` stops it from syncing `.venv` on every call,
+leaving installation to `[deps.uv]` (below). From a shell where mise is not
 activated, run a tool with `mise exec -- <tool>` instead.
 
-Dependencies install themselves: `[deps.uv]` in `mise.toml` runs `uv sync --all-extras` before
-any `mise run` whenever `uv.lock` or `pyproject.toml` has changed, or `.venv` has gone missing.
-So `mise run install` is seldom needed explicitly, and `mise run reinstall` is for the case that
-automatic check cannot see — a `.venv` that is *dirty* rather than *stale*, e.g. after a manual
-`uv pip install`. Add or remove dependencies with `uv add` / `uv remove`.
+Dependencies install themselves: `[deps.uv]` in `mise.toml` runs
+`uv sync --all-extras` before any `mise run` whenever `uv.lock` or
+`pyproject.toml` has changed, or `.venv` has gone missing. So `mise run install`
+is seldom needed explicitly, and `mise run reinstall` is for the case that
+automatic check cannot see — a `.venv` that is *dirty* rather than *stale*, e.g.
+after a manual `uv pip install`. Add or remove dependencies with `uv add` /
+`uv remove`.
 
 <!-- toc -->
 **On this page**
 
-  - [Python versions](#python-versions)
-  - [Parallel test execution](#parallel-test-execution)
+- [Python versions](#python-versions)
+- [Parallel test execution](#parallel-test-execution)
 - [Testing Strategy](#testing-strategy)
   - [Manual Testing](#manual-testing)
   - [Automated tests](#automated-tests)
@@ -84,22 +95,24 @@ automatic check cannot see — a `.venv` that is *dirty* rather than *stale*, e.
 - [Renovate](#renovate)
 <!-- tocstop -->
 
-### Python versions
+## Python versions
 
-nbkp supports exactly one Python version, the one pinned in `mise.toml` (`[tools] python`):
-local development, CI and the `requires-python` floor all use it, so there is no separate
-compatibility check. Raising it means moving `[tools] python` (then `mise lock`),
-`requires-python`, ruff's `target-version`, pyright's `pythonVersion`, and the base image in
-`nbkp/remote/testkit/dockerbuild/Dockerfile.btrfs-local-test` together. That Dockerfile pins
-Python and uv by digest and Renovate's dockerfile manager updates them on their own, so between
-minor bumps their patch versions can differ from `mise.toml`'s; the btrfs tests do not need
-them to match. See the
+nbkp supports exactly one Python version, the one pinned in `mise.toml`
+(`[tools] python`): local development, CI and the `requires-python` floor all
+use it, so there is no separate compatibility check. Raising it means moving
+`[tools] python` (then `mise lock`), `requires-python`, ruff's `target-version`,
+pyright's `pythonVersion`, and the base image in
+`nbkp/remote/testkit/dockerbuild/Dockerfile.btrfs-local-test` together. That
+Dockerfile pins Python and uv by digest and Renovate's dockerfile manager
+updates them on their own, so between minor bumps their patch versions can
+differ from `mise.toml`'s; the btrfs tests do not need them to match. See the
 [Python Version Policy](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#python-version-policy)
 for the rationale.
 
-### Parallel test execution
+## Parallel test execution
 
-Tests run under [pytest-xdist](https://pytest-xdist.readthedocs.io/), with per-suite worker counts chosen for what each suite can safely parallelize:
+Tests run under [pytest-xdist](https://pytest-xdist.readthedocs.io/), with
+per-suite worker counts chosen for what each suite can safely parallelize:
 
 | Suite | mise task | Workers | Why |
 |---|---|---|---|
@@ -109,49 +122,120 @@ Tests run under [pytest-xdist](https://pytest-xdist.readthedocs.io/), with per-s
 | Local btrfs (privileged) | `test-integration-docker-btrfs` | serial | Single privileged container; real btrfs ops share one loopback mount. |
 | End-to-end | `test-e2e` | `-n 3` | One worker per test, each with its own multi-container topology (UUID-named network); halves the suite. Raise the count with the number of tests. |
 
-**How Docker integration parallelizes safely:** session-scoped container fixtures are instantiated **once per xdist worker**, so each worker spins up its own privileged container. All those containers share the host VM kernel's **loop-device pool** and **device-mapper namespace** — naively concurrent containers contend on them (loop-device exhaustion, device-mapper name collisions, and a global `losetup -D` that would detach siblings' devices). The testkit ([`entrypoint.sh`](../nbkp/remote/testkit/dockerbuild/entrypoint.sh), [`setup-luks.sh`](../nbkp/remote/testkit/dockerbuild/setup-luks.sh), and the `luks_mapper_name` fixture) keeps them independent:
+**How Docker integration parallelizes safely:** session-scoped container
+fixtures are instantiated **once per xdist worker**, so each worker spins up its
+own privileged container. All those containers share the host VM kernel's
+**loop-device pool** and **device-mapper namespace** — naively concurrent
+containers contend on them (loop-device exhaustion, device-mapper name
+collisions, and a global `losetup -D` that would detach siblings' devices). The
+testkit ([`entrypoint.sh`](../nbkp/remote/testkit/dockerbuild/entrypoint.sh),
+[`setup-luks.sh`](../nbkp/remote/testkit/dockerbuild/setup-luks.sh), and the
+`luks_mapper_name` fixture) keeps them independent:
 
-- **Per-worker-unique LUKS mapper names.** Each worker's container gets a unique `/dev/mapper/<name>` (passed via env, persisted to a file because `sudo`/SSH strip the environment, and read by `setup-luks.sh`). Avoids "device already exists" collisions on the shared dm namespace.
-- **Pre-created loop-node pool.** The VM pre-populates only `/dev/loop0..14` and there is no udev in the container to create more, so a pool of nodes is `mknod`-ed at startup. Without it, once the shared pool is busy `losetup` allocates a higher number whose `/dev` node does not exist (`device node is lost`).
-- **No loop-device leaks.** File-backed btrfs is mounted with `mount -o loop` (autoclear → frees on container stop). The encrypted-volume LUKS image needs an explicit `losetup` (for a stable `/dev/disk/by-uuid` entry), which is *not* autoclear; the `docker_container` fixture detaches it on teardown — matched by backing-file inode so concurrent siblings are untouched — so loops do not accumulate across runs.
-- **One image build per run.** The image fixture is session-scoped too, and concurrent builds of the same tag race inside the Docker daemon (`already exists, but accessing it also failed`). The first worker builds under a file lock in the run's shared basetemp directory, and the rest wait and reuse the image. That directory is new on every run, so each run still rebuilds.
-- **Device links can briefly vanish.** Each container runs its own `systemd-udevd` on the shared `/dev`, so with several workers more than one udev daemon handles every lock and unlock, and `/dev/disk/by-uuid` links can be missing for a moment. nbkp itself waits for this (`settle_udev` before looking for a device, and `run_udisks` retrying while udisks has no object for it), because a real drive that has just been plugged in or locked has the same window.
-- **No destructive global cleanup.** Startup never runs a blanket `losetup -D` (it would yank live siblings' devices); it only detaches loops whose backing file is `(deleted)`, as a best-effort reap of orphans from killed runs.
+- **Per-worker-unique LUKS mapper names.** Each worker's container gets a unique
+  `/dev/mapper/<name>` (passed via env, persisted to a file because `sudo`/SSH
+  strip the environment, and read by `setup-luks.sh`). Avoids "device already
+  exists" collisions on the shared dm namespace.
+- **Pre-created loop-node pool.** The VM pre-populates only `/dev/loop0..14` and
+  there is no udev in the container to create more, so a pool of nodes is
+  `mknod`-ed at startup. Without it, once the shared pool is busy `losetup`
+  allocates a higher number whose `/dev` node does not exist
+  (`device node is lost`).
+- **No loop-device leaks.** File-backed btrfs is mounted with `mount -o loop`
+  (autoclear → frees on container stop). The encrypted-volume LUKS image needs
+  an explicit `losetup` (for a stable `/dev/disk/by-uuid` entry), which is *not*
+  autoclear; the `docker_container` fixture detaches it on teardown — matched by
+  backing-file inode so concurrent siblings are untouched — so loops do not
+  accumulate across runs.
+- **One image build per run.** The image fixture is session-scoped too, and
+  concurrent builds of the same tag race inside the Docker daemon
+  (`already exists, but accessing it also failed`). The first worker builds
+  under a file lock in the run's shared basetemp directory, and the rest wait
+  and reuse the image. That directory is new on every run, so each run still
+  rebuilds.
+- **Device links can briefly vanish.** Each container runs its own
+  `systemd-udevd` on the shared `/dev`, so with several workers more than one
+  udev daemon handles every lock and unlock, and `/dev/disk/by-uuid` links can
+  be missing for a moment. nbkp itself waits for this (`settle_udev` before
+  looking for a device, and `run_udisks` retrying while udisks has no object for
+  it), because a real drive that has just been plugged in or locked has the same
+  window.
+- **No destructive global cleanup.** Startup never runs a blanket `losetup -D`
+  (it would yank live siblings' devices); it only detaches loops whose backing
+  file is `(deleted)`, as a best-effort reap of orphans from killed runs.
 
-Within a worker, the autouse `_cleanup_remote` fixture scrubs shared remote paths between tests, keeping them independent.
+Within a worker, the autouse `_cleanup_remote` fixture scrubs shared remote
+paths between tests, keeping them independent.
 
-Keep xdist's default `load` scheduling. `--dist worksteal` moves queued tests between workers, which makes `TestLuksLifecycle` fail (`device not plugged in`): the containers share the host's `/dev` and udev, so LUKS lifecycle tests on different workers interfere with each other.
+Keep xdist's default `load` scheduling. `--dist worksteal` moves queued tests
+between workers, which makes `TestLuksLifecycle` fail (`device not plugged in`):
+the containers share the host's `/dev` and udev, so LUKS lifecycle tests on
+different workers interfere with each other.
 
-To debug a flaky test in isolation, run a single process by passing `-n0` (or omitting `-n`).
+To debug a flaky test in isolation, run a single process by passing `-n0` (or
+omitting `-n`).
 
-The `check-links` workflow runs a link checker against the documentation to catch broken links.
-It is scheduled to run weekly, but can also be triggered manually using `gh workflow run check-links.yml`.
+The `check-links` workflow runs a link checker against the documentation to
+catch broken links. It is scheduled to run weekly, but can also be triggered
+manually using `gh workflow run check-links.yml`.
 
 ## Testing Strategy
 
 ### Manual Testing
 
-In addition to the automated tests, the `nbkp demo seed --docker` command can be used for manual testing and debugging. It generates:
+In addition to the automated tests, the `nbkp demo seed --docker` command can be
+used for manual testing and debugging. It generates:
+
 1. a similar environment as the one used in the Docker-enabled tests
 2. a set of pre-configured test data.
 
-`mise run demo-record` is a great way to iterate quickly on test scenarios: it runs the `demo seed` command as well as a few test scenarios exercising different features of the tool. It needs Docker, plus `pv` for the simulated typing; `mise run install` provides `pv`, from conda-forge, on Linux and macOS. `mise run demo-preflight` checks these dependencies and says how to fix what is missing; `demo-record` runs it first.
+`mise run demo-record` is a great way to iterate quickly on test scenarios: it
+runs the `demo seed` command as well as a few test scenarios exercising
+different features of the tool. It needs Docker, plus `pv` for the simulated
+typing; `mise run install` provides `pv`, from conda-forge, on Linux and macOS.
+`mise run demo-preflight` checks these dependencies and says how to fix what is
+missing; `demo-record` runs it first.
 
-The demo uses the same real udisks path as production: the Docker harness runs `dbus-daemon`, `polkitd`, and `udisksd`, installs the generated `50-nbkp.rules` polkit rule, and connects as the non-root backup user, so the demo exercises the actual `udisksctl unlock/mount/unmount/lock` lifecycle and the polkit grant — not a bypassed simplified setup.
+The demo uses the same real udisks path as production: the Docker harness runs
+`dbus-daemon`, `polkitd`, and `udisksd`, installs the generated `50-nbkp.rules`
+polkit rule, and connects as the non-root backup user, so the demo exercises the
+actual `udisksctl unlock/mount/unmount/lock` lifecycle and the polkit grant —
+not a bypassed simplified setup.
 
 ### Automated tests
 
-Automated tests are organized into 4 categories based on what they test and what infrastructure they require:
+Automated tests are organized into 4 categories based on what they test and what
+infrastructure they require:
 
-1. **Unit tests** (`tests/`, `tests/sync/`, `tests/remote/`, `tests/disks/`, …) — Run every external call (rsync, SSH, host commands) against fakes rather than patches; see [Testing](guidelines.md#coding) in the project guidelines. Test logic and command building. No external dependencies.
+1. **Unit tests** (`tests/`, `tests/sync/`, `tests/remote/`, `tests/disks/`, …)
+   — Run every external call (rsync, SSH, host commands) against fakes rather
+   than patches; see [Testing](guidelines.md#coding) in the project guidelines.
+   Test logic and command building. No external dependencies.
 
-2. **E2E (Docker)** (`tests/e2e_docker/`) — Full pipeline tests against Docker containers. The chain sync test exercises a 6-hop pipeline covering all four sync direction combinations (local→local, local→remote, remote→remote, remote→local), both snapshot modes (hard-link and btrfs), bastion/proxy-jump, LUKS-encrypted volumes, filter exclusion, topological ordering, and failure propagation. The shell script test generates and executes the equivalent standalone bash script.
+2. **E2E (Docker)** (`tests/e2e_docker/`) — Full pipeline tests against Docker
+   containers. The chain sync test exercises a 6-hop pipeline covering all four
+   sync direction combinations (local→local, local→remote, remote→remote,
+   remote→local), both snapshot modes (hard-link and btrfs), bastion/proxy-jump,
+   LUKS-encrypted volumes, filter exclusion, topological ordering, and failure
+   propagation. The shell script test generates and executes the equivalent
+   standalone bash script.
 
-3. **Integration (Docker)** (`tests/integration_docker/`) — Component-level tests against real infrastructure in Docker. Tests individual module functions (preflight observations, btrfs snapshot operations, hard-link snapshots, mount lifecycle, SSH connectivity, subdir endpoint mapping) via SSH. Includes local btrfs tests that run inside a privileged Docker container (`mise run test-integration-docker-btrfs`).
+3. **Integration (Docker)** (`tests/integration_docker/`) — Component-level
+   tests against real infrastructure in Docker. Tests individual module
+   functions (preflight observations, btrfs snapshot operations, hard-link
+   snapshots, mount lifecycle, SSH connectivity, subdir endpoint mapping) via
+   SSH. Includes local btrfs tests that run inside a privileged Docker container
+   (`mise run test-integration-docker-btrfs`).
 
-4. **Integration (filesystem)** (`tests/integration_fs/`) — Component-level tests using real local filesystem operations (local-to-local syncs with real rsync, hard-link snapshots, symlinks, inode verification, shell script generation). Runs on any OS that supports hard links.
+4. **Integration (filesystem)** (`tests/integration_fs/`) — Component-level
+   tests using real local filesystem operations (local-to-local syncs with real
+   rsync, hard-link snapshots, symlinks, inode verification, shell script
+   generation). Runs on any OS that supports hard links.
 
-The Docker-based test suites use [testcontainers](https://testcontainers-python.readthedocs.io/) and automatically:
+The Docker-based test suites use
+[testcontainers](https://testcontainers-python.readthedocs.io/) and
+automatically:
+
 - Generate an ephemeral SSH key pair
 - Build and start a Docker container with SSH, rsync, and a btrfs filesystem
 - Run the tests
@@ -159,16 +243,34 @@ The Docker-based test suites use [testcontainers](https://testcontainers-python.
 
 ### Known Gaps in Test Coverage
 
-The following functionality is covered by unit tests but intentionally excluded from Docker/integration testing, with reasoning:
+The following functionality is covered by unit tests but intentionally excluded
+from Docker/integration testing, with reasoning:
 
-- **Credential providers** (keyring, prompt, env, command) — Keyring requires OS-level secret store setup (macOS Keychain, GNOME Keyring) unavailable in Docker. Prompt is interactive. Env and command providers are trivial wrappers. The passphrase delivery path is exercised end-to-end through LUKS mount tests, which pipe a real passphrase via stdin.
-- **SSH agent authentication** — Requires managing an `ssh-agent` process in the test environment. All integration tests use explicit key files. The `allow_agent=False` parameter is validated via unit tests.
-- **Paramiko-specific timeouts** (`banner_timeout`, `auth_timeout`, `channel_timeout`) — Would require a deliberately slow or broken SSH server. Correct flag generation is unit-tested.
-- **`disabled_algorithms`** — Would require a server configured to require specific algorithms. Correct option mapping is unit-tested.
-- **SSH `compress` / `server_alive_interval` behavior** — Verifying actual compression or keepalive behavior over the wire is impractical. Correct flag generation is unit-tested.
-- **Per-hop connection options** — Multi-hop proxy tests use identical options on all hops. Per-hop option variation is covered by unit tests (each hop generates options independently).
-- **Sync ordering** — Pure graph logic with no external commands. Topological sort and cycle detection are thoroughly unit-tested. Ordering is implicitly validated by the e2e chain sync test which asserts step execution order.
-- **Shell script generation internals** — The `integration_fs` test suite already generates and executes a full backup script against real filesystems, validating the end-to-end sh path.
+- **Credential providers** (keyring, prompt, env, command) — Keyring requires
+  OS-level secret store setup (macOS Keychain, GNOME Keyring) unavailable in
+  Docker. Prompt is interactive. Env and command providers are trivial wrappers.
+  The passphrase delivery path is exercised end-to-end through LUKS mount tests,
+  which pipe a real passphrase via stdin.
+- **SSH agent authentication** — Requires managing an `ssh-agent` process in the
+  test environment. All integration tests use explicit key files. The
+  `allow_agent=False` parameter is validated via unit tests.
+- **Paramiko-specific timeouts** (`banner_timeout`, `auth_timeout`,
+  `channel_timeout`) — Would require a deliberately slow or broken SSH server.
+  Correct flag generation is unit-tested.
+- **`disabled_algorithms`** — Would require a server configured to require
+  specific algorithms. Correct option mapping is unit-tested.
+- **SSH `compress` / `server_alive_interval` behavior** — Verifying actual
+  compression or keepalive behavior over the wire is impractical. Correct flag
+  generation is unit-tested.
+- **Per-hop connection options** — Multi-hop proxy tests use identical options
+  on all hops. Per-hop option variation is covered by unit tests (each hop
+  generates options independently).
+- **Sync ordering** — Pure graph logic with no external commands. Topological
+  sort and cycle detection are thoroughly unit-tested. Ordering is implicitly
+  validated by the e2e chain sync test which asserts step execution order.
+- **Shell script generation internals** — The `integration_fs` test suite
+  already generates and executes a full backup script against real filesystems,
+  validating the end-to-end sh path.
 
 ## Release Process
 
@@ -176,11 +278,14 @@ The steps to cut a release are in
 [Releasing and Publishing › Release Process](releasing-and-publishing.md#release-process).
 
 ## GitHub Config
-- **Protect `main` and the release tags with rulesets.** Configured as the shared
+
+- **Protect `main` and the release tags with rulesets.** Configured as the
+  shared
   [repository conventions](https://github.com/iglootools/common/blob/main/guidelines/project-setup/repository.md#protect-the-default-branch-and-release-tags)
-  describe: `main` cannot be deleted or force-pushed, changes go through a pull request
-  merged with a merge commit, and the `test` check must pass first; `v*` tags cannot be
-  deleted or moved, so a published version keeps pointing at the commit it was built from.
+  describe: `main` cannot be deleted or force-pushed, changes go through a pull
+  request merged with a merge commit, and the `test` check must pass first; `v*`
+  tags cannot be deleted or moved, so a published version keeps pointing at the
+  commit it was built from.
 
   ```bash
   gh api --method POST repos/iglootools/nbkp/rulesets --input - <<'JSON'
@@ -219,75 +324,82 @@ The steps to cut a release are in
   ```
 
   To change an existing ruleset, `PUT` the same payload to
-  `repos/iglootools/nbkp/rulesets/<id>` (ids from `gh api repos/iglootools/nbkp/rulesets`).
-  Verify what GitHub actually enforces — an `active` ruleset with an empty `include` list
-  protects nothing and looks enabled all the same:
+  `repos/iglootools/nbkp/rulesets/<id>` (ids from
+  `gh api repos/iglootools/nbkp/rulesets`). Verify what GitHub actually enforces
+  — an `active` ruleset with an empty `include` list protects nothing and looks
+  enabled all the same:
 
   ```bash
   gh api repos/iglootools/nbkp/rules/branches/main -q '[.[].type]'
   # expect: ["deletion","non_fast_forward","pull_request","required_status_checks"]
   ```
 
-  `test` must keep running on every pull request (no `paths` filter on its workflow), or a
-  pull request it skips can never be merged.
-- **Keep the dependency graph on.** Dependabot security updates (below) read it to find
-  vulnerable dependencies. GitHub enables it on every public repository and offers no switch
-  to turn it off there, so there is nothing to apply while the repository stays public; on a
-  private one, enable it under Settings > Advanced Security. Verify that
-  GitHub can export it:
+  `test` must keep running on every pull request (no `paths` filter on its
+  workflow), or a pull request it skips can never be merged.
+- **Keep the dependency graph on.** Dependabot security updates (below) read it
+  to find vulnerable dependencies. GitHub enables it on every public repository
+  and offers no switch to turn it off there, so there is nothing to apply while
+  the repository stays public; on a private one, enable it under Settings >
+  Advanced Security. Verify that GitHub can export it:
 
     ```bash
     gh api repos/iglootools/nbkp/dependency-graph/sbom -q '.sbom.name'
     # expect: com.github.iglootools/nbkp   (a 404 means the graph is off)
     ```
-- **Set the `ASCIINEMA_INSTALL_ID` Actions secret.** It ties uploads to the project's
-  asciinema.org account. No workflow uses it today: the `demo` workflow calls the shared
-  `reusable-demo.yml` from [iglootools/common](https://github.com/iglootools/common), which
-  records the demo and keeps the cast as an artifact but never publishes it, because
+
+- **Set the `ASCIINEMA_INSTALL_ID` Actions secret.** It ties uploads to the
+  project's asciinema.org account. No workflow uses it today: the `demo`
+  workflow calls the shared `reusable-demo.yml` from
+  [iglootools/common](https://github.com/iglootools/common), which records the
+  demo and keeps the cast as an artifact but never publishes it, because
   GitHub-hosted runners cannot reach asciinema.org. Uploads go through
-  `mise run demo-upload-latest` from a developer's machine instead. The secret stays set so
-  uploads from a workflow can be re-enabled. Run `asciinema auth` and open the link it prints
-  to tie the local install id to the account, then store it:
+  `mise run demo-upload-latest` from a developer's machine instead. The secret
+  stays set so uploads from a workflow can be re-enabled. Run `asciinema auth`
+  and open the link it prints to tie the local install id to the account, then
+  store it:
 
     ```bash
     gh secret set ASCIINEMA_INSTALL_ID -R iglootools/nbkp < ~/.local/state/asciinema/install-id
     gh secret list -R iglootools/nbkp   # expect a line starting with ASCIINEMA_INSTALL_ID
     ```
 
-    A secret's value cannot be read back, only its name and update date, so `gh secret list`
-    is as far as verification goes.
-- **The `pypi` and `testpypi` environments**, which the publish workflows run in and the
-  PyPI trusted publishers name, are release configuration: they are recorded, with the
-  publisher settings that must match them, in
+  A secret's value cannot be read back, only its name and update date, so
+  `gh secret list` is as far as verification goes.
+- **The `pypi` and `testpypi` environments**, which the publish workflows run in
+  and the PyPI trusted publishers name, are release configuration: they are
+  recorded, with the publisher settings that must match them, in
   [Releasing and Publishing › PyPI Config](releasing-and-publishing.md#pypi-config).
 - **Enable Dependabot security updates.** These are *repository settings*, and
-  [.github/dependabot.yml](../.github/dependabot.yml) cannot switch them on — that file only
-  shapes the resulting PRs and restricts Dependabot to the security half
-  (`open-pull-requests-limit: 0`, because Renovate owns routine version updates and delays them
-  14 days). A repo with the file committed and these settings off looks configured while
-  watching nothing:
+  [.github/dependabot.yml](../.github/dependabot.yml) cannot switch them on —
+  that file only shapes the resulting PRs and restricts Dependabot to the
+  security half (`open-pull-requests-limit: 0`, because Renovate owns routine
+  version updates and delays them 14 days). A repo with the file committed and
+  these settings off looks configured while watching nothing:
 
     ```bash
     gh api -X PUT repos/iglootools/nbkp/vulnerability-alerts
     gh api -X PUT repos/iglootools/nbkp/automated-security-fixes
     ```
 
-    Both are required, and they are separate switches: `vulnerability-alerts` is what notices a
-    vulnerable dependency, `automated-security-fixes` is what opens the fix PR. Alerts alone
-    give a Security tab entry and no PR — the easy state to land in by accident, since alerts
-    are the more discoverable of the two.
+  Both are required, and they are separate switches: `vulnerability-alerts` is
+  what notices a vulnerable dependency, `automated-security-fixes` is what opens
+  the fix PR. Alerts alone give a Security tab entry and no PR — the easy state
+  to land in by accident, since alerts are the more discoverable of the two.
 
-    Each `PUT` returns `204 No Content` and prints nothing, so verify rather than assume:
+  Each `PUT` returns `204 No Content` and prints nothing, so verify rather than
+  assume:
 
     ```bash
     gh api repos/iglootools/nbkp/vulnerability-alerts -i | head -1   # expect HTTP/2.0 204
     gh api repos/iglootools/nbkp/automated-security-fixes            # expect "enabled": true
     ```
 
-    A `404` from the first is the disabled state, not a missing endpoint. Undo with the same two
-    URLs and `-X DELETE`. Needs admin on the repository; the dependency graph is a prerequisite
-    and is on by default for public repositories.
+  A `404` from the first is the disabled state, not a missing endpoint. Undo
+  with the same two URLs and `-X DELETE`. Needs admin on the repository; the
+  dependency graph is a prerequisite and is on by default for public
+  repositories.
 
 ## Renovate
-- Added the [iglootools](https://github.com/iglootools) org to [developer.mend.io](https://developer.mend.io/)
 
+- Added the [iglootools](https://github.com/iglootools) org to
+  [developer.mend.io](https://developer.mend.io/)

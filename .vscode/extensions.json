@@ -1,10 +1,12 @@
 {
-    "recommendations": [
-        "ms-python.python",
-        "ms-python.vscode-pylance",
-        "ms-python.vscode-python-envs",
-        "charliermarsh.ruff",
-        "hverlin.mise-vscode",
-        "tombi-toml.tombi"
-    ]
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.vscode-python-envs",
+    "charliermarsh.ruff",
+    "hverlin.mise-vscode",
+    "tombi-toml.tombi",
+    "dprint.dprint",
+    "rvben.rumdl"
+  ]
 }

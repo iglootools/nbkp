@@ -13,7 +13,7 @@ volumes:
   laptop-docs:
     type: local
     path: /Volumes/docs
-  
+
   # apfs
   laptop-home:
     type: local
@@ -82,11 +82,11 @@ volumes:
       encryption:
         type: luks
         passphrase-id: iomega1tb
-    
+
 sync-endpoints:
   laptop-docs:
     volume: laptop-docs
-  
+
   laptop-home:
     volume: laptop-home
 
@@ -143,7 +143,7 @@ sync-endpoints:
     btrfs-snapshots:
       enabled: true
       max-snapshots: 30
-  
+
   seagate1tb-backups-audio:
     volume: seagate1tb
     subdir: backups/audio
@@ -202,7 +202,7 @@ sync-endpoints:
     btrfs-snapshots:
       enabled: true
       max-snapshots: 30
-  
+
   seagate8tb-backups-audio:
     volume: seagate8tb
     subdir: backups/audio
@@ -223,7 +223,7 @@ sync-endpoints:
     btrfs-snapshots:
       enabled: true
       max-snapshots: 30
-  
+
   seagate8tb-backups-home:
     volume: seagate8tb
     subdir: backups/home
@@ -245,7 +245,7 @@ sync-endpoints:
     btrfs-snapshots:
       enabled: true
       max-snapshots: 30
-  
+
   wd6tb-backups-audio:
     volume: wd6tb
     subdir: backups/audio
@@ -266,7 +266,7 @@ sync-endpoints:
     btrfs-snapshots:
       enabled: true
       max-snapshots: 30
-  
+
   wd6tb-backups-home:
     volume: wd6tb
     subdir: backups/home
@@ -302,7 +302,7 @@ syncs:
       checksum: false
     filters:
       - dir-merge: .rsync-filter
-  
+
   laptop-home-config-to-rocketnano1tb:
     source: laptop-home
     destination: rocketnano1tb-backups-home-config
@@ -322,7 +322,7 @@ syncs:
       - "+ /.config/mise/***"
       # cruft
       - "- /**"
-  
+
   # laptop-home
   laptop-home-to-seagate8tb:
     source: laptop-home
@@ -373,7 +373,7 @@ syncs:
     destination: seagate8tb-backups-photos
     rsync-options:
       checksum: false
-  
+
   # seagate8tb-backups
   seagate8tb-backups-applications-to-seagate1tb:
     source: seagate8tb-backups-applications
@@ -392,7 +392,7 @@ syncs:
     destination: seagate1tb-backups-docs
     rsync-options:
       checksum: false
-  
+
   seagate8tb-backups-education-to-seagate1tb:
     source: seagate8tb-backups-education
     destination: seagate1tb-backups-education
@@ -422,7 +422,7 @@ syncs:
     destination: wd6tb-backups-education
     rsync-options:
       checksum: false
-  
+
   seagate8tb-backups-home-to-wd6tb:
     source: seagate8tb-backups-home
     destination: wd6tb-backups-home
@@ -465,5 +465,3 @@ syncs:
       - "+ /photos/albums/203[0-9]/***"
       - "+ /photos/albums/204[0-9]/***"
       - "- /**"
-
-  

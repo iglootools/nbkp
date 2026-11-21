@@ -1,17 +1,17 @@
 ssh-endpoints:
   nas:
-    host: nas                     # matches "Host nas" in ~/.ssh/config
+    host: nas # matches "Host nas" in ~/.ssh/config
     location: home
 
   nas-public:
-    extends: nas                  # inherits all fields from nas
-    host: nas.example.com         # override with public hostname
+    extends: nas # inherits all fields from nas
+    host: nas.example.com # override with public hostname
     location: travel
 
 volumes:
   laptop:
     type: local
-    path: "~"                     # quote ~ (YAML treats bare ~ as null)
+    path: "~" # quote ~ (YAML treats bare ~ as null)
 
   usb-drive:
     type: local
@@ -19,8 +19,8 @@ volumes:
 
   nas-backups:
     type: remote
-    ssh-endpoint: nas             # or, for specifying multiple endpoints:
-    ssh-endpoints:                # candidates for auto-selection
+    ssh-endpoint: nas # or, for specifying multiple endpoints:
+    ssh-endpoints: # candidates for auto-selection
       - nas
       - nas-public
     path: /volume1/backups

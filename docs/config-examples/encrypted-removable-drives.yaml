@@ -1,4 +1,4 @@
-credential-provider: keyring  # or: prompt, env, command
+credential-provider: keyring # or: prompt, env, command
 # credential-command: ["pass", "show", "nbkp/{id}"]  # only needed for command provider
 
 volumes:
@@ -10,7 +10,7 @@ volumes:
     type: local
     path: /mnt/seagate8tb
     mount:
-      device-uuid: 5941f273-f73c-44c5-a3ef-fae7248db1b6  # LUKS container UUID
+      device-uuid: 5941f273-f73c-44c5-a3ef-fae7248db1b6 # LUKS container UUID
       encryption:
         type: luks
         passphrase-id: seagate8tb
@@ -22,13 +22,13 @@ volumes:
       device-uuid: ad5542e5-5365-4951-a1f2-fe81c4d6fe43
       encryption:
         type: luks
-        passphrase-id: backup-drives  # shared passphrase across drives
+        passphrase-id: backup-drives # shared passphrase across drives
 
   usb-plain:
     type: local
     path: /mnt/usb-plain
     mount:
-      device-uuid: 8a3b2c1d-4e5f-6789-abcd-ef0123456789  # filesystem UUID
+      device-uuid: 8a3b2c1d-4e5f-6789-abcd-ef0123456789 # filesystem UUID
 
 sync-endpoints:
   laptop-photos:
