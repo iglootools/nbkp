@@ -73,8 +73,8 @@ automatic check cannot see — a `.venv` that is *dirty* rather than *stale*, e.
 <!-- toc -->
 **On this page**
 
-  - [Python versions](#python-versions)
-  - [Parallel test execution](#parallel-test-execution)
+- [Python versions](#python-versions)
+- [Parallel test execution](#parallel-test-execution)
 - [Testing Strategy](#testing-strategy)
   - [Manual Testing](#manual-testing)
   - [Automated tests](#automated-tests)
@@ -84,7 +84,7 @@ automatic check cannot see — a `.venv` that is *dirty* rather than *stale*, e.
 - [Renovate](#renovate)
 <!-- tocstop -->
 
-### Python versions
+## Python versions
 
 nbkp supports exactly one Python version, the one pinned in `mise.toml` (`[tools] python`):
 local development, CI and the `requires-python` floor all use it, so there is no separate
@@ -97,7 +97,7 @@ them to match. See the
 [Python Version Policy](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#python-version-policy)
 for the rationale.
 
-### Parallel test execution
+## Parallel test execution
 
 Tests run under [pytest-xdist](https://pytest-xdist.readthedocs.io/), with per-suite worker counts chosen for what each suite can safely parallelize:
 
