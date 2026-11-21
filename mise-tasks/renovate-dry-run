@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+#MISE description="List the updates Renovate would propose, from this checkout, without writing anything"
+# Renovate's local platform reads the working tree and only looks updates up: it creates no
+# branch or pull request and writes no file (guidelines/project-setup/dependency-automation.md).
+# Its lookups need a GitHub token, taken from GITHUB_COM_TOKEN or else from `gh auth token`.
+set -euo pipefail
+
+if [ -z "${GITHUB_COM_TOKEN:-}" ]; then
+  if ! GITHUB_COM_TOKEN="$(gh auth token 2>/dev/null)"; then
+    echo "renovate-dry-run needs a GitHub token: set GITHUB_COM_TOKEN, or log in with \`gh auth login\`." >&2
+    exit 1
+  fi
+fi
+export GITHUB_COM_TOKEN
+
+report="$(mktemp)"
+trap 'rm -f "$report"' EXIT
+
+LOG_LEVEL="${LOG_LEVEL:-warn}" renovate --platform=local --dry-run=lookup \
+  --report-type=file --report-path="$report"
+
+jq -r '
+  [.repositories[].packageFiles | to_entries[] | .key as $manager | .value[]
+    | .packageFile as $file | .deps[] | select((.updates // []) | length > 0)
+    | [$manager, $file, .depName,
+       (.currentValue // (.currentDigest // "" | .[0:12])),
+       ([.updates[] | (.newVersion // (.newDigest // "" | .[0:12]))] | unique | join(", "))]]
+  | if length == 0 then "No updates." else (.[] | @tsv) end
+' "$report" | column -t -s "$(printf '\t')"

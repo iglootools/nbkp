@@ -44,6 +44,8 @@ mise run lint-lock-mise     # check mise.lock is up to date
 mise run lint-lock-uv       # check uv.lock is consistent with pyproject.toml
 mise run lint-boundaries    # check the module layering rules (import-linter)
 mise run lint-dead-code     # check for unused code (deadcode)
+mise run lint-renovate      # validate renovate.json with Renovate's validator, strictly
+mise run renovate-dry-run   # list the updates Renovate would propose, writing nothing (needs gh auth)
 
 mise run install            # sync .venv with uv.lock (rarely needed by hand — see below)
 mise run reinstall          # delete .venv and sync from scratch

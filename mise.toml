@@ -10,6 +10,13 @@ github-cli = "2.103.3"
 shellcheck = "0.11.0"
 dprint = "0.64.3"
 rumdl = "0.3.4"
+# Renovate, for lint-renovate and renovate-dry-run (guidelines/project-setup/dependency-automation.md
+# in iglootools/common, which explains both options). trust_policy_excludes exempts one reviewed
+# release, published by hand without provenance; allow_builds lets re2 build its native module,
+# so the validator checks regexes with RE2, the engine Renovate runs.
+"npm:renovate" = { version = "44.239.1", trust_policy_excludes = ["@yarnpkg/libzip@3.2.2"], allow_builds = ["re2"] }
+node = "26.13.0"
+jq = "1.8.2"
 
 [env]
 # Pin uv to the interpreter mise installed, by absolute path. mise's own docs are explicit
@@ -258,6 +265,7 @@ run = [
   { task = "lint-depgraph" },
   { task = "lint-boundaries" },
   { task = "lint-dead-code" },
+  { task = "lint-renovate" },
 ]
 
 # Why the formatters need a lint of their own: `ruff format` rewrites files and exits 0 whether
@@ -389,3 +397,9 @@ run = "uv run --no-sync iglootools docs depgraph --format ascii"
 [tasks.depgraph-mermaid]
 description = "Print module dependency graph (mermaid syntax) to stdout"
 run = "uv run --no-sync iglootools docs depgraph --format mermaid"
+
+# --strict fails on a config Renovate would migrate, which a plain run reports only as a
+# warning. With no argument it validates renovate.json as repository config.
+[tasks.lint-renovate]
+description = "Validate the Renovate config with Renovate's validator, strictly"
+run = "renovate-config-validator --strict"
