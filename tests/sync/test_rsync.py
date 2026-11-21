@@ -23,10 +23,10 @@ from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.snapshots.common import create_snapshot_timestamp
 from nbkp.sync.rsync import (
     ProgressMode,
-    _run_streaming,
     build_rsync_command,
     run_local_process,
     run_rsync,
+    run_streaming,
 )
 from tests.fakes import completed
 
@@ -1420,12 +1420,12 @@ class TestRunStreaming:
     """Chunked reads decode exactly like the ``text=True`` pipe they replaced."""
 
     def test_translates_newlines_like_a_text_pipe(self) -> None:
-        result = _run_streaming(_emit_cmd(b"a\r\nb\rc\n"), lambda _: None)
+        result = run_streaming(_emit_cmd(b"a\r\nb\rc\n"), lambda _: None)
         assert result.stdout == "a\nb\nc\n"
 
     def test_decodes_characters_and_crlf_split_across_reads(self) -> None:
         chunks: list[str] = []
-        result = _run_streaming(
+        result = run_streaming(
             _emit_cmd("é\r\n€".encode()), chunks.append, chunk_size=1
         )
         assert result.stdout == "é\n€"
@@ -1434,7 +1434,7 @@ class TestRunStreaming:
         assert "" not in chunks
 
     def test_merges_stderr_and_keeps_exit_code(self) -> None:
-        result = _run_streaming(
+        result = run_streaming(
             _emit_cmd(b"out\n", stderr=b"err\n", exit_code=23), lambda _: None
         )
         assert result.returncode == 23
@@ -1452,7 +1452,7 @@ class TestRunStreaming:
             raise BrokenPipeError
 
         with pytest.raises(BrokenPipeError):
-            _run_streaming([sys.executable, "-c", code], on_output)
+            run_streaming([sys.executable, "-c", code], on_output)
 
         # Killed and reaped: the pid no longer exists.
         with pytest.raises(ProcessLookupError):
@@ -1463,7 +1463,7 @@ class TestRunStreaming:
         # The child builds the payload: Linux caps one argument at 128 KiB.
         cmd = [sys.executable, "-c", f"import sys; sys.stdout.write('x' * {size})"]
         chunks: list[str] = []
-        _run_streaming(cmd, chunks.append)
+        run_streaming(cmd, chunks.append)
         assert "".join(chunks) == "x" * size
         assert len(chunks) < 1_000
 
@@ -1473,7 +1473,7 @@ class TestRunStreaming:
         code = "import sys\nfor i in range(10_000): sys.stdout.write(f'{i}\\n')\n"
         chunks: list[str] = []
 
-        result = _run_streaming(
+        result = run_streaming(
             [sys.executable, "-c", code], chunks.append, chunk_size=7, tail_size=20
         )
 

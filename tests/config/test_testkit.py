@@ -23,7 +23,7 @@ from nbkp.config.testkit import config_show_config, write_config
 from nbkp.preflight.testkit.check import check_config
 from nbkp.preflight.testkit.troubleshoot import troubleshoot_config
 from nbkp.sync.testkit.seed import build_chain_config, build_local_chain_config
-from tests.clidisplay import config_with_locations, sample_config
+from tests.fixtures.preflight import config_with_locations, sample_config
 
 
 def _chain_config() -> Config:

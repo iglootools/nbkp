@@ -24,14 +24,14 @@ from nbkp.run.pipeline import (
     run_failed,
 )
 from nbkp.sync import RunOptions, SyncFailureKind, SyncOutcome
-from tests.clidisplay import (
+from tests.fakes import FakeRsync, completed
+from tests.fixtures.preflight import (
     dst_ep_status,
     localhost_ssh_status,
     preflight,
     src_ep_status,
     vol_status,
 )
-from tests.fakes import FakeRsync, completed
 
 
 def _chain_config() -> Config:

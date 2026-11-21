@@ -25,8 +25,8 @@ from nbkp.ordering.output import (
     format_rich_tree_graph,
 )
 from nbkp.policy import Severity
-from tests.clidisplay import runner
 from tests.fakes import fake_runtime
+from tests.fixtures.cli import runner
 
 
 def _render(renderable) -> str:  # type: ignore[no-untyped-def]

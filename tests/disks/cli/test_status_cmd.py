@@ -13,9 +13,9 @@ from nbkp.config import (
     SshEndpoint,
 )
 from nbkp.config.testkit import write_config
-from tests.clidisplay import runner
-from tests.cliwiring.test_mount import UUID, encrypted_volume
 from tests.fakes import FakeCommandRunner, completed, fake_runtime
+from tests.fixtures.cli import runner
+from tests.fixtures.disks import UUID, encrypted_volume
 
 _PLAIN_UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 

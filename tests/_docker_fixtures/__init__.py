@@ -1,19 +1,5 @@
 """Shared Docker test fixtures for e2e and integration tests.
 
-Docker-harness note (needs real-Docker validation):
-The mount lifecycle migrated from direct ``cryptsetup``/``mount`` to udisks2
-(``udisksctl``).  For the encrypted-volume mount tests to pass against a real
-container, the image at ``nbkp/remote/testkit/dockerbuild/`` (frozen in this
-change) must be updated to:
-
-* install ``udisks2`` + ``udisks2-btrfs`` + ``polkit``;
-* start ``dbus-daemon --system``, ``polkitd`` and ``/usr/lib/udisks2/udisksd``
-  at container init;
-* create the backup user and install the generated ``50-nbkp.rules`` polkit
-  file (see ``nbkp.disks.auth.generate_polkit_rules``);
-* provide a loopback LUKS device with an ``/etc/fstab`` entry mapping
-  ``/dev/mapper/luks-<uuid>`` to the mount path (no crypttab needed).
-
 Tests share a single session-scoped container and unlock/mount/lock the same
 encrypted volume repeatedly.  This is reliable without any between-test reset
 because the container shares the host ``/dev`` and ``/run/udev`` (see the

@@ -15,20 +15,21 @@ from nbkp.config import (
     SshEndpoint,
 )
 from nbkp.credentials import retrieve_passphrase
-from nbkp.demo import seed as seed_module
 from nbkp.demo.cli import app
 from nbkp.demo.cli.seed_cmd import commands_script, format_seed_error
 from nbkp.demo.seed import (
     SeedError,
     SeedErrorKind,
     SeedResult,
+    docker_demo_config,
+    encrypted_volume_mounted,
     seed_demo,
     seed_plan,
     seed_steps,
 )
 from nbkp.remote.testkit.constants import LUKS_PASSPHRASE
-from tests.cliwiring.test_mount import UUID, encrypted_volume
 from tests.fakes import FakeCommandRunner, completed
+from tests.fixtures.disks import UUID, encrypted_volume
 
 
 class TestDryRun:
@@ -66,12 +67,13 @@ class TestCredentialProvider:
     ) -> None:
         """Regression: the config had no credential-command and failed
         validation after the containers had started."""
-        endpoint = SshEndpoint(slug="bastion", host="127.0.0.1")
-        containers = seed_module._Containers(
-            tmp_path / "id", endpoint, endpoint, 2222, 2223
-        )
-        config = seed_module._docker_config(
-            tmp_path, containers, UUID, RsyncOptions(), CredentialProvider.COMMAND
+        config = docker_demo_config(
+            tmp_path,
+            bastion=SshEndpoint(slug="bastion", host="127.0.0.1"),
+            private_key=tmp_path / "id",
+            luks_uuid=UUID,
+            rsync_options=RsyncOptions(),
+            credential_provider=CredentialProvider.COMMAND,
         )
         assert config.credential_provider == CredentialProvider.COMMAND
         passphrase = retrieve_passphrase(
@@ -124,15 +126,12 @@ class TestUmountFailure:
         run = _drive(unmount=completed(1, stderr="busy"))
         with (
             pytest.raises(SeedError) as exc,
-            seed_module._encrypted_volume_mounted(
+            encrypted_volume_mounted(
                 _ENC,
                 {},
-                True,
-                seed_module._Steps(
-                    None, lambda label, sev, _d: ends.append((label, sev))
-                ),
                 passphrase_fn=lambda _: "x",
                 run=run,
+                on_step_end=lambda label, sev, _d: ends.append((label, sev)),
             ),
         ):
             pass
@@ -145,11 +144,9 @@ class TestUmountFailure:
         run = _drive(mounts=False, mount=completed(1, stderr="no fs"))
         with (
             pytest.raises(SeedError) as exc,
-            seed_module._encrypted_volume_mounted(
+            encrypted_volume_mounted(
                 _ENC,
                 {},
-                True,
-                seed_module._Steps(None, None),
                 passphrase_fn=lambda _: "x",
                 run=run,
             ),
@@ -165,13 +162,38 @@ class TestUmountFailure:
 
 
 class TestStepFailure:
-    def test_a_raising_step_is_reported_failed(self) -> None:
+    def test_a_failed_mount_is_reported_with_its_detail(self) -> None:
         ends: list[tuple[str, str, str | None]] = []
-        steps = seed_module._Steps(None, lambda *end: ends.append(end))
-        step = seed_steps(docker=True, luks=False)[0]
-        with pytest.raises(TimeoutError), steps.run(step):
-            raise TimeoutError("SSH not ready after 30s")
-        assert ends == [(step.done, "error", "SSH not ready after 30s")]
+        run = _drive(mounts=False, mount=completed(1, stderr="no fs"))
+        with (
+            pytest.raises(SeedError),
+            encrypted_volume_mounted(
+                _ENC,
+                {},
+                passphrase_fn=lambda _: "x",
+                run=run,
+                on_step_end=lambda *end: ends.append(end),
+            ),
+        ):
+            pass
+        assert ends[0] == (
+            "mount encrypted volume",
+            "error",
+            "mount failed (exit 1): no fs",
+        )
+
+    def test_a_raising_step_is_reported_failed(self, tmp_path: Path) -> None:
+        # A file where the seeding creates the source volume's directory.
+        (tmp_path / "src-local-bare").write_text("")
+        ends: list[tuple[str, str, str | None]] = []
+        with pytest.raises(FileExistsError) as exc:
+            seed_demo(
+                tmp_path,
+                docker=False,
+                big_file_size=0,
+                on_step_end=lambda *end: ends.append(end),
+            )
+        assert ends == [("seed volumes", "error", str(exc.value))]
 
 
 class TestSeedErrorRendering:

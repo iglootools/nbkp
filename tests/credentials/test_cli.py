@@ -23,8 +23,8 @@ from nbkp.config import (
 from nbkp.config.testkit import write_config
 from nbkp.credentials import CommandFn, CredentialErrorKind, PassphrasePrefetch
 from nbkp.credentials.cli.keyring_status_cmd import keyring_status_json
-from tests.clidisplay import runner
 from tests.fakes import completed, fake_runtime
+from tests.fixtures.cli import runner
 
 
 def _config(

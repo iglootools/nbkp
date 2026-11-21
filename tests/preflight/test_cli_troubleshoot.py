@@ -10,8 +10,8 @@ from pathlib import Path
 
 from nbkp.cli import app
 from nbkp.config.testkit import write_config
-from tests.clidisplay import runner
 from tests.fakes import FakeCommandRunner, fake_runtime
+from tests.fixtures.cli import runner
 from tests.nas import healthy_nas, nas_config
 from tests.preflight.fake_hosts import FAILS
 

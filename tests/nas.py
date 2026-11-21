@@ -8,21 +8,18 @@ healthy host does.  Commands run against it with::
     runner.invoke(app, [...], obj=fake_runtime(run=healthy_nas()))
 """
 
-from typing import Literal
-
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     HardLinkSnapshotConfig,
     RemoteVolume,
+    SnapshotMode,
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
 )
 from tests.fakes import FakeCommandRunner
 from tests.preflight.fake_hosts import healthy_host
-
-type SnapshotMode = Literal["none", "btrfs", "hard-link"]
 
 
 def nas_config(

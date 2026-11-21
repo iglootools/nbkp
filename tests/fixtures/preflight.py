@@ -1,10 +1,7 @@
-"""Shared CLI test helpers: status builders, config fixtures, and runner."""
-
-import re
-
-from typer.testing import CliRunner
+"""Shared test fixtures: preflight status builders and sample configs."""
 
 from nbkp.config import (
+    BtrfsSnapshotConfig,
     Config,
     LocalVolume,
     RemoteVolume,
@@ -33,14 +30,6 @@ from nbkp.preflight import (
     VolumeErrorKind,
     VolumeStatus,
 )
-
-runner = CliRunner()
-
-
-def strip_panel(text: str) -> str:
-    """Strip Rich panel border characters and normalize whitespace."""
-    text = re.sub(r"[╭╮╰╯│─]", "", text)
-    return re.sub(r"\s+", " ", text).strip()
 
 
 def localhost_ssh_status(*, active: bool = True) -> SshEndpointStatus:
@@ -244,6 +233,70 @@ def preflight(
     )
 
 
+def sync_status(
+    config: Config,
+    vol_statuses: dict[str, VolumeStatus],
+    sync_slug: str,
+    *,
+    src_ep_errors: list[SourceEndpointErrorKind] | None = None,
+    dst_ep_errors: list[DestinationEndpointErrorKind] | None = None,
+    sync_errors: list[SyncErrorKind] | None = None,
+    destination_latest_snapshot: Snapshot | None = None,
+) -> SyncStatus:
+    """*sync_slug*'s status over *vol_statuses*, its endpoints built by
+    :func:`src_ep_status` and :func:`dst_ep_status` with the given errors
+    added."""
+    sync = config.syncs[sync_slug]
+    src = src_ep_status(
+        sync.source, vol_statuses[config.sync_endpoints[sync.source].volume]
+    )
+    dst = dst_ep_status(
+        sync.destination,
+        vol_statuses[config.sync_endpoints[sync.destination].volume],
+    )
+    return SyncStatus(
+        slug=sync_slug,
+        config=sync,
+        source_endpoint_status=src.model_copy(
+            update={"errors": [*src.errors, *(src_ep_errors or [])]}
+        ),
+        destination_endpoint_status=dst.model_copy(
+            update={"errors": [*dst.errors, *(dst_ep_errors or [])]}
+        ),
+        errors=sync_errors or [],
+        destination_latest_snapshot=destination_latest_snapshot,
+    )
+
+
+def local_vol_statuses(config: Config) -> dict[str, VolumeStatus]:
+    """Every volume of *config*, active on ``localhost``."""
+    ssh = localhost_ssh_status()
+    return {name: vol_status(name, config, ssh) for name in config.volumes}
+
+
+def btrfs_config() -> Config:
+    """``btrfs-sync``: local ``src`` to local ``dst``, which takes btrfs
+    snapshots."""
+    src = LocalVolume(slug="src", path="/mnt/src")
+    dst = LocalVolume(slug="dst", path="/mnt/dst")
+    ep_src = SyncEndpoint(slug="ep-src", volume="src")
+    ep_dst = SyncEndpoint(
+        slug="ep-dst",
+        volume="dst",
+        btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+    )
+    sync = SyncConfig(
+        slug="btrfs-sync",
+        source="ep-src",
+        destination="ep-dst",
+    )
+    return Config(
+        volumes={"src": src, "dst": dst},
+        sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
+        syncs={"btrfs-sync": sync},
+    )
+
+
 def sample_config() -> Config:
     src = LocalVolume(slug="local-data", path="/mnt/data")
     nas_server = SshEndpoint(
@@ -281,24 +334,6 @@ def sample_vol_statuses(
     return {
         "local-data": vol_status("local-data", config, local_ssh),
         "nas": vol_status("nas", config, nas_ssh),
-    }
-
-
-def sample_sync_statuses(
-    config: Config,
-    vol_statuses: dict[str, VolumeStatus],
-) -> dict[str, SyncStatus]:
-    """NAS unreachable -> sync inactive due to SSH-level error."""
-    src_ep = src_ep_status("ep-src", vol_statuses["local-data"])
-    dst_ep = dst_ep_status("ep-dst", vol_statuses["nas"])
-    return {
-        "photos-to-nas": SyncStatus(
-            slug="photos-to-nas",
-            config=config.syncs["photos-to-nas"],
-            source_endpoint_status=src_ep,
-            destination_endpoint_status=dst_ep,
-            errors=[SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE],
-        ),
     }
 
 

@@ -15,16 +15,16 @@ from nbkp.cli import app
 from nbkp.clidisplay import echo_json
 from nbkp.config.testkit import write_config
 from nbkp.preflight.cli.check_cmd import check_json
-from tests.clidisplay import (
+from tests.fakes import FakeCommandRunner, fake_runtime
+from tests.fixtures.cli import runner
+from tests.fixtures.preflight import (
     config_with_locations,
     preflight,
-    runner,
     sample_all_active_sync_statuses,
     sample_all_active_vol_statuses,
     sample_config,
     sample_sync_statuses_with_snapshots,
 )
-from tests.fakes import FakeCommandRunner, fake_runtime
 from tests.nas import healthy_nas, nas_config
 from tests.preflight.fake_hosts import FAILS
 

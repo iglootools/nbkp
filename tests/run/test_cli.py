@@ -25,9 +25,11 @@ from nbkp.preflight import SyncErrorKind, SyncStatus
 from nbkp.run.cli.run_cmd import abort_message, run_json
 from nbkp.run.pipeline import PipelineResult
 from nbkp.sync import ProgressMode, SyncFailureKind, SyncResult
-from tests.clidisplay import (
+from tests.fakes import FakeCommandRunner, FakeRsync, completed, fake_runtime
+from tests.fixtures.cli import runner
+from tests.fixtures.disks import BUSY, LOCK_FAILED, encrypted_volume, mounted_drive_host
+from tests.fixtures.preflight import (
     preflight,
-    runner,
     sample_all_active_sync_statuses,
     sample_all_active_vol_statuses,
     sample_config,
@@ -36,13 +38,6 @@ from tests.clidisplay import (
     sample_sync_statuses_with_snapshots,
     sample_vol_statuses,
 )
-from tests.cliwiring.test_mount import (
-    BUSY,
-    LOCK_FAILED,
-    encrypted_volume,
-    mounted_drive_host,
-)
-from tests.fakes import FakeCommandRunner, FakeRsync, completed, fake_runtime
 from tests.nas import healthy_nas, nas_config
 from tests.preflight.fake_hosts import FAILS
 

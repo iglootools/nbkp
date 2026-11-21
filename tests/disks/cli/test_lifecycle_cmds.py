@@ -26,9 +26,9 @@ from nbkp.disks.models import (
 )
 from nbkp.disks.output import format_plan_line
 from nbkp.disks.plan import MountAction, VolumePlan, plan_incomplete
-from tests.clidisplay import runner
-from tests.cliwiring.test_mount import UUID, encrypted_volume
 from tests.fakes import FakeCommandRunner, completed, fake_runtime
+from tests.fixtures.cli import runner
+from tests.fixtures.disks import UUID, encrypted_volume
 from tests.preflight.fake_hosts import FAILS
 
 _CLEARTEXT = f"/dev/mapper/luks-{UUID}"
