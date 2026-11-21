@@ -306,14 +306,18 @@ forbidden_modules = [
 # that runs without being named in the project, so the scan cannot see it used.
 [tool.deadcode]
 ignore-names-if-decorated-with = [
-  "@*.command", "@*.callback",                # Typer registers commands by decorator
-  "@pytest.fixture",                          # pytest injects fixtures by parameter name
-  "@field_validator", "@model_validator",     # Pydantic calls them while validating
-  "@field_serializer",                        # and while serializing
+  "@*.command", # Typer registers commands and callbacks by decorator
+  "@*.callback",
+  "@pytest.fixture", # pytest injects fixtures by parameter name
+  "@field_validator", # Pydantic calls validators while validating
+  "@model_validator",
+  "@field_serializer", # and serializers while serializing
 ]
 ignore-names = [
-  "main",                                     # the [project.scripts] entry point
-  "model_config",                             # read by Pydantic
-  "pytestmark", "pytest_plugins", "pytest_*", # read by pytest
-  "side_effect",                              # MagicMock's, set on the documented Connection patch
+  "main", # the [project.scripts] entry point
+  "model_config", # read by Pydantic
+  "pytestmark", # read by pytest
+  "pytest_plugins",
+  "pytest_*",
+  "side_effect", # MagicMock's, set on the documented Connection patch
 ]
