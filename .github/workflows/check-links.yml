@@ -33,4 +33,4 @@ jobs:
     # because checkout there resolves to the calling repository. Pinned to a commit SHA for the
     # reason guidelines/project-setup/workflows.md in iglootools/common gives for actions, with
     # the version in the trailing comment so Renovate can raise the update.
-    uses: iglootools/common/.github/workflows/reusable-check-links.yml@4de2f56f5a4e0a1625d072f8656b75428a84688a # v1.30.0
+    uses: iglootools/common/.github/workflows/reusable-check-links.yml@e8dd2a6f64d297997ea4876ae6f625fd1d62190c # v1.30.1
