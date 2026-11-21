@@ -36,6 +36,7 @@ from ...config.output import endpoint_path, host_label
 from ...disks import AuthRuleBlock, cleartext_mapper_name
 from ...fsprotocol import (
     DESTINATION_SENTINEL,
+    DEVNULL_TARGET,
     LATEST_LINK,
     SNAPSHOTS_DIR,
     SOURCE_SENTINEL,
@@ -84,6 +85,10 @@ class RemediationFacts:
     polkit_rules: Mapping[str, AuthRuleBlock] = field(default_factory=dict)
     """System user → the polkit rule block authorizing that user.  A user is
     absent when no volume declares a ``mount`` section."""
+    newest_snapshots: Mapping[str, str | None] = field(default_factory=dict)
+    """Sync endpoint slug → name of its newest snapshot, ``None`` when it has
+    none.  An endpoint is absent when its snapshots could not be listed; the
+    fix then names a placeholder for the user to fill in."""
 
 
 @dataclass(frozen=True)
@@ -191,20 +196,65 @@ def _sentinel_fix(
     ]
 
 
+_NEWEST_SNAPSHOT_PLACEHOLDER = "<newest-snapshot>"
+
+
 def _reset_latest(
     vol: LocalVolume | RemoteVolume,
     path: str,
+    endpoint_slug: str,
     ctx: TroubleshootContext,
 ) -> Lines:
-    return [
-        format_command(
-            wrap_cmd(
-                ["ln", "-sfn", "/dev/null", f"{path}/{LATEST_LINK}"],
-                vol,
-                ctx.resolved_endpoints,
-            ),
-        )
-    ]
+    """Point ``latest`` at the newest snapshot, or at ``/dev/null`` only when
+    there is none: a hard-link sync deletes every snapshot as a leftover of a
+    failed run while ``latest`` points to ``/dev/null``.
+    """
+    newest_snapshots = ctx.known_facts.newest_snapshots
+    known = endpoint_slug in newest_snapshots
+    newest = newest_snapshots.get(endpoint_slug)
+    target = (
+        DEVNULL_TARGET
+        if known and newest is None
+        else f"{SNAPSHOTS_DIR}/{newest or _NEWEST_SNAPSHOT_PLACEHOLDER}"
+    )
+    command = format_command(
+        wrap_cmd(
+            ["ln", "-sfn", target, f"{path}/{LATEST_LINK}"],
+            vol,
+            ctx.resolved_endpoints,
+        ),
+    )
+    snapshots = f"{path}/{SNAPSHOTS_DIR}/"
+    match (known, newest):
+        case (True, None):
+            return [
+                command,
+                format_line(FIX, snapshots, " holds no snapshot yet, hence /dev/null."),
+            ]
+        case (True, str() as name):
+            return [
+                command,
+                format_line(
+                    FIX,
+                    name,
+                    " is the newest snapshot in ",
+                    snapshots,
+                    ". If a run was interrupted while writing it, pick the one before.",
+                ),
+            ]
+        case _:
+            return [
+                command,
+                format_line(
+                    FIX,
+                    f"Replace {_NEWEST_SNAPSHOT_PLACEHOLDER} with the newest"
+                    " snapshot in ",
+                    snapshots,
+                    ". Use /dev/null only if it holds none: while latest points"
+                    " to /dev/null, the next hard-link sync deletes every"
+                    " snapshot there as a leftover of a failed run.",
+                ),
+            ]
 
 
 def _chown(
@@ -864,7 +914,7 @@ def format_source_endpoint_error_fix(
                     f"{path}/{LATEST_LINK}",
                     " symlink does not exist. Create it:",
                 ),
-                *_reset_latest(src_vol, path, ctx),
+                *_reset_latest(src_vol, path, src_ep.slug, ctx),
             ]
         case SourceEndpointErrorKind.LATEST_SYMLINK_INVALID:
             return [
@@ -875,7 +925,7 @@ def format_source_endpoint_error_fix(
                     " symlink points to an invalid target. Ensure the upstream sync"
                     " has run at least once, or reset it:",
                 ),
-                *_reset_latest(src_vol, path, ctx),
+                *_reset_latest(src_vol, path, src_ep.slug, ctx),
             ]
         case SourceEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND:
             # Endpoint dir is expected to be user-writable by this point
@@ -904,7 +954,7 @@ def format_destination_endpoint_error_fix(
             | DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID
             | DestinationEndpointErrorKind.VOLUME_INACTIVE
         ):
-            return _destination_layout_fix(error, dst_vol, path, ctx)
+            return _destination_layout_fix(error, dst_vol, path, dst_ep.slug, ctx)
         case _:
             return _destination_snapshot_backend_fix(error, dst_vol, path, ctx)
 
@@ -949,6 +999,7 @@ def _destination_layout_fix(
     error: DestinationEndpointErrorKind,
     vol: LocalVolume | RemoteVolume,
     path: str,
+    endpoint_slug: str,
     ctx: TroubleshootContext,
 ) -> Lines:
     """Fixes for the directory layout shared by every destination."""
@@ -990,7 +1041,7 @@ def _destination_layout_fix(
                     latest,
                     " symlink does not exist. Create it:",
                 ),
-                *_reset_latest(vol, path, ctx),
+                *_reset_latest(vol, path, endpoint_slug, ctx),
             ]
         case DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID:
             return [
@@ -1000,7 +1051,7 @@ def _destination_layout_fix(
                     latest,
                     " symlink points to an invalid target. Reset it:",
                 ),
-                *_reset_latest(vol, path, ctx),
+                *_reset_latest(vol, path, endpoint_slug, ctx),
             ]
         case _:
             return [format_line(FIX, "Fix the volume errors reported above.")]

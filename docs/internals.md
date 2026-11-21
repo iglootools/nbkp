@@ -73,6 +73,8 @@ The `latest` symlink is only updated after a successful sync. If a sync fails mi
 
 When `latest` is used as a **source** (in chained syncs), `latest → /dev/null` is accepted only when an enabled upstream sync that is part of the same run writes to that endpoint (a sync left out by `--sync` never replaces the marker). Otherwise, it is flagged as an error during pre-flight checks.
 
+**Repairing `latest`** — When `latest` is missing or does not point to a snapshot of the endpoint, `preflight troubleshoot` lists the endpoint's `snapshots/` and suggests pointing `latest` at the newest one (`ln -sfn snapshots/<newest> latest`), and at `/dev/null` only when there is none. When the listing fails, it shows a `<newest-snapshot>` placeholder to replace. If the newest snapshot was being written when a run was interrupted, point `latest` at the one before it.
+
 ### Volume Mount Management
 
 Volumes can optionally declare a `mount` section to automate the mount/umount lifecycle. This is useful for removable drives (encrypted or not) that need to be mounted before syncing and umounted afterward. nbkp drives the lifecycle entirely through [udisks2](https://www.freedesktop.org/wiki/Software/udisks/) (`udisksctl`), a single D-Bus daemon authorized by polkit — there is no `sudo`, no `systemd-cryptsetup`, and no `systemctl` in the mount path.

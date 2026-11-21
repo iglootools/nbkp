@@ -16,8 +16,17 @@ from io import StringIO
 from rich.console import Console, Group, RenderableType
 from rich.text import Text
 
-from ...config import Config, LocalVolume, MountConfig, RemoteVolume, SyncConfig
+from ...config import (
+    Config,
+    LocalVolume,
+    MountConfig,
+    RemoteVolume,
+    SyncConfig,
+    SyncEndpoint,
+    resolve_endpoint_path,
+)
 from ...disks import DeviceProbeError, discover_cleartext_device, generate_auth_rules
+from ...fsprotocol import SNAPSHOTS_DIR, Snapshot, parse_snapshot_listing
 from ...policy import Severity, Strictness
 from ...remote.dispatch import VolumeCommandRunner, run_on_volume
 from ...remote.endpoints import ResolvedEndpoints
@@ -291,6 +300,83 @@ def _discover_cleartext_device(
         return None
 
 
+# Errors whose fix points ``latest`` at the endpoint's newest snapshot.
+_NEEDS_NEWEST_SNAPSHOT: frozenset[PreflightErrorKind] = frozenset(
+    {
+        SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND,
+        SourceEndpointErrorKind.LATEST_SYMLINK_INVALID,
+        DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND,
+        DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID,
+    }
+)
+
+
+def _issue_endpoint(issue: TroubleshootIssue, config: Config) -> SyncEndpoint | None:
+    match issue:
+        case TroubleshootIssue(error=SourceEndpointErrorKind(), sync=SyncConfig() as s):
+            return config.source_endpoint(s)
+        case TroubleshootIssue(
+            error=DestinationEndpointErrorKind(), sync=SyncConfig() as s
+        ):
+            return config.destination_endpoint(s)
+        case _:
+            return None
+
+
+def _list_endpoint_snapshots(
+    endpoint: SyncEndpoint,
+    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
+) -> list[Snapshot] | None:
+    """The endpoint's snapshots, oldest first; ``[]`` when ``snapshots/`` is
+    absent, and ``None`` when they could not be listed.  Like cleartext
+    discovery, a failure degrades instead of propagating: the fix then asks
+    the user to look.
+    """
+    vol = config.volumes[endpoint.volume]
+    if vol.path is None:
+        return None
+    path = f"{resolve_endpoint_path(vol, endpoint.subdir)}/{SNAPSHOTS_DIR}"
+    try:
+        listing = run(["ls", path], vol, resolved_endpoints)
+        if listing.returncode == 0:
+            return parse_snapshot_listing(listing.stdout)
+        else:
+            exists = run(["test", "-d", path], vol, resolved_endpoints)
+            return [] if exists.returncode == 1 else None
+    except ssh_connection_errors():
+        return None
+
+
+def _find_newest_snapshots(
+    issues: list[TroubleshootIssue],
+    ctx: TroubleshootContext,
+    *,
+    run: VolumeCommandRunner,
+) -> dict[str, str | None]:
+    """Endpoint slug → its newest snapshot name, ``None`` when it has none;
+    endpoints whose snapshots could not be listed are left out.
+    """
+    endpoints = {
+        ep.slug: ep
+        for issue in issues
+        if issue.error in _NEEDS_NEWEST_SNAPSHOT
+        for ep in [_issue_endpoint(issue, ctx.config)]
+        if ep is not None
+    }
+    listed = {
+        slug: _list_endpoint_snapshots(ep, ctx.config, ctx.resolved_endpoints, run=run)
+        for slug, ep in endpoints.items()
+    }
+    return {
+        slug: snapshots[-1].name if snapshots else None
+        for slug, snapshots in listed.items()
+        if snapshots is not None
+    }
+
+
 def gather_remediation_facts(
     issues: list[TroubleshootIssue],
     ctx: TroubleshootContext,
@@ -298,7 +384,9 @@ def gather_remediation_facts(
     run: VolumeCommandRunner = run_on_volume,
 ) -> RemediationFacts:
     """Only issues whose fix shows a cleartext device trigger a discovery, once per
-    encrypted volume; only a missing polkit rule triggers rule generation.
+    encrypted volume; only a missing polkit rule triggers rule generation; only
+    a missing or invalid ``latest`` triggers a snapshot listing, once per
+    endpoint.
 
     Discovery runs ``lsblk`` on the volume's host through *run*
     (:func:`remote.dispatch.run_on_volume` unless a test injects a fake).
@@ -330,6 +418,7 @@ def gather_remediation_facts(
             slug: device for slug, device in discovered.items() if device is not None
         },
         polkit_rules={user: block for user, block in rules.items() if block},
+        newest_snapshots=_find_newest_snapshots(issues, ctx, run=run),
     )
 
 
