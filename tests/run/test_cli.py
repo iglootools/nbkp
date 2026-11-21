@@ -17,6 +17,7 @@ from rich.console import Console
 
 from nbkp.cli import app
 from nbkp.clidisplay import echo_json
+from nbkp.cliwiring.lock import hold_run_lock
 from nbkp.config import Config
 from nbkp.config.testkit import write_config
 from nbkp.disks import UmountResult
@@ -25,7 +26,13 @@ from nbkp.preflight import SyncErrorKind, SyncStatus
 from nbkp.run.cli.run_cmd import abort_message, run_json
 from nbkp.run.pipeline import PipelineResult
 from nbkp.sync import ProgressMode, SyncFailureKind, SyncResult
-from tests.fakes import FakeCommandRunner, FakeRsync, completed, fake_runtime
+from tests.fakes import (
+    FakeCommandRunner,
+    FakeRsync,
+    FakeRunLock,
+    completed,
+    fake_runtime,
+)
 from tests.fixtures.cli import runner
 from tests.fixtures.disks import BUSY, LOCK_FAILED, encrypted_volume, mounted_drive_host
 from tests.fixtures.preflight import (
@@ -381,6 +388,88 @@ class TestUnknownSyncFilter:
         assert result.exit_code == 2
         assert "unknown sync name(s): nope" in result.stderr
         assert "photos-to-nas" in result.stderr
+
+
+class TestRunLock:
+    """One run at a time: the lock is taken before anything is mounted."""
+
+    def test_a_held_lock_stops_the_run_before_anything_runs(
+        self, nas_config_file: str, tmp_path: Path
+    ) -> None:
+        state_home = tmp_path / "state"
+        lock_path = state_home / "nbkp" / "run.lock"
+        nas, rsync = healthy_nas(), FakeRsync()
+        runtime = fake_runtime(
+            run=nas,
+            rsync=rsync,
+            environ={"XDG_STATE_HOME": str(state_home)},
+            run_lock=hold_run_lock,
+        )
+
+        with hold_run_lock(lock_path):
+            result = runner.invoke(
+                app, ["run", "-c", nas_config_file, "-o", "json"], obj=runtime
+            )
+
+        assert result.exit_code == 1
+        error = json.loads(result.stdout)["error"]
+        assert error["reason"] == "run-in-progress"
+        assert error["lock_path"] == str(lock_path)
+        assert "Wait for it to finish" in error["message"]
+        assert nas.commands == []
+        assert rsync.synced == []
+
+    def test_a_held_lock_is_reported_on_stderr(
+        self, nas_config_file: str, tmp_path: Path
+    ) -> None:
+        state_home = tmp_path / "state"
+        runtime = fake_runtime(
+            environ={"XDG_STATE_HOME": str(state_home)}, run_lock=hold_run_lock
+        )
+
+        with hold_run_lock(state_home / "nbkp" / "run.lock"):
+            result = runner.invoke(app, ["run", "-c", nas_config_file], obj=runtime)
+
+        assert result.exit_code == 1
+        assert "another nbkp command" in result.stderr
+
+    def test_a_run_takes_the_lock_under_xdg_state_home(
+        self, nas_config_file: str, tmp_path: Path
+    ) -> None:
+        lock = FakeRunLock()
+        runtime = fake_runtime(
+            run=healthy_nas(),
+            environ={"XDG_STATE_HOME": str(tmp_path / "state")},
+            run_lock=lock,
+        )
+
+        result = runner.invoke(app, ["run", "-c", nas_config_file], obj=runtime)
+
+        assert result.exit_code == 0, result.output
+        assert lock.paths == [tmp_path / "state" / "nbkp" / "run.lock"]
+
+    def test_a_dry_run_that_mounts_takes_the_lock(self, nas_config_file: str) -> None:
+        lock = FakeRunLock()
+        runtime = fake_runtime(run=healthy_nas(), run_lock=lock)
+
+        runner.invoke(app, ["run", "-c", nas_config_file, "--dry-run"], obj=runtime)
+
+        assert len(lock.paths) == 1
+
+    def test_a_dry_run_without_mount_or_umount_does_not(
+        self, nas_config_file: str
+    ) -> None:
+        lock = FakeRunLock()
+        runtime = fake_runtime(run=healthy_nas(), run_lock=lock)
+
+        result = runner.invoke(
+            app,
+            ["run", "-c", nas_config_file, "--dry-run", "--no-mount", "--no-umount"],
+            obj=runtime,
+        )
+
+        assert result.exit_code == 0, result.output
+        assert lock.paths == []
 
 
 class TestUmountFailure:

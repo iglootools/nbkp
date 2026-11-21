@@ -1008,10 +1008,11 @@ class TestHardLink:
             # Cleanup orphaned snapshots
             if [ "$NBKP_DRY_RUN" = false ]; then
                 NBKP_LATEST_LINK=$(readlink /mnt/dst/latest 2>/dev/null || true)
-                if [ -n "$NBKP_LATEST_LINK" ] && [ "$NBKP_LATEST_LINK" != "/dev/null" ]; then
+                if [ -n "$NBKP_LATEST_LINK" ]; then
                     NBKP_LATEST_NAME="${NBKP_LATEST_LINK##*/}"
                     for snap in $(ls /mnt/dst/snapshots 2>/dev/null | nbkp_snapshot_names); do
-                        if nbkp_snapshot_after "$snap" "$NBKP_LATEST_NAME"; then
+                        if [ "$NBKP_LATEST_LINK" = "/dev/null" ] \\
+                            || nbkp_snapshot_after "$snap" "$NBKP_LATEST_NAME"; then
                             nbkp_log "Removing orphaned snapshot: $snap"
                             rm -rf "/mnt/dst/snapshots/${snap}" || nbkp_log "WARN: failed to remove orphaned snapshot: $snap"
                         fi

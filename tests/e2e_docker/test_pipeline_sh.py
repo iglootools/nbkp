@@ -4,6 +4,7 @@ Same 6-hop chain as test_pipeline.py, but executed through a
 generated bash script (`nbkp sh`) instead of `run_all_syncs`.
 """
 
+import os
 import stat
 import subprocess
 import sys
@@ -77,6 +78,8 @@ class TestChainSyncSh:
                 capture_output=True,
                 text=True,
                 check=False,
+                # The run lock goes under the test's directory.
+                env={**os.environ, "XDG_STATE_HOME": str(tmp_path / "state")},
             )
             assert result.returncode == 0, f"script failed:\n{result.stderr}"
             assert "All syncs completed" in result.stderr

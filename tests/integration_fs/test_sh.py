@@ -1,6 +1,7 @@
 """Integration tests: generate scripts from chain configs and execute them."""
 
 import os
+import shlex
 import shutil
 import stat
 import subprocess
@@ -11,6 +12,7 @@ from textwrap import dedent
 
 import pytest
 
+from nbkp.cliwiring.lock import hold_run_lock, resolve_run_lock_path
 from nbkp.config import (
     Config,
     HardLinkSnapshotConfig,
@@ -133,8 +135,42 @@ def _run_script(
         capture_output=True,
         text=True,
         check=False,
-        env=env,
+        # The run lock goes under the test's directory, not the developer's.
+        env={**(env or os.environ), "XDG_STATE_HOME": str(_state_home(tmp_path))},
     )
+
+
+def _state_home(tmp_path: Path) -> Path:
+    return tmp_path / "state"
+
+
+def _with_flock(tmp_path: Path) -> dict[str, str]:
+    """The environment, with ``flock`` on ``PATH``.
+
+    Where util-linux's flock(1) is missing (macOS), a stand-in makes the
+    same ``flock(2)`` call on the descriptor the script passes.
+    """
+    if shutil.which("flock") is not None:
+        return dict(os.environ)
+    bin_dir = tmp_path / "flock-bin"
+    bin_dir.mkdir()
+    flock = bin_dir / "flock"
+    flock.write_text(
+        dedent(f"""\
+            #!/bin/sh
+            # flock -n FD
+            exec {shlex.quote(sys.executable)} -c '
+            import fcntl, sys
+            try:
+                fcntl.flock(int(sys.argv[2]), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                sys.exit(1)
+            ' "$@"
+        """),
+        encoding="utf-8",
+    )
+    flock.chmod(0o755)
+    return {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
 
 
 def _stage(tmp_path: Path) -> Path:
@@ -143,6 +179,24 @@ def _stage(tmp_path: Path) -> Path:
 
 def _snapshot_names(tmp_path: Path) -> list[str]:
     return sorted(p.name for p in (_stage(tmp_path) / SNAPSHOTS_DIR).iterdir())
+
+
+def _write_rm_refusing(bin_dir: Path, name: str) -> None:
+    """An ``rm`` on *bin_dir* that fails for paths containing *name*.
+
+    While ``latest`` points to /dev/null, orphan cleanup removes every
+    snapshot; this keeps one in place, as a cleanup that failed would.
+    """
+    fake_rm = bin_dir / "rm"
+    fake_rm.write_text(
+        dedent(f"""\
+            #!/bin/sh
+            case "$*" in *{name}*) exit 1 ;; esac
+            exec {shutil.which("rm")} "$@"
+        """),
+        encoding="utf-8",
+    )
+    fake_rm.chmod(0o755)
 
 
 class TestGeneratedScriptSyntax:
@@ -214,6 +268,67 @@ class TestGeneratedScriptExecution:
         assert f"Removing orphaned snapshot: {orphan}" in result.stderr
         assert not (snapshots / orphan).exists()
         assert (snapshots / previous).exists()
+
+    def test_first_run_leftover_is_removed_when_latest_is_dev_null(
+        self, tmp_path: Path
+    ) -> None:
+        """Before the first complete snapshot, every snapshot is a leftover."""
+        config = _seeded_chain(tmp_path)
+        snapshots = _stage(tmp_path) / SNAPSHOTS_DIR
+        leftover = "2021-01-01T00-00-00.000Z"
+        (snapshots / leftover).mkdir()
+        latest = _stage(tmp_path) / LATEST_LINK
+        latest.unlink(missing_ok=True)
+        latest.symlink_to("/dev/null")
+
+        result = _run_script(config, tmp_path)
+
+        assert result.returncode == 0, result.stderr
+        assert f"Removing orphaned snapshot: {leftover}" in result.stderr
+        assert not (snapshots / leftover).exists()
+        assert len(_snapshot_names(tmp_path)) == 1
+
+    def test_held_run_lock_stops_the_script(self, tmp_path: Path) -> None:
+        """The script and nbkp run share one lock: no two runs at once."""
+        config = _seeded_chain(tmp_path)
+        environ = {"XDG_STATE_HOME": str(_state_home(tmp_path))}
+
+        with hold_run_lock(resolve_run_lock_path(environ, Path.home())):
+            result = _run_script(config, tmp_path, env=_with_flock(tmp_path))
+
+        assert result.returncode == 1
+        assert (
+            "another nbkp command (a run, a mount, a prune, …) is in progress"
+            in result.stderr
+        )
+        assert _snapshot_names(tmp_path) == []
+
+    def test_free_run_lock_lets_the_script_run(self, tmp_path: Path) -> None:
+        config = _seeded_chain(tmp_path)
+
+        result = _run_script(config, tmp_path, env=_with_flock(tmp_path))
+
+        assert result.returncode == 0, result.stderr
+        assert "run lock" not in result.stderr
+
+    @pytest.mark.skipif(shutil.which("flock") is not None, reason="flock installed")
+    def test_runs_unlocked_without_flock(self, tmp_path: Path) -> None:
+        config = _seeded_chain(tmp_path)
+
+        result = _run_script(config, tmp_path)
+
+        assert result.returncode == 0, result.stderr
+        assert "WARN: flock not found" in result.stderr
+
+    def test_dry_run_does_not_take_the_run_lock(self, tmp_path: Path) -> None:
+        config = _seeded_chain(tmp_path)
+        environ = {"XDG_STATE_HOME": str(_state_home(tmp_path))}
+
+        with hold_run_lock(resolve_run_lock_path(environ, Path.home())):
+            result = _run_script(config, tmp_path, "--dry-run")
+
+        assert result.returncode == 0, result.stderr
+        assert "run lock" not in result.stderr
 
     def test_progress_flags_reach_rsync(self, tmp_path: Path) -> None:
         """--progress modes pass several rsync flags as separate words."""
@@ -431,6 +546,7 @@ class TestGeneratedScriptExecution:
             encoding="utf-8",
         )
         flaky_readlink.chmod(0o755)
+        _write_rm_refusing(bin_dir, future)
         env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
 
         result = _run_script(config, tmp_path, env=env)
@@ -568,8 +684,9 @@ class TestGeneratedScriptExecution:
         assert os.readlink(latest) == f"{SNAPSHOTS_DIR}/{future}"
 
     def test_existing_snapshot_dir_is_not_reused(self, tmp_path: Path) -> None:
-        """mkdir without -p: a name collision fails the sync, so a failed
-        rsync never removes a snapshot it did not create.
+        """mkdir without -p: a name collision (here with a leftover that
+        orphan cleanup failed to remove) fails the sync, so a failed rsync
+        never removes a snapshot it did not create.
         """
         config = _seeded_chain(tmp_path)
         fake_bin = tmp_path / "bin"
@@ -581,6 +698,7 @@ class TestGeneratedScriptExecution:
         fake_date = fake_bin / "date"
         fake_date.write_text(f"#!/bin/sh\necho '{fixed}'\n")
         fake_date.chmod(0o755)
+        _write_rm_refusing(fake_bin, fixed)
         existing = _stage(tmp_path) / SNAPSHOTS_DIR / fixed
         existing.mkdir()
         (existing / "keep.txt").write_text("keep")

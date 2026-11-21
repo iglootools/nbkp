@@ -25,7 +25,7 @@ _DENIED = completed(1, stderr="Permission denied")
 
 
 def _fresh_destination() -> FakeCommandRunner:
-    """A destination whose ``latest`` still points to /dev/null: no orphans."""
+    """A destination with no snapshot yet: ``latest`` points to /dev/null."""
     return FakeCommandRunner().on("readlink", returns=completed(0, "/dev/null\n"))
 
 
@@ -87,6 +87,7 @@ class TestHardLinkSync:
         assert rsync.last_kwargs["dest_suffix"] == f"snapshots/{NEW_SNAPSHOT_NAME}"
         assert runner.commands == [
             ["readlink", "/dst/latest"],
+            ["ls", "/dst/snapshots"],
             ["mkdir", "-p", "/dst/snapshots"],
             ["mkdir", _NEW_SNAPSHOT],
             ["ln", "-sfn", f"snapshots/{NEW_SNAPSHOT_NAME}", "/dst/latest"],
@@ -193,11 +194,17 @@ class TestHardLinkSync:
             .on(
                 "readlink",
                 returns=[
-                    completed(0, "/dev/null\n"),  # orphan cleanup, before rsync
+                    completed(0, f"snapshots/{_PREVIOUS.name}\n"),  # orphan cleanup
                     completed(0, f"snapshots/{NEW_SNAPSHOT_NAME}\n"),  # prune
                 ],
             )
-            .on("ls", returns=completed(0, f"{_PREVIOUS.name}\n{NEW_SNAPSHOT_NAME}\n"))
+            .on(
+                "ls",
+                returns=[
+                    completed(0, f"{_PREVIOUS.name}\n"),
+                    completed(0, f"{_PREVIOUS.name}\n{NEW_SNAPSHOT_NAME}\n"),
+                ],
+            )
             .on("rm", returns=_DENIED)
         )
 
@@ -217,15 +224,16 @@ class TestHardLinkSync:
             .on(
                 "readlink",
                 returns=[
-                    completed(0, "/dev/null\n"),  # orphan cleanup, before rsync
+                    completed(0, f"snapshots/{_PREVIOUS.name}\n"),  # orphan cleanup
                     completed(0, f"snapshots/{NEW_SNAPSHOT_NAME}\n"),  # prune
                 ],
             )
             .on(
                 "ls",
-                returns=completed(
-                    0, f"{oldest}\n{_PREVIOUS.name}\n{NEW_SNAPSHOT_NAME}\n"
-                ),
+                returns=[
+                    completed(0, f"{oldest}\n{_PREVIOUS.name}\n"),
+                    completed(0, f"{oldest}\n{_PREVIOUS.name}\n{NEW_SNAPSHOT_NAME}\n"),
+                ],
             )
             .on("rm", returns=[completed(0), _DENIED])
         )
@@ -242,8 +250,14 @@ class TestHardLinkSync:
         _, statuses = active_statuses(config)
         runner = (
             FakeCommandRunner()
-            .on("readlink", returns=completed(0, "/dev/null\n"))
-            .on("ls", returns=completed(0, f"{_PREVIOUS.name}\n{NEW_SNAPSHOT_NAME}\n"))
+            .on("readlink", returns=completed(0, f"snapshots/{_PREVIOUS.name}\n"))
+            .on(
+                "ls",
+                returns=[
+                    completed(0, f"{_PREVIOUS.name}\n"),
+                    completed(0, f"{_PREVIOUS.name}\n{NEW_SNAPSHOT_NAME}\n"),
+                ],
+            )
         )
 
         results = run_syncs(

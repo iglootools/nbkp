@@ -64,6 +64,7 @@ def troubleshoot_cmd(
         cfg,
         resolved,
         runtime=runtime,
+        writes=False,
         mount=mount,
         umount=umount,
         output_format=output,

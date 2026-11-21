@@ -13,9 +13,10 @@ import pytest
 
 from nbkp.cli import app
 from nbkp.clidisplay import echo_json
+from nbkp.cliwiring.lock import hold_run_lock
 from nbkp.config.testkit import write_config
 from nbkp.preflight.cli.check_cmd import check_json
-from tests.fakes import FakeCommandRunner, fake_runtime
+from tests.fakes import FakeCommandRunner, FakeRunLock, fake_runtime
 from tests.fixtures.cli import runner
 from tests.fixtures.preflight import (
     config_with_locations,
@@ -156,6 +157,54 @@ class TestCheckCommand:
             line.strip(" │") for line in output.splitlines() if line.strip()
         )
         assert "nbkp preflight troubleshoot -c config.yaml -N private" in flat
+
+
+class TestRunLock:
+    """A check mounts and umounts drives, so it takes the lock another nbkp
+    command may hold, unless it does neither."""
+
+    def test_a_held_lock_stops_the_check_before_anything_runs(
+        self, tmp_path: Path
+    ) -> None:
+        config_path = write_config(tmp_path, nas_config())
+        state_home = tmp_path / "state"
+        lock_path = state_home / "nbkp" / "run.lock"
+        run = healthy_nas()
+        runtime = fake_runtime(
+            run=run, environ={"XDG_STATE_HOME": str(state_home)}, run_lock=hold_run_lock
+        )
+
+        with hold_run_lock(lock_path):
+            result = runner.invoke(
+                app,
+                ["preflight", "check", "--config", str(config_path), "-o", "json"],
+                obj=runtime,
+            )
+
+        assert result.exit_code == 1
+        error = json.loads(result.stdout)["error"]
+        assert error["reason"] == "run-in-progress"
+        assert error["lock_path"] == str(lock_path)
+        assert run.commands == []
+
+    @pytest.mark.parametrize(
+        ("args", "locked"),
+        [([], True), (["--no-mount", "--no-umount"], False)],
+    )
+    def test_the_lock_is_taken_only_when_mounting_or_umounting(
+        self, args: list[str], locked: bool, tmp_path: Path
+    ) -> None:
+        config_path = write_config(tmp_path, nas_config())
+        lock = FakeRunLock()
+
+        result = runner.invoke(
+            app,
+            ["preflight", "check", "--config", str(config_path), *args],
+            obj=fake_runtime(run=healthy_nas(), run_lock=lock),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert len(lock.paths) == (1 if locked else 0)
 
 
 class TestLocationValidation:

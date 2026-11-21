@@ -192,7 +192,7 @@ Two interchangeable backends trade portability against efficiency:
 
 Concepts common to both:
 
-- **`latest`** points to the newest *complete* snapshot and moves only after a sync succeeds. A failed sync never changes what `latest` designates. Before the first success it points to `/dev/null`.
+- **`latest`** points to the newest *complete* snapshot and moves only after a sync succeeds. A failed sync never changes what `latest` designates. Before the first success it points to `/dev/null`, and a hard-link sync then treats every snapshot directory as the leftover of a failed run and deletes it.
 - **Snapshots as sources** — a downstream sync reading from a snapshot-enabled endpoint reads `latest`, so it always sees a consistent, completed backup, never one half-written.
 - **Retention** — `max-snapshots` bounds the history; older snapshots are pruned after each run. The snapshot `latest` points to is never pruned.
 

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from nbkp.cli import app
 from nbkp.config.testkit import write_config
-from tests.fakes import FakeCommandRunner, fake_runtime
+from tests.fakes import FakeCommandRunner, FakeRunLock, fake_runtime
 from tests.fixtures.cli import runner
 from tests.nas import healthy_nas, nas_config
 from tests.preflight.fake_hosts import FAILS
@@ -63,3 +63,18 @@ class TestTroubleshootCommand:
 
         assert exit_code == 0
         assert "No issues found." in output
+
+
+class TestRunLock:
+    def test_troubleshoot_takes_the_lock_when_it_mounts(self, tmp_path: Path) -> None:
+        config_path = write_config(tmp_path, nas_config())
+        lock = FakeRunLock()
+
+        result = runner.invoke(
+            app,
+            ["preflight", "troubleshoot", "--config", str(config_path)],
+            obj=fake_runtime(run=healthy_nas(), run_lock=lock),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert len(lock.paths) == 1

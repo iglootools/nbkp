@@ -16,6 +16,7 @@ import pytest
 from rich.console import Console
 
 from nbkp.cli import app
+from nbkp.cliwiring.lock import hold_run_lock
 from nbkp.config import Config, CredentialProvider
 from nbkp.config.testkit import write_config
 from nbkp.disks import MountResult, UmountResult, any_failed, refused_by_polkit
@@ -26,7 +27,7 @@ from nbkp.disks.models import (
 )
 from nbkp.disks.output import format_plan_line
 from nbkp.disks.plan import MountAction, VolumePlan, plan_incomplete
-from tests.fakes import FakeCommandRunner, completed, fake_runtime
+from tests.fakes import FakeCommandRunner, FakeRunLock, completed, fake_runtime
 from tests.fixtures.cli import runner
 from tests.fixtures.disks import UUID, encrypted_volume
 from tests.preflight.fake_hosts import FAILS
@@ -256,6 +257,55 @@ class TestUmount:
 
         assert exit_code == 1
         assert "nbkp preflight troubleshoot -c config.yaml -N private" in output
+
+
+class TestRunLock:
+    """Mounting or umounting waits for no one: a held lock fails it at once."""
+
+    @pytest.mark.parametrize("command", ["mount", "umount"])
+    def test_a_held_lock_stops_the_command_before_any_udisks_call(
+        self, command: str, tmp_path: Path
+    ) -> None:
+        state_home = tmp_path / "state"
+        lock_path = state_home / "nbkp" / "run.lock"
+        run = _locked_drive() if command == "mount" else _mounted_drive()
+        runtime = fake_runtime(
+            run=run,
+            environ={
+                "NBKP_PASSPHRASE_ENC": "secret",
+                "XDG_STATE_HOME": str(state_home),
+            },
+            run_lock=hold_run_lock,
+        )
+
+        with hold_run_lock(lock_path):
+            result = runner.invoke(
+                app,
+                ["disks", command, "-c", "config.yaml", "-o", "json"],
+                obj=runtime,
+            )
+
+        assert result.exit_code == 1
+        error = json.loads(result.stdout)["error"]
+        assert error["reason"] == "run-in-progress"
+        assert error["lock_path"] == str(lock_path)
+        assert _udisks_steps(run) == []
+
+    @pytest.mark.parametrize("command", ["mount", "umount"])
+    def test_a_dry_run_takes_no_lock(self, command: str) -> None:
+        lock = FakeRunLock()
+        runtime = fake_runtime(
+            run=_locked_drive(),
+            environ={"NBKP_PASSPHRASE_ENC": "secret"},
+            run_lock=lock,
+        )
+
+        result = runner.invoke(
+            app, ["disks", command, "-c", "config.yaml", "--dry-run"], obj=runtime
+        )
+
+        assert result.exit_code == 0, result.output
+        assert lock.paths == []
 
 
 class TestDryRun:

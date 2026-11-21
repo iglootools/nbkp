@@ -116,6 +116,7 @@ def run_cmd(
         cfg,
         resolved,
         runtime=runtime,
+        writes=not dry_run,
         mount=mount,
         umount=umount,
         output_format=output,

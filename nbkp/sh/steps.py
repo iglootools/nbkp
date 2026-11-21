@@ -95,18 +95,23 @@ def _indent(text: str, levels: int) -> str:
 
 
 def _orphan_cleanup_block(spec: SyncSpec) -> str:
-    """Remove snapshots newer than ``latest`` (left by failed syncs).
+    """Remove snapshots newer than ``latest`` (left by failed syncs), and all
+    of them while ``latest`` points to ``/dev/null``, as in ``nbkp run``.
 
     Best-effort, as in ``nbkp run``: a failed removal is only a warning.
+    Unlike ``nbkp run``, an unreadable ``latest`` skips the cleanup instead
+    of counting as absent: the script cannot tell a missing link from a
+    failed ``readlink``, and preflight has already required the link.
     """
     rm = _rm_snapshot(spec, SNAP)
     return dedent(f"""\
         if [ "$NBKP_DRY_RUN" = false ]; then
             NBKP_LATEST_LINK={_readlink_latest(spec)}
-            if [ -n "$NBKP_LATEST_LINK" ] && [ "$NBKP_LATEST_LINK" != "/dev/null" ]; then
+            if [ -n "$NBKP_LATEST_LINK" ]; then
                 NBKP_LATEST_NAME="${{NBKP_LATEST_LINK##*/}}"
                 for snap in {_list_snapshots(spec, quiet=True)}; do
-                    if nbkp_snapshot_after "$snap" "$NBKP_LATEST_NAME"; then
+                    if [ "$NBKP_LATEST_LINK" = "/dev/null" ] \\
+                        || nbkp_snapshot_after "$snap" "$NBKP_LATEST_NAME"; then
                         nbkp_log "Removing orphaned snapshot: $snap"
                         {rm} || nbkp_log "WARN: failed to remove orphaned snapshot: $snap"
                     fi

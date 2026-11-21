@@ -1,8 +1,9 @@
 """The flow ``snapshots show`` and ``snapshots prune`` share.
 
-Load the config, mount what needs mounting, run preflight, apply the
-command's operation to the sync statuses, print the results, and exit 1
-on an error, pointing at ``preflight troubleshoot`` when preflight caused it.
+Load the config, take the run lock and mount what needs mounting, run
+preflight, apply the command's operation to the sync statuses, print the
+results, and exit 1 on an error, pointing at ``preflight troubleshoot`` when
+preflight caused it.
 """
 
 from collections.abc import Callable
@@ -56,8 +57,14 @@ def run_snapshot_operation_or_exit[R: ShowResult | PruneResult](
     options: SnapshotCommandOptions,
     operation_fn: SnapshotOperationFn[R],
     print_fn: Callable[[list[R]], None],
+    *,
+    writes: bool,
 ) -> None:
-    """Run *operation_fn* on the preflight statuses and print with *print_fn*."""
+    """Run *operation_fn* on the preflight statuses and print with *print_fn*.
+
+    *writes* says whether *operation_fn* deletes snapshots; the command then
+    holds the run lock even when it neither mounts nor umounts.
+    """
     runtime = runtime_of(ctx)
     output = options.output
     cfg = load_config_or_exit(runtime, options.config, output)
@@ -69,6 +76,7 @@ def run_snapshot_operation_or_exit[R: ShowResult | PruneResult](
         cfg,
         resolved,
         runtime=runtime,
+        writes=writes,
         mount=options.mount,
         umount=options.umount,
         output_format=output,

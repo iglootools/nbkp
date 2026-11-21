@@ -8,11 +8,13 @@ between modules does not break them.
 
 import subprocess
 from collections.abc import Mapping
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from nbkp.cliwiring.lock import RunLockFn
 from nbkp.cliwiring.runtime import Runtime
 from nbkp.config import Config, SyncConfig, Volume
 from nbkp.credentials import CommandFn
@@ -149,6 +151,18 @@ def _no_credential_command(command: list[str]) -> subprocess.CompletedProcess[st
     raise AssertionError(f"unexpected credential command: {command}")
 
 
+@dataclass
+class FakeRunLock:
+    """A :data:`~nbkp.cliwiring.lock.RunLockFn` that is always free, recording the
+    path of each lock taken."""
+
+    paths: list[Path] = field(default_factory=list)
+
+    def __call__(self, path: Path) -> AbstractContextManager[None]:
+        self.paths.append(path)
+        return nullcontext()
+
+
 _NOWHERE = Path("/nonexistent-nbkp-test")
 """Under it, the paths a fake runtime searches for a config: none exists."""
 
@@ -162,6 +176,7 @@ def fake_runtime(
     run_credential_command: CommandFn | None = None,
     local_user: str = "backup",
     home: Path = _NOWHERE / "home",
+    run_lock: RunLockFn | None = None,
 ) -> Runtime:
     """A :class:`~nbkp.cliwiring.runtime.Runtime` touching nothing real.
 
@@ -170,7 +185,8 @@ def fake_runtime(
     orchestrator's ``PATH``, a :class:`FakeRsync`, a clock stopped at
     :data:`FIXED_NOW` on Linux, an empty environment, a home and platform
     config directories that do not exist (so the config search never finds
-    the developer's), and no credential command (calling it fails the test).  Pass it to
+    the developer's), a :class:`FakeRunLock`, and no credential command
+    (calling it fails the test).  Pass it to
     ``CliRunner().invoke(app, args, obj=...)``.
     """
     return Runtime(
@@ -185,4 +201,5 @@ def fake_runtime(
         site_config_dir=lambda app: str(_NOWHERE / "site-config" / app),
         run_credential_command=run_credential_command or _no_credential_command,
         local_user=lambda: local_user,
+        run_lock=run_lock if run_lock is not None else FakeRunLock(),
     )

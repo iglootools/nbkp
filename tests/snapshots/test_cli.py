@@ -12,9 +12,10 @@ from pathlib import Path
 import pytest
 
 from nbkp.cli import app
+from nbkp.cliwiring.lock import hold_run_lock
 from nbkp.config import Config
 from nbkp.config.testkit import write_config
-from tests.fakes import FakeCommandRunner, completed, fake_runtime
+from tests.fakes import FakeCommandRunner, FakeRunLock, completed, fake_runtime
 from tests.fixtures.cli import runner
 from tests.fixtures.disks import encrypted_volume
 from tests.nas import healthy_nas, nas_config
@@ -133,6 +134,59 @@ class TestPruneCommand:
 
         assert exit_code == 1
         assert "preflight troubleshoot" not in output
+
+
+class TestRunLock:
+    """A prune deletes snapshots, and either command may mount and umount:
+    both take the lock another nbkp command may hold."""
+
+    def test_a_held_lock_stops_a_prune_before_anything_runs(
+        self, tmp_path: Path
+    ) -> None:
+        _write(tmp_path)
+        state_home = tmp_path / "state"
+        lock_path = state_home / "nbkp" / "run.lock"
+        run = _nas((OLD, MID, NEW))
+        runtime = fake_runtime(
+            run=run, environ={"XDG_STATE_HOME": str(state_home)}, run_lock=hold_run_lock
+        )
+
+        with hold_run_lock(lock_path):
+            result = runner.invoke(
+                app,
+                ["snapshots", "prune", "-c", "config.yaml", "-o", "json"],
+                obj=runtime,
+            )
+
+        assert result.exit_code == 1
+        error = json.loads(result.stdout)["error"]
+        assert error["reason"] == "run-in-progress"
+        assert error["lock_path"] == str(lock_path)
+        assert run.commands == []
+
+    @pytest.mark.parametrize(
+        ("args", "locked"),
+        [
+            (["prune", "--no-mount", "--no-umount"], True),
+            (["prune", "--dry-run"], True),
+            (["prune", "--dry-run", "--no-mount", "--no-umount"], False),
+            (["show"], True),
+            (["show", "--no-mount", "--no-umount"], False),
+        ],
+    )
+    def test_the_lock_is_taken_unless_nothing_is_mounted_umounted_or_deleted(
+        self, args: list[str], locked: bool, tmp_path: Path
+    ) -> None:
+        _write(tmp_path)
+        lock = FakeRunLock()
+        runtime = fake_runtime(run=_nas((OLD, MID, NEW), (MID, NEW)), run_lock=lock)
+
+        result = runner.invoke(
+            app, ["snapshots", *args, "-c", "config.yaml"], obj=runtime
+        )
+
+        assert result.exit_code == 0, result.output
+        assert len(lock.paths) == (1 if locked else 0)
 
 
 class TestJsonErrors:

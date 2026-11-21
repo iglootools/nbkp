@@ -9,6 +9,7 @@ from ...clidisplay import OutputFormat
 from ...clidisplay.invocation import Invocation, format_troubleshoot_hint
 from ...cliwiring.config import load_config_or_exit, resolve_endpoints
 from ...cliwiring.disks import require_known_names, show_plan, show_volume_statuses
+from ...cliwiring.lock import run_lock_or_exit
 from ...cliwiring.mount import lifecycle_session
 from ...cliwiring.mount_progress import mount_display_names
 from ...cliwiring.options import (
@@ -92,14 +93,17 @@ def _mount_with_progress(
     output: OutputFormat,
     runtime: Runtime,
 ) -> list[MountResult]:
-    with lifecycle_session(
-        cfg,
-        resolved,
-        runtime=runtime,
-        enabled=output is OutputFormat.HUMAN,
-        names=names,
-        umounting=False,
-    ) as (passphrase_fn, progress):
+    with (
+        run_lock_or_exit(runtime.run_lock, runtime.run_lock_path(), output),
+        lifecycle_session(
+            cfg,
+            resolved,
+            runtime=runtime,
+            enabled=output is OutputFormat.HUMAN,
+            names=names,
+            umounting=False,
+        ) as (passphrase_fn, progress),
+    ):
         return mount_phase(
             cfg,
             resolved,

@@ -6,6 +6,7 @@
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Commands](#commands)
+  - [Scheduled runs](#scheduled-runs)
 - [Config](#config)
   - [Config File Location](#config-file-location)
   - [Configuration Reference](#configuration-reference)
@@ -84,6 +85,17 @@ nbkp run
 
 See the [CLI Reference](./cli-reference.md) for the full list of commands and options.
 
+### Scheduled runs
+
+`nbkp run` suits a cron entry or a systemd timer, since inactive syncs are skipped without failing the run:
+
+```bash
+# crontab: every hour
+0 * * * * nbkp run -o json >> "$HOME/nbkp-run.log" 2>&1
+```
+
+Only one run at a time goes ahead on a machine: a run that starts while another is still going exits 1 at once, before mounting anything, with `another nbkp command (a run, a mount, a prune, …) is in progress` (`run-in-progress` under `-o json`), and the next scheduled run picks up the work. The other commands that mount or umount drives or delete snapshots (`disks mount` and `umount`, `snapshots show` and `prune`, `preflight check` and `troubleshoot`) take the same lock and fail the same way while a run is going, and a run fails while one of them is; dry runs and checks with `--no-mount --no-umount` run alongside anything. A generated script shares the same lock where `flock` is installed. See [The Run Lock](./internals.md#the-run-lock).
+
 ## Config
 
 ### Config File Location
@@ -138,7 +150,7 @@ nbkp sh -o /mnt/usb/backup.sh --relative-dst   # paths relative to the script
 ./backup.sh --strictness ignore-none    # any inactive sync aborts the run
 ```
 
-The script behaves like `nbkp run`: it checks every sync first (sentinels, tools, snapshot layout), skips inactive syncs without failing (`--strictness ignore-inactive`, the default), aborts on infrastructure errors before syncing anything, runs the syncs in dependency order, and cancels syncs downstream of a failed or skipped one. It exits non-zero when a sync fails or is cancelled because of a failure; a cancellation caused by an inactive (skipped) upstream sync is no more an error than that skip, unless `--strictness ignore-none`. With `--strictness ignore-all`, syncs with infrastructure errors are attempted once their sentinels are present. Pruning failures are logged as warnings, as in `nbkp run`.
+The script behaves like `nbkp run`: it checks every sync first (sentinels, tools, snapshot layout), skips inactive syncs without failing (`--strictness ignore-inactive`, the default), aborts on infrastructure errors before syncing anything, runs the syncs in dependency order, and cancels syncs downstream of a failed or skipped one. It exits non-zero when a sync fails or is cancelled because of a failure; a cancellation caused by an inactive (skipped) upstream sync is no more an error than that skip, unless `--strictness ignore-none`. With `--strictness ignore-all`, syncs with infrastructure errors are attempted once their sentinels are present. Pruning failures are logged as warnings, as in `nbkp run`. It also takes the lock `nbkp run` holds, so the script never runs at the same time as a run or another command that mounts drives or modifies destinations; without `flock` (util-linux, missing on stock macOS) it warns and runs unlocked.
 
 ### Example 2: Multi-hop chained backups
 

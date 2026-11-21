@@ -46,6 +46,9 @@ ${{ config_line }}
 #   - Best-effort steps (orphan cleanup, pruning, removal of a failed snapshot
 #     directory) log a warning and never fail the sync
 #   - Dry-run and progress mode support (as runtime script arguments)
+#   - The run lock: one run at a time per user, shared with nbkp run
+#     ($XDG_STATE_HOME/nbkp/run.lock, else ~/.local/state/nbkp/run.lock), taken
+#     with flock(1) except in a dry run, which touches no destination
 #   - Nonzero exit on any sync failure
 #
 # Dropped from nbkp run:
@@ -55,6 +58,8 @@ ${{ config_line }}
 #   - Endpoint selection (--location, --network) → resolved once, at generation time
 #   - Paramiko-only SSH options (channel_timeout, disabled_algorithms) → no ssh CLI equivalent
 #   - Orphan cleanup during --dry-run → a dry-run here never modifies the destination
+#   - The run lock where flock(1) is missing (util-linux; not on stock macOS) →
+#     the script warns and runs unlocked
 #   - Preflight probes of the orchestrator's own coreutils (date, sort, grep, wc) →
 #     the script itself cannot run without them
 #   - Volume mount management (udisks LUKS unlock/lock, mount/umount) → credential
@@ -301,6 +306,24 @@ ${{ sync_functions(sync) | trim }}
 ${{ sync_functions(sync) | trim | comment_out }}
 <% endif %>
 <% endfor %>
+
+# --- Run lock (the one nbkp run holds), for the rest of the script ---
+if [ "$NBKP_DRY_RUN" = false ]; then
+    case "${XDG_STATE_HOME:-}" in
+        /*) NBKP_RUN_LOCK="$XDG_STATE_HOME/nbkp/run.lock";;
+        *) NBKP_RUN_LOCK="$HOME/.local/state/nbkp/run.lock";;
+    esac
+    if command -v flock >/dev/null 2>&1; then
+        mkdir -p "$(dirname "$NBKP_RUN_LOCK")"
+        exec 9>>"$NBKP_RUN_LOCK"
+        if ! flock -n 9; then
+            nbkp_log "ERROR: another nbkp command (a run, a mount, a prune, …) is in progress (it holds $NBKP_RUN_LOCK). Wait for it to finish, then run again."
+            exit 1
+        fi
+    else
+        nbkp_log "WARN: flock not found: running without the run lock ($NBKP_RUN_LOCK)"
+    fi
+fi
 
 # --- Preflight checks (all syncs, before any sync starts) ---
 <% for sync in enabled_syncs %>
