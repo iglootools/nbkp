@@ -16,7 +16,7 @@ without paying their import cost on commands that never connect.
 """
 
 import threading
-from collections.abc import Callable, Hashable, Iterator
+from collections.abc import Callable, Generator, Hashable
 from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar
 from typing import Protocol
@@ -81,7 +81,7 @@ def active_pool() -> ConnectionPool | None:
 
 
 @contextmanager
-def connection_scope() -> Iterator[ConnectionPool]:
+def connection_scope() -> Generator[ConnectionPool]:
     """Reuse SSH connections until the block exits, then close them.
 
     A nested scope joins the enclosing one, which keeps ownership of the

@@ -101,20 +101,20 @@ def active_src_ep_status(
         diagnostics=SourceEndpointDiagnostics(
             endpoint_slug=endpoint_slug,
             sentinel_exists=True,
-            **(
-                {
-                    "snapshot_dirs": SnapshotDirsDiagnostics(
-                        exists=True, writable=True
-                    ),
-                    "latest": LatestSymlinkState(
-                        exists=True,
-                        raw_target="snapshots/2026-03-06T14:30:00.000Z",
-                        target_valid=True,
-                        snapshot=Snapshot.from_name("2026-03-06T14:30:00.000Z"),
-                    ),
-                }
+            snapshot_dirs=(
+                SnapshotDirsDiagnostics(exists=True, writable=True)
                 if snapshot_mode
-                else {}
+                else None
+            ),
+            latest=(
+                LatestSymlinkState(
+                    exists=True,
+                    raw_target="snapshots/2026-03-06T14:30:00.000Z",
+                    target_valid=True,
+                    snapshot=Snapshot.from_name("2026-03-06T14:30:00.000Z"),
+                )
+                if snapshot_mode
+                else None
             ),
         ),
         errors=[],

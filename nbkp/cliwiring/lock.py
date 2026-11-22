@@ -14,7 +14,7 @@ mounts, works and umounts, and the generated script takes the same lock with
 import enum
 import fcntl
 import os
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Generator, Mapping
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from pathlib import Path
 
@@ -63,7 +63,7 @@ type RunLockFn = Callable[[Path], AbstractContextManager[None]]
 
 
 @contextmanager
-def hold_run_lock(path: Path) -> Iterator[None]:
+def hold_run_lock(path: Path) -> Generator[None]:
     """Hold the run lock at *path* until the block exits, without waiting.
 
     Raises :class:`RunLockError` (``RUN_IN_PROGRESS``) when another process
@@ -100,7 +100,7 @@ def _lock_or_raise(fd: int, path: Path) -> None:
 @contextmanager
 def run_lock_or_exit(
     lock: RunLockFn, path: Path, output: OutputFormat, *, needed: bool = True
-) -> Iterator[None]:
+) -> Generator[None]:
     """Hold *lock* at *path*, when *needed*, for the block, or exit 1 before
     the block starts when another command holds it.
 
