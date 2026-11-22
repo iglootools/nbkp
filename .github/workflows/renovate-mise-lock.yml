@@ -18,7 +18,7 @@ jobs:
       # caller allowed, not a grant of its own, so without this the job regenerates mise.lock
       # and then cannot push it.
       contents: write
-    uses: iglootools/common/.github/workflows/reusable-renovate-mise-lock.yml@452e6da5b7b32c6594861e6e4553ebcc698a1d4c # v1.34.0
+    uses: iglootools/common/.github/workflows/reusable-renovate-mise-lock.yml@9e0492244d3c55257e397ab5f08fd3d6d2f712ab # v1.34.1
     with:
       # Pinned here, not in the shared workflow: guidelines/project-setup/workflows.md in
       # iglootools/common requires it to match the version this project's mise.lock was
