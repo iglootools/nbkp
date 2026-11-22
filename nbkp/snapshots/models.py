@@ -72,7 +72,7 @@ class PruneResult(BaseModel):
     skip_reason: SnapshotSkipReason | None = None
     error: SnapshotResultError | None = None
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def skipped(self) -> bool:
         return self.skip_reason is not None
@@ -89,7 +89,7 @@ class ShowResult(BaseModel):
     skip_reason: SnapshotSkipReason | None = None
     error: SnapshotResultError | None = None
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def skipped(self) -> bool:
         return self.skip_reason is not None

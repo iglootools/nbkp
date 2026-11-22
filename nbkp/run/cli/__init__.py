@@ -1,1 +1,2 @@
-from . import run_cmd as _run_cmd  # noqa: F401
+# Imported to register its command on the Typer app.
+from . import run_cmd as run_cmd

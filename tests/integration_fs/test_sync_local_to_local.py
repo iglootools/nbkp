@@ -1,6 +1,7 @@
 """Integration tests: local-to-local sync (no Docker needed)."""
 
 from pathlib import Path
+from typing import Any
 
 from nbkp.config import (
     BtrfsSnapshotConfig,
@@ -26,14 +27,14 @@ def _make_local_config(
         volume="src",
         subdir=src_subdir,
     )
-    ep_dst_kwargs: dict[str, object] = {
+    ep_dst_kwargs: dict[str, Any] = {
         "slug": "ep-dst",
         "volume": "dst",
         "subdir": dst_subdir,
     }
     if btrfs_snapshots is not None:
         ep_dst_kwargs["btrfs_snapshots"] = btrfs_snapshots
-    ep_dst = SyncEndpoint(**ep_dst_kwargs)  # type: ignore[arg-type]
+    ep_dst = SyncEndpoint(**ep_dst_kwargs)
     sync = SyncConfig(
         slug="test-sync",
         source="ep-src",

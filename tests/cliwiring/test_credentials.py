@@ -9,7 +9,7 @@ _app = typer.Typer()
 
 
 @_app.command()
-def _ask() -> None:
+def ask_passphrase() -> None:
     typer.echo(f"got {prompt_passphrase('disk1')}")
 
 

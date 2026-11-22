@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import NoReturn
 
 import pytest
-from pytest import MonkeyPatch  # noqa: TID251 -- (c) see _isolate_from_user_ssh_config
+from pytest import MonkeyPatch  # noqa: TID251 -- (c) see isolate_from_user_ssh_config
 
 from nbkp.config import (
     Config,
@@ -71,7 +71,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _isolate_from_user_ssh_config(
+def isolate_from_user_ssh_config(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> Iterator[None]:
     """Never let a test read the developer's real ``~/.ssh/config``.

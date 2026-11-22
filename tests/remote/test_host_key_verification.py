@@ -55,7 +55,7 @@ class _LocalSshServer:
 
 
 @pytest.fixture(autouse=True)
-def _isolated_home(tmp_path: Path) -> Iterator[None]:
+def isolated_home(tmp_path: Path) -> Iterator[None]:
     """Keep the developer's ~/.ssh/known_hosts and ~/.ssh/config out of it."""
     with MonkeyPatch.context() as patch:
         patch.setenv("HOME", str(tmp_path))

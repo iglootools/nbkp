@@ -1,6 +1,7 @@
 import io
 import shlex
 from collections.abc import Iterator
+from functools import partial
 from pathlib import Path
 from unittest.mock import MagicMock, patch  # noqa: TID251 -- (a) Fabric's Connection
 
@@ -500,6 +501,14 @@ class _Channel:
         self.closed = True
 
 
+def _leave_as_built(conn: MagicMock) -> None:
+    pass
+
+
+def _answer_with(channel: _Channel, conn: MagicMock) -> None:
+    conn.create_session.return_value = channel
+
+
 def _built(mock_conn_cls: MagicMock, host: str) -> list[MagicMock]:
     """The connections built to *host*, in construction order."""
     return [conn for conn in mock_conn_cls.built if conn.host == host]
@@ -511,7 +520,7 @@ def mock_conn_cls() -> Iterator[MagicMock]:
     call; ``configure`` adjusts each one as it is built."""
     with patch("nbkp.remote.fabricssh.Connection") as cls:
         cls.built = []
-        cls.configure = lambda conn: None
+        cls.configure = _leave_as_built
 
         def build(**kwargs: object) -> MagicMock:
             conn = _fake_connection(**kwargs)
@@ -547,9 +556,7 @@ class TestRunRemoteCommand:
         self, mock_conn_cls: MagicMock, ssh_endpoint: SshEndpoint
     ) -> None:
         channel = _Channel(stdout="file1\nfile2\n")
-        mock_conn_cls.configure = lambda conn: setattr(
-            conn.create_session, "return_value", channel
-        )
+        mock_conn_cls.configure = partial(_answer_with, channel)
 
         result = run_remote_command(ssh_endpoint, ["ls", "/tmp"])
 
@@ -634,9 +641,7 @@ class TestRunRemoteCommand:
 
     def test_input_is_sent_then_closed(self, mock_conn_cls: MagicMock) -> None:
         channel = _Channel(stdout="unlocked\n")
-        mock_conn_cls.configure = lambda conn: setattr(
-            conn.create_session, "return_value", channel
-        )
+        mock_conn_cls.configure = partial(_answer_with, channel)
 
         result = run_remote_command(
             _TARGET, ["udisksctl", "unlock", "--key-file", "/dev/stdin"], input="pw"
@@ -658,9 +663,7 @@ class TestRunRemoteCommand:
             exit_status=1,
             reads_input=False,
         )
-        mock_conn_cls.configure = lambda conn: setattr(
-            conn.create_session, "return_value", channel
-        )
+        mock_conn_cls.configure = partial(_answer_with, channel)
 
         result = run_remote_command(_TARGET, ["udisksctl", "unlock"], input="pw")
 
@@ -794,7 +797,7 @@ class TestRunRemoteCommandInScope:
             mock_conn_cls.configure = refuse
             with pytest.raises(OSError, match="refused"):
                 run_remote_command(_TARGET, ["true"])
-            mock_conn_cls.configure = lambda conn: None
+            mock_conn_cls.configure = _leave_as_built
             result = run_remote_command(_TARGET, ["true"])
 
             refused, connected = _built(mock_conn_cls, "target.example.com")

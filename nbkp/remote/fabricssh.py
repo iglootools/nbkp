@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import cast
 
 import paramiko
-from fabric import Connection  # type: ignore[import-untyped]
+from fabric import Connection  # pyright: ignore[reportMissingTypeStubs] -- fabric ships no type hints; retire when it does
 
 from ..config import SshConnectionOptions, SshEndpoint
 from .errors import ssh_connection_errors
@@ -49,6 +49,9 @@ def _build_single_connection(
         gateway=gateway,
     )
 
+    # fabric declares ``client = None`` on the class, so pyright infers it as
+    # optional, but ``Connection.__init__`` always sets an SSHClient. Retire
+    # both fabric ignores below when fabric ships type hints.
     _configure_host_key_verification(conn.client, opts)  # pyright: ignore[reportArgumentType]
     return conn
 
@@ -134,6 +137,8 @@ def _open_connection(
         # Fabric connects lazily: the transport only exists once open.
         conn.open()
         if server.connection_options.server_alive_interval is not None:
+            # fabric declares ``transport = None`` on the class; open() above
+            # has just set it.
             conn.transport.set_keepalive(  # pyright: ignore[reportOptionalMemberAccess]
                 server.connection_options.server_alive_interval
             )
@@ -228,7 +233,8 @@ def _run_pooled(
     key = _pool_key(server, proxy_chain)
     open_ = partial(_open_connection, server, proxy_chain)
     opened, reused = _get_or_open(pool, key, open_)
-    if reused and not opened.target.is_connected:
+    # fabric leaves is_connected unannotated; retire when fabric ships type hints.
+    if reused and not opened.target.is_connected:  # pyright: ignore[reportUnknownMemberType]
         # The transport noticed the connection drop (server restart, network
         # change) since the previous command.
         pool.discard(key)

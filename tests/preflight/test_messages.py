@@ -11,6 +11,7 @@ from nbkp.preflight import (
     format_problem,
     format_problems,
 )
+from nbkp.preflight.severity import PreflightErrorKind, PreflightWarningKind
 from nbkp.preflight.status.ssh import SshEndpointWarningKind
 from nbkp.snapshots.errors import SnapshotOp
 from nbkp.snapshots.models import SnapshotSkipReason
@@ -31,8 +32,10 @@ _PREFLIGHT_KINDS: list[type[StrEnum]] = [
     [member for enum in _PREFLIGHT_KINDS for member in enum],
     ids=lambda kind: f"{type(kind).__name__}.{kind.name}",
 )
-def test_every_preflight_kind_has_a_sentence(kind: StrEnum) -> None:
-    assert format_problem(kind)  # pyright: ignore[reportArgumentType]
+def test_every_preflight_kind_has_a_sentence(
+    kind: PreflightErrorKind | PreflightWarningKind,
+) -> None:
+    assert format_problem(kind)
 
 
 def test_kinds_sharing_a_token_keep_their_own_sentence() -> None:

@@ -205,7 +205,8 @@ def _docker_available() -> bool:
         import docker as dockerlib
 
         client = dockerlib.from_env()
-        client.ping()
+        # docker leaves ping()'s *args and **kwargs unannotated; retire when it annotates them.
+        client.ping()  # pyright: ignore[reportUnknownMemberType]
         return True
     except Exception:  # noqa: BLE001
         return False

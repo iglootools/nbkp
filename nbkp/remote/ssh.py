@@ -91,10 +91,13 @@ def _build_proxy_command(
 ) -> str:
     """Uses ProxyCommand instead of -J so that per-proxy SSH
     options (e.g. StrictHostKeyChecking) are propagated to
-    each hop.
+    each hop. *proxies* must not be empty.
     """
-    return reduce(  # type: ignore[arg-type]
-        lambda cmd, proxy: _build_proxy_hop(proxy, cmd), proxies, None
+    innermost, *outer = proxies
+    return reduce(
+        lambda cmd, proxy: _build_proxy_hop(proxy, cmd),
+        outer,
+        _build_proxy_hop(innermost, None),
     )
 
 

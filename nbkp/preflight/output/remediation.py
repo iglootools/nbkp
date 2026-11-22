@@ -43,7 +43,7 @@ from ...fsprotocol import (
     STAGING_DIR,
     VOLUME_SENTINEL,
 )
-from ...remote.endpoints import ResolvedEndpoints
+from ...remote.endpoints import ResolvedEndpoint, ResolvedEndpoints
 from ...remote.ssh import (
     format_known_hosts_option,
     format_proxy_jump_chain,
@@ -77,15 +77,19 @@ HEADER, ERROR, FIX, STEP, STEP_CMD = range(5)
 class RemediationFacts:
     """Facts the fixes show that had to be probed or generated first."""
 
-    cleartext_devices: Mapping[str, str] = field(default_factory=dict)
+    cleartext_devices: Mapping[str, str] = field(default_factory=dict[str, str])
     """Volume slug → cleartext device udisks actually created (e.g.
     ``/dev/mapper/<label>``).  A volume is absent when its container is locked
     or discovery failed; the fix then shows udisks's default name with a
     caveat."""
-    polkit_rules: Mapping[str, AuthRuleBlock] = field(default_factory=dict)
+    polkit_rules: Mapping[str, AuthRuleBlock] = field(
+        default_factory=dict[str, AuthRuleBlock]
+    )
     """System user → the polkit rule block authorizing that user.  A user is
     absent when no volume declares a ``mount`` section."""
-    newest_snapshots: Mapping[str, str | None] = field(default_factory=dict)
+    newest_snapshots: Mapping[str, str | None] = field(
+        default_factory=dict[str, str | None]
+    )
     """Sync endpoint slug → name of its newest snapshot, ``None`` when it has
     none.  An endpoint is absent when its snapshots could not be listed; the
     fix then names a placeholder for the user to fill in."""
@@ -96,7 +100,9 @@ class TroubleshootContext:
     """Everything the fixes need besides the error itself."""
 
     config: Config
-    resolved_endpoints: ResolvedEndpoints = field(default_factory=dict)
+    resolved_endpoints: ResolvedEndpoints = field(
+        default_factory=dict[str, ResolvedEndpoint]
+    )
     invocation: Invocation = field(default_factory=Invocation)
     """Config path and endpoint flags, so suggested commands copy-paste."""
     local_user: str = "<user>"
@@ -555,7 +561,7 @@ def _device_not_present_fix(mount: MountConfig | None) -> Lines:
     ]
 
 
-def _cleartext_device(
+def cleartext_device(
     vol: LocalVolume | RemoteVolume,
     mount: MountConfig,
     facts: RemediationFacts,
@@ -603,7 +609,7 @@ def _fstab_line(
                 )
             ]
         case MountConfig():
-            device, discovered = _cleartext_device(vol, mount, ctx.known_facts)
+            device, discovered = cleartext_device(vol, mount, ctx.known_facts)
             return [
                 format_command(f"{device}  {path}  {fs_and_options}", STEP),
                 *([] if discovered else _mapper_name_caveat(STEP)),
@@ -826,7 +832,7 @@ def _mount_failed_fix(
         case MountConfig(encryption=None):
             device = f"/dev/disk/by-uuid/{mount.device_uuid}"
         case MountConfig():
-            device, _ = _cleartext_device(vol, mount, ctx.known_facts)
+            device, _ = cleartext_device(vol, mount, ctx.known_facts)
         case None:
             device = "<device>"
     return [

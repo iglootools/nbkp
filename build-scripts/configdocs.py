@@ -22,7 +22,7 @@ Why hand-rolled instead of a library?
 import sys
 from pathlib import Path
 from types import UnionType
-from typing import Annotated, Any, Literal, get_args, get_origin
+from typing import Annotated, Literal, TypeIs, get_args, get_origin
 
 import typer
 from pydantic import BaseModel
@@ -195,6 +195,17 @@ def _constraints_str(info: FieldInfo) -> str:
     return f" ({', '.join(constraints)})" if constraints else ""
 
 
+# Plain bool and a TypeIs to a known type: an inline isinstance() check would
+# narrow the value to list[Unknown] or type[Unknown], which strict pyright
+# rejects wherever the value is used next.
+def _is_empty_list(value: object) -> bool:
+    return isinstance(value, list) and not value
+
+
+def _is_model_class(annotation: object) -> TypeIs[type[BaseModel]]:
+    return isinstance(annotation, type) and issubclass(annotation, BaseModel)
+
+
 def _type_str(info: FieldInfo) -> str:
     annotation = info.annotation
     if annotation is None:
@@ -230,10 +241,10 @@ def _type_str(info: FieldInfo) -> str:
     if origin is dict:
         return "object"
 
-    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+    if _is_model_class(annotation):
         return "object"
 
-    type_map: dict[type[Any], str] = {
+    type_map: dict[object, str] = {
         str: "string",
         int: "integer",
         float: "float",
@@ -258,14 +269,14 @@ def _default_str(info: FieldInfo) -> str:
         return f"`{default}`"
     if isinstance(default, str):
         return f'`"{default}"`'
-    if isinstance(default, list) and len(default) == 0:
+    if _is_empty_list(default):
         return "`[]`"
 
     if info.default_factory is not None:
-        factory_result = info.default_factory()  # type: ignore[call-arg]
+        factory_result = info.get_default(call_default_factory=True)
         if isinstance(factory_result, BaseModel):
             return "see below"
-        if isinstance(factory_result, list) and len(factory_result) == 0:
+        if _is_empty_list(factory_result):
             return "`[]`"
         return str(factory_result)
 

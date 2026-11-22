@@ -133,7 +133,7 @@ class SshEndpointStatus(BaseModel):
     warnings: list[SshEndpointWarningKind] = []
     """Non-fatal findings; never affect ``active``."""
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def active(self) -> bool:
         return not self.errors

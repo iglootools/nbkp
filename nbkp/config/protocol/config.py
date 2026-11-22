@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 
-from .base import ConfigModel
+from .base import ConfigModel, is_raw_mapping
 from .errors import ConfigValidationErrorKind, config_error
 from .ssh_endpoint import SshEndpoint
 from .sync import SyncConfig, sync_predecessors
@@ -59,11 +59,13 @@ _MERGED_SECTIONS = frozenset({"connection-options", "connection_options"})
 
 
 def _overlay_field(key: str, parent_value: Any, child_value: Any) -> Any:
-    match parent_value, child_value:
-        case dict(), dict() if key in _MERGED_SECTIONS:
-            return {**parent_value, **child_value}
-        case _:
-            return child_value
+    return (
+        {**parent_value, **child_value}
+        if key in _MERGED_SECTIONS
+        and is_raw_mapping(parent_value)
+        and is_raw_mapping(child_value)
+        else child_value
+    )
 
 
 def _merge_endpoint(
@@ -91,7 +93,7 @@ def _resolve_endpoint(
     detection. Non-mapping entries are returned as-is for pydantic to reject.
     """
     ep = endpoints[slug]
-    parent_slug = ep.get("extends") if isinstance(ep, dict) else None
+    parent_slug = ep.get("extends") if is_raw_mapping(ep) else None
     if parent_slug is None:
         return ep
     elif parent_slug in chain:
@@ -106,7 +108,7 @@ def _resolve_endpoint(
         )
     else:
         parent = _resolve_endpoint(endpoints, parent_slug, (*chain, parent_slug))
-        return _merge_endpoint(parent, ep) if isinstance(parent, dict) else ep
+        return _merge_endpoint(parent, ep) if is_raw_mapping(parent) else ep
 
 
 def _inject_slug(slug: str, data: Any) -> Any:
@@ -120,18 +122,18 @@ def _inject_slug(slug: str, data: Any) -> Any:
                 f"Entry '{slug}' declares slug {declared!r}: omit 'slug',"
                 " or make it equal to the key the entry is declared under",
             )
-        case dict() if "slug" not in data:
+        case _ if is_raw_mapping(data) and "slug" not in data:
             return {**data, "slug": slug}
         case _:
             return data
 
 
 def _inject_slugs(entries: Any) -> Any:
-    match entries:
-        case dict():
-            return {slug: _inject_slug(slug, data) for slug, data in entries.items()}
-        case _:
-            return entries
+    return (
+        {slug: _inject_slug(slug, data) for slug, data in entries.items()}
+        if is_raw_mapping(entries)
+        else entries
+    )
 
 
 def _unknown_reference(message: str) -> ValueError:
@@ -207,11 +209,11 @@ class Config(ConfigModel):
     @model_validator(mode="before")
     @classmethod
     def resolve_ssh_endpoint_extends(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
+        if not is_raw_mapping(data):
             return data
         key = "ssh-endpoints" if "ssh-endpoints" in data else "ssh_endpoints"
-        endpoints = data.get(key) or {}
-        if not isinstance(endpoints, dict):
+        endpoints = data.get(key) or dict[str, Any]()
+        if not is_raw_mapping(endpoints):
             return data
         resolved = {
             slug: _resolve_endpoint(endpoints, slug, (slug,)) for slug in endpoints

@@ -35,7 +35,7 @@ class TestLocalVolume:
     def test_frozen(self) -> None:
         vol = LocalVolume(slug="data", path="/mnt/data")
         try:
-            vol.slug = "other"  # type: ignore[misc]
+            vol.slug = "other"
             assert False, "Should be frozen"
         except AttributeError, pydantic.ValidationError:
             pass
@@ -97,7 +97,7 @@ class TestRemoteVolume:
             path="/backup",
         )
         try:
-            vol.path = "other"  # type: ignore[misc]
+            vol.path = "other"
             assert False, "Should be frozen"
         except AttributeError, pydantic.ValidationError:
             pass

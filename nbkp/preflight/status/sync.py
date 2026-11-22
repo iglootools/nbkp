@@ -67,7 +67,7 @@ class SyncStatus(BaseModel):
     ``/dev/null`` (no snapshot yet).
     """
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def active(self) -> bool:
         return not self.errors

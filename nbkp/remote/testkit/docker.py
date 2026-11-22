@@ -16,7 +16,7 @@ lazy from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519Privat
 
 from ...config import SshConnectionOptions, SshEndpoint
 from ...remote.fabricssh import run_remote_command
-from .constants import (  # noqa: F401
+from .constants import (
     BASTION_CONTAINER_NAME,
     LUKS_MAPPER_NAME,
     LUKS_PASSPHRASE,
@@ -24,7 +24,6 @@ from .constants import (  # noqa: F401
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_ENCRYPTED_PATH,
     REMOTE_BTRFS_PATH,
-    REMOTE_UNENCRYPTED_PATH,
     STORAGE_CONTAINER_NAME,
 )
 from .errors import DockerError, DockerErrorKind
@@ -88,7 +87,8 @@ def create_test_ssh_endpoint(
 def check_docker() -> None:
     try:
         client = dockerlib.from_env()
-        client.ping()
+        # docker leaves ping()'s *args and **kwargs unannotated; retire when it annotates them.
+        client.ping()  # pyright: ignore[reportUnknownMemberType]
     except docker_errors.DockerException as exc:
         raise DockerError(DockerErrorKind.UNAVAILABLE, str(exc)) from exc
 
@@ -213,7 +213,8 @@ def start_storage_container(
     if network_name is not None:
         network = client.networks.get(network_name)
         aliases = [network_alias] if network_alias else None
-        network.connect(container, aliases=aliases)
+        # docker leaves connect()'s *args and **kwargs unannotated; retire when it annotates them.
+        network.connect(container, aliases=aliases)  # pyright: ignore[reportUnknownMemberType]
 
     container.reload()
     port_info = container.attrs["NetworkSettings"]["Ports"]["22/tcp"]
@@ -249,7 +250,8 @@ def start_bastion_container(
     )
 
     network = client.networks.get(network_name)
-    network.connect(container)
+    # docker leaves connect()'s *args and **kwargs unannotated; retire when it annotates them.
+    network.connect(container)  # pyright: ignore[reportUnknownMemberType]
 
     container.reload()
     port_info = container.attrs["NetworkSettings"]["Ports"]["22/tcp"]

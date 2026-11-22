@@ -1,4 +1,6 @@
-from mermaid_ascii import parse_mermaid, render_ascii
+# mermaid-ascii-diagrams leaves render_ascii's parameter unannotated; retire when
+# it annotates it.
+from mermaid_ascii import parse_mermaid, render_ascii  # pyright: ignore[reportUnknownVariableType]
 from rich.console import Group, RenderableType
 from rich.text import Text
 from rich.tree import Tree

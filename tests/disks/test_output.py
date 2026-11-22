@@ -2,7 +2,7 @@ import json
 from io import StringIO
 
 import pytest
-from rich.console import Console
+from rich.console import Console, RenderableType
 
 from nbkp.disks import MountCapabilities
 from nbkp.disks.lifecycle import MountFailureKind, MountResult, UmountResult
@@ -39,7 +39,7 @@ class TestMountStateIcon:
         assert mount_state_icon(None) == "—"
 
 
-def _render(table) -> str:  # type: ignore[no-untyped-def]
+def _render(table: RenderableType) -> str:
     buf = StringIO()
     Console(file=buf, highlight=False, markup=True).print(table)
     return buf.getvalue()

@@ -27,7 +27,7 @@ class EndpointFilter(ConfigModel):
 
 class ResolvedEndpoint(ConfigModel):
     server: SshEndpoint
-    proxy_chain: list[SshEndpoint] = Field(default_factory=list)
+    proxy_chain: list[SshEndpoint] = Field(default_factory=list[SshEndpoint])
 
 
 type ResolvedEndpoints = dict[str, ResolvedEndpoint]

@@ -68,14 +68,14 @@ class TestCleartextDeviceRendering:
         """A LUKS2-labelled container unlocks as /dev/mapper/<label>."""
         vol = _volume()
         facts = rem.RemediationFacts(cleartext_devices={vol.slug: _LABELLED})
-        device, discovered = rem._cleartext_device(vol, _mount(vol), facts)
+        device, discovered = rem.cleartext_device(vol, _mount(vol), facts)
         assert device == _LABELLED
         assert discovered is True
 
     def test_falls_back_to_the_default_name_when_locked(self) -> None:
         """With no unlocked device to inspect, the derived name is all there is."""
         vol = _volume()
-        device, discovered = rem._cleartext_device(
+        device, discovered = rem.cleartext_device(
             vol, _mount(vol), rem.RemediationFacts()
         )
         assert device == f"/dev/mapper/luks-{_UUID}"
@@ -90,7 +90,7 @@ class TestCleartextDeviceRendering:
         """
         vol = _volume()
         facts = rem.RemediationFacts(cleartext_devices={vol.slug: _LABELLED})
-        device, _ = rem._cleartext_device(vol, _mount(vol), facts)
+        device, _ = rem.cleartext_device(vol, _mount(vol), facts)
         assert _UUID not in device
 
     def test_fstab_fix_renders_the_gathered_device(self) -> None:

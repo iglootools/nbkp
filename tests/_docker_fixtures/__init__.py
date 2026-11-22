@@ -30,15 +30,15 @@ from nbkp.config import (
 )
 from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.remote.resolution import resolve_all_endpoints
-from nbkp.remote.testkit.docker import (  # noqa: F401
+from nbkp.remote.testkit.constants import REMOTE_UNENCRYPTED_PATH
+from nbkp.remote.testkit.docker import (
     DOCKER_DIR,
     LUKS_PASSPHRASE,
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_ENCRYPTED_PATH,
     REMOTE_BTRFS_PATH,
-    REMOTE_UNENCRYPTED_PATH,
     LuksMetadata,
-    create_sentinels,
+    create_sentinels as create_sentinels,
     create_test_ssh_endpoint,
     generate_ssh_keypair,
     read_luks_metadata,
@@ -124,7 +124,8 @@ def _docker_available() -> bool:
     """Check if Docker is available and running."""
     try:
         client = dockerlib.from_env()
-        client.ping()
+        # docker leaves ping()'s *args and **kwargs unannotated; retire when it annotates them.
+        client.ping()  # pyright: ignore[reportUnknownMemberType]
         return True
     except docker_errors.DockerException:
         return False
@@ -148,7 +149,7 @@ _TEST_IMAGE_TAG = "nbkp-test-server:latest"
 
 
 @pytest.fixture(scope="session")
-def _docker_image(tmp_path_factory: pytest.TempPathFactory, worker_id: str) -> str:
+def docker_image(tmp_path_factory: pytest.TempPathFactory, worker_id: str) -> str:
     # xdist instantiates session fixtures once per worker, and concurrent builds
     # of one tag race inside the Docker daemon ("already exists, but accessing it
     # also failed"). So the first worker builds, under a lock, and the others wait
@@ -174,7 +175,7 @@ def _build_test_image() -> None:
 
 
 @pytest.fixture(scope="session")
-def _docker_network() -> Generator[Any]:
+def docker_network() -> Generator[Any]:
     """Create a Docker bridge network for inter-container comms."""
     client = dockerlib.from_env()
     name = f"nbkp-test-{uuid.uuid4().hex[:8]}"
@@ -208,8 +209,8 @@ def luks_mapper_name() -> str:
 @pytest.fixture(scope="session")
 def docker_container(
     ssh_key_pair: tuple[Path, Path],
-    _docker_image: str,
-    _docker_network: Any,
+    docker_image: str,
+    docker_network: Any,
     luks_mapper_name: str,
 ) -> Generator[SshEndpoint]:
     """Start Docker container and yield SshEndpoint."""
@@ -229,7 +230,7 @@ def docker_container(
     ).with_startup_timeout(90)
 
     container = (
-        DockerContainer(_docker_image)
+        DockerContainer(docker_image)
         .with_exposed_ports(22)
         .with_volume_mapping(
             str(public_key),
@@ -262,7 +263,7 @@ def docker_container(
 
     # Connect to network with alias for bastion access
     wrapped = container.get_wrapped_container()
-    _docker_network.connect(wrapped, aliases=["backup-server"])
+    docker_network.connect(wrapped, aliases=["backup-server"])
 
     server = create_test_ssh_endpoint(
         "test-server",
@@ -316,8 +317,8 @@ done
 @pytest.fixture(scope="session")
 def bastion_container(
     ssh_key_pair: tuple[Path, Path],
-    _docker_image: str,
-    _docker_network: Any,
+    docker_image: str,
+    docker_network: Any,
 ) -> Generator[SshEndpoint]:
     """Start a bastion (jump proxy) container."""
     from testcontainers.core.container import DockerContainer
@@ -336,7 +337,7 @@ def bastion_container(
     ).with_startup_timeout(90)
 
     container = (
-        DockerContainer(_docker_image)
+        DockerContainer(docker_image)
         .with_exposed_ports(22)
         .with_volume_mapping(
             str(public_key),
@@ -349,7 +350,7 @@ def bastion_container(
     container.start()
 
     wrapped = container.get_wrapped_container()
-    _docker_network.connect(wrapped)
+    docker_network.connect(wrapped)
 
     server = create_test_ssh_endpoint(
         "bastion",
@@ -557,7 +558,7 @@ fi
 
 
 @pytest.fixture(autouse=True)
-def _cleanup_remote(
+def cleanup_remote(
     request: pytest.FixtureRequest,
 ) -> Generator[None]:
     """Clean up /srv/backups and /srv/btrfs-backups between tests.

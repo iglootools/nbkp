@@ -30,8 +30,8 @@ class CredentialError(Exception):
 
 def _from_keyring(passphrase_id: str) -> str:
     try:
-        import keyring  # type: ignore[import-untyped]
-        from keyring.errors import KeyringError  # type: ignore[import-untyped]
+        import keyring
+        from keyring.errors import KeyringError
     except ImportError:
         raise CredentialError(
             "keyring package not installed."

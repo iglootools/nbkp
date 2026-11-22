@@ -137,7 +137,7 @@ class TestSshEndpointErrors:
     def test_statuses_are_frozen(self) -> None:
         status = _ssh(SshEndpointDiagnostics(host_tools=_TOOLS))
         with pytest.raises(pydantic.ValidationError):
-            status.errors = [SshEndpointErrorKind.UNREACHABLE]  # type: ignore[misc]
+            status.errors = [SshEndpointErrorKind.UNREACHABLE]
 
 
 def _sync_status(ssh_status: SshEndpointStatus) -> SyncStatus:

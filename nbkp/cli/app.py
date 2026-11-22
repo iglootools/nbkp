@@ -30,7 +30,7 @@ app = typer.Typer(
 
 
 @app.callback(invoke_without_command=True)
-def _main(
+def app_callback(
     ctx: typer.Context,
     version: Annotated[
         bool | None,

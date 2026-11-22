@@ -52,21 +52,20 @@ def observe_source_endpoint(
         volume, endpoint.subdir, SOURCE_SENTINEL, resolved_endpoints, run=run
     )
     src_ep = resolve_endpoint_path(volume, endpoint.subdir)
+    has_snapshots = endpoint.snapshot_mode != "none"
 
     return SourceEndpointDiagnostics(
         endpoint_slug=endpoint.slug,
         sentinel_exists=sentinel_exists,
-        **(
-            {
-                "snapshot_dirs": _check_snapshot_dirs(
-                    volume, src_ep, resolved_endpoints, run=run
-                ),
-                "latest": _read_latest_state(
-                    volume, src_ep, resolved_endpoints, run=run
-                ),
-            }
-            if endpoint.snapshot_mode != "none"
-            else {}
+        snapshot_dirs=(
+            _check_snapshot_dirs(volume, src_ep, resolved_endpoints, run=run)
+            if has_snapshots
+            else None
+        ),
+        latest=(
+            _read_latest_state(volume, src_ep, resolved_endpoints, run=run)
+            if has_snapshots
+            else None
         ),
     )
 

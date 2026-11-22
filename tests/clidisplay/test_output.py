@@ -2,6 +2,7 @@
 
 import json
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
@@ -9,7 +10,7 @@ from nbkp.clidisplay import OutputFormat, echo_json
 from nbkp.fsprotocol import Snapshot
 
 
-def _emit(data: object, capsys: pytest.CaptureFixture[str]) -> dict | list:
+def _emit(data: object, capsys: pytest.CaptureFixture[str]) -> Any:
     echo_json(data)
     return json.loads(capsys.readouterr().out)
 

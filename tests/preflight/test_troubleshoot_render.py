@@ -3,6 +3,7 @@ commands, warnings, and the JSON form."""
 
 from io import StringIO
 from pathlib import Path
+from typing import Any, cast
 
 from rich.console import Console
 
@@ -170,10 +171,16 @@ class TestWarnings:
         data = troubleshoot_json(
             issues, TroubleshootContext(config=Config()), has_fatal_errors=False
         )
-        [issue] = data["issues"]  # type: ignore[misc]
+        [issue] = _json_issues(data)
         assert issue["kind"] == "warning"
         assert issue["code"] == "UDISKS_BTRFS_MODULE_MISSING"
         assert "udisks2-btrfs" in issue["remediation"]
+
+
+def _json_issues(data: dict[str, object]) -> list[dict[str, Any]]:
+    issues = data["issues"]
+    assert isinstance(issues, list)
+    return cast(list[dict[str, Any]], issues)
 
 
 class TestLatestSnapshotWritable:
@@ -188,7 +195,7 @@ class TestLatestSnapshotWritable:
     def test_fix_makes_the_snapshot_read_only_again(self) -> None:
         issues, ctx = self._issues_and_ctx()
         data = troubleshoot_json(issues, ctx, has_fatal_errors=False)
-        [issue] = data["issues"]  # type: ignore[misc]
+        [issue] = _json_issues(data)
         assert (issue["kind"], issue["code"], issue["severity"]) == (
             "warning",
             "LATEST_SNAPSHOT_WRITABLE",

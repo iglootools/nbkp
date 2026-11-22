@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from io import StringIO
 
-from rich.console import Console
+from rich.console import Console, RenderableType
 
 from nbkp.config import (
     Config,
@@ -29,7 +29,7 @@ from nbkp.sync.results import (
 from tests.fixtures.preflight import btrfs_config, local_vol_statuses, sync_status
 
 
-def _render_sections(sections: list) -> str:
+def _render_sections(sections: list[RenderableType]) -> str:
     buf = StringIO()
     console = Console(file=buf, highlight=False, markup=False, width=300)
     for s in sections:

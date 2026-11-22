@@ -182,7 +182,7 @@ class SourceEndpointStatus(BaseModel):
     """``None`` when the volume is inactive."""
     errors: list[SourceEndpointErrorKind]
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def active(self) -> bool:
         return not self.errors
@@ -218,7 +218,7 @@ class DestinationEndpointStatus(BaseModel):
     warnings: list[DestinationEndpointWarningKind] = []
     """Non-fatal findings; never affect ``active``."""
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def active(self) -> bool:
         return not self.errors

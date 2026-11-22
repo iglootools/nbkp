@@ -6,7 +6,12 @@ import pytest
 
 from nbkp.policy import Severity, Strictness
 from nbkp.preflight import SyncErrorKind
-from nbkp.sync.results import SyncFailureKind, SyncResult, result_severity
+from nbkp.sync.results import (
+    SyncFailureKind,
+    SyncOutcome,
+    SyncResult,
+    result_severity,
+)
 
 _OK_PROC = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
@@ -122,7 +127,7 @@ class TestSyncResultModel:
         with pytest.raises(ValueError, match="contradicts"):
             SyncResult(
                 sync_slug="s",
-                outcome="success",  # type: ignore[arg-type]
+                outcome=SyncOutcome.SUCCESS,
                 dry_run=False,
                 failure=SyncFailureKind.RSYNC,
             )
@@ -131,7 +136,7 @@ class TestSyncResultModel:
         with pytest.raises(ValueError, match="cancelled_by"):
             SyncResult(
                 sync_slug="s",
-                outcome="cancelled",  # type: ignore[arg-type]
+                outcome=SyncOutcome.CANCELLED,
                 dry_run=False,
                 failure=SyncFailureKind.UPSTREAM_FAILED,
             )
@@ -139,4 +144,4 @@ class TestSyncResultModel:
     def test_frozen(self) -> None:
         result = _success()
         with pytest.raises(ValueError, match="frozen"):
-            result.detail = "x"  # type: ignore[misc]
+            result.detail = "x"

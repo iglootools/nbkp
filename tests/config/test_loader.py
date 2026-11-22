@@ -2,7 +2,7 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 from textwrap import dedent
-from typing import TypedDict
+from typing import Any, TypedDict
 
 import pytest
 import yaml
@@ -1522,39 +1522,47 @@ class TestPathNormalization:
         assert sync.filter_file is None
 
     def test_merge_filter_tilde_expansion(self) -> None:
-        sync = SyncConfig(
-            slug="s",
-            source="src",
-            destination="dst",
-            filters=[{"merge": "~/rules.txt"}],  # type: ignore[list-item]
+        sync = SyncConfig.model_validate(
+            {
+                "slug": "s",
+                "source": "src",
+                "destination": "dst",
+                "filters": [{"merge": "~/rules.txt"}],
+            }
         )
         assert sync.filters == [f"merge {Path('~/rules.txt').expanduser()}"]
 
     def test_merge_filter_no_tilde(self) -> None:
-        sync = SyncConfig(
-            slug="s",
-            source="src",
-            destination="dst",
-            filters=[{"merge": "/etc/rules.txt"}],  # type: ignore[list-item]
+        sync = SyncConfig.model_validate(
+            {
+                "slug": "s",
+                "source": "src",
+                "destination": "dst",
+                "filters": [{"merge": "/etc/rules.txt"}],
+            }
         )
         assert sync.filters == ["merge /etc/rules.txt"]
 
     def test_dir_merge_no_tilde_expansion(self) -> None:
-        sync = SyncConfig(
-            slug="s",
-            source="src",
-            destination="dst",
-            filters=[{"dir-merge": ".rsync-filter"}],  # type: ignore[list-item]
+        sync = SyncConfig.model_validate(
+            {
+                "slug": "s",
+                "source": "src",
+                "destination": "dst",
+                "filters": [{"dir-merge": ".rsync-filter"}],
+            }
         )
         assert sync.filters == ["dir-merge .rsync-filter"]
 
     def test_dir_merge_unknown_option_raises(self) -> None:
         with pytest.raises(ValidationError) as excinfo:
-            SyncConfig(
-                slug="s",
-                source="src",
-                destination="dst",
-                filters=[{"dir-merge": {"path": ".rsync-filter", "bad": True}}],  # type: ignore[list-item]
+            SyncConfig.model_validate(
+                {
+                    "slug": "s",
+                    "source": "src",
+                    "destination": "dst",
+                    "filters": [{"dir-merge": {"path": ".rsync-filter", "bad": True}}],
+                }
             )
         assert _error_types(excinfo.value) == {
             ConfigValidationErrorKind.UNKNOWN_DIR_MERGE_OPTION
@@ -1590,34 +1598,42 @@ class TestNoSilentCoercion:
     def test_non_string_subdir_rejected(self) -> None:
         # An unquoted ``subdir: 2024`` used to collapse to the volume root.
         with pytest.raises(ValidationError) as excinfo:
-            SyncEndpoint(slug="ep", volume="v", subdir=2024)  # type: ignore[arg-type]
+            SyncEndpoint.model_validate({"slug": "ep", "volume": "v", "subdir": 2024})
         assert _error_types(excinfo.value) == {"string_type"}
 
     def test_non_string_filter_file_rejected(self) -> None:
         with pytest.raises(ValidationError) as excinfo:
-            SyncConfig(slug="s", source="a", destination="b", filter_file=42)  # type: ignore[arg-type]
+            SyncConfig.model_validate(
+                {"slug": "s", "source": "a", "destination": "b", "filter-file": 42}
+            )
         assert _error_types(excinfo.value) == {"string_type"}
 
     def test_non_string_ssh_key_rejected(self) -> None:
         with pytest.raises(ValidationError) as excinfo:
-            SshEndpoint(slug="s", host="example.com", key=["~/.ssh/id"])  # type: ignore[arg-type]
+            SshEndpoint.model_validate(
+                {"slug": "s", "host": "example.com", "key": ["~/.ssh/id"]}
+            )
         assert _error_types(excinfo.value) == {"string_type"}
 
     def test_filters_as_single_string_rejected(self) -> None:
         # A bare string used to be iterated into one rule per character.
         with pytest.raises(ValidationError) as excinfo:
-            SyncConfig(slug="s", source="a", destination="b", filters="- *.tmp")  # type: ignore[arg-type]
+            SyncConfig.model_validate(
+                {"slug": "s", "source": "a", "destination": "b", "filters": "- *.tmp"}
+            )
         assert _error_types(excinfo.value) == {
             ConfigValidationErrorKind.FILTERS_NOT_A_LIST
         }
 
     def test_filters_as_mapping_rejected(self) -> None:
         with pytest.raises(ValidationError) as excinfo:
-            SyncConfig(
-                slug="s",
-                source="a",
-                destination="b",
-                filters={"exclude": "*.tmp"},  # type: ignore[arg-type]
+            SyncConfig.model_validate(
+                {
+                    "slug": "s",
+                    "source": "a",
+                    "destination": "b",
+                    "filters": {"exclude": "*.tmp"},
+                }
             )
         assert _error_types(excinfo.value) == {
             ConfigValidationErrorKind.FILTERS_NOT_A_LIST
@@ -1625,16 +1641,20 @@ class TestNoSilentCoercion:
 
     def test_filters_null_rejected(self) -> None:
         with pytest.raises(ValidationError) as excinfo:
-            SyncConfig(slug="s", source="a", destination="b", filters=None)  # type: ignore[arg-type]
+            SyncConfig.model_validate(
+                {"slug": "s", "source": "a", "destination": "b", "filters": None}
+            )
         assert _error_types(excinfo.value) == {"list_type"}
 
     def test_invalid_filter_entry_code(self) -> None:
         with pytest.raises(ValidationError) as excinfo:
-            SyncConfig(
-                slug="s",
-                source="a",
-                destination="b",
-                filters=[{"badkey": "value"}],  # type: ignore[list-item]
+            SyncConfig.model_validate(
+                {
+                    "slug": "s",
+                    "source": "a",
+                    "destination": "b",
+                    "filters": [{"badkey": "value"}],
+                }
             )
         assert _error_types(excinfo.value) == {ConfigValidationErrorKind.INVALID_FILTER}
 
@@ -1650,11 +1670,8 @@ class TestNoSilentCoercion:
         self, item: dict[str, str]
     ) -> None:
         with pytest.raises(ValidationError) as excinfo:
-            SyncConfig(
-                slug="s",
-                source="a",
-                destination="b",
-                filters=[item],  # type: ignore[list-item]
+            SyncConfig.model_validate(
+                {"slug": "s", "source": "a", "destination": "b", "filters": [item]}
             )
         assert _error_types(excinfo.value) == {ConfigValidationErrorKind.INVALID_FILTER}
 
@@ -1663,7 +1680,7 @@ class TestUnknownKeys:
     """A misspelt key is rejected where it sits, not dropped for the defaults."""
 
     @staticmethod
-    def _raw_config(sample_config: Config) -> dict:
+    def _raw_config(sample_config: Config) -> dict[str, Any]:
         return sample_config.model_dump(by_alias=True, mode="json")
 
     def test_unknown_top_level_key_rejected(
@@ -1744,10 +1761,10 @@ class TestShippedExamples:
 class TestFrozenModels:
     def test_config_is_immutable(self, sample_config: Config) -> None:
         with pytest.raises(ValidationError) as excinfo:
-            sample_config.credential_command = ["x"]  # type: ignore[misc]
+            sample_config.credential_command = ["x"]
         assert _error_types(excinfo.value) == {"frozen_instance"}
 
     def test_sync_endpoint_is_immutable(self) -> None:
         ep = SyncEndpoint(slug="ep", volume="v")
         with pytest.raises(ValidationError):
-            ep.subdir = "x"  # type: ignore[misc]
+            ep.subdir = "x"

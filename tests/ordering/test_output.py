@@ -4,7 +4,7 @@ import json
 from io import StringIO
 from pathlib import Path
 
-from rich.console import Console
+from rich.console import Console, RenderableType
 
 from nbkp.cli import app
 from nbkp.config import (
@@ -29,7 +29,7 @@ from tests.fakes import fake_runtime
 from tests.fixtures.cli import runner
 
 
-def _render(renderable) -> str:  # type: ignore[no-untyped-def]
+def _render(renderable: RenderableType) -> str:
     buf = StringIO()
     Console(file=buf, highlight=False, markup=True, force_terminal=False).print(
         renderable
