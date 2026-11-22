@@ -14,6 +14,7 @@ from nbkp.config import (
     LocalVolume,
     LuksEncryptionConfig,
     MountConfig,
+    Volume,
     passphrase_env_var,
 )
 from nbkp.credentials import (
@@ -31,6 +32,8 @@ from nbkp.credentials import (
 class _StoreKeyring(KeyringBackend):
     """A keyring backend over a dict, or failing with *error* when given."""
 
+    # keyring types priority as a read-only class property, yet its own
+    # backends, and its documentation, override it with a plain number.
     priority = 1  # pyright: ignore[reportAssignmentType]  # noqa: DC06 -- keyring reads it
 
     def __init__(
@@ -302,7 +305,7 @@ def _cfg(
     plain: list[str] | None = None,
 ) -> Config:
     """Build a config whose volumes map slug -> passphrase-id (or no encryption)."""
-    volumes: dict[str, LocalVolume] = {
+    volumes: dict[str, Volume] = {
         slug: LocalVolume(
             slug=slug,
             path=f"/mnt/{slug}",
@@ -316,7 +319,7 @@ def _cfg(
     for slug in plain or []:
         volumes[slug] = LocalVolume(slug=slug, path=f"/mnt/{slug}")
     return Config(
-        volumes=volumes,  # type: ignore[arg-type]
+        volumes=volumes,
         credential_provider=provider,
         credential_command=(
             ["pass", "show", "nbkp/{id}"]
@@ -376,7 +379,11 @@ class TestPrefetchPassphrases:
         cfg = _cfg(provider=CredentialProvider.PROMPT, encrypted={"a": "id"})
         calls: list[str] = []
 
-        assert prefetch_passphrases(cfg, calls.append) == []  # type: ignore[arg-type]
+        def passphrase_fn(passphrase_id: str) -> str:
+            calls.append(passphrase_id)
+            return "unused"
+
+        assert prefetch_passphrases(cfg, passphrase_fn) == []
         assert calls == []
         assert prefetch_count(cfg) == 0
 

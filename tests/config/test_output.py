@@ -46,7 +46,7 @@ def _validation_error() -> ConfigError:
         retention_count: int  # noqa: DC06 -- the field the error names
 
     with pytest.raises(ValidationError) as exc:
-        M(retention_count="x")  # type: ignore[arg-type]
+        M.model_validate({"retention_count": "x"})
     e = ConfigError("bad config", reason=ConfigErrorKind.VALIDATION)
     e.__cause__ = exc.value
     return e

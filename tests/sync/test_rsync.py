@@ -5,6 +5,7 @@ import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -216,7 +217,7 @@ class TestBuildRsyncCommandRemoteToRemoteSameServer:
         dst_path: str = "/data/dst",
         src_subdir: str | None = None,
         dst_subdir: str | None = None,
-        **sync_kwargs: object,
+        **sync_kwargs: Any,
     ) -> tuple[SyncConfig, Config]:
         srv = server or SshEndpoint(
             slug="nas",
@@ -242,7 +243,7 @@ class TestBuildRsyncCommandRemoteToRemoteSameServer:
             slug="s1",
             source="ep-src",
             destination="ep-dst",
-            **sync_kwargs,  # type: ignore[arg-type]
+            **sync_kwargs,
         )
         config = Config(
             ssh_endpoints=endpoints,

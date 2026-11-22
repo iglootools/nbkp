@@ -11,6 +11,7 @@ in nbkp/preflight/guidelines.md.
 
 import enum
 from functools import cache
+from typing import Any, cast
 
 import pytest
 
@@ -58,9 +59,8 @@ def _remediations() -> dict[enum.Enum, tuple[str, ...]]:
     )
     rendered = troubleshoot_json(issues, ctx, has_fatal_errors=True)["issues"]
     assert isinstance(rendered, list)
-    pairs = [
-        (issue.error, item["remediation"]) for issue, item in zip(issues, rendered)
-    ]
+    items = cast(list[dict[str, Any]], rendered)
+    pairs = [(issue.error, item["remediation"]) for issue, item in zip(issues, items)]
     return {error: tuple(fix for e, fix in pairs if e is error) for error, _ in pairs}
 
 

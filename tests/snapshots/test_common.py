@@ -1,5 +1,6 @@
 """Tests for nbkp.snapshots.common (shared snapshot helpers)."""
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -450,7 +451,7 @@ class TestUpdateLatestSymlink:
         ]
 
 
-def _is_op(op: SnapshotOp):
+def _is_op(op: SnapshotOp) -> Callable[[SnapshotOperationError], bool]:
     return lambda e: e.op is op
 
 

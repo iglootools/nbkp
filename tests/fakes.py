@@ -63,8 +63,8 @@ class FakeCommandRunner:
     response is raised, like a transport failure.
     """
 
-    rules: list[_Rule] = field(default_factory=list)
-    calls: list[CommandCall] = field(default_factory=list)
+    rules: list[_Rule] = field(default_factory=list[_Rule])
+    calls: list[CommandCall] = field(default_factory=list[CommandCall])
 
     def on(
         self,
@@ -120,7 +120,9 @@ class FakeRsync:
     """
 
     responses: list[Response] = field(default_factory=lambda: [completed(0, "done\n")])
-    calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    calls: list[tuple[str, dict[str, Any]]] = field(
+        default_factory=list[tuple[str, dict[str, Any]]]
+    )
 
     def __call__(
         self, sync: SyncConfig, config: Config, **kwargs: Any
@@ -156,7 +158,7 @@ class FakeRunLock:
     """A :data:`~nbkp.cliwiring.lock.RunLockFn` that is always free, recording the
     path of each lock taken."""
 
-    paths: list[Path] = field(default_factory=list)
+    paths: list[Path] = field(default_factory=list[Path])
 
     def __call__(self, path: Path) -> AbstractContextManager[None]:
         self.paths.append(path)

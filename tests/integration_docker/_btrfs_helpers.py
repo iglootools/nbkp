@@ -104,7 +104,7 @@ def run_test_prunes_oldest_beyond_limit(env: BtrfsEnv) -> None:
     env.create_staging()
     env.seed_staging("test data")
 
-    names = []
+    names: list[str] = []
     for i in range(3):
         now = datetime(2024, 1, 1 + i, tzinfo=UTC)
         path = create_snapshot(

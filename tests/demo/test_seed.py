@@ -172,7 +172,9 @@ class TestStepFailure:
                 {},
                 passphrase_fn=lambda _: "x",
                 run=run,
-                on_step_end=lambda *end: ends.append(end),
+                on_step_end=lambda step, severity, detail: ends.append(
+                    (step, severity, detail)
+                ),
             ),
         ):
             pass
@@ -191,7 +193,9 @@ class TestStepFailure:
                 tmp_path,
                 docker=False,
                 big_file_size=0,
-                on_step_end=lambda *end: ends.append(end),
+                on_step_end=lambda step, severity, detail: ends.append(
+                    (step, severity, detail)
+                ),
             )
         assert ends == [("seed volumes", "error", str(exc.value))]
 

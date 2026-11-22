@@ -81,7 +81,8 @@ def _cleanup(
     luks_uuid: str,
 ) -> None:
     """Idempotent cleanup: umount + lock via udisksctl (ignore errors)."""
-    device = resolve_target_device(volume, volume.mount, resolved)  # type: ignore[arg-type]
+    assert volume.mount is not None
+    device = resolve_target_device(volume, volume.mount, resolved)
     if device is not None:
         run_on_volume(build_unmount_command(device), volume, resolved)
     _lock_luks(volume, resolved, luks_uuid)

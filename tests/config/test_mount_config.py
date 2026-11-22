@@ -1,5 +1,7 @@
 """Tests for mount and encryption config models."""
 
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
@@ -161,9 +163,9 @@ class TestResolveEndpointPath:
 
 
 class TestCredentialProviderConfig:
-    def _minimal_config(self, **kwargs: object) -> Config:
+    def _minimal_config(self, **kwargs: Any) -> Config:
         return Config(
-            **kwargs,  # type: ignore[arg-type]
+            **kwargs,
             volumes={
                 "src": LocalVolume(slug="src", path="/src"),
                 "dst": LocalVolume(slug="dst", path="/dst"),

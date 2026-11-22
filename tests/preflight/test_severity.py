@@ -121,7 +121,7 @@ class TestSeverityForErrors:
         )
 
     def test_strictness_changes_classification(self) -> None:
-        errors: list = [VolumeErrorKind.SENTINEL_NOT_FOUND]
+        errors = [VolumeErrorKind.SENTINEL_NOT_FOUND]
         assert (
             severity_for_errors(errors, Strictness.IGNORE_INACTIVE) is Severity.WARNING
         )
