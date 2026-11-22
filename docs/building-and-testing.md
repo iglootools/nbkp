@@ -70,7 +70,7 @@ uv run --no-sync pytest tests/integration_docker/ -n auto -v         # Docker in
 uv run --no-sync pytest tests/ -v                                    # All tests
 uv run --no-sync ruff format .                                       # formatting
 uv run --no-sync ruff check nbkp/ tests/ build-scripts/              # linting
-uv run --no-sync pyright nbkp/ tests/ build-scripts/                 # type-checking
+uv run --no-sync pyright                                             # type-checking (strict; paths in [tool.pyright])
 uv run --no-sync pytest tests/remote/test_ssh.py::TestBuildSshBaseArgs::test_full -v  # run a single test
 ```
 

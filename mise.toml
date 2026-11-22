@@ -306,7 +306,7 @@ run = "uv run --no-sync ruff check nbkp/ tests/ build-scripts/"
 
 [tasks.lint-types]
 description = "Type-check with pyright"
-run = "uv run --no-sync pyright nbkp/ tests/ build-scripts/"
+run = "uv run --no-sync pyright"
 
 # The uv.lock counterpart of lock-check, and the replacement for `poetry check --lock`:
 # asserts uv.lock is consistent with pyproject.toml. Distinct from UV_LOCKED in CI, which

@@ -153,7 +153,10 @@ markers = [
 ]
 
 [tool.pyright]
+include = ["nbkp", "tests", "build-scripts"]
 pythonVersion = "3.15"
+typeCheckingMode = "strict"
+reportUnnecessaryTypeIgnoreComment = "error"
 # uv creates the project venv at .venv; restating it here is what lets editors and
 # language servers resolve imports against it, since they inherit no shell activation.
 venvPath = "."
