@@ -561,7 +561,7 @@ def _device_not_present_fix(mount: MountConfig | None) -> Lines:
     ]
 
 
-def _cleartext_device(
+def cleartext_device(
     vol: LocalVolume | RemoteVolume,
     mount: MountConfig,
     facts: RemediationFacts,
@@ -609,7 +609,7 @@ def _fstab_line(
                 )
             ]
         case MountConfig():
-            device, discovered = _cleartext_device(vol, mount, ctx.known_facts)
+            device, discovered = cleartext_device(vol, mount, ctx.known_facts)
             return [
                 format_command(f"{device}  {path}  {fs_and_options}", STEP),
                 *([] if discovered else _mapper_name_caveat(STEP)),
@@ -832,7 +832,7 @@ def _mount_failed_fix(
         case MountConfig(encryption=None):
             device = f"/dev/disk/by-uuid/{mount.device_uuid}"
         case MountConfig():
-            device, _ = _cleartext_device(vol, mount, ctx.known_facts)
+            device, _ = cleartext_device(vol, mount, ctx.known_facts)
         case None:
             device = "<device>"
     return [
