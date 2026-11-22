@@ -1,5 +1,13 @@
-from .loader import ConfigError, ConfigErrorKind, find_config_file, load_config
-from .protocol import (
+"""Finding, loading and validating the nbkp config file."""
+
+from nbkp.config.loader import (
+    ConfigError,
+    ConfigErrorKind,
+    find_config_file,
+    load_config,
+)
+from nbkp.config.protocol import (
+    DEFAULT_SSH_PORT,
     BtrfsSnapshotConfig,
     Config,
     ConfigValidationErrorKind,
@@ -25,6 +33,7 @@ from .protocol import (
 )
 
 __all__ = [
+    "DEFAULT_SSH_PORT",
     "BtrfsSnapshotConfig",
     "Config",
     "ConfigError",

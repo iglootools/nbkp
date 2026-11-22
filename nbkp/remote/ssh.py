@@ -1,16 +1,32 @@
+"""
+Building ``ssh`` command lines for endpoints and their proxy chains.
+
+Covers the arguments nbkp runs ``ssh`` and rsync's ``-e`` with, and the
+commands it prints for the operator to copy-paste.
+"""
+
 import os
 import re
 import shlex
 from functools import reduce
 
-from ..config import LocalVolume, RemoteVolume, SshConnectionOptions, SshEndpoint
-lazy from .endpoints import ResolvedEndpoints
+from nbkp.config import (
+    DEFAULT_SSH_PORT,
+    LocalVolume,
+    RemoteVolume,
+    SshConnectionOptions,
+    SshEndpoint,
+)
+lazy from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 def format_known_hosts_option(known_hosts_file: str) -> str:
-    """``UserKnownHostsFile=<path>``, the value double-quoted when it holds
-    whitespace or a quote: OpenSSH splits the value on whitespace into several
-    files unless it is quoted, and unescapes ``\\`` and ``\"`` inside quotes.
+    r"""
+    Format the ``UserKnownHostsFile=<path>`` option.
+
+    The value is double-quoted when it holds whitespace or a quote: OpenSSH splits the
+    value on whitespace into several files unless it is quoted, and unescapes ``\\`` and
+    ``\"`` inside quotes.
     """
     if re.search(r'[\s"\\]', known_hosts_file) is None:
         return f"UserKnownHostsFile={known_hosts_file}"
@@ -55,7 +71,7 @@ def _ssh_o_options(opts: SshConnectionOptions) -> list[str]:
 
 def _port_and_key_args(endpoint: SshEndpoint) -> list[str]:
     return [
-        *(["-p", str(endpoint.port)] if endpoint.port != 22 else []),
+        *(["-p", str(endpoint.port)] if endpoint.port != DEFAULT_SSH_PORT else []),
         *(["-i", endpoint.key] if endpoint.key else []),
     ]
 
@@ -70,10 +86,12 @@ def _ssh_endpoint_args(endpoint: SshEndpoint) -> list[str]:
 
 
 def _build_proxy_hop(proxy: SshEndpoint, inner_cmd: str | None) -> str:
-    """ssh runs a ProxyCommand through ``sh -c``, so the hop is shell-quoted
-    (``shlex.join``). Only ``%`` needs ssh-level escaping in a nested
-    command: ``%h:%p`` itself contains no shell metacharacters and stays
-    unquoted for ssh to expand.
+    """
+    Build one ProxyCommand hop through *proxy*.
+
+    Ssh runs a ProxyCommand through ``sh -c``, so the hop is shell-quoted
+    (``shlex.join``). Only ``%`` needs ssh-level escaping in a nested command: ``%h:%p``
+    itself contains no shell metacharacters and stays unquoted for ssh to expand.
     """
     parts = [
         "ssh",
@@ -89,9 +107,11 @@ def _build_proxy_hop(proxy: SshEndpoint, inner_cmd: str | None) -> str:
 def _build_proxy_command(
     proxies: list[SshEndpoint],
 ) -> str:
-    """Uses ProxyCommand instead of -J so that per-proxy SSH
-    options (e.g. StrictHostKeyChecking) are propagated to
-    each hop. *proxies* must not be empty.
+    """
+    Build the ProxyCommand that reaches the host through *proxies*.
+
+    Uses ProxyCommand instead of -J so that per-proxy SSH options (e.g.
+    StrictHostKeyChecking) are propagated to each hop. *proxies* must not be empty.
     """
     innermost, *outer = proxies
     return reduce(
@@ -119,7 +139,7 @@ def build_ssh_base_args(
     server: SshEndpoint,
     proxy_chain: list[SshEndpoint] | None = None,
 ) -> list[str]:
-    """Returns args like ``ssh -o ConnectTimeout=10 -o BatchMode=yes [opts] host``."""
+    """Return args like ``ssh -o ConnectTimeout=10 -o BatchMode=yes [opts] host``."""
     return ["ssh", *_build_ssh_core_args(server, proxy_chain), server.destination]
 
 
@@ -127,7 +147,8 @@ def build_ssh_e_option(
     server: SshEndpoint,
     proxy_chain: list[SshEndpoint] | None = None,
 ) -> list[str]:
-    """Returns a list like:
+    """
+    Return rsync's ``-e`` option, as a list like this.
 
         ["-e", "ssh -o ConnectTimeout=10 -o BatchMode=yes ..."]
 
@@ -140,6 +161,7 @@ def build_ssh_e_option(
 
 
 def format_remote_path(server: SshEndpoint, path: str) -> str:
+    """Return *path* on *server* as an rsync/scp ``destination:path`` argument."""
     return f"{server.destination}:{path}"
 
 
@@ -148,6 +170,7 @@ def format_remote_path(server: SshEndpoint, path: str) -> str:
 
 
 def format_proxy_jump_chain(proxies: list[SshEndpoint]) -> str:
+    """Return the value of ``ssh -J`` that jumps through *proxies*, in order."""
     return ",".join(p.host_label for p in proxies)
 
 
@@ -155,6 +178,12 @@ def ssh_prefix(
     server: SshEndpoint,
     proxy_chain: list[SshEndpoint] | None = None,
 ) -> list[str]:
+    """
+    Return the ``ssh`` arguments that reach *server*, for a printed command.
+
+    Unlike :func:`build_ssh_base_args`, it gives only the port, key and ``-J``
+    jump chain, so the line stays short enough to read and paste.
+    """
     return [
         "ssh",
         *_port_and_key_args(server),
@@ -164,7 +193,8 @@ def ssh_prefix(
 
 
 def _quote_arg(arg: str) -> str:
-    """Shell-quote one argument, keeping a leading ``~`` / ``~/`` expandable.
+    """
+    Shell-quote one argument, keeping a leading ``~`` / ``~/`` expandable.
 
     Remote volume paths may start with ``~`` (the remote user's home); quoting
     the tilde would stop the remote shell from expanding it.
@@ -186,7 +216,8 @@ def wrap_cmd(
     vol: LocalVolume | RemoteVolume,
     resolved_endpoints: ResolvedEndpoints,
 ) -> str:
-    """Render a command as a copy-pasteable shell line, over SSH if remote.
+    """
+    Render a command as a copy-pasteable shell line, over SSH if remote.
 
     For a remote volume the quoted command becomes a single argument to
     ``ssh``, which hands it to the remote shell to parse again.

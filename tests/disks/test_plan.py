@@ -33,7 +33,9 @@ def _config(*volumes: LocalVolume) -> Config:
 
 def _probe(states: dict[str, MountCapabilities | Exception]) -> MountProbeFn:
     def probe(
-        volume: Volume, mount: MountConfig, resolved: ResolvedEndpoints
+        volume: Volume,
+        _mount: MountConfig,
+        _resolved: ResolvedEndpoints,
     ) -> MountCapabilities:
         match states[volume.slug]:
             case Exception() as error:
@@ -52,16 +54,25 @@ def _plan(
     names: list[str] | None = None,
 ) -> list[VolumePlan]:
     return plan_lifecycle(
-        config, {}, mounting=mounting, names=names, probe=_probe(states)
+        config,
+        {},
+        mounting=mounting,
+        names=names,
+        probe=_probe(states),
     )
 
 
 _LOCKED = MountCapabilities(device_present=True, luks_unlocked=False, mounted=False)
 _UNLOCKED_ONLY = MountCapabilities(
-    device_present=True, luks_unlocked=True, mounted=False
+    device_present=True,
+    luks_unlocked=True,
+    mounted=False,
 )
 _MOUNTED = MountCapabilities(
-    device_present=True, luks_unlocked=True, mounted=True, effective_path="/mnt/enc"
+    device_present=True,
+    luks_unlocked=True,
+    mounted=True,
+    effective_path="/mnt/enc",
 )
 _ABSENT = MountCapabilities(device_present=False)
 
@@ -114,7 +125,7 @@ class TestUmountPlan:
 class TestPlanLifecycle:
     def test_probe_failure_is_reported_not_raised(self) -> None:
         states: dict[str, MountCapabilities | Exception] = {
-            "enc": OSError("No route to host")
+            "enc": OSError("No route to host"),
         }
 
         [plan] = _plan(_config(_volume("enc")), states, mounting=True)
@@ -141,7 +152,7 @@ class TestPlanLifecycle:
 
     def test_missing_local_tool_is_reported_as_not_installed(self) -> None:
         states: dict[str, MountCapabilities | Exception] = {
-            "enc": FileNotFoundError(2, "No such file or directory", "lsblk")
+            "enc": FileNotFoundError(2, "No such file or directory", "lsblk"),
         }
 
         [plan] = _plan(_config(_volume("enc")), states, mounting=False)
@@ -175,7 +186,7 @@ class TestPlanLifecycle:
             volumes={
                 "enc": _volume("enc"),
                 "fixed": LocalVolume(slug="fixed", path="/srv/data"),
-            }
+            },
         )
 
         plans = _plan(config, {"enc": _LOCKED}, mounting=True)

@@ -206,8 +206,11 @@ class TestBuildRsyncCommandRemoteToLocal:
 
 
 class TestBuildRsyncCommandRemoteToRemoteSameServer:
-    """When both volumes resolve to the same SSH endpoint,
-    rsync should use local paths (no inner SSH)."""
+    """
+    Rsync uses local paths when both volumes resolve to the same SSH endpoint.
+
+    No inner SSH.
+    """
 
     def _simple_config(
         self,
@@ -216,8 +219,9 @@ class TestBuildRsyncCommandRemoteToRemoteSameServer:
         src_path: str = "/data/src",
         dst_path: str = "/data/dst",
         src_subdir: str | None = None,
+        *,
         dst_subdir: str | None = None,
-        **sync_kwargs: Any,
+        **sync_kwargs: Any,  # noqa: ANN401 -- SyncConfig fields
     ) -> tuple[SyncConfig, Config]:
         srv = server or SshEndpoint(
             slug="nas",
@@ -277,7 +281,10 @@ class TestBuildRsyncCommandRemoteToRemoteSameServer:
         resolved = resolve_all_endpoints(config)
 
         cmd = build_rsync_command(
-            sync, config, dry_run=True, resolved_endpoints=resolved
+            sync,
+            config,
+            dry_run=True,
+            resolved_endpoints=resolved,
         )
         inner = cmd[-1]
         assert "--dry-run" in inner
@@ -1355,7 +1362,9 @@ class _RecordingProcessRunner:
         self.calls: list[tuple[list[str], Callable[[str], None] | None]] = []
 
     def __call__(
-        self, cmd: list[str], on_output: Callable[[str], None] | None
+        self,
+        cmd: list[str],
+        on_output: Callable[[str], None] | None,
     ) -> subprocess.CompletedProcess[str]:
         self.calls.append((cmd, on_output))
         return completed(stdout="done")
@@ -1370,7 +1379,7 @@ class TestRunRsync:
 
         assert result.stdout == "done"
         assert run_process.calls == [
-            (build_rsync_command(sync, config, dry_run=True), None)
+            (build_rsync_command(sync, config, dry_run=True), None),
         ]
 
     def test_hands_the_output_callback_to_the_process(self) -> None:
@@ -1407,7 +1416,7 @@ class TestRunLocalProcess:
 
 
 def _emit_cmd(data: bytes, *, stderr: bytes = b"", exit_code: int = 0) -> list[str]:
-    """A command writing *data* to stdout and *stderr* to stderr, unbuffered."""
+    """Return a command writing *data* and *stderr* to stdout and stderr, unbuffered."""
     code = (
         "import sys\n"
         f"sys.stdout.buffer.write({data!r}); sys.stdout.flush()\n"
@@ -1427,7 +1436,9 @@ class TestRunStreaming:
     def test_decodes_characters_and_crlf_split_across_reads(self) -> None:
         chunks: list[str] = []
         result = run_streaming(
-            _emit_cmd("é\r\n€".encode()), chunks.append, chunk_size=1
+            _emit_cmd("é\r\n€".encode()),
+            chunks.append,
+            chunk_size=1,
         )
         assert result.stdout == "é\n€"
         # One byte per read: the halves of "é" and of "\r\n" are joined.
@@ -1436,15 +1447,20 @@ class TestRunStreaming:
 
     def test_merges_stderr_and_keeps_exit_code(self) -> None:
         result = run_streaming(
-            _emit_cmd(b"out\n", stderr=b"err\n", exit_code=23), lambda _: None
+            _emit_cmd(b"out\n", stderr=b"err\n", exit_code=23),
+            lambda _: None,
         )
         assert result.returncode == 23
         assert result.stdout == "out\nerr\n"
         assert result.stderr == ""
 
     def test_kills_the_child_when_forwarding_raises(self) -> None:
-        """Regression: `nbkp run -p overall | head` left rsync running once
-        echoing its output raised BrokenPipeError."""
+        """
+        Regression: a failing forward left rsync running.
+
+        `nbkp run -p overall | head` left rsync running once echoing its output raised
+        BrokenPipeError.
+        """
         code = "import os, time\nprint(os.getpid(), flush=True)\ntime.sleep(60)\n"
         pids: list[int] = []
 
@@ -1469,13 +1485,19 @@ class TestRunStreaming:
         assert len(chunks) < 1_000
 
     def test_keeps_only_the_tail_of_the_output(self) -> None:
-        """The output was already forwarded; only its end, where rsync's error
-        lands, is kept for the result."""
+        """
+        Keep only the tail of the output, where rsync's error lands.
+
+        The output was already forwarded.
+        """
         code = "import sys\nfor i in range(10_000): sys.stdout.write(f'{i}\\n')\n"
         chunks: list[str] = []
 
         result = run_streaming(
-            [sys.executable, "-c", code], chunks.append, chunk_size=7, tail_size=20
+            [sys.executable, "-c", code],
+            chunks.append,
+            chunk_size=7,
+            tail_size=20,
         )
 
         forwarded = "".join(chunks)

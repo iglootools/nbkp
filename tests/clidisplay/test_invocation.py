@@ -36,7 +36,9 @@ class TestCommand:
 
     def test_without_endpoint_flags(self) -> None:
         inv = Invocation(
-            config_path=Path("/w/c.yaml"), locations=("home",), cwd=Path("/w")
+            config_path=Path("/w/c.yaml"),
+            locations=("home",),
+            cwd=Path("/w"),
         )
         assert inv.command("disks", "setup-auth", endpoint_flags=False) == (
             "nbkp disks setup-auth -c c.yaml"

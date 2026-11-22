@@ -1,4 +1,5 @@
-"""The label that marks the human output of a dry run.
+"""
+The label that marks the human output of a dry run.
 
 A line describing an action that would be taken starts with it
 (``[dry-run] Would unlock, mount enc``); a table or summary carries it once,
@@ -19,7 +20,8 @@ def dry_run_labeled(line: str | Text) -> Text:
 
 
 def dry_run_table_title(title: str, *, dry_run: bool) -> Text:
-    """A table title, labeled when *dry_run*.
+    """
+    Return a table title, labeled when *dry_run*.
 
     Styled as Rich styles a ``str`` title, which it does not do for a
     :class:`~rich.text.Text` one.

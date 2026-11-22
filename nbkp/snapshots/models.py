@@ -1,14 +1,17 @@
+"""The results of ``snapshots show`` and ``snapshots prune``, one per sync."""
+
 import enum
 
 from pydantic import BaseModel, ConfigDict, computed_field, field_serializer
 
-from ..fsprotocol import Snapshot
-from ..preflight import SyncErrorKind
-from .errors import SnapshotOp, SnapshotOperationError
+from nbkp.fsprotocol import Snapshot
+from nbkp.preflight import SyncErrorKind
+from nbkp.snapshots.errors import SnapshotOp, SnapshotOperationError
 
 
 class SnapshotSkipReason(enum.StrEnum):
-    """Why a sync was left out of ``snapshots show`` / ``snapshots prune``.
+    """
+    Why a sync was left out of ``snapshots show`` / ``snapshots prune``.
 
     A skip is never a failure: failures go in the result's ``error``.
     """
@@ -21,6 +24,8 @@ class SnapshotSkipReason(enum.StrEnum):
 
 
 class SnapshotErrorKind(enum.StrEnum):
+    """How a sync failed in ``snapshots show`` / ``snapshots prune``."""
+
     INACTIVE = "inactive"
     """Expected inactivity, fatal under ``--strictness ignore-none``."""
     PREFLIGHT_ERRORS = "preflight-errors"
@@ -29,7 +34,8 @@ class SnapshotErrorKind(enum.StrEnum):
 
 
 class SnapshotResultError(BaseModel):
-    """Why a sync failed in ``snapshots show`` / ``snapshots prune``.
+    """
+    Why a sync failed in ``snapshots show`` / ``snapshots prune``.
 
     The preflight errors and the snapshot operation serialize as their
     stable codes (enum member names); the output layer renders the text.
@@ -46,6 +52,7 @@ class SnapshotResultError(BaseModel):
 
     @staticmethod
     def from_operation(error: SnapshotOperationError) -> SnapshotResultError:
+        """Return the result error for a failed snapshot operation."""
         return SnapshotResultError(
             kind=SnapshotErrorKind.OPERATION_FAILED,
             operation=error.op,
@@ -63,6 +70,14 @@ class SnapshotResultError(BaseModel):
 
 
 class PruneResult(BaseModel):
+    """
+    The result of pruning one sync's destination.
+
+    ``deleted`` names the snapshots removed (or that would be, on a dry
+    run), including those removed before a failure; ``kept`` counts the
+    snapshots left afterwards.
+    """
+
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     sync_slug: str
@@ -75,10 +90,13 @@ class PruneResult(BaseModel):
     @computed_field
     @property
     def skipped(self) -> bool:
+        """Return whether the sync was skipped rather than processed."""
         return self.skip_reason is not None
 
 
 class ShowResult(BaseModel):
+    """One sync's snapshots, its ``latest`` snapshot and its retention limit."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     sync_slug: str
@@ -92,4 +110,5 @@ class ShowResult(BaseModel):
     @computed_field
     @property
     def skipped(self) -> bool:
+        """Return whether the sync was skipped rather than processed."""
         return self.skip_reason is not None

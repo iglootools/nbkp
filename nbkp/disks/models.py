@@ -1,19 +1,23 @@
+"""The mount lifecycle's failure kinds, steps and observed device capabilities."""
+
 import enum
 from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict
 
-lazy from ..config.protocol.volume import LocalVolume, RemoteVolume
+lazy from nbkp.config.protocol.volume import LocalVolume, RemoteVolume
 
 
 class MountFailureKind(enum.StrEnum):
-    """Lives here (not in ``lifecycle``) so that ``MountCapabilities`` can carry
-    it as a typed field and preflight can ``match`` on members instead of
-    string literals.
+    """
+    How a mount lifecycle step failed.
+
+    Lives here (not in ``lifecycle``) so that ``MountCapabilities`` can carry it as a
+    typed field and preflight can ``match`` on members instead of string literals.
     """
 
     DEVICE_NOT_PRESENT = "device-not-present"
-    PASSPHRASE_NOT_AVAILABLE = "passphrase-not-available"
+    PASSPHRASE_NOT_AVAILABLE = "passphrase-not-available"  # noqa: S105 -- a failure kind, not a secret
     UNLOCK_FAILED = "unlock-failed"
     MOUNT_FAILED = "mount-failed"
     NOT_AUTHORIZED = "not-authorized"
@@ -25,6 +29,8 @@ class MountFailureKind(enum.StrEnum):
 
 
 class UmountFailureKind(enum.StrEnum):
+    """How an umount lifecycle step failed."""
+
     UNMOUNT_FAILED = "unmount-failed"
     LOCK_FAILED = "lock-failed"
     """Unmounted (or not mounted) but the LUKS container is still unlocked."""
@@ -44,7 +50,8 @@ class LifecycleStep(enum.StrEnum):
 
 @dataclass(frozen=True)
 class LifecycleFailure:
-    """The facts behind a failed mount or umount; the reason is on the result.
+    """
+    The facts behind a failed mount or umount; the reason is on the result.
 
     Each field is set only when it applies, and holds data, not prose: the
     message users see is rendered by ``nbkp.disks.output``.
@@ -63,7 +70,8 @@ class LifecycleFailure:
 
 
 class MountToolCapabilities(BaseModel):
-    """Mount management tool availability on a host.
+    """
+    Mount management tool availability on a host.
 
     Probed once per SSH endpoint when any volume on that host has
     mount config.  Tool *availability* is host-level; tool *need*
@@ -80,7 +88,8 @@ class MountToolCapabilities(BaseModel):
 
 
 class MountCapabilities(BaseModel):
-    """Volume-specific mount diagnostics (config checks + runtime state).
+    """
+    Volume-specific mount diagnostics (config checks + runtime state).
 
     Host-level tool availability (udisksctl, udisksd, etc.) lives on
     ``MountToolCapabilities`` at the SSH endpoint level.  This model captures
@@ -111,7 +120,7 @@ class MountCapabilities(BaseModel):
 
 
 def display_name(vol: LocalVolume | RemoteVolume) -> str:
-    """Display name for a volume: ``ssh-endpoint:slug`` for remote, ``slug`` for local."""
+    """Return a volume's display name: ``ssh-endpoint:slug``, or ``slug`` if local."""
     return (
         f"{vol.ssh_endpoint}:{vol.slug}" if isinstance(vol, RemoteVolume) else vol.slug
     )

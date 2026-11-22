@@ -5,14 +5,15 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict, computed_field
 
-from ...disks import (
-    MountToolCapabilities,
-)
+from nbkp.disks import MountToolCapabilities
 
 
 class SshEndpointErrorKind(enum.StrEnum):
-    """Host tool availability errors live here because tool presence is a
-    property of the host, shared by all volumes on that host.
+    """
+    Errors of an SSH endpoint, host tool availability included.
+
+    Host tool availability errors live here because tool presence is a property of the
+    host, shared by all volumes on that host.
     """
 
     UNREACHABLE = "unreachable"
@@ -43,12 +44,13 @@ INACTIVE_SSH_ERRORS: frozenset[SshEndpointErrorKind] = frozenset(
     {
         SshEndpointErrorKind.UNREACHABLE,
         SshEndpointErrorKind.LOCATION_EXCLUDED,
-    }
+    },
 )
 
 
 class SshEndpointWarningKind(enum.StrEnum):
-    """Host-level findings worth fixing that do not make the endpoint inactive.
+    """
+    Host-level findings worth fixing that do not make the endpoint inactive.
 
     Kept apart from ``SshEndpointErrorKind`` so they never reach ``active`` or
     the strictness policy: ``check`` and ``troubleshoot`` display them, and
@@ -62,7 +64,8 @@ class SshEndpointWarningKind(enum.StrEnum):
 
 @dataclass(frozen=True)
 class SshEndpointToolNeeds:
-    """What tools are required on this SSH endpoint, derived from config.
+    """
+    What tools are required on this SSH endpoint, derived from config.
 
     Computed by ``checks.py`` by scanning volumes and endpoints on this host.
     """
@@ -92,7 +95,8 @@ class HostToolCapabilities(BaseModel):
 
 
 class SshEndpointDiagnostics(BaseModel):
-    """Observed state of an SSH endpoint (or implicit localhost).
+    """
+    Observed state of an SSH endpoint (or implicit localhost).
 
     Pure diagnostics — no interpretation of what constitutes an error.
     ``SshEndpointStatus.from_diagnostics`` translates these into
@@ -124,6 +128,8 @@ Safe to share because ``SshEndpointToolNeeds`` is frozen."""
 
 
 class SshEndpointStatus(BaseModel):
+    """An SSH endpoint's diagnostics, and the errors and warnings they mean."""
+
     model_config = ConfigDict(frozen=True)
 
     slug: str
@@ -136,6 +142,7 @@ class SshEndpointStatus(BaseModel):
     @computed_field
     @property
     def active(self) -> bool:
+        """Return whether the SSH endpoint has no errors."""
         return not self.errors
 
     @staticmethod
@@ -144,6 +151,12 @@ class SshEndpointStatus(BaseModel):
         diagnostics: SshEndpointDiagnostics,
         needs: SshEndpointToolNeeds = _NO_TOOL_NEEDS,
     ) -> SshEndpointStatus:
+        """
+        Build the status from the diagnostics.
+
+        rsync is always required; any other missing tool is an error only when *needs*
+        says a volume or endpoint on this host uses it.
+        """
         return SshEndpointStatus(
             slug=slug,
             diagnostics=diagnostics,
@@ -176,8 +189,8 @@ def _ssh_endpoint_errors(
                             if diag.mount_tools is not None
                             else []
                         ),
-                    ]
-                )
+                    ],
+                ),
             )
         case _:
             return []
@@ -234,7 +247,10 @@ def _ssh_mount_tool_errors(
     mount_tools: MountToolCapabilities,
     needs: SshEndpointToolNeeds,
 ) -> list[SshEndpointErrorKind]:
-    """A mount-managed host needs ``udisksctl`` + a running ``udisksd`` (for
+    """
+    Return the errors for the mount tools a mount-managed host lacks.
+
+    A mount-managed host needs ``udisksctl`` + a running ``udisksd`` (for
     unlock/mount/lock), ``findmnt`` (mountpoint discovery), and ``lsblk``
     (cleartext-device discovery).  The udisks btrfs module that btrfs-backed
     mount volumes want is a warning (see ``_ssh_endpoint_warnings``).

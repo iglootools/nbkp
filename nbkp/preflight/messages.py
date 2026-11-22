@@ -1,4 +1,5 @@
-"""The sentence each preflight problem kind is shown as.
+"""
+The sentence each preflight problem kind is shown as.
 
 The kinds' values are stable tokens that scripts match on in JSON output;
 the wording lives here, so it can change without breaking them. One table
@@ -8,7 +9,7 @@ member hashes as its value, so a single table would merge them.
 
 from collections.abc import Iterable
 
-from ..fsprotocol import (
+from nbkp.fsprotocol import (
     DESTINATION_SENTINEL,
     LATEST_LINK,
     SNAPSHOTS_DIR,
@@ -16,8 +17,8 @@ from ..fsprotocol import (
     STAGING_DIR,
     VOLUME_SENTINEL,
 )
-from .severity import PreflightErrorKind, PreflightWarningKind
-from .status import (
+from nbkp.preflight.severity import PreflightErrorKind, PreflightWarningKind
+from nbkp.preflight.status import (
     DestinationEndpointErrorKind,
     DestinationEndpointWarningKind,
     SourceEndpointErrorKind,
@@ -87,7 +88,9 @@ _SOURCE_ENDPOINT: dict[SourceEndpointErrorKind, str] = {
     SourceEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND: (
         f"{SNAPSHOTS_DIR}/ directory not found"
     ),
-    SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND: f"{LATEST_LINK} symlink not found",
+    SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND: (
+        f"{LATEST_LINK} symlink not found"
+    ),
     SourceEndpointErrorKind.LATEST_SYMLINK_INVALID: (
         f"{LATEST_LINK} symlink target is invalid"
     ),
@@ -135,6 +138,7 @@ _DESTINATION_ENDPOINT: dict[DestinationEndpointErrorKind, str] = {
 
 
 def format_problem(kind: PreflightErrorKind | PreflightWarningKind) -> str:
+    """Return the lowercase phrase *kind* is shown as to the user."""
     match kind:
         case VolumeErrorKind():
             return _VOLUME[kind]
@@ -155,4 +159,5 @@ def format_problem(kind: PreflightErrorKind | PreflightWarningKind) -> str:
 def format_problems(
     kinds: Iterable[PreflightErrorKind | PreflightWarningKind],
 ) -> str:
+    """Return the phrases of *kinds*, comma-separated, in their given order."""
     return ", ".join(format_problem(kind) for kind in kinds)

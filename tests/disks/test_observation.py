@@ -55,7 +55,7 @@ class TestBuildMountObservations:
                 mounted=True,
                 cleartext_device="/dev/mapper/luks-x",
                 effective_path="/mnt/encrypted",
-            )
+            ),
         ]
         obs = build_mount_observations(results)
         assert obs["enc"] == MountObservation(
@@ -75,7 +75,7 @@ class TestBuildMountObservations:
                 luks_unlocked=None,
                 mounted=True,
                 effective_path="/mnt/plain",
-            )
+            ),
         ]
         obs = build_mount_observations(results)
         assert obs["plain"].device_present is True
@@ -89,7 +89,7 @@ class TestBuildMountObservations:
                 success=False,
                 failure_reason=MountFailureKind.DEVICE_NOT_PRESENT,
                 device_present=False,
-            )
+            ),
         ]
         obs = build_mount_observations(results)
         assert obs["enc"].device_present is False
@@ -105,7 +105,7 @@ class TestBuildMountObservations:
                 failure_reason=MountFailureKind.UNLOCK_FAILED,
                 device_present=True,
                 luks_unlocked=False,
-            )
+            ),
         ]
         obs = build_mount_observations(results)
         assert obs["enc"].device_present is True
@@ -120,7 +120,7 @@ class TestBuildMountObservations:
                 failure_reason=MountFailureKind.NOT_AUTHORIZED,
                 device_present=True,
                 luks_unlocked=False,
-            )
+            ),
         ]
         obs = build_mount_observations(results)
         assert obs["enc"].failure_reason == MountFailureKind.NOT_AUTHORIZED
@@ -134,7 +134,7 @@ class TestBuildMountObservations:
                 failure_reason=MountFailureKind.MOUNT_FAILED,
                 device_present=True,
                 mounted=False,
-            )
+            ),
         ]
         obs = build_mount_observations(results)
         assert obs["plain"].device_present is True
@@ -147,7 +147,7 @@ class TestBuildMountObservations:
                 volume_slug="enc",
                 success=False,
                 failure_reason=MountFailureKind.UNREACHABLE,
-            )
+            ),
         ]
         obs = build_mount_observations(results)
         assert "enc" not in obs
@@ -178,7 +178,7 @@ class TestApplyEffectivePaths:
                 device_present=True,
                 mounted=True,
                 effective_path="/run/media/backup/label",
-            )
+            ),
         }
         updated = apply_effective_paths(cfg, observations)
         assert updated.volumes["usb"].path == "/run/media/backup/label"
@@ -190,7 +190,7 @@ class TestApplyEffectivePaths:
                 device_present=True,
                 mounted=True,
                 effective_path="/somewhere/else",
-            )
+            ),
         }
         updated = apply_effective_paths(cfg, observations)
         # Declared path wins; not overwritten by the observation.
@@ -199,7 +199,7 @@ class TestApplyEffectivePaths:
     def test_no_effective_path_returns_same_config(self) -> None:
         cfg = _config_with_volumes(_DISCOVERED_VOLUME)
         observations = {
-            "usb": MountObservation(device_present=False, effective_path=None)
+            "usb": MountObservation(device_present=False, effective_path=None),
         }
         updated = apply_effective_paths(cfg, observations)
         assert updated is cfg

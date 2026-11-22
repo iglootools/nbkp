@@ -1,17 +1,19 @@
+"""Delete the snapshots beyond each sync's ``max-snapshots`` limit."""
+
 from collections.abc import Callable
 
-from ..config import Config, SyncConfig
-from ..config.protocol.sync_endpoint import SyncEndpoint
-from ..policy import Strictness
-from ..preflight import SyncStatus
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
-from .btrfs import prune_snapshots as btrfs_prune_snapshots
-from .common import list_snapshots
-from .disposition import preflight_disposition
-from .errors import SnapshotOperationError, SnapshotPruneError
-from .hardlinks import prune_snapshots as hl_prune_snapshots
-from .models import PruneResult, SnapshotResultError, SnapshotSkipReason
+from nbkp.config import Config, SyncConfig
+from nbkp.config.protocol.sync_endpoint import SyncEndpoint
+from nbkp.policy import Strictness
+from nbkp.preflight import SyncStatus
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.snapshots.btrfs import prune_snapshots as btrfs_prune_snapshots
+from nbkp.snapshots.common import list_snapshots
+from nbkp.snapshots.disposition import preflight_disposition
+from nbkp.snapshots.errors import SnapshotOperationError, SnapshotPruneError
+from nbkp.snapshots.hardlinks import prune_snapshots as hl_prune_snapshots
+from nbkp.snapshots.models import PruneResult, SnapshotResultError, SnapshotSkipReason
 
 type _PruneFn = Callable[..., list[str]]
 
@@ -55,12 +57,14 @@ def _skipped(
     status: SyncStatus,
     config: Config,
     re: ResolvedEndpoints,
+    *,
     dry_run: bool,
     skip_reason: SnapshotSkipReason | None,
     error: SnapshotResultError | None,
     run: VolumeCommandRunner,
 ) -> PruneResult:
-    """A result for a sync that is not pruned.
+    """
+    Return a result for a sync that is not pruned.
 
     For an active snapshot destination (e.g. no ``max-snapshots``), the
     existing snapshots are still counted; a failure to list them is
@@ -90,13 +94,19 @@ def _execute_prune(
     prune_fn: _PruneFn,
     limit: int,
     config: Config,
+    *,
     re: ResolvedEndpoints,
     dry_run: bool,
     run: VolumeCommandRunner,
 ) -> PruneResult:
     try:
         deleted = prune_fn(
-            sync, config, limit, dry_run=dry_run, resolved_endpoints=re, run=run
+            sync,
+            config,
+            limit,
+            dry_run=dry_run,
+            resolved_endpoints=re,
+            run=run,
         )
         remaining = list_snapshots(sync, config, re, run=run)
         return PruneResult(
@@ -123,6 +133,7 @@ def _process_candidate(
     status: SyncStatus,
     config: Config,
     re: ResolvedEndpoints,
+    *,
     dry_run: bool,
     strictness: Strictness,
     run: VolumeCommandRunner,
@@ -137,27 +148,54 @@ def _process_candidate(
     match (skip_reason, error, _prune_backend(dst_ep), dst_ep.max_snapshots):
         case (None, None, prune_fn, int() as limit) if prune_fn is not None:
             return _execute_prune(
-                slug, status.config, prune_fn, limit, config, re, dry_run, run
+                slug,
+                status.config,
+                prune_fn,
+                limit,
+                config,
+                re=re,
+                dry_run=dry_run,
+                run=run,
             )
         case _:
-            return _skipped(slug, status, config, re, dry_run, skip_reason, error, run)
+            return _skipped(
+                slug,
+                status,
+                config,
+                re,
+                dry_run=dry_run,
+                skip_reason=skip_reason,
+                error=error,
+                run=run,
+            )
 
 
 def prune_all_syncs(
     config: Config,
     sync_statuses: dict[str, SyncStatus],
+    *,
     dry_run: bool = False,
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
-    *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> list[PruneResult]:
-    """Prune each selected sync's destination, running every listing and
-    deletion through *run*."""
+    """
+    Prune each selected sync's destination.
+
+    Every listing and deletion runs through *run*.
+    """
     re = resolved_endpoints or {}
     return [
-        _process_candidate(slug, status, config, re, dry_run, strictness, run)
+        _process_candidate(
+            slug,
+            status,
+            config,
+            re,
+            dry_run=dry_run,
+            strictness=strictness,
+            run=run,
+        )
         for slug, status in sync_statuses.items()
         if not only_syncs or slug in only_syncs
     ]

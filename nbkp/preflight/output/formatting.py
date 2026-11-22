@@ -1,29 +1,44 @@
+"""Rich text building blocks shared by the check and troubleshoot reports."""
+
 from collections.abc import Iterable
 
 from rich.text import Text
 
-from ...clidisplay import OK_SYMBOL, severity_style, severity_symbol
-from ...config import MountConfig
-from ...disks import (
+from nbkp.clidisplay import OK_SYMBOL, severity_style, severity_symbol
+from nbkp.config import MountConfig
+from nbkp.disks import (
     MountCapabilities,
     device_fail_severity,
     luks_fail_severity,
     mounted_fail_severity,
 )
-from ...policy import Severity, Strictness
-from ..messages import format_problems
-from ..severity import PreflightErrorKind, severity_for_error, severity_for_errors
-from ..status.endpoint import DestinationEndpointErrorKind, SourceEndpointErrorKind
-from ..status.ssh import SshEndpointErrorKind, SshEndpointStatus
-from ..status.sync import SyncErrorKind, SyncStatus
-from ..status.volume import VolumeCapabilities, VolumeErrorKind, VolumeStatus
+from nbkp.policy import Severity, Strictness
+from nbkp.preflight.messages import format_problems
+from nbkp.preflight.severity import (
+    PreflightErrorKind,
+    severity_for_error,
+    severity_for_errors,
+)
+from nbkp.preflight.status.endpoint import (
+    DestinationEndpointErrorKind,
+    SourceEndpointErrorKind,
+)
+from nbkp.preflight.status.ssh import SshEndpointErrorKind, SshEndpointStatus
+from nbkp.preflight.status.sync import SyncErrorKind, SyncStatus
+from nbkp.preflight.status.volume import (
+    VolumeCapabilities,
+    VolumeErrorKind,
+    VolumeStatus,
+)
 
 
 def join_text(items: Iterable[Text], separator: str = ", ") -> Text:
+    """Return *items* joined by *separator*, keeping each item's style."""
     return Text(separator).join(items)
 
 
 def status_text(
+    *,
     active: bool,
     errors: (
         list[VolumeErrorKind]
@@ -34,9 +49,12 @@ def status_text(
     ),
     strictness: Strictness,
 ) -> Text:
-    """Inactive statuses use the warning icon when their errors are all
-    non-fatal under *strictness* (e.g. missing sentinels with the
-    default ``IGNORE_INACTIVE``), and the error icon otherwise.
+    """
+    Format a status with its icon.
+
+    Inactive statuses use the warning icon when their errors are all non-fatal under
+    *strictness* (e.g. missing sentinels with the default ``IGNORE_INACTIVE``), and the
+    error icon otherwise.
     """
     severity = severity_for_errors(errors, strictness)
     return (
@@ -52,9 +70,12 @@ def status_text(
 def mount_capability_items(
     mount: MountCapabilities,
 ) -> list[tuple[bool | None, str | None]]:
-    """udisks has no backend/strategy distinction, so we surface the
-    effective mountpoint (the path udisks mounted at, or the discovered
-    cleartext device) instead of a systemd mount-unit name.
+    """
+    Return the mount capability items to display.
+
+    Udisks has no backend/strategy distinction, so we surface the effective mountpoint
+    (the path udisks mounted at, or the discovered cleartext device) instead of a
+    systemd mount-unit name.
     """
     return [
         (
@@ -69,6 +90,11 @@ def mount_capability_items(
 
 
 def format_capabilities(caps: VolumeCapabilities | None) -> Text:
+    """
+    Return the labels of the capabilities *caps* has, comma-separated.
+
+    ``none`` when it has none, and empty when the volume was not probed (``None``).
+    """
     if caps is None:
         return Text("")
     items = [
@@ -86,13 +112,15 @@ def format_capabilities(caps: VolumeCapabilities | None) -> Text:
 
 
 def check(
+    *,
     ok: bool,
     label: str,
     fail_error: PreflightErrorKind | None = None,
     fail_severity: Severity | None = None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Text:
-    """Format a diagnostic item as \u2713label (green) or \u26a0/\u2717label.
+    """
+    Format a diagnostic item as \u2713label (green) or \u26a0/\u2717label.
 
     The failure icon is picked from (in order of priority):
 
@@ -122,10 +150,12 @@ def format_mount_status(
     mount_config: MountConfig | None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Text:
-    """Shows \u2713/\u26a0/\u2717 for each probed mount state item.  Items whose value
-    is ``None`` (not probed / not applicable) are omitted, matching
-    the pattern used by source/destination diagnostics columns.
-    Empty when the volume has no mount config or caps are unavailable.
+    """
+    Format each probed mount state item with ✓, ⚠ or ✗.
+
+    Items whose value is ``None`` (not probed / not applicable) are omitted, matching
+    the pattern used by source/destination diagnostics columns. Empty when the volume
+    has no mount config or caps are unavailable.
 
     Failure-icon severity is delegated to the shared
     ``{device,luks,mounted}_fail_severity`` helpers in
@@ -149,7 +179,7 @@ def format_mount_status(
         (mount_caps.mounted, "mounted", mounted_fail_severity(reason, strictness)),
     ]
     return join_text(
-        check(bool(value), label, fail_severity=fail_sev)
+        check(ok=bool(value), label=label, fail_severity=fail_sev)
         for value, label, fail_sev in items
         if value is not None
     )
@@ -159,9 +189,10 @@ def collect_ssh_endpoint_statuses(
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
 ) -> dict[str, SshEndpointStatus]:
-    """SSH endpoint statuses are embedded in volume statuses.  This extracts
-    them for display in the SSH Endpoints table.  First-seen wins for
-    duplicate slugs.
+    """
+    Extract the SSH endpoint statuses embedded in volume statuses.
+
+    They feed the SSH Endpoints table. First-seen wins for duplicate slugs.
     """
     all_ssh = [
         *[vs.ssh_endpoint_status for vs in vol_statuses.values()],

@@ -15,13 +15,15 @@ class TestSeverityForError:
     def test_ignore_inactive_inactive_error_is_warning(self) -> None:
         assert (
             severity_for_error(
-                VolumeErrorKind.SENTINEL_NOT_FOUND, Strictness.IGNORE_INACTIVE
+                VolumeErrorKind.SENTINEL_NOT_FOUND,
+                Strictness.IGNORE_INACTIVE,
             )
             is Severity.WARNING
         )
         assert (
             severity_for_error(
-                VolumeErrorKind.DEVICE_NOT_PRESENT, Strictness.IGNORE_INACTIVE
+                VolumeErrorKind.DEVICE_NOT_PRESENT,
+                Strictness.IGNORE_INACTIVE,
             )
             is Severity.WARNING
         )
@@ -29,13 +31,15 @@ class TestSeverityForError:
     def test_ignore_inactive_infra_error_is_error(self) -> None:
         assert (
             severity_for_error(
-                DestinationEndpointErrorKind.NOT_WRITABLE, Strictness.IGNORE_INACTIVE
+                DestinationEndpointErrorKind.NOT_WRITABLE,
+                Strictness.IGNORE_INACTIVE,
             )
             is Severity.ERROR
         )
         assert (
             severity_for_error(
-                VolumeErrorKind.UNLOCK_FAILED, Strictness.IGNORE_INACTIVE
+                VolumeErrorKind.UNLOCK_FAILED,
+                Strictness.IGNORE_INACTIVE,
             )
             is Severity.ERROR
         )
@@ -43,7 +47,8 @@ class TestSeverityForError:
     def test_ignore_none_everything_fatal(self) -> None:
         assert (
             severity_for_error(
-                VolumeErrorKind.SENTINEL_NOT_FOUND, Strictness.IGNORE_NONE
+                VolumeErrorKind.SENTINEL_NOT_FOUND,
+                Strictness.IGNORE_NONE,
             )
             is Severity.ERROR
         )
@@ -58,7 +63,8 @@ class TestSeverityForError:
     def test_ignore_all_nothing_fatal(self) -> None:
         assert (
             severity_for_error(
-                DestinationEndpointErrorKind.NOT_WRITABLE, Strictness.IGNORE_ALL
+                DestinationEndpointErrorKind.NOT_WRITABLE,
+                Strictness.IGNORE_ALL,
             )
             is Severity.WARNING
         )
@@ -67,13 +73,15 @@ class TestSeverityForError:
         """Sanity-check that each enum layer routes through correctly."""
         assert (
             severity_for_error(
-                SshEndpointErrorKind.UNREACHABLE, Strictness.IGNORE_INACTIVE
+                SshEndpointErrorKind.UNREACHABLE,
+                Strictness.IGNORE_INACTIVE,
             )
             is Severity.WARNING
         )
         assert (
             severity_for_error(
-                SourceEndpointErrorKind.SENTINEL_NOT_FOUND, Strictness.IGNORE_INACTIVE
+                SourceEndpointErrorKind.SENTINEL_NOT_FOUND,
+                Strictness.IGNORE_INACTIVE,
             )
             is Severity.WARNING
         )
@@ -86,7 +94,8 @@ class TestSeverityForError:
         )
         assert (
             severity_for_error(
-                SyncErrorKind.SOURCE_ENDPOINT_INACTIVE, Strictness.IGNORE_INACTIVE
+                SyncErrorKind.SOURCE_ENDPOINT_INACTIVE,
+                Strictness.IGNORE_INACTIVE,
             )
             is Severity.WARNING
         )

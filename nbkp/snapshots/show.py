@@ -1,12 +1,14 @@
-from ..config import Config
-from ..policy import Strictness
-from ..preflight import SyncStatus
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
-from .common import list_snapshots, read_latest_symlink
-from .disposition import preflight_disposition
-from .errors import SnapshotOperationError
-from .models import ShowResult, SnapshotResultError, SnapshotSkipReason
+"""List each sync's snapshots and its ``latest`` snapshot."""
+
+from nbkp.config import Config
+from nbkp.policy import Strictness
+from nbkp.preflight import SyncStatus
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.snapshots.common import list_snapshots, read_latest_symlink
+from nbkp.snapshots.disposition import preflight_disposition
+from nbkp.snapshots.errors import SnapshotOperationError
+from nbkp.snapshots.models import ShowResult, SnapshotResultError, SnapshotSkipReason
 
 
 def _disposition(
@@ -36,7 +38,10 @@ def _read_snapshots(
             snapshot_mode=dst_ep.snapshot_mode,
             snapshots=tuple(list_snapshots(status.config, config, re, run=run)),
             latest=read_latest_symlink(
-                status.config, config, resolved_endpoints=re, run=run
+                status.config,
+                config,
+                resolved_endpoints=re,
+                run=run,
             ),
             max_snapshots=dst_ep.max_snapshots,
         )
@@ -57,6 +62,7 @@ def _process_candidate(
     config: Config,
     re: ResolvedEndpoints,
     strictness: Strictness,
+    *,
     run: VolumeCommandRunner,
 ) -> ShowResult:
     match _disposition(status, config, strictness):
@@ -87,7 +93,7 @@ def show_all_syncs(
     """Snapshots of each selected sync's destination, read through *run*."""
     re = resolved_endpoints or {}
     return [
-        _process_candidate(slug, status, config, re, strictness, run)
+        _process_candidate(slug, status, config, re, strictness, run=run)
         for slug, status in sync_statuses.items()
         if not only_syncs or slug in only_syncs
     ]

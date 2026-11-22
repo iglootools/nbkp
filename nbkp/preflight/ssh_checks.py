@@ -1,4 +1,5 @@
-"""Standalone SSH endpoint observation.
+"""
+Standalone SSH endpoint observation.
 
 Probes SSH endpoints that are not volume-referenced (bastions, alternate
 endpoints, orphan endpoints) for SSH reachability only.  No tools
@@ -8,12 +9,12 @@ Separate from ``volume_checks.py`` because these endpoints have no
 volume involvement.
 """
 
-from ..config import RemoteVolume, SshEndpoint
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoint
-from ..remote.errors import ssh_connection_errors
-from .status.ssh import SshEndpointDiagnostics
-from .volume_checks import unreachable_diagnostics
+from nbkp.config import RemoteVolume, SshEndpoint
+from nbkp.preflight.status.ssh import SshEndpointDiagnostics
+from nbkp.preflight.volume_checks import unreachable_diagnostics
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoint
+from nbkp.remote.errors import ssh_connection_errors
 
 
 def observe_standalone_endpoint(
@@ -22,9 +23,12 @@ def observe_standalone_endpoint(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> SshEndpointDiagnostics:
-    """Returns ``SshEndpointDiagnostics(ssh_reachable=True)`` on success
-    (with ``host_tools=None``), which ``_ssh_endpoint_errors()`` interprets
-    as no errors (active, no tool requirements).
+    """
+    Observe an SSH endpoint no volume reaches.
+
+    Returns ``SshEndpointDiagnostics(ssh_reachable=True)`` on success (with
+    ``host_tools=None``), which ``_ssh_endpoint_errors()`` interprets as no errors
+    (active, no tool requirements).
 
     Returns ``SshEndpointDiagnostics(ssh_reachable=False)`` with the cause
     on a connection failure; other exceptions (bugs) propagate.

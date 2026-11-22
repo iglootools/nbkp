@@ -1,7 +1,10 @@
-"""Scenarios about whether a sync can run at all: disabled, unreachable,
-excluded, sentinels missing."""
+"""
+Scenarios about whether a sync can run at all.
 
-from ....config import (
+Disabled, unreachable, excluded, sentinels missing.
+"""
+
+from nbkp.config import (
     Config,
     LocalVolume,
     RemoteVolume,
@@ -9,7 +12,7 @@ from ....config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ... import (
+from nbkp.preflight import (
     DestinationEndpointDiagnostics,
     DestinationEndpointErrorKind,
     DestinationEndpointStatus,
@@ -23,12 +26,12 @@ from ... import (
     VolumeErrorKind,
     VolumeStatus,
 )
-from ..common import (
+from nbkp.preflight.testkit.common import (
     LOCALHOST_SSH_STATUS,
     inactive_dst_ep_status,
     standalone_ssh_status,
 )
-from .scenario import (
+from nbkp.preflight.testkit.troubleshoot.scenario import (
     BOTH_ENDPOINTS_INACTIVE,
     LAPTOP_SRC,
     Scenario,
@@ -58,7 +61,7 @@ def _standalone_statuses(_config: Config, _shared: SharedStatuses) -> ScenarioSt
             standalone_ssh_status("bastion2", reachable=False),
             standalone_ssh_status("nas-public"),
             _AUTH_FAILED_SSH,
-        )
+        ),
     )
 
 
@@ -76,11 +79,12 @@ def _disabled_statuses(config: Config, shared: SharedStatuses) -> ScenarioStatus
                 config=config.syncs["disabled-sync"],
                 source_endpoint_status=shared.laptop_src_inactive,
                 destination_endpoint_status=inactive_dst_ep_status(
-                    "dst-disabled", shared.usb_drive
+                    "dst-disabled",
+                    shared.usb_drive,
                 ),
                 errors=[SyncErrorKind.DISABLED],
             ),
-        )
+        ),
     )
 
 
@@ -109,11 +113,12 @@ def _unavailable_statuses(config: Config, shared: SharedStatuses) -> ScenarioSta
                 config=config.syncs["unavailable-volumes"],
                 source_endpoint_status=shared.laptop_src_inactive,
                 destination_endpoint_status=inactive_dst_ep_status(
-                    "dst-unavail", shared.nas_unreachable
+                    "dst-unavail",
+                    shared.nas_unreachable,
                 ),
                 errors=list(BOTH_ENDPOINTS_INACTIVE),
             ),
-        )
+        ),
     )
 
 
@@ -129,7 +134,8 @@ UNAVAILABLE_VOLUMES = Scenario(
 
 
 def _missing_sentinels_statuses(
-    config: Config, shared: SharedStatuses
+    config: Config,
+    shared: SharedStatuses,
 ) -> ScenarioStatuses:
     # Endpoint sentinels missing (Layer 3)
     usb2 = volume_status(config, "usb-2", LOCALHOST_SSH_STATUS, healthy_caps())
@@ -159,7 +165,7 @@ def _missing_sentinels_statuses(
                 ),
                 errors=list(BOTH_ENDPOINTS_INACTIVE),
             ),
-        )
+        ),
     )
 
 
@@ -178,7 +184,8 @@ _HOME_NAS_SSH = SshEndpointStatus.from_diagnostics(
 
 
 def _location_excluded_statuses(
-    config: Config, shared: SharedStatuses
+    config: Config,
+    shared: SharedStatuses,
 ) -> ScenarioStatuses:
     # SshEndpointErrorKind.LOCATION_EXCLUDED (Layer 1 error → cascade to Layer 2)
     home_nas = VolumeStatus(
@@ -196,7 +203,8 @@ def _location_excluded_statuses(
                 config=config.syncs["location-excluded"],
                 source_endpoint_status=shared.laptop_src_inactive,
                 destination_endpoint_status=inactive_dst_ep_status(
-                    "dst-loc-excluded", home_nas
+                    "dst-loc-excluded",
+                    home_nas,
                 ),
                 errors=list(BOTH_ENDPOINTS_INACTIVE),
             ),

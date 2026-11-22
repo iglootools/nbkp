@@ -29,7 +29,9 @@ $ nbkp [OPTIONS] COMMAND [ARGS]...
 
 ## `nbkp run`
 
-Execute all active syncs in dependency order. Supports dry-run, progress display, snapshot creation, and automatic pruning.
+Execute all active syncs in dependency order.
+
+Supports dry-run, progress display, snapshot creation, and automatic pruning.
 
 **Usage**:
 
@@ -55,9 +57,13 @@ $ nbkp run [OPTIONS]
 
 ## `nbkp sh`
 
-Compile the config into a self-contained bash script. The generated script performs the same operations as `run` without requiring Python or the config file at runtime.
+Compile the config into a self-contained bash script.
 
-This is useful for deploying to systems without Python, or eyeballing the actual commands before letting anything touch your data.
+The generated script performs the same operations as `run` without requiring
+Python or the config file at runtime.
+
+This is useful for deploying to systems without Python, or eyeballing the
+actual commands before letting anything touch your data.
 
 **Usage**:
 
@@ -98,7 +104,10 @@ $ nbkp config [OPTIONS] COMMAND [ARGS]...
 
 ### `nbkp config show`
 
-Load, validate, and render the config as tables or JSON. Useful for verifying that inheritance, filters, and cross-references resolve correctly.
+Load, validate, and render the config as tables or JSON.
+
+Useful for verifying that inheritance, filters, and cross-references resolve
+correctly.
 
 **Usage**:
 
@@ -172,7 +181,9 @@ $ nbkp disks [OPTIONS] COMMAND [ARGS]...
 
 ### `nbkp disks mount`
 
-Unlock LUKS and mount volumes. Mounts all volumes with mount config, or specific ones via --name.
+Unlock LUKS and mount volumes.
+
+Mounts all volumes with mount config, or specific ones via --name.
 
 **Usage**:
 
@@ -193,7 +204,9 @@ $ nbkp disks mount [OPTIONS]
 
 ### `nbkp disks umount`
 
-Umount volumes and lock LUKS. Umounts all volumes with mount config, or specific ones via --name.
+Umount volumes and lock LUKS.
+
+Umounts all volumes with mount config, or specific ones via --name.
 
 **Usage**:
 
@@ -300,12 +313,15 @@ $ nbkp preflight [OPTIONS] COMMAND [ARGS]...
 
 **Commands**:
 
-* `check`: Verify that volumes are reachable,...
-* `troubleshoot`: Run the same checks as `check` but...
+* `check`: Verify that volumes are reachable and...
+* `troubleshoot`: Run the same checks as `check`, with...
 
 ### `nbkp preflight check`
 
-Verify that volumes are reachable, sentinel files exist, SSH connectivity works, and required tools are available. Use this before `run` to confirm everything is ready.
+Verify that volumes are reachable and ready for a run.
+
+Checks that sentinel files exist, SSH connectivity works, and required tools
+are available. Use this before `run` to confirm everything is ready.
 
 **Usage**:
 
@@ -327,7 +343,9 @@ $ nbkp preflight check [OPTIONS]
 
 ### `nbkp preflight troubleshoot`
 
-Run the same checks as `check` but displays step-by-step fix instructions for every failure. Useful when `check` reports problems.
+Run the same checks as `check`, with step-by-step fixes for every failure.
+
+Useful when `check` reports problems.
 
 **Usage**:
 
@@ -368,7 +386,9 @@ $ nbkp snapshots [OPTIONS] COMMAND [ARGS]...
 
 ### `nbkp snapshots prune`
 
-Remove snapshots beyond the `max-snapshots` limit. Normally handled automatically by `run`, but can be invoked manually.
+Remove snapshots beyond the `max-snapshots` limit.
+
+Normally handled automatically by `run`, but can be invoked manually.
 
 **Usage**:
 

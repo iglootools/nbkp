@@ -14,7 +14,7 @@ from tests.sync.runner_helpers import (
 
 def _make_hard_link_config(max_snapshots: int | None = None) -> Config:
     return make_snapshot_config(
-        hard_link=HardLinkSnapshotConfig(enabled=True, max_snapshots=max_snapshots)
+        hard_link=HardLinkSnapshotConfig(enabled=True, max_snapshots=max_snapshots),
     )
 
 
@@ -25,7 +25,7 @@ _DENIED = completed(1, stderr="Permission denied")
 
 
 def _fresh_destination() -> FakeCommandRunner:
-    """A destination with no snapshot yet: ``latest`` points to /dev/null."""
+    """Script a destination with no snapshot yet: ``latest`` points to /dev/null."""
     return FakeCommandRunner().on("readlink", returns=completed(0, "/dev/null\n"))
 
 
@@ -50,7 +50,11 @@ class TestHardLinkSync:
         rsync, runner = FakeRsync(), _destination_with_orphan()
 
         results = run_syncs(
-            config, statuses, dry_run=True, rsync=rsync, run_command=runner
+            config,
+            statuses,
+            dry_run=True,
+            rsync=rsync,
+            run_command=runner,
         )
 
         assert results[0].outcome == SyncOutcome.SUCCESS
@@ -68,7 +72,11 @@ class TestHardLinkSync:
         runner = _fresh_destination()
 
         results = run_syncs(
-            config, statuses, dry_run=True, rsync=rsync, run_command=runner
+            config,
+            statuses,
+            dry_run=True,
+            rsync=rsync,
+            run_command=runner,
         )
 
         assert results[0].failure == SyncFailureKind.RSYNC
@@ -102,7 +110,7 @@ class TestHardLinkSync:
 
         assert results[0].outcome == SyncOutcome.SUCCESS
         assert runner.commands_starting_with("rm") == [
-            ["rm", "-rf", f"/dst/snapshots/{_ORPHAN}"]
+            ["rm", "-rf", f"/dst/snapshots/{_ORPHAN}"],
         ]
 
     def test_orphan_cleanup_failure_is_a_warning(self) -> None:
@@ -173,7 +181,7 @@ class TestHardLinkSync:
 
         assert results[0].failure == SyncFailureKind.RSYNC
         assert [w.kind for w in results[0].warnings] == [
-            SyncWarningKind.SNAPSHOT_DIR_CLEANUP
+            SyncWarningKind.SNAPSHOT_DIR_CLEANUP,
         ]
 
     def test_symlink_failure(self) -> None:
@@ -261,7 +269,11 @@ class TestHardLinkSync:
         )
 
         results = run_syncs(
-            config, statuses, prune=False, rsync=FakeRsync(), run_command=runner
+            config,
+            statuses,
+            prune=False,
+            rsync=FakeRsync(),
+            run_command=runner,
         )
 
         assert results[0].outcome == SyncOutcome.SUCCESS

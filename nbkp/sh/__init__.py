@@ -1,4 +1,5 @@
-"""Generate a standalone bash script from nbkp config.
+"""
+Generate a standalone bash script from nbkp config.
 
 Compiles a Config into a self-contained shell script that performs
 the same sync operations as ``nbkp run``, with all paths and
@@ -14,33 +15,38 @@ from pathlib import Path
 
 lazy from jinja2 import Environment, Template
 
-from ..config import Config, LocalVolume, RemoteVolume, sync_predecessors
-from ..ordering.graph import sort_syncs
-from ..remote.endpoints import ResolvedEndpoints
-from .preflight import build_preflight_block
-from .quoting import SCRIPT_DIR, comment_out, comment_text, has_shell_var
-from .spec import build_sync_spec
-from .steps import Step, build_steps
+from nbkp.config import Config, LocalVolume, RemoteVolume, sync_predecessors
+from nbkp.ordering.graph import sort_syncs
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.sh.preflight import build_preflight_block
+from nbkp.sh.quoting import SCRIPT_DIR, comment_out, comment_text, has_shell_var
+from nbkp.sh.spec import build_sync_spec
+from nbkp.sh.steps import Step, build_steps
 
 
 class VolumeWithoutPathError(ValueError):
-    """A volume the script would use has no ``path``.
+    """
+    A volume the script would use has no ``path``.
 
     The script is static, so it cannot discover a mount-managed volume's
     mountpoint at run time (mount management is left out of ``sh``).
     """
 
     def __init__(self, volume_slug: str) -> None:
+        """Build the error for the volume named *volume_slug*."""
         self.volume_slug = volume_slug
         super().__init__(
-            f"volume '{volume_slug}': 'path' is required for shell script generation"
+            f"volume '{volume_slug}': 'path' is required for shell script generation",
         )
 
 
 @dataclass(frozen=True, kw_only=True)
 class ScriptOptions:
-    """``platform`` (a ``sys.platform`` value) selects the snapshot timestamp
-    format; it is supplied by the CLI so generation stays deterministic.
+    """
+    Options for generating a script.
+
+    ``platform`` (a ``sys.platform`` value) selects the snapshot timestamp format; it is
+    supplied by the CLI so generation stays deterministic.
     """
 
     platform: str
@@ -58,7 +64,8 @@ def generate_script(
     now: datetime,
     resolved_endpoints: ResolvedEndpoints | None = None,
 ) -> str:
-    """*now* is the generation time written to the header.
+    """
+    *now* is the generation time written to the header.
 
     Raises :class:`VolumeWithoutPathError` when a volume has no ``path``.
     """
@@ -85,7 +92,7 @@ def _load_template() -> Template:
         .joinpath("backup.sh.j2")
         .read_text(encoding="utf-8")
     )
-    env = Environment(
+    env = Environment(  # noqa: S701 -- a shell script, not HTML; values are shell-quoted
         variable_start_string="${{",
         variable_end_string="}}",
         block_start_string="<%",
@@ -116,7 +123,7 @@ def _resolve_vol_path(
     dst_slugs: set[str],
     options: ScriptOptions,
 ) -> str:
-    """Raises :class:`VolumeWithoutPathError` for a volume with no ``path``."""
+    """Raise :class:`VolumeWithoutPathError` for a volume with no ``path``."""
     if vol.path is None:
         raise VolumeWithoutPathError(slug)
     match vol:
@@ -127,7 +134,7 @@ def _resolve_vol_path(
                 slug in dst_slugs and options.relative_dst
             )
             if should_relativize and options.output_file:
-                output_dir = os.path.dirname(options.output_file)
+                output_dir = Path(options.output_file).parent
                 return f"{SCRIPT_DIR}/{os.path.relpath(vol.path, output_dir)}"
             else:
                 return vol.path
@@ -143,6 +150,7 @@ def _build_sync_context(
     vol_paths: dict[str, str],
     resolved_endpoints: ResolvedEndpoints,
     platform: str,
+    *,
     predecessors: set[str],
 ) -> _SyncContext:
     """Disabled syncs are rendered too: the template emits them commented out."""
@@ -172,13 +180,15 @@ def _build_script_context(
             vol_paths,
             resolved_endpoints,
             options.platform,
-            pred_map.get(slug, set()),
+            predecessors=pred_map.get(slug, set()),
         )
         for slug in sort_syncs(config.syncs)
     ]
     return {
         "timestamp": now.isoformat(timespec="seconds").replace("+00:00", "Z"),
-        "config_line": f"# Config: {comment_text(str(options.config_path or '<stdin>'))}",
+        "config_line": (
+            f"# Config: {comment_text(str(options.config_path or '<stdin>'))}"
+        ),
         "has_script_dir": any(has_shell_var(p) for p in vol_paths.values()),
         "portable": options.portable,
         "syncs": syncs,

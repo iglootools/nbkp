@@ -2,21 +2,29 @@
 
 import shutil
 
-from ...config import Config, LocalVolume, RemoteVolume, SshEndpoint, SyncConfig, Volume
-from ...remote.dispatch import VolumeCommandRunner, WhichFn, run_on_volume
-from ...remote.endpoints import ResolvedEndpoints
-from .. import SyncStatus, VolumeStatus, check_all_syncs
+from nbkp.config import (
+    Config,
+    LocalVolume,
+    RemoteVolume,
+    SshEndpoint,
+    SyncConfig,
+    Volume,
+)
+from nbkp.preflight import SyncStatus, VolumeStatus, check_all_syncs
+from nbkp.remote.dispatch import VolumeCommandRunner, WhichFn, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 def check_sync(
     sync: SyncConfig,
     config: Config,
     resolved_endpoints: ResolvedEndpoints | None = None,
-    dry_run: bool = False,
     *,
+    dry_run: bool = False,
     run: VolumeCommandRunner = run_on_volume,
     which: WhichFn = shutil.which,
 ) -> SyncStatus:
+    """Return the status of *sync*, preflighting only it within *config*."""
     result = check_all_syncs(
         config,
         only_syncs=[sync.slug],
@@ -35,7 +43,8 @@ def check_volume(
     run: VolumeCommandRunner = run_on_volume,
     which: WhichFn = shutil.which,
 ) -> VolumeStatus:
-    """Preflight a config holding only *volume*.
+    """
+    Preflight a config holding only *volume*.
 
     A remote volume's SSH endpoint is a stand-in: it only has to exist for the
     config to validate, since the volume's probes connect through
@@ -46,7 +55,10 @@ def check_volume(
         volumes={volume.slug: volume},
     )
     result = check_all_syncs(
-        config, resolved_endpoints=resolved_endpoints, run=run, which=which
+        config,
+        resolved_endpoints=resolved_endpoints,
+        run=run,
+        which=which,
     )
     return result.volume_statuses[volume.slug]
 

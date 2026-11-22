@@ -9,12 +9,8 @@ from pathlib import Path
 
 lazy import paramiko
 
-from ..config.protocol import (
-    Config,
-    RemoteVolume,
-    SshEndpoint,
-)
-from .endpoints import (
+from nbkp.config.protocol import Config, RemoteVolume, SshEndpoint
+from nbkp.remote.endpoints import (
     EndpointFilter,
     NetworkType,
     ResolvedEndpoint,
@@ -26,6 +22,8 @@ type AddressLookupFn = Callable[[str], set[str] | None]
 
 
 class SshConfigErrorKind(StrEnum):
+    """Which SSH config value nbkp could not use."""
+
     INVALID_PORT = "invalid-port"
 
 
@@ -33,6 +31,7 @@ class SshConfigError(ValueError):
     """A value the user's SSH config gives a host that nbkp cannot use."""
 
     def __init__(self, kind: SshConfigErrorKind, host: str, value: str) -> None:
+        """Build the error from its kind, the config ``Host`` and the bad value."""
         super().__init__(f"{kind}: Host {host}: {value!r}")
         self.kind = kind
         self.host = host
@@ -40,11 +39,13 @@ class SshConfigError(ValueError):
 
 
 def default_ssh_config_path() -> Path:
+    """Return the user's OpenSSH client config path, ``~/.ssh/config``."""
     return Path.home() / ".ssh" / "config"
 
 
 def load_ssh_config(path: Path | None = None) -> paramiko.SSHConfig:
-    """Load an OpenSSH client config (default: the user's ``~/.ssh/config``).
+    """
+    Load an OpenSSH client config (default: the user's ``~/.ssh/config``).
 
     A missing file yields an empty config, whose lookups return only the
     queried hostname — the same as having no config at all.
@@ -58,6 +59,7 @@ def load_ssh_config(path: Path | None = None) -> paramiko.SSHConfig:
 
 
 def dns_lookup(hostname: str) -> set[str] | None:
+    """Return the IP addresses *hostname* resolves to, or ``None`` if it does not."""
     try:
         return {str(r[4][0]) for r in socket.getaddrinfo(hostname, None)}
     except socket.gaierror:
@@ -69,9 +71,10 @@ def _or_default(ssh_config: paramiko.SSHConfig | None) -> paramiko.SSHConfig:
 
 
 def resolve_hostname(
-    hostname: str, ssh_config: paramiko.SSHConfig | None = None
+    hostname: str,
+    ssh_config: paramiko.SSHConfig | None = None,
 ) -> str:
-    """Applies the SSH config's ``HostName`` for *hostname*, if it has one."""
+    """Apply the SSH config's ``HostName`` for *hostname*, if it has one."""
     return _or_default(ssh_config).lookup(hostname).get("hostname", hostname)
 
 
@@ -80,6 +83,12 @@ def resolve_host(
     ssh_config: paramiko.SSHConfig | None = None,
     lookup: AddressLookupFn = dns_lookup,
 ) -> set[str] | None:
+    """
+    Return the IP addresses *hostname* resolves to, or ``None`` if it does not.
+
+    The SSH config's ``HostName`` for *hostname* is applied before the lookup, so
+    an alias resolves the way ``ssh`` would.
+    """
     return lookup(resolve_hostname(hostname, ssh_config))
 
 
@@ -88,9 +97,11 @@ def is_private_host(
     ssh_config: paramiko.SSHConfig | None = None,
     lookup: AddressLookupFn = dns_lookup,
 ) -> bool | None:
-    """True if all resolved addresses are private,
-    False if any is public, or None if the hostname
-    cannot be resolved.
+    """
+    Return whether every address *hostname* resolves to is private.
+
+    True if all resolved addresses are private, False if any is public, or None if the
+    hostname cannot be resolved.
     """
     addrs = resolve_host(hostname, ssh_config, lookup)
     if addrs is None:
@@ -110,7 +121,8 @@ def _ssh_config_updates(
     endpoint: SshEndpoint,
     result: paramiko.SSHConfigDict,
 ) -> dict[str, object]:
-    """Only fields NOT explicitly set on the endpoint are candidates.
+    """
+    Only fields NOT explicitly set on the endpoint are candidates.
 
     Raises ``SshConfigError`` for a ``Port`` that is not a number.
     """
@@ -138,7 +150,8 @@ def enrich_from_ssh_config(
     endpoint: SshEndpoint,
     ssh_config: paramiko.SSHConfig | None = None,
 ) -> SshEndpoint:
-    """Fill unset endpoint fields (``port``, ``user``, ``key``) from the SSH config.
+    """
+    Fill unset endpoint fields (``port``, ``user``, ``key``) from the SSH config.
 
     "Unset" means absent from ``model_fields_set``: neither given in the
     config nor inherited via ``extends``.
@@ -149,9 +162,9 @@ def enrich_from_ssh_config(
 
 
 def _soft_filter(slugs: list[str], predicate: Callable[[str], bool]) -> list[str]:
-    """Apply a filter, keeping the original list if it would eliminate all candidates."""
+    """Apply a filter, keeping the original list if it would leave no candidate."""
     filtered = [s for s in slugs if predicate(s)]
-    return filtered if filtered else slugs
+    return filtered or slugs
 
 
 def resolve_endpoint_for_volume(
@@ -161,7 +174,8 @@ def resolve_endpoint_for_volume(
     ssh_config: paramiko.SSHConfig | None = None,
     lookup: AddressLookupFn = dns_lookup,
 ) -> SshEndpoint:
-    """The first candidate left by the soft filters.
+    """
+    Return the first candidate left by the soft filters.
 
     The candidates are ``ssh_endpoints`` in order when set, else the primary
     ``ssh_endpoint`` alone. Unresolvable hostnames are always filtered out;
@@ -179,10 +193,13 @@ def resolve_endpoint_for_volume(
     else:
         # The DNS and --network filters both classify each candidate's host.
         is_private = cache(
-            partial(is_private_host, ssh_config=_or_default(ssh_config), lookup=lookup)
+            partial(is_private_host, ssh_config=_or_default(ssh_config), lookup=lookup),
         )
         result = _apply_soft_filters(
-            candidates, eps, endpoint_filter or EndpointFilter(), is_private
+            candidates,
+            eps,
+            endpoint_filter or EndpointFilter(),
+            is_private,
         )
         return eps[result[0]]
 
@@ -216,11 +233,13 @@ def resolve_proxy_chain(
     config: Config,
     server: SshEndpoint,
 ) -> list[SshEndpoint]:
+    """Return the endpoints *server* jumps through, outermost first."""
     return [config.ssh_endpoints[slug] for slug in server.proxy_jump_chain]
 
 
 def endpoint_location_excluded(
-    endpoint: SshEndpoint, exclude_locations: Collection[str]
+    endpoint: SshEndpoint,
+    exclude_locations: Collection[str],
 ) -> bool:
     """Whether *endpoint* is tagged with one of *exclude_locations*."""
     return not set(exclude_locations).isdisjoint(endpoint.location_list)
@@ -264,7 +283,8 @@ def resolve_all_endpoints(
     ssh_config: paramiko.SSHConfig | None = None,
     lookup: AddressLookupFn = dns_lookup,
 ) -> ResolvedEndpoints:
-    """Keyed by volume slug; local volumes are not included.
+    """
+    Keyed by volume slug; local volumes are not included.
 
     Volumes whose endpoints are all at excluded locations are omitted, so
     nothing attempts to reach them over SSH.
@@ -282,7 +302,11 @@ def resolve_all_endpoints(
     # A local-only config never reads ~/.ssh/config, so it never imports paramiko.
     return (
         _resolve_volumes(
-            config, remote_volumes, endpoint_filter, _or_default(ssh_config), lookup
+            config,
+            remote_volumes,
+            endpoint_filter,
+            _or_default(ssh_config),
+            lookup,
         )
         if remote_volumes
         else {}
@@ -301,7 +325,11 @@ def _resolve_volumes(
     cached_lookup = cache(lookup)
     return {
         vol.slug: _resolve_volume(
-            config, vol, endpoint_filter, ssh_config, cached_lookup
+            config,
+            vol,
+            endpoint_filter,
+            ssh_config,
+            cached_lookup,
         )
         for vol in volumes
     }

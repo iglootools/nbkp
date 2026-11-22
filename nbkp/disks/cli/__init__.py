@@ -1,4 +1,11 @@
+"""The ``nbkp disks`` command group: mount, umount, status and setup-auth."""
+
 import typer
+
+from nbkp.disks.cli.mount_cmd import mount_cmd
+from nbkp.disks.cli.setup_auth_cmd import setup_auth_cmd
+from nbkp.disks.cli.status_cmd import status_cmd
+from nbkp.disks.cli.umount_cmd import umount_cmd
 
 app = typer.Typer(
     name="disks",
@@ -6,13 +13,10 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-# Import order determines the order commands are listed in `--help` and in the
+# Registration order is the order commands are listed in `--help` and in the
 # generated CLI reference, so it follows the disk lifecycle rather than the
-# alphabet. Keep isort out of it.
-# isort: off
-from . import mount_cmd as mount_cmd
-from . import umount_cmd as umount_cmd
-from . import status_cmd as status_cmd
-from . import setup_auth_cmd as setup_auth_cmd
-
-# isort: on
+# alphabet.
+app.command("mount")(mount_cmd)
+app.command("umount")(umount_cmd)
+app.command("status")(status_cmd)
+app.command("setup-auth")(setup_auth_cmd)

@@ -1,4 +1,5 @@
-"""Generate the polkit rule for mount management authorization.
+"""
+Generate the polkit rule for mount management authorization.
 
 udisks is authorized purely by polkit — there is no ``sudo``/sudoers path.
 A single rule grants the backup user the udisks actions needed to unlock,
@@ -14,7 +15,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from textwrap import dedent
 
-from ..config import Config
+from nbkp.config import Config
 
 POLKIT_RULES_PATH = "/etc/polkit-1/rules.d/50-nbkp.rules"
 
@@ -54,15 +55,19 @@ class AuthRuleBlock:
 
     @property
     def install_hint(self) -> str:
+        """Return the line telling the user where to install the file."""
         return f"Install to: {self.path}"
 
 
 @dataclass(frozen=True)
 class AuthRules:
+    """The auth rules ``disks setup-auth`` prints for a config."""
+
     polkit: str | None
     """polkit rules content, or None if no volumes have mount config."""
 
     def polkit_block(self) -> AuthRuleBlock | None:
+        """Return the polkit rules file to install, or None when there is none."""
         if self.polkit:
             return AuthRuleBlock("polkit rules", POLKIT_RULES_PATH, self.polkit)
         return None
@@ -75,7 +80,8 @@ class AuthRules:
 
 
 def generate_polkit_rules(user: str) -> str:
-    """Generate the polkit rule granting *user* the udisks mount actions.
+    """
+    Generate the polkit rule granting *user* the udisks mount actions.
 
     Values are embedded as JSON literals (valid JavaScript), so a user name
     containing a quote or backslash cannot break out of the string and alter
@@ -95,7 +101,8 @@ def generate_polkit_rules(user: str) -> str:
 
 
 def generate_auth_rules(config: Config, user: str) -> AuthRules:
-    """Generate the polkit rule for all volumes with mount config.
+    """
+    Generate the polkit rule for all volumes with mount config.
 
     A single rule covers every mount-managed volume (the udisks actions are
     not device-specific), so the result is non-empty whenever at least one

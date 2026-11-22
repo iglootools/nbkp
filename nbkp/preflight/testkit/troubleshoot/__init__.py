@@ -1,4 +1,5 @@
-"""Fake ``preflight troubleshoot`` data covering every preflight error.
+"""
+Fake ``preflight troubleshoot`` data covering every preflight error.
 
 Each scenario contributes its config entries and the statuses that exercise
 them, so a new preflight error is one new :class:`Scenario` added to
@@ -11,18 +12,18 @@ them, so a new preflight error is one new :class:`Scenario` added to
 - Sync level: disabled, latest → /dev/null interpretation
 """
 
-from ....config import Config, SyncEndpoint
-from ....config.testkit import base_ssh_endpoints, base_volumes
-from ...status.result import PreflightResult
-from ..common import demo_ssh_statuses
-from .host_tools import (
+from nbkp.config import Config, SyncEndpoint
+from nbkp.config.testkit import base_ssh_endpoints, base_volumes
+from nbkp.preflight.status.result import PreflightResult
+from nbkp.preflight.testkit.common import demo_ssh_statuses
+from nbkp.preflight.testkit.troubleshoot.host_tools import (
     BTRFS_NOT_DETECTED,
     HOST_TOOL_ERRORS,
     RSYNC_MISSING,
     RSYNC_TOO_OLD,
     TOOLS_MISSING,
 )
-from .mounts import (
+from nbkp.preflight.testkit.troubleshoot.mounts import (
     MOUNT_BTRFS_SUBVOLRM,
     MOUNT_DEVICE_MISSING,
     MOUNT_ENCRYPTED,
@@ -33,25 +34,25 @@ from .mounts import (
     MOUNT_POLKIT_REFUSED,
     MOUNT_UNENCRYPTED,
 )
-from .permissions import (
+from nbkp.preflight.testkit.troubleshoot.permissions import (
     BTRFS_PERMISSIONS,
     HARDLINK_PERMISSIONS,
     NO_SNAPSHOT_PERMISSIONS,
 )
-from .reachability import (
+from nbkp.preflight.testkit.troubleshoot.reachability import (
     DISABLED_SYNC,
     LOCATION_EXCLUDED,
     MISSING_SENTINELS,
     STANDALONE_ENDPOINTS,
     UNAVAILABLE_VOLUMES,
 )
-from .scenario import (
+from nbkp.preflight.testkit.troubleshoot.scenario import (
     LAPTOP_SRC,
     Scenario,
     ScenarioStatuses,
     shared_statuses,
 )
-from .snapshots import (
+from nbkp.preflight.testkit.troubleshoot.snapshots import (
     BTRFS_MOUNT_ISSUES,
     DRY_RUN_PENDING,
     DST_LATEST_INVALID,
@@ -102,7 +103,8 @@ SCENARIOS: tuple[Scenario, ...] = (
 
 
 def troubleshoot_config() -> Config:
-    """The base config plus every scenario's entries.
+    """
+    Return the base config plus every scenario's entries.
 
     Each sync needs a unique destination endpoint, and each endpoint a unique
     (volume, subdir) pair, so most scenarios bring a volume of their own.
@@ -125,8 +127,11 @@ def troubleshoot_config() -> Config:
 
 
 def troubleshoot_data(config: Config) -> PreflightResult:
-    """Statuses of every scenario, against *config* from
-    :func:`troubleshoot_config`."""
+    """
+    Return the statuses of every scenario.
+
+    Against *config* from :func:`troubleshoot_config`.
+    """
     shared = shared_statuses(config)
     results: list[ScenarioStatuses] = [s.statuses(config, shared) for s in SCENARIOS]
     vol_statuses = {

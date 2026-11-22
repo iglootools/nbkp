@@ -36,7 +36,9 @@ _FAILED = f"FAILED (list snapshots failed for /dst/snapshots: {_STDERR})"
 
 
 def _render(
-    format_fn: Callable[..., RenderableType], results: Sequence[object], **kwargs: Any
+    format_fn: Callable[..., RenderableType],
+    results: Sequence[object],
+    **kwargs: Any,  # noqa: ANN401 -- forwarded to format_fn
 ) -> str:
     buffer = StringIO()
     Console(file=buffer, width=200).print(format_fn(results, **kwargs))

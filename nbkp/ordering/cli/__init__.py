@@ -1,4 +1,8 @@
+"""The ``nbkp ordering`` command group."""
+
 import typer
+
+from nbkp.ordering.cli.graph_cmd import graph_cmd
 
 app = typer.Typer(
     name="ordering",
@@ -6,5 +10,4 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-# Imported to register its command on the Typer app.
-from . import graph_cmd as graph_cmd
+app.command("graph")(graph_cmd)

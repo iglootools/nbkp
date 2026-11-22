@@ -1,19 +1,21 @@
-"""Drive detection and state queries for mount management.
+"""
+Drive detection and state queries for mount management.
 
-This is morally equivalent to the `preflight.queries` module, but the mounting logic runs before any preflight checks in the lifecycle,
-so these functions are separate and have no dependencies on preflight code.
+This is morally equivalent to the `preflight.queries` module, but the mounting logic
+runs before any preflight checks in the lifecycle, so these functions are separate
+and have no dependencies on preflight code.
 """
 
-from ..config import (
-    MountConfig,
-    Volume,
-)
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
+import contextlib
+
+from nbkp.config import MountConfig, Volume
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 class DeviceProbeError(Exception):
-    """A read-only device probe failed, so the device state is unknown.
+    """
+    A read-only device probe failed, so the device state is unknown.
 
     Raised instead of returning ``None`` so that "the probe failed" is not
     mistaken for "the container is locked" (which would, e.g., make umount
@@ -21,6 +23,7 @@ class DeviceProbeError(Exception):
     """
 
     def __init__(self, command: str, returncode: int, stderr: str) -> None:
+        """Build the error from the failed probe command, its exit status and stderr."""
         super().__init__(f"{command} failed (exit {returncode}): {stderr}".rstrip())
         self.command = command
         self.returncode = returncode
@@ -38,7 +41,8 @@ def settle_udev(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> None:
-    """Wait until udev has processed the pending device events, best effort.
+    """
+    Wait until udev has processed the pending device events, best effort.
 
     A lock, an unlock or a newly plugged drive makes udev remove and re-create the
     ``/dev/disk/by-uuid`` links, so a check right after one can miss a device that
@@ -48,14 +52,12 @@ def settle_udev(
     Never fails: without ``udevadm``, or when it times out or is refused, the
     caller's own checks still run and report what they find.
     """
-    try:
+    with contextlib.suppress(OSError):
         run(
             ["udevadm", "settle", f"--timeout={_UDEV_SETTLE_TIMEOUT_S}"],
             volume,
             resolved_endpoints,
         )
-    except OSError:
-        pass
 
 
 def detect_device_present(
@@ -65,7 +67,8 @@ def detect_device_present(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> bool:
-    """Check if a device UUID exists in ``/dev/disk/by-uuid/``.
+    """
+    Check if a device UUID exists in ``/dev/disk/by-uuid/``.
 
     Uses ``test -e`` (not ``-f``) because these entries are symlinks.
     Maintained by udev — no root, no parsing, works on all
@@ -86,7 +89,8 @@ def discover_cleartext_device(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> str | None:
-    """Discover the unlocked cleartext device for a LUKS container.
+    """
+    Discover the unlocked cleartext device for a LUKS container.
 
     Runs ``lsblk -rno NAME,TYPE /dev/disk/by-uuid/<luks-uuid>`` and returns
     ``/dev/mapper/<name>`` for the ``crypt`` child, or ``None`` when the
@@ -115,7 +119,11 @@ def discover_cleartext_device(
             # failed (lsblk missing, permission problem, …).
             return None
         case _:
-            raise DeviceProbeError("lsblk", result.returncode, result.stderr.strip())
+            raise DeviceProbeError(
+                command="lsblk",
+                returncode=result.returncode,
+                stderr=result.stderr.strip(),
+            )
 
 
 def resolve_target_device(
@@ -125,7 +133,8 @@ def resolve_target_device(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> str | None:
-    """Resolve the block device to mount/unmount for a volume.
+    """
+    Resolve the block device to mount/unmount for a volume.
 
     For unencrypted volumes this is ``/dev/disk/by-uuid/<fs-uuid>``.  For
     encrypted volumes it is the discovered cleartext mapper, or ``None`` when
@@ -135,7 +144,10 @@ def resolve_target_device(
     if mount_config.encryption is None:
         return f"/dev/disk/by-uuid/{mount_config.device_uuid}"
     return discover_cleartext_device(
-        volume, mount_config.device_uuid, resolved_endpoints, run=run
+        volume,
+        mount_config.device_uuid,
+        resolved_endpoints,
+        run=run,
     )
 
 
@@ -146,7 +158,8 @@ def find_mountpoint(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> str | None:
-    """Return the current mountpoint of ``device``, or ``None`` if unmounted.
+    """
+    Return the current mountpoint of ``device``, or ``None`` if unmounted.
 
     Runs ``findmnt --source <device> -n -o TARGET``.  Authoritative for both
     fstab-declared paths and udisks's ``/run/media`` defaults, and works for
@@ -175,7 +188,11 @@ def find_mountpoint(
             # on errors, but those print a message.
             return None
         case _:
-            raise DeviceProbeError("findmnt", result.returncode, result.stderr.strip())
+            raise DeviceProbeError(
+                command="findmnt",
+                returncode=result.returncode,
+                stderr=result.stderr.strip(),
+            )
 
 
 def resolve_effective_path(
@@ -185,7 +202,8 @@ def resolve_effective_path(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> str | None:
-    """Resolve where a mount-managed volume is (or should be) located.
+    """
+    Resolve where a mount-managed volume is (or should be) located.
 
     When ``volume.path`` is declared it is authoritative (Option A — fstab
     mounts the device there).  When omitted (Option B), the mountpoint udisks

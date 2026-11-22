@@ -1,4 +1,5 @@
-"""Tests for SSH-endpoint and sync-level error interpretation.
+"""
+Tests for SSH-endpoint and sync-level error interpretation.
 
 Covers auth failures, warnings, host-tool errors on localhost
 (``SyncErrorKind.ENDPOINT_HOST_ERRORS``), the observation layer's exception
@@ -54,7 +55,7 @@ from nbkp.preflight.status.volume import (
 from nbkp.preflight.strictness import has_fatal_errors
 from nbkp.preflight.volume_checks import observe_ssh_endpoint
 from nbkp.remote.endpoints import ResolvedEndpoint
-from tests.fakes import FakeCommandRunner, completed
+from tests.fakes import BodyError, FakeCommandRunner, completed
 
 _TOOLS = HostToolCapabilities(
     has_rsync=True,
@@ -71,7 +72,9 @@ def _ssh(
     slug: str = "localhost",
 ) -> SshEndpointStatus:
     return SshEndpointStatus.from_diagnostics(
-        slug=slug, diagnostics=diag, needs=needs or SshEndpointToolNeeds()
+        slug=slug,
+        diagnostics=diag,
+        needs=needs or SshEndpointToolNeeds(),
     )
 
 
@@ -141,7 +144,7 @@ class TestSshEndpointErrors:
 
 
 def _sync_status(ssh_status: SshEndpointStatus) -> SyncStatus:
-    """A local→local sync whose volumes/endpoints are healthy."""
+    """Build a local→local sync whose volumes/endpoints are healthy."""
     src_vol = LocalVolume(slug="src", path="/mnt/src")
     dst_vol = LocalVolume(slug="dst", path="/mnt/dst")
     caps = VolumeCapabilities(
@@ -174,7 +177,9 @@ def _sync_status(ssh_status: SshEndpointStatus) -> SyncStatus:
             dst_ep,
             dst_vs,
             DestinationEndpointDiagnostics(
-                endpoint_slug="ep-dst", sentinel_exists=True, endpoint_writable=True
+                endpoint_slug="ep-dst",
+                sentinel_exists=True,
+                endpoint_writable=True,
             ),
         ),
         selected_syncs={"s": sync},
@@ -188,9 +193,9 @@ class TestEndpointHostErrors:
         ssh = _ssh(
             SshEndpointDiagnostics(
                 host_tools=_TOOLS.model_copy(
-                    update={"has_rsync": False, "rsync_version_ok": False}
-                )
-            )
+                    update={"has_rsync": False, "rsync_version_ok": False},
+                ),
+            ),
         )
         status = _sync_status(ssh)
         assert status.errors == [SyncErrorKind.ENDPOINT_HOST_ERRORS]
@@ -230,7 +235,7 @@ def _remote_volume() -> tuple[RemoteVolume, dict[str, ResolvedEndpoint]]:
 
 
 def _host_raising(error: Exception) -> FakeCommandRunner:
-    """A host whose first probe (``which rsync``) fails with *error*."""
+    """Script a host whose first probe (``which rsync``) fails with *error*."""
     return FakeCommandRunner().on("which", returns=error)
 
 
@@ -250,14 +255,16 @@ class TestObservationExceptions:
                 "nas.local",
                 paramiko.RSAKey.generate(1024),
                 paramiko.RSAKey.generate(1024),
-            )
+            ),
         )
         assert observe_ssh_endpoint(vol, resolved, run=run).ssh_auth_failed is True
 
     def test_timeout_is_unreachable(self) -> None:
         vol, resolved = _remote_volume()
         diag = observe_ssh_endpoint(
-            vol, resolved, run=_host_raising(TimeoutError("timed out"))
+            vol,
+            resolved,
+            run=_host_raising(TimeoutError("timed out")),
         )
         assert diag.ssh_reachable is False
         assert diag.ssh_auth_failed is False
@@ -278,25 +285,27 @@ class TestObservationExceptions:
         assert diag.ssh_reachable is True
         assert run.commands == [["true"]]
         assert run.calls[0].endpoint == ResolvedEndpoint(
-            server=server, proxy_chain=[bastion]
+            server=server,
+            proxy_chain=[bastion],
         )
 
     def test_standalone_auth_failure(self) -> None:
         run = FakeCommandRunner().on(
-            "true", returns=paramiko.AuthenticationException("Authentication failed.")
+            "true",
+            returns=paramiko.AuthenticationException("Authentication failed."),
         )
         diag = observe_standalone_endpoint(SshEndpoint(slug="b", host="b"), [], run=run)
         assert diag.ssh_auth_failed is True
 
     def test_standalone_programming_error_propagates(self) -> None:
-        run = FakeCommandRunner().on("true", returns=ValueError())
-        with pytest.raises(ValueError):
+        run = FakeCommandRunner().on("true", returns=BodyError())
+        with pytest.raises(BodyError):
             observe_standalone_endpoint(SshEndpoint(slug="b", host="b"), [], run=run)
 
 
 class TestLatestSymlinkTarget:
     def _state(self, tmp_path: Path, target: str) -> LatestSymlinkState:
-        """The ``latest`` a source endpoint at *tmp_path* reports."""
+        """Return the ``latest`` a source endpoint at *tmp_path* reports."""
         vol = LocalVolume(slug="v", path=str(tmp_path))
         endpoint = SyncEndpoint(
             slug="ep",
@@ -331,13 +340,15 @@ class TestLatestSymlinkTarget:
         ],
     )
     def test_snapshot_outside_snapshots_dir_is_invalid(
-        self, tmp_path: Path, target: str
+        self,
+        tmp_path: Path,
+        target: str,
     ) -> None:
         """Only ``snapshots/<name>`` is a snapshot of this endpoint."""
         (tmp_path / "ep").mkdir()
         (tmp_path / "ep" / "snapshots" / "2026-03-06T14:30:00.000Z").mkdir(parents=True)
         (tmp_path / "other" / "snapshots" / "2026-03-06T14:30:00.000Z").mkdir(
-            parents=True
+            parents=True,
         )
         (tmp_path / "ep" / "elsewhere" / "2026-03-06T14:30:00.000Z").mkdir(parents=True)
         state = self._state(tmp_path / "ep", target)
@@ -360,8 +371,11 @@ _BTRFS_CAPS = VolumeCapabilities(
 
 
 class TestLatestSnapshotReadOnly:
-    """A writable ``latest`` snapshot is probed on btrfs destinations and
-    reported as a warning that leaves the endpoint active."""
+    """
+    A writable ``latest`` snapshot on btrfs destinations is a warning.
+
+    It is probed on btrfs destinations, and the warning leaves the endpoint active.
+    """
 
     def _observe(
         self,
@@ -387,15 +401,19 @@ class TestLatestSnapshotReadOnly:
         )
 
     @pytest.mark.parametrize(
-        ("stdout", "readonly"), [("ro=true\n", True), ("ro=false\n", False)]
+        ("stdout", "readonly"),
+        [("ro=true\n", True), ("ro=false\n", False)],
     )
     def test_probes_the_snapshot_latest_points_to(
-        self, stdout: str, readonly: bool
+        self,
+        stdout: str,
+        *,
+        readonly: bool,
     ) -> None:
         run = FakeCommandRunner().on("btrfs", "property", returns=completed(0, stdout))
         assert self._observe(run).latest_snapshot_readonly is readonly
         assert run.commands_starting_with("btrfs") == [
-            ["btrfs", "property", "get", f"/data/snapshots/{_SNAPSHOT}", "ro"]
+            ["btrfs", "property", "get", f"/data/snapshots/{_SNAPSHOT}", "ro"],
         ]
 
     def test_a_failed_probe_is_unknown(self) -> None:
@@ -423,6 +441,7 @@ class TestLatestSnapshotReadOnly:
     )
     def test_writable_is_a_warning_not_an_error(
         self,
+        *,
         readonly: bool | None,
         warnings: list[DestinationEndpointWarningKind],
     ) -> None:
@@ -462,7 +481,7 @@ class TestFsTypeUnknown:
                     is_btrfs_filesystem=None,
                     hardlink_supported=True,
                     btrfs_user_subvol_rm=False,
-                )
+                ),
             ),
             errors=[],
         )
@@ -474,7 +493,9 @@ class TestFsTypeUnknown:
             ),
             vol_status,
             DestinationEndpointDiagnostics(
-                endpoint_slug="ep", sentinel_exists=True, endpoint_writable=True
+                endpoint_slug="ep",
+                sentinel_exists=True,
+                endpoint_writable=True,
             ),
         )
         assert DestinationEndpointErrorKind.VOL_FS_TYPE_UNKNOWN in status.errors
@@ -490,7 +511,7 @@ class TestDisabledSyncNeverFatal:
             update={
                 "config": status.config.model_copy(update={"enabled": False}),
                 "errors": [SyncErrorKind.DISABLED],
-            }
+            },
         )
         return {"s": disabled}
 

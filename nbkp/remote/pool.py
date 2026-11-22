@@ -1,4 +1,5 @@
-"""Reuse of open SSH connections for the duration of one CLI command.
+"""
+Reuse of open SSH connections for the duration of one CLI command.
 
 Preflight, mounting, snapshots and pruning each run many short remote
 commands against the same hosts; connecting for every one of them costs a
@@ -23,24 +24,33 @@ from typing import Protocol
 
 
 class Closeable(Protocol):
-    def close(self) -> None: ...
+    """A connection the pool can hold: anything with a ``close`` method."""
+
+    def close(self) -> None:
+        """Release the connection."""
+        ...
 
 
 class ConnectionPool:
-    """Open connections by key, reused until :meth:`discard` or :meth:`close`.
+    """
+    Open connections by key, reused until :meth:`discard` or :meth:`close`.
 
     Thread-safe: a lock guards the table, and is held while a missing
     connection is opened so that two threads never open the same one twice.
     """
 
     def __init__(self) -> None:
+        """Build an empty pool."""
         self._connections: dict[Hashable, Closeable] = {}
         self._lock = threading.Lock()
 
     def get_or_open(
-        self, key: Hashable, open_: Callable[[], Closeable]
+        self,
+        key: Hashable,
+        open_: Callable[[], Closeable],
     ) -> tuple[Closeable, bool]:
-        """The connection for *key*, and whether it was already open.
+        """
+        Return the connection for *key*, and whether it was already open.
 
         A connection that fails to open is not kept: the exception
         propagates and the next call tries again.
@@ -72,17 +82,20 @@ class ConnectionPool:
 
 
 _active_pool: ContextVar[ConnectionPool | None] = ContextVar(
-    "nbkp_ssh_connection_pool", default=None
+    "nbkp_ssh_connection_pool",
+    default=None,
 )
 
 
 def active_pool() -> ConnectionPool | None:
+    """Return the pool of the enclosing :func:`connection_scope`, or ``None``."""
     return _active_pool.get()
 
 
 @contextmanager
 def connection_scope() -> Generator[ConnectionPool]:
-    """Reuse SSH connections until the block exits, then close them.
+    """
+    Reuse SSH connections until the block exits, then close them.
 
     A nested scope joins the enclosing one, which keeps ownership of the
     connections.

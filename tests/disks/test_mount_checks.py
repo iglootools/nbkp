@@ -46,7 +46,9 @@ def _unencrypted_mount() -> MountConfig:
 
 def _encrypted_vol() -> LocalVolume:
     return LocalVolume(
-        slug="encrypted", path="/mnt/encrypted", mount=_encrypted_mount()
+        slug="encrypted",
+        path="/mnt/encrypted",
+        mount=_encrypted_mount(),
     )
 
 
@@ -55,7 +57,7 @@ def _unencrypted_vol() -> LocalVolume:
 
 
 def _fstab_line(source: str, target: str) -> FakeCommandRunner:
-    """A host whose ``/etc/fstab`` maps *source* to *target*."""
+    """Script a host whose ``/etc/fstab`` maps *source* to *target*."""
     return FakeCommandRunner().on(
         "findmnt",
         "--fstab",
@@ -105,7 +107,12 @@ class TestObservationReuse:
             effective_path="/mnt/encrypted",
         )
         result = check_mount_capabilities(
-            _encrypted_vol(), _encrypted_mount(), _MOUNT_TOOLS, {}, obs, run=run
+            _encrypted_vol(),
+            _encrypted_mount(),
+            _MOUNT_TOOLS,
+            {},
+            obs,
+            run=run,
         )
 
         assert [cmd[:2] for cmd in run.commands] == [["findmnt", "--fstab"]]
@@ -124,7 +131,12 @@ class TestObservationReuse:
             .on("findmnt", "--source", returns=completed(0, "/mnt/encrypted\n"))
         )
         result = check_mount_capabilities(
-            _encrypted_vol(), _encrypted_mount(), _MOUNT_TOOLS, {}, None, run=run
+            _encrypted_vol(),
+            _encrypted_mount(),
+            _MOUNT_TOOLS,
+            {},
+            None,
+            run=run,
         )
         # lsblk runs once: the cleartext device is reused for the mountpoint.
         assert run.commands == [
@@ -154,11 +166,19 @@ class TestToolGating:
 
     def test_missing_findmnt_and_lsblk(self) -> None:
         tools = MountToolCapabilities(
-            has_udisksctl=True, udisksd_running=True, has_findmnt=False, has_lsblk=False
+            has_udisksctl=True,
+            udisksd_running=True,
+            has_findmnt=False,
+            has_lsblk=False,
         )
         run = FakeCommandRunner()
         result = check_mount_capabilities(
-            _encrypted_vol(), _encrypted_mount(), tools, {}, None, run=run
+            _encrypted_vol(),
+            _encrypted_mount(),
+            tools,
+            {},
+            None,
+            run=run,
         )
         # Only the device presence probe ran: no lsblk, no findmnt.
         assert run.commands == [["test", "-e", f"/dev/disk/by-uuid/{_ENC_UUID}"]]
@@ -170,7 +190,12 @@ class TestToolGating:
     def test_failed_lsblk_is_unknown(self) -> None:
         run = FakeCommandRunner().on("lsblk", returns=completed(1, stderr="boom"))
         result = check_mount_capabilities(
-            _encrypted_vol(), _encrypted_mount(), _MOUNT_TOOLS, {}, None, run=run
+            _encrypted_vol(),
+            _encrypted_mount(),
+            _MOUNT_TOOLS,
+            {},
+            None,
+            run=run,
         )
         assert result.device_present is True
         assert result.luks_unlocked is None
@@ -178,10 +203,17 @@ class TestToolGating:
 
     def test_failed_findmnt_is_unknown(self) -> None:
         run = FakeCommandRunner().on(
-            "findmnt", "--source", returns=completed(2, stderr="boom")
+            "findmnt",
+            "--source",
+            returns=completed(2, stderr="boom"),
         )
         result = check_mount_capabilities(
-            _unencrypted_vol(), _unencrypted_mount(), _MOUNT_TOOLS, {}, None, run=run
+            _unencrypted_vol(),
+            _unencrypted_mount(),
+            _MOUNT_TOOLS,
+            {},
+            None,
+            run=run,
         )
         assert result.mounted is None
         assert result.effective_path is None
@@ -213,7 +245,7 @@ class TestFstabSourceMatches:
             ("/dev/sdb1", True),
         ],
     )
-    def test_unencrypted(self, source: str, expected: bool) -> None:
+    def test_unencrypted(self, source: str, *, expected: bool) -> None:
         assert fstab_source_matches(source, _unencrypted_mount(), None) is expected
 
     @pytest.mark.parametrize(
@@ -235,16 +267,27 @@ class TestFstabSourceMatches:
         ],
     )
     def test_encrypted(
-        self, source: str, cleartext: str | None, expected: bool
+        self,
+        source: str,
+        cleartext: str | None,
+        *,
+        expected: bool,
     ) -> None:
         assert fstab_source_matches(source, _encrypted_mount(), cleartext) is expected
 
     def test_entry_for_another_device_is_a_mismatch(self) -> None:
         run = _fstab_line("UUID=11111111-2222-3333-4444-555555555555", "/mnt/usb").on(
-            "findmnt", "--source", returns=completed(1)
+            "findmnt",
+            "--source",
+            returns=completed(1),
         )
         result = check_mount_capabilities(
-            _unencrypted_vol(), _unencrypted_mount(), _MOUNT_TOOLS, {}, None, run=run
+            _unencrypted_vol(),
+            _unencrypted_mount(),
+            _MOUNT_TOOLS,
+            {},
+            None,
+            run=run,
         )
         assert result.has_fstab_entry is False
         assert result.fstab_source == "UUID=11111111-2222-3333-4444-555555555555"
@@ -260,7 +303,7 @@ class TestFstabSourceMatches:
                     hardlink_supported=True,
                     btrfs_user_subvol_rm=False,
                     mount=result,
-                )
+                ),
             ),
         )
         assert status.errors == [VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH]
@@ -288,5 +331,5 @@ class TestFstabSourceMatches:
                 "-P",
                 "-o",
                 "SOURCE,TARGET",
-            ]
+            ],
         ]

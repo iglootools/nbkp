@@ -1,4 +1,5 @@
-"""Integration tests: subdir-to-subdir endpoint mapping (Docker).
+"""
+Integration tests: subdir-to-subdir endpoint mapping (Docker).
 
 Basic rsync for all direction combinations is covered by
 ``e2e_docker/test_pipeline``.  These tests isolate subdir mapping

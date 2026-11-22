@@ -1,14 +1,18 @@
-from typing import Any, Literal
+"""The config models of a sync endpoint and its snapshot settings."""
+
+from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from .base import ConfigModel, Slug
-from .errors import ConfigValidationErrorKind, config_error
+from nbkp.config.protocol.base import ConfigModel, Slug
+from nbkp.config.protocol.errors import ConfigValidationErrorKind, config_error
 
 SnapshotMode = Literal["none", "btrfs", "hard-link"]
 
 
 class BtrfsSnapshotConfig(ConfigModel):
+    """Whether a sync endpoint keeps btrfs snapshots, and how many."""
+
     enabled: bool = Field(default=False, description="Enable snapshot management")
     max_snapshots: int | None = Field(
         default=None,
@@ -18,6 +22,8 @@ class BtrfsSnapshotConfig(ConfigModel):
 
 
 class HardLinkSnapshotConfig(ConfigModel):
+    """Whether a sync endpoint keeps hard-link snapshots, and how many."""
+
     enabled: bool = Field(default=False, description="Enable snapshot management")
     max_snapshots: int | None = Field(
         default=None,
@@ -27,7 +33,8 @@ class HardLinkSnapshotConfig(ConfigModel):
 
 
 class SyncEndpoint(ConfigModel):
-    """A reusable sync endpoint: volume + optional subdir + snapshots.
+    """
+    A reusable sync endpoint: volume + optional subdir + snapshots.
 
     Defined at the top level of the config under ``sync-endpoints``
     and referenced by slug from ``syncs``.  When used as a
@@ -47,22 +54,23 @@ class SyncEndpoint(ConfigModel):
 
     @field_validator("subdir", mode="before")
     @classmethod
-    def normalize_subdir(cls, v: Any) -> Any:
+    def normalize_subdir(cls, v: object) -> object:
+        """Return the subdir without outer slashes, or ``None`` if nothing is left."""
         # Non-strings pass through so pydantic rejects them (e.g. an unquoted
         # ``subdir: 2024``) instead of silently targeting the volume root.
         match v:
             case str():
                 stripped = v.strip("/")
-                return stripped if stripped else None
+                return stripped or None
             case _:
                 return v
 
     btrfs_snapshots: BtrfsSnapshotConfig = Field(
-        default_factory=lambda: BtrfsSnapshotConfig(),
+        default_factory=BtrfsSnapshotConfig,
         description="Btrfs snapshot config",
     )
     hard_link_snapshots: HardLinkSnapshotConfig = Field(
-        default_factory=lambda: HardLinkSnapshotConfig(),
+        default_factory=HardLinkSnapshotConfig,
         description="Hard-link snapshot config",
     )
 
@@ -70,6 +78,7 @@ class SyncEndpoint(ConfigModel):
     def validate_snapshot_exclusivity(
         self,
     ) -> SyncEndpoint:
+        """Raise a ``mutually-exclusive`` error if both snapshot kinds are enabled."""
         if self.btrfs_snapshots.enabled and self.hard_link_snapshots.enabled:
             raise config_error(
                 ConfigValidationErrorKind.MUTUALLY_EXCLUSIVE,
@@ -81,6 +90,7 @@ class SyncEndpoint(ConfigModel):
     def snapshot_mode(
         self,
     ) -> SnapshotMode:
+        """Return the enabled snapshot kind, or ``"none"`` when neither is enabled."""
         if self.btrfs_snapshots.enabled:
             return "btrfs"
         elif self.hard_link_snapshots.enabled:
@@ -90,8 +100,11 @@ class SyncEndpoint(ConfigModel):
 
     @property
     def max_snapshots(self) -> int | None:
-        """Retention limit of the enabled snapshot mode (``None``: unlimited or no
-        snapshots)."""
+        """
+        Retention limit of the enabled snapshot mode.
+
+        ``None``: unlimited or no snapshots.
+        """
         match self.snapshot_mode:
             case "btrfs":
                 return self.btrfs_snapshots.max_snapshots

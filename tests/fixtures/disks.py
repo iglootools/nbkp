@@ -22,16 +22,22 @@ def encrypted_volume(path: str = "/mnt/enc") -> LocalVolume:
         slug="enc",
         path=path,
         mount=MountConfig(
-            device_uuid=UUID, encryption=LuksEncryptionConfig(passphrase_id="enc")
+            device_uuid=UUID,
+            encryption=LuksEncryptionConfig(passphrase_id="enc"),
         ),
     )
 
 
 def mounted_drive_host(
-    lock: subprocess.CompletedProcess[str], *, path: str = "/mnt/enc"
+    lock: subprocess.CompletedProcess[str],
+    *,
+    path: str = "/mnt/enc",
 ) -> FakeCommandRunner:
-    """A host where ``enc`` is plugged in, unlocked and mounted at *path*,
-    and ``udisksctl lock`` answers *lock*."""
+    """
+    Script a host where ``enc`` is plugged in, unlocked and mounted at *path*.
+
+    ``udisksctl lock`` answers *lock*.
+    """
     return (
         FakeCommandRunner()
         .on("lsblk", returns=completed(stdout=f"sdb part\nluks-{UUID} crypt\n"))

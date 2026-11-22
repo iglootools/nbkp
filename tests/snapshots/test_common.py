@@ -1,12 +1,14 @@
 """Tests for nbkp.snapshots.common (shared snapshot helpers)."""
 
+import errno
+import os
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
 import paramiko
 import pytest
-from pytest import MonkeyPatch  # noqa: TID251 -- (b) Path.symlink_to failing mid-update
+from pytest import MonkeyPatch  # noqa: PT013, TID251 -- (b) Path.symlink_to failing mid-update
 
 from nbkp.config import (
     BtrfsSnapshotConfig,
@@ -144,7 +146,8 @@ def _hl_remote_config() -> tuple[SyncConfig, Config, dict[str, ResolvedEndpoint]
                 slug="ep-dst",
                 volume="dst",
                 hard_link_snapshots=HardLinkSnapshotConfig(
-                    enabled=True, max_snapshots=3
+                    enabled=True,
+                    max_snapshots=3,
                 ),
             ),
         },
@@ -184,7 +187,7 @@ class TestListSnapshotsRemoteSpaces:
             returns=completed(
                 returncode=0,
                 stdout="2024-01-01T00:00:00.000Z\n2024-01-15T12:00:00.000Z\n",
-            )
+            ),
         )
         config, sync = _remote_config_spaces()
         resolved = resolve_all_endpoints(config)
@@ -204,7 +207,7 @@ class TestListSnapshotsLocal:
             returns=completed(
                 returncode=0,
                 stdout="2024-01-01T00:00:00.000Z\n2024-01-15T12:00:00.000Z\n",
-            )
+            ),
         )
         config, sync = _local_config()
 
@@ -227,7 +230,7 @@ class TestListSnapshotsLocal:
             returns=[
                 completed(returncode=2, stdout="", stderr="No such file"),
                 completed(returncode=1, stdout="", stderr=""),
-            ]
+            ],
         )
         config, sync = _local_config()
 
@@ -241,7 +244,7 @@ class TestListSnapshotsRemote:
             returns=completed(
                 returncode=0,
                 stdout="2024-01-01T00:00:00.000Z\n2024-01-15T12:00:00.000Z\n",
-            )
+            ),
         )
         config, sync = _remote_config()
         resolved = resolve_all_endpoints(config)
@@ -328,7 +331,7 @@ class TestReadLatestSymlink:
             returns=completed(
                 returncode=0,
                 stdout=f"snapshots/{_TS_REMOTE.name}\n",
-            )
+            ),
         )
         sync, config, re = _hl_remote_config()
 
@@ -343,7 +346,7 @@ class TestReadLatestSymlink:
         assert result is None
 
     def test_local_devnull(self, tmp_path: Path) -> None:
-        """latest -> /dev/null returns None."""
+        """Latest -> /dev/null returns None."""
         dst = LocalVolume(slug="dst", path=str(tmp_path))
         src = LocalVolume(slug="src", path="/src")
         sync = SyncConfig(
@@ -375,7 +378,7 @@ class TestReadLatestSymlink:
             returns=completed(
                 returncode=0,
                 stdout="/dev/null\n",
-            )
+            ),
         )
         sync, config, re = _hl_remote_config()
 
@@ -421,22 +424,21 @@ class TestUpdateLatestSymlink:
         assert sorted(p.name for p in tmp_path.iterdir()) == ["latest"]
 
     def test_local_failure_keeps_previous_latest(self, tmp_path: Path) -> None:
-        """latest is never missing, even when creating the new link fails."""
+        """Latest is never missing, even when creating the new link fails."""
         sync, config = _hl_local_config(tmp_path)
         link = tmp_path / "latest"
         link.symlink_to("snapshots/previous")
 
-        def fail(self: Path, target: str) -> None:
-            raise OSError("disk full")
+        def fail(_self: Path, _target: str) -> None:
+            raise OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))
 
-        with (
-            MonkeyPatch.context() as patch,
-            pytest.raises(
-                SnapshotOperationError, check=_is_op(SnapshotOp.UPDATE_LATEST)
-            ),
-        ):
+        with MonkeyPatch.context() as patch:
             patch.setattr(Path, "symlink_to", fail)
-            update_latest_symlink(sync, config, _TS_LOCAL)
+            with pytest.raises(
+                SnapshotOperationError,
+                check=_is_op(SnapshotOp.UPDATE_LATEST),
+            ):
+                update_latest_symlink(sync, config, _TS_LOCAL)
         assert str(link.readlink()) == "snapshots/previous"
 
     def test_remote(self) -> None:
@@ -444,10 +446,14 @@ class TestUpdateLatestSymlink:
         sync, config, re = _hl_remote_config()
 
         update_latest_symlink(
-            sync, config, _TS_REMOTE, resolved_endpoints=re, run=runner
+            sync,
+            config,
+            _TS_REMOTE,
+            resolved_endpoints=re,
+            run=runner,
         )
         assert runner.commands == [
-            ["ln", "-sfn", f"snapshots/{_TS_REMOTE.name}", "/backup/latest"]
+            ["ln", "-sfn", f"snapshots/{_TS_REMOTE.name}", "/backup/latest"],
         ]
 
 
@@ -457,12 +463,12 @@ def _is_op(op: SnapshotOp) -> Callable[[SnapshotOperationError], bool]:
 
 class TestListSnapshotsFailures:
     def test_unreadable_existing_dir_raises(self) -> None:
-        """ls failing on a directory that exists is not "no snapshots"."""
+        """Ls failing on a directory that exists is not "no snapshots"."""
         runner = FakeCommandRunner().on(
             returns=[
                 completed(returncode=2, stdout="", stderr="Permission denied"),
                 completed(returncode=0, stdout="", stderr=""),
-            ]
+            ],
         )
         config, sync = _local_config()
 
@@ -481,7 +487,7 @@ class TestListSnapshotsFailures:
             returns=completed(
                 returncode=0,
                 stdout="2026-03-01T10:00:00.000Z\nlost+found\n.DS_Store\nnotes.txt\n",
-            )
+            ),
         )
         config, sync = _local_config()
 
@@ -494,7 +500,7 @@ class TestListSnapshotsFailures:
             returns=completed(
                 returncode=0,
                 stdout="2026-03-01T10-30-00.000Z\n2026-03-01T10:15:00.000Z\n",
-            )
+            ),
         )
         config, sync = _local_config()
 
@@ -514,7 +520,8 @@ class TestListSnapshotsFailures:
             ),
         )
         runner.on(
-            "readlink", returns=completed(0, "snapshots/2026-03-01T10-45-00.000Z\n")
+            "readlink",
+            returns=completed(0, "snapshots/2026-03-01T10-45-00.000Z\n"),
         )
         runner.on("rm", returns=completed(0))
         sync, config, re = _hl_remote_config()
@@ -543,36 +550,40 @@ class TestListSnapshotsFailures:
 
 class TestReadLatestSymlinkFailures:
     def test_remote_unreadable_symlink_raises(self) -> None:
-        """readlink failing on an existing symlink must not read as "absent"."""
+        """Readlink failing on an existing symlink must not read as "absent"."""
         runner = FakeCommandRunner().on(
             returns=[
                 completed(returncode=1, stdout="", stderr="I/O error"),
                 completed(returncode=0, stdout="", stderr=""),  # test -L: exists
-            ]
+            ],
         )
         sync, config, re = _hl_remote_config()
 
         with pytest.raises(
-            SnapshotOperationError, check=_is_op(SnapshotOp.READ_LATEST)
+            SnapshotOperationError,
+            check=_is_op(SnapshotOp.READ_LATEST),
         ):
             read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
 
     def test_target_not_a_snapshot_raises(self) -> None:
         """A latest target nbkp did not write is an error, not a guess."""
         runner = FakeCommandRunner().on(
-            "readlink", returns=completed(0, "snapshots/2026-03-07T09:00:00\n")
+            "readlink",
+            returns=completed(0, "snapshots/2026-03-07T09:00:00\n"),
         )
         sync, config, re = _hl_remote_config()
 
         with pytest.raises(
-            SnapshotOperationError, check=_is_op(SnapshotOp.READ_LATEST)
+            SnapshotOperationError,
+            check=_is_op(SnapshotOp.READ_LATEST),
         ):
             read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
 
     def test_non_snapshot_target_raises(self) -> None:
         """A target that is not a snapshot name is a failed read, not a crash."""
         runner = FakeCommandRunner().on(
-            "readlink", returns=completed(0, "snapshots/foo\n")
+            "readlink",
+            returns=completed(0, "snapshots/foo\n"),
         )
         sync, config, re = _hl_remote_config()
 
@@ -596,7 +607,8 @@ class TestReadLatestSymlinkFailures:
         sync, config, re = _hl_remote_config()
 
         with pytest.raises(
-            SnapshotOperationError, check=_is_op(SnapshotOp.READ_LATEST)
+            SnapshotOperationError,
+            check=_is_op(SnapshotOp.READ_LATEST),
         ):
             read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
 
@@ -613,12 +625,13 @@ class TestReadLatestSymlinkFailures:
                 ),
                 completed(returncode=1, stdout="", stderr="I/O error"),  # readlink
                 completed(returncode=2, stdout="", stderr=""),  # test -L: error
-            ]
+            ],
         )
         sync, config, re = _hl_remote_config()
 
         with pytest.raises(
-            SnapshotOperationError, check=_is_op(SnapshotOp.READ_LATEST)
+            SnapshotOperationError,
+            check=_is_op(SnapshotOp.READ_LATEST),
         ):
             hl_prune_snapshots(sync, config, 3, resolved_endpoints=re, run=runner)
         assert len(runner.calls) == 3  # no rm -rf issued
@@ -643,7 +656,8 @@ class TestLocalOSErrorTranslation:
         sync = config.syncs["s1"]
 
         with pytest.raises(
-            SnapshotOperationError, check=_is_op(SnapshotOp.UPDATE_LATEST)
+            SnapshotOperationError,
+            check=_is_op(SnapshotOp.UPDATE_LATEST),
         ):
             update_latest_symlink(sync, config, _TS_LOCAL)
 

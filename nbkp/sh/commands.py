@@ -1,9 +1,9 @@
 """Shell command snippets that run on a volume's host (local or over SSH)."""
 
-from ..config import LocalVolume, RemoteVolume
-from ..remote.endpoints import ResolvedEndpoints
-from ..remote.ssh import build_ssh_base_args
-from .quoting import quote, quote_args, remote_command
+from nbkp.config import LocalVolume, RemoteVolume
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.remote.ssh import build_ssh_base_args
+from nbkp.sh.quoting import quote, quote_args, remote_command
 
 # Preflight function return codes, interpreted by ``nbkp_run_sync`` and
 # ``nbkp_enforce_strictness`` in the template.
@@ -37,7 +37,8 @@ def which_cmd(
         case LocalVolume():
             return f"command -v {quote(command)} >/dev/null 2>&1"
         case RemoteVolume():
-            return f"{vol_cmd(vol, ['which', command], resolved_endpoints)} >/dev/null 2>&1"
+            which = vol_cmd(vol, ["which", command], resolved_endpoints)
+            return f"{which} >/dev/null 2>&1"
 
 
 def output_of(
@@ -50,7 +51,8 @@ def output_of(
 
 
 def guard(condition: str, message: str, code: int) -> str:
-    """``condition || { log message; return code; }``.
+    """
+    ``condition || { log message; return code; }``.
 
     *message* is passed to ``nbkp_log`` as a single quoted word, so paths
     inside it are never interpreted by the shell.
@@ -62,7 +64,8 @@ def guard(condition: str, message: str, code: int) -> str:
 
 
 def snapshot_date_format(vol: LocalVolume | RemoteVolume, platform: str) -> str:
-    """``date`` format for snapshot names.
+    """
+    ``date`` format for snapshot names.
 
     Colons (ISO 8601) on Linux/remote; hyphens on macOS local volumes,
     where APFS/HFS+ forbids colons in filenames.

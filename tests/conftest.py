@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import NoReturn
 
 import pytest
-from pytest import MonkeyPatch  # noqa: TID251 -- (c) see isolate_from_user_ssh_config
+from pytest import MonkeyPatch  # noqa: PT013, TID251 -- (c) see isolate_from_user_ssh_config
 
 from nbkp.config import (
     Config,
@@ -19,7 +19,8 @@ from nbkp.config.testkit import write_config
 
 
 def _raise_fd_soft_limit(target: int = 8192) -> None:
-    """Lift this process's open-file soft limit toward ``target``.
+    """
+    Lift this process's open-file soft limit toward ``target``.
 
     The Docker test suites (testcontainers' docker-py client + containers +
     SSH connections + the generated backup script's subprocess pipes) need far
@@ -33,16 +34,14 @@ def _raise_fd_soft_limit(target: int = 8192) -> None:
     shell's ``ulimit``.
     """
     try:
-        import resource
+        import resource  # noqa: PLC0415 -- Unix-only stdlib module
     except ImportError:  # non-Unix; not a supported test platform
         return
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
     new_soft = target if hard == resource.RLIM_INFINITY else min(target, hard)
     if soft < new_soft:
-        try:
+        with contextlib.suppress(ValueError, OSError):
             resource.setrlimit(resource.RLIMIT_NOFILE, (new_soft, hard))
-        except ValueError, OSError:
-            pass
 
 
 _raise_fd_soft_limit()
@@ -50,8 +49,9 @@ _raise_fd_soft_limit()
 pytest_plugins = ["tests._docker_fixtures"]
 
 
-def pytest_configure(config: pytest.Config) -> None:
-    """Never let a test reach the developer's real OS keyring.
+def pytest_configure() -> None:
+    """
+    Never let a test reach the developer's real OS keyring.
 
     The ``keyring`` credential provider is the default, so any command run
     through the CLI on a config with an encrypted volume prefetches its
@@ -63,8 +63,8 @@ def pytest_configure(config: pytest.Config) -> None:
     """
     os.environ["PYTHON_KEYRING_BACKEND"] = "keyring.backends.fail.Keyring"
     try:
-        import keyring
-        import keyring.backends.fail
+        import keyring  # noqa: PLC0415 -- optional extra
+        import keyring.backends.fail  # noqa: PLC0415 -- optional extra
     except ImportError:  # the 'keyring' extra is optional
         return
     keyring.set_keyring(keyring.backends.fail.Keyring())
@@ -74,7 +74,8 @@ def pytest_configure(config: pytest.Config) -> None:
 def isolate_from_user_ssh_config(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> Iterator[None]:
-    """Never let a test read the developer's real ``~/.ssh/config``.
+    """
+    Never let a test read the developer's real ``~/.ssh/config``.
 
     Endpoint resolution falls back to it when no SSH config is passed in, so
     many tests calling ``resolve_all_endpoints(config)`` would otherwise pick
@@ -90,7 +91,8 @@ def isolate_from_user_ssh_config(
 
 @pytest.fixture
 def monkeypatch() -> NoReturn:
-    """Replace pytest's fixture for every test: tests do not patch.
+    """
+    Replace pytest's fixture for every test: tests do not patch.
 
     Inject a fake through a parameter instead (docs/guidelines.md, Testing).
     The documented exceptions use ``pytest.MonkeyPatch``, which ruff bans
@@ -105,7 +107,8 @@ def monkeypatch() -> NoReturn:
 
 @pytest.fixture
 def chdir() -> Iterator[Callable[[Path], None]]:
-    """Change the working directory until the end of the test.
+    """
+    Change the working directory until the end of the test.
 
     Stands in for ``monkeypatch.chdir``, which went with the fixture above.
     """
@@ -177,22 +180,22 @@ def _sample_minimal_config() -> Config:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_config_file(tmp_path: Path) -> Path:
     return write_config(tmp_path, _sample_config())
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_minimal_config_file(tmp_path: Path) -> Path:
     return write_config(tmp_path, _sample_minimal_config())
 
 
-@pytest.fixture()
+@pytest.fixture
 def local_volume() -> LocalVolume:
     return LocalVolume(slug="local-data", path="/mnt/data")
 
 
-@pytest.fixture()
+@pytest.fixture
 def ssh_endpoint() -> SshEndpoint:
     return SshEndpoint(
         slug="nas-server",
@@ -203,7 +206,7 @@ def ssh_endpoint() -> SshEndpoint:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def ssh_endpoint_minimal() -> SshEndpoint:
     return SshEndpoint(
         slug="nas2-server",
@@ -211,7 +214,7 @@ def ssh_endpoint_minimal() -> SshEndpoint:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def remote_volume() -> RemoteVolume:
     return RemoteVolume(
         slug="nas",
@@ -220,7 +223,7 @@ def remote_volume() -> RemoteVolume:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def remote_volume_minimal() -> RemoteVolume:
     return RemoteVolume(
         slug="nas2",
@@ -229,11 +232,11 @@ def remote_volume_minimal() -> RemoteVolume:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_config() -> Config:
     return _sample_config()
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_minimal_config() -> Config:
     return _sample_minimal_config()

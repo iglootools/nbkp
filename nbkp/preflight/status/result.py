@@ -1,9 +1,14 @@
+"""The combined result of every preflight phase."""
+
 from dataclasses import dataclass
 
-from .endpoint import DestinationEndpointStatus, SourceEndpointStatus
-from .ssh import SshEndpointStatus
-from .sync import SyncStatus
-from .volume import VolumeStatus
+from nbkp.preflight.status.endpoint import (
+    DestinationEndpointStatus,
+    SourceEndpointStatus,
+)
+from nbkp.preflight.status.ssh import SshEndpointStatus
+from nbkp.preflight.status.sync import SyncStatus
+from nbkp.preflight.status.volume import VolumeStatus
 
 
 @dataclass(frozen=True)

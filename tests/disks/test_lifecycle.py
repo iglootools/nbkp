@@ -1,4 +1,5 @@
-"""Tests for nbkp.disks.lifecycle (udisks2 backend).
+"""
+Tests for nbkp.disks.lifecycle (udisks2 backend).
 
 The lifecycle runs every probe (``test -e``, ``lsblk``, ``findmnt``) and every
 ``udisksctl`` step through the injected command runner, so each test scripts
@@ -81,14 +82,16 @@ def _unencrypted_vol() -> LocalVolume:
 
 
 def _mount(
-    vol: LocalVolume, run: FakeCommandRunner, passphrase: str = "secret"
+    vol: LocalVolume,
+    run: FakeCommandRunner,
+    passphrase: str = "secret",
 ) -> MountResult:
     assert vol.mount is not None
     return mount_volume(vol, vol.mount, {}, lambda _: passphrase, run=run)
 
 
 def _udisks_steps(run: FakeCommandRunner) -> list[str]:
-    """The ``udisksctl`` subcommands that reached the host, in order."""
+    """Return the ``udisksctl`` subcommands that reached the host, in order."""
     return [cmd[1] for cmd in run.commands_starting_with("udisksctl")]
 
 
@@ -110,24 +113,29 @@ class TestRunUdisks:
             ["udisksctl", "unlock"],
             _encrypted_vol(),
             {},
-            input="secret",
+            stdin="secret",
             sleep=sleeps.append,
             run=run,
         )
         assert result.returncode == 0
         attempts = [c for c in run.calls if c.cmd[0] == "udisksctl"]
         assert len(attempts) == 3
-        assert all(c.input == "secret" for c in attempts)
+        assert all(c.stdin == "secret" for c in attempts)
         assert len(run.commands_starting_with("udevadm", "settle")) == 2
         assert len(sleeps) == 2
 
     def test_gives_up_after_bounded_attempts(self) -> None:
         sleeps: list[float] = []
         run = FakeCommandRunner().on(
-            "udisksctl", returns=completed(1, stderr=_LOOKUP_ERROR)
+            "udisksctl",
+            returns=completed(1, stderr=_LOOKUP_ERROR),
         )
         result = run_udisks(
-            ["udisksctl", "unlock"], _encrypted_vol(), {}, sleep=sleeps.append, run=run
+            ["udisksctl", "unlock"],
+            _encrypted_vol(),
+            {},
+            sleep=sleeps.append,
+            run=run,
         )
         attempts = len(run.commands_starting_with("udisksctl"))
         assert result.returncode == 1
@@ -139,11 +147,16 @@ class TestRunUdisks:
         run = FakeCommandRunner().on(
             "udisksctl",
             returns=completed(
-                1, stderr="Error unlocking /dev/sda1: Failed to activate device"
+                1,
+                stderr="Error unlocking /dev/sda1: Failed to activate device",
             ),
         )
         run_udisks(
-            ["udisksctl", "unlock"], _encrypted_vol(), {}, sleep=sleeps.append, run=run
+            ["udisksctl", "unlock"],
+            _encrypted_vol(),
+            {},
+            sleep=sleeps.append,
+            run=run,
         )
         assert len(run.commands_starting_with("udisksctl")) == 1
         assert sleeps == []
@@ -167,7 +180,8 @@ class TestMountVolume:
     def test_unencrypted_mount(self) -> None:
         # findmnt: not mounted before the mount, mounted after it.
         run = FakeCommandRunner().on(
-            "findmnt", returns=[_NOT_MOUNTED, _mounted_at("/mnt/usb")]
+            "findmnt",
+            returns=[_NOT_MOUNTED, _mounted_at("/mnt/usb")],
         )
         result = _mount(_unencrypted_vol(), run)
         assert result.success
@@ -181,7 +195,7 @@ class TestMountVolume:
                 "-b",
                 f"/dev/disk/by-uuid/{_USB_UUID}",
                 "--no-user-interaction",
-            ]
+            ],
         ]
 
     def test_already_mounted_is_noop(self) -> None:
@@ -207,7 +221,7 @@ class TestMountVolume:
         # The unlock pipes the passphrase via stdin with NO trailing newline.
         unlock, mount = [c for c in run.calls if c.cmd[0] == "udisksctl"]
         assert unlock.cmd[:2] == ["udisksctl", "unlock"]
-        assert unlock.input == "secret"
+        assert unlock.stdin == "secret"
         assert mount.cmd[:4] == ["udisksctl", "mount", "-b", _CLEARTEXT]
 
     def test_unlock_reports_the_cleartext_device_itself(self) -> None:
@@ -269,7 +283,8 @@ class TestMountVolume:
             "udisksctl",
             "unlock",
             returns=completed(
-                1, stderr="Error unlocking: Not Authorized to perform operation"
+                1,
+                stderr="Error unlocking: Not Authorized to perform operation",
             ),
         )
         result = _mount(_encrypted_vol(), run)
@@ -283,12 +298,16 @@ class TestMountVolume:
     ) -> None:
         message = "Error looking up object for device /dev/disk/by-uuid/x"
         run = FakeCommandRunner().on(
-            "udisksctl", "unlock", returns=completed(1, stderr=message)
+            "udisksctl",
+            "unlock",
+            returns=completed(1, stderr=message),
         )
         result = _mount(_encrypted_vol(), run)
         assert result.failure_reason == MountFailureKind.UNLOCK_FAILED
         assert result.failure == LifecycleFailure(
-            step=LifecycleStep.UNLOCK, exit_code=1, message=message
+            step=LifecycleStep.UNLOCK,
+            exit_code=1,
+            message=message,
         )
 
     def test_mount_failure(self) -> None:
@@ -302,7 +321,9 @@ class TestMountVolume:
         assert result.failure_reason == MountFailureKind.MOUNT_FAILED
         assert result.mounted is False
         assert result.failure == LifecycleFailure(
-            step=LifecycleStep.MOUNT, exit_code=1, message="mount: unknown filesystem"
+            step=LifecycleStep.MOUNT,
+            exit_code=1,
+            message="mount: unknown filesystem",
         )
 
     @pytest.mark.parametrize(
@@ -335,22 +356,29 @@ class TestMountVolume:
         ids=["polkit-denied", "bash-missing", "dash-missing", "daemon-unreachable"],
     )
     def test_mount_failure_classification(
-        self, returncode: int, stderr: str, reason: MountFailureKind
+        self,
+        returncode: int,
+        stderr: str,
+        reason: MountFailureKind,
     ) -> None:
         run = FakeCommandRunner().on(
-            "udisksctl", "mount", returns=completed(returncode, stderr=stderr)
+            "udisksctl",
+            "mount",
+            returns=completed(returncode, stderr=stderr),
         )
         result = _mount(_unencrypted_vol(), run)
         assert not result.success
         assert result.failure_reason == reason
 
     def test_udisks_unknown_device_is_a_mount_failure(self) -> None:
-        """udisks failing to find a device does not mean udisks is missing."""
+        """Udisks failing to find a device does not mean udisks is missing."""
         # Verbatim udisksctl 2.10.1 (Debian 13) output, exit code 1, for a
         # device udisks has no object for.
         stderr = f"Error looking up object for device /dev/disk/by-uuid/{_USB_UUID}"
         run = FakeCommandRunner().on(
-            "udisksctl", "mount", returns=completed(1, stderr=stderr)
+            "udisksctl",
+            "mount",
+            returns=completed(1, stderr=stderr),
         )
         result = _mount(_unencrypted_vol(), run)
         assert result.failure_reason == MountFailureKind.MOUNT_FAILED
@@ -382,7 +410,9 @@ class TestMountVolume:
         ids=["auth-failure", "ssh-timeout", "connection-refused"],
     )
     def test_connection_failure_returns_unreachable(
-        self, error: Exception, message: str
+        self,
+        error: Exception,
+        message: str,
     ) -> None:
         run = FakeCommandRunner().on("test", "-e", returns=error)
         result = _mount(_encrypted_vol(), run)
@@ -391,7 +421,8 @@ class TestMountVolume:
         assert result.failure == LifecycleFailure(message=message)
 
     def test_missing_passphrase_on_plugged_in_drive(self) -> None:
-        """A plugged-in drive whose passphrase cannot be retrieved fails loudly.
+        """
+        A plugged-in drive whose passphrase cannot be retrieved fails loudly.
 
         Regression: the CredentialError used to be swallowed as UNREACHABLE,
         so the drive was silently skipped as "inactive".
@@ -400,10 +431,7 @@ class TestMountVolume:
         assert vol.mount is not None
 
         def no_passphrase(pid: str) -> str:
-            raise CredentialError(
-                f"No passphrase found in keyring for id '{pid}'",
-                reason=CredentialErrorKind.NOT_FOUND,
-            )
+            raise CredentialError(CredentialErrorKind.NOT_FOUND, passphrase_id=pid)
 
         run = FakeCommandRunner().on("lsblk", returns=_LOCKED)
         result = mount_volume(vol, vol.mount, {}, no_passphrase, run=run)
@@ -418,7 +446,9 @@ class TestMountVolume:
         result = _mount(_encrypted_vol(), run)
         assert result.failure_reason == MountFailureKind.PROBE_FAILED
         assert result.failure == LifecycleFailure(
-            command="lsblk", exit_code=1, message="boom"
+            command="lsblk",
+            exit_code=1,
+            message="boom",
         )
         # No unlock attempted on a guess.
         assert _udisks_steps(run) == []
@@ -426,7 +456,8 @@ class TestMountVolume:
     def test_missing_local_tool_is_udisks_not_available(self) -> None:
         """Locally, FileNotFoundError is a missing tool, not an unreachable host."""
         run = FakeCommandRunner().on(
-            "lsblk", returns=FileNotFoundError(2, "No such file", "lsblk")
+            "lsblk",
+            returns=FileNotFoundError(2, "No such file", "lsblk"),
         )
         result = _mount(_encrypted_vol(), run)
         assert result.failure_reason == MountFailureKind.UDISKS_NOT_AVAILABLE
@@ -492,7 +523,9 @@ class TestUmountVolume:
         assert not result.success
         assert result.failure_reason == UmountFailureKind.LOCK_FAILED
         assert result.failure == LifecycleFailure(
-            step=LifecycleStep.LOCK, exit_code=1, message="Error locking: device busy"
+            step=LifecycleStep.LOCK,
+            exit_code=1,
+            message="Error locking: device busy",
         )
 
     def test_umount_failure(self) -> None:
@@ -517,7 +550,8 @@ class TestUmountVolume:
 
     def test_missing_local_tool_is_not_unreachable(self) -> None:
         run = FakeCommandRunner().on(
-            "findmnt", returns=FileNotFoundError(2, "No such file", "findmnt")
+            "findmnt",
+            returns=FileNotFoundError(2, "No such file", "findmnt"),
         )
         result = _umount(_unencrypted_vol(), run)
         assert not result.success
@@ -531,20 +565,25 @@ class TestUmountVolume:
         assert not result.success
         assert result.failure_reason == UmountFailureKind.PROBE_FAILED
         assert result.failure == LifecycleFailure(
-            command="lsblk", exit_code=1, message="boom"
+            command="lsblk",
+            exit_code=1,
+            message="boom",
         )
         assert _udisks_steps(run) == []
 
     def test_failed_findmnt_is_reported_not_skipped(self) -> None:
         """A failed findmnt must not be read as "not mounted" and skip unmount."""
         run = FakeCommandRunner().on(
-            "findmnt", returns=completed(127, stderr="findmnt: command not found")
+            "findmnt",
+            returns=completed(127, stderr="findmnt: command not found"),
         )
         result = _umount(_unencrypted_vol(), run)
         assert not result.success
         assert result.failure_reason == UmountFailureKind.PROBE_FAILED
         assert result.failure == LifecycleFailure(
-            command="findmnt", exit_code=127, message="findmnt: command not found"
+            command="findmnt",
+            exit_code=127,
+            message="findmnt: command not found",
         )
         assert _udisks_steps(run) == []  # no unmount on a guess
 
@@ -560,7 +599,7 @@ class TestUmountVolume:
                 "-b",
                 f"/dev/disk/by-uuid/{_USB_UUID}",
                 "--no-user-interaction",
-            ]
+            ],
         ]
 
 
@@ -591,7 +630,7 @@ class TestMountVolumes:
             .on("lsblk", returns=_UNLOCKED)
             .on("findmnt", returns=_mounted_at("/mnt/x"))
         )
-        results = mount_volumes(cfg, {}, lambda x: "pass", run=run)
+        results = mount_volumes(cfg, {}, lambda _passphrase_id: "pass", run=run)
         # Only 2 volumes have mount config (enc, usb), not plain.
         assert [r.volume_slug for r in results] == ["encrypted", "usb"]
         assert all(r.success for r in results)
@@ -600,14 +639,20 @@ class TestMountVolumes:
     def test_filter_by_name(self) -> None:
         cfg = _config_with_mount()
         run = FakeCommandRunner().on("findmnt", returns=_mounted_at("/mnt/usb"))
-        results = mount_volumes(cfg, {}, lambda x: "pass", names=["usb"], run=run)
+        results = mount_volumes(
+            cfg,
+            {},
+            lambda _passphrase_id: "pass",
+            names=["usb"],
+            run=run,
+        )
         assert [r.volume_slug for r in results] == ["usb"]
         assert {c.volume.slug for c in run.calls} == {"usb"}
 
     def test_returns_list(self) -> None:
         cfg = _config_with_mount()
         run = FakeCommandRunner().on("test", "-e", returns=completed(1))
-        results = mount_volumes(cfg, {}, lambda x: "pass", run=run)
+        results = mount_volumes(cfg, {}, lambda _passphrase_id: "pass", run=run)
         assert isinstance(results, list)
         assert all(not r.success for r in results)
 
@@ -619,7 +664,7 @@ class TestUmountVolumes:
         umount_volumes(
             cfg,
             {},
-            on_umount_start=lambda slug: slugs.append(slug),
+            on_umount_start=slugs.append,
             run=FakeCommandRunner(),
         )
         # Should be reversed: usb first, then enc.
@@ -633,8 +678,11 @@ class TestUmountVolumes:
 
 
 def _config_with_excluded_remote_mount() -> tuple[Config, ResolvedEndpoints]:
-    """``usb`` (local) and ``nas-drive`` (remote, only reachable from home),
-    resolved under ``--exclude-location home``."""
+    """
+    Build ``usb`` (local) and ``nas-drive`` (remote, only reachable from home).
+
+    Resolved under ``--exclude-location home``.
+    """
     cfg = Config(
         ssh_endpoints={
             "nas": SshEndpoint(slug="nas", host="nas.lan", location="home"),
@@ -664,7 +712,7 @@ class TestLocationExcludedVolumes:
     def test_mount_skips_excluded_volume(self) -> None:
         cfg, resolved = _config_with_excluded_remote_mount()
         run = FakeCommandRunner().on("findmnt", returns=_mounted_at("/mnt/usb"))
-        results = mount_volumes(cfg, resolved, lambda x: "pass", run=run)
+        results = mount_volumes(cfg, resolved, lambda _passphrase_id: "pass", run=run)
         assert [r.volume_slug for r in results] == ["usb"]
         assert {c.volume.slug for c in run.calls} == {"usb"}
 
@@ -680,7 +728,7 @@ class TestLocationExcludedVolumes:
         assert mount_count(cfg, resolved) == 1
 
     @pytest.mark.parametrize("mounting", [True, False])
-    def test_plan_skips_excluded_volume(self, mounting: bool) -> None:
+    def test_plan_skips_excluded_volume(self, *, mounting: bool) -> None:
         cfg, resolved = _config_with_excluded_remote_mount()
         probed: list[str] = []
 

@@ -1,17 +1,16 @@
-"""No ``SyncErrorKind`` interpretation happens here — the sync layer translates
-diagnostics + capabilities into errors.
+"""
+Observe sync endpoints, without interpreting what is an error.
+
+No ``SyncErrorKind`` interpretation happens here: the sync layer translates diagnostics
+and capabilities into errors.
 
 ``VolumeCapabilities`` is accepted to decide *which* checks to run
 (e.g. btrfs subvolume only when the filesystem is btrfs), avoiding
 wasteful remote commands.
 """
 
-from ..config import (
-    SyncEndpoint,
-    Volume,
-    resolve_endpoint_path,
-)
-from ..fsprotocol import (
+from nbkp.config import SyncEndpoint, Volume, resolve_endpoint_path
+from nbkp.fsprotocol import (
     DESTINATION_SENTINEL,
     DEVNULL_TARGET,
     LATEST_LINK,
@@ -20,25 +19,25 @@ from ..fsprotocol import (
     STAGING_DIR,
     Snapshot,
 )
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
-from .probes import (
+from nbkp.preflight.probes import (
     check_directory_exists,
     check_directory_writable,
     check_endpoint_sentinel,
     check_symlink_exists,
     read_symlink_target,
 )
-from .snapshot_checks import check_btrfs_subvolume, probe_btrfs_readonly
-from .status.endpoint import (
+from nbkp.preflight.snapshot_checks import check_btrfs_subvolume, probe_btrfs_readonly
+from nbkp.preflight.status.endpoint import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
     LatestSymlinkState,
     SnapshotDirsDiagnostics,
     SourceEndpointDiagnostics,
 )
-from .status.ssh import HostToolCapabilities
-from .status.volume import VolumeCapabilities
+from nbkp.preflight.status.ssh import HostToolCapabilities
+from nbkp.preflight.status.volume import VolumeCapabilities
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 def observe_source_endpoint(
@@ -48,8 +47,18 @@ def observe_source_endpoint(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> SourceEndpointDiagnostics:
+    """
+    Return what the source endpoint's directory holds.
+
+    Looks for the source sentinel, and, when the endpoint has snapshots, its snapshot
+    directories and ``latest`` symlink.
+    """
     sentinel_exists = check_endpoint_sentinel(
-        volume, endpoint.subdir, SOURCE_SENTINEL, resolved_endpoints, run=run
+        volume,
+        endpoint.subdir,
+        SOURCE_SENTINEL,
+        resolved_endpoints,
+        run=run,
     )
     src_ep = resolve_endpoint_path(volume, endpoint.subdir)
     has_snapshots = endpoint.snapshot_mode != "none"
@@ -79,8 +88,20 @@ def observe_destination_endpoint(
     host_tools: HostToolCapabilities,
     run: VolumeCommandRunner = run_on_volume,
 ) -> DestinationEndpointDiagnostics:
+    """
+    Return what the destination endpoint's directory holds and allows.
+
+    Looks for the destination sentinel and whether the directory is writable, and,
+    per snapshot mode, the btrfs staging subvolume, snapshot directories, ``latest``
+    symlink and whether the latest btrfs snapshot is read-only. *capabilities* and
+    *host_tools* skip the probes the volume or its host cannot answer.
+    """
     sentinel_exists = check_endpoint_sentinel(
-        volume, endpoint.subdir, DESTINATION_SENTINEL, resolved_endpoints, run=run
+        volume,
+        endpoint.subdir,
+        DESTINATION_SENTINEL,
+        resolved_endpoints,
+        run=run,
     )
     dst_ep = resolve_endpoint_path(volume, endpoint.subdir)
     latest = (
@@ -93,7 +114,10 @@ def observe_destination_endpoint(
         endpoint_slug=endpoint.slug,
         sentinel_exists=sentinel_exists,
         endpoint_writable=check_directory_writable(
-            volume, dst_ep, resolved_endpoints, run=run
+            volume,
+            dst_ep,
+            resolved_endpoints,
+            run=run,
         ),
         btrfs=_check_btrfs_diagnostics(
             endpoint,
@@ -101,7 +125,7 @@ def observe_destination_endpoint(
             capabilities,
             dst_ep,
             resolved_endpoints,
-            host_tools,
+            host_tools=host_tools,
             run=run,
         ),
         snapshot_dirs=(
@@ -112,7 +136,10 @@ def observe_destination_endpoint(
         latest=latest,
         latest_snapshot_readonly=(
             probe_btrfs_readonly(
-                volume, f"{dst_ep}/{latest.raw_target}", resolved_endpoints, run=run
+                volume,
+                f"{dst_ep}/{latest.raw_target}",
+                resolved_endpoints,
+                run=run,
             )
             if endpoint.btrfs_snapshots.enabled
             and host_tools.has_btrfs
@@ -130,8 +157,8 @@ def _check_btrfs_diagnostics(
     capabilities: VolumeCapabilities,
     dst_ep: str,
     resolved_endpoints: ResolvedEndpoints,
-    host_tools: HostToolCapabilities,
     *,
+    host_tools: HostToolCapabilities,
     run: VolumeCommandRunner,
 ) -> BtrfsStagingSubvolumeDiagnostics | None:
     if not (
@@ -146,7 +173,10 @@ def _check_btrfs_diagnostics(
     )
     staging_path = f"{dst_ep}/{STAGING_DIR}"
     staging_exists = check_directory_exists(
-        volume, staging_path, resolved_endpoints, run=run
+        volume,
+        staging_path,
+        resolved_endpoints,
+        run=run,
     )
     return BtrfsStagingSubvolumeDiagnostics(
         staging_exists=staging_exists,
@@ -201,7 +231,10 @@ def _read_latest_state(
             snapshot = (
                 _parse_snapshot(target)
                 if check_directory_exists(
-                    volume, f"{endpoint_path}/{target}", resolved_endpoints, run=run
+                    volume,
+                    f"{endpoint_path}/{target}",
+                    resolved_endpoints,
+                    run=run,
                 )
                 else None
             )
@@ -216,7 +249,7 @@ def _read_latest_state(
 
 
 def _parse_snapshot(target: str) -> Snapshot | None:
-    """The snapshot *target* designates, if it is one of this endpoint's."""
+    """Return the snapshot *target* designates, if it is one of this endpoint's."""
     try:
         return Snapshot.from_latest_target(target)
     except ValueError:

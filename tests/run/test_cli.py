@@ -1,4 +1,5 @@
-"""Tests for `nbkp run`.
+"""
+Tests for `nbkp run`.
 
 The JSON payload and the abort message are tested from plain pipeline
 results; the command itself runs against a fake NAS (``tests.nas``) through
@@ -53,11 +54,11 @@ _HINT = "nbkp preflight troubleshoot -c conf/nbkp.yaml -N private"
 
 
 def _ok(slug: str, *, dry_run: bool = False) -> SyncResult:
-    return SyncResult.succeeded(slug, dry_run, _DONE)
+    return SyncResult.succeeded(slug, dry_run=dry_run, proc=_DONE)
 
 
-def _as_json(data: object, capsys: pytest.CaptureFixture[str]) -> Any:
-    """*data* as ``-o json`` prints it."""
+def _as_json(data: object, capsys: pytest.CaptureFixture[str]) -> Any:  # noqa: ANN401 -- json.loads's value, which the test indexes freely
+    """Return *data* as ``-o json`` prints it."""
     echo_json(data)
     return json.loads(capsys.readouterr().out)
 
@@ -100,26 +101,30 @@ class TestRunJson:
         assert [v["slug"] for v in data["volumes"]] == ["local-data", "nas"]
         assert [s["slug"] for s in data["syncs"]] == ["photos-to-nas"]
         assert [(r["sync_slug"], r["outcome"]) for r in data["results"]] == [
-            ("photos-to-nas", "success")
+            ("photos-to-nas", "success"),
         ]
         assert data["umount"] == []
         assert "hint" not in data
         assert "dry_run" not in data
 
     def test_aborted_run_carries_the_hint(
-        self, capsys: pytest.CaptureFixture[str]
+        self,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         data = _as_json(
-            run_json(_aborted(sample_config()), _HINT, [], dry_run=False), capsys
+            run_json(_aborted(sample_config()), _HINT, [], dry_run=False),
+            capsys,
         )
 
         assert data["results"] == []
         assert data["hint"] == _HINT
 
     def test_snapshot_timestamps_serialize(
-        self, capsys: pytest.CaptureFixture[str]
+        self,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """Regression: statuses carrying a snapshot broke JSON serialization.
+        """
+        Regression: statuses carrying a snapshot broke JSON serialization.
 
         `run` is the command where this matters most, since scripting it is
         the reason to ask for JSON at all — and any destination that has ever
@@ -136,7 +141,7 @@ class TestRunJson:
         data = _as_json(run_json(pipeline, None, [], dry_run=False), capsys)
 
         assert data["syncs"][0]["destination_latest_snapshot"]["timestamp"].startswith(
-            "2026-03-06T14:30:00"
+            "2026-03-06T14:30:00",
         )
 
     def test_umount_outcomes(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -173,7 +178,7 @@ def _render(renderable: object) -> str:
 class TestAbortMessage:
     def test_lists_the_offending_syncs_and_suggests_troubleshoot(self) -> None:
         text = _render(
-            abort_message(_aborted(sample_config()), Strictness.IGNORE_INACTIVE, _HINT)
+            abort_message(_aborted(sample_config()), Strictness.IGNORE_INACTIVE, _HINT),
         )
 
         assert "Aborting: preflight checks found errors in 1 sync:" in text
@@ -181,13 +186,16 @@ class TestAbortMessage:
         assert f"Run {_HINT} for step-by-step fixes." in text
 
     def test_does_not_list_disabled_syncs(self) -> None:
-        """Under ignore-none an inactive sync aborts the run, but a disabled
-        one is never fatal and must not be reported as offending."""
+        """
+        Under ignore-none, a disabled sync is not listed as offending.
+
+        An inactive sync aborts the run, but a disabled one is never fatal.
+        """
         config = sample_config()
         vol_s = sample_all_active_vol_statuses(config)
         sync_s = sample_sentinel_only_sync_statuses(config, vol_s)
         sync_s["off"] = sync_s["photos-to-nas"].model_copy(
-            update={"slug": "off", "errors": [SyncErrorKind.DISABLED]}
+            update={"slug": "off", "errors": [SyncErrorKind.DISABLED]},
         )
         pipeline = PipelineResult(
             preflight=preflight(vol_s, sync_s),
@@ -205,8 +213,11 @@ class TestAbortMessage:
 
 @pytest.fixture
 def nas_config_file(tmp_path: Path, chdir: Callable[[Path], None]) -> str:
-    """``conf/nbkp.yaml`` (two syncs on the fake NAS), relative to the
-    working directory so that suggested commands show it as given."""
+    """
+    Write ``conf/nbkp.yaml`` (two syncs on the fake NAS).
+
+    Relative to the working directory, so that suggested commands show it as given.
+    """
     chdir(tmp_path)
     (tmp_path / "conf").mkdir()
     write_config(tmp_path / "conf", nas_config(syncs=("photos", "music")), "nbkp.yaml")
@@ -243,7 +254,8 @@ class TestRunCommand:
         assert rsync.synced == ["photos", "music"]
 
     def test_human_output_shows_the_checks_before_the_results(
-        self, nas_config_file: str
+        self,
+        nas_config_file: str,
     ) -> None:
         rsync = FakeRsync()
 
@@ -258,7 +270,12 @@ class TestRunCommand:
         rsync = FakeRsync([completed(23, stderr="partial transfer")])
 
         exit_code, output = _invoke(
-            nas_config_file, "-s", "photos", "-o", "json", rsync=rsync
+            nas_config_file,
+            "-s",
+            "photos",
+            "-o",
+            "json",
+            rsync=rsync,
         )
 
         assert exit_code == 1
@@ -302,17 +319,18 @@ class TestRunCommand:
 
 def _source_sentinel_missing() -> FakeCommandRunner:
     return healthy_nas(
-        FakeCommandRunner().on("test", "-f", "/data/photos/.nbkp-src", returns=FAILS)
+        FakeCommandRunner().on("test", "-f", "/data/photos/.nbkp-src", returns=FAILS),
     )
 
 
 class TestPreflightAbort:
     def test_infrastructure_error_aborts_before_any_sync(
-        self, nas_config_file: str
+        self,
+        nas_config_file: str,
     ) -> None:
         rsync = FakeRsync()
         rsync_missing = healthy_nas(
-            FakeCommandRunner().on("which", "rsync", returns=FAILS)
+            FakeCommandRunner().on("which", "rsync", returns=FAILS),
         )
 
         exit_code, output = _invoke(nas_config_file, run=rsync_missing, rsync=rsync)
@@ -325,7 +343,11 @@ class TestPreflightAbort:
         rsync = FakeRsync()
 
         exit_code, output = _invoke(
-            nas_config_file, "-o", "json", run=_source_sentinel_missing(), rsync=rsync
+            nas_config_file,
+            "-o",
+            "json",
+            run=_source_sentinel_missing(),
+            rsync=rsync,
         )
 
         assert exit_code == 0
@@ -351,7 +373,8 @@ class TestPreflightAbort:
         assert rsync.calls == []
 
     def test_json_hint_carries_config_and_network_flags(
-        self, nas_config_file: str
+        self,
+        nas_config_file: str,
     ) -> None:
         exit_code, output = _invoke(
             nas_config_file,
@@ -377,7 +400,12 @@ class TestUnknownSyncFilter:
         run = healthy_nas()
 
         exit_code, output = _invoke(
-            nas_config_file, "-o", "json", "--sync", "nope", run=run
+            nas_config_file,
+            "-o",
+            "json",
+            "--sync",
+            "nope",
+            run=run,
         )
 
         assert exit_code == 2
@@ -399,7 +427,9 @@ class TestRunLock:
     """One run at a time: the lock is taken before anything is mounted."""
 
     def test_a_held_lock_stops_the_run_before_anything_runs(
-        self, nas_config_file: str, tmp_path: Path
+        self,
+        nas_config_file: str,
+        tmp_path: Path,
     ) -> None:
         state_home = tmp_path / "state"
         lock_path = state_home / "nbkp" / "run.lock"
@@ -413,7 +443,9 @@ class TestRunLock:
 
         with hold_run_lock(lock_path):
             result = runner.invoke(
-                app, ["run", "-c", nas_config_file, "-o", "json"], obj=runtime
+                app,
+                ["run", "-c", nas_config_file, "-o", "json"],
+                obj=runtime,
             )
 
         assert result.exit_code == 1
@@ -425,11 +457,14 @@ class TestRunLock:
         assert rsync.synced == []
 
     def test_a_held_lock_is_reported_on_stderr(
-        self, nas_config_file: str, tmp_path: Path
+        self,
+        nas_config_file: str,
+        tmp_path: Path,
     ) -> None:
         state_home = tmp_path / "state"
         runtime = fake_runtime(
-            environ={"XDG_STATE_HOME": str(state_home)}, run_lock=hold_run_lock
+            environ={"XDG_STATE_HOME": str(state_home)},
+            run_lock=hold_run_lock,
         )
 
         with hold_run_lock(state_home / "nbkp" / "run.lock"):
@@ -439,7 +474,9 @@ class TestRunLock:
         assert "another nbkp command" in result.stderr
 
     def test_a_run_takes_the_lock_under_xdg_state_home(
-        self, nas_config_file: str, tmp_path: Path
+        self,
+        nas_config_file: str,
+        tmp_path: Path,
     ) -> None:
         lock = FakeRunLock()
         runtime = fake_runtime(
@@ -462,7 +499,8 @@ class TestRunLock:
         assert len(lock.paths) == 1
 
     def test_a_dry_run_without_mount_or_umount_does_not(
-        self, nas_config_file: str
+        self,
+        nas_config_file: str,
     ) -> None:
         lock = FakeRunLock()
         runtime = fake_runtime(run=healthy_nas(), run_lock=lock)
@@ -481,7 +519,7 @@ class TestUmountFailure:
     def test_failed_lock_fails_a_successful_run(self, tmp_path: Path) -> None:
         config = nas_config()
         config = config.model_copy(
-            update={"volumes": {**config.volumes, "enc": encrypted_volume()}}
+            update={"volumes": {**config.volumes, "enc": encrypted_volume()}},
         )
         config_path = write_config(tmp_path, config)
 

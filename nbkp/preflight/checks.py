@@ -1,4 +1,5 @@
-"""Sync check orchestration.
+"""
+Sync check orchestration.
 
 Composes SSH endpoint diagnostics, volume diagnostics, endpoint
 diagnostics, and capabilities into the entry point ``check_all_syncs``.
@@ -26,7 +27,7 @@ from functools import partial
 
 lazy import paramiko
 
-from ..config import (
+from nbkp.config import (
     Config,
     LocalVolume,
     RemoteVolume,
@@ -35,32 +36,38 @@ from ..config import (
     SyncEndpoint,
     Volume,
 )
-from ..disks import MountObservation
-from ..remote.dispatch import VolumeCommandRunner, WhichFn, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints, location_excluded
-from ..remote.errors import ssh_connection_errors
-from ..remote.resolution import (
-    endpoint_location_excluded,
-    enrich_from_ssh_config,
-    resolve_proxy_chain,
+from nbkp.disks import MountObservation
+from nbkp.preflight.endpoint_checks import (
+    observe_destination_endpoint,
+    observe_source_endpoint,
 )
-from .endpoint_checks import observe_destination_endpoint, observe_source_endpoint
-from .severity import PreflightErrorKind
-from .ssh_checks import observe_standalone_endpoint
-from .status.endpoint import DestinationEndpointStatus, SourceEndpointStatus
-from .status.result import PreflightResult
-from .status.ssh import (
+from nbkp.preflight.severity import PreflightErrorKind
+from nbkp.preflight.ssh_checks import observe_standalone_endpoint
+from nbkp.preflight.status.endpoint import (
+    DestinationEndpointStatus,
+    SourceEndpointStatus,
+)
+from nbkp.preflight.status.result import PreflightResult
+from nbkp.preflight.status.ssh import (
     HostToolCapabilities,
     SshEndpointDiagnostics,
     SshEndpointStatus,
     SshEndpointToolNeeds,
 )
-from .status.sync import SyncStatus
-from .status.volume import VolumeCapabilities, VolumeStatus
-from .volume_checks import (
+from nbkp.preflight.status.sync import SyncStatus
+from nbkp.preflight.status.volume import VolumeCapabilities, VolumeStatus
+from nbkp.preflight.volume_checks import (
     observe_ssh_endpoint,
     observe_volume,
     unreachable_diagnostics,
+)
+from nbkp.remote.dispatch import VolumeCommandRunner, WhichFn, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints, location_excluded
+from nbkp.remote.errors import ssh_connection_errors
+from nbkp.remote.resolution import (
+    endpoint_location_excluded,
+    enrich_from_ssh_config,
+    resolve_proxy_chain,
 )
 
 
@@ -77,7 +84,7 @@ class _Progress:
             VolumeStatus,
             SourceEndpointStatus,
             DestinationEndpointStatus,
-        )
+        ),
     ](self, label: str, run: Callable[[], S]) -> S:
         if self.on_start is not None:
             self.on_start(label)
@@ -93,15 +100,16 @@ def check_all_syncs(
     on_check_end: Callable[[str, Sequence[PreflightErrorKind]], None] | None = None,
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    *,
     dry_run: bool = False,
     mount_observations: dict[str, MountObservation] | None = None,
     exclude_locations: Collection[str] = (),
-    *,
     run: VolumeCommandRunner = run_on_volume,
     which: WhichFn = shutil.which,
     ssh_config: paramiko.SSHConfig | None = None,
 ) -> PreflightResult:
-    """Check SSH endpoints, volumes, and syncs in staged passes.
+    """
+    Check SSH endpoints, volumes, and syncs in staged passes.
 
     Four phases:
     1. SSH endpoints → ``ssh_endpoint_statuses`` (observation + interpretation)
@@ -133,8 +141,8 @@ def check_all_syncs(
         syncs,
         re,
         _standalone_candidates(config, needed_volumes, only_syncs, exclude_locations),
-        progress,
-        _Host(run, which, partial(enrich_from_ssh_config, ssh_config=ssh_config)),
+        progress=progress,
+        host=_Host(run, which, partial(enrich_from_ssh_config, ssh_config=ssh_config)),
     )
     volume_statuses = _check_volumes(
         config,
@@ -142,11 +150,16 @@ def check_all_syncs(
         ssh_statuses,
         re,
         mount_observations or {},
-        progress,
+        progress=progress,
         run=run,
     )
     src_ep_statuses, dst_ep_statuses = _check_sync_endpoints(
-        config, syncs, volume_statuses, re, progress, run=run
+        config,
+        syncs,
+        volume_statuses,
+        re,
+        progress,
+        run=run,
     )
     return PreflightResult(
         ssh_endpoint_statuses=ssh_statuses,
@@ -154,7 +167,11 @@ def check_all_syncs(
         source_endpoint_statuses=src_ep_statuses,
         destination_endpoint_statuses=dst_ep_statuses,
         sync_statuses=_sync_statuses(
-            config, syncs, src_ep_statuses, dst_ep_statuses, dry_run
+            config,
+            syncs,
+            src_ep_statuses,
+            dst_ep_statuses,
+            dry_run=dry_run,
         ),
     )
 
@@ -165,7 +182,8 @@ def check_step_count(
     resolved_endpoints: ResolvedEndpoints | None = None,
     exclude_locations: Collection[str] = (),
 ) -> int:
-    """How many progress steps :func:`check_all_syncs` reports.
+    """
+    How many progress steps :func:`check_all_syncs` reports.
 
     One per SSH endpoint, volume, source endpoint and destination endpoint,
     so a progress bar can be sized before the checks start.
@@ -182,10 +200,13 @@ def check_step_count(
         + len(
             _standalone_endpoints(
                 _standalone_candidates(
-                    config, needed_volumes, only_syncs, exclude_locations
+                    config,
+                    needed_volumes,
+                    only_syncs,
+                    exclude_locations,
                 ),
                 volume_endpoints,
-            )
+            ),
         )
         + len(needed_volumes)
         + len({config.source_endpoint(sc).slug for sc in syncs.values()})
@@ -194,7 +215,8 @@ def check_step_count(
 
 
 def _selected_syncs(
-    config: Config, only_syncs: list[str] | None
+    config: Config,
+    only_syncs: list[str] | None,
 ) -> dict[str, SyncConfig]:
     return (
         {s: sc for s, sc in config.syncs.items() if s in only_syncs}
@@ -232,10 +254,12 @@ def _check_ssh_endpoints(
     syncs: dict[str, SyncConfig],
     resolved_endpoints: ResolvedEndpoints,
     standalone_candidates: set[str],
+    *,
     progress: _Progress,
     host: _Host,
 ) -> dict[str, SshEndpointStatus]:
-    """Each endpoint is probed once, through a representative volume.
+    """
+    Each endpoint is probed once, through a representative volume.
 
     Volumes are grouped by the endpoint resolution chose for them, so a volume
     reached through an alternate is probed (and reported) under that
@@ -255,7 +279,7 @@ def _check_ssh_endpoints(
                 vol_slugs,
                 syncs,
                 resolved_endpoints,
-                host,
+                host=host,
             ),
         )
         for ssh_slug, vol_slugs in by_endpoint.items()
@@ -268,17 +292,20 @@ def _check_ssh_endpoints(
     volume_endpoints = {**probed, **excluded}
     standalone = {
         slug: progress.track(
-            f"ssh:{slug}", partial(_check_standalone_endpoint, config, slug, host)
+            f"ssh:{slug}",
+            partial(_check_standalone_endpoint, config, slug, host),
         )
         for slug in _standalone_endpoints(
-            standalone_candidates, volume_endpoints.keys()
+            standalone_candidates,
+            volume_endpoints.keys(),
         )
     }
     return {**volume_endpoints, **standalone}
 
 
 def _standalone_endpoints(
-    candidates: set[str], volume_endpoints: Collection[str]
+    candidates: set[str],
+    volume_endpoints: Collection[str],
 ) -> list[str]:
     """SSH endpoints probed for reachability only (sorted)."""
     return sorted(candidates - set(volume_endpoints))
@@ -290,7 +317,8 @@ def _standalone_candidates(
     only_syncs: list[str] | None,
     exclude_locations: Collection[str],
 ) -> set[str]:
-    """Endpoints worth a reachability probe of their own.
+    """
+    Endpoints worth a reachability probe of their own.
 
     Every endpoint, or under *only_syncs* those the selected volumes may be
     reached through (candidates and their proxy hops); never one at an
@@ -331,8 +359,11 @@ def _volumes_by_ssh_endpoint(
     needed_volumes: set[str],
     resolved_endpoints: ResolvedEndpoints,
 ) -> dict[str, list[str]]:
-    """Needed, reachable volume slugs grouped by the SSH endpoint resolved for
-    them (sorted, stable)."""
+    """
+    Group needed, reachable volume slugs by the SSH endpoint resolved for them.
+
+    Sorted, stable.
+    """
     pairs = sorted(
         (_ssh_endpoint_slug(config.volumes[v], resolved_endpoints), v)
         for v in needed_volumes
@@ -355,13 +386,14 @@ def _excluded_endpoints(
             _ssh_endpoint_slug(vol, resolved_endpoints)
             for vol in (config.volumes[v] for v in needed_volumes)
             if location_excluded(vol, resolved_endpoints)
-        }
+        },
     )
 
 
 def _excluded_ssh_status(slug: str) -> SshEndpointStatus:
     return SshEndpointStatus.from_diagnostics(
-        slug=slug, diagnostics=SshEndpointDiagnostics(location_excluded=True)
+        slug=slug,
+        diagnostics=SshEndpointDiagnostics(location_excluded=True),
     )
 
 
@@ -370,7 +402,8 @@ def _volume_ssh_status(
     ssh_statuses: dict[str, SshEndpointStatus],
     resolved_endpoints: ResolvedEndpoints,
 ) -> SshEndpointStatus:
-    """The status of the endpoint *volume* is reached through.
+    """
+    Return the status of the endpoint *volume* is reached through.
 
     An excluded volume gets its own excluded status even when another volume
     reached its primary endpoint, since nothing may reach this one.
@@ -389,6 +422,7 @@ def _check_volume_ssh_endpoint(
     vol_slugs: list[str],
     syncs: dict[str, SyncConfig],
     resolved_endpoints: ResolvedEndpoints,
+    *,
     host: _Host,
 ) -> SshEndpointStatus:
     diag = observe_ssh_endpoint(
@@ -406,7 +440,9 @@ def _check_volume_ssh_endpoint(
 
 
 def _check_standalone_endpoint(
-    config: Config, slug: str, host: _Host
+    config: Config,
+    slug: str,
+    host: _Host,
 ) -> SshEndpointStatus:
     """Reachability-only probe for an endpoint no needed volume uses."""
     server = host.enrich(config.ssh_endpoints[slug])
@@ -418,7 +454,7 @@ def _check_standalone_endpoint(
 
 
 def _ssh_endpoint_slug(volume: Volume, resolved_endpoints: ResolvedEndpoints) -> str:
-    """The endpoint resolution chose for *volume*, else its primary."""
+    """Return the endpoint resolution chose for *volume*, else its primary."""
     match volume:
         case LocalVolume():
             return "localhost"
@@ -433,7 +469,8 @@ def _endpoints_on(
     vol_slugs: list[str],
     syncs: dict[str, SyncConfig],
 ) -> list[SyncEndpoint]:
-    """Endpoints of the enabled syncs on *vol_slugs*.
+    """
+    Endpoints of the enabled syncs on *vol_slugs*.
 
     A disabled sync never runs, so its tools must not be required: that
     would make the enabled syncs sharing the host fatal.
@@ -471,8 +508,8 @@ def _check_volumes(
     ssh_statuses: dict[str, SshEndpointStatus],
     resolved_endpoints: ResolvedEndpoints,
     mount_observations: dict[str, MountObservation],
-    progress: _Progress,
     *,
+    progress: _Progress,
     run: VolumeCommandRunner,
 ) -> dict[str, VolumeStatus]:
     """Observe and interpret every needed volume (sorted for stable output)."""
@@ -483,7 +520,9 @@ def _check_volumes(
                 _check_volume,
                 config.volumes[slug],
                 _volume_ssh_status(
-                    config.volumes[slug], ssh_statuses, resolved_endpoints
+                    config.volumes[slug],
+                    ssh_statuses,
+                    resolved_endpoints,
                 ),
                 resolved_endpoints,
                 mount_observations.get(slug),
@@ -529,9 +568,12 @@ def _check_volume(
 
 
 def _disconnected_volume_status(
-    vol: Volume, ssh_status: SshEndpointStatus, error: BaseException
+    vol: Volume,
+    ssh_status: SshEndpointStatus,
+    error: BaseException,
 ) -> VolumeStatus:
-    """A remote volume whose host dropped after answering the first probes.
+    """
+    Return the status of a remote volume whose host dropped after the first probes.
 
     Every remote command opens a new connection, so a host can go away
     (a NAS falling asleep, Wi-Fi dropping) half-way through preflight.  That
@@ -545,7 +587,8 @@ def _disconnected_volume_status(
                 slug=vol.slug,
                 config=vol,
                 ssh_endpoint_status=SshEndpointStatus.from_diagnostics(
-                    slug=ssh_status.slug, diagnostics=unreachable_diagnostics(error)
+                    slug=ssh_status.slug,
+                    diagnostics=unreachable_diagnostics(error),
                 ),
                 diagnostics=None,
             )
@@ -620,12 +663,16 @@ def _check_source_endpoint(
         return SourceEndpointStatus.from_diagnostics(
             endpoint=ep,
             volume_status=_disconnected_volume_status(
-                volume_status.config, volume_status.ssh_endpoint_status, e
+                volume_status.config,
+                volume_status.ssh_endpoint_status,
+                e,
             ),
             diagnostics=None,
         )
     return SourceEndpointStatus.from_diagnostics(
-        endpoint=ep, volume_status=volume_status, diagnostics=diagnostics
+        endpoint=ep,
+        volume_status=volume_status,
+        diagnostics=diagnostics,
     )
 
 
@@ -654,12 +701,16 @@ def _check_destination_endpoint(
         return DestinationEndpointStatus.from_diagnostics(
             endpoint=ep,
             volume_status=_disconnected_volume_status(
-                volume_status.config, volume_status.ssh_endpoint_status, e
+                volume_status.config,
+                volume_status.ssh_endpoint_status,
+                e,
             ),
             diagnostics=None,
         )
     return DestinationEndpointStatus.from_diagnostics(
-        endpoint=ep, volume_status=volume_status, diagnostics=diagnostics
+        endpoint=ep,
+        volume_status=volume_status,
+        diagnostics=diagnostics,
     )
 
 
@@ -698,6 +749,7 @@ def _sync_statuses(
     syncs: dict[str, SyncConfig],
     src_ep_statuses: dict[str, SourceEndpointStatus],
     dst_ep_statuses: dict[str, DestinationEndpointStatus],
+    *,
     dry_run: bool,
 ) -> dict[str, SyncStatus]:
     """Sync-level interpretation — pure computation, no I/O."""

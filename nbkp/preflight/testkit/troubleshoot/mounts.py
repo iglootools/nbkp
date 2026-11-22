@@ -1,6 +1,6 @@
 """Scenarios about mount-managed volumes: udisks, fstab, LUKS, polkit."""
 
-from ....config import (
+from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     LocalVolume,
@@ -8,8 +8,8 @@ from ....config import (
     MountConfig,
     SyncEndpoint,
 )
-from ....disks import MountFailureKind, MountToolCapabilities
-from ... import (
+from nbkp.disks import MountFailureKind, MountToolCapabilities
+from nbkp.preflight import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
     DestinationEndpointErrorKind,
@@ -22,8 +22,8 @@ from ... import (
     VolumeCapabilities,
     VolumeErrorKind,
 )
-from ..common import inactive_dst_ep_status
-from .scenario import (
+from nbkp.preflight.testkit.common import inactive_dst_ep_status
+from nbkp.preflight.testkit.troubleshoot.scenario import (
     BOTH_ENDPOINTS_INACTIVE,
     Scenario,
     ScenarioStatuses,
@@ -32,14 +32,19 @@ from .scenario import (
     sync_from_laptop,
     volume_status,
 )
-from .ssh import BTRFS_HOST_TOOLS, MOUNT_NEEDS, UDISKS_TOOLS, localhost_status
+from nbkp.preflight.testkit.troubleshoot.ssh import (
+    BTRFS_HOST_TOOLS,
+    MOUNT_NEEDS,
+    UDISKS_TOOLS,
+    localhost_status,
+)
 
 # udisks tools healthy: the errors are at the volume level
 _LOCALHOST_UDISKS_SSH = localhost_status(mount_tools=UDISKS_TOOLS, needs=MOUNT_NEEDS)
 
 
 def _encrypted_volume(slug: str, path: str, device_uuid: str) -> LocalVolume:
-    """A LUKS volume whose passphrase id is its slug without ``mount-``."""
+    """Build a LUKS volume whose passphrase id is its slug without ``mount-``."""
     return LocalVolume(
         slug=slug,
         path=path,
@@ -52,9 +57,13 @@ def _encrypted_volume(slug: str, path: str, device_uuid: str) -> LocalVolume:
     )
 
 
-def _mount_caps(mount: MountCapabilities, *, sentinel: bool) -> VolumeCapabilities:
+def _mount_caps(
+    mount: MountCapabilities,
+    *,
+    sentinel_exists: bool,
+) -> VolumeCapabilities:
     return VolumeCapabilities(
-        sentinel_exists=sentinel,
+        sentinel_exists=sentinel_exists,
         is_btrfs_filesystem=False,
         hardlink_supported=True,
         btrfs_user_subvol_rm=False,
@@ -69,7 +78,7 @@ def _unmounted_volume_scenario(
     capabilities: VolumeCapabilities,
     error: VolumeErrorKind,
 ) -> Scenario:
-    """A sync from the inactive laptop to a volume that is not usable."""
+    """Build a sync from the inactive laptop to a volume that is not usable."""
     endpoint = f"{volume.slug}-dst"
 
     def statuses(config: Config, shared: SharedStatuses) -> ScenarioStatuses:
@@ -105,7 +114,9 @@ def _unmounted_volume_scenario(
 MOUNT_ENCRYPTED = _unmounted_volume_scenario(
     "mount-encrypted-errors",
     _encrypted_volume(
-        "mount-encrypted", "/mnt/encrypted", "5941f273-f73c-44c5-a3ef-fae7248db1b6"
+        "mount-encrypted",
+        "/mnt/encrypted",
+        "5941f273-f73c-44c5-a3ef-fae7248db1b6",
     ),
     localhost_status(
         mount_tools=MountToolCapabilities(
@@ -123,7 +134,7 @@ MOUNT_ENCRYPTED = _unmounted_volume_scenario(
             luks_unlocked=False,
             mounted=False,
         ),
-        sentinel=True,
+        sentinel_exists=True,
     ),
     VolumeErrorKind.VOLUME_NOT_MOUNTED,
 )
@@ -144,7 +155,7 @@ MOUNT_UNENCRYPTED = _unmounted_volume_scenario(
             device_present=True,
             mounted=False,
         ),
-        sentinel=True,
+        sentinel_exists=True,
     ),
     VolumeErrorKind.VOLUME_NOT_MOUNTED,
 )
@@ -163,7 +174,8 @@ _LOCALHOST_BTRFS_SUBVOLRM_SSH = localhost_status(
 
 
 def _btrfs_subvolrm_statuses(
-    config: Config, shared: SharedStatuses
+    config: Config,
+    shared: SharedStatuses,
 ) -> ScenarioStatuses:
     # The encrypted btrfs volume unlocks and mounts fine, but the live mount
     # lacks user_subvol_rm_allowed (needed for snapshot pruning).  The volume
@@ -207,7 +219,7 @@ def _btrfs_subvolrm_statuses(
                     snapshot_dirs=SnapshotDirsDiagnostics(exists=True, writable=True),
                     latest=LatestSymlinkState(exists=True, raw_target="/dev/null"),
                 ),
-                [DestinationEndpointErrorKind.VOL_NOT_MOUNTED_USER_SUBVOL_RM],
+                errors=[DestinationEndpointErrorKind.VOL_NOT_MOUNTED_USER_SUBVOL_RM],
             ),
         ),
     )
@@ -248,7 +260,7 @@ MOUNT_DEVICE_MISSING = _unmounted_volume_scenario(
     ),
     _mount_caps(
         MountCapabilities(device_present=False, luks_unlocked=None, mounted=None),
-        sentinel=False,
+        sentinel_exists=False,
     ),
     VolumeErrorKind.DEVICE_NOT_PRESENT,
 )
@@ -270,15 +282,18 @@ MOUNT_FSTAB_MISMATCH = _unmounted_volume_scenario(
             luks_unlocked=True,
             mounted=False,
         ),
-        sentinel=False,
+        sentinel_exists=False,
     ),
     VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH,
 )
 
 
 def _failed_mount_caps(path: str, reason: MountFailureKind) -> VolumeCapabilities:
-    """The lifecycle reported *reason*, which preflight surfaces instead of
-    VOLUME_NOT_MOUNTED."""
+    """
+    Return mount capabilities whose lifecycle reported *reason*.
+
+    Preflight surfaces *reason* instead of VOLUME_NOT_MOUNTED.
+    """
     return _mount_caps(
         MountCapabilities(
             has_fstab_entry=True,
@@ -288,14 +303,16 @@ def _failed_mount_caps(path: str, reason: MountFailureKind) -> VolumeCapabilitie
             mounted=False,
             mount_failure_reason=reason,
         ),
-        sentinel=False,
+        sentinel_exists=False,
     )
 
 
 MOUNT_LUKS_FAILED = _unmounted_volume_scenario(
     "mount-luks-failed",
     _encrypted_volume(
-        "mount-luks-failed", "/mnt/luks-failed", "66666666-7777-8888-9999-aaaaaaaaaaaa"
+        "mount-luks-failed",
+        "/mnt/luks-failed",
+        "66666666-7777-8888-9999-aaaaaaaaaaaa",
     ),
     _LOCALHOST_UDISKS_SSH,
     _failed_mount_caps("/mnt/luks-failed", MountFailureKind.UNLOCK_FAILED),

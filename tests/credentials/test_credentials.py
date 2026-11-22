@@ -6,7 +6,7 @@ import keyring
 import pytest
 from keyring import errors as keyring_errors
 from keyring.backend import KeyringBackend
-from pytest import MonkeyPatch  # noqa: TID251 -- (b) the keyring extra, simulated as missing
+from pytest import MonkeyPatch  # noqa: PT013, TID251 -- (b) the keyring extra, simulated as missing
 
 from nbkp.config import (
     Config,
@@ -22,6 +22,7 @@ from nbkp.credentials import (
     CredentialError,
     CredentialErrorKind,
     PassphraseCache,
+    PromptNotSuppliedError,
     collect_passphrase_ids,
     prefetch_count,
     prefetch_passphrases,
@@ -51,14 +52,18 @@ class _StoreKeyring(KeyringBackend):
         return self._passwords.get((service, username))
 
     def set_password(  # noqa: DC04 -- abstract in KeyringBackend
-        self, service: str, username: str, password: str
+        self,
+        service: str,
+        username: str,
+        password: str,
     ) -> None:
         self._passwords[(service, username)] = password
 
 
 @pytest.fixture
 def use_keyring() -> Iterator[Callable[[KeyringBackend], None]]:
-    """Install a keyring backend for one test, through keyring's own API.
+    """
+    Install a keyring backend for one test, through keyring's own API.
 
     The backend is process-wide state: conftest points it at the fail
     backend for the session, and this restores that afterwards.
@@ -70,14 +75,16 @@ def use_keyring() -> Iterator[Callable[[KeyringBackend], None]]:
 
 class TestRetrievePassphraseKeyring:
     def test_returns_password_from_keyring(
-        self, use_keyring: Callable[[KeyringBackend], None]
+        self,
+        use_keyring: Callable[[KeyringBackend], None],
     ) -> None:
         use_keyring(_StoreKeyring({("nbkp", "disk1"): "secret123"}))
         result = retrieve_passphrase("disk1", CredentialProvider.KEYRING)
         assert result == "secret123"
 
     def test_raises_when_password_not_found(
-        self, use_keyring: Callable[[KeyringBackend], None]
+        self,
+        use_keyring: Callable[[KeyringBackend], None],
     ) -> None:
         use_keyring(_StoreKeyring({("nbkp", "other"): "secret123"}))
         with pytest.raises(CredentialError) as excinfo:
@@ -104,12 +111,10 @@ class TestRetrievePassphraseKeyring:
     def test_raises_when_keyring_not_installed(self) -> None:
         # The test environment installs every extra, so the missing one is
         # simulated: a None entry makes `import keyring` raise ImportError.
-        with (
-            MonkeyPatch.context() as patch,
-            pytest.raises(CredentialError) as excinfo,
-        ):
+        with MonkeyPatch.context() as patch:
             patch.setitem(sys.modules, "keyring", None)
-            retrieve_passphrase("disk1", CredentialProvider.KEYRING)
+            with pytest.raises(CredentialError) as excinfo:
+                retrieve_passphrase("disk1", CredentialProvider.KEYRING)
         assert excinfo.value.reason == CredentialErrorKind.NOT_INSTALLED
 
 
@@ -126,7 +131,7 @@ class TestRetrievePassphrasePrompt:
         assert asked == ["disk1"]
 
     def test_missing_prompt_function_raises(self) -> None:
-        with pytest.raises(ValueError):
+        with pytest.raises(PromptNotSuppliedError):
             retrieve_passphrase("disk1", CredentialProvider.PROMPT)
 
 
@@ -158,9 +163,11 @@ class TestRetrievePassphraseEnv:
 
 
 def _command_runner(
-    returncode: int = 0, stdout: str = "", stderr: str = ""
+    returncode: int = 0,
+    stdout: str = "",
+    stderr: str = "",
 ) -> tuple[list[list[str]], CommandFn]:
-    """A CommandFn answering every command alike, and the commands it ran."""
+    """Return a CommandFn answering every command alike, and the commands it ran."""
     ran: list[list[str]] = []
 
     def run(command: list[str]) -> subprocess.CompletedProcess[str]:
@@ -227,7 +234,9 @@ class TestRetrievePassphraseCommand:
         ],
     )
     def test_passphrase_is_first_line_of_output(
-        self, stdout: str, passphrase: str
+        self,
+        stdout: str,
+        passphrase: str,
     ) -> None:
         _, run = _command_runner(stdout=stdout)
 
@@ -286,7 +295,7 @@ class TestPassphraseCache:
         cache = PassphraseCache()
         calls = 0
 
-        def retrieve(pid: str) -> str:
+        def retrieve(_pid: str) -> str:
             nonlocal calls
             calls += 1
             return "secret"
@@ -364,8 +373,8 @@ class TestPrefetchPassphrases:
         def passphrase_fn(pid: str) -> str:
             if pid == "absent":
                 raise CredentialError(
-                    "No passphrase found in keyring for id 'absent'",
-                    reason=CredentialErrorKind.NOT_FOUND,
+                    CredentialErrorKind.NOT_FOUND,
+                    passphrase_id=pid,
                 )
             return "secret"
 
@@ -396,12 +405,13 @@ class TestPrefetchPassphrases:
         ],
     )
     def test_enabled_for_non_interactive_providers(
-        self, provider: CredentialProvider
+        self,
+        provider: CredentialProvider,
     ) -> None:
         cfg = _cfg(provider=provider, encrypted={"a": "id"})
         assert prefetch_count(cfg) == 1
         assert [r.passphrase_id for r in prefetch_passphrases(cfg, lambda _: "s")] == [
-            "id"
+            "id",
         ]
 
     def test_callbacks_fire_per_id(self) -> None:

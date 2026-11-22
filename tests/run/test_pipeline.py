@@ -1,4 +1,5 @@
-"""Tests for the check-then-run pipeline's strictness semantics.
+"""
+Tests for the check-then-run pipeline's strictness semantics.
 
 :func:`run_checked` takes the preflight result :func:`check_and_run` computed,
 so these tests hand it testkit statuses; the CLI tests drive the whole
@@ -35,7 +36,7 @@ from tests.fixtures.preflight import (
 
 
 def _chain_config() -> Config:
-    """``a`` (v0 → v1) feeds ``b`` (v1 → v2)."""
+    """Build ``a`` (v0 → v1) feeding ``b`` (v1 → v2)."""
     vols: dict[str, Volume] = {
         f"v{i}": LocalVolume(slug=f"v{i}", path=f"/v{i}") for i in range(3)
     }
@@ -66,7 +67,8 @@ def _status(config: Config, slug: str, *, src_sentinel: bool = True) -> SyncStat
         config=sync,
         source_endpoint_status=src,
         destination_endpoint_status=dst_ep_status(
-            dst_ep.slug, vol_status(dst_ep.volume, config, ssh)
+            dst_ep.slug,
+            vol_status(dst_ep.volume, config, ssh),
         ),
         errors=[] if src_sentinel else [SyncErrorKind.SOURCE_ENDPOINT_INACTIVE],
     )
@@ -75,13 +77,13 @@ def _status(config: Config, slug: str, *, src_sentinel: bool = True) -> SyncStat
 def _infra_broken(status: SyncStatus) -> SyncStatus:
     """Destination not writable: infrastructure, sentinels observed."""
     dst = status.destination_endpoint_status.model_copy(
-        update={"errors": [DestinationEndpointErrorKind.NOT_WRITABLE]}
+        update={"errors": [DestinationEndpointErrorKind.NOT_WRITABLE]},
     )
     return status.model_copy(
         update={
             "destination_endpoint_status": dst,
             "errors": [SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE],
-        }
+        },
     )
 
 
@@ -193,7 +195,7 @@ class TestPreflightAbort:
             (Strictness.IGNORE_ALL, False),
         ],
     )
-    def test_infra_errors(self, strictness: Strictness, aborts: bool) -> None:
+    def test_infra_errors(self, strictness: Strictness, *, aborts: bool) -> None:
         config = _chain_config()
         statuses = {
             "a": _infra_broken(_status(config, "a")),
@@ -227,7 +229,7 @@ class TestFatalSyncErrors:
         }
 
         assert fatal_sync_errors(statuses, Strictness.IGNORE_INACTIVE) == {
-            "b": [SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE]
+            "b": [SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE],
         }
         assert fatal_sync_errors(statuses, Strictness.IGNORE_NONE) == {
             "a": [SyncErrorKind.SOURCE_ENDPOINT_INACTIVE],
@@ -235,11 +237,14 @@ class TestFatalSyncErrors:
         }
 
     def test_a_disabled_sync_is_never_fatal(self) -> None:
-        """Under ignore-none an inactive sync aborts the run, but a disabled
-        one must not be reported as offending."""
+        """
+        Under ignore-none, a disabled sync is not reported as offending.
+
+        An inactive sync aborts the run, but a disabled one must not be reported.
+        """
         config = _chain_config()
         disabled = _status(config, "a").model_copy(
-            update={"errors": [SyncErrorKind.DISABLED]}
+            update={"errors": [SyncErrorKind.DISABLED]},
         )
 
         assert fatal_sync_errors({"a": disabled}, Strictness.IGNORE_NONE) == {}
@@ -247,7 +252,10 @@ class TestFatalSyncErrors:
 
 class TestRunFailed:
     def _pipeline(
-        self, *, aborted: bool = False, failed: bool = False
+        self,
+        *,
+        aborted: bool = False,
+        failed: bool = False,
     ) -> PipelineResult:
         return PipelineResult(
             preflight=preflight({}, {}),
@@ -261,7 +269,7 @@ class TestRunFailed:
         assert not run_failed(self._pipeline(), [ok])
 
     @pytest.mark.parametrize(("aborted", "failed"), [(True, True), (False, True)])
-    def test_abort_or_sync_failure_fails(self, aborted: bool, failed: bool) -> None:
+    def test_abort_or_sync_failure_fails(self, *, aborted: bool, failed: bool) -> None:
         assert run_failed(self._pipeline(aborted=aborted, failed=failed), [])
 
     def test_a_volume_left_mounted_fails_a_successful_run(self) -> None:

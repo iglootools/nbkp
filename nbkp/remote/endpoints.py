@@ -1,4 +1,5 @@
-"""Endpoint resolution types: filter, resolved endpoint, and network classification.
+"""
+Endpoint resolution types: filter, resolved endpoint, and network classification.
 
 The data side of the endpoint selection performed in :mod:`.resolution`:
 the operator's hints (:class:`EndpointFilter`) go in, the SSH endpoint
@@ -9,10 +10,12 @@ from enum import StrEnum
 
 from pydantic import Field
 
-from ..config.protocol import ConfigModel, RemoteVolume, SshEndpoint, Volume
+from nbkp.config.protocol import ConfigModel, RemoteVolume, SshEndpoint, Volume
 
 
 class NetworkType(StrEnum):
+    """Whether a host's addresses are all private (LAN, VPN) or any is public."""
+
     PRIVATE = "private"
     PUBLIC = "public"
 
@@ -26,6 +29,12 @@ class EndpointFilter(ConfigModel):
 
 
 class ResolvedEndpoint(ConfigModel):
+    """
+    The SSH endpoint chosen for a remote volume, and the proxies it jumps through.
+
+    Both are enriched from the user's SSH config; *proxy_chain* is outermost first.
+    """
+
     server: SshEndpoint
     proxy_chain: list[SshEndpoint] = Field(default_factory=list[SshEndpoint])
 
@@ -34,7 +43,8 @@ type ResolvedEndpoints = dict[str, ResolvedEndpoint]
 
 
 def location_excluded(volume: Volume, resolved: ResolvedEndpoints) -> bool:
-    """Whether endpoint resolution skipped *volume* for its location.
+    """
+    Whether endpoint resolution skipped *volume* for its location.
 
     Such a remote volume has no resolved endpoint, so nothing may try to
     reach it.

@@ -1,4 +1,5 @@
-"""Tests for nbkp.cliwiring.mount (managed_mount with CLI reporting).
+"""
+Tests for nbkp.cliwiring.mount (managed_mount with CLI reporting).
 
 The volume ``enc`` is a LUKS drive found unlocked and mounted; on exit the
 umount succeeds and the lock answers what each test scripts.
@@ -11,7 +12,7 @@ from nbkp.clidisplay import OutputFormat
 from nbkp.cliwiring.mount import managed_mount
 from nbkp.config import Config
 from nbkp.disks import UmountResult
-from tests.fakes import completed, fake_runtime
+from tests.fakes import BodyError, completed, fake_runtime
 from tests.fixtures.disks import BUSY, LOCK_FAILED, encrypted_volume, mounted_drive_host
 
 _CONFIG = Config(volumes={"enc": encrypted_volume()})
@@ -19,7 +20,8 @@ _CONFIG = Config(volumes={"enc": encrypted_volume()})
 
 class TestUmountFailure:
     def test_fails_a_command_that_would_have_succeeded(
-        self, capsys: pytest.CaptureFixture[str]
+        self,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         runtime = fake_runtime(run=mounted_drive_host(BUSY))
         with (
@@ -40,11 +42,12 @@ class TestUmountFailure:
         assert "still unlocked" in err
 
     def test_body_failure_wins_and_the_umount_failure_is_still_reported(
-        self, capsys: pytest.CaptureFixture[str]
+        self,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         runtime = fake_runtime(run=mounted_drive_host(BUSY))
         with (
-            pytest.raises(ValueError),
+            pytest.raises(BodyError),
             managed_mount(
                 _CONFIG,
                 {},
@@ -53,7 +56,7 @@ class TestUmountFailure:
                 output_format=OutputFormat.JSON,
             ),
         ):
-            raise ValueError("body failed")
+            raise BodyError
 
         assert "Umount failed: enc: lock failed (exit 1): busy" in (
             capsys.readouterr().err

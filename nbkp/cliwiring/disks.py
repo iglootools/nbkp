@@ -1,33 +1,36 @@
-"""``disks`` command wiring shared by ``disks mount``, ``umount`` and
-``status``: the status table, the dry-run plan and the ``--name`` check."""
+"""
+Wire the ``disks`` commands ``mount``, ``umount`` and ``status`` share.
+
+Shared: the status table, the dry-run plan and the ``--name`` check.
+"""
 
 from collections.abc import Mapping, Sequence
 
 import typer
 from rich.console import Console
 
-from ..clidisplay import OutputFormat, StepProgressBar, dry_run_labeled, echo_json
-from ..config import Config, Volume
-from ..disks.lifecycle import UmountResult, unknown_volume_names
-from ..disks.models import display_name
-from ..disks.output import (
+from nbkp.clidisplay import OutputFormat, StepProgressBar, dry_run_labeled, echo_json
+from nbkp.cliwiring.config import require_known
+from nbkp.config import Config, Volume
+from nbkp.disks.lifecycle import UmountResult, unknown_volume_names
+from nbkp.disks.models import display_name
+from nbkp.disks.output import (
     build_volume_status_table,
     format_plan_line,
     umount_result_json,
     volume_status_detail,
     volume_status_json,
 )
-from ..disks.plan import VolumePlan, plan_incomplete, plan_json
-from ..disks.status import (
+from nbkp.disks.plan import VolumePlan, plan_incomplete, plan_json
+from nbkp.disks.status import (
     ProbeEndFn,
     VolumeStatus,
     managed_volumes,
     probe_volume_statuses,
 )
-from ..policy import Severity
-from ..remote.dispatch import VolumeCommandRunner
-from ..remote.endpoints import ResolvedEndpoints
-from .config import require_known
+from nbkp.policy import Severity
+from nbkp.remote.dispatch import VolumeCommandRunner
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 def show_volume_statuses(
@@ -36,8 +39,12 @@ def show_volume_statuses(
     output_format: OutputFormat,
     json_extras_by_slug: Mapping[str, dict[str, object]] | None = None,
 ) -> None:
-    """The status table, or one ``-o json`` entry per volume, merged with its
-    *json_extras_by_slug* entry (why a mount or umount failed)."""
+    """
+    Print the status table, or one ``-o json`` entry per volume.
+
+    Each JSON entry is merged with its *json_extras_by_slug* entry (why a mount or
+    umount failed).
+    """
     extras = json_extras_by_slug or {}
     match output_format:
         case OutputFormat.JSON:
@@ -45,7 +52,7 @@ def show_volume_statuses(
                 [
                     {**volume_status_json(s), **extras.get(s.volume_slug, {})}
                     for s in statuses
-                ]
+                ],
             )
         case OutputFormat.HUMAN:
             if statuses:
@@ -58,9 +65,13 @@ def show_volume_statuses(
 
 
 def _status_line(volume: Volume) -> str:
-    """Prefixed with ``status`` so the line is told apart from the ``mount`` /
-    ``umount`` action lines the same console prints (``disks umount`` runs
-    the umount step and then this probe back-to-back)."""
+    """
+    Format a volume's status line, prefixed with ``status``.
+
+    The prefix tells the line apart from the ``mount`` / ``umount`` action lines the
+    same console prints (``disks umount`` runs the umount step and then this probe
+    back-to-back).
+    """
     return f"status {display_name(volume)}"
 
 
@@ -111,7 +122,8 @@ def probe_and_show_status(
     *,
     run: VolumeCommandRunner,
 ) -> None:
-    """Probe and show the mount status of the volumes, through *run*.
+    """
+    Probe and show the mount status of the volumes, through *run*.
 
     *umount_results* are the umounts just attempted: under ``-o json`` the
     entry of a volume whose umount failed also says why (``disks umount``).
@@ -131,7 +143,10 @@ def require_known_names(
 ) -> None:
     """Exit 2 when a ``--name`` matches no volume."""
     require_known(
-        "volume", unknown_volume_names(cfg, names), cfg.volumes, output_format
+        "volume",
+        unknown_volume_names(cfg, names),
+        cfg.volumes,
+        output_format,
     )
 
 
@@ -140,7 +155,8 @@ def show_plan(
     display_names: dict[str, str],
     output_format: OutputFormat,
 ) -> None:
-    """Print a dry-run plan as lines (human) or ``{"dry_run": …}`` (JSON).
+    """
+    Print a dry-run plan as lines (human) or ``{"dry_run": …}`` (JSON).
 
     Exits 1 when the plan is incomplete (:func:`plan_incomplete`).
     """
@@ -155,8 +171,9 @@ def show_plan(
             for plan in plans:
                 console.print(
                     format_plan_line(
-                        plan, display_names.get(plan.volume_slug, plan.volume_slug)
-                    )
+                        plan,
+                        display_names.get(plan.volume_slug, plan.volume_slug),
+                    ),
                 )
     if plan_incomplete(plans):
         raise typer.Exit(1)

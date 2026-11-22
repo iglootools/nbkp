@@ -1,4 +1,5 @@
-"""Shared test logic for btrfs component tests (local and remote).
+"""
+Shared test logic for btrfs component tests (local and remote).
 
 Provides ``BtrfsEnv`` — a fixture-friendly bundle of config, setup
 callbacks, and verification callbacks — and plain test functions that
@@ -147,11 +148,18 @@ def run_test_dry_run_preserves_all(env: BtrfsEnv) -> None:
     ]
     snapshot = Snapshot.from_path(paths[-1])
     update_latest_symlink(
-        env.sync, env.config, snapshot, resolved_endpoints=env.resolved
+        env.sync,
+        env.config,
+        snapshot,
+        resolved_endpoints=env.resolved,
     )
 
     deleted = prune_snapshots(
-        env.sync, env.config, 1, dry_run=True, resolved_endpoints=env.resolved
+        env.sync,
+        env.config,
+        1,
+        dry_run=True,
+        resolved_endpoints=env.resolved,
     )
     assert len(deleted) == 2
 

@@ -1,3 +1,11 @@
+"""
+Running remote commands over SSH with Fabric and Paramiko.
+
+Connections honour each endpoint's connection options and host-key policy,
+tunnel through its proxy chain, and are reused inside a
+:func:`~nbkp.remote.pool.connection_scope`.
+"""
+
 import subprocess
 from collections.abc import Callable, Hashable
 from concurrent.futures import ThreadPoolExecutor
@@ -5,16 +13,16 @@ from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial, reduce
 from pathlib import Path
-from typing import cast
+from typing import cast, override
 
 import paramiko
 from fabric import Connection  # pyright: ignore[reportMissingTypeStubs] -- fabric ships no type hints; retire when it does
 
-from ..config import SshConnectionOptions, SshEndpoint
-from .errors import ssh_connection_errors
-from .hostkeys import UnknownHostKeyError
-from .pool import ConnectionPool, active_pool
-from .ssh import shell_join
+from nbkp.config import SshConnectionOptions, SshEndpoint
+from nbkp.remote.errors import ssh_connection_errors
+from nbkp.remote.hostkeys import UnknownHostKeyError
+from nbkp.remote.pool import ConnectionPool, active_pool
+from nbkp.remote.ssh import shell_join
 
 
 def _build_single_connection(
@@ -57,22 +65,33 @@ def _build_single_connection(
 
 
 class _RejectUnknownHostKey(paramiko.MissingHostKeyPolicy):
-    """Like ``paramiko.RejectPolicy``, but raises a dedicated exception so an
-    unknown host is classified as an authentication failure rather than as
-    an unreachable host (``RejectPolicy`` raises a bare ``SSHException``)."""
+    """
+    Reject an unknown host key with a dedicated exception.
 
+    Like ``paramiko.RejectPolicy``, but the dedicated exception classifies an unknown
+    host as an authentication failure rather than as an unreachable host
+    (``RejectPolicy`` raises a bare ``SSHException``).
+    """
+
+    @override
     def missing_host_key(  # noqa: DC04 -- Paramiko calls it
-        self, client: paramiko.SSHClient, hostname: str, key: paramiko.PKey
+        self,
+        client: paramiko.SSHClient,
+        hostname: str,
+        key: paramiko.PKey,
     ) -> None:
         raise UnknownHostKeyError(hostname)
 
 
 def _configure_host_key_verification(
-    client: paramiko.SSHClient, opts: SshConnectionOptions
+    client: paramiko.SSHClient,
+    opts: SshConnectionOptions,
 ) -> None:
-    """Mirror OpenSSH, which the rsync path uses: with strict checking, the
-    host key must already be in ``known-hosts-file`` (which replaces
-    ``~/.ssh/known_hosts``, like ``UserKnownHostsFile``). Fabric's own default
+    """
+    Mirror OpenSSH's host key verification, which the rsync path uses.
+
+    With strict checking, the host key must already be in ``known-hosts-file`` (which
+    replaces ``~/.ssh/known_hosts``, like ``UserKnownHostsFile``). Fabric's own default
     is to trust any host key without loading a known_hosts file at all.
     """
     # A missing file is an empty one for OpenSSH: every host is unknown.
@@ -98,12 +117,17 @@ def _build_hops(
     server: SshEndpoint,
     proxy_chain: list[SshEndpoint] | None = None,
 ) -> tuple[Connection, ...]:
-    """Connections from the first proxy to *server*, each the next one's gateway."""
+    """
+    Build the connections from the first proxy to *server*.
+
+    Each is the next one's gateway.
+    """
     return reduce(_add_hop, [*(proxy_chain or []), server], ())
 
 
 def _add_hop(
-    hops: tuple[Connection, ...], endpoint: SshEndpoint
+    hops: tuple[Connection, ...],
+    endpoint: SshEndpoint,
 ) -> tuple[Connection, ...]:
     return (*hops, _build_single_connection(endpoint, hops[-1] if hops else None))
 
@@ -140,7 +164,7 @@ def _open_connection(
             # fabric declares ``transport = None`` on the class; open() above
             # has just set it.
             conn.transport.set_keepalive(  # pyright: ignore[reportOptionalMemberAccess]
-                server.connection_options.server_alive_interval
+                server.connection_options.server_alive_interval,
             )
     except BaseException:
         # A failed authentication leaves the transport connected.
@@ -152,10 +176,12 @@ def _open_connection(
 def _run_on_connection(
     conn: Connection,
     cmd_string: str,
-    input: str | None,
+    stdin: str | None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run *cmd_string* on a session channel of our own, with *input* on its
-    stdin, then stdin closed.
+    """
+    Run *cmd_string* on a session channel of our own.
+
+    *stdin* goes to its stdin, which is then closed.
 
     Not ``conn.run``: Fabric writes stdin from a worker thread, and when the
     command exits before reading it (``udisksctl unlock`` on a device udisks
@@ -168,7 +194,7 @@ def _run_on_connection(
     channel = conn.create_session()
     try:
         channel.exec_command(cmd_string)
-        _send_input(channel, (input or "").encode())
+        _send_input(channel, (stdin or "").encode())
         stdout, stderr = _read_output(channel)
         return subprocess.CompletedProcess(
             args=cmd_string,
@@ -206,21 +232,24 @@ def run_remote_command(
     server: SshEndpoint,
     command: list[str],
     proxy_chain: list[SshEndpoint] | None = None,
-    input: str | None = None,
+    stdin: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run *command* on *server*, reusing an open connection inside a
-    :func:`~nbkp.remote.pool.connection_scope`, connecting just for this
-    command otherwise."""
+    """
+    Run *command* on *server*.
+
+    Reuses an open connection inside a :func:`~nbkp.remote.pool.connection_scope`, and
+    connects just for this command otherwise.
+    """
     cmd_string = shell_join(command)
     pool = active_pool()
     if pool is None:
         opened = _open_connection(server, proxy_chain)
         try:
-            return _run_on_connection(opened.target, cmd_string, input)
+            return _run_on_connection(opened.target, cmd_string, stdin)
         finally:
             opened.close()
     else:
-        return _run_pooled(pool, server, proxy_chain, cmd_string, input)
+        return _run_pooled(pool, server, proxy_chain, cmd_string, stdin)
 
 
 def _run_pooled(
@@ -228,7 +257,7 @@ def _run_pooled(
     server: SshEndpoint,
     proxy_chain: list[SshEndpoint] | None,
     cmd_string: str,
-    input: str | None,
+    stdin: str | None,
 ) -> subprocess.CompletedProcess[str]:
     key = _pool_key(server, proxy_chain)
     open_ = partial(_open_connection, server, proxy_chain)
@@ -240,7 +269,7 @@ def _run_pooled(
         pool.discard(key)
         opened, reused = _get_or_open(pool, key, open_)
     try:
-        return _run_on_connection(opened.target, cmd_string, input)
+        return _run_on_connection(opened.target, cmd_string, stdin)
     except OSError, EOFError, paramiko.SSHException:
         pool.discard(key)
         if not reused:
@@ -252,7 +281,7 @@ def _run_pooled(
     # instead, and a failed write of its input is ignored. The command therefore never
     # started, and running it once more on a fresh connection is safe.
     fresh, _ = _get_or_open(pool, key, open_)
-    return _run_on_connection(fresh.target, cmd_string, input)
+    return _run_on_connection(fresh.target, cmd_string, stdin)
 
 
 def _pool_key(server: SshEndpoint, proxy_chain: list[SshEndpoint] | None) -> Hashable:
@@ -268,4 +297,4 @@ def _get_or_open(
 ) -> tuple[_OpenConnection, bool]:
     opened, reused = pool.get_or_open(key, open_)
     # Only this module fills the pool, always with _OpenConnection values.
-    return (cast(_OpenConnection, opened), reused)
+    return (cast("_OpenConnection", opened), reused)

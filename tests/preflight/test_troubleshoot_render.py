@@ -1,5 +1,8 @@
-"""Rendering details of `preflight troubleshoot`: markup safety, suggested
-commands, warnings, and the JSON form."""
+"""
+Rendering details of `preflight troubleshoot`.
+
+Markup safety, suggested commands, warnings, and the JSON form.
+"""
 
 from io import StringIO
 from pathlib import Path
@@ -53,7 +56,7 @@ def _render(
             {},
             config,
             context=ctx,
-        )
+        ),
     )
     return buf.getvalue()
 
@@ -63,7 +66,9 @@ def _volume_status(vol: LocalVolume, error: VolumeErrorKind) -> VolumeStatus:
         slug=vol.slug,
         config=vol,
         ssh_endpoint_status=SshEndpointStatus(
-            slug="localhost", diagnostics=SshEndpointDiagnostics(), errors=[]
+            slug="localhost",
+            diagnostics=SshEndpointDiagnostics(),
+            errors=[],
         ),
         diagnostics=VolumeDiagnostics(),
         errors=[error],
@@ -76,7 +81,8 @@ class TestMarkupSafety:
         vol = LocalVolume(slug="v", path="/mnt/[bold]disk")
         config = Config(volumes={"v": vol})
         out = _render(
-            {"v": _volume_status(vol, VolumeErrorKind.SENTINEL_NOT_FOUND)}, config
+            {"v": _volume_status(vol, VolumeErrorKind.SENTINEL_NOT_FOUND)},
+            config,
         )
         assert "/mnt/[bold]disk" in out
 
@@ -91,7 +97,8 @@ class TestMarkupSafety:
         )
         config = Config(volumes={"v": vol})
         out = _render(
-            {"v": _volume_status(vol, VolumeErrorKind.PASSPHRASE_NOT_AVAILABLE)}, config
+            {"v": _volume_status(vol, VolumeErrorKind.PASSPHRASE_NOT_AVAILABLE)},
+            config,
         )
         assert "keyring set nbkp 'id[red]x'" in out
 
@@ -169,7 +176,9 @@ class TestWarnings:
     def test_json_marks_warning_kind(self) -> None:
         issues = collect_issues({"localhost": _warning_ssh_status()}, {}, {})
         data = troubleshoot_json(
-            issues, TroubleshootContext(config=Config()), has_fatal_errors=False
+            issues,
+            TroubleshootContext(config=Config()),
+            has_fatal_errors=False,
         )
         [issue] = _json_issues(data)
         assert issue["kind"] == "warning"
@@ -180,7 +189,7 @@ class TestWarnings:
 def _json_issues(data: dict[str, object]) -> list[dict[str, Any]]:
     issues = data["issues"]
     assert isinstance(issues, list)
-    return cast(list[dict[str, Any]], issues)
+    return cast("list[dict[str, Any]]", issues)
 
 
 class TestLatestSnapshotWritable:
@@ -222,7 +231,7 @@ class TestAuthFailedFix:
 
     def test_suggests_accepting_an_unknown_host_key(self) -> None:
         out = self._render_auth_failed(
-            SshEndpoint(slug="nas", host="nas.lan", port=2222, user="bk")
+            SshEndpoint(slug="nas", host="nas.lan", port=2222, user="bk"),
         )
         assert "If the host key is not known yet" in out
         assert "ssh -p 2222 bk@nas.lan true" in out
@@ -234,9 +243,9 @@ class TestAuthFailedFix:
                 slug="nas",
                 host="nas.lan",
                 connection_options=SshConnectionOptions(
-                    known_hosts_file="/etc/nbkp/known_hosts"
+                    known_hosts_file="/etc/nbkp/known_hosts",
                 ),
-            )
+            ),
         )
         assert "ssh -o UserKnownHostsFile=/etc/nbkp/known_hosts nas.lan true" in out
         assert "ssh-keygen -f /etc/nbkp/known_hosts -R nas.lan" in out

@@ -1,4 +1,5 @@
-"""Layer 3 — Sync endpoints (source and destination).
+"""
+Layer 3 — Sync endpoints (source and destination).
 
 Endpoint sentinel, directories, symlinks, writability, and the
 capability-gated errors whose requirement comes from the endpoint config.
@@ -8,18 +9,15 @@ import enum
 
 from pydantic import BaseModel, ConfigDict, computed_field
 
-from ...config import (
-    SyncEndpoint,
-)
-from ...fsprotocol import (
-    DEVNULL_TARGET,
-    Snapshot,
-)
-from .ssh import HostToolCapabilities
-from .volume import VolumeCapabilities, VolumeStatus
+from nbkp.config import SyncEndpoint
+from nbkp.fsprotocol import DEVNULL_TARGET, Snapshot
+from nbkp.preflight.status.ssh import HostToolCapabilities
+from nbkp.preflight.status.volume import VolumeCapabilities, VolumeStatus
 
 
 class SourceEndpointErrorKind(enum.StrEnum):
+    """Why a source endpoint cannot be read from."""
+
     SENTINEL_NOT_FOUND = "sentinel-not-found"
     SNAPSHOTS_DIR_NOT_FOUND = "snapshots-dir-not-found"
     LATEST_SYMLINK_NOT_FOUND = "latest-symlink-not-found"
@@ -33,16 +31,18 @@ INACTIVE_SRC_ENDPOINT_ERRORS: frozenset[SourceEndpointErrorKind] = frozenset(
     {
         SourceEndpointErrorKind.SENTINEL_NOT_FOUND,
         SourceEndpointErrorKind.VOLUME_INACTIVE,
-    }
+    },
 )
 
 
 class DestinationEndpointErrorKind(enum.StrEnum):
-    """Includes capability-gated errors that are probed at the volume or
-    host level but become errors because the endpoint config requires
-    a capability the volume doesn't have.  Troubleshoot offers dual
-    remediation: fix the volume (e.g. create btrfs filesystem) or
-    change the endpoint config (e.g. switch to hard-link snapshots).
+    """
+    Errors of a destination endpoint, capability-gated ones included.
+
+    Capability-gated errors are probed at the volume or host level but become errors
+    because the endpoint config requires a capability the volume doesn't have.
+    Troubleshoot offers dual remediation: fix the volume (e.g. create btrfs filesystem)
+    or change the endpoint config (e.g. switch to hard-link snapshots).
     """
 
     SENTINEL_NOT_FOUND = "sentinel-not-found"
@@ -70,12 +70,13 @@ INACTIVE_DST_ENDPOINT_ERRORS: frozenset[DestinationEndpointErrorKind] = frozense
     {
         DestinationEndpointErrorKind.SENTINEL_NOT_FOUND,
         DestinationEndpointErrorKind.VOLUME_INACTIVE,
-    }
+    },
 )
 
 
 class DestinationEndpointWarningKind(enum.StrEnum):
-    """Endpoint findings worth fixing that do not make the endpoint inactive.
+    """
+    Endpoint findings worth fixing that do not make the endpoint inactive.
 
     Kept apart from ``DestinationEndpointErrorKind`` so they never reach
     ``active`` or the strictness policy: ``check`` and ``troubleshoot``
@@ -89,9 +90,10 @@ class DestinationEndpointWarningKind(enum.StrEnum):
 
 
 class LatestSymlinkState(BaseModel):
-    """Captures the raw readlink result and whether the resolved
-    target directory exists, without interpreting what constitutes
-    an error.
+    """
+    The raw ``latest`` readlink result, and whether its target directory exists.
+
+    It does not interpret what constitutes an error.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -108,8 +110,11 @@ class LatestSymlinkState(BaseModel):
 
 
 class BtrfsStagingSubvolumeDiagnostics(BaseModel):
-    """Present only when btrfs snapshots are enabled, the filesystem
-    is btrfs, and ``stat`` is available on the host.
+    """
+    The state of the btrfs ``staging`` subvolume.
+
+    Present only when btrfs snapshots are enabled, the filesystem is btrfs, and ``stat``
+    is available on the host.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -123,7 +128,8 @@ class BtrfsStagingSubvolumeDiagnostics(BaseModel):
 
 
 class SnapshotDirsDiagnostics(BaseModel):
-    """Snapshot directory diagnostics shared by btrfs and hard-link modes.
+    """
+    Snapshot directory diagnostics shared by btrfs and hard-link modes.
 
     Present only when the endpoint has any snapshot mode enabled.
     """
@@ -136,7 +142,8 @@ class SnapshotDirsDiagnostics(BaseModel):
 
 
 class SourceEndpointDiagnostics(BaseModel):
-    """Observed state of a source sync endpoint.
+    """
+    Observed state of a source sync endpoint.
 
     Pure diagnostics — no interpretation of what constitutes an error.
     ``SourceEndpointStatus.from_diagnostics`` translates these into
@@ -152,7 +159,8 @@ class SourceEndpointDiagnostics(BaseModel):
 
 
 class DestinationEndpointDiagnostics(BaseModel):
-    """Observed state of a destination sync endpoint.
+    """
+    Observed state of a destination sync endpoint.
 
     Pure diagnostics — no interpretation of what constitutes an error.
     ``DestinationEndpointStatus.from_diagnostics`` translates these into
@@ -174,6 +182,8 @@ class DestinationEndpointDiagnostics(BaseModel):
 
 
 class SourceEndpointStatus(BaseModel):
+    """A source endpoint's diagnostics and the errors they mean."""
+
     model_config = ConfigDict(frozen=True)
 
     endpoint_slug: str
@@ -185,6 +195,7 @@ class SourceEndpointStatus(BaseModel):
     @computed_field
     @property
     def active(self) -> bool:
+        """Return whether the source endpoint has no errors."""
         return not self.errors
 
     @staticmethod
@@ -193,6 +204,12 @@ class SourceEndpointStatus(BaseModel):
         volume_status: VolumeStatus,
         diagnostics: SourceEndpointDiagnostics | None,
     ) -> SourceEndpointStatus:
+        """
+        Build the status from the diagnostics and the volume's status.
+
+        An inactive volume gives only ``VOLUME_INACTIVE``; the snapshot errors apply
+        only when the endpoint has snapshots.
+        """
         return SourceEndpointStatus(
             endpoint_slug=endpoint.slug,
             volume_status=volume_status,
@@ -208,6 +225,8 @@ class SourceEndpointStatus(BaseModel):
 
 
 class DestinationEndpointStatus(BaseModel):
+    """A destination endpoint's diagnostics, and the errors and warnings they mean."""
+
     model_config = ConfigDict(frozen=True)
 
     endpoint_slug: str
@@ -221,6 +240,7 @@ class DestinationEndpointStatus(BaseModel):
     @computed_field
     @property
     def active(self) -> bool:
+        """Return whether the destination endpoint has no errors."""
         return not self.errors
 
     @staticmethod
@@ -229,8 +249,11 @@ class DestinationEndpointStatus(BaseModel):
         volume_status: VolumeStatus,
         diagnostics: DestinationEndpointDiagnostics | None,
     ) -> DestinationEndpointStatus:
-        """Capability-gated errors need the host tools and volume capabilities
-        probed at the lower layers.
+        """
+        Build the status from the diagnostics and the layers below.
+
+        Capability-gated errors need the host tools and volume capabilities probed at
+        the lower layers.
         """
         vol_caps = (
             volume_status.diagnostics.capabilities
@@ -291,9 +314,11 @@ def _source_endpoint_errors(
 def _source_latest_ep_errors(
     diag: SourceEndpointDiagnostics,
 ) -> list[SourceEndpointErrorKind]:
-    """Only structural validity is checked here.  The ``/dev/null``
-    interpretation requires sync-level context (upstream sync check)
-    and stays at Layer 4.
+    """
+    Return the structural errors of a source endpoint's ``latest``.
+
+    Only structural validity is checked here. The ``/dev/null`` interpretation requires
+    sync-level context (upstream sync check) and stays at Layer 4.
     """
     latest = diag.latest
     if latest is None or not latest.exists:
@@ -313,13 +338,14 @@ def _destination_endpoint_errors(
     host_tools: HostToolCapabilities | None,
     endpoint: SyncEndpoint,
 ) -> list[DestinationEndpointErrorKind]:
-    """``NOT_WRITABLE`` is only emitted when the endpoint directory is
-    known to exist — approximated via ``sentinel_exists`` (the sentinel
-    lives inside the endpoint dir, so its presence proves the dir
-    exists).  When the sentinel is missing we suppress NOT_WRITABLE
-    because the ``test -w`` probe also fails on non-existent paths, and
-    the SENTINEL_NOT_FOUND fix already covers the "create the dir"
-    case.
+    """
+    Return a destination endpoint's errors.
+
+    ``NOT_WRITABLE`` is only emitted when the endpoint directory is known to exist,
+    approximated via ``sentinel_exists`` (the sentinel lives inside the endpoint dir, so
+    its presence proves the dir exists). When the sentinel is missing we suppress
+    NOT_WRITABLE because the ``test -w`` probe also fails on non-existent paths, and the
+    SENTINEL_NOT_FOUND fix already covers the "create the dir" case.
     """
     return [
         *(
@@ -360,9 +386,12 @@ def _btrfs_destination_ep_errors(
     caps: VolumeCapabilities | None,
     host_tools: HostToolCapabilities | None,
 ) -> list[DestinationEndpointErrorKind]:
-    """Tool availability (btrfs, stat, findmnt) errors are reported at the
-    SSH endpoint level.  Here we check capability-gated errors: the
-    endpoint config requires btrfs but the volume may not support it.
+    """
+    Return the btrfs capability errors of a destination endpoint.
+
+    Tool availability (btrfs, stat, findmnt) errors are reported at the SSH endpoint
+    level. Here we check capability-gated errors: the endpoint config requires btrfs but
+    the volume may not support it.
     """
     match (caps, host_tools):
         case (None, _) | (_, None):

@@ -17,7 +17,7 @@ _NEW_SNAPSHOT = f"/dst/snapshots/{NEW_SNAPSHOT_NAME}"
 
 def _btrfs_config(max_snapshots: int | None = None) -> Config:
     return make_snapshot_config(
-        btrfs=BtrfsSnapshotConfig(enabled=True, max_snapshots=max_snapshots)
+        btrfs=BtrfsSnapshotConfig(enabled=True, max_snapshots=max_snapshots),
     )
 
 
@@ -43,7 +43,11 @@ class TestBtrfsSync:
         runner = FakeCommandRunner()
 
         results = run_syncs(
-            config, sync_statuses, dry_run=True, rsync=FakeRsync(), run_command=runner
+            config,
+            sync_statuses,
+            dry_run=True,
+            rsync=FakeRsync(),
+            run_command=runner,
         )
 
         assert results[0].success is True
@@ -65,13 +69,16 @@ class TestBtrfsSync:
         runner = FakeCommandRunner()
 
         results = run_syncs(
-            config, sync_statuses, rsync=FakeRsync(), run_command=runner
+            config,
+            sync_statuses,
+            rsync=FakeRsync(),
+            run_command=runner,
         )
 
         assert results[0].success is True
         assert results[0].snapshot_path == f"/backup/snapshots/{NEW_SNAPSHOT_NAME}"
         assert runner.commands_starting_with("ln") == [
-            ["ln", "-sfn", f"snapshots/{NEW_SNAPSHOT_NAME}", "/backup/latest"]
+            ["ln", "-sfn", f"snapshots/{NEW_SNAPSHOT_NAME}", "/backup/latest"],
         ]
 
     def test_rsync_failure_takes_no_snapshot(self) -> None:
@@ -93,11 +100,17 @@ class TestBtrfsSync:
         config = _btrfs_config()
         _, sync_statuses = active_statuses(config)
         runner = FakeCommandRunner().on(
-            "btrfs", "subvolume", "snapshot", returns=completed(1, stderr="no space")
+            "btrfs",
+            "subvolume",
+            "snapshot",
+            returns=completed(1, stderr="no space"),
         )
 
         results = run_syncs(
-            config, sync_statuses, rsync=FakeRsync(), run_command=runner
+            config,
+            sync_statuses,
+            rsync=FakeRsync(),
+            run_command=runner,
         )
 
         assert results[0].outcome == SyncOutcome.FAILED
@@ -105,12 +118,15 @@ class TestBtrfsSync:
         assert runner.commands_starting_with("ln") == []
 
     def test_snapshot_failure_keeps_rsync_stderr(self) -> None:
-        """rsync's warnings on stderr belong in the failure report too."""
+        """Rsync's warnings on stderr belong in the failure report too."""
         config = _btrfs_config()
         _, sync_statuses = active_statuses(config)
         rsync = FakeRsync([completed(0, "sent 10 bytes\n", "file vanished: a\n")])
         runner = FakeCommandRunner().on(
-            "btrfs", "subvolume", "snapshot", returns=completed(1, stderr="no space")
+            "btrfs",
+            "subvolume",
+            "snapshot",
+            returns=completed(1, stderr="no space"),
         )
 
         results = run_syncs(config, sync_statuses, rsync=rsync, run_command=runner)
@@ -130,7 +146,10 @@ class TestBtrfsSync:
         runner = FakeCommandRunner()
 
         results = run_syncs(
-            config, sync_statuses, rsync=FakeRsync(), run_command=runner
+            config,
+            sync_statuses,
+            rsync=FakeRsync(),
+            run_command=runner,
         )
 
         assert results[0].failure == SyncFailureKind.SNAPSHOT
@@ -149,13 +168,16 @@ class TestBtrfsSync:
         )
 
         results = run_syncs(
-            config, sync_statuses, rsync=FakeRsync(), run_command=runner
+            config,
+            sync_statuses,
+            rsync=FakeRsync(),
+            run_command=runner,
         )
 
         assert results[0].success is True
         assert results[0].pruned_paths == (f"/dst/snapshots/{old}",)
         assert runner.commands_starting_with("btrfs", "subvolume", "delete") == [
-            ["btrfs", "subvolume", "delete", f"/dst/snapshots/{old}"]
+            ["btrfs", "subvolume", "delete", f"/dst/snapshots/{old}"],
         ]
 
     def test_no_auto_prune_without_max_snapshots(self) -> None:
@@ -164,7 +186,10 @@ class TestBtrfsSync:
         runner = FakeCommandRunner()
 
         results = run_syncs(
-            config, sync_statuses, rsync=FakeRsync(), run_command=runner
+            config,
+            sync_statuses,
+            rsync=FakeRsync(),
+            run_command=runner,
         )
 
         assert results[0].success is True
@@ -183,7 +208,11 @@ class TestBtrfsSync:
         )
 
         results = run_syncs(
-            config, sync_statuses, prune=False, rsync=FakeRsync(), run_command=runner
+            config,
+            sync_statuses,
+            prune=False,
+            rsync=FakeRsync(),
+            run_command=runner,
         )
 
         assert results[0].success is True

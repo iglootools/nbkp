@@ -1,4 +1,5 @@
-"""``write_config`` must hand the loader a file it reads back unchanged.
+"""
+``write_config`` must hand the loader a file it reads back unchanged.
 
 CLI tests rely on it to run the real loader instead of injecting a
 ``Config``: a field the round trip lost or altered would silently change
@@ -29,7 +30,10 @@ from tests.fixtures.preflight import config_with_locations, sample_config
 def _chain_config() -> Config:
     bastion = SshEndpoint(slug="bastion", host="bastion.example.com", port=2222)
     proxied = SshEndpoint(
-        slug="via-bastion", host="storage", user="backup", proxy_jump="bastion"
+        slug="via-bastion",
+        host="storage",
+        user="backup",
+        proxy_jump="bastion",
     )
     return build_chain_config(
         Path("/seed"),
@@ -43,14 +47,14 @@ def _chain_config() -> Config:
 
 
 def _discovered_mount_config() -> Config:
-    """A mount-managed volume without ``path``: serialized as ``path: null``."""
+    """Build a mount-managed volume without ``path``, serialized as ``path: null``."""
     return Config(
         volumes={
             "usb": LocalVolume(
                 slug="usb",
                 mount=MountConfig(device_uuid="01234567-89ab-cdef-0123-456789abcdef"),
-            )
-        }
+            ),
+        },
     )
 
 

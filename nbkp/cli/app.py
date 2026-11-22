@@ -1,25 +1,27 @@
+"""The root ``nbkp`` Typer app, with every command group attached."""
+
 import importlib.metadata
 from typing import Annotated
 
 import typer
 
-from ..cliwiring.runtime import runtime_of
-from ..config.cli import app as config_app
-from ..credentials.cli import app as credentials_app
-from ..demo import app as demo_app
-from ..disks.cli import app as disks_app
-from ..ordering.cli import app as ordering_app
-from ..preflight.cli import app as preflight_app
-from ..remote.pool import connection_scope
-from ..run.cli.run_cmd import run_cmd
-from ..sh.cli.sh_cmd import sh_cmd
-from ..snapshots.cli import app as snapshots_app
+from nbkp.cliwiring.runtime import runtime_of
+from nbkp.config.cli import app as config_app
+from nbkp.credentials.cli import app as credentials_app
+from nbkp.demo import app as demo_app
+from nbkp.disks.cli import app as disks_app
+from nbkp.ordering.cli import app as ordering_app
+from nbkp.preflight.cli import app as preflight_app
+from nbkp.remote.pool import connection_scope
+from nbkp.run.cli.run_cmd import run_cmd
+from nbkp.sh.cli.sh_cmd import sh_cmd
+from nbkp.snapshots.cli import app as snapshots_app
 
 
-def _version_callback(value: bool) -> None:
+def _version_callback(*, value: bool) -> None:
     if value:
         typer.echo(importlib.metadata.version("nbkp"))
-        raise typer.Exit()
+        raise typer.Exit
 
 
 app = typer.Typer(
@@ -32,7 +34,7 @@ app = typer.Typer(
 @app.callback(invoke_without_command=True)
 def app_callback(
     ctx: typer.Context,
-    version: Annotated[
+    version: Annotated[  # noqa: ARG001 -- read by its eager callback, for Typer
         bool | None,
         typer.Option(
             "--version",
@@ -43,6 +45,7 @@ def app_callback(
         ),
     ] = None,
 ) -> None:
+    """Install the host I/O and the shared SSH connections for the subcommand."""
     # The subcommand runs with the real host I/O, unless the caller passed its
     # own Runtime as the context object (tests do, with fakes).
     runtime_of(ctx)

@@ -1,4 +1,5 @@
-"""The steps of a generated sync function, mirroring ``nbkp.sync.modes``.
+"""
+The steps of a generated sync function, mirroring ``nbkp.sync.modes``.
 
 Each step is a block of shell code at indent 0.  Sync functions run in a
 ``set -e`` subshell (see ``nbkp_run_sync`` in the template), so any
@@ -11,25 +12,28 @@ hard-link rsync, each of which only logs a warning).
 from dataclasses import dataclass
 from textwrap import dedent
 
-from ..config import LocalVolume, RemoteVolume
-from ..fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
-from ..sync.rsync import (
+from nbkp.config import LocalVolume, RemoteVolume
+from nbkp.fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
+from nbkp.sh.commands import snapshot_date_format, vol_cmd
+from nbkp.sh.quoting import INDENT, SNAP, SNAPSHOT_TS, format_command, quote
+from nbkp.sh.spec import SyncSpec
+from nbkp.sync.rsync import (
     build_rsync_command,
     hard_link_dest_suffix,
     hard_link_link_dest,
 )
-from .commands import snapshot_date_format, vol_cmd
-from .quoting import INDENT, SNAP, SNAPSHOT_TS, format_command, quote
-from .spec import SyncSpec
 
 
 @dataclass(frozen=True)
 class Step:
+    """One step of a sync function: a comment title and its shell code."""
+
     title: str
     body: str
 
 
 def build_steps(spec: SyncSpec) -> tuple[Step, ...]:
+    """Return the steps of *spec*'s sync function, in run order, per snapshot mode."""
     prune = _prune_steps(spec)
     match spec.dst_ep.snapshot_mode:
         case "hard-link":
@@ -69,7 +73,8 @@ def _on_dst(spec: SyncSpec, args: list[str]) -> str:
 
 
 def _readlink_latest(spec: SyncSpec, *, strict: bool = False) -> str:
-    """``latest``'s target; empty when it cannot be read, unless *strict*.
+    """
+    ``latest``'s target; empty when it cannot be read, unless *strict*.
 
     A strict read fails the enclosing ``set -e`` block instead, for callers
     that would otherwise act on an empty target as "no latest".
@@ -79,7 +84,7 @@ def _readlink_latest(spec: SyncSpec, *, strict: bool = False) -> str:
 
 
 def _list_snapshots(spec: SyncSpec, *, quiet: bool = False) -> str:
-    """Valid snapshot names, oldest first (``nbkp_snapshot_names`` sorts)."""
+    """List valid snapshot names, oldest first (``nbkp_snapshot_names`` sorts)."""
     ls = _on_dst(spec, ["ls", spec.snapshots_dir])
     redirect = " 2>/dev/null" if quiet else ""
     return f"$({ls}{redirect} | nbkp_snapshot_names)"
@@ -95,8 +100,10 @@ def _indent(text: str, levels: int) -> str:
 
 
 def _orphan_cleanup_block(spec: SyncSpec) -> str:
-    """Remove snapshots newer than ``latest`` (left by failed syncs), and all
-    of them while ``latest`` points to ``/dev/null``, as in ``nbkp run``.
+    """
+    Remove the snapshots newer than ``latest``, left by failed syncs.
+
+    And all of them while ``latest`` points to ``/dev/null``, as in ``nbkp run``.
 
     Best-effort, as in ``nbkp run``: a failed removal is only a warning.
     Unlike ``nbkp run``, an unreadable ``latest`` skips the cleanup instead
@@ -104,6 +111,7 @@ def _orphan_cleanup_block(spec: SyncSpec) -> str:
     failed ``readlink``, and preflight has already required the link.
     """
     rm = _rm_snapshot(spec, SNAP)
+    warn = 'nbkp_log "WARN: failed to remove orphaned snapshot: $snap"'
     return dedent(f"""\
         if [ "$NBKP_DRY_RUN" = false ]; then
             NBKP_LATEST_LINK={_readlink_latest(spec)}
@@ -113,7 +121,7 @@ def _orphan_cleanup_block(spec: SyncSpec) -> str:
                     if [ "$NBKP_LATEST_LINK" = "/dev/null" ] \\
                         || nbkp_snapshot_after "$snap" "$NBKP_LATEST_NAME"; then
                         nbkp_log "Removing orphaned snapshot: $snap"
-                        {rm} || nbkp_log "WARN: failed to remove orphaned snapshot: $snap"
+                        {rm} || {warn}
                     fi
                 done
             fi
@@ -140,7 +148,8 @@ def _timestamp_line(spec: SyncSpec) -> str:
 
 
 def _after_latest_guard(spec: SyncSpec) -> str:
-    """Fail the sync unless ``$NBKP_TS`` sorts after ``latest``'s snapshot.
+    """
+    Fail the sync unless ``$NBKP_TS`` sorts after ``latest``'s snapshot.
 
     As ``ensure_after_latest`` in ``nbkp run``: a snapshot taken with the
     clock behind would move ``latest`` back in time, and the next orphan
@@ -164,7 +173,8 @@ def _after_latest_guard(spec: SyncSpec) -> str:
 
 
 def _mkdir_block(spec: SyncSpec) -> str:
-    """Create the new snapshot dir, which must not exist yet (as in run).
+    """
+    Create the new snapshot dir, which must not exist yet (as in run).
 
     Plain ``mkdir``: names have one-second resolution here, and reusing an
     existing snapshot would have rsync write into it, and a failed rsync
@@ -180,7 +190,7 @@ def _mkdir_block(spec: SyncSpec) -> str:
             _indent(mkdir_parent, 1),
             _indent(mkdir, 1),
             "fi",
-        ]
+        ],
     )
 
 
@@ -207,7 +217,9 @@ def _rsync_command(spec: SyncSpec, dest_suffix: str | None) -> list[str]:
 
 
 def _substitute_vol_path(
-    arg: str, vol: LocalVolume | RemoteVolume, effective_path: str
+    arg: str,
+    vol: LocalVolume | RemoteVolume,
+    effective_path: str,
 ) -> str:
     """Replace a local volume's configured path prefix with its effective path."""
     match vol:
@@ -235,7 +247,7 @@ def _rsync_block(spec: SyncSpec, dest_suffix: str | None) -> str:
             'nbkp_log "ERROR: rsync exited with code $NBKP_RSYNC_RC"',
             *_rsync_failure_cleanup(spec),
             "return 1",
-        ]
+        ],
     )
     return "\n".join(
         [
@@ -244,7 +256,7 @@ def _rsync_block(spec: SyncSpec, dest_suffix: str | None) -> str:
             'if [ "$NBKP_RSYNC_RC" -ne 0 ]; then',
             _indent(on_failure, 1),
             "fi",
-        ]
+        ],
     )
 
 
@@ -280,13 +292,14 @@ def _btrfs_snapshot_block(spec: SyncSpec) -> str:
             _indent(_after_latest_guard(spec), 1),
             _indent(snap, 1),
             "fi",
-        ]
+        ],
     )
 
 
 def _symlink_block(spec: SyncSpec) -> str:
     ln = _on_dst(
-        spec, ["ln", "-sfn", f"{SNAPSHOTS_DIR}/{SNAPSHOT_TS}", spec.dst_latest]
+        spec,
+        ["ln", "-sfn", f"{SNAPSHOTS_DIR}/{SNAPSHOT_TS}", spec.dst_latest],
     )
     return dedent(f"""\
         if [ "$NBKP_DRY_RUN" = false ]; then
@@ -313,7 +326,8 @@ def _delete_snapshot_cmds(spec: SyncSpec) -> list[str]:
 
 
 def _prune_block(spec: SyncSpec, max_snapshots: int) -> str:
-    """Delete the oldest snapshots beyond *max_snapshots*, never ``latest``.
+    """
+    Delete the oldest snapshots beyond *max_snapshots*, never ``latest``.
 
     Same selection as ``prune_snapshots``: drop the latest target from the
     candidates first, then take the oldest ``excess`` of the rest. As there,
@@ -338,18 +352,19 @@ def _prune_block(spec: SyncSpec, max_snapshots: int) -> str:
             'nbkp_log "Pruning snapshot: $snap"',
             *_delete_snapshot_cmds(spec),
             "NBKP_PRUNED=$((NBKP_PRUNED + 1))",
-        ]
+        ],
     )
     body = "\n".join(
-        [selection, "for snap in $NBKP_SNAPS; do", _indent(loop_body, 1), "done"]
+        [selection, "for snap in $NBKP_SNAPS; do", _indent(loop_body, 1), "done"],
     )
     return "\n".join(
-        ['if [ "$NBKP_DRY_RUN" = false ]; then', _indent(_best_effort(body), 1), "fi"]
+        ['if [ "$NBKP_DRY_RUN" = false ]; then', _indent(_best_effort(body), 1), "fi"],
     )
 
 
 def _best_effort(body: str) -> str:
-    """Run *body* with ``set -e`` but turn its failure into a warning.
+    """
+    Run *body* with ``set -e`` but turn its failure into a warning.
 
     Pruning is best-effort in ``nbkp run``: the new snapshot is complete and
     ``latest`` already points to it.  ``set +e`` around an explicit subshell,
@@ -370,5 +385,5 @@ def _best_effort(body: str) -> str:
             'if [ "$NBKP_PRUNE_RC" -ne 0 ]; then',
             _indent(warn, 1),
             "fi",
-        ]
+        ],
     )

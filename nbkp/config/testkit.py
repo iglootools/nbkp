@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from . import (
+from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     HardLinkSnapshotConfig,
@@ -17,6 +17,7 @@ from . import (
 
 
 def bastion_server() -> SshEndpoint:
+    """Return the ``bastion`` endpoint: the first hop to the NAS."""
     return SshEndpoint(
         slug="bastion",
         host="bastion.example.com",
@@ -25,6 +26,7 @@ def bastion_server() -> SshEndpoint:
 
 
 def bastion2_server() -> SshEndpoint:
+    """Return the ``bastion2`` endpoint: the second hop to the NAS."""
     return SshEndpoint(
         slug="bastion2",
         host="bastion2.internal",
@@ -33,6 +35,7 @@ def bastion2_server() -> SshEndpoint:
 
 
 def nas_server() -> SshEndpoint:
+    """Return the ``nas`` endpoint: custom port and key, two jumps, two locations."""
     return SshEndpoint(
         slug="nas",
         host="nas.example.com",
@@ -45,6 +48,7 @@ def nas_server() -> SshEndpoint:
 
 
 def nas_public_server() -> SshEndpoint:
+    """Return the ``nas-public`` endpoint: the NAS reached directly while travelling."""
     return SshEndpoint(
         slug="nas-public",
         host="nas.public.example.com",
@@ -56,6 +60,7 @@ def nas_public_server() -> SshEndpoint:
 
 
 def base_volumes() -> dict[str, LocalVolume | RemoteVolume]:
+    """Return three local volumes and a remote NAS volume, keyed by slug."""
     return {
         "laptop": LocalVolume(slug="laptop", path="/mnt/data"),
         # Dedicated volume for the whole-volume (no-subdir) `laptop-root`
@@ -74,6 +79,7 @@ def base_volumes() -> dict[str, LocalVolume | RemoteVolume]:
 
 
 def base_ssh_endpoints() -> dict[str, SshEndpoint]:
+    """Return the bastion, bastion2, nas and nas-public endpoints, keyed by slug."""
     return {
         "bastion": bastion_server(),
         "bastion2": bastion2_server(),
@@ -83,6 +89,12 @@ def base_ssh_endpoints() -> dict[str, SshEndpoint]:
 
 
 def base_sync_endpoints() -> dict[str, SyncEndpoint]:
+    """
+    Return sync endpoints on :func:`base_volumes`, keyed by slug.
+
+    They cover no snapshots, btrfs and hard-link snapshots, and a
+    whole-volume endpoint.
+    """
     return {
         "laptop-photos": SyncEndpoint(
             slug="laptop-photos",
@@ -125,6 +137,7 @@ def base_sync_endpoints() -> dict[str, SyncEndpoint]:
 
 
 def base_syncs() -> dict[str, SyncConfig]:
+    """Return three syncs between :func:`base_sync_endpoints`, keyed by slug."""
     return {
         "photos-to-usb": SyncConfig(
             slug="photos-to-usb",
@@ -165,11 +178,12 @@ def config_to_yaml(config: Config) -> str:
 
 
 def write_config(directory: Path, config: Config, name: str = "config.yaml") -> Path:
-    """Write ``config`` as ``directory/name`` and return the file's path.
+    """
+    Write ``config`` as ``directory/name`` and return the file's path.
 
     Lets a CLI test or the demo pass a real file to ``-c`` so the loader and
     config file lookup run, instead of injecting a ``Config`` past them.
     """
     path = directory / name
-    path.write_text(config_to_yaml(config))
+    path.write_text(config_to_yaml(config), encoding="utf-8")
     return path

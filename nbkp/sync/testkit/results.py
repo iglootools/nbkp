@@ -1,10 +1,10 @@
 """Fake sync and prune result builders for manual testing."""
 
-from ...config import Config
-from ...fsprotocol import SNAPSHOTS_DIR
-from ...snapshots.errors import SnapshotOp
-from ...snapshots.models import PruneResult, SnapshotErrorKind, SnapshotResultError
-from ..results import (
+from nbkp.config import Config
+from nbkp.fsprotocol import SNAPSHOTS_DIR
+from nbkp.snapshots.errors import SnapshotOp
+from nbkp.snapshots.models import PruneResult, SnapshotErrorKind, SnapshotResultError
+from nbkp.sync.results import (
     SyncFailureKind,
     SyncOutcome,
     SyncResult,
@@ -79,6 +79,7 @@ def run_results(config: Config) -> list[SyncResult]:
 
 
 def dry_run_results(config: Config) -> list[SyncResult]:
+    """Return the sync results of :func:`run_results`, marked as a dry run."""
     return [r.model_copy(update={"dry_run": True}) for r in run_results(config)]
 
 
@@ -120,6 +121,7 @@ def prune_results(config: Config) -> list[PruneResult]:
 def prune_dry_run_results(
     config: Config,
 ) -> list[PruneResult]:
+    """Return a dry-run prune result that would delete two snapshots."""
     snap_base = _snap_base(config, "photos-to-usb")
     return [
         PruneResult(

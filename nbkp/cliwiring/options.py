@@ -1,4 +1,5 @@
-"""Options that several commands share, each declared once.
+"""
+Options that several commands share, each declared once.
 
 A command takes one as ``config: CONFIG_OPTION = None`` and keeps the default
 in its own signature, as Typer requires.
@@ -9,8 +10,8 @@ from typing import Annotated
 
 import typer
 
-from ..clidisplay import OutputFormat
-from ..remote.endpoints import NetworkType
+from nbkp.clidisplay import OutputFormat
+from nbkp.remote.endpoints import NetworkType
 
 CONFIG_OPTION = Annotated[
     Path | None,

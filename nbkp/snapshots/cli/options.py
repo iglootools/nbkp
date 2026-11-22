@@ -4,7 +4,7 @@ from typing import Annotated
 
 import typer
 
-from ...policy import Strictness
+from nbkp.policy import Strictness
 
 STRICTNESS_OPTION = Annotated[
     Strictness,

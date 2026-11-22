@@ -9,10 +9,12 @@ from enum import StrEnum
 
 from pydantic import SecretStr
 
-from ..config import Config, CredentialProvider, passphrase_env_var
+from nbkp.config import Config, CredentialProvider, passphrase_env_var
 
 
 class CredentialErrorKind(StrEnum):
+    """Why a passphrase could not be retrieved from its provider."""
+
     NOT_INSTALLED = "not-installed"
     NOT_FOUND = "not-found"
     BACKEND_UNAVAILABLE = "backend-unavailable"
@@ -23,23 +25,97 @@ class CredentialErrorKind(StrEnum):
 
 
 class CredentialError(Exception):
-    def __init__(self, message: str, reason: CredentialErrorKind) -> None:
-        super().__init__(message)
+    """
+    A passphrase could not be retrieved; *reason* says why.
+
+    The fields that apply to *reason* are set: *passphrase_id* for the keyring,
+    *env_var* for the environment, *command* (and *exit_code*) for a credential
+    command, and *detail* for the underlying error or the command's stderr.
+    """
+
+    def __init__(
+        self,
+        reason: CredentialErrorKind,
+        *,
+        passphrase_id: str | None = None,
+        env_var: str | None = None,
+        command: list[str] | None = None,
+        exit_code: int | None = None,
+        detail: str | None = None,
+    ) -> None:
+        """Build the error from its reason and the fields that apply to it."""
         self.reason = reason
+        self.passphrase_id = passphrase_id
+        self.env_var = env_var
+        self.command = command
+        self.exit_code = exit_code
+        self.detail = detail
+        super().__init__(self._message())
+
+    def _message(self) -> str:
+        command = self.command or []
+        match self.reason:
+            case CredentialErrorKind.NOT_INSTALLED:
+                return (
+                    "keyring package not installed."
+                    " Install with: uv tool install 'nbkp[keyring]'"
+                    " (quotes required — the shell would glob the extra otherwise),"
+                    " or switch to another credential-provider."
+                )
+            case CredentialErrorKind.BACKEND_UNAVAILABLE:
+                return (
+                    f"Keyring backend unavailable for id '{self.passphrase_id}':"
+                    f" {self.detail}. Unlock the keyring, configure a backend,"
+                    " or switch to another credential-provider."
+                )
+            case CredentialErrorKind.NOT_FOUND:
+                return (
+                    f"No passphrase found in keyring for id '{self.passphrase_id}'."
+                    f" Store it with: keyring set nbkp {self.passphrase_id}"
+                )
+            case CredentialErrorKind.ENV_UNSET:
+                return (
+                    f"Environment variable '{self.env_var}' not set."
+                    f" Export it with: export {self.env_var}=..."
+                )
+            case CredentialErrorKind.COMMAND_MISSING:
+                return (
+                    "credential-command is required when credential-provider is"
+                    " 'command'"
+                )
+            case CredentialErrorKind.COMMAND_NOT_RUNNABLE:
+                return (
+                    f"Credential command could not be started ({command[0]}):"
+                    f" {self.detail}"
+                )
+            case CredentialErrorKind.COMMAND_FAILED:
+                return (
+                    f"Credential command failed (exit {self.exit_code}):"
+                    f" {shlex.join(command)}\nstderr: {self.detail}"
+                )
+
+
+class PromptNotSuppliedError(ValueError):
+    """
+    A ``prompt``-provider passphrase was retrieved without a prompt function.
+
+    A wiring bug, not a user error: every caller that can retrieve such a
+    passphrase must pass the CLI prompt.
+    """
+
+    def __init__(self) -> None:
+        """Build the error; its message names the missing prompt function."""
+        super().__init__(
+            "credential-provider 'prompt' needs a prompt function; none was supplied",
+        )
 
 
 def _from_keyring(passphrase_id: str) -> str:
     try:
-        import keyring
-        from keyring.errors import KeyringError
+        import keyring  # noqa: PLC0415 -- optional extra (nbkp[keyring])
+        from keyring.errors import KeyringError  # noqa: PLC0415 -- optional extra
     except ImportError:
-        raise CredentialError(
-            "keyring package not installed."
-            " Install with: uv tool install 'nbkp[keyring]'"
-            " (quotes required — the shell would glob the extra otherwise),"
-            " or switch to another credential-provider.",
-            reason=CredentialErrorKind.NOT_INSTALLED,
-        ) from None
+        raise CredentialError(CredentialErrorKind.NOT_INSTALLED) from None
 
     try:
         password = keyring.get_password("nbkp", passphrase_id)
@@ -48,16 +124,14 @@ def _from_keyring(passphrase_id: str) -> str:
         # store: a retrieval failure like any other, so prefetch reports it
         # as a warning and unlock as PASSPHRASE_NOT_AVAILABLE.
         raise CredentialError(
-            f"Keyring backend unavailable for id '{passphrase_id}': {e}."
-            " Unlock the keyring, configure a backend,"
-            " or switch to another credential-provider.",
-            reason=CredentialErrorKind.BACKEND_UNAVAILABLE,
+            CredentialErrorKind.BACKEND_UNAVAILABLE,
+            passphrase_id=passphrase_id,
+            detail=str(e),
         ) from e
     if password is None:
         raise CredentialError(
-            f"No passphrase found in keyring for id '{passphrase_id}'."
-            f" Store it with: keyring set nbkp {passphrase_id}",
-            reason=CredentialErrorKind.NOT_FOUND,
+            CredentialErrorKind.NOT_FOUND,
+            passphrase_id=passphrase_id,
         )
     return password
 
@@ -71,11 +145,7 @@ Supplied by the CLI layer, so this package stays free of terminal I/O.
 
 def _from_prompt(passphrase_id: str, prompt: PromptFn | None) -> str:
     if prompt is None:
-        # A wiring bug, not a user error: every caller that can retrieve a
-        # ``prompt``-provider passphrase must pass the CLI prompt.
-        raise ValueError(
-            "credential-provider 'prompt' needs a prompt function; none was supplied"
-        )
+        raise PromptNotSuppliedError
     return prompt(passphrase_id)
 
 
@@ -83,11 +153,7 @@ def _from_env(passphrase_id: str, environ: Mapping[str, str]) -> str:
     env_var = passphrase_env_var(passphrase_id)
     value = environ.get(env_var)
     if value is None:
-        raise CredentialError(
-            f"Environment variable '{env_var}' not set."
-            f" Export it with: export {env_var}=...",
-            reason=CredentialErrorKind.ENV_UNSET,
-        )
+        raise CredentialError(CredentialErrorKind.ENV_UNSET, env_var=env_var)
     return value
 
 
@@ -96,17 +162,22 @@ type CommandFn = Callable[[list[str]], subprocess.CompletedProcess[str]]
 
 
 def run_captured(command: list[str]) -> subprocess.CompletedProcess[str]:
+    """
+    Run *command* and return its result, stdout and stderr captured as text.
+
+    A non-zero exit is returned, not raised; a command that cannot be started
+    raises ``OSError``.
+    """
     return subprocess.run(command, capture_output=True, text=True, check=False)
 
 
 def _from_command(
-    passphrase_id: str, command_template: list[str] | None, run: CommandFn
+    passphrase_id: str,
+    command_template: list[str] | None,
+    run: CommandFn,
 ) -> str:
     if command_template is None:
-        raise CredentialError(
-            "credential-command is required when credential-provider is 'command'",
-            reason=CredentialErrorKind.COMMAND_MISSING,
-        )
+        raise CredentialError(CredentialErrorKind.COMMAND_MISSING)
     command = [arg.replace("{id}", passphrase_id) for arg in command_template]
     try:
         result = run(command)
@@ -114,22 +185,27 @@ def _from_command(
         # Left uncaught, this would crash prefetch, or reach unlock as an
         # OSError and be mislabelled an unreachable host.
         raise CredentialError(
-            f"Credential command could not be started ({command[0]}): {e}",
-            reason=CredentialErrorKind.COMMAND_NOT_RUNNABLE,
+            CredentialErrorKind.COMMAND_NOT_RUNNABLE,
+            command=command,
+            detail=str(e),
         ) from e
     if result.returncode != 0:
         raise CredentialError(
-            f"Credential command failed (exit {result.returncode}):"
-            f" {shlex.join(command)}\nstderr: {result.stderr.strip()}",
-            reason=CredentialErrorKind.COMMAND_FAILED,
+            CredentialErrorKind.COMMAND_FAILED,
+            command=command,
+            exit_code=result.returncode,
+            detail=result.stderr.strip(),
         )
     return _first_line(result.stdout)
 
 
 def _first_line(output: str) -> str:
-    """The passphrase in a command's output: its first line, as ``pass``
-    stores it (later lines hold metadata), without the line break but with
-    any surrounding spaces, which may belong to the passphrase."""
+    """
+    Return the passphrase in a command's output.
+
+    Its first line, as ``pass`` stores it (later lines hold metadata), without the line
+    break but with any surrounding spaces, which may belong to the passphrase.
+    """
     return output.partition("\n")[0].removesuffix("\r")
 
 
@@ -139,11 +215,15 @@ def retrieve_passphrase(
     command_template: list[str] | None = None,
     environ: Mapping[str, str] = os.environ,
     prompt: PromptFn | None = None,
+    *,
     run: CommandFn = run_captured,
 ) -> str:
-    """``environ`` is where the ``env`` provider looks the passphrase up;
-    ``prompt`` is how the ``prompt`` provider asks for it; ``run`` is how the
-    ``command`` provider runs its command.
+    """
+    Retrieve a passphrase from its configured provider.
+
+    ``environ`` is where the ``env`` provider looks the passphrase up; ``prompt`` is how
+    the ``prompt`` provider asks for it; ``run`` is how the ``command`` provider runs
+    its command.
     """
     match provider:
         case CredentialProvider.KEYRING:
@@ -157,12 +237,14 @@ def retrieve_passphrase(
 
 
 class PassphraseCache:
-    """In-memory cache for passphrases during a single run.
+    """
+    In-memory cache for passphrases during a single run.
 
     Values are stored as ``SecretStr`` to prevent accidental logging.
     """
 
     def __init__(self) -> None:
+        """Build an empty cache."""
         self._cache: dict[str, SecretStr] = {}
 
     def get_or_retrieve(
@@ -170,11 +252,18 @@ class PassphraseCache:
         passphrase_id: str,
         retrieve_fn: Callable[[str], str],
     ) -> str:
+        """
+        Return the passphrase of *passphrase_id*, retrieving it on first use.
+
+        *retrieve_fn* is called only on a miss; an exception it raises propagates
+        and nothing is cached, so the next call retries.
+        """
         if passphrase_id not in self._cache:
             self._cache[passphrase_id] = SecretStr(retrieve_fn(passphrase_id))
         return self._cache[passphrase_id].get_secret_value()
 
     def clear(self) -> None:
+        """Forget every cached passphrase, so none outlives the run."""
         self._cache.clear()
 
 
@@ -186,7 +275,8 @@ def build_passphrase_fn(
     environ: Mapping[str, str] = os.environ,
     run: CommandFn = run_captured,
 ) -> tuple[Callable[[str], str], PassphraseCache]:
-    """Build a passphrase retrieval function backed by a per-run cache.
+    """
+    Build a passphrase retrieval function backed by a per-run cache.
 
     *prompt*, *environ* and *run* are handed to :func:`retrieve_passphrase`:
     each is used only by its own provider.
@@ -197,7 +287,12 @@ def build_passphrase_fn(
         return cache.get_or_retrieve(
             passphrase_id,
             lambda pid: retrieve_passphrase(
-                pid, provider, command_template, environ, prompt, run
+                pid,
+                provider,
+                command_template,
+                environ,
+                prompt,
+                run=run,
             ),
         )
 
@@ -205,7 +300,8 @@ def build_passphrase_fn(
 
 
 def collect_passphrase_ids(config: Config) -> dict[str, list[str]]:
-    """Map each configured passphrase-id to the volume slugs that use it.
+    """
+    Map each configured passphrase-id to the volume slugs that use it.
 
     Covers *every* encrypted mount-managed volume in the config, whether or
     not its drive is currently plugged in.
@@ -230,7 +326,7 @@ _PREFETCHABLE_PROVIDERS: frozenset[CredentialProvider] = frozenset(
         CredentialProvider.KEYRING,
         CredentialProvider.ENV,
         CredentialProvider.COMMAND,
-    }
+    },
 )
 
 
@@ -241,6 +337,12 @@ def is_prefetchable(provider: CredentialProvider) -> bool:
 
 @dataclass(frozen=True)
 class PassphrasePrefetch:
+    """
+    The outcome of prefetching one passphrase-id, and the volumes that use it.
+
+    On failure, *detail* holds the error message and *reason* its kind.
+    """
+
     passphrase_id: str
     volumes: tuple[str, ...]
     success: bool
@@ -255,7 +357,8 @@ def prefetch_passphrases(
     on_prefetch_start: Callable[[str], None] | None = None,
     on_prefetch_end: Callable[[str, PassphrasePrefetch], None] | None = None,
 ) -> list[PassphrasePrefetch]:
-    """Warm the passphrase cache with *every* configured passphrase-id.
+    """
+    Warm the passphrase cache with *every* configured passphrase-id.
 
     Called once before the mount phase so that all credential-store access
     happens up front, in a single burst.  OS secret stores (macOS Keychain,
@@ -306,7 +409,11 @@ def _prefetch_one(
         result = PassphrasePrefetch(pid, volumes, success=True)
     except CredentialError as e:
         result = PassphrasePrefetch(
-            pid, volumes, success=False, detail=str(e), reason=e.reason
+            pid,
+            volumes,
+            success=False,
+            detail=str(e),
+            reason=e.reason,
         )
     if on_prefetch_end is not None:
         on_prefetch_end(pid, result)
@@ -314,7 +421,7 @@ def _prefetch_one(
 
 
 def prefetch_count(config: Config) -> int:
-    """Number of passphrase-ids :func:`prefetch_passphrases` would retrieve."""
+    """Count the passphrase-ids :func:`prefetch_passphrases` would retrieve."""
     return (
         len(collect_passphrase_ids(config))
         if is_prefetchable(config.credential_provider)

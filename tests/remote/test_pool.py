@@ -3,11 +3,15 @@ from collections.abc import Callable
 import pytest
 
 from nbkp.remote.pool import ConnectionPool, active_pool, connection_scope
+from tests.fakes import BodyError
 
 
 class _Conn:
-    """A connection that counts how often it was closed, and raises
-    *close_error* when closed if given."""
+    """
+    A connection that counts how often it was closed.
+
+    It raises *close_error* when closed, if given.
+    """
 
     def __init__(self, close_error: Exception | None = None) -> None:
         self.closes = 0
@@ -19,9 +23,19 @@ class _Conn:
             raise self._close_error
 
 
+def _fail_inside_scope(conn: _Conn) -> None:
+    """Open *conn* in a connection scope, then raise BodyError inside it."""
+    with connection_scope() as pool:
+        pool.get_or_open("a", lambda: conn)
+        raise BodyError
+
+
 def _opener(*outcomes: _Conn | Exception) -> tuple[Callable[[], _Conn], list[None]]:
-    """An open function returning (or raising) *outcomes* in turn, and the
-    list it appends to on every call."""
+    """
+    Return an open function returning (or raising) *outcomes* in turn.
+
+    Also return the list it appends to on every call.
+    """
     calls: list[None] = []
     pending = list(outcomes)
 
@@ -103,9 +117,8 @@ class TestConnectionScope:
 
     def test_closes_on_error(self) -> None:
         conn = _Conn()
-        with pytest.raises(ValueError), connection_scope() as pool:
-            pool.get_or_open("a", lambda: conn)
-            raise ValueError
+        with pytest.raises(BodyError):
+            _fail_inside_scope(conn)
         assert active_pool() is None
         assert conn.closes == 1
 

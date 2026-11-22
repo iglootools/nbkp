@@ -1,4 +1,5 @@
-"""Tests for `snapshots show` / `snapshots prune` against a fake NAS.
+"""
+Tests for `snapshots show` / `snapshots prune` against a fake NAS.
 
 What the commands decide from preflight and from the snapshot operations is
 tested in test_show_prune.py; these check that a command wires preflight,
@@ -30,7 +31,8 @@ _HINT = "nbkp preflight troubleshoot -c config.yaml -N private"
 
 @pytest.fixture(autouse=True)
 def in_tmp_path(tmp_path: Path, chdir: Callable[[Path], None]) -> None:
-    """Run every test from ``tmp_path``, where it writes ``config.yaml``.
+    """
+    Run every test from ``tmp_path``, where it writes ``config.yaml``.
 
     Commands get ``-c config.yaml``, and the troubleshoot hints they print
     show that same short relative path.
@@ -43,8 +45,11 @@ def _write(tmp_path: Path, config: Config | None = None) -> None:
 
 
 def _nas(*listings: tuple[str, ...]) -> FakeCommandRunner:
-    """A healthy NAS whose snapshot listing answers each of *listings* in
-    turn, with ``latest`` on the newest snapshot."""
+    """
+    Script a healthy NAS whose snapshot listing answers each of *listings* in turn.
+
+    ``latest`` is on the newest snapshot.
+    """
     return healthy_nas(
         FakeCommandRunner()
         .on(
@@ -56,13 +61,15 @@ def _nas(*listings: tuple[str, ...]) -> FakeCommandRunner:
             "readlink",
             "/backup/photos/latest",
             returns=completed(stdout=f"snapshots/{NEW}\n"),
-        )
+        ),
     )
 
 
 def _invoke(run: FakeCommandRunner, *args: str) -> tuple[int, str]:
     result = runner.invoke(
-        app, ["snapshots", *args, "-c", "config.yaml"], obj=fake_runtime(run=run)
+        app,
+        ["snapshots", *args, "-c", "config.yaml"],
+        obj=fake_runtime(run=run),
     )
     return result.exit_code, result.output
 
@@ -106,7 +113,7 @@ class TestPruneCommand:
                 "skip_reason": None,
                 "error": None,
                 "skipped": False,
-            }
+            },
         ]
         assert ["btrfs", "subvolume", "delete", f"{SNAPSHOTS}/{OLD}"] in run.commands
 
@@ -124,12 +131,16 @@ class TestPruneCommand:
         assert run.commands_starting_with("btrfs", "subvolume") == []
 
     def test_failed_delete_fails_without_troubleshoot_hint(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         """Troubleshoot explains preflight findings, not a failed delete."""
         _write(tmp_path)
         run = _nas((OLD, MID, NEW)).on(
-            "btrfs", "subvolume", "delete", returns=completed(1, stderr="denied")
+            "btrfs",
+            "subvolume",
+            "delete",
+            returns=completed(1, stderr="denied"),
         )
 
         exit_code, output = _invoke(run, "prune", "-N", "private")
@@ -139,18 +150,24 @@ class TestPruneCommand:
 
 
 class TestRunLock:
-    """A prune deletes snapshots, and either command may mount and umount:
-    both take the lock another nbkp command may hold."""
+    """
+    Both commands take the run lock another nbkp command may hold.
+
+    A prune deletes snapshots, and either command may mount and umount.
+    """
 
     def test_a_held_lock_stops_a_prune_before_anything_runs(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         _write(tmp_path)
         state_home = tmp_path / "state"
         lock_path = state_home / "nbkp" / "run.lock"
         run = _nas((OLD, MID, NEW))
         runtime = fake_runtime(
-            run=run, environ={"XDG_STATE_HOME": str(state_home)}, run_lock=hold_run_lock
+            run=run,
+            environ={"XDG_STATE_HOME": str(state_home)},
+            run_lock=hold_run_lock,
         )
 
         with hold_run_lock(lock_path):
@@ -177,14 +194,20 @@ class TestRunLock:
         ],
     )
     def test_the_lock_is_taken_unless_nothing_is_mounted_umounted_or_deleted(
-        self, args: list[str], locked: bool, tmp_path: Path
+        self,
+        args: list[str],
+        *,
+        locked: bool,
+        tmp_path: Path,
     ) -> None:
         _write(tmp_path)
         lock = FakeRunLock()
         runtime = fake_runtime(run=_nas((OLD, MID, NEW), (MID, NEW)), run_lock=lock)
 
         result = runner.invoke(
-            app, ["snapshots", *args, "-c", "config.yaml"], obj=runtime
+            app,
+            ["snapshots", *args, "-c", "config.yaml"],
+            obj=runtime,
         )
 
         assert result.exit_code == 0, result.output
@@ -197,7 +220,10 @@ class TestJsonErrors:
     def test_failed_delete(self, tmp_path: Path) -> None:
         _write(tmp_path)
         run = _nas((OLD, MID, NEW)).on(
-            "btrfs", "subvolume", "delete", returns=completed(1, stderr="denied")
+            "btrfs",
+            "subvolume",
+            "delete",
+            returns=completed(1, stderr="denied"),
         )
 
         exit_code, output = _invoke(run, "prune", "-o", "json")
@@ -215,11 +241,16 @@ class TestJsonErrors:
     def test_preflight_failure(self, command: str, tmp_path: Path) -> None:
         _write(tmp_path)
         no_snapshots_dir = healthy_nas(
-            FakeCommandRunner().on("test", "-d", SNAPSHOTS, returns=FAILS)
+            FakeCommandRunner().on("test", "-d", SNAPSHOTS, returns=FAILS),
         )
 
         exit_code, output = _invoke(
-            no_snapshots_dir, command, "-S", "ignore-none", "-o", "json"
+            no_snapshots_dir,
+            command,
+            "-S",
+            "ignore-none",
+            "-o",
+            "json",
         )
 
         assert exit_code == 1
@@ -239,7 +270,7 @@ class TestPreflightFailure:
     def test_suggests_troubleshoot(self, command: str, tmp_path: Path) -> None:
         _write(tmp_path)
         no_snapshots_dir = healthy_nas(
-            FakeCommandRunner().on("test", "-d", SNAPSHOTS, returns=FAILS)
+            FakeCommandRunner().on("test", "-d", SNAPSHOTS, returns=FAILS),
         )
 
         exit_code, output = _invoke(no_snapshots_dir, command, "-N", "private")
@@ -251,11 +282,16 @@ class TestPreflightFailure:
     def test_skipped_under_ignore_all(self, command: str, tmp_path: Path) -> None:
         _write(tmp_path)
         no_snapshots_dir = healthy_nas(
-            FakeCommandRunner().on("test", "-d", SNAPSHOTS, returns=FAILS)
+            FakeCommandRunner().on("test", "-d", SNAPSHOTS, returns=FAILS),
         )
 
         exit_code, output = _invoke(
-            no_snapshots_dir, command, "-S", "ignore-all", "-o", "json"
+            no_snapshots_dir,
+            command,
+            "-S",
+            "ignore-all",
+            "-o",
+            "json",
         )
 
         assert exit_code == 0
@@ -264,20 +300,24 @@ class TestPreflightFailure:
 
 class TestMountStrictness:
     @pytest.mark.parametrize(
-        ("strictness", "icon"), [("ignore-inactive", "⚠"), ("ignore-none", "✗")]
+        ("strictness", "icon"),
+        [("ignore-inactive", "⚠"), ("ignore-none", "✗")],
     )
     def test_absent_drive_is_reported_under_the_strictness(
-        self, strictness: str, icon: str, tmp_path: Path
+        self,
+        strictness: str,
+        icon: str,
+        tmp_path: Path,
     ) -> None:
         config = nas_config(snapshots="btrfs", max_snapshots=2)
         _write(
             tmp_path,
             config.model_copy(
-                update={"volumes": {**config.volumes, "enc": encrypted_volume()}}
+                update={"volumes": {**config.volumes, "enc": encrypted_volume()}},
             ),
         )
         absent = healthy_nas(
-            FakeCommandRunner().on("test", "-e", returns=FAILS, volume="enc")
+            FakeCommandRunner().on("test", "-e", returns=FAILS, volume="enc"),
         )
 
         _, output = _invoke(absent, "show", "-S", strictness)
@@ -302,10 +342,13 @@ class TestUnknownSyncFilter:
 class TestSyncFilter:
     @pytest.mark.parametrize("command", ["show", "prune"])
     def test_only_the_selected_sync_is_checked_and_reported(
-        self, command: str, tmp_path: Path
+        self,
+        command: str,
+        tmp_path: Path,
     ) -> None:
         _write(
-            tmp_path, nas_config(snapshots="btrfs", max_snapshots=2, syncs=("a", "b"))
+            tmp_path,
+            nas_config(snapshots="btrfs", max_snapshots=2, syncs=("a", "b")),
         )
         run = healthy_nas()
 

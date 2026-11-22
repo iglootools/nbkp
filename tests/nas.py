@@ -1,4 +1,5 @@
-"""A backup topology on one fake NAS, for driving whole commands.
+"""
+A backup topology on one fake NAS, for driving whole commands.
 
 Both volumes of :func:`nas_config` live on the remote host ``nas``, so every
 probe, snapshot operation and udisks step a command performs on them goes
@@ -28,8 +29,12 @@ def nas_config(
     max_snapshots: int | None = None,
     syncs: tuple[str, ...] = ("photos",),
 ) -> Config:
-    """One sync per name in *syncs*: ``/data/<name>`` → ``/backup/<name>`` on
-    ``nas``, the destination taking *snapshots* (keeping *max_snapshots*)."""
+    """
+    Build one sync per name in *syncs*, on ``nas``.
+
+    ``/data/<name>`` → ``/backup/<name>``, the destination taking *snapshots* (keeping
+    *max_snapshots*).
+    """
     return Config(
         ssh_endpoints={"nas": SshEndpoint(slug="nas", host="nas.example.com")},
         volumes={
@@ -39,7 +44,9 @@ def nas_config(
         sync_endpoints={
             **{
                 f"{name}-src": SyncEndpoint(
-                    slug=f"{name}-src", volume="data", subdir=name
+                    slug=f"{name}-src",
+                    volume="data",
+                    subdir=name,
                 )
                 for name in syncs
             },
@@ -49,10 +56,12 @@ def nas_config(
                     volume="backup",
                     subdir=name,
                     btrfs_snapshots=BtrfsSnapshotConfig(
-                        enabled=snapshots == "btrfs", max_snapshots=max_snapshots
+                        enabled=snapshots == "btrfs",
+                        max_snapshots=max_snapshots,
                     ),
                     hard_link_snapshots=HardLinkSnapshotConfig(
-                        enabled=snapshots == "hard-link", max_snapshots=max_snapshots
+                        enabled=snapshots == "hard-link",
+                        max_snapshots=max_snapshots,
                     ),
                 )
                 for name in syncs
@@ -66,9 +75,14 @@ def nas_config(
 
 
 def healthy_nas(
-    run: FakeCommandRunner | None = None, *, fs_type: str = "btrfs"
+    run: FakeCommandRunner | None = None,
+    *,
+    fs_type: str = "btrfs",
 ) -> FakeCommandRunner:
-    """*run* answering what its rules leave out as a healthy ``nas`` does:
-    every sentinel present, GNU rsync, btrfs with ``user_subvol_rm_allowed``,
-    ``latest`` pointing to ``/dev/null`` (see :func:`healthy_host`)."""
+    """
+    Make *run* answer what its rules leave out as a healthy ``nas`` does.
+
+    Every sentinel present, GNU rsync, btrfs with ``user_subvol_rm_allowed``, ``latest``
+    pointing to ``/dev/null`` (see :func:`healthy_host`).
+    """
     return healthy_host(run, fs_type=fs_type)

@@ -10,14 +10,15 @@ from nbkp.clidisplay import OutputFormat, echo_json
 from nbkp.fsprotocol import Snapshot
 
 
-def _emit(data: object, capsys: pytest.CaptureFixture[str]) -> Any:
+def _emit(data: object, capsys: pytest.CaptureFixture[str]) -> Any:  # noqa: ANN401 -- json.loads's value, which the test indexes freely
     echo_json(data)
     return json.loads(capsys.readouterr().out)
 
 
 class TestEchoJson:
     def test_serializes_model_with_datetime_field(
-        self, capsys: pytest.CaptureFixture[str]
+        self,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """A datetime field is the case a bare model_dump() gets wrong."""
         snapshot = Snapshot.create(datetime(2026, 3, 6, 14, 30, tzinfo=UTC))
@@ -30,7 +31,8 @@ class TestEchoJson:
         assert data["timestamp"].startswith("2026-03-06T14:30:00")
 
     def test_serializes_models_nested_in_containers(
-        self, capsys: pytest.CaptureFixture[str]
+        self,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Commands pass dicts and lists of models, not bare models."""
         snapshot = Snapshot.create(datetime(2026, 3, 6, 14, 30, tzinfo=UTC))
@@ -42,7 +44,8 @@ class TestEchoJson:
         assert data["snapshots"][0]["name"] == "2026-03-06T14:30:00.000Z"
 
     def test_passes_through_plain_structures(
-        self, capsys: pytest.CaptureFixture[str]
+        self,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         data = _emit({"provider": "keyring", "ids": ["a", "b"]}, capsys)
 

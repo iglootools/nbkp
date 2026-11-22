@@ -1,4 +1,5 @@
-"""E2E sync tests — Docker SSH server with rsync + btrfs.
+"""
+E2E sync tests — Docker SSH server with rsync + btrfs.
 
 The ``test-e2e-docker`` mise task runs these with ``-n 3``, one worker per
 test. Each test brings up its own multi-container topology (backup-server +

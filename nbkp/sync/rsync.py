@@ -1,3 +1,9 @@
+"""
+Building and running the rsync command of a sync, local or over SSH.
+
+Also streams rsync's output to a callback as it runs, for live progress.
+"""
+
 import codecs
 import io
 import locale
@@ -6,7 +12,7 @@ import subprocess
 from collections.abc import Callable, Iterator
 from enum import StrEnum
 
-from ..config import (
+from nbkp.config import (
     Config,
     LocalVolume,
     RemoteVolume,
@@ -14,17 +20,23 @@ from ..config import (
     SyncEndpoint,
     resolve_endpoint_path,
 )
-from ..fsprotocol import LATEST_LINK, SNAPSHOTS_DIR
-from ..remote import (
+from nbkp.fsprotocol import LATEST_LINK, SNAPSHOTS_DIR
+from nbkp.remote import (
     build_ssh_base_args,
     build_ssh_e_option,
     format_remote_path,
     shell_join,
 )
-from ..remote.endpoints import ResolvedEndpoints
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 class ProgressMode(StrEnum):
+    """
+    How much transfer progress rsync reports.
+
+    Overall progress and stats, per-file progress, both, or none.
+    """
+
     NONE = "none"
     OVERALL = "overall"
     PER_FILE = "per-file"
@@ -46,11 +58,13 @@ def resolve_source_path(
     volume: LocalVolume | RemoteVolume,
     source: SyncEndpoint,
 ) -> str:
-    """When the source endpoint has snapshots configured (btrfs or
-    hard-link), rsync should read from the ``latest/`` directory
-    rather than the volume root.  For hard-link snapshots,
-    ``latest`` is a symlink — rsync's trailing slash causes it
-    to follow the symlink and copy the target's contents.
+    """
+    Return the path rsync reads the source from.
+
+    When the source endpoint has snapshots configured (btrfs or hard-link), rsync should
+    read from the ``latest/`` directory rather than the volume root. For hard-link
+    snapshots, ``latest`` is a symlink: rsync's trailing slash causes it to follow the
+    symlink and copy the target's contents.
     """
     base = resolve_endpoint_path(volume, source.subdir)
     if source.snapshot_mode != "none":
@@ -79,6 +93,7 @@ def _progress_args(progress: ProgressMode | None) -> list[str]:
 
 def _base_rsync_args(
     sync: SyncConfig,
+    *,
     dry_run: bool,
     link_dest: str | None,
     progress: ProgressMode | None = None,
@@ -114,8 +129,10 @@ def hard_link_dest_suffix(snapshot_name: str) -> str:
 
 
 def hard_link_link_dest(latest_name: str | None) -> str | None:
-    """``--link-dest`` to the snapshot ``latest`` designates, or ``None`` before
-    the first one.  rsync resolves a relative ``--link-dest`` against the
+    """
+    Return ``--link-dest`` to the snapshot ``latest`` designates.
+
+    ``None`` before the first one. rsync resolves a relative ``--link-dest`` against the
     destination directory, which is the new snapshot's sibling.
     """
     return f"../{latest_name}" if latest_name else None
@@ -128,6 +145,7 @@ def _dest_target(base: str, dest_suffix: str | None) -> str:
 def build_rsync_command(
     sync: SyncConfig,
     config: Config,
+    *,
     dry_run: bool = False,
     link_dest: str | None = None,
     progress: ProgressMode | None = None,
@@ -143,7 +161,12 @@ def build_rsync_command(
     src_path = resolve_source_path(src_vol, src_ep)
     dst_path = resolve_endpoint_path(dst_vol, dst_ep.subdir)
     rsync_args = [
-        *_base_rsync_args(sync, dry_run, link_dest, progress),
+        *_base_rsync_args(
+            sync,
+            dry_run=dry_run,
+            link_dest=link_dest,
+            progress=progress,
+        ),
         *_filter_args(sync),
     ]
 
@@ -182,17 +205,23 @@ def build_rsync_command(
 
 
 type ProcessRunner = Callable[
-    [list[str], Callable[[str], None] | None], subprocess.CompletedProcess[str]
+    [list[str], Callable[[str], None] | None],
+    subprocess.CompletedProcess[str],
 ]
 """Runs a command on the orchestrator, forwarding its output to the callback
 when one is given, and capturing it otherwise."""
 
 
 def run_local_process(
-    cmd: list[str], on_output: Callable[[str], None] | None = None
+    cmd: list[str],
+    on_output: Callable[[str], None] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run *cmd*: its stdout and stderr captured apart when *on_output* is
-    ``None``, merged and forwarded to *on_output* as they arrive otherwise."""
+    """
+    Run *cmd*, capturing its output or forwarding it to *on_output*.
+
+    Its stdout and stderr are captured apart when *on_output* is ``None``, and merged
+    and forwarded to *on_output* as they arrive otherwise.
+    """
     if on_output is None:
         return subprocess.run(cmd, capture_output=True, text=True, check=False)
     else:
@@ -220,11 +249,14 @@ def run_streaming(
     chunk_size: int = _STREAM_CHUNK_SIZE,
     tail_size: int = _STREAM_TAIL_SIZE,
 ) -> subprocess.CompletedProcess[str]:
-    """Run *cmd*, forwarding its merged stdout/stderr to *on_output*, read at
-    most *chunk_size* bytes at a time.  The result's ``stdout`` holds only the
-    last *tail_size* characters of it."""
+    """
+    Run *cmd*, forwarding its merged stdout/stderr to *on_output*.
+
+    Reads at most *chunk_size* bytes at a time. The result's ``stdout`` holds only the
+    last *tail_size* characters of it.
+    """
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    assert proc.stdout is not None
+    assert proc.stdout is not None  # noqa: S101 -- set by stdout=PIPE; narrows the type
     fd = proc.stdout.fileno()
     raw_chunks = iter(lambda: os.read(fd, chunk_size), b"")
     tail = _OutputTail(tail_size)
@@ -251,7 +283,8 @@ def _decoded(raw_chunks: Iterator[bytes]) -> Iterator[str]:
 
 
 class _OutputTail:
-    """The last *size* characters appended.
+    """
+    The last *size* characters appended.
 
     Mutable so that appending stays cheap: rebuilding a bounded string on
     every chunk would copy up to *size* characters per (often tiny) progress
@@ -276,15 +309,17 @@ class _OutputTail:
 
 
 def _text_decoder() -> io.IncrementalNewlineDecoder:
-    """Decode bytes exactly as a ``text=True`` pipe would.
+    r"""
+    Decode bytes exactly as a ``text=True`` pipe would.
 
     Same encoding and strictness as ``io.TextIOWrapper``'s defaults, and the
-    same universal-newline translation (``\\r\\n`` and ``\\r`` become ``\\n``),
-    including a multi-byte character or a ``\\r\\n`` split across two reads.
+    same universal-newline translation (``\r\n`` and ``\r`` become ``\n``),
+    including a multi-byte character or a ``\r\n`` split across two reads.
     """
-    encoding = locale.getpreferredencoding(False)
+    encoding = locale.getpreferredencoding(do_setlocale=False)
     return io.IncrementalNewlineDecoder(
-        codecs.getincrementaldecoder(encoding)(), translate=True
+        codecs.getincrementaldecoder(encoding)(),
+        translate=True,
     )
 
 
@@ -296,6 +331,7 @@ def _forward(chunk: str, on_output: Callable[[str], None]) -> None:
 def run_rsync(
     sync: SyncConfig,
     config: Config,
+    *,
     dry_run: bool = False,
     link_dest: str | None = None,
     progress: ProgressMode | None = None,
@@ -304,15 +340,19 @@ def run_rsync(
     dest_suffix: str | None = None,
     run_process: ProcessRunner = run_local_process,
 ) -> subprocess.CompletedProcess[str]:
-    """*run_process* runs the built command: :func:`run_local_process` by
-    default, a fake in tests."""
+    """
+    Run rsync for *sync*.
+
+    *run_process* runs the built command: :func:`run_local_process` by default, a fake
+    in tests.
+    """
     cmd = build_rsync_command(
         sync,
         config,
-        dry_run,
-        link_dest,
-        progress,
-        resolved_endpoints,
+        dry_run=dry_run,
+        link_dest=link_dest,
+        progress=progress,
+        resolved_endpoints=resolved_endpoints,
         dest_suffix=dest_suffix,
     )
     return run_process(cmd, on_output)

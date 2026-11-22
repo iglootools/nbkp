@@ -7,21 +7,17 @@ from typing import NoReturn
 import typer
 from rich.console import Console
 
-from ..clidisplay import OutputFormat, echo_json
-from ..config import Config, ConfigError, ConfigErrorKind
-from ..config.output import config_error_json, format_config_error
-from ..remote.endpoints import (
-    EndpointFilter,
-    NetworkType,
-    ResolvedEndpoints,
-)
-from ..remote.resolution import (
+from nbkp.clidisplay import OutputFormat, echo_json
+from nbkp.cliwiring.runtime import Runtime
+from nbkp.config import Config, ConfigError, ConfigErrorKind
+from nbkp.config.output import config_error_json, format_config_error
+from nbkp.remote.endpoints import EndpointFilter, NetworkType, ResolvedEndpoints
+from nbkp.remote.resolution import (
     SshConfigError,
     SshConfigErrorKind,
     default_ssh_config_path,
     resolve_all_endpoints,
 )
-from .runtime import Runtime
 
 
 def load_config_or_exit(
@@ -29,8 +25,10 @@ def load_config_or_exit(
     config_path: str | Path | None,
     output_format: OutputFormat = OutputFormat.HUMAN,
 ) -> Config:
-    """Load config, searched for in *runtime*'s environment when no path is
-    given, or exit with code 2 on error.
+    """
+    Load the config, or exit with code 2 on error.
+
+    When no path is given, the config is searched for in *runtime*'s environment.
 
     The error is rendered in the command's output format: a Rich panel on
     stderr, or a JSON ``{"error": ...}`` object on stdout for ``-o json`` so
@@ -57,8 +55,10 @@ def require_known(
     known: Collection[str],
     output_format: OutputFormat,
 ) -> None:
-    """Exit 2 when an option names a *kind* of thing (``sync``, ``volume``,
-    ``location``) the config does not define.
+    """
+    Exit 2 when an option names a *kind* of thing the config does not define.
+
+    The kind is ``sync``, ``volume`` or ``location``.
 
     Without this, a typo (in a timer entry, say) filters everything out and
     the command reports success having done nothing. The error is rendered in
@@ -78,8 +78,8 @@ def require_known(
                             "reason": f"unknown-{kind}",
                             "message": message,
                             "names": list(unknown),
-                        }
-                    }
+                        },
+                    },
                 )
             case OutputFormat.HUMAN:
                 typer.echo(f"Error: {message}", err=True)
@@ -117,11 +117,14 @@ def _require_known_locations(
     exclude_locations: list[str] | None,
     output_format: OutputFormat,
 ) -> None:
-    """Exit 2 when a ``--location`` or ``--exclude-location`` value is not
-    defined in the config."""
+    """
+    Exit 2 when a location option names a location the config does not define.
+
+    The option is ``--location`` or ``--exclude-location``.
+    """
     known = cfg.known_locations()
     values: dict[str, None] = dict.fromkeys(
-        [*(locations or []), *(exclude_locations or [])]
+        [*(locations or []), *(exclude_locations or [])],
     )
     unknown = [value for value in values if value not in known]
     require_known("location", unknown, known, output_format)
@@ -134,8 +137,12 @@ def resolve_endpoints(
     network: NetworkType | None,
     output_format: OutputFormat = OutputFormat.HUMAN,
 ) -> ResolvedEndpoints:
-    """Exit with code 2, like a config error, when the user's SSH config
-    gives a host a value nbkp cannot use."""
+    """
+    Resolve the endpoints, or exit 2 on an SSH config value nbkp cannot use.
+
+    Exit with code 2, like a config error, when the user's SSH config gives a host a
+    value nbkp cannot use.
+    """
     _require_known_locations(cfg, locations, exclude_locations, output_format)
     ef = build_endpoint_filter(locations, exclude_locations, network)
     try:
@@ -149,6 +156,7 @@ def _ssh_config_error(e: SshConfigError) -> ConfigError:
         case SshConfigErrorKind.INVALID_PORT:
             detail = f"Port {e.value!r} for host '{e.host}' is not a number"
     return ConfigError(
-        f"Invalid SSH config {default_ssh_config_path()}: {detail}",
         ConfigErrorKind.INVALID_SSH_CONFIG,
+        path=default_ssh_config_path(),
+        detail=detail,
     )

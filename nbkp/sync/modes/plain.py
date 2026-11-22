@@ -1,13 +1,14 @@
 """Plain sync: rsync straight into the destination, no snapshots."""
 
-from ...config import SyncConfig
-from ..results import SyncResult
-from .common import RunContext, rsync_step
+from nbkp.config import SyncConfig
+from nbkp.sync.modes.common import RunContext, rsync_step
+from nbkp.sync.results import SyncResult
 
 
 def run_plain_sync(sync: SyncConfig, ctx: RunContext) -> SyncResult:
+    """Rsync *sync* straight into its destination and return the result."""
     match rsync_step(sync, ctx, dest_suffix=None):
         case SyncResult() as failure:
             return failure
         case proc:
-            return SyncResult.succeeded(sync.slug, ctx.dry_run, proc)
+            return SyncResult.succeeded(sync.slug, dry_run=ctx.dry_run, proc=proc)

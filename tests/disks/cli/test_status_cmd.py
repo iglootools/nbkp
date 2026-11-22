@@ -1,5 +1,8 @@
-"""Tests for `disks status`, against a host whose answers a FakeCommandRunner
-scripts, through an injected runtime."""
+"""
+Tests for `disks status`.
+
+Against a host whose answers a FakeCommandRunner scripts, through an injected runtime.
+"""
 
 import json
 from pathlib import Path
@@ -25,7 +28,7 @@ def _mount_config_for_status() -> Config:
     return Config(
         volumes={
             "encrypted-drive": encrypted_volume("/mnt/encrypted").model_copy(
-                update={"slug": "encrypted-drive"}
+                update={"slug": "encrypted-drive"},
             ),
             "plain-drive": LocalVolume(
                 slug="plain-drive",
@@ -53,7 +56,9 @@ def _host() -> FakeCommandRunner:
 
 
 def _status(
-    config_path: Path, *args: str, run: FakeCommandRunner | None = None
+    config_path: Path,
+    *args: str,
+    run: FakeCommandRunner | None = None,
 ) -> tuple[int, str]:
     result = runner.invoke(
         app,
@@ -66,7 +71,9 @@ def _status(
 class TestVolumesStatusCommand:
     def test_json_output(self, tmp_path: Path) -> None:
         exit_code, output = _status(
-            write_config(tmp_path, _mount_config_for_status()), "-o", "json"
+            write_config(tmp_path, _mount_config_for_status()),
+            "-o",
+            "json",
         )
 
         assert exit_code == 0
@@ -114,7 +121,8 @@ class TestVolumesStatusCommand:
 
     def test_missing_local_tool_is_not_unreachable(self, tmp_path: Path) -> None:
         no_test = FakeCommandRunner().on(
-            "test", returns=FileNotFoundError(2, "No such file or directory", "test")
+            "test",
+            returns=FileNotFoundError(2, "No such file or directory", "test"),
         )
 
         exit_code, output = _status(

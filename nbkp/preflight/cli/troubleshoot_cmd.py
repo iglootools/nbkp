@@ -1,13 +1,15 @@
+"""The ``nbkp preflight troubleshoot`` command: preflight checks with fixes."""
+
 from typing import Annotated
 
 import typer
 from rich.console import Console
 
-from ...clidisplay import OutputFormat, echo_json
-from ...clidisplay.invocation import Invocation
-from ...cliwiring.config import load_config_or_exit, resolve_endpoints
-from ...cliwiring.mount import managed_mount
-from ...cliwiring.options import (
+from nbkp.clidisplay import OutputFormat, echo_json
+from nbkp.clidisplay.invocation import Invocation
+from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
+from nbkp.cliwiring.mount import managed_mount
+from nbkp.cliwiring.options import (
     CONFIG_OPTION,
     EXCLUDE_LOCATION_OPTION,
     LOCATION_OPTION,
@@ -16,21 +18,19 @@ from ...cliwiring.options import (
     OUTPUT_OPTION,
     UMOUNT_OPTION,
 )
-from ...cliwiring.preflight import check_all_with_progress
-from ...cliwiring.runtime import Runtime, runtime_of
-from ...policy import Strictness
-from ..output import (
+from nbkp.cliwiring.preflight import check_all_with_progress
+from nbkp.cliwiring.runtime import Runtime, runtime_of
+from nbkp.policy import Strictness
+from nbkp.preflight.output import (
     TroubleshootContext,
     collect_issues,
     format_human_troubleshoot,
     troubleshoot_json,
 )
-from ..status.result import PreflightResult
-from ..strictness import has_fatal_errors
-from . import app
+from nbkp.preflight.status.result import PreflightResult
+from nbkp.preflight.strictness import has_fatal_errors
 
 
-@app.command("troubleshoot")
 def troubleshoot_cmd(
     ctx: typer.Context,
     config: CONFIG_OPTION = None,
@@ -49,12 +49,17 @@ def troubleshoot_cmd(
         ),
     ] = Strictness.IGNORE_INACTIVE,
     location: LOCATION_OPTION = None,
+    *,
     exclude_location: EXCLUDE_LOCATION_OPTION = None,
     network: NETWORK_OPTION = None,
     mount: MOUNT_OPTION = True,
     umount: UMOUNT_OPTION = True,
 ) -> None:
-    """Run the same checks as `check` but displays step-by-step fix instructions for every failure. Useful when `check` reports problems."""
+    """
+    Run the same checks as `check`, with step-by-step fixes for every failure.
+
+    Useful when `check` reports problems.
+    """
     runtime = runtime_of(ctx)
     cfg = load_config_or_exit(runtime, config, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
@@ -109,7 +114,7 @@ def _report(
                 strictness,
             )
             echo_json(
-                troubleshoot_json(issues, ctx, has_fatal_errors=fatal, run=runtime.run)
+                troubleshoot_json(issues, ctx, has_fatal_errors=fatal, run=runtime.run),
             )
         case OutputFormat.HUMAN:
             Console().print(
@@ -121,5 +126,5 @@ def _report(
                     context=ctx,
                     strictness=strictness,
                     run=runtime.run,
-                )
+                ),
             )

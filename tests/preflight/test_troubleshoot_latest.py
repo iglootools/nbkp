@@ -1,5 +1,7 @@
-"""Tests for the ``latest`` fix troubleshoot prints when the symlink is
-missing or invalid.
+"""
+Tests for the ``latest`` fix troubleshoot prints.
+
+The fix for a missing or invalid symlink.
 
 While ``latest`` points to ``/dev/null``, a hard-link sync deletes every
 snapshot as a leftover of a failed run, so the fix points it at the newest
@@ -36,12 +38,13 @@ def _issues(
 
 
 _INVALID_DST = _issues(
-    dst_ep_errors=[DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID]
+    dst_ep_errors=[DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID],
 )
 
 
 def _remediation(
-    issues: list[ts.TroubleshootIssue], facts: rem.RemediationFacts
+    issues: list[ts.TroubleshootIssue],
+    facts: rem.RemediationFacts,
 ) -> str:
     ctx = rem.TroubleshootContext(config=btrfs_config(), facts=facts)
     data = ts.troubleshoot_json(issues, ctx, has_fatal_errors=True)
@@ -71,7 +74,7 @@ class TestLatestFixRendering:
 
     def test_source_endpoint_fix_uses_the_source_snapshots(self) -> None:
         issues = _issues(
-            src_ep_errors=[SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND]
+            src_ep_errors=[SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND],
         )
         facts = rem.RemediationFacts(newest_snapshots={"ep-src": _NEW})
         out = _remediation(issues, facts)
@@ -85,7 +88,9 @@ class TestNewestSnapshotGathering:
         listing = f"{_OLD}\n{mac_newest}\n{_NEW}\nlost+found\n"
         run = FakeCommandRunner().on("ls", returns=completed(stdout=listing))
         facts = ts.gather_remediation_facts(
-            _INVALID_DST, rem.TroubleshootContext(config=btrfs_config()), run=run
+            _INVALID_DST,
+            rem.TroubleshootContext(config=btrfs_config()),
+            run=run,
         )
         assert facts.newest_snapshots == {"ep-dst": mac_newest}
         assert run.commands == [["ls", _SNAPSHOTS]]
@@ -97,23 +102,30 @@ class TestNewestSnapshotGathering:
             .on("test", returns=completed(1))
         )
         facts = ts.gather_remediation_facts(
-            _INVALID_DST, rem.TroubleshootContext(config=btrfs_config()), run=run
+            _INVALID_DST,
+            rem.TroubleshootContext(config=btrfs_config()),
+            run=run,
         )
         assert facts.newest_snapshots == {"ep-dst": None}
 
     def test_unknown_when_the_listing_fails(self) -> None:
         run = FakeCommandRunner().on(
-            "ls", returns=completed(2, stderr="permission denied")
+            "ls",
+            returns=completed(2, stderr="permission denied"),
         )
         facts = ts.gather_remediation_facts(
-            _INVALID_DST, rem.TroubleshootContext(config=btrfs_config()), run=run
+            _INVALID_DST,
+            rem.TroubleshootContext(config=btrfs_config()),
+            run=run,
         )
         assert facts.newest_snapshots == {}
 
     def test_unknown_when_the_connection_fails(self) -> None:
         run = FakeCommandRunner().on("ls", returns=paramiko.SSHException("closed"))
         facts = ts.gather_remediation_facts(
-            _INVALID_DST, rem.TroubleshootContext(config=btrfs_config()), run=run
+            _INVALID_DST,
+            rem.TroubleshootContext(config=btrfs_config()),
+            run=run,
         )
         assert facts.newest_snapshots == {}
 
@@ -121,7 +133,9 @@ class TestNewestSnapshotGathering:
         run = FakeCommandRunner()
         issues = _issues(dst_ep_errors=[DestinationEndpointErrorKind.NOT_WRITABLE])
         facts = ts.gather_remediation_facts(
-            issues, rem.TroubleshootContext(config=btrfs_config()), run=run
+            issues,
+            rem.TroubleshootContext(config=btrfs_config()),
+            run=run,
         )
         assert facts.newest_snapshots == {}
         assert run.commands == []

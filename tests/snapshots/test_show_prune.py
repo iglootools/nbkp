@@ -1,4 +1,5 @@
-"""Tests for show_all_syncs / prune_all_syncs and their outcome decisions.
+"""
+Tests for show_all_syncs / prune_all_syncs and their outcome decisions.
 
 Each takes the preflight statuses ``snapshots show|prune`` computed, so the
 tests hand them testkit statuses for the syncs of ``tests.nas`` and script
@@ -11,6 +12,7 @@ from nbkp.config import Config
 from nbkp.policy import Strictness
 from nbkp.preflight import (
     DestinationEndpointErrorKind,
+    DestinationEndpointStatus,
     SyncErrorKind,
     SyncStatus,
 )
@@ -48,18 +50,24 @@ def active_statuses(config: Config) -> dict[str, SyncStatus]:
     return {name: sync_status(config, vols, name) for name in config.syncs}
 
 
+def _with_errors(
+    status: DestinationEndpointStatus,
+    errors: list[DestinationEndpointErrorKind],
+) -> DestinationEndpointStatus:
+    return status.model_copy(update={"errors": errors})
+
+
 def infra_error_statuses(config: Config) -> dict[str, SyncStatus]:
     """Destination snapshots/ missing: an infrastructure error, not inactivity."""
     return {
         name: ss.model_copy(
             update={
-                "destination_endpoint_status": ss.destination_endpoint_status.model_copy(
-                    update={
-                        "errors": [DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND]
-                    }
+                "destination_endpoint_status": _with_errors(
+                    ss.destination_endpoint_status,
+                    [DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND],
                 ),
                 "errors": [SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE],
-            }
+            },
         )
         for name, ss in active_statuses(config).items()
     }
@@ -76,7 +84,7 @@ def inactive_statuses(config: Config) -> dict[str, SyncStatus]:
                     sentinel_exists=False,
                 ),
                 "errors": [SyncErrorKind.SOURCE_ENDPOINT_INACTIVE],
-            }
+            },
         )
         for name, ss in active_statuses(config).items()
     }
@@ -156,9 +164,12 @@ class TestPrune:
         assert run.commands_starting_with("btrfs") == []
 
     def test_dry_run_keeps_every_snapshot(self) -> None:
-        """A dry run deletes nothing, so every snapshot is still kept: the
-        listing already holds the would-be-deleted ones (it used to count them
-        twice, 4 kept of 3)."""
+        """
+        A dry run deletes nothing, so every snapshot is still kept.
+
+        The listing already holds the would-be-deleted ones (it used to count them
+        twice, 4 kept of 3).
+        """
         [result] = _prune(_nas_with((OLD, MID, NEW)), dry_run=True)
 
         assert result.kept == 3
@@ -190,8 +201,11 @@ class TestPrune:
         )
 
     def test_delete_failing_partway_reports_what_was_deleted(self) -> None:
-        """With 4 snapshots and a limit of 2, the second deletion fails: the
-        first is gone, and the remaining 3 are counted afresh."""
+        """
+        With 4 snapshots and a limit of 2, the second deletion fails.
+
+        The first is gone, and the remaining 3 are counted afresh.
+        """
         older = "2026-02-01T10:00:00.000Z"
         run = _nas_with((older, OLD, MID, NEW), (OLD, MID, NEW)).on(
             "btrfs",
@@ -227,7 +241,9 @@ class TestPrune:
         run = FakeCommandRunner()
 
         [result] = _prune(
-            run, infra_error_statuses(_BTRFS), strictness=Strictness.IGNORE_ALL
+            run,
+            infra_error_statuses(_BTRFS),
+            strictness=Strictness.IGNORE_ALL,
         )
 
         assert result.skip_reason is SnapshotSkipReason.PREFLIGHT_ERRORS
@@ -289,7 +305,8 @@ class TestShow:
         assert result.sync_slug == "photos"
         assert result.snapshot_mode == "btrfs"
         assert [s.name for s in result.snapshots] == [OLD, NEW]
-        assert result.latest is not None and result.latest.name == NEW
+        assert result.latest is not None
+        assert result.latest.name == NEW
         assert result.max_snapshots == 2
         assert (result.skip_reason, result.error) == (None, None)
 
@@ -330,7 +347,9 @@ class TestShow:
         }
 
         [result] = _show(
-            FakeCommandRunner(), disabled, strictness=Strictness.IGNORE_NONE
+            FakeCommandRunner(),
+            disabled,
+            strictness=Strictness.IGNORE_NONE,
         )
 
         assert result.skip_reason is SnapshotSkipReason.INACTIVE
@@ -369,7 +388,7 @@ class TestOutcome:
                 snapshots=(),
                 latest=None,
                 max_snapshots=None,
-            )
+            ),
         ]
         assert not has_errors(results)
         assert not failed_in_preflight(results, self._active())

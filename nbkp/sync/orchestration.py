@@ -1,4 +1,5 @@
-"""Sync orchestration: run every selected sync in dependency order.
+"""
+Sync orchestration: run every selected sync in dependency order.
 
 Decides, per sync, whether to run it, skip it (inactive or broken at
 preflight) or cancel it (an upstream did not succeed), and delegates the run
@@ -9,19 +10,25 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
-from ..config import Config, sync_predecessors
-from ..ordering.graph import sort_syncs
-from ..policy import Strictness
-from ..preflight import SyncErrorKind, SyncStatus
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
-from .modes import RsyncRunner, RunContext, run_single_sync
-from .results import DISABLED_FAILURES, RUNTIME_FAILURES, SyncFailureKind, SyncResult
-from .rsync import ProgressMode, run_rsync
+from nbkp.config import Config, sync_predecessors
+from nbkp.ordering.graph import sort_syncs
+from nbkp.policy import Strictness
+from nbkp.preflight import SyncErrorKind, SyncStatus
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.sync.modes import RsyncRunner, RunContext, run_single_sync
+from nbkp.sync.results import (
+    DISABLED_FAILURES,
+    RUNTIME_FAILURES,
+    SyncFailureKind,
+    SyncResult,
+)
+from nbkp.sync.rsync import ProgressMode, run_rsync
 
 
 def _presence_proven(status: SyncStatus) -> bool:
-    """Whether preflight observed every sentinel of an enabled sync.
+    """
+    Whether preflight observed every sentinel of an enabled sync.
 
     Endpoint diagnostics only exist once the volume is reachable and its
     ``.nbkp-vol`` sentinel present, so both endpoint sentinels being
@@ -41,7 +48,8 @@ def _presence_proven(status: SyncStatus) -> bool:
 
 
 def _should_attempt(status: SyncStatus, strictness: Strictness) -> bool:
-    """Active syncs run; ``ignore-all`` also attempts broken ones.
+    """
+    Active syncs run; ``ignore-all`` also attempts broken ones.
 
     ``ignore-all`` attempts a sync with preflight errors only when its
     presence is proven: skipping the sentinel guarantee could write a
@@ -72,9 +80,11 @@ def _cancellation(
     slug: str,
     upstreams: set[str],
     results: dict[str, SyncResult],
+    *,
     dry_run: bool,
 ) -> SyncResult | None:
-    """A cancelled result when an upstream did not succeed, else ``None``.
+    """
+    Return a cancelled result when an upstream did not succeed, else ``None``.
 
     A failed upstream takes precedence over a skipped one, and a skipped one
     over a disabled one, so the cancellation is as severe as its most severe
@@ -92,15 +102,24 @@ def _cancellation(
     match (failed, skipped, disabled):
         case ([first, *_], _, _):
             return SyncResult.cancelled(
-                slug, dry_run, SyncFailureKind.UPSTREAM_FAILED, first
+                slug,
+                dry_run=dry_run,
+                failure=SyncFailureKind.UPSTREAM_FAILED,
+                upstream=first,
             )
         case ([], [first, *_], _):
             return SyncResult.cancelled(
-                slug, dry_run, SyncFailureKind.UPSTREAM_SKIPPED, first
+                slug,
+                dry_run=dry_run,
+                failure=SyncFailureKind.UPSTREAM_SKIPPED,
+                upstream=first,
             )
         case ([], [], [first, *_]):
             return SyncResult.cancelled(
-                slug, dry_run, SyncFailureKind.UPSTREAM_DISABLED, first
+                slug,
+                dry_run=dry_run,
+                failure=SyncFailureKind.UPSTREAM_DISABLED,
+                upstream=first,
             )
         case _:
             return None
@@ -113,7 +132,7 @@ def _execute_or_skip(
     strictness: Strictness,
     ctx: RunContext,
 ) -> SyncResult:
-    cancellation = _cancellation(status.slug, upstreams, results, ctx.dry_run)
+    cancellation = _cancellation(status.slug, upstreams, results, dry_run=ctx.dry_run)
     if cancellation is not None:
         return cancellation
     elif _should_attempt(status, strictness):
@@ -122,13 +141,17 @@ def _execute_or_skip(
         # With cascade errors, status.errors is self-describing: sync-level
         # errors plus pointers to the inactive lower layers.
         return SyncResult.skipped(
-            status.slug, ctx.dry_run, _skip_kind(status), tuple(status.errors)
+            status.slug,
+            dry_run=ctx.dry_run,
+            failure=_skip_kind(status),
+            preflight_errors=tuple(status.errors),
         )
 
 
 @dataclass(frozen=True)
 class RunOptions:
-    """How a run executes its syncs, chosen once at the entry point.
+    """
+    How a run executes its syncs, chosen once at the entry point.
 
     *clock* names snapshots (read once per snapshot-enabled sync) and
     *platform* (``sys.platform``) decides the macOS-safe snapshot name form.
@@ -158,7 +181,8 @@ def run_all_syncs(
     on_sync_start: Callable[[str], None] | None = None,
     on_sync_end: Callable[[str, SyncResult], None] | None = None,
 ) -> list[SyncResult]:
-    """Run all (or selected) syncs in dependency order.
+    """
+    Run all (or selected) syncs in dependency order.
 
     Expects pre-computed sync statuses from ``check_all_syncs``.
     """

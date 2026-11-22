@@ -27,7 +27,11 @@ _OPTIONS = ScriptOptions(platform="linux", config_path="/etc/nbkp/config.yaml")
 
 def _bash_n(script: str) -> None:
     result = subprocess.run(
-        ["bash", "-n"], input=script, capture_output=True, text=True, check=False
+        ["bash", "-n"],
+        input=script,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
@@ -43,7 +47,9 @@ def _local_to_local_config() -> Config:
         },
         syncs={
             "my-sync": SyncConfig(
-                slug="my-sync", source="ep-src", destination="ep-dst"
+                slug="my-sync",
+                source="ep-src",
+                destination="ep-dst",
             ),
         },
     )
@@ -377,7 +383,10 @@ class TestVolumeChecks:
         config = _local_to_remote_config()
         resolved = resolve_all_endpoints(config)
         script = generate_script(
-            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+            config,
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints=resolved,
         )
         assert "ssh" in script
         assert "/volume1/backups/.nbkp-vol" in script
@@ -407,7 +416,10 @@ class TestLocalToRemote:
         config = _local_to_remote_config()
         resolved = resolve_all_endpoints(config)
         script = generate_script(
-            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+            config,
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints=resolved,
         )
         assert "rsync" in script
         assert "/mnt/data/photos/" in script
@@ -422,7 +434,10 @@ class TestRemoteToLocal:
         config = _remote_to_local_config()
         resolved = resolve_all_endpoints(config)
         script = generate_script(
-            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+            config,
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints=resolved,
         )
         assert "admin@remote.example.com:/data/" in script
         assert "/mnt/backup/" in script
@@ -484,7 +499,7 @@ class TestBtrfs:
                 fi
                 btrfs subvolume snapshot -r /mnt/dst/staging "/mnt/dst/snapshots/${NBKP_TS}"
             fi
-        """)
+        """)  # noqa: E501 -- the generated script, line for line
         assert indent(step, "    ") in script
 
     def test_prune_with_max_snapshots(self) -> None:
@@ -515,7 +530,7 @@ class TestBtrfs:
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert indent(_SYMLINK_STEP, "    ") in script
         assert script.index("# Btrfs snapshot") < script.index(
-            "# Update latest symlink"
+            "# Update latest symlink",
         )
 
 
@@ -555,7 +570,10 @@ class TestPreflightChecks:
         config = _local_to_remote_config()
         resolved = resolve_all_endpoints(config)
         script = generate_script(
-            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+            config,
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints=resolved,
         )
         assert "ssh" in script
         assert ".nbkp-dst" in script
@@ -603,7 +621,10 @@ class TestProxyJump:
         config = _proxy_jump_config()
         resolved = resolve_all_endpoints(config)
         script = generate_script(
-            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+            config,
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints=resolved,
         )
         assert "ProxyCommand=" in script
         assert "admin@bastion.example.com" in script
@@ -669,7 +690,10 @@ class TestSshConnectionOptions:
         )
         resolved = resolve_all_endpoints(config)
         script = generate_script(
-            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+            config,
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints=resolved,
         )
         assert "Compression=yes" in script
         assert "ServerAliveInterval=60" in script
@@ -687,7 +711,10 @@ class TestShellValidity:
         config = _local_to_remote_config()
         resolved = resolve_all_endpoints(config)
         script = generate_script(
-            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+            config,
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints=resolved,
         )
         _bash_n(script)
 
@@ -695,7 +722,10 @@ class TestShellValidity:
         config = _remote_to_local_config()
         resolved = resolve_all_endpoints(config)
         script = generate_script(
-            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+            config,
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints=resolved,
         )
         _bash_n(script)
 
@@ -718,13 +748,16 @@ class TestShellValidity:
         config = _proxy_jump_config()
         resolved = resolve_all_endpoints(config)
         script = generate_script(
-            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+            config,
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints=resolved,
         )
         _bash_n(script)
 
 
 def mount_managed_config() -> Config:
-    """A sync onto a mount-managed volume whose mountpoint is discovered."""
+    """Build a sync onto a mount-managed volume whose mountpoint is discovered."""
     config = _local_to_local_config()
     dst = LocalVolume(
         slug="dst",
@@ -736,7 +769,8 @@ def mount_managed_config() -> Config:
 class TestEdgeCases:
     def test_volume_without_path_is_refused(self) -> None:
         with pytest.raises(
-            VolumeWithoutPathError, check=lambda e: e.volume_slug == "dst"
+            VolumeWithoutPathError,
+            check=lambda e: e.volume_slug == "dst",
         ):
             generate_script(mount_managed_config(), _OPTIONS, now=_NOW)
 
@@ -909,7 +943,10 @@ class TestRemoteBtrfs:
         )
         resolved = resolve_all_endpoints(config)
         script = generate_script(
-            config, _OPTIONS, now=_NOW, resolved_endpoints=resolved
+            config,
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints=resolved,
         )
         # Btrfs commands should be wrapped in SSH
         assert "btrfs subvolume snapshot" in script
@@ -931,7 +968,8 @@ class TestHardLink:
                     slug="ep-dst",
                     volume="dst",
                     hard_link_snapshots=HardLinkSnapshotConfig(
-                        enabled=True, max_snapshots=5
+                        enabled=True,
+                        max_snapshots=5,
                     ),
                 ),
             },
@@ -987,7 +1025,8 @@ class TestHardLink:
                     slug="ep-dst",
                     volume="nas-vol",
                     hard_link_snapshots=HardLinkSnapshotConfig(
-                        enabled=True, max_snapshots=3
+                        enabled=True,
+                        max_snapshots=3,
                     ),
                 ),
             },
@@ -1019,7 +1058,7 @@ class TestHardLink:
                     done
                 fi
             fi
-        """)
+        """)  # noqa: E501 -- the generated script, line for line
         assert indent(step, "    ") in script
 
     def test_rejects_filesystems_without_hard_links(self) -> None:
@@ -1393,12 +1432,14 @@ def _remote_snapshot_config(mode: str) -> Config:
     hard_link = HardLinkSnapshotConfig(enabled=mode == "hard-link", max_snapshots=3)
     return Config(
         ssh_endpoints={
-            "nas": SshEndpoint(slug="nas", host="nas.example.com", user="backup")
+            "nas": SshEndpoint(slug="nas", host="nas.example.com", user="backup"),
         },
         volumes={
             "src": LocalVolume(slug="src", path="/mnt/data"),
             "nas-vol": RemoteVolume(
-                slug="nas-vol", ssh_endpoint="nas", path="/srv/back ups"
+                slug="nas-vol",
+                ssh_endpoint="nas",
+                path="/srv/back ups",
             ),
         },
         sync_endpoints={
@@ -1413,7 +1454,9 @@ def _remote_snapshot_config(mode: str) -> Config:
         },
         syncs={
             "remote-snap": SyncConfig(
-                slug="remote-snap", source="ep-src", destination="ep-dst"
+                slug="remote-snap",
+                source="ep-src",
+                destination="ep-dst",
             ),
         },
     )
@@ -1426,8 +1469,11 @@ def _remote_script(mode: str) -> str:
 
 
 class TestBtrfsPruneFailedDelete:
-    """A failed delete makes the snapshot read-only again and still fails
-    the prune block, which ``nbkp_run_sync`` turns into a warning."""
+    """
+    A failed btrfs delete makes the snapshot read-only again and fails the block.
+
+    ``nbkp_run_sync`` turns the failed prune block into a warning.
+    """
 
     _STUB = dedent("""\
         btrfs() {
@@ -1647,7 +1693,7 @@ class TestSyncSteps:
 
 
 def test_config_path_cannot_inject_shell_lines() -> None:
-    options = ScriptOptions(platform="linux", config_path="/tmp/x\nrm -rf ~\n.yaml")
+    options = ScriptOptions(platform="linux", config_path="/tmp/x\nrm -rf ~\n.yaml")  # noqa: S108 -- data only, never written
     script = generate_script(_local_to_local_config(), options, now=_NOW)
     assert "# Config: /tmp/x\\nrm -rf ~\\n.yaml\n" in script
     assert "\nrm -rf ~" not in script

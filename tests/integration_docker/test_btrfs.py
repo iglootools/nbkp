@@ -1,4 +1,5 @@
-"""Integration tests: btrfs module via remote Docker container.
+"""
+Integration tests: btrfs module via remote Docker container.
 
 Includes both component-level tests (direct btrfs operations) and
 sync-flow tests (rsync into staging → snapshot → verify).
@@ -77,7 +78,7 @@ def _make_btrfs_config(
     return sync, config, resolved
 
 
-@pytest.fixture()
+@pytest.fixture
 def btrfs_env_remote(
     tmp_path: Path,
     docker_ssh_endpoint: SshEndpoint,
@@ -85,7 +86,9 @@ def btrfs_env_remote(
 ) -> BtrfsEnv:
     """BtrfsEnv backed by the Docker SSH container."""
     sync, config, resolved = _make_btrfs_config(
-        str(tmp_path), remote_btrfs_volume, docker_ssh_endpoint
+        str(tmp_path),
+        remote_btrfs_volume,
+        docker_ssh_endpoint,
     )
 
     def _create_staging() -> None:
@@ -202,11 +205,16 @@ class TestBtrfsSnapshots:
         (src / "data.txt").write_text("snapshot me")
 
         sync, config, resolved = _make_btrfs_sync_config(
-            str(src), remote_btrfs_volume, docker_ssh_endpoint
+            str(src),
+            remote_btrfs_volume,
+            docker_ssh_endpoint,
         )
 
         result = run_rsync(
-            sync, config, resolved_endpoints=resolved, dest_suffix="staging"
+            sync,
+            config,
+            resolved_endpoints=resolved,
+            dest_suffix="staging",
         )
         assert result.returncode == 0
 
@@ -231,7 +239,10 @@ class TestBtrfsSnapshots:
         assert f"snapshots/{snapshot.name}" in link.stdout
 
         assert_sentinels_after_sync(
-            sync, config, docker_ssh_endpoint, dest_suffix="staging"
+            sync,
+            config,
+            docker_ssh_endpoint,
+            dest_suffix="staging",
         )
 
     def test_snapshot_readonly(
@@ -245,7 +256,9 @@ class TestBtrfsSnapshots:
         (src / "data.txt").write_text("readonly test")
 
         sync, config, resolved = _make_btrfs_sync_config(
-            str(src), remote_btrfs_volume, docker_ssh_endpoint
+            str(src),
+            remote_btrfs_volume,
+            docker_ssh_endpoint,
         )
         run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="staging")
         snapshot_path = create_snapshot(
@@ -274,7 +287,9 @@ class TestBtrfsSnapshots:
         (src / "file.txt").write_text("v1")
 
         sync, config, resolved = _make_btrfs_sync_config(
-            str(src), remote_btrfs_volume, docker_ssh_endpoint
+            str(src),
+            remote_btrfs_volume,
+            docker_ssh_endpoint,
         )
 
         run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="staging")
@@ -324,7 +339,10 @@ class TestBtrfsSnapshots:
         assert f"snapshots/{snapshot.name}" in link.stdout
 
         assert_sentinels_after_sync(
-            sync, config, docker_ssh_endpoint, dest_suffix="staging"
+            sync,
+            config,
+            docker_ssh_endpoint,
+            dest_suffix="staging",
         )
 
     def test_dry_run_no_snapshot(
@@ -344,7 +362,9 @@ class TestBtrfsSnapshots:
         (src / "data.txt").write_text("dry run")
 
         sync, config, resolved = _make_btrfs_sync_config(
-            str(src), remote_btrfs_volume, docker_ssh_endpoint
+            str(src),
+            remote_btrfs_volume,
+            docker_ssh_endpoint,
         )
 
         result = run_rsync(
@@ -399,7 +419,9 @@ class TestPruneBtrfsSnapshotsViaSyncFlow:
         (src / "data.txt").write_text("prune test")
 
         sync, config, resolved = _make_btrfs_sync_config(
-            str(src), remote_btrfs_volume, docker_ssh_endpoint
+            str(src),
+            remote_btrfs_volume,
+            docker_ssh_endpoint,
         )
         run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="staging")
 
@@ -431,7 +453,9 @@ class TestPruneBtrfsSnapshotsViaSyncFlow:
         (src / "data.txt").write_text("dry run prune")
 
         sync, config, resolved = _make_btrfs_sync_config(
-            str(src), remote_btrfs_volume, docker_ssh_endpoint
+            str(src),
+            remote_btrfs_volume,
+            docker_ssh_endpoint,
         )
         run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="staging")
 
@@ -464,7 +488,9 @@ class TestPruneBtrfsSnapshotsViaSyncFlow:
         (src / "data.txt").write_text("noop prune")
 
         sync, config, resolved = _make_btrfs_sync_config(
-            str(src), remote_btrfs_volume, docker_ssh_endpoint
+            str(src),
+            remote_btrfs_volume,
+            docker_ssh_endpoint,
         )
         run_rsync(sync, config, resolved_endpoints=resolved, dest_suffix="staging")
 

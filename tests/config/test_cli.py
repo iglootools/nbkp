@@ -31,8 +31,11 @@ _UNKNOWN_SSH_ENDPOINT = (
 
 
 class TestConfigSearch:
-    """Without ``--config``, the command searches the runtime's home and
-    platform directories, never the developer's."""
+    """
+    Without ``--config``, the command searches only the runtime's directories.
+
+    It searches the runtime's home and platform directories, never the developer's.
+    """
 
     def test_finds_the_config_under_the_runtime_home(self, tmp_path: Path) -> None:
         (tmp_path / ".config" / "nbkp").mkdir(parents=True)
@@ -49,7 +52,9 @@ class TestConfigSearch:
 
     def test_reports_no_config_when_the_runtime_has_none(self) -> None:
         result = runner.invoke(
-            app, ["config", "show", "-o", "json"], obj=fake_runtime()
+            app,
+            ["config", "show", "-o", "json"],
+            obj=fake_runtime(),
         )
 
         assert result.exit_code == 2
@@ -115,7 +120,8 @@ class TestConfigError:
 
     def test_run_config_error(self, tmp_path: Path) -> None:
         result = runner.invoke(
-            app, ["run", "--config", _write_raw(tmp_path, _INVALID_TYPE)]
+            app,
+            ["run", "--config", _write_raw(tmp_path, _INVALID_TYPE)],
         )
         assert result.exit_code == 2
 
@@ -156,17 +162,18 @@ class TestConfigErrorJson:
         data = json.loads(result.stdout)
         assert data["error"]["reason"] == ConfigErrorKind.VALIDATION
         assert [e["type"] for e in data["error"]["errors"]] == [
-            ConfigValidationErrorKind.UNKNOWN_REFERENCE
+            ConfigValidationErrorKind.UNKNOWN_REFERENCE,
         ]
 
     def test_plain_error_as_json(self) -> None:
         result = runner.invoke(
-            app, ["preflight", "check", "--config", _MISSING, "-o", "json"]
+            app,
+            ["preflight", "check", "--config", _MISSING, "-o", "json"],
         )
         assert result.exit_code == 2
         assert json.loads(result.stdout) == {
             "error": {
                 "reason": "file-not-found",
                 "message": f"Config file not found: {_MISSING}",
-            }
+            },
         }

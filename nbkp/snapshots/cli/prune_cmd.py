@@ -1,8 +1,10 @@
+"""The ``nbkp snapshots prune`` command."""
+
 import typer
 from rich.console import Console
 
-from ...clidisplay import OutputFormat, echo_json
-from ...cliwiring.options import (
+from nbkp.clidisplay import OutputFormat, echo_json
+from nbkp.cliwiring.options import (
     CONFIG_OPTION,
     DRY_RUN_OPTION,
     EXCLUDE_LOCATION_OPTION,
@@ -13,20 +15,22 @@ from ...cliwiring.options import (
     SYNC_OPTION,
     UMOUNT_OPTION,
 )
-from ...policy import Strictness
-from .. import prune_all_syncs
-from ..models import PruneResult
-from ..output import format_human_prune_results
-from . import app
-from .operation import SnapshotCommandOptions, run_snapshot_operation_or_exit
-from .options import STRICTNESS_OPTION
+from nbkp.policy import Strictness
+from nbkp.snapshots import prune_all_syncs
+from nbkp.snapshots.cli.operation import (
+    SnapshotCommandOptions,
+    run_snapshot_operation_or_exit,
+)
+from nbkp.snapshots.cli.options import STRICTNESS_OPTION
+from nbkp.snapshots.models import PruneResult
+from nbkp.snapshots.output import format_human_prune_results
 
 
-@app.command("prune")
 def prune_cmd(
     ctx: typer.Context,
     config: CONFIG_OPTION = None,
     sync: SYNC_OPTION = None,
+    *,
     dry_run: DRY_RUN_OPTION = False,
     output: OUTPUT_OPTION = OutputFormat.HUMAN,
     strictness: STRICTNESS_OPTION = Strictness.IGNORE_INACTIVE,
@@ -36,7 +40,11 @@ def prune_cmd(
     mount: MOUNT_OPTION = True,
     umount: UMOUNT_OPTION = True,
 ) -> None:
-    """Remove snapshots beyond the `max-snapshots` limit. Normally handled automatically by `run`, but can be invoked manually."""
+    """
+    Remove snapshots beyond the `max-snapshots` limit.
+
+    Normally handled automatically by `run`, but can be invoked manually.
+    """
     options = SnapshotCommandOptions(
         config=config,
         sync=sync,
@@ -60,13 +68,16 @@ def prune_cmd(
             strictness=strictness,
             run=run,
         ),
-        lambda results: _print_results(results, dry_run, output),
+        lambda results: _print_results(results, dry_run=dry_run, output=output),
         writes=not dry_run,
     )
 
 
 def _print_results(
-    results: list[PruneResult], dry_run: bool, output: OutputFormat
+    results: list[PruneResult],
+    *,
+    dry_run: bool,
+    output: OutputFormat,
 ) -> None:
     match (output, dry_run):
         case (OutputFormat.JSON, True):
@@ -77,4 +88,4 @@ def _print_results(
         case (OutputFormat.JSON, False):
             echo_json(list(results))
         case (OutputFormat.HUMAN, _):
-            Console().print(format_human_prune_results(results, dry_run))
+            Console().print(format_human_prune_results(results, dry_run=dry_run))

@@ -13,26 +13,30 @@ from nbkp.disks.status import (
 from tests.fakes import FakeCommandRunner
 
 _UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
-_DRIVE = LocalVolume(
-    slug="drive", path="/mnt/drive", mount=MountConfig(device_uuid=_UUID)
-)
+_DRIVE_MOUNT = MountConfig(device_uuid=_UUID)
+_DRIVE = LocalVolume(slug="drive", path="/mnt/drive", mount=_DRIVE_MOUNT)
 
 
 class TestProbeVolumeStatus:
     def test_unreachable_host_is_a_status(self) -> None:
         run = FakeCommandRunner().on("test", returns=OSError("timed out"))
 
-        assert probe_volume_status(_DRIVE, {}, run=run) == VolumeStatus(
-            "drive", VolumeStatusKind.UNREACHABLE, error_message="timed out"
+        assert probe_volume_status(_DRIVE, _DRIVE_MOUNT, {}, run=run) == VolumeStatus(
+            "drive",
+            VolumeStatusKind.UNREACHABLE,
+            error_message="timed out",
         )
 
     def test_missing_local_tool_is_a_status(self) -> None:
         run = FakeCommandRunner().on(
-            "test", returns=FileNotFoundError(2, "No such file or directory", "test")
+            "test",
+            returns=FileNotFoundError(2, "No such file or directory", "test"),
         )
 
-        assert probe_volume_status(_DRIVE, {}, run=run) == VolumeStatus(
-            "drive", VolumeStatusKind.TOOL_NOT_INSTALLED, missing_tool="test"
+        assert probe_volume_status(_DRIVE, _DRIVE_MOUNT, {}, run=run) == VolumeStatus(
+            "drive",
+            VolumeStatusKind.TOOL_NOT_INSTALLED,
+            missing_tool="test",
         )
 
 
@@ -42,7 +46,7 @@ class TestUnprobedVolumeStatuses:
         config = Config(volumes={"drive": _DRIVE, "home": plain})
 
         assert unprobed_volume_statuses(config, {}) == [
-            VolumeStatus("home", VolumeStatusKind.NOT_MANAGED)
+            VolumeStatus("home", VolumeStatusKind.NOT_MANAGED),
         ]
 
 
@@ -57,8 +61,10 @@ class TestMountResultStatuses:
 
         assert mount_result_statuses([result]) == [
             VolumeStatus(
-                "drive", VolumeStatusKind.UNREACHABLE, error_message="No route to host"
-            )
+                "drive",
+                VolumeStatusKind.UNREACHABLE,
+                error_message="No route to host",
+            ),
         ]
 
     def test_observed_result_is_probed(self) -> None:

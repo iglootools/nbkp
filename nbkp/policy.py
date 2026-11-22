@@ -1,4 +1,5 @@
-"""Run policy: how strict to be about findings, and how bad each one is.
+"""
+Run policy: how strict to be about findings, and how bad each one is.
 
 Decision logic shared by preflight, the mount lifecycle and the sync runner.
 Each domain owns the predicate "is this finding an expected, inactive state?"
@@ -15,7 +16,8 @@ import enum
 
 
 class Strictness(enum.StrEnum):
-    """Controls how preflight errors affect the exit code.
+    """
+    Controls how preflight errors affect the exit code.
 
     - ``IGNORE_NONE``: All errors are fatal — any inactive sync
       (including missing sentinels) aborts the run.
@@ -32,7 +34,8 @@ class Strictness(enum.StrEnum):
 
 
 class Severity(enum.StrEnum):
-    """Three-way classification of a finding.
+    """
+    Three-way classification of a finding.
 
     ``OK``; ``WARNING`` (non-fatal under the current policy); ``ERROR``
     (fatal).
@@ -43,8 +46,9 @@ class Severity(enum.StrEnum):
     ERROR = "error"
 
 
-def classify_severity(is_inactive: bool, strictness: Strictness) -> Severity:
-    """Apply the strictness policy to an "is this inactive?" boolean.
+def classify_severity(*, is_inactive: bool, strictness: Strictness) -> Severity:
+    """
+    Apply the strictness policy to an "is this inactive?" boolean.
 
     Each domain owns the predicate, but the strictness match-case lives
     here so the policy change point isn't scattered across modules.

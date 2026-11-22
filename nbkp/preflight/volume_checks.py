@@ -1,4 +1,5 @@
-"""Volume and SSH endpoint observation: raw state and capabilities.
+"""
+Volume and SSH endpoint observation: raw state and capabilities.
 
 Two levels of observation:
 
@@ -22,46 +23,45 @@ fakes.
 import shutil
 from pathlib import Path
 
-from ..config import (
-    LocalVolume,
-    RemoteVolume,
-    Volume,
-)
-from ..disks import (
+from nbkp.config import LocalVolume, RemoteVolume, Volume
+from nbkp.disks import (
     MountObservation,
     MountToolCapabilities,
     check_mount_capabilities as _check_mount_capabilities,
     probe_mount_tools as _probe_mount_tools,
 )
-from ..fsprotocol import VOLUME_SENTINEL
-from ..remote.dispatch import (
-    VolumeCommandRunner,
-    WhichFn,
-    check_command_available,
-    run_on_volume,
-)
-from ..remote.endpoints import ResolvedEndpoints
-from ..remote.errors import describe_error, is_auth_error, ssh_connection_errors
-from .probes import check_rsync_version
-from .snapshot_checks import (
+from nbkp.fsprotocol import VOLUME_SENTINEL
+from nbkp.preflight.probes import check_rsync_version
+from nbkp.preflight.snapshot_checks import (
     check_btrfs_mount_option,
     is_btrfs_filesystem,
     probe_filesystem_type,
     supports_hard_links,
 )
-from .status.ssh import HostToolCapabilities, SshEndpointDiagnostics
-from .status.volume import VolumeCapabilities, VolumeDiagnostics
+from nbkp.preflight.status.ssh import HostToolCapabilities, SshEndpointDiagnostics
+from nbkp.preflight.status.volume import VolumeCapabilities, VolumeDiagnostics
+from nbkp.remote.dispatch import (
+    VolumeCommandRunner,
+    WhichFn,
+    check_command_available,
+    run_on_volume,
+)
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.remote.errors import describe_error, is_auth_error, ssh_connection_errors
 
 
 def observe_ssh_endpoint(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints | None = None,
-    probe_mount_tools: bool = False,
     *,
+    probe_mount_tools: bool = False,
     run: VolumeCommandRunner = run_on_volume,
     which: WhichFn = shutil.which,
 ) -> SshEndpointDiagnostics:
-    """Uses *volume* as the dispatch target for running commands on the host.
+    """
+    Observe the SSH endpoint *volume* is reached through.
+
+    Uses *volume* as the dispatch target for running commands on the host.
     For local volumes, commands run locally (implicit localhost endpoint).
     For remote volumes, commands run over SSH via the resolved endpoint.
 
@@ -72,19 +72,27 @@ def observe_ssh_endpoint(
     match volume:
         case LocalVolume():
             return _observe_ssh_endpoint_local(
-                volume, re, probe_mount_tools, run=run, which=which
+                volume,
+                re,
+                probe_mount_tools=probe_mount_tools,
+                run=run,
+                which=which,
             )
         case RemoteVolume():
             return _observe_ssh_endpoint_remote(
-                volume, re, probe_mount_tools, run=run, which=which
+                volume,
+                re,
+                probe_mount_tools=probe_mount_tools,
+                run=run,
+                which=which,
             )
 
 
 def _observe_ssh_endpoint_local(
     volume: LocalVolume,
     resolved_endpoints: ResolvedEndpoints,
-    probe_mount_tools: bool,
     *,
+    probe_mount_tools: bool,
     run: VolumeCommandRunner,
     which: WhichFn,
 ) -> SshEndpointDiagnostics:
@@ -103,16 +111,18 @@ def _observe_ssh_endpoint_local(
 def _observe_ssh_endpoint_remote(
     volume: RemoteVolume,
     resolved_endpoints: ResolvedEndpoints,
-    probe_mount_tools: bool,
     *,
+    probe_mount_tools: bool,
     run: VolumeCommandRunner,
     which: WhichFn,
 ) -> SshEndpointDiagnostics:
-    """SSH reachability is tested implicitly via the first host tool probe
-    (``which rsync``).  A connection failure — then or during a later probe,
-    each of which connects anew — marks the host unreachable (or
-    auth-failed) and records the cause; any other exception is a bug and
-    propagates.
+    """
+    Observe a remote volume's SSH endpoint.
+
+    SSH reachability is tested implicitly via the first host tool probe (``which
+    rsync``). A connection failure (then or during a later probe, each of which connects
+    anew) marks the host unreachable (or auth-failed) and records the cause; any other
+    exception is a bug and propagates.
     """
     if volume.slug not in resolved_endpoints:
         return SshEndpointDiagnostics(location_excluded=True)
@@ -120,7 +130,10 @@ def _observe_ssh_endpoint_remote(
         return SshEndpointDiagnostics(
             ssh_reachable=True,
             host_tools=_probe_host_tools(
-                volume, resolved_endpoints, run=run, which=which
+                volume,
+                resolved_endpoints,
+                run=run,
+                which=which,
             ),
             mount_tools=(
                 _probe_mount_tools(volume, resolved_endpoints, run=run, which=which)
@@ -133,6 +146,12 @@ def _observe_ssh_endpoint_remote(
 
 
 def unreachable_diagnostics(error: BaseException) -> SshEndpointDiagnostics:
+    """
+    Return the diagnostics of an SSH endpoint the connection failed on with *error*.
+
+    Marks it unreachable, and records whether the host refused authentication and the
+    error's first line.
+    """
     return SshEndpointDiagnostics(
         ssh_reachable=False,
         ssh_auth_failed=is_auth_error(error),
@@ -147,14 +166,20 @@ def _probe_host_tools(
     run: VolumeCommandRunner,
     which: WhichFn,
 ) -> HostToolCapabilities:
-    """For remote volumes, any of these ``which`` probes implicitly tests
-    SSH reachability — if the connection fails, the caller catches the
-    exception.
+    """
+    Probe the host tools with ``which``.
+
+    For remote volumes, any of these ``which`` probes implicitly tests SSH reachability:
+    if the connection fails, the caller catches the exception.
     """
 
     def available(command: str) -> bool:
         return check_command_available(
-            volume, command, resolved_endpoints, run=run, which=which
+            volume,
+            command,
+            resolved_endpoints,
+            run=run,
+            which=which,
         )
 
     has_rsync = available("rsync")
@@ -182,19 +207,31 @@ def observe_volume(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> VolumeDiagnostics:
-    """Called only when the SSH endpoint is active.  SSH reachability and
-    location exclusion are handled at the SSH endpoint level.
+    """
+    Observe a volume whose SSH endpoint is active.
+
+    Called only when the SSH endpoint is active. SSH reachability and location exclusion
+    are handled at the SSH endpoint level.
 
     *host_tools* and *mount_tools* come from the SSH endpoint observation.
     """
     re = resolved_endpoints or {}
     caps = (
         check_volume_capabilities(
-            volume, host_tools, mount_tools, re, mount_observation, run=run
+            volume,
+            host_tools,
+            mount_tools,
+            re,
+            mount_observation,
+            run=run,
         )
         if _volume_sentinel_exists(volume, re, run=run)
         else _sentinel_only_capabilities(
-            volume, mount_tools, re, mount_observation, run=run
+            volume,
+            mount_tools,
+            re,
+            mount_observation,
+            run=run,
         )
     )
     return VolumeDiagnostics(capabilities=caps)
@@ -206,8 +243,11 @@ def _volume_sentinel_exists(
     *,
     run: VolumeCommandRunner,
 ) -> bool:
-    """A mount-managed volume with no declared path that is not yet mounted
-    has no knowable location — treated as sentinel-missing (inactive).
+    """
+    Return whether the volume's sentinel exists.
+
+    A mount-managed volume with no declared path that is not yet mounted has no knowable
+    location: treated as sentinel-missing (inactive).
 
     For a remote volume, SSH reachability has already been verified at the
     SSH endpoint level.
@@ -221,7 +261,9 @@ def _volume_sentinel_exists(
         case RemoteVolume():
             return (
                 run(
-                    ["test", "-f", sentinel_path], volume, resolved_endpoints
+                    ["test", "-f", sentinel_path],
+                    volume,
+                    resolved_endpoints,
                 ).returncode
                 == 0
             )
@@ -236,7 +278,8 @@ def check_volume_capabilities(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> VolumeCapabilities:
-    """Compute volume-level capabilities once per active volume.
+    """
+    Compute volume-level capabilities once per active volume.
 
     Host-level tool availability (rsync, btrfs, stat, findmnt) comes
     from *host_tools* (probed at the SSH endpoint level).  This function
@@ -256,7 +299,12 @@ def check_volume_capabilities(
 
     mount_caps = (
         _check_mount_capabilities(
-            volume, volume.mount, mount_tools, re, mount_observation, run=run
+            volume,
+            volume.mount,
+            mount_tools,
+            re,
+            mount_observation,
+            run=run,
         )
         if volume.mount is not None
         else None
@@ -279,7 +327,8 @@ def _sentinel_only_capabilities(
     *,
     run: VolumeCommandRunner,
 ) -> VolumeCapabilities:
-    """Minimal capabilities for a reachable volume whose sentinel is missing.
+    """
+    Minimal capabilities for a reachable volume whose sentinel is missing.
 
     Only ``sentinel_exists`` is meaningful; the remaining fields are
     not probed and carry safe defaults.  Mount status is still probed

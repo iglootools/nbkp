@@ -1,21 +1,23 @@
-"""Apply the strictness policy to preflight sync statuses.
+"""
+Apply the strictness policy to preflight sync statuses.
 
 The :class:`~nbkp.policy.Strictness` enum is generic run policy and lives in
 :mod:`nbkp.policy`; this module owns the preflight-status-aware
 :func:`is_fatal` predicate and :func:`has_fatal_errors`.
 """
 
-from ..policy import Strictness
-from .status.sync import SyncErrorKind, SyncStatus
+from nbkp.policy import Strictness
+from nbkp.preflight.status.sync import SyncErrorKind, SyncStatus
 
 
 def _is_disabled(status: SyncStatus) -> bool:
-    """A sync switched off in the config: never attempted, never fatal."""
+    """Return whether a sync is disabled: never attempted, never fatal."""
     return SyncErrorKind.DISABLED in status.errors
 
 
 def is_fatal(status: SyncStatus, strictness: Strictness) -> bool:
-    """Whether *status* should abort the run under *strictness*.
+    """
+    Whether *status* should abort the run under *strictness*.
 
     See :class:`Strictness` for the three modes.  Disabled syncs are never
     fatal, under any mode: the runner never attempts them, so they cannot

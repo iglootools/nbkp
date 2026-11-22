@@ -1,15 +1,20 @@
+"""The config models of a local or remote volume, its mount and encryption."""
+
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from .base import ConfigModel, Slug
-from .errors import ConfigValidationErrorKind, config_error
+from nbkp.config.protocol.base import ConfigModel, Slug
+from nbkp.config.protocol.errors import ConfigValidationErrorKind, config_error
 
 
 class LuksEncryptionConfig(ConfigModel):
-    """``type='luks'`` serves as discriminator for future encryption backends
-    (e.g. VeraCrypt, BitLocker).
+    """
+    LUKS encryption of a volume.
+
+    ``type='luks'`` serves as discriminator for future encryption backends (e.g.
+    VeraCrypt, BitLocker).
     """
 
     type: Literal["luks"] = "luks"
@@ -30,7 +35,8 @@ _UUID_PATTERN = (
 
 
 class MountConfig(ConfigModel):
-    """Mount management config for a volume.
+    """
+    Mount management config for a volume.
 
     When present, nbkp manages the volume's mount lifecycle:
     detect drive → (unlock LUKS if encrypted) → mount → backup → umount → (lock LUKS).
@@ -56,6 +62,13 @@ class MountConfig(ConfigModel):
 
 
 class LocalVolume(ConfigModel):
+    """
+    A volume on the machine nbkp runs on.
+
+    ``path`` is required unless ``mount`` is set, and must be absolute after
+    ``~`` is expanded.
+    """
+
     type: Literal["local"] = "local"
     slug: Slug
     path: str | None = Field(
@@ -80,7 +93,8 @@ class LocalVolume(ConfigModel):
 
     @field_validator("path", mode="before")
     @classmethod
-    def normalize_path(cls, v: Any) -> Any:
+    def normalize_path(cls, v: object) -> object:
+        """Return the path with ``~`` expanded and trailing slashes stripped."""
         if not isinstance(v, str):
             return v
         return str(Path(v).expanduser())
@@ -104,13 +118,23 @@ class LocalVolume(ConfigModel):
 
 
 class RemoteVolume(ConfigModel):
+    """
+    A volume on a host nbkp reaches through one of its SSH endpoints.
+
+    ``path`` is required unless ``mount`` is set; it is a path on the remote
+    host, so ``~`` is left for SSH and rsync to resolve.
+    """
+
     type: Literal["remote"] = "remote"
     slug: Slug
     ssh_endpoint: str = Field(
-        ..., min_length=1, description="Primary SSH endpoint slug"
+        ...,
+        min_length=1,
+        description="Primary SSH endpoint slug",
     )
     ssh_endpoints: list[str] | None = Field(
-        default=None, description="Candidate endpoints for auto-selection"
+        default=None,
+        description="Candidate endpoints for auto-selection",
     )
     path: str | None = Field(
         default=None,
@@ -136,17 +160,21 @@ class RemoteVolume(ConfigModel):
 
     @field_validator("path", mode="before")
     @classmethod
-    def normalize_path(cls, v: Any) -> Any:
+    def normalize_path(cls, v: object) -> object:
+        """Return the path with trailing slashes stripped, keeping ``/`` itself."""
         if not isinstance(v, str):
             return v
         stripped = v.rstrip("/")
-        return stripped if stripped else "/"
+        return stripped or "/"
 
     @property
     def endpoint_candidates(self) -> list[str]:
-        """The endpoints resolution picks from, in order: ``ssh-endpoints``
-        when set (``ssh-endpoint`` is then not a candidate), else the
-        primary alone."""
+        """
+        Return the endpoints resolution picks from, in order.
+
+        ``ssh-endpoints`` when set (``ssh-endpoint`` is then not a candidate), else the
+        primary alone.
+        """
         return list(self.ssh_endpoints) if self.ssh_endpoints else [self.ssh_endpoint]
 
     @model_validator(mode="after")
@@ -156,9 +184,11 @@ class RemoteVolume(ConfigModel):
 
 
 def _validate_path_requirement(volume: LocalVolume | RemoteVolume) -> None:
-    """Mount-managed volumes may omit ``path`` (the mountpoint is discovered at
-    runtime). Externally-mounted volumes must declare ``path`` — it is their
-    only locator.
+    """
+    Require ``path`` on a volume that is not mount-managed.
+
+    Mount-managed volumes may omit ``path`` (the mountpoint is discovered at runtime).
+    Externally-mounted volumes must declare ``path``: it is their only locator.
     """
     if volume.mount is None and volume.path is None:
         msg = (
@@ -172,14 +202,19 @@ Volume = Annotated[LocalVolume | RemoteVolume, Field(discriminator="type")]
 
 
 def join_subdir(base: str, subdir: str | None) -> str:
+    """Return *base* with *subdir* appended after a ``/``, or *base* if no subdir."""
     return f"{base}/{subdir}" if subdir else base
 
 
 def resolve_endpoint_path(
-    volume: LocalVolume | RemoteVolume, subdir: str | None
+    volume: LocalVolume | RemoteVolume,
+    subdir: str | None,
 ) -> str:
-    """The volume's ``path`` must be resolved by this point — either declared in
-    config, or filled in from the discovered mountpoint after mounting (see
+    """
+    Return the volume's path joined with the endpoint's subdirectory.
+
+    The volume's ``path`` must be resolved by this point, either declared in config or
+    filled in from the discovered mountpoint after mounting (see
     ``disks.observation.apply_effective_paths``); ``ValueError`` otherwise.
     """
     if volume.path is None:

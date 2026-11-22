@@ -24,7 +24,7 @@ class TestDryRunLabeled:
         labeled = dry_run_labeled(Text("Would mount enc", style="bold"))
 
         assert [str(labeled[s.start : s.end]) for s in labeled.spans] == [
-            "Would mount enc"
+            "Would mount enc",
         ]
 
 

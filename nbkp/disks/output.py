@@ -1,26 +1,32 @@
+"""Render ``disks`` status, mount, umount and plan results as tables, text and JSON."""
+
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 
 from rich.table import Table
 from rich.text import Text
 
-from ..clidisplay import (
+from nbkp.clidisplay import (
     dry_run_labeled,
     severity_icon,
     severity_style,
     severity_symbol,
 )
-from ..policy import Severity, Strictness
-from .lifecycle import MountResult, UmountResult
-from .models import (
+from nbkp.disks.lifecycle import MountResult, UmountResult
+from nbkp.disks.models import (
     LifecycleFailure,
     LifecycleStep,
     MountFailureKind,
     UmountFailureKind,
 )
-from .plan import VolumePlan
-from .severity import device_fail_severity, luks_fail_severity, mounted_fail_severity
-from .status import MountStatusData, VolumeStatus, VolumeStatusKind
+from nbkp.disks.plan import VolumePlan
+from nbkp.disks.severity import (
+    device_fail_severity,
+    luks_fail_severity,
+    mounted_fail_severity,
+)
+from nbkp.disks.status import MountStatusData, VolumeStatus, VolumeStatusKind
+from nbkp.policy import Severity, Strictness
 
 # A row's display label.  ``Text`` when the label carries styling *and*
 # caller-supplied text (an error detail, a "not managed" marker): Rich parses
@@ -30,11 +36,12 @@ type MountStatusLabel = str | Text
 
 
 def mount_state_icon(
-    value: bool | None,
     *,
+    value: bool | None,
     fail_severity: Severity = Severity.ERROR,
 ) -> str:
-    """Format a mount state value as checkmark, cross/warning, or dash.
+    """
+    Format a mount state value as checkmark, cross/warning, or dash.
 
     ``fail_severity`` lets callers downgrade a ``False`` value to a
     warning (orange) when the observation is non-fatal (e.g. a drive
@@ -55,7 +62,8 @@ def build_mount_status_table(
     title: str = "Volume Mount Status:",
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Table:
-    """Build a Rich table showing mount status for each volume.
+    """
+    Build a Rich table showing mount status for each volume.
 
     ``False`` cells are disambiguated by ``mount_failure_reason`` via
     the shared ``{device,luks,mounted}_fail_severity`` helpers, which
@@ -72,15 +80,15 @@ def build_mount_status_table(
         table.add_row(
             slug,
             mount_state_icon(
-                status.device_present,
+                value=status.device_present,
                 fail_severity=device_fail_severity(strictness),
             ),
             mount_state_icon(
-                status.luks_unlocked,
+                value=status.luks_unlocked,
                 fail_severity=luks_fail_severity(reason, strictness),
             ),
             mount_state_icon(
-                status.mounted,
+                value=status.mounted,
                 fail_severity=mounted_fail_severity(reason, strictness),
             ),
         )
@@ -88,7 +96,8 @@ def build_mount_status_table(
 
 
 def error_label(name: str, detail: str | None) -> Text:
-    """Fold an error detail into the volume's display name (red).
+    """
+    Fold an error detail into the volume's display name (red).
 
     Assembled as ``Text`` rather than a markup string: *detail* is external
     text (an exception message, udisksctl's stderr) that Rich would otherwise
@@ -123,11 +132,14 @@ def volume_status_detail(status: VolumeStatus) -> str | None:
 
 
 def format_volume_status_label(name: str, status: VolumeStatus) -> Text:
-    """The Name cell: the display name, with why the volume was not probed
-    (dim when it was never meant to be, red when probing failed)."""
+    """
+    Format the Name cell: the display name, with why the volume was not probed.
+
+    Dim when it was never meant to be, red when probing failed.
+    """
     match status.kind, volume_status_detail(status):
         case VolumeStatusKind.NOT_MANAGED | VolumeStatusKind.LOCATION_EXCLUDED, str(
-            note
+            note,
         ):
             return Text.assemble(name, " ", (f"({note})", "dim"))
         case _, detail:
@@ -135,24 +147,35 @@ def format_volume_status_label(name: str, status: VolumeStatus) -> Text:
 
 
 def build_volume_status_table(
-    statuses: Sequence[VolumeStatus], display_names: Mapping[str, str]
+    statuses: Sequence[VolumeStatus],
+    display_names: Mapping[str, str],
 ) -> Table:
+    """
+    Return the ``disks status`` table, one row per volume.
+
+    Rows are labelled from *display_names* (keyed by slug), falling back to
+    the slug.
+    """
     return build_mount_status_table(
         [
             (
                 format_volume_status_label(
-                    display_names.get(status.volume_slug, status.volume_slug), status
+                    display_names.get(status.volume_slug, status.volume_slug),
+                    status,
                 ),
                 status.state,
             )
             for status in statuses
-        ]
+        ],
     )
 
 
 def volume_status_json(status: VolumeStatus) -> dict[str, object]:
-    """A volume's ``-o json`` status entry: its slug, whether it was probed
-    (``status``) and why not, and the state observed."""
+    """
+    Return a volume's ``-o json`` status entry.
+
+    Its slug, whether it was probed (``status``) and why not, and the state observed.
+    """
     return {
         "volume": status.volume_slug,
         "status": status.kind.value,
@@ -244,7 +267,7 @@ def _umount_failure_detail(reason: UmountFailureKind, failure: LifecycleFailure)
 
 
 def umount_failure_warning(result: UmountResult) -> str | None:
-    """What a failed umount leaves behind for the operator to clean up."""
+    """Describe what a failed umount leaves behind for the operator to clean up."""
     match result.failure_reason:
         case None:
             return None
@@ -267,8 +290,11 @@ def _failure_json(failure: LifecycleFailure) -> dict[str, object]:
 
 
 def mount_result_json(result: MountResult) -> dict[str, object]:
-    """Why a mount failed, for ``-o json``: the reason, the rendered detail and
-    the facts behind it.  Empty for a successful mount.
+    """
+    Return why a mount failed, for ``-o json``.
+
+    The reason, the rendered detail and the facts behind it. Empty for a successful
+    mount.
     """
     return (
         {
@@ -296,8 +322,12 @@ def umount_result_json(result: UmountResult) -> dict[str, object]:
 
 
 def format_plan_line(plan: VolumePlan, name: str) -> Text:
-    """One labeled dry-run line: ``Would unlock, mount <name>``,
-    ``Nothing to do``, or ``Cannot plan`` when the state could not be probed."""
+    """
+    Format one labeled dry-run line.
+
+    ``Would unlock, mount <name>``, ``Nothing to do``, or ``Cannot plan`` when the state
+    could not be probed.
+    """
     severity = Severity.ERROR if plan.probe_failed else Severity.OK
     verbs = ", ".join(action.value for action in plan.actions)
     return dry_run_labeled(
@@ -311,5 +341,5 @@ def format_plan_line(plan: VolumePlan, name: str) -> Text:
                 else f" Nothing to do for {name}"
             ),
             *([(f" ({plan.detail})", "dim")] if plan.detail else []),
-        )
+        ),
     )

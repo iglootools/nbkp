@@ -3,8 +3,8 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from ....config import Config, SshEndpoint, SyncConfig, SyncEndpoint, Volume
-from ... import (
+from nbkp.config import Config, SshEndpoint, SyncConfig, SyncEndpoint, Volume
+from nbkp.preflight import (
     DestinationEndpointDiagnostics,
     DestinationEndpointErrorKind,
     DestinationEndpointStatus,
@@ -18,13 +18,13 @@ from ... import (
     VolumeErrorKind,
     VolumeStatus,
 )
-from ..common import (
+from nbkp.preflight.testkit.common import (
     LOCALHOST_SSH_STATUS,
     LOCALHOST_SSH_STATUS_BTRFS,
     SENTINEL_MISSING_CAPS,
     inactive_src_ep_status,
 )
-from .ssh import HOST_TOOLS, nas_status
+from nbkp.preflight.testkit.troubleshoot.ssh import HOST_TOOLS, nas_status
 
 #: Source endpoint most scenarios read from, on the shared ``laptop`` volume.
 LAPTOP_SRC = "laptop-src"
@@ -49,11 +49,14 @@ class SharedStatuses:
 
     @property
     def reported_volumes(self) -> tuple[VolumeStatus, ...]:
+        """Return the shared volume statuses listed in the result, whatever runs."""
         return (self.laptop, self.usb_drive, self.nas_unreachable)
 
 
 @dataclass(frozen=True)
 class ScenarioStatuses:
+    """The statuses one scenario contributes to the troubleshoot result."""
+
     syncs: tuple[SyncStatus, ...] = ()
     volumes: tuple[VolumeStatus, ...] = ()
     """Volume statuses listed in the result, keyed by slug."""
@@ -63,7 +66,8 @@ class ScenarioStatuses:
 
 @dataclass(frozen=True)
 class Scenario:
-    """Config entries a scenario adds, and the statuses that exercise them.
+    """
+    Config entries a scenario adds, and the statuses that exercise them.
 
     The statuses are built by hand rather than by ``from_diagnostics``, so a
     scenario can show errors production would cascade away, and says so
@@ -78,6 +82,7 @@ class Scenario:
 
 
 def sync_from_laptop(slug: str, destination: str) -> SyncConfig:
+    """Return the sync *slug* from the shared laptop source to *destination*."""
     return SyncConfig(slug=slug, source=LAPTOP_SRC, destination=destination)
 
 
@@ -103,6 +108,7 @@ def volume_status(
     capabilities: VolumeCapabilities,
     errors: tuple[VolumeErrorKind, ...] = (),
 ) -> VolumeStatus:
+    """Return the status of *config*'s volume *slug*, with *errors* as given."""
     return VolumeStatus(
         slug=slug,
         config=config.volumes[slug],
@@ -118,9 +124,10 @@ def broken_destination(
     sync_slug: str,
     volume: VolumeStatus,
     diagnostics: DestinationEndpointDiagnostics,
+    *,
     errors: list[DestinationEndpointErrorKind],
 ) -> SyncStatus:
-    """A sync from the inactive laptop whose destination has *errors*."""
+    """Build a sync from the inactive laptop whose destination has *errors*."""
     return SyncStatus(
         slug=sync_slug,
         config=config.syncs[sync_slug],
@@ -146,6 +153,7 @@ _NAS_REACHABLE_SSH = nas_status(HOST_TOOLS)
 
 
 def shared_statuses(config: Config) -> SharedStatuses:
+    """Return the statuses scenarios share, for *config*'s shared volumes."""
     laptop = volume_status(
         config,
         "laptop",
@@ -156,7 +164,10 @@ def shared_statuses(config: Config) -> SharedStatuses:
     return SharedStatuses(
         laptop=laptop,
         laptop_active=volume_status(
-            config, "laptop", LOCALHOST_SSH_STATUS, healthy_caps()
+            config,
+            "laptop",
+            LOCALHOST_SSH_STATUS,
+            healthy_caps(),
         ),
         laptop_src_inactive=inactive_src_ep_status(LAPTOP_SRC, laptop),
         usb_drive=VolumeStatus(
@@ -175,6 +186,9 @@ def shared_statuses(config: Config) -> SharedStatuses:
             errors=[VolumeErrorKind.SSH_ENDPOINT_INACTIVE],
         ),
         nas_reachable=volume_status(
-            config, "nas-backup", _NAS_REACHABLE_SSH, healthy_caps()
+            config,
+            "nas-backup",
+            _NAS_REACHABLE_SSH,
+            healthy_caps(),
         ),
     )

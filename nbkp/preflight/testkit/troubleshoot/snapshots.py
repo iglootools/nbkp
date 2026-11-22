@@ -1,7 +1,11 @@
-"""Scenarios about snapshot layout: filesystem support, snapshot directories,
-and the ``latest`` symlink on either side of a sync."""
+"""
+Scenarios about snapshot layout.
 
-from ....config import (
+Filesystem support, snapshot directories, and the ``latest`` symlink on either side of a
+sync.
+"""
+
+from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     HardLinkSnapshotConfig,
@@ -9,8 +13,8 @@ from ....config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ....fsprotocol import Snapshot
-from ... import (
+from nbkp.fsprotocol import Snapshot
+from nbkp.preflight import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
     DestinationEndpointErrorKind,
@@ -24,14 +28,14 @@ from ... import (
     SyncErrorKind,
     SyncStatus,
 )
-from ..common import (
+from nbkp.preflight.testkit.common import (
     LOCALHOST_SSH_STATUS,
     LOCALHOST_SSH_STATUS_BTRFS,
     active_dst_ep_status,
     active_src_ep_status,
     inactive_dst_ep_status,
 )
-from .scenario import (
+from nbkp.preflight.testkit.troubleshoot.scenario import (
     BOTH_ENDPOINTS_INACTIVE,
     LAPTOP_SRC,
     Scenario,
@@ -42,7 +46,7 @@ from .scenario import (
     sync_from_laptop,
     volume_status,
 )
-from .ssh import BTRFS_HOST_TOOLS, nas_status
+from nbkp.preflight.testkit.troubleshoot.ssh import BTRFS_HOST_TOOLS, nas_status
 
 _HEALTHY_SNAPSHOT_DIRS = SnapshotDirsDiagnostics(exists=True, writable=True)
 _LATEST_DEVNULL = LatestSymlinkState(exists=True, raw_target="/dev/null")
@@ -54,7 +58,9 @@ _LATEST_DANGLING = LatestSymlinkState(
 
 
 def _hard_link_endpoint(
-    slug: str, volume: str, subdir: str | None = None
+    slug: str,
+    volume: str,
+    subdir: str | None = None,
 ) -> SyncEndpoint:
     return SyncEndpoint(
         slug=slug,
@@ -65,17 +71,23 @@ def _hard_link_endpoint(
 
 
 _NAS_BTRFS_MOUNT_SSH = nas_status(
-    BTRFS_HOST_TOOLS, has_btrfs_endpoints=True, has_snapshot_endpoints=True
+    BTRFS_HOST_TOOLS,
+    has_btrfs_endpoints=True,
+    has_snapshot_endpoints=True,
 )
 
 
 def _btrfs_mount_issues_statuses(
-    config: Config, shared: SharedStatuses
+    config: Config,
+    shared: SharedStatuses,
 ) -> ScenarioStatuses:
     # DestinationEndpointErrorKind.VOL_NOT_MOUNTED_USER_SUBVOL_RM + missing staging
     # + missing snapshots dir (Layer 3)
     nas = volume_status(
-        config, "nas-backup", _NAS_BTRFS_MOUNT_SSH, healthy_caps(btrfs=True)
+        config,
+        "nas-backup",
+        _NAS_BTRFS_MOUNT_SSH,
+        healthy_caps(btrfs=True),
     )
     return ScenarioStatuses(
         syncs=(
@@ -95,13 +107,13 @@ def _btrfs_mount_issues_statuses(
                     snapshot_dirs=SnapshotDirsDiagnostics(exists=False),
                     latest=_LATEST_DEVNULL,
                 ),
-                [
+                errors=[
                     DestinationEndpointErrorKind.VOL_NOT_MOUNTED_USER_SUBVOL_RM,
                     DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND,
                     DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND,
                 ],
             ),
-        )
+        ),
     )
 
 
@@ -120,12 +132,16 @@ BTRFS_MOUNT_ISSUES = Scenario(
 
 
 def _hardlink_issues_statuses(
-    config: Config, shared: SharedStatuses
+    config: Config,
+    shared: SharedStatuses,
 ) -> ScenarioStatuses:
     # DestinationEndpointErrorKind.VOL_NO_HARDLINK_SUPPORT + missing snapshots dir
     # (Layer 3)
     usb5 = volume_status(
-        config, "usb-5", LOCALHOST_SSH_STATUS, healthy_caps(hardlinks=False)
+        config,
+        "usb-5",
+        LOCALHOST_SSH_STATUS,
+        healthy_caps(hardlinks=False),
     )
     return ScenarioStatuses(
         syncs=(
@@ -141,12 +157,12 @@ def _hardlink_issues_statuses(
                     snapshot_dirs=SnapshotDirsDiagnostics(exists=False),
                     latest=_LATEST_DEVNULL,
                 ),
-                [
+                errors=[
                     DestinationEndpointErrorKind.VOL_NO_HARDLINK_SUPPORT,
                     DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND,
                 ],
             ),
-        )
+        ),
     )
 
 
@@ -165,7 +181,8 @@ HARDLINK_ISSUES = Scenario(
 
 
 def _source_latest_missing_statuses(
-    config: Config, shared: SharedStatuses
+    config: Config,
+    shared: SharedStatuses,
 ) -> ScenarioStatuses:
     # SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND + SNAPSHOTS_DIR_NOT_FOUND
     # (Layer 3)
@@ -189,11 +206,12 @@ def _source_latest_missing_statuses(
                     ],
                 ),
                 destination_endpoint_status=inactive_dst_ep_status(
-                    "dst-src-latest", shared.nas_unreachable
+                    "dst-src-latest",
+                    shared.nas_unreachable,
                 ),
                 errors=list(BOTH_ENDPOINTS_INACTIVE),
             ),
-        )
+        ),
     )
 
 
@@ -221,7 +239,8 @@ SOURCE_LATEST_MISSING = Scenario(
 
 
 def _dry_run_pending_statuses(
-    config: Config, shared: SharedStatuses
+    config: Config,
+    shared: SharedStatuses,
 ) -> ScenarioStatuses:
     upstream = SyncStatus(
         slug="dry-run-upstream",
@@ -257,7 +276,8 @@ def _dry_run_pending_statuses(
             errors=[],
         ),
         destination_endpoint_status=active_dst_ep_status(
-            "dst-dry-run-pending", shared.nas_reachable
+            "dst-dry-run-pending",
+            shared.nas_reachable,
         ),
         errors=[SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING],
     )
@@ -269,7 +289,9 @@ DRY_RUN_PENDING = Scenario(
     sync_endpoints=(
         _hard_link_endpoint("hl-stage", "usb-drive", "stage"),
         SyncEndpoint(
-            slug="dst-dry-run-pending", volume="nas-backup", subdir="dry-run-pending"
+            slug="dst-dry-run-pending",
+            volume="nas-backup",
+            subdir="dry-run-pending",
         ),
     ),
     syncs=(
@@ -284,7 +306,8 @@ DRY_RUN_PENDING = Scenario(
 
 
 def _dst_latest_missing_statuses(
-    config: Config, shared: SharedStatuses
+    config: Config,
+    shared: SharedStatuses,
 ) -> ScenarioStatuses:
     usb10 = volume_status(config, "usb-10", LOCALHOST_SSH_STATUS, healthy_caps())
     return ScenarioStatuses(
@@ -301,9 +324,9 @@ def _dst_latest_missing_statuses(
                     snapshot_dirs=_HEALTHY_SNAPSHOT_DIRS,
                     latest=LatestSymlinkState(exists=False),
                 ),
-                [DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND],
+                errors=[DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND],
             ),
-        )
+        ),
     )
 
 
@@ -316,7 +339,8 @@ DST_LATEST_MISSING = Scenario(
 
 
 def _dst_latest_invalid_statuses(
-    config: Config, shared: SharedStatuses
+    config: Config,
+    shared: SharedStatuses,
 ) -> ScenarioStatuses:
     usb11 = volume_status(config, "usb-11", LOCALHOST_SSH_STATUS, healthy_caps())
     return ScenarioStatuses(
@@ -333,9 +357,9 @@ def _dst_latest_invalid_statuses(
                     snapshot_dirs=_HEALTHY_SNAPSHOT_DIRS,
                     latest=_LATEST_DANGLING,
                 ),
-                [DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID],
+                errors=[DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID],
             ),
-        )
+        ),
     )
 
 
@@ -367,7 +391,8 @@ def _snapshot_source_status(
 
 
 def _src_latest_invalid_statuses(
-    config: Config, shared: SharedStatuses
+    config: Config,
+    shared: SharedStatuses,
 ) -> ScenarioStatuses:
     # SourceEndpointErrorKind.LATEST_SYMLINK_INVALID on a source with no upstream
     usb13 = volume_status(config, "usb-13", LOCALHOST_SSH_STATUS, healthy_caps())
@@ -383,11 +408,12 @@ def _src_latest_invalid_statuses(
                     [SourceEndpointErrorKind.LATEST_SYMLINK_INVALID],
                 ),
                 destination_endpoint_status=active_dst_ep_status(
-                    "dst-src-latest-invalid", usb13
+                    "dst-src-latest-invalid",
+                    usb13,
                 ),
                 errors=[SyncErrorKind.SOURCE_ENDPOINT_INACTIVE],
             ),
-        )
+        ),
     )
 
 
@@ -409,7 +435,8 @@ SRC_LATEST_INVALID = Scenario(
 
 
 def _src_devnull_no_upstream_statuses(
-    config: Config, shared: SharedStatuses
+    config: Config,
+    shared: SharedStatuses,
 ) -> ScenarioStatuses:
     # SyncErrorKind.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM (Layer 4): the source's
     # latest → /dev/null, and no upstream sync will ever replace it.
@@ -420,14 +447,18 @@ def _src_devnull_no_upstream_statuses(
                 slug="src-devnull-no-upstream",
                 config=config.syncs["src-devnull-no-upstream"],
                 source_endpoint_status=_snapshot_source_status(
-                    shared, "src-devnull-no-upstream", _LATEST_DEVNULL, []
+                    shared,
+                    "src-devnull-no-upstream",
+                    _LATEST_DEVNULL,
+                    [],
                 ),
                 destination_endpoint_status=active_dst_ep_status(
-                    "dst-devnull-no-upstream", usb12
+                    "dst-devnull-no-upstream",
+                    usb12,
                 ),
                 errors=[SyncErrorKind.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM],
             ),
-        )
+        ),
     )
 
 
@@ -449,11 +480,15 @@ SRC_DEVNULL_NO_UPSTREAM = Scenario(
 
 
 def _fs_type_unknown_statuses(
-    config: Config, shared: SharedStatuses
+    config: Config,
+    shared: SharedStatuses,
 ) -> ScenarioStatuses:
     # `stat -f` failed: DestinationEndpointErrorKind.VOL_FS_TYPE_UNKNOWN (Layer 3)
     usb15 = volume_status(
-        config, "usb-15", LOCALHOST_SSH_STATUS_BTRFS, healthy_caps(btrfs=None)
+        config,
+        "usb-15",
+        LOCALHOST_SSH_STATUS_BTRFS,
+        healthy_caps(btrfs=None),
     )
     return ScenarioStatuses(
         volumes=(usb15,),
@@ -462,7 +497,8 @@ def _fs_type_unknown_statuses(
                 slug="fs-type-unknown",
                 config=config.syncs["fs-type-unknown"],
                 source_endpoint_status=active_src_ep_status(
-                    LAPTOP_SRC, shared.laptop_active
+                    LAPTOP_SRC,
+                    shared.laptop_active,
                 ),
                 destination_endpoint_status=DestinationEndpointStatus(
                     endpoint_slug="dst-fs-unknown",
@@ -498,12 +534,16 @@ _WRITABLE_SNAPSHOT = "2024-01-01T00:00:00.000Z"
 
 
 def _latest_snapshot_writable_statuses(
-    config: Config, shared: SharedStatuses
+    config: Config,
+    shared: SharedStatuses,
 ) -> ScenarioStatuses:
     # DestinationEndpointWarningKind.LATEST_SNAPSHOT_WRITABLE: a warning on an
     # active endpoint, so the sync stays active.
     usb16 = volume_status(
-        config, "usb-16", LOCALHOST_SSH_STATUS_BTRFS, healthy_caps(btrfs=True)
+        config,
+        "usb-16",
+        LOCALHOST_SSH_STATUS_BTRFS,
+        healthy_caps(btrfs=True),
     )
     return ScenarioStatuses(
         volumes=(usb16,),
@@ -512,7 +552,8 @@ def _latest_snapshot_writable_statuses(
                 slug="latest-snapshot-writable",
                 config=config.syncs["latest-snapshot-writable"],
                 source_endpoint_status=active_src_ep_status(
-                    LAPTOP_SRC, shared.laptop_active
+                    LAPTOP_SRC,
+                    shared.laptop_active,
                 ),
                 destination_endpoint_status=DestinationEndpointStatus(
                     endpoint_slug="dst-latest-writable",

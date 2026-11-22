@@ -31,7 +31,7 @@ class TestAuthRulesBlocks:
         assert rules.polkit_block() is None
 
     def test_no_sudoers_field(self) -> None:
-        """udisks is authorized purely by polkit — there is no sudoers block."""
+        """Udisks is authorized purely by polkit — there is no sudoers block."""
         assert not hasattr(AuthRules(polkit="// rule"), "sudoers")
         assert not hasattr(AuthRules(polkit="// rule"), "sudoers_block")
 

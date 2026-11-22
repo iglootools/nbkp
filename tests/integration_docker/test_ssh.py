@@ -1,4 +1,5 @@
-"""Integration tests: SSH connection options.
+"""
+Integration tests: SSH connection options.
 
 Tests exercise real SSH connections to Docker containers with
 various connection option combinations that are not covered by
@@ -12,6 +13,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
@@ -45,7 +47,8 @@ from tests._docker_fixtures import ssh_exec, ssh_run
 
 
 def _extract_host_key(endpoint: SshEndpoint) -> str:
-    """Extract the ed25519 host public key from a container.
+    """
+    Extract the ed25519 host public key from a container.
 
     Returns the key in ``ssh-ed25519 AAAA...`` format.
     """
@@ -53,8 +56,8 @@ def _extract_host_key(endpoint: SshEndpoint) -> str:
         endpoint,
         "cat /etc/ssh/ssh_host_ed25519_key.pub",
     )
-    # Format: "ssh-ed25519 AAAA... root@hostname\n"
-    # We want just the key type + base64 data
+    # The file holds "ssh-ed25519 AAAA... root@hostname\n"; keep the key type and
+    # the base64 data.
     parts = result.stdout.strip().split()
     return f"{parts[0]} {parts[1]}"
 
@@ -65,7 +68,8 @@ def _write_known_hosts(
     port: int,
     host_key: str,
 ) -> Path:
-    """Write a known_hosts file for a given host:port.
+    """
+    Write a known_hosts file for a given host:port.
 
     The *host_key* should be in ``ssh-ed25519 AAAA...`` format.
     """
@@ -89,8 +93,11 @@ def _make_endpoint(
     docker_ssh_endpoint: SshEndpoint,
     connection_options: SshConnectionOptions,
 ) -> SshEndpoint:
-    """Create a new SshEndpoint copying host/port/user/key from
-    the Docker fixture, with custom connection options."""
+    """
+    Create an SshEndpoint like the Docker fixture's, with custom connection options.
+
+    It copies host/port/user/key from the fixture.
+    """
     return SshEndpoint(
         slug="test-ssh",
         host=docker_ssh_endpoint.host,
@@ -105,7 +112,8 @@ def _make_endpoint(
 def _ssh_agent(
     private_key: Path,
 ) -> Generator[str]:
-    """Start an ephemeral ssh-agent and load the given key.
+    """
+    Start an ephemeral ssh-agent and load the given key.
 
     Sets ``SSH_AUTH_SOCK`` in the process environment for the
     duration of the context.  Kills the agent on exit.
@@ -154,11 +162,11 @@ def _ssh_agent(
 
 
 class TestHostKeyVerification:
+    @pytest.mark.usefixtures("docker_remote_volume")
     def test_check_succeeds_with_correct_known_hosts(
         self,
         tmp_path: Path,
         docker_ssh_endpoint: SshEndpoint,
-        docker_remote_volume: RemoteVolume,
     ) -> None:
         host_key = _extract_host_key(docker_ssh_endpoint)
         known_hosts = _write_known_hosts(
@@ -459,7 +467,8 @@ class TestConnectionFailure:
 
 
 class TestAgentForwarding:
-    """Verify SSH agent forwarding through a bastion host.
+    """
+    Verify SSH agent forwarding through a bastion host.
 
     Spawns an ephemeral ssh-agent, loads the test key, and
     verifies the forwarded agent is visible on the destination
@@ -498,10 +507,10 @@ class TestAgentForwarding:
         )
         return config, vol
 
+    @pytest.mark.usefixtures("docker_ssh_endpoint")
     def test_fabric_forwarded_agent_on_destination(
         self,
         ssh_key_pair: tuple[Path, Path],
-        docker_ssh_endpoint: SshEndpoint,
         bastion_container: SshEndpoint,
     ) -> None:
         """ssh-add -l shows key on destination (Fabric)."""
@@ -523,10 +532,10 @@ class TestAgentForwarding:
             assert result.returncode == 0
             assert "ED25519" in result.stdout
 
+    @pytest.mark.usefixtures("docker_ssh_endpoint")
     def test_cli_forwarded_agent_on_destination(
         self,
         ssh_key_pair: tuple[Path, Path],
-        docker_ssh_endpoint: SshEndpoint,
         bastion_container: SshEndpoint,
     ) -> None:
         """ssh-add -l shows key on destination (SSH CLI)."""
@@ -551,19 +560,20 @@ class TestAgentForwarding:
 
 class TestRemoteCommandInput:
     def test_input_reaches_the_command(self, docker_ssh_endpoint: SshEndpoint) -> None:
-        result = fabric_run_remote(docker_ssh_endpoint, ["cat"], input="secret")
+        result = fabric_run_remote(docker_ssh_endpoint, ["cat"], stdin="secret")
 
         assert (result.returncode, result.stdout) == (0, "secret")
 
     def test_command_exiting_before_reading_input_keeps_stderr(
-        self, docker_ssh_endpoint: SshEndpoint
+        self,
+        docker_ssh_endpoint: SshEndpoint,
     ) -> None:
         # More input than the channel window holds, so the write is still
         # under way when the command closes its stdin and exits.
         result = fabric_run_remote(
             docker_ssh_endpoint,
             ["sh", "-c", "exec <&-; echo 'no such device' >&2; exit 3"],
-            input="x" * (8 * 1024 * 1024),
+            stdin="x" * (8 * 1024 * 1024),
         )
 
         assert result.returncode == 3

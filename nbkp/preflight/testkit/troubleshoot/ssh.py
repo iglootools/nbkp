@@ -1,7 +1,7 @@
 """Host tool sets the scenarios' SSH endpoint statuses are built from."""
 
-from ....disks import MountToolCapabilities
-from ... import (
+from nbkp.disks import MountToolCapabilities
+from nbkp.preflight import (
     HostToolCapabilities,
     SshEndpointDiagnostics,
     SshEndpointStatus,
@@ -27,7 +27,8 @@ UDISKS_TOOLS = MountToolCapabilities(
 _NO_NEEDS = SshEndpointToolNeeds()
 MOUNT_NEEDS = SshEndpointToolNeeds(has_mount_volumes=True)
 BTRFS_SNAPSHOT_NEEDS = SshEndpointToolNeeds(
-    has_btrfs_endpoints=True, has_snapshot_endpoints=True
+    has_btrfs_endpoints=True,
+    has_snapshot_endpoints=True,
 )
 
 
@@ -37,17 +38,19 @@ def localhost_status(
     mount_tools: MountToolCapabilities | None = None,
     needs: SshEndpointToolNeeds = _NO_NEEDS,
 ) -> SshEndpointStatus:
+    """Return the ``localhost`` endpoint status, with the given tools and *needs*."""
     return SshEndpointStatus.from_diagnostics(
         slug="localhost",
         diagnostics=SshEndpointDiagnostics(
-            host_tools=host_tools, mount_tools=mount_tools
+            host_tools=host_tools,
+            mount_tools=mount_tools,
         ),
         needs=needs,
     )
 
 
 def nas_status(host_tools: HostToolCapabilities, **needs: bool) -> SshEndpointStatus:
-    """The reachable ``nas`` endpoint, with *host_tools* installed."""
+    """Return the reachable ``nas`` endpoint, with *host_tools* installed."""
     return SshEndpointStatus.from_diagnostics(
         slug="nas",
         diagnostics=SshEndpointDiagnostics(ssh_reachable=True, host_tools=host_tools),

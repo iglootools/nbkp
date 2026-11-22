@@ -1,4 +1,5 @@
-"""Integration test: end-to-end chain sync via generated script.
+"""
+Integration test: end-to-end chain sync via generated script.
 
 Same 6-hop chain as test_pipeline.py, but executed through a
 generated bash script (`nbkp sh`) instead of `run_all_syncs`.
@@ -34,8 +35,10 @@ class TestChainSyncSh:
         proxied_ssh_endpoint: SshEndpoint,
         luks_uuid: str,
     ) -> None:
-        """Generated script propagates data through the
-        full 6-hop chain, same as the Python runner.
+        """
+        The generated script propagates data through the full 6-hop chain.
+
+        Same as the Python runner.
 
         Mount lifecycle is handled externally via managed_mount
         (matching the real-world usage where mount management is
@@ -50,7 +53,7 @@ class TestChainSyncSh:
         resolved = resolve_all_endpoints(config)
 
         with managed_mount(config, resolved, lambda _: LUKS_PASSPHRASE):
-            src = setup_chain(config, tmp_path, docker_ssh_endpoint, resolved)
+            src = setup_chain(config, tmp_path, resolved)
 
             script = generate_script(
                 config,

@@ -1,6 +1,5 @@
 """Integration tests: hard-link snapshots on local filesystem."""
 
-import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -51,7 +50,8 @@ def _make_config(
                 slug="ep-dst",
                 volume="dst",
                 hard_link_snapshots=HardLinkSnapshotConfig(
-                    enabled=True, max_snapshots=max_snapshots
+                    enabled=True,
+                    max_snapshots=max_snapshots,
                 ),
             ),
         },
@@ -72,13 +72,17 @@ def _do_sync(
     max_snapshots: int | None = 5,
     now: datetime | None = None,
 ) -> tuple[SyncConfig, Config, str]:
-    """Create snapshot dir + rsync + update symlink.
+    """
+    Create snapshot dir + rsync + update symlink.
 
     Returns (sync, config, snapshot_name).
     """
     sync, config = _make_config(str(src), str(dst), max_snapshots)
     snapshot_path = create_snapshot_dir(
-        sync, config, now=now or datetime.now(UTC), platform=sys.platform
+        sync,
+        config,
+        now=now or datetime.now(UTC),
+        platform=sys.platform,
     )
     snapshot = Snapshot.from_path(snapshot_path)
 
@@ -103,7 +107,10 @@ class TestCreateSnapshotDir:
 
         sync, config = _make_config(str(src), str(dst))
         snapshot_path = create_snapshot_dir(
-            sync, config, now=datetime.now(UTC), platform=sys.platform
+            sync,
+            config,
+            now=datetime.now(UTC),
+            platform=sys.platform,
         )
 
         assert Path(snapshot_path).is_dir()
@@ -117,7 +124,10 @@ class TestCreateSnapshotDir:
 
         sync, config = _make_config(str(src), str(dst))
         snapshot_path = create_snapshot_dir(
-            sync, config, now=datetime.now(UTC), platform=sys.platform
+            sync,
+            config,
+            now=datetime.now(UTC),
+            platform=sys.platform,
         )
 
         snapshots_dir = Path(snapshot_path).parent
@@ -154,7 +164,9 @@ class TestCleanupOrphanedSnapshots:
         # Create an orphaned snapshot (newer than latest)
         dst_vol = config.volumes["dst"]
         orphan_snapshot = create_snapshot_timestamp(
-            datetime(9999, 1, 1, tzinfo=UTC), dst_vol, sys.platform
+            datetime(9999, 1, 1, tzinfo=UTC),
+            dst_vol,
+            sys.platform,
         )
         orphan = Path(str(dst)) / "snapshots" / orphan_snapshot.name
         orphan.mkdir(parents=True)
@@ -198,7 +210,9 @@ class TestDeleteSnapshot:
 
         dst_vol = LocalVolume(slug="dst", path=str(dst))
         snap = create_snapshot_timestamp(
-            datetime(2024, 1, 1, tzinfo=UTC), dst_vol, sys.platform
+            datetime(2024, 1, 1, tzinfo=UTC),
+            dst_vol,
+            sys.platform,
         )
         snap_dir = dst / "snapshots" / snap.name
         snap_dir.mkdir(parents=True)
@@ -224,7 +238,10 @@ class TestPruneSnapshots:
         for i in range(count):
             now = datetime(2024, 1, 1 + i, tzinfo=UTC)
             sync, config, snap_name = _do_sync(
-                src, dst, max_snapshots=max_snapshots, now=now
+                src,
+                dst,
+                max_snapshots=max_snapshots,
+                now=now,
             )
             names.append(snap_name)
 
@@ -374,9 +391,9 @@ class TestHardLinkIncremental:
         )
         assert result.returncode == 0
 
-        inode1 = os.stat(f"{snap1_path}/unchanged.txt").st_ino
-        inode2 = os.stat(f"{snap2_path}/unchanged.txt").st_ino
+        inode1 = Path(f"{snap1_path}/unchanged.txt").stat().st_ino
+        inode2 = Path(f"{snap2_path}/unchanged.txt").stat().st_ino
         assert inode1 == inode2
 
-        content = Path(f"{snap2_path}/changed.txt").read_text()
+        content = Path(f"{snap2_path}/changed.txt").read_text(encoding="utf-8")
         assert content == "v2 is different"

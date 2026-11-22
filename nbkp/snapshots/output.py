@@ -1,10 +1,12 @@
+"""Render snapshot show and prune results as human-readable text and tables."""
+
 from rich.table import Table
 from rich.text import Text
 
-from ..clidisplay import dry_run_table_title
-from ..preflight import format_problems
-from .errors import SnapshotOp
-from .models import (
+from nbkp.clidisplay import dry_run_table_title
+from nbkp.preflight import format_problems
+from nbkp.snapshots.errors import SnapshotOp
+from nbkp.snapshots.models import (
     PruneResult,
     ShowResult,
     SnapshotErrorKind,
@@ -14,6 +16,7 @@ from .models import (
 
 
 def retention_display(max_snapshots: int | None) -> str:
+    """Return the retention column text: ``unlimited`` or ``keep N``."""
     if max_snapshots is None:
         return "unlimited"
     else:
@@ -40,14 +43,17 @@ _SKIP_REASONS: dict[SnapshotSkipReason, str] = {
 
 
 def format_operation(op: SnapshotOp) -> str:
+    """Return the human phrase for a snapshot operation, e.g. ``delete snapshot``."""
     return _OPERATIONS[op]
 
 
 def format_skip_reason(reason: SnapshotSkipReason) -> str:
+    """Return the human phrase for why a sync was skipped."""
     return _SKIP_REASONS[reason]
 
 
 def snapshot_error_text(error: SnapshotResultError) -> str:
+    """Return a one-line description of a sync's snapshot failure."""
     errors = format_problems(error.preflight_errors)
     match error.kind:
         case SnapshotErrorKind.INACTIVE:
@@ -62,10 +68,13 @@ def snapshot_error_text(error: SnapshotResultError) -> str:
 
 
 def _status_text(
-    skip_reason: SnapshotSkipReason | None, error: SnapshotResultError | None
+    skip_reason: SnapshotSkipReason | None,
+    error: SnapshotResultError | None,
 ) -> Text:
-    """Text, not markup: the error carries remote stderr, which may contain
-    square brackets.
+    """
+    Format a sync's status as text, not markup.
+
+    The error carries remote stderr, which may contain square brackets.
     """
     match (skip_reason, error):
         case (_, SnapshotResultError() as e):
@@ -76,7 +85,8 @@ def _status_text(
             return Text("OK", style="green")
 
 
-def format_human_prune_results(results: list[PruneResult], dry_run: bool) -> Table:
+def format_human_prune_results(results: list[PruneResult], *, dry_run: bool) -> Table:
+    """Return a table of each sync's deleted and kept snapshot counts and status."""
     table = Table(
         title=dry_run_table_title("NBKP prune:", dry_run=dry_run),
     )
@@ -115,6 +125,7 @@ def _show_row(r: ShowResult) -> tuple[str, str, str, str, str, Text]:
 
 
 def format_human_show_results(results: list[ShowResult]) -> Table:
+    """Return a table of each sync's snapshot mode, count, latest and retention."""
     table = Table(title="Snapshots:")
     table.add_column("Name", style="bold")
     table.add_column("Mode")

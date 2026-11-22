@@ -62,7 +62,8 @@ syncs:
   <slug>: <SyncConfig>
 ```
 
-Slugs must be lowercase alphanumeric with hyphens (e.g. `my-nas`, `usb-drive`). Max 50 characters.
+Slugs must be lowercase alphanumeric with hyphens (e.g. `my-nas`, `usb-drive`). Max 50
+characters.
 <!-- END CONFIGREF:TOP_LEVEL -->
 <!-- rumdl-enable -->
 
@@ -115,9 +116,12 @@ discovers the name udisks chose for the unlocked device). See
 | `device-uuid` | string | **required** | Device UUID for drive detection (from ``/dev/disk/by-uuid/``). For encrypted volumes: the LUKS container UUID (from crypttab/blkid); the unlocked device is named ``luks-<uuid>`` by udisks unless the LUKS2 header carries a label or a crypttab entry overrides it (nbkp discovers the actual name either way). For unencrypted volumes: the filesystem UUID (from fstab/blkid). |
 | `encryption` | object | `null` | Encryption config. Omit for unencrypted volumes. |
 
-The `mount` section is optional on both local and remote volumes. When present, nbkp manages the mount/umount lifecycle automatically during `run`.
+The `mount` section is optional on both local and remote volumes. When present, nbkp
+manages the mount/umount lifecycle automatically during `run`.
 
-For encrypted volumes, `device-uuid` is the LUKS container UUID (from `crypttab` or `blkid`). For unencrypted volumes, it is the filesystem UUID (from `fstab` or `blkid`).
+For encrypted volumes, `device-uuid` is the LUKS container UUID (from `crypttab` or
+`blkid`). For unencrypted volumes, it is the filesystem UUID (from `fstab` or
+`blkid`).
 
 #### `encryption` — LUKS Encryption Config
 
@@ -126,9 +130,12 @@ For encrypted volumes, `device-uuid` is the LUKS container UUID (from `crypttab`
 | `type` | `"luks"` | **required** | Volume type discriminator |
 | `passphrase-id` | string | **required** | Credential lookup key for the passphrase |
 
-The `type: luks` field is a discriminator for future encryption backend extensibility. Currently only LUKS is supported.
+The `type: luks` field is a discriminator for future encryption backend extensibility.
+Currently only LUKS is supported.
 
-The `passphrase-id` is used as a lookup key with the configured `credential-provider`. Multiple volumes can share the same `passphrase-id` — the passphrase is cached in memory during a single run.
+The `passphrase-id` is used as a lookup key with the configured `credential-provider`.
+Multiple volumes can share the same `passphrase-id` — the passphrase is cached in memory
+during a single run.
 
 ---
 
@@ -140,10 +147,16 @@ Top-level config fields for credential retrieval:
 | `credential-command` | list of strings | `null` | Command template for `command` provider. Must contain `{id}` placeholder (e.g. `["pass", "show", "nbkp/{id}"]`) |
 
 Providers:
-- **keyring**: `keyring.get_password("nbkp", passphrase_id)` — uses macOS Keychain or Linux SecretService. Requires `uv tool install 'nbkp[keyring]'`.
+- **keyring**: `keyring.get_password("nbkp", passphrase_id)` — uses macOS Keychain or
+  Linux SecretService. Requires `uv tool install 'nbkp[keyring]'`.
 - **prompt**: interactive hidden input prompt.
-- **env**: reads `NBKP_PASSPHRASE_<ID>`: the passphrase-id uppercased, with every character other than a letter or digit replaced by `_` (`nas.disk-1` → `NBKP_PASSPHRASE_NAS_DISK_1`). Two passphrase-ids that map to the same variable (`usb-drive` and `usb_drive`) are rejected when the config loads.
-- **command**: runs command template with `{id}` replaced by passphrase-id. The first line of its output, without the line break, is the passphrase (the `pass` convention: later lines hold metadata); spaces are kept.
+- **env**: reads `NBKP_PASSPHRASE_<ID>`: the passphrase-id uppercased, with every
+  character other than a letter or digit replaced by `_` (`nas.disk-1` →
+  `NBKP_PASSPHRASE_NAS_DISK_1`). Two passphrase-ids that map to the same variable
+  (`usb-drive` and `usb_drive`) are rejected when the config loads.
+- **command**: runs command template with `{id}` replaced by passphrase-id. The first
+  line of its output, without the line break, is the passphrase (the `pass` convention:
+  later lines hold metadata); spaces are kept.
 <!-- END CONFIGREF:VOLUMES -->
 <!-- rumdl-enable -->
 
@@ -251,9 +264,12 @@ Fields not explicitly set (`port`, `user`, `key`) are automatically filled from 
 | `btrfs-snapshots` | object | see below | Btrfs snapshot config |
 | `hard-link-snapshots` | object | see below | Hard-link snapshot config |
 
-Only one of `btrfs-snapshots` and `hard-link-snapshots` can be enabled per endpoint. Each (volume, subdir) pair must be unique across all sync endpoints.
+Only one of `btrfs-snapshots` and `hard-link-snapshots` can be enabled per endpoint.
+Each (volume, subdir) pair must be unique across all sync endpoints.
 
-When used as a **source**, enabling snapshots tells rsync to read from the `latest/` directory instead of the volume root. When used as a **destination**, enabling snapshots activates snapshot creation after each successful sync.
+When used as a **source**, enabling snapshots tells rsync to read from the `latest/`
+directory instead of the volume root. When used as a **destination**, enabling snapshots
+activates snapshot creation after each successful sync.
 
 ---
 
@@ -336,13 +352,22 @@ filters:
   - "dir-merge,e /.rsync-filter"  # dir-merge with word-splitting
 ```
 
-**`merge`** reads a file of filter rules once and applies them at the point where they appear in the list. Tilde (`~`) is expanded in merge paths. This is similar to `filter-file`, but `filter-file` is always appended after all inline filters, while `merge` respects its position in the list.
+**`merge`** reads a file of filter rules once and applies them at the point where they
+appear in the list. Tilde (`~`) is expanded in merge paths. This is similar to
+`filter-file`, but `filter-file` is always appended after all inline filters, while
+`merge` respects its position in the list.
 
-**`dir-merge`** tells rsync to look for the named file in each directory as it walks the source tree. Rules from each file apply only to that directory and its subdirectories. The `exclude-self` option appends a `- <filename>` rule to prevent the filter files from being transferred (equivalent to rsync's `-FF` flag). Dir-merge paths are not tilde-expanded (they are relative filenames resolved by rsync per-directory).
+**`dir-merge`** tells rsync to look for the named file in each directory as it walks the
+source tree. Rules from each file apply only to that directory and its subdirectories.
+The `exclude-self` option appends a `- <filename>` rule to prevent the filter files from
+being transferred (equivalent to rsync's `-FF` flag). Dir-merge paths are not
+tilde-expanded (they are relative filenames resolved by rsync per-directory).
 
-Each structured rule is a mapping with exactly one key: `{include: "*.jpg", exclude: "*"}` is rejected rather than read as one of its rules. Write two list items instead.
+Each structured rule is a mapping with exactly one key: `{include: "*.jpg", exclude:
+"*"}` is rejected rather than read as one of its rules. Write two list items instead.
 
-Filters are applied in order as `--filter=RULE` arguments. When `filter-file` is also set, inline filters are applied first.
+Filters are applied in order as `--filter=RULE` arguments. When `filter-file` is also
+set, inline filters are applied first.
 <!-- END CONFIGREF:SYNCS -->
 <!-- rumdl-enable -->
 

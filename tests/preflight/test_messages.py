@@ -49,7 +49,7 @@ def test_kinds_sharing_a_token_keep_their_own_sentence() -> None:
 
 def test_problems_join_in_order() -> None:
     assert format_problems(
-        [SyncErrorKind.DISABLED, SyncErrorKind.SOURCE_ENDPOINT_INACTIVE]
+        [SyncErrorKind.DISABLED, SyncErrorKind.SOURCE_ENDPOINT_INACTIVE],
     ) == ("disabled, source endpoint inactive")
 
 

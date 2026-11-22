@@ -1,14 +1,15 @@
+"""
+Filesystem and tool probes run on a volume's host, locally or over SSH.
+
+Each takes the command runner as *run*, so tests can inject a fake one.
+"""
+
 import re as regex
 from pathlib import Path
 
-from ..config import (
-    LocalVolume,
-    RemoteVolume,
-    Volume,
-    resolve_endpoint_path,
-)
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
+from nbkp.config import LocalVolume, RemoteVolume, Volume, resolve_endpoint_path
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 def check_endpoint_sentinel(
@@ -19,6 +20,7 @@ def check_endpoint_sentinel(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> bool:
+    """Return whether the file *sentinel_name* exists in the endpoint's directory."""
     base = resolve_endpoint_path(volume, subdir)
     rel_path = f"{base}/{sentinel_name}"
     match volume:
@@ -38,6 +40,7 @@ def check_directory_writable(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> bool:
+    """Return whether *path* on *volume* is writable by the user nbkp runs as."""
     return run(["test", "-w", path], volume, resolved_endpoints).returncode == 0
 
 
@@ -48,6 +51,7 @@ def check_directory_exists(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> bool:
+    """Return whether *path* on *volume* is a directory."""
     match volume:
         case LocalVolume():
             return Path(path).is_dir()
@@ -62,6 +66,7 @@ def check_symlink_exists(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> bool:
+    """Return whether *path* on *volume* is a symlink, dangling or not."""
     match volume:
         case LocalVolume():
             return Path(path).is_symlink()
@@ -92,7 +97,8 @@ _GNU_RSYNC_RE = regex.compile(r"rsync\s+version\s+(\d+)\.(\d+)\.(\d+)")
 
 
 def parse_rsync_version(output: str) -> tuple[int, ...]:
-    """Extract version tuple from ``rsync --version`` output.
+    """
+    Extract version tuple from ``rsync --version`` output.
 
     GNU rsync:  ``rsync  version 3.2.7  protocol version 31``
     openrsync:  ``openrsync: protocol version 29``
@@ -109,6 +115,11 @@ def check_rsync_version(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> bool:
+    """
+    Return whether *volume*'s host has rsync 3.0.0 or later.
+
+    openrsync, and output :func:`parse_rsync_version` cannot parse, count as too old.
+    """
     result = run(["rsync", "--version"], volume, resolved_endpoints)
     return (
         result.returncode == 0

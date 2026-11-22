@@ -1,6 +1,8 @@
-from .check import format_human_check
-from .remediation import RemediationFacts, TroubleshootContext
-from .troubleshoot import (
+"""Human and JSON rendering of preflight results and their remediation steps."""
+
+from nbkp.preflight.output.check import format_human_check
+from nbkp.preflight.output.remediation import RemediationFacts, TroubleshootContext
+from nbkp.preflight.output.troubleshoot import (
     TroubleshootIssue,
     collect_issues,
     format_human_troubleshoot,

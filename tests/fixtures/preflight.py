@@ -167,11 +167,13 @@ def dst_ep_status(
     sentinel_exists: bool = True,
     latest_snapshot: str | None = None,
 ) -> DestinationEndpointStatus:
-    """*latest_snapshot* is a snapshot directory name (e.g.
-    ``2026-03-06T14:30:00.000Z``); passing one populates the ``latest``
-    symlink state with a parsed :class:`Snapshot`, whose ``timestamp`` is a
-    ``datetime``.  That field is the one non-JSON-native type reachable from
-    a status tree, so it is what exercises JSON serialization.
+    """
+    Build a destination endpoint status.
+
+    *latest_snapshot* is a snapshot directory name (e.g. ``2026-03-06T14:30:00.000Z``);
+    passing one populates the ``latest`` symlink state with a parsed :class:`Snapshot`,
+    whose ``timestamp`` is a ``datetime``. That field is the one non-JSON-native type
+    reachable from a status tree, so it is what exercises JSON serialization.
     """
     if not vol_s.active:
         return DestinationEndpointStatus(
@@ -243,12 +245,16 @@ def sync_status(
     sync_errors: list[SyncErrorKind] | None = None,
     destination_latest_snapshot: Snapshot | None = None,
 ) -> SyncStatus:
-    """*sync_slug*'s status over *vol_statuses*, its endpoints built by
-    :func:`src_ep_status` and :func:`dst_ep_status` with the given errors
-    added."""
+    """
+    Build *sync_slug*'s status over *vol_statuses*.
+
+    Its endpoints are built by :func:`src_ep_status` and :func:`dst_ep_status` with the
+    given errors added.
+    """
     sync = config.syncs[sync_slug]
     src = src_ep_status(
-        sync.source, vol_statuses[config.sync_endpoints[sync.source].volume]
+        sync.source,
+        vol_statuses[config.sync_endpoints[sync.source].volume],
     )
     dst = dst_ep_status(
         sync.destination,
@@ -258,10 +264,10 @@ def sync_status(
         slug=sync_slug,
         config=sync,
         source_endpoint_status=src.model_copy(
-            update={"errors": [*src.errors, *(src_ep_errors or [])]}
+            update={"errors": [*src.errors, *(src_ep_errors or [])]},
         ),
         destination_endpoint_status=dst.model_copy(
-            update={"errors": [*dst.errors, *(dst_ep_errors or [])]}
+            update={"errors": [*dst.errors, *(dst_ep_errors or [])]},
         ),
         errors=sync_errors or [],
         destination_latest_snapshot=destination_latest_snapshot,
@@ -275,8 +281,7 @@ def local_vol_statuses(config: Config) -> dict[str, VolumeStatus]:
 
 
 def btrfs_config() -> Config:
-    """``btrfs-sync``: local ``src`` to local ``dst``, which takes btrfs
-    snapshots."""
+    """Build ``btrfs-sync``: local ``src`` to local ``dst``, with btrfs snapshots."""
     src = LocalVolume(slug="src", path="/mnt/src")
     dst = LocalVolume(slug="dst", path="/mnt/dst")
     ep_src = SyncEndpoint(slug="ep-src", volume="src")
@@ -410,7 +415,8 @@ def sample_sync_statuses_with_snapshots(
     config: Config,
     vol_statuses: dict[str, VolumeStatus],
 ) -> dict[str, SyncStatus]:
-    """All-active sync statuses whose destination has a populated ``latest``.
+    """
+    All-active sync statuses whose destination has a populated ``latest``.
 
     The only difference from :func:`sample_all_active_sync_statuses` is that
     the destination's ``latest`` symlink resolves to a real snapshot, putting
@@ -438,7 +444,9 @@ def config_with_locations() -> Config:
     """Config with location-tagged SSH endpoints for filter validation tests."""
     server_home = SshEndpoint(slug="nas-home", host="192.168.1.50", location="home")
     server_travel = SshEndpoint(
-        slug="nas-travel", host="nas.example.com", location="travel"
+        slug="nas-travel",
+        host="nas.example.com",
+        location="travel",
     )
     src = LocalVolume(slug="local-data", path="/mnt/data")
     dst = RemoteVolume(

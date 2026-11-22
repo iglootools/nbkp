@@ -1,4 +1,5 @@
-"""The flags a command was invoked with, for building follow-up suggestions.
+"""
+The flags a command was invoked with, for building follow-up suggestions.
 
 Suggested commands (``Run nbkp preflight troubleshoot …``, ``nbkp disks
 setup-auth …``) must be copy-pasteable as-is: they carry the same config file
@@ -41,6 +42,7 @@ class Invocation:
         exclude_locations: list[str] | None = None,
         network: str | None = None,
     ) -> Invocation:
+        """Build an invocation from the CLI options, ``None`` lists meaning none."""
         return Invocation(
             config_path=config_path,
             locations=tuple(locations or []),
@@ -65,7 +67,8 @@ class Invocation:
         ]
 
     def command(self, *args: str, endpoint_flags: bool = True) -> str:
-        """Shell-quoted ``nbkp <args> -c <config> [endpoint flags]``.
+        """
+        Shell-quoted ``nbkp <args> -c <config> [endpoint flags]``.
 
         *endpoint_flags* is ``False`` for commands that take no endpoint
         selection (e.g. ``disks setup-auth``, ``credentials keyring-status``).
@@ -76,12 +79,13 @@ class Invocation:
                 *args,
                 *self.config_args(),
                 *(self.endpoint_args() if endpoint_flags else []),
-            ]
+            ],
         )
 
 
 def format_troubleshoot_hint(invocation: Invocation) -> Text:
-    """Point a failed command at ``nbkp preflight troubleshoot``.
+    """
+    Point a failed command at ``nbkp preflight troubleshoot``.
 
     For commands whose JSON output is a bare list, which has no room for the
     ``hint`` field ``run`` adds to its JSON object: they print this, to

@@ -19,14 +19,15 @@ def _render(e: ConfigError) -> str:
 class TestFormatConfigError:
     def test_reason_survives_in_title(self) -> None:
         """The title's own brackets are literal, not a Rich style tag."""
-        e = ConfigError("boom", reason=ConfigErrorKind.INVALID_YAML)
+        e = ConfigError(ConfigErrorKind.INVALID_YAML, detail="boom")
         assert f"[{ConfigErrorKind.INVALID_YAML}]" in _render(e)
 
     def test_message_brackets_survive(self) -> None:
         """YAML parser messages quote the offending text, brackets included."""
         e = ConfigError(
-            "Invalid YAML in /etc/nbkp.yaml: found unexpected ']' at line 3",
-            reason=ConfigErrorKind.INVALID_YAML,
+            ConfigErrorKind.INVALID_YAML,
+            path="/etc/nbkp.yaml",
+            detail="found unexpected ']' at line 3",
         )
         assert "unexpected ']'" in _render(e)
 
@@ -47,6 +48,6 @@ def _validation_error() -> ConfigError:
 
     with pytest.raises(ValidationError) as exc:
         M.model_validate({"retention_count": "x"})
-    e = ConfigError("bad config", reason=ConfigErrorKind.VALIDATION)
+    e = ConfigError(ConfigErrorKind.VALIDATION, detail="bad config")
     e.__cause__ = exc.value
     return e

@@ -1,4 +1,5 @@
-"""Fake command and rsync runners, injected where production passes the real ones.
+"""
+Fake command and rsync runners, injected where production passes the real ones.
 
 Tests hand these to the ``run`` / ``run_command`` / ``rsync`` parameters, or
 to a whole command through :func:`fake_runtime`, instead of patching
@@ -26,7 +27,9 @@ type Response = subprocess.CompletedProcess[str] | Exception
 
 
 def completed(
-    returncode: int = 0, stdout: str = "", stderr: str = ""
+    returncode: int = 0,
+    stdout: str = "",
+    stderr: str = "",
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.CompletedProcess([], returncode, stdout, stderr)
 
@@ -35,7 +38,7 @@ def completed(
 class CommandCall:
     cmd: list[str]
     volume: Volume
-    input: str | None
+    stdin: str | None
     endpoint: ResolvedEndpoint | None
     """Where a remote volume's command was routed (``None`` for a local one)."""
 
@@ -54,7 +57,8 @@ class _Rule:
 
 @dataclass
 class FakeCommandRunner:
-    """A :class:`~nbkp.remote.dispatch.VolumeCommandRunner` answering from a script.
+    """
+    A :class:`~nbkp.remote.dispatch.VolumeCommandRunner` answering from a script.
 
     Each rule maps a command prefix (``("ls",)``, ``("btrfs", "subvolume")``),
     optionally restricted to one volume slug, to a response, or to a list of
@@ -82,10 +86,10 @@ class FakeCommandRunner:
         volume: Volume,
         resolved_endpoints: ResolvedEndpoints,
         *,
-        input: str | None = None,
+        stdin: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         self.calls.append(
-            CommandCall(cmd, volume, input, resolved_endpoints.get(volume.slug))
+            CommandCall(cmd, volume, stdin, resolved_endpoints.get(volume.slug)),
         )
         response = self._response_for(cmd, volume)
         if isinstance(response, Exception):
@@ -113,7 +117,8 @@ class FakeCommandRunner:
 
 @dataclass
 class FakeRsync:
-    """A :class:`~nbkp.sync.modes.RsyncRunner` returning *responses* in order.
+    """
+    A :class:`~nbkp.sync.modes.RsyncRunner` returning *responses* in order.
 
     The last response repeats; records each call's sync slug and keyword
     arguments.
@@ -121,11 +126,14 @@ class FakeRsync:
 
     responses: list[Response] = field(default_factory=lambda: [completed(0, "done\n")])
     calls: list[tuple[str, dict[str, Any]]] = field(
-        default_factory=list[tuple[str, dict[str, Any]]]
+        default_factory=list[tuple[str, dict[str, Any]]],
     )
 
     def __call__(
-        self, sync: SyncConfig, config: Config, **kwargs: Any
+        self,
+        sync: SyncConfig,
+        config: Config,  # noqa: ARG002 -- RsyncRunner's signature
+        **kwargs: Any,  # noqa: ANN401 -- run_rsync's keywords, recorded as given
     ) -> subprocess.CompletedProcess[str]:
         self.calls.append((sync.slug, kwargs))
         response = (
@@ -149,14 +157,29 @@ FIXED_NOW = datetime(2026, 3, 6, 14, 30, tzinfo=UTC)
 """The time a :func:`fake_runtime` clock reads, which names snapshots."""
 
 
+class BodyError(Exception):
+    """Raised inside a ``with`` block to check that its cleanup still runs."""
+
+
+class UnexpectedCommandError(AssertionError):
+    """A fake was asked to run *command*, which the test did not expect."""
+
+    def __init__(self, command: list[str]) -> None:
+        super().__init__(f"unexpected credential command: {command}")
+        self.command = command
+
+
 def _no_credential_command(command: list[str]) -> subprocess.CompletedProcess[str]:
-    raise AssertionError(f"unexpected credential command: {command}")
+    raise UnexpectedCommandError(command)
 
 
 @dataclass
 class FakeRunLock:
-    """A :data:`~nbkp.cliwiring.lock.RunLockFn` that is always free, recording the
-    path of each lock taken."""
+    """
+    A run lock that is always free, recording the path of each lock taken.
+
+    A :data:`~nbkp.cliwiring.lock.RunLockFn`.
+    """
 
     paths: list[Path] = field(default_factory=list[Path])
 
@@ -180,7 +203,8 @@ def fake_runtime(
     home: Path = _NOWHERE / "home",
     run_lock: RunLockFn | None = None,
 ) -> Runtime:
-    """A :class:`~nbkp.cliwiring.runtime.Runtime` touching nothing real.
+    """
+    Return a :class:`~nbkp.cliwiring.runtime.Runtime` touching nothing real.
 
     Unless given: hosts answered by an empty :class:`FakeCommandRunner`
     (every command succeeds with no output), every tool on the

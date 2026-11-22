@@ -1,4 +1,5 @@
-"""Troubleshoot output: per-error remediation instructions for all 4 layers.
+"""
+Troubleshoot output: per-error remediation instructions for all 4 layers.
 
 Issues are first *collected* into structured :class:`TroubleshootIssue`
 records (pure, order-preserving, deduplicated).  The facts their fixes need
@@ -16,7 +17,7 @@ from io import StringIO
 from rich.console import Console, Group, RenderableType
 from rich.text import Text
 
-from ...config import (
+from nbkp.config import (
     Config,
     LocalVolume,
     MountConfig,
@@ -25,25 +26,11 @@ from ...config import (
     SyncEndpoint,
     resolve_endpoint_path,
 )
-from ...disks import DeviceProbeError, discover_cleartext_device, generate_auth_rules
-from ...fsprotocol import SNAPSHOTS_DIR, Snapshot, parse_snapshot_listing
-from ...policy import Severity, Strictness
-from ...remote.dispatch import VolumeCommandRunner, run_on_volume
-from ...remote.endpoints import ResolvedEndpoints
-from ...remote.errors import ssh_connection_errors
-from ..messages import format_problem
-from ..severity import PreflightErrorKind, PreflightWarningKind, severity_for_error
-from ..status.endpoint import (
-    DestinationEndpointErrorKind,
-    DestinationEndpointStatus,
-    DestinationEndpointWarningKind,
-    SourceEndpointErrorKind,
-    SourceEndpointStatus,
-)
-from ..status.ssh import SshEndpointErrorKind, SshEndpointStatus, SshEndpointWarningKind
-from ..status.sync import SyncErrorKind, SyncStatus
-from ..status.volume import VolumeErrorKind, VolumeStatus
-from .remediation import (
+from nbkp.disks import DeviceProbeError, discover_cleartext_device, generate_auth_rules
+from nbkp.fsprotocol import SNAPSHOTS_DIR, Snapshot, parse_snapshot_listing
+from nbkp.policy import Severity, Strictness
+from nbkp.preflight.messages import format_problem
+from nbkp.preflight.output.remediation import (
     ERROR,
     HEADER,
     Lines,
@@ -59,6 +46,28 @@ from .remediation import (
     format_volume_error_fix,
     polkit_user,
 )
+from nbkp.preflight.severity import (
+    PreflightErrorKind,
+    PreflightWarningKind,
+    severity_for_error,
+)
+from nbkp.preflight.status.endpoint import (
+    DestinationEndpointErrorKind,
+    DestinationEndpointStatus,
+    DestinationEndpointWarningKind,
+    SourceEndpointErrorKind,
+    SourceEndpointStatus,
+)
+from nbkp.preflight.status.ssh import (
+    SshEndpointErrorKind,
+    SshEndpointStatus,
+    SshEndpointWarningKind,
+)
+from nbkp.preflight.status.sync import SyncErrorKind, SyncStatus
+from nbkp.preflight.status.volume import VolumeErrorKind, VolumeStatus
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.remote.errors import ssh_connection_errors
 
 # Cascade errors are pointers to inactive lower layers — they have no
 # actionable fix at their own layer, so troubleshoot skips them.
@@ -69,7 +78,7 @@ _CASCADE_ERRORS: frozenset[PreflightErrorKind] = frozenset(
         DestinationEndpointErrorKind.VOLUME_INACTIVE,
         SyncErrorKind.SOURCE_ENDPOINT_INACTIVE,
         SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE,
-    }
+    },
 )
 
 
@@ -111,7 +120,8 @@ class TroubleshootIssue:
 
 
 def _ssh_issues(
-    ssh_statuses: dict[str, SshEndpointStatus], strictness: Strictness
+    ssh_statuses: dict[str, SshEndpointStatus],
+    strictness: Strictness,
 ) -> list[TroubleshootIssue]:
     return [
         *(
@@ -140,7 +150,8 @@ def _ssh_issues(
 
 
 def _volume_issues(
-    vol_statuses: dict[str, VolumeStatus], strictness: Strictness
+    vol_statuses: dict[str, VolumeStatus],
+    strictness: Strictness,
 ) -> list[TroubleshootIssue]:
     return [
         TroubleshootIssue(
@@ -163,7 +174,8 @@ def _endpoint_issues(
     ],
     strictness: Strictness,
 ) -> list[TroubleshootIssue]:
-    """Issues of endpoints shared by several syncs, reported once.
+    """
+    Issues of endpoints shared by several syncs, reported once.
 
     Deduplicated per ``(endpoint, error)`` — the first sync using the
     endpoint provides the fix context.
@@ -174,10 +186,14 @@ def _endpoint_issues(
         for error in ep.errors
         if error not in _CASCADE_ERRORS
     ]
-    first = {key: sync for key, sync in reversed(candidates)}
+    first = dict(reversed(candidates))
     return [
         TroubleshootIssue(
-            layer, slug, error, severity_for_error(error, strictness), sync=first[key]
+            layer,
+            slug,
+            error,
+            severity_for_error(error, strictness),
+            sync=first[key],
         )
         for key in dict.fromkeys(key for key, _ in candidates)
         for slug, error in [key]
@@ -193,7 +209,7 @@ def _destination_warning_issues(
         for ss in sync_statuses.values()
         for warning in ss.destination_endpoint_status.warnings
     ]
-    first = {key: ss for key, ss in reversed(candidates)}
+    first = dict(reversed(candidates))
     return [
         TroubleshootIssue(
             Layer.DESTINATION_ENDPOINT,
@@ -209,7 +225,8 @@ def _destination_warning_issues(
 
 
 def _sync_issues(
-    sync_statuses: dict[str, SyncStatus], strictness: Strictness
+    sync_statuses: dict[str, SyncStatus],
+    strictness: Strictness,
 ) -> list[TroubleshootIssue]:
     return [
         TroubleshootIssue(
@@ -260,18 +277,20 @@ _NEEDS_CLEARTEXT_DEVICE: frozenset[PreflightErrorKind] = frozenset(
         VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH,
         VolumeErrorKind.MOUNT_FAILED,
         DestinationEndpointErrorKind.VOL_NOT_MOUNTED_USER_SUBVOL_RM,
-    }
+    },
 )
 
 
 def _issue_volume(
-    issue: TroubleshootIssue, config: Config
+    issue: TroubleshootIssue,
+    config: Config,
 ) -> LocalVolume | RemoteVolume | None:
     match issue:
         case TroubleshootIssue(vol_status=VolumeStatus() as vs):
             return vs.config
         case TroubleshootIssue(
-            error=DestinationEndpointErrorKind(), sync=SyncConfig() as sync
+            error=DestinationEndpointErrorKind(),
+            sync=SyncConfig() as sync,
         ):
             return config.volumes[config.destination_endpoint(sync).volume]
         case _:
@@ -285,7 +304,10 @@ def _discover_cleartext_device(
     *,
     run: VolumeCommandRunner,
 ) -> str | None:
-    """Discovery runs ``lsblk``, which this code path cannot assume exists — it
+    """
+    Discover the cleartext device, or ``None`` when it cannot be discovered.
+
+    Discovery runs ``lsblk``, which this code path cannot assume exists — it
     is the *error reporting* path, reached precisely when the host is not in
     the expected state, and it also runs on machines with no udisks at all
     (e.g. ``nbkp demo output`` on macOS).  A failed probe, a missing tool or a
@@ -294,7 +316,10 @@ def _discover_cleartext_device(
     """
     try:
         return discover_cleartext_device(
-            vol, mount.device_uuid, resolved_endpoints, run=run
+            vol,
+            mount.device_uuid,
+            resolved_endpoints,
+            run=run,
         )
     except (*ssh_connection_errors(), DeviceProbeError):
         return None
@@ -307,7 +332,7 @@ _NEEDS_NEWEST_SNAPSHOT: frozenset[PreflightErrorKind] = frozenset(
         SourceEndpointErrorKind.LATEST_SYMLINK_INVALID,
         DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND,
         DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID,
-    }
+    },
 )
 
 
@@ -316,7 +341,8 @@ def _issue_endpoint(issue: TroubleshootIssue, config: Config) -> SyncEndpoint | 
         case TroubleshootIssue(error=SourceEndpointErrorKind(), sync=SyncConfig() as s):
             return config.source_endpoint(s)
         case TroubleshootIssue(
-            error=DestinationEndpointErrorKind(), sync=SyncConfig() as s
+            error=DestinationEndpointErrorKind(),
+            sync=SyncConfig() as s,
         ):
             return config.destination_endpoint(s)
         case _:
@@ -330,10 +356,12 @@ def _list_endpoint_snapshots(
     *,
     run: VolumeCommandRunner,
 ) -> list[Snapshot] | None:
-    """The endpoint's snapshots, oldest first; ``[]`` when ``snapshots/`` is
-    absent, and ``None`` when they could not be listed.  Like cleartext
-    discovery, a failure degrades instead of propagating: the fix then asks
-    the user to look.
+    """
+    List the endpoint's snapshots, oldest first.
+
+    ``[]`` when ``snapshots/`` is absent, and ``None`` when they could not be listed.
+    Like cleartext discovery, a failure degrades instead of propagating: the fix then
+    asks the user to look.
     """
     vol = config.volumes[endpoint.volume]
     if vol.path is None:
@@ -356,8 +384,11 @@ def _find_newest_snapshots(
     *,
     run: VolumeCommandRunner,
 ) -> dict[str, str | None]:
-    """Endpoint slug → its newest snapshot name, ``None`` when it has none;
-    endpoints whose snapshots could not be listed are left out.
+    """
+    Map each endpoint slug to its newest snapshot name.
+
+    ``None`` when it has none; endpoints whose snapshots could not be listed are left
+    out.
     """
     endpoints = {
         ep.slug: ep
@@ -383,10 +414,12 @@ def gather_remediation_facts(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> RemediationFacts:
-    """Only issues whose fix shows a cleartext device trigger a discovery, once per
-    encrypted volume; only a missing polkit rule triggers rule generation; only
-    a missing or invalid ``latest`` triggers a snapshot listing, once per
-    endpoint.
+    """
+    Gather the facts the remediations need, probing only what an issue needs.
+
+    Only issues whose fix shows a cleartext device trigger a discovery, once per
+    encrypted volume; only a missing polkit rule triggers rule generation; only a
+    missing or invalid ``latest`` triggers a snapshot listing, once per endpoint.
 
     Discovery runs ``lsblk`` on the volume's host through *run*
     (:func:`remote.dispatch.run_on_volume` unless a test injects a fake).
@@ -437,6 +470,11 @@ def with_remediation_facts(
 
 
 def format_issue_fix(issue: TroubleshootIssue, ctx: TroubleshootContext) -> Lines:
+    """
+    Return the remediation lines for *issue*, by the kind of its error.
+
+    Empty when the issue lacks the status or sync its kind of fix needs.
+    """
     match issue:
         case TroubleshootIssue(
             error=SshEndpointWarningKind() as warning,
@@ -450,23 +488,28 @@ def format_issue_fix(issue: TroubleshootIssue, ctx: TroubleshootContext) -> Line
         ):
             return format_destination_endpoint_warning_fix(warning, sync, st, ctx)
         case TroubleshootIssue(
-            error=SshEndpointErrorKind() as error, ssh_status=SshEndpointStatus() as st
+            error=SshEndpointErrorKind() as error,
+            ssh_status=SshEndpointStatus() as st,
         ):
             return format_ssh_endpoint_error_fix(st, error, ctx)
         case TroubleshootIssue(
-            error=VolumeErrorKind() as error, vol_status=VolumeStatus() as vs
+            error=VolumeErrorKind() as error,
+            vol_status=VolumeStatus() as vs,
         ):
             return format_volume_error_fix(vs, error, ctx)
         case TroubleshootIssue(
-            error=SourceEndpointErrorKind() as error, sync=SyncConfig() as sync
+            error=SourceEndpointErrorKind() as error,
+            sync=SyncConfig() as sync,
         ):
             return format_source_endpoint_error_fix(error, sync, ctx)
         case TroubleshootIssue(
-            error=DestinationEndpointErrorKind() as error, sync=SyncConfig() as sync
+            error=DestinationEndpointErrorKind() as error,
+            sync=SyncConfig() as sync,
         ):
             return format_destination_endpoint_error_fix(error, sync, ctx)
         case TroubleshootIssue(
-            error=SyncErrorKind() as error, sync=SyncConfig() as sync
+            error=SyncErrorKind() as error,
+            sync=SyncConfig() as sync,
         ):
             return format_sync_error_fix(sync, error, ctx)
         case _:
@@ -507,8 +550,11 @@ def _format_group(
 
 
 def format_issues(issues: list[TroubleshootIssue], ctx: TroubleshootContext) -> Group:
-    """Pure rendering: facts missing from ``ctx.facts`` are rendered as unknown
-    (default mapper name, no polkit rule body).
+    """
+    Format the issues, as pure rendering.
+
+    Facts missing from ``ctx.facts`` are rendered as unknown (default mapper name, no
+    polkit rule body).
     """
     groups = list(dict.fromkeys((i.layer, i.subject) for i in issues))
     return Group(
@@ -521,7 +567,7 @@ def format_issues(issues: list[TroubleshootIssue], ctx: TroubleshootContext) -> 
                 [i for i in issues if (i.layer, i.subject) == (layer, subject)],
                 ctx,
             )
-        )
+        ),
     )
 
 
@@ -536,11 +582,15 @@ def format_human_troubleshoot(
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
     run: VolumeCommandRunner = run_on_volume,
 ) -> RenderableType:
-    """*context* carries the invocation flags and local user used in
-    suggested commands; facts it lacks are gathered through *run*.
+    """
+    Format the human-readable troubleshoot report.
+
+    *context* carries the invocation flags and local user used in suggested commands;
+    facts it lacks are gathered through *run*.
     """
     ctx = context or TroubleshootContext(
-        config=config, resolved_endpoints=resolved_endpoints or {}
+        config=config,
+        resolved_endpoints=resolved_endpoints or {},
     )
     issues = collect_issues(ssh_statuses, vol_statuses, sync_statuses, strictness)
     return (
@@ -553,7 +603,7 @@ def format_human_troubleshoot(
 def _render_plain(lines: Lines) -> str:
     buf = StringIO()
     Console(file=buf, width=100, color_system=None, highlight=False).print(
-        Group(*lines)
+        Group(*lines),
     )
     return buf.getvalue().rstrip("\n")
 
@@ -565,9 +615,12 @@ def troubleshoot_json(
     has_fatal_errors: bool,
     run: VolumeCommandRunner = run_on_volume,
 ) -> dict[str, object]:
-    """``code`` is the stable enum member name (``RSYNC_NOT_FOUND``) and the
-    identifier to branch on; ``remediation`` is the human fix as plain text.
-    Facts *ctx* lacks are gathered through *run*.
+    """
+    Build the troubleshoot report as JSON-ready data.
+
+    ``code`` is the stable enum member name (``RSYNC_NOT_FOUND``) and the identifier to
+    branch on; ``remediation`` is the human fix as plain text. Facts *ctx* lacks are
+    gathered through *run*.
     """
     ctx = with_remediation_facts(issues, ctx, run=run)
     return {
