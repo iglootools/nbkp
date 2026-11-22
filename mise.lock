@@ -110,6 +110,7 @@ url_api = "https://api.github.com/repos/asciinema/agg/releases/assets/433216272"
 version = "3.2.1"
 backend = "aqua:asciinema/asciinema"
 specifiers = ["3.2.1"]
+unsupported_platforms = ["windows-x64"]
 
 [tools."aqua:asciinema/asciinema"."platforms.linux-arm64"]
 checksum = "sha256:b516a6d896844c0ffbc96e0a55afe4cbcc79216abde0fc64fdda4e39bee421ea"

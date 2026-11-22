@@ -83,7 +83,7 @@ jobs:
         if: steps.released.outputs.skip != 'true'
         with:
           # renovate: datasource=github-releases depName=jdx/mise
-          version: 2026.11.9
+          version: 2026.11.12
       - run: mise run ci-build
         if: steps.released.outputs.skip != 'true'
       - name: Publish package distributions to PyPI
