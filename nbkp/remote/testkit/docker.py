@@ -16,7 +16,7 @@ lazy from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519Privat
 
 from ...config import SshConnectionOptions, SshEndpoint
 from ...remote.fabricssh import run_remote_command
-from .constants import (  # noqa: F401
+from .constants import (
     BASTION_CONTAINER_NAME,
     LUKS_MAPPER_NAME,
     LUKS_PASSPHRASE,
@@ -24,7 +24,6 @@ from .constants import (  # noqa: F401
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_ENCRYPTED_PATH,
     REMOTE_BTRFS_PATH,
-    REMOTE_UNENCRYPTED_PATH,
     STORAGE_CONTAINER_NAME,
 )
 from .errors import DockerError, DockerErrorKind

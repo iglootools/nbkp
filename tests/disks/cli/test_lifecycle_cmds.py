@@ -49,7 +49,7 @@ def _config() -> Config:
 
 
 @pytest.fixture(autouse=True)
-def _config_file(tmp_path: Path, chdir: Callable[[Path], None]) -> None:
+def run_from_config_dir(tmp_path: Path, chdir: Callable[[Path], None]) -> None:
     """Run every test from a directory holding ``_config()`` as ``config.yaml``.
 
     Commands get ``-c config.yaml``, and the hints they print show that

@@ -12,7 +12,7 @@ console = Console()
 # Import order determines the order commands are listed in `--help`.
 # Keep isort out of it.
 # isort: off
-from . import output_cmd as _output_cmd  # noqa: F401
-from . import seed_cmd as _seed_cmd  # noqa: F401
+from . import output_cmd as output_cmd
+from . import seed_cmd as seed_cmd
 
 # isort: on

@@ -6,4 +6,5 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-from . import keyring_status_cmd as _keyring_status_cmd  # noqa: F401
+# Imported to register its command on the Typer app.
+from . import keyring_status_cmd as keyring_status_cmd

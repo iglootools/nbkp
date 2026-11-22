@@ -1,1 +1,2 @@
-from . import sh_cmd as _sh_cmd  # noqa: F401
+# Imported to register its command on the Typer app.
+from . import sh_cmd as sh_cmd

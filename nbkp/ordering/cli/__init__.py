@@ -6,4 +6,5 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-from . import graph_cmd as _graph_cmd  # noqa: F401
+# Imported to register its command on the Typer app.
+from . import graph_cmd as graph_cmd

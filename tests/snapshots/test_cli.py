@@ -29,7 +29,7 @@ _HINT = "nbkp preflight troubleshoot -c config.yaml -N private"
 
 
 @pytest.fixture(autouse=True)
-def _in_tmp_path(tmp_path: Path, chdir: Callable[[Path], None]) -> None:
+def in_tmp_path(tmp_path: Path, chdir: Callable[[Path], None]) -> None:
     """Run every test from ``tmp_path``, where it writes ``config.yaml``.
 
     Commands get ``-c config.yaml``, and the troubleshoot hints they print
