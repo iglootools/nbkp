@@ -18,7 +18,7 @@ optional btrfs or hard-link snapshots for point-in-time recovery.
 Files are backed up as-is in plain directories: no obscure storage formats and
 restoring is just a copy.
 
-[![asciicast](https://asciinema.org/a/849UKcGs6WqqAe6i.svg)](https://asciinema.org/a/849UKcGs6WqqAe6i)
+[![asciicast](demo/demo.svg)](https://asciinema.org/a/849UKcGs6WqqAe6i)
 
 <!-- toc -->
 **On this page**
