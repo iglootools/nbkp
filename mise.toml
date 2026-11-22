@@ -98,6 +98,12 @@ run = "uv run --no-sync iglootools python reinstall"
 description = "Lint the tracked shell scripts with shellcheck"
 run = "uv run --no-sync iglootools shell lint"
 
+# Every pin on iglootools/common names the same release, and `iglootools common adopt` would
+# move each one (guidelines/project-setup/iglootools-cli.md in iglootools/common).
+[tasks.lint-common-pins]
+description = "Check that every pin on iglootools/common agrees (fix with `iglootools common adopt`)"
+run = "uv run --no-sync iglootools common check-pins"
+
 [tasks.lint-lock-mise]
 description = "Check that mise.lock is up to date with mise.toml"
 run = "uv run --no-sync iglootools mise lock-check"
@@ -266,6 +272,7 @@ run = [
   { task = "lint-boundaries" },
   { task = "lint-dead-code" },
   { task = "lint-renovate" },
+  { task = "lint-common-pins" },
 ]
 
 # Why the formatters need a lint of their own: `ruff format` rewrites files and exits 0 whether
