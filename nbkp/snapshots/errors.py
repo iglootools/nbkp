@@ -11,10 +11,10 @@ import enum
 import subprocess
 from collections.abc import Callable
 
-from ..config import Volume
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
-from ..remote.errors import ssh_connection_errors
+from nbkp.config import Volume
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.remote.errors import ssh_connection_errors
 
 
 class SnapshotOp(enum.StrEnum):

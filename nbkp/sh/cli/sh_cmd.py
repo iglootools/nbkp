@@ -6,16 +6,16 @@ from typing import Annotated
 
 import typer
 
-from ...clidisplay.invocation import display_path
-from ...cliwiring.config import load_config_or_exit, resolve_endpoints
-from ...cliwiring.options import (
+from nbkp.clidisplay.invocation import display_path
+from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
+from nbkp.cliwiring.options import (
     CONFIG_OPTION,
     EXCLUDE_LOCATION_OPTION,
     LOCATION_OPTION,
     NETWORK_OPTION,
 )
-from ...cliwiring.runtime import runtime_of
-from .. import ScriptOptions, VolumeWithoutPathError, generate_script
+from nbkp.cliwiring.runtime import runtime_of
+from nbkp.sh import ScriptOptions, VolumeWithoutPathError, generate_script
 
 
 def sh_cmd(

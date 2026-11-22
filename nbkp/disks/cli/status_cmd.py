@@ -1,18 +1,18 @@
 import typer
 
-from ...clidisplay import OutputFormat
-from ...cliwiring.config import load_config_or_exit, resolve_endpoints
-from ...cliwiring.disks import probe_and_show_status, require_known_names
-from ...cliwiring.options import (
+from nbkp.clidisplay import OutputFormat
+from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
+from nbkp.cliwiring.disks import probe_and_show_status, require_known_names
+from nbkp.cliwiring.options import (
     CONFIG_OPTION,
     EXCLUDE_LOCATION_OPTION,
     LOCATION_OPTION,
     NETWORK_OPTION,
     OUTPUT_OPTION,
 )
-from ...cliwiring.runtime import runtime_of
-from . import app
-from .options import NAME_OPTION
+from nbkp.cliwiring.runtime import runtime_of
+from nbkp.disks.cli import app
+from nbkp.disks.cli.options import NAME_OPTION
 
 
 @app.command("status")

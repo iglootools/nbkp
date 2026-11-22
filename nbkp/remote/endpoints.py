@@ -9,7 +9,7 @@ from enum import StrEnum
 
 from pydantic import Field
 
-from ..config.protocol import ConfigModel, RemoteVolume, SshEndpoint, Volume
+from nbkp.config.protocol import ConfigModel, RemoteVolume, SshEndpoint, Volume
 
 
 class NetworkType(StrEnum):

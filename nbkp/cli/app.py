@@ -3,17 +3,17 @@ from typing import Annotated
 
 import typer
 
-from ..cliwiring.runtime import runtime_of
-from ..config.cli import app as config_app
-from ..credentials.cli import app as credentials_app
-from ..demo import app as demo_app
-from ..disks.cli import app as disks_app
-from ..ordering.cli import app as ordering_app
-from ..preflight.cli import app as preflight_app
-from ..remote.pool import connection_scope
-from ..run.cli.run_cmd import run_cmd
-from ..sh.cli.sh_cmd import sh_cmd
-from ..snapshots.cli import app as snapshots_app
+from nbkp.cliwiring.runtime import runtime_of
+from nbkp.config.cli import app as config_app
+from nbkp.credentials.cli import app as credentials_app
+from nbkp.demo import app as demo_app
+from nbkp.disks.cli import app as disks_app
+from nbkp.ordering.cli import app as ordering_app
+from nbkp.preflight.cli import app as preflight_app
+from nbkp.remote.pool import connection_scope
+from nbkp.run.cli.run_cmd import run_cmd
+from nbkp.sh.cli.sh_cmd import sh_cmd
+from nbkp.snapshots.cli import app as snapshots_app
 
 
 def _version_callback(value: bool) -> None:

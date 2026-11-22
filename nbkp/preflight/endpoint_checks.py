@@ -6,12 +6,8 @@ diagnostics + capabilities into errors.
 wasteful remote commands.
 """
 
-from ..config import (
-    SyncEndpoint,
-    Volume,
-    resolve_endpoint_path,
-)
-from ..fsprotocol import (
+from nbkp.config import SyncEndpoint, Volume, resolve_endpoint_path
+from nbkp.fsprotocol import (
     DESTINATION_SENTINEL,
     DEVNULL_TARGET,
     LATEST_LINK,
@@ -20,25 +16,25 @@ from ..fsprotocol import (
     STAGING_DIR,
     Snapshot,
 )
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
-from .probes import (
+from nbkp.preflight.probes import (
     check_directory_exists,
     check_directory_writable,
     check_endpoint_sentinel,
     check_symlink_exists,
     read_symlink_target,
 )
-from .snapshot_checks import check_btrfs_subvolume, probe_btrfs_readonly
-from .status.endpoint import (
+from nbkp.preflight.snapshot_checks import check_btrfs_subvolume, probe_btrfs_readonly
+from nbkp.preflight.status.endpoint import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
     LatestSymlinkState,
     SnapshotDirsDiagnostics,
     SourceEndpointDiagnostics,
 )
-from .status.ssh import HostToolCapabilities
-from .status.volume import VolumeCapabilities
+from nbkp.preflight.status.ssh import HostToolCapabilities
+from nbkp.preflight.status.volume import VolumeCapabilities
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 def observe_source_endpoint(

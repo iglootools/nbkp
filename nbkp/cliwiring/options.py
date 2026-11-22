@@ -9,8 +9,8 @@ from typing import Annotated
 
 import typer
 
-from ..clidisplay import OutputFormat
-from ..remote.endpoints import NetworkType
+from nbkp.clidisplay import OutputFormat
+from nbkp.remote.endpoints import NetworkType
 
 CONFIG_OPTION = Annotated[
     Path | None,

@@ -4,15 +4,15 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from ...config import Config, SyncConfig
-from ...fsprotocol import Snapshot
-from ...remote.dispatch import VolumeCommandRunner, run_on_volume
-from ...remote.endpoints import ResolvedEndpoints
-from ...remote.errors import ssh_connection_errors
-from ...snapshots.common import update_latest_symlink
-from ...snapshots.errors import SnapshotOperationError, SnapshotPruneError
-from ..results import SyncFailureKind, SyncResult, SyncWarning, SyncWarningKind
-from ..rsync import ProgressMode, run_rsync
+from nbkp.config import Config, SyncConfig
+from nbkp.fsprotocol import Snapshot
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.remote.errors import ssh_connection_errors
+from nbkp.snapshots.common import update_latest_symlink
+from nbkp.snapshots.errors import SnapshotOperationError, SnapshotPruneError
+from nbkp.sync.results import SyncFailureKind, SyncResult, SyncWarning, SyncWarningKind
+from nbkp.sync.rsync import ProgressMode, run_rsync
 
 
 class RsyncRunner(Protocol):

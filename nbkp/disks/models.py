@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict
 
-lazy from ..config.protocol.volume import LocalVolume, RemoteVolume
+lazy from nbkp.config.protocol.volume import LocalVolume, RemoteVolume
 
 
 class MountFailureKind(enum.StrEnum):

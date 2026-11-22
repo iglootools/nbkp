@@ -8,24 +8,22 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
-from ...clidisplay import StepProgressBar, dry_run_labeled
-from ...config import (
-    CredentialProvider,
-)
-from . import app, console as _console
-lazy from ...remote.testkit.constants import (
-    BASTION_CONTAINER_NAME,
-    LUKS_PASSPHRASE,
-    NETWORK_NAME,
-    STORAGE_CONTAINER_NAME,
-)
-lazy from ..seed import (
+from nbkp.clidisplay import StepProgressBar, dry_run_labeled
+from nbkp.config import CredentialProvider
+from nbkp.demo.cli import app, console as _console
+lazy from nbkp.demo.seed import (
     SeedError,
     SeedErrorKind,
     SeedResult,
     seed_demo,
     seed_plan,
     seed_steps,
+)
+lazy from nbkp.remote.testkit.constants import (
+    BASTION_CONTAINER_NAME,
+    LUKS_PASSPHRASE,
+    NETWORK_NAME,
+    STORAGE_CONTAINER_NAME,
 )
 
 

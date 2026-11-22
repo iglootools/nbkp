@@ -4,27 +4,27 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from ...clidisplay import OutputFormat
-from ...clidisplay.invocation import Invocation, format_troubleshoot_hint
-from ...cliwiring.config import load_config_or_exit, resolve_endpoints
-from ...cliwiring.disks import probe_and_show_status, require_known_names, show_plan
-from ...cliwiring.lock import run_lock_or_exit
-from ...cliwiring.mount_progress import LifecycleProgress, mount_display_names
-from ...cliwiring.options import (
+from nbkp.clidisplay import OutputFormat
+from nbkp.clidisplay.invocation import Invocation, format_troubleshoot_hint
+from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
+from nbkp.cliwiring.disks import probe_and_show_status, require_known_names, show_plan
+from nbkp.cliwiring.lock import run_lock_or_exit
+from nbkp.cliwiring.mount_progress import LifecycleProgress, mount_display_names
+from nbkp.cliwiring.options import (
     CONFIG_OPTION,
     EXCLUDE_LOCATION_OPTION,
     LOCATION_OPTION,
     NETWORK_OPTION,
     OUTPUT_OPTION,
 )
-from ...cliwiring.runtime import Runtime, runtime_of
-from ...config import Config
-from ...remote.endpoints import ResolvedEndpoints
-from ..lifecycle import UmountResult, any_failed, umount_volumes
-from ..mount_checks import check_mount_status
-from ..plan import plan_lifecycle
-from . import app
-from .options import NAME_OPTION
+from nbkp.cliwiring.runtime import Runtime, runtime_of
+from nbkp.config import Config
+from nbkp.disks.cli import app
+from nbkp.disks.cli.options import NAME_OPTION
+from nbkp.disks.lifecycle import UmountResult, any_failed, umount_volumes
+from nbkp.disks.mount_checks import check_mount_status
+from nbkp.disks.plan import plan_lifecycle
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 @app.command("umount")

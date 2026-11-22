@@ -9,26 +9,23 @@ import shutil
 from dataclasses import dataclass
 from functools import partial
 
-from ..config import (
-    MountConfig,
-    Volume,
-)
-from ..remote.dispatch import (
-    VolumeCommandRunner,
-    WhichFn,
-    check_command_available,
-    run_on_volume,
-)
-from ..remote.endpoints import ResolvedEndpoints
-from .detection import (
+from nbkp.config import MountConfig, Volume
+from nbkp.disks.detection import (
     DeviceProbeError,
     detect_device_present,
     discover_cleartext_device,
     find_mountpoint,
 )
-from .models import MountCapabilities, MountToolCapabilities
-from .observation import MountObservation
-from .udisks import cleartext_mapper_name
+from nbkp.disks.models import MountCapabilities, MountToolCapabilities
+from nbkp.disks.observation import MountObservation
+from nbkp.disks.udisks import cleartext_mapper_name
+from nbkp.remote.dispatch import (
+    VolumeCommandRunner,
+    WhichFn,
+    check_command_available,
+    run_on_volume,
+)
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 # udisks2 btrfs module locations (best-effort across distros).  The module
 # (from the ``udisks2-btrfs`` package) is ``libudisks2_btrfs.so`` under

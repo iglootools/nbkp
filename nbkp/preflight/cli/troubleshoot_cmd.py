@@ -3,11 +3,11 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from ...clidisplay import OutputFormat, echo_json
-from ...clidisplay.invocation import Invocation
-from ...cliwiring.config import load_config_or_exit, resolve_endpoints
-from ...cliwiring.mount import managed_mount
-from ...cliwiring.options import (
+from nbkp.clidisplay import OutputFormat, echo_json
+from nbkp.clidisplay.invocation import Invocation
+from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
+from nbkp.cliwiring.mount import managed_mount
+from nbkp.cliwiring.options import (
     CONFIG_OPTION,
     EXCLUDE_LOCATION_OPTION,
     LOCATION_OPTION,
@@ -16,18 +16,18 @@ from ...cliwiring.options import (
     OUTPUT_OPTION,
     UMOUNT_OPTION,
 )
-from ...cliwiring.preflight import check_all_with_progress
-from ...cliwiring.runtime import Runtime, runtime_of
-from ...policy import Strictness
-from ..output import (
+from nbkp.cliwiring.preflight import check_all_with_progress
+from nbkp.cliwiring.runtime import Runtime, runtime_of
+from nbkp.policy import Strictness
+from nbkp.preflight.cli import app
+from nbkp.preflight.output import (
     TroubleshootContext,
     collect_issues,
     format_human_troubleshoot,
     troubleshoot_json,
 )
-from ..status.result import PreflightResult
-from ..strictness import has_fatal_errors
-from . import app
+from nbkp.preflight.status.result import PreflightResult
+from nbkp.preflight.strictness import has_fatal_errors
 
 
 @app.command("troubleshoot")

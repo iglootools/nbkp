@@ -22,8 +22,8 @@ from rich.padding import Padding
 from rich.syntax import Syntax
 from rich.text import Text
 
-from ...clidisplay.invocation import Invocation
-from ...config import (
+from nbkp.clidisplay.invocation import Invocation
+from nbkp.config import (
     Config,
     LocalVolume,
     MountConfig,
@@ -32,9 +32,9 @@ from ...config import (
     SyncConfig,
     passphrase_env_var,
 )
-from ...config.output import endpoint_path, host_label
-from ...disks import AuthRuleBlock, cleartext_mapper_name
-from ...fsprotocol import (
+from nbkp.config.output import endpoint_path, host_label
+from nbkp.disks import AuthRuleBlock, cleartext_mapper_name
+from nbkp.fsprotocol import (
     DESTINATION_SENTINEL,
     DEVNULL_TARGET,
     LATEST_LINK,
@@ -43,22 +43,26 @@ from ...fsprotocol import (
     STAGING_DIR,
     VOLUME_SENTINEL,
 )
-from ...remote.endpoints import ResolvedEndpoint, ResolvedEndpoints
-from ...remote.ssh import (
-    format_known_hosts_option,
-    format_proxy_jump_chain,
-    ssh_prefix,
-    wrap_cmd,
-)
-from ..status.endpoint import (
+from nbkp.preflight.status.endpoint import (
     DestinationEndpointErrorKind,
     DestinationEndpointStatus,
     DestinationEndpointWarningKind,
     SourceEndpointErrorKind,
 )
-from ..status.ssh import SshEndpointErrorKind, SshEndpointStatus, SshEndpointWarningKind
-from ..status.sync import SyncErrorKind
-from ..status.volume import VolumeErrorKind, VolumeStatus
+from nbkp.preflight.status.ssh import (
+    SshEndpointErrorKind,
+    SshEndpointStatus,
+    SshEndpointWarningKind,
+)
+from nbkp.preflight.status.sync import SyncErrorKind
+from nbkp.preflight.status.volume import VolumeErrorKind, VolumeStatus
+from nbkp.remote.endpoints import ResolvedEndpoint, ResolvedEndpoints
+from nbkp.remote.ssh import (
+    format_known_hosts_option,
+    format_proxy_jump_chain,
+    ssh_prefix,
+    wrap_cmd,
+)
 
 Part = str | tuple[str, str] | Text
 """A line fragment: plain text, ``(text, style)``, or a ``Text``."""

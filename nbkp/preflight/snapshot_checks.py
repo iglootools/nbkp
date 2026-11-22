@@ -1,7 +1,7 @@
-from ..config import Volume, resolve_endpoint_path
-from ..fsprotocol import NO_HARDLINK_FILESYSTEMS
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
+from nbkp.config import Volume, resolve_endpoint_path
+from nbkp.fsprotocol import NO_HARDLINK_FILESYSTEMS
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 def probe_filesystem_type(

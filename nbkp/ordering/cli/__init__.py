@@ -7,4 +7,4 @@ app = typer.Typer(
 )
 
 # Imported to register its command on the Typer app.
-from . import graph_cmd as graph_cmd
+from nbkp.ordering.cli import graph_cmd as graph_cmd

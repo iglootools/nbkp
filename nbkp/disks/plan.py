@@ -10,12 +10,12 @@ import enum
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from ..config import Config, MountConfig, Volume
-from ..remote.endpoints import ResolvedEndpoints
-from ..remote.errors import describe_error, ssh_connection_errors
-from .lifecycle import lifecycle_volumes, missing_local_tool
-from .models import MountCapabilities
-from .mount_checks import check_mount_status
+from nbkp.config import Config, MountConfig, Volume
+from nbkp.disks.lifecycle import lifecycle_volumes, missing_local_tool
+from nbkp.disks.models import MountCapabilities
+from nbkp.disks.mount_checks import check_mount_status
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.remote.errors import describe_error, ssh_connection_errors
 
 type MountProbeFn = Callable[
     [Volume, MountConfig, ResolvedEndpoints], MountCapabilities

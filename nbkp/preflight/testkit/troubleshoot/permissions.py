@@ -1,21 +1,24 @@
 """Scenarios about destinations the backup user cannot write to (Layer 3)."""
 
-from ....config import (
+from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     HardLinkSnapshotConfig,
     LocalVolume,
     SyncEndpoint,
 )
-from ... import (
+from nbkp.preflight import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
     DestinationEndpointErrorKind,
     LatestSymlinkState,
     SnapshotDirsDiagnostics,
 )
-from ..common import LOCALHOST_SSH_STATUS, LOCALHOST_SSH_STATUS_BTRFS
-from .scenario import (
+from nbkp.preflight.testkit.common import (
+    LOCALHOST_SSH_STATUS,
+    LOCALHOST_SSH_STATUS_BTRFS,
+)
+from nbkp.preflight.testkit.troubleshoot.scenario import (
     Scenario,
     ScenarioStatuses,
     SharedStatuses,

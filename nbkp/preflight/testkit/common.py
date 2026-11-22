@@ -1,7 +1,7 @@
 """Statuses shared by the check and troubleshoot demo data."""
 
-from ...fsprotocol import Snapshot
-from .. import (
+from nbkp.fsprotocol import Snapshot
+from nbkp.preflight import (
     DestinationEndpointDiagnostics,
     DestinationEndpointErrorKind,
     DestinationEndpointStatus,

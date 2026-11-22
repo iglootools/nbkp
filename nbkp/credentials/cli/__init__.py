@@ -7,4 +7,4 @@ app = typer.Typer(
 )
 
 # Imported to register its command on the Typer app.
-from . import keyring_status_cmd as keyring_status_cmd
+from nbkp.credentials.cli import keyring_status_cmd as keyring_status_cmd

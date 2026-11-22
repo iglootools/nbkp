@@ -22,35 +22,31 @@ fakes.
 import shutil
 from pathlib import Path
 
-from ..config import (
-    LocalVolume,
-    RemoteVolume,
-    Volume,
-)
-from ..disks import (
+from nbkp.config import LocalVolume, RemoteVolume, Volume
+from nbkp.disks import (
     MountObservation,
     MountToolCapabilities,
     check_mount_capabilities as _check_mount_capabilities,
     probe_mount_tools as _probe_mount_tools,
 )
-from ..fsprotocol import VOLUME_SENTINEL
-from ..remote.dispatch import (
-    VolumeCommandRunner,
-    WhichFn,
-    check_command_available,
-    run_on_volume,
-)
-from ..remote.endpoints import ResolvedEndpoints
-from ..remote.errors import describe_error, is_auth_error, ssh_connection_errors
-from .probes import check_rsync_version
-from .snapshot_checks import (
+from nbkp.fsprotocol import VOLUME_SENTINEL
+from nbkp.preflight.probes import check_rsync_version
+from nbkp.preflight.snapshot_checks import (
     check_btrfs_mount_option,
     is_btrfs_filesystem,
     probe_filesystem_type,
     supports_hard_links,
 )
-from .status.ssh import HostToolCapabilities, SshEndpointDiagnostics
-from .status.volume import VolumeCapabilities, VolumeDiagnostics
+from nbkp.preflight.status.ssh import HostToolCapabilities, SshEndpointDiagnostics
+from nbkp.preflight.status.volume import VolumeCapabilities, VolumeDiagnostics
+from nbkp.remote.dispatch import (
+    VolumeCommandRunner,
+    WhichFn,
+    check_command_available,
+    run_on_volume,
+)
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.remote.errors import describe_error, is_auth_error, ssh_connection_errors
 
 
 def observe_ssh_endpoint(

@@ -14,9 +14,9 @@ import docker.errors as docker_errors
 lazy from cryptography.hazmat.primitives import serialization
 lazy from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from ...config import SshConnectionOptions, SshEndpoint
-from ...remote.fabricssh import run_remote_command
-from .constants import (
+from nbkp.config import SshConnectionOptions, SshEndpoint
+from nbkp.remote.fabricssh import run_remote_command
+from nbkp.remote.testkit.constants import (
     BASTION_CONTAINER_NAME,
     LUKS_MAPPER_NAME,
     LUKS_PASSPHRASE,
@@ -26,7 +26,7 @@ from .constants import (
     REMOTE_BTRFS_PATH,
     STORAGE_CONTAINER_NAME,
 )
-from .errors import DockerError, DockerErrorKind
+from nbkp.remote.testkit.errors import DockerError, DockerErrorKind
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"
 _IMAGE_TAG = "nbkp-demo-server:latest"

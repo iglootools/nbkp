@@ -2,11 +2,11 @@ from typing import Annotated
 
 import typer
 
-from ...clidisplay import OutputFormat, echo_json
-from ...clidisplay.invocation import Invocation
-from ...cliwiring.config import load_config_or_exit, resolve_endpoints
-from ...cliwiring.mount import managed_mount
-from ...cliwiring.options import (
+from nbkp.clidisplay import OutputFormat, echo_json
+from nbkp.clidisplay.invocation import Invocation
+from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
+from nbkp.cliwiring.mount import managed_mount
+from nbkp.cliwiring.options import (
     CONFIG_OPTION,
     EXCLUDE_LOCATION_OPTION,
     LOCATION_OPTION,
@@ -15,11 +15,11 @@ from ...cliwiring.options import (
     OUTPUT_OPTION,
     UMOUNT_OPTION,
 )
-from ...cliwiring.preflight import check_and_display
-from ...cliwiring.runtime import runtime_of
-from ...policy import Strictness
-from ..status.result import PreflightResult
-from . import app
+from nbkp.cliwiring.preflight import check_and_display
+from nbkp.cliwiring.runtime import runtime_of
+from nbkp.policy import Strictness
+from nbkp.preflight.cli import app
+from nbkp.preflight.status.result import PreflightResult
 
 
 @app.command("check")

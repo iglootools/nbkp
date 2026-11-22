@@ -1,15 +1,12 @@
 import typer
 from rich.console import Console
 
-from ...clidisplay import OutputFormat, echo_json
-from ...cliwiring.config import load_config_or_exit, resolve_endpoints
-from ...cliwiring.options import (
-    CONFIG_OPTION,
-    OUTPUT_OPTION,
-)
-from ...cliwiring.runtime import runtime_of
-from ..output import format_human_config
-from . import app
+from nbkp.clidisplay import OutputFormat, echo_json
+from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
+from nbkp.cliwiring.options import CONFIG_OPTION, OUTPUT_OPTION
+from nbkp.cliwiring.runtime import runtime_of
+from nbkp.config.cli import app
+from nbkp.config.output import format_human_config
 
 
 @app.command("show")

@@ -1,6 +1,6 @@
 """Scenarios about mount-managed volumes: udisks, fstab, LUKS, polkit."""
 
-from ....config import (
+from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     LocalVolume,
@@ -8,8 +8,8 @@ from ....config import (
     MountConfig,
     SyncEndpoint,
 )
-from ....disks import MountFailureKind, MountToolCapabilities
-from ... import (
+from nbkp.disks import MountFailureKind, MountToolCapabilities
+from nbkp.preflight import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
     DestinationEndpointErrorKind,
@@ -22,8 +22,8 @@ from ... import (
     VolumeCapabilities,
     VolumeErrorKind,
 )
-from ..common import inactive_dst_ep_status
-from .scenario import (
+from nbkp.preflight.testkit.common import inactive_dst_ep_status
+from nbkp.preflight.testkit.troubleshoot.scenario import (
     BOTH_ENDPOINTS_INACTIVE,
     Scenario,
     ScenarioStatuses,
@@ -32,7 +32,12 @@ from .scenario import (
     sync_from_laptop,
     volume_status,
 )
-from .ssh import BTRFS_HOST_TOOLS, MOUNT_NEEDS, UDISKS_TOOLS, localhost_status
+from nbkp.preflight.testkit.troubleshoot.ssh import (
+    BTRFS_HOST_TOOLS,
+    MOUNT_NEEDS,
+    UDISKS_TOOLS,
+    localhost_status,
+)
 
 # udisks tools healthy: the errors are at the volume level
 _LOCALHOST_UDISKS_SSH = localhost_status(mount_tools=UDISKS_TOOLS, needs=MOUNT_NEEDS)

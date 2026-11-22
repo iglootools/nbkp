@@ -1,20 +1,20 @@
 """Hard-link snapshot sync: rsync into a new snapshot dir with ``--link-dest``."""
 
-from ...config import SyncConfig, SyncEndpoint
-from ...fsprotocol import Snapshot
-from ...preflight import SyncStatus
-from ...snapshots.common import destination_volume, ensure_after_latest
-from ...snapshots.errors import SnapshotOp, SnapshotOperationError
-from ...snapshots.hardlinks import (
+from nbkp.config import SyncConfig, SyncEndpoint
+from nbkp.fsprotocol import Snapshot
+from nbkp.preflight import SyncStatus
+from nbkp.snapshots.common import destination_volume, ensure_after_latest
+from nbkp.snapshots.errors import SnapshotOp, SnapshotOperationError
+from nbkp.snapshots.hardlinks import (
     cleanup_orphaned_snapshots,
     create_snapshot_dir,
     delete_snapshot as hl_delete_snapshot,
     prune_snapshots as hl_prune_snapshots,
     snapshot_path_for,
 )
-from ..results import SyncFailureKind, SyncResult, SyncWarning, SyncWarningKind
-from ..rsync import hard_link_dest_suffix, hard_link_link_dest
-from .common import RunContext, publish_snapshot, rsync_step
+from nbkp.sync.modes.common import RunContext, publish_snapshot, rsync_step
+from nbkp.sync.results import SyncFailureKind, SyncResult, SyncWarning, SyncWarningKind
+from nbkp.sync.rsync import hard_link_dest_suffix, hard_link_link_dest
 
 
 def run_hard_link_sync(

@@ -1,10 +1,10 @@
 """Fake sync and prune result builders for manual testing."""
 
-from ...config import Config
-from ...fsprotocol import SNAPSHOTS_DIR
-from ...snapshots.errors import SnapshotOp
-from ...snapshots.models import PruneResult, SnapshotErrorKind, SnapshotResultError
-from ..results import (
+from nbkp.config import Config
+from nbkp.fsprotocol import SNAPSHOTS_DIR
+from nbkp.snapshots.errors import SnapshotOp
+from nbkp.snapshots.models import PruneResult, SnapshotErrorKind, SnapshotResultError
+from nbkp.sync.results import (
     SyncFailureKind,
     SyncOutcome,
     SyncResult,

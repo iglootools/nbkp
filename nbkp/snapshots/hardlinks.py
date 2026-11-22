@@ -1,16 +1,10 @@
 import shutil
 from datetime import datetime
 
-from ..config import (
-    Config,
-    LocalVolume,
-    RemoteVolume,
-    SyncConfig,
-    Volume,
-)
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
-from .common import (
+from nbkp.config import Config, LocalVolume, RemoteVolume, SyncConfig, Volume
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.snapshots.common import (
     create_snapshot_timestamp,
     destination_volume,
     list_snapshots,
@@ -18,7 +12,7 @@ from .common import (
     read_latest_symlink,
     snapshots_dir,
 )
-from .errors import SnapshotOp, local_fs_op, run_checked
+from nbkp.snapshots.errors import SnapshotOp, local_fs_op, run_checked
 
 
 def create_snapshot_dir(

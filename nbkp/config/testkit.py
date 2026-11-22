@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from . import (
+from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     HardLinkSnapshotConfig,

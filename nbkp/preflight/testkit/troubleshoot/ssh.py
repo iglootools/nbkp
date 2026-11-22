@@ -1,7 +1,7 @@
 """Host tool sets the scenarios' SSH endpoint statuses are built from."""
 
-from ....disks import MountToolCapabilities
-from ... import (
+from nbkp.disks import MountToolCapabilities
+from nbkp.preflight import (
     HostToolCapabilities,
     SshEndpointDiagnostics,
     SshEndpointStatus,

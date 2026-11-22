@@ -8,7 +8,7 @@ member hashes as its value, so a single table would merge them.
 
 from collections.abc import Iterable
 
-from ..fsprotocol import (
+from nbkp.fsprotocol import (
     DESTINATION_SENTINEL,
     LATEST_LINK,
     SNAPSHOTS_DIR,
@@ -16,8 +16,8 @@ from ..fsprotocol import (
     STAGING_DIR,
     VOLUME_SENTINEL,
 )
-from .severity import PreflightErrorKind, PreflightWarningKind
-from .status import (
+from nbkp.preflight.severity import PreflightErrorKind, PreflightWarningKind
+from nbkp.preflight.status import (
     DestinationEndpointErrorKind,
     DestinationEndpointWarningKind,
     SourceEndpointErrorKind,

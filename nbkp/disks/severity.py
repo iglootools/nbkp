@@ -5,9 +5,9 @@ table and the preflight check display, which render the result with their own
 icons.
 """
 
-from ..policy import Severity, Strictness, classify_severity
-from .lifecycle import LUKS_STAGE_FAILURES, MOUNT_STAGE_FAILURES, MountResult
-from .models import MountFailureKind
+from nbkp.disks.lifecycle import LUKS_STAGE_FAILURES, MOUNT_STAGE_FAILURES, MountResult
+from nbkp.disks.models import MountFailureKind
+from nbkp.policy import Severity, Strictness, classify_severity
 
 # Each helper answers "did the action for this column actually attempt and
 # fail?" from ``mount_failure_reason``, then routes the answer through

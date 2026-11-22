@@ -7,7 +7,7 @@ import yaml
 from platformdirs import site_config_dir, user_config_dir
 from pydantic import ValidationError
 
-from .protocol import Config
+from nbkp.config.protocol import Config
 
 _APP = "nbkp"
 _FILENAME = "config.yaml"

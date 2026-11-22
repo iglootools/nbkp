@@ -16,7 +16,7 @@ from functools import cache
 
 lazy import paramiko
 
-lazy from .hostkeys import UnknownHostKeyError
+lazy from nbkp.remote.hostkeys import UnknownHostKeyError
 
 
 @cache

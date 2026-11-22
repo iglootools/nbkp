@@ -1,14 +1,9 @@
 import re as regex
 from pathlib import Path
 
-from ..config import (
-    LocalVolume,
-    RemoteVolume,
-    Volume,
-    resolve_endpoint_path,
-)
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
+from nbkp.config import LocalVolume, RemoteVolume, Volume, resolve_endpoint_path
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 def check_endpoint_sentinel(

@@ -10,9 +10,9 @@ app = typer.Typer(
 # generated CLI reference, so it follows the disk lifecycle rather than the
 # alphabet. Keep isort out of it.
 # isort: off
-from . import mount_cmd as mount_cmd
-from . import umount_cmd as umount_cmd
-from . import status_cmd as status_cmd
-from . import setup_auth_cmd as setup_auth_cmd
+from nbkp.disks.cli import mount_cmd as mount_cmd
+from nbkp.disks.cli import umount_cmd as umount_cmd
+from nbkp.disks.cli import status_cmd as status_cmd
+from nbkp.disks.cli import setup_auth_cmd as setup_auth_cmd
 
 # isort: on

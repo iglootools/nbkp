@@ -12,7 +12,7 @@ console = Console()
 # Import order determines the order commands are listed in `--help`.
 # Keep isort out of it.
 # isort: off
-from . import output_cmd as output_cmd
-from . import seed_cmd as seed_cmd
+from nbkp.demo.cli import output_cmd as output_cmd
+from nbkp.demo.cli import seed_cmd as seed_cmd
 
 # isort: on

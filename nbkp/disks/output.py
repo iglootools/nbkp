@@ -4,23 +4,27 @@ from dataclasses import asdict
 from rich.table import Table
 from rich.text import Text
 
-from ..clidisplay import (
+from nbkp.clidisplay import (
     dry_run_labeled,
     severity_icon,
     severity_style,
     severity_symbol,
 )
-from ..policy import Severity, Strictness
-from .lifecycle import MountResult, UmountResult
-from .models import (
+from nbkp.disks.lifecycle import MountResult, UmountResult
+from nbkp.disks.models import (
     LifecycleFailure,
     LifecycleStep,
     MountFailureKind,
     UmountFailureKind,
 )
-from .plan import VolumePlan
-from .severity import device_fail_severity, luks_fail_severity, mounted_fail_severity
-from .status import MountStatusData, VolumeStatus, VolumeStatusKind
+from nbkp.disks.plan import VolumePlan
+from nbkp.disks.severity import (
+    device_fail_severity,
+    luks_fail_severity,
+    mounted_fail_severity,
+)
+from nbkp.disks.status import MountStatusData, VolumeStatus, VolumeStatusKind
+from nbkp.policy import Severity, Strictness
 
 # A row's display label.  ``Text`` when the label carries styling *and*
 # caller-supplied text (an error detail, a "not managed" marker): Rich parses

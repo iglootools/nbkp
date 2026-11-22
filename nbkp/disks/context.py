@@ -7,21 +7,21 @@ that both the CLI and tests can share.
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 
-from ..config import Config
-from ..credentials import PassphrasePrefetch, prefetch_passphrases
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
-from .lifecycle import (
+from nbkp.config import Config
+from nbkp.credentials import PassphrasePrefetch, prefetch_passphrases
+from nbkp.disks.lifecycle import (
     MountResult,
     UmountResult,
     mount_volumes,
     umount_volumes,
 )
-from .observation import (
+from nbkp.disks.observation import (
     MountObservation,
     apply_effective_paths,
     build_mount_observations,
 )
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 @contextmanager

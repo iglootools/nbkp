@@ -5,7 +5,7 @@ which severity a finding has is policy (:mod:`nbkp.policy`); this module
 only maps it to symbols and Rich styles.
 """
 
-from ..policy import Severity
+from nbkp.policy import Severity
 
 OK_SYMBOL = "✓"
 WARNING_SYMBOL = "⚠"

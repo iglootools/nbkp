@@ -7,21 +7,17 @@ from typing import NoReturn
 import typer
 from rich.console import Console
 
-from ..clidisplay import OutputFormat, echo_json
-from ..config import Config, ConfigError, ConfigErrorKind
-from ..config.output import config_error_json, format_config_error
-from ..remote.endpoints import (
-    EndpointFilter,
-    NetworkType,
-    ResolvedEndpoints,
-)
-from ..remote.resolution import (
+from nbkp.clidisplay import OutputFormat, echo_json
+from nbkp.cliwiring.runtime import Runtime
+from nbkp.config import Config, ConfigError, ConfigErrorKind
+from nbkp.config.output import config_error_json, format_config_error
+from nbkp.remote.endpoints import EndpointFilter, NetworkType, ResolvedEndpoints
+from nbkp.remote.resolution import (
     SshConfigError,
     SshConfigErrorKind,
     default_ssh_config_path,
     resolve_all_endpoints,
 )
-from .runtime import Runtime
 
 
 def load_config_or_exit(

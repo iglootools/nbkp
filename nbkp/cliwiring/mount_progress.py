@@ -7,23 +7,23 @@ to each carry their own copy of these callbacks.
 
 from dataclasses import dataclass
 
-from ..clidisplay import StepProgressBar
-from ..config import Config
-from ..credentials import PassphrasePrefetch, prefetch_count
-from ..disks import (
+from nbkp.clidisplay import StepProgressBar
+from nbkp.config import Config
+from nbkp.credentials import PassphrasePrefetch, prefetch_count
+from nbkp.disks import (
     MountResult,
     UmountResult,
     display_name,
     mount_count,
     mount_result_severity,
 )
-from ..disks.output import (
+from nbkp.disks.output import (
     mount_failure_detail,
     umount_failure_detail,
     umount_failure_warning,
 )
-from ..policy import Severity, Strictness
-from ..remote.endpoints import ResolvedEndpoints
+from nbkp.policy import Severity, Strictness
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 def mount_display_names(cfg: Config) -> dict[str, str]:

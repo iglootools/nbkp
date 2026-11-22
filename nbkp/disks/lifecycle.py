@@ -6,17 +6,9 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
 
-from ..config import (
-    Config,
-    LocalVolume,
-    MountConfig,
-    Volume,
-)
-from ..credentials import CredentialError
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints, location_excluded
-from ..remote.errors import describe_error, ssh_connection_errors
-from .detection import (
+from nbkp.config import Config, LocalVolume, MountConfig, Volume
+from nbkp.credentials import CredentialError
+from nbkp.disks.detection import (
     DeviceProbeError,
     detect_device_present,
     discover_cleartext_device,
@@ -24,19 +16,22 @@ from .detection import (
     resolve_target_device,
     settle_udev,
 )
-from .models import (
+from nbkp.disks.models import (
     LifecycleFailure,
     LifecycleStep,
     MountFailureKind,
     UmountFailureKind,
 )
-from .udisks import (
+from nbkp.disks.udisks import (
     build_lock_command,
     build_mount_command,
     build_unlock_command,
     build_unmount_command,
     parse_unlocked_device,
 )
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints, location_excluded
+from nbkp.remote.errors import describe_error, ssh_connection_errors
 
 # stderr fragments emitted by udisks/polkit when authorization is refused
 # under ``--no-user-interaction`` (no active session, no polkit rule).

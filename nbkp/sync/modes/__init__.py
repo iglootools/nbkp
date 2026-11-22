@@ -1,9 +1,9 @@
-from ...preflight import SyncStatus
-from ..results import SyncResult
-from .btrfs import run_btrfs_sync
-from .common import RsyncRunner, RunContext
-from .hardlink import run_hard_link_sync
-from .plain import run_plain_sync
+from nbkp.preflight import SyncStatus
+from nbkp.sync.modes.btrfs import run_btrfs_sync
+from nbkp.sync.modes.common import RsyncRunner, RunContext
+from nbkp.sync.modes.hardlink import run_hard_link_sync
+from nbkp.sync.modes.plain import run_plain_sync
+from nbkp.sync.results import SyncResult
 
 __all__ = ["RsyncRunner", "RunContext", "run_single_sync"]
 

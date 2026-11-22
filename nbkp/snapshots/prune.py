@@ -1,17 +1,17 @@
 from collections.abc import Callable
 
-from ..config import Config, SyncConfig
-from ..config.protocol.sync_endpoint import SyncEndpoint
-from ..policy import Strictness
-from ..preflight import SyncStatus
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
-from .btrfs import prune_snapshots as btrfs_prune_snapshots
-from .common import list_snapshots
-from .disposition import preflight_disposition
-from .errors import SnapshotOperationError, SnapshotPruneError
-from .hardlinks import prune_snapshots as hl_prune_snapshots
-from .models import PruneResult, SnapshotResultError, SnapshotSkipReason
+from nbkp.config import Config, SyncConfig
+from nbkp.config.protocol.sync_endpoint import SyncEndpoint
+from nbkp.policy import Strictness
+from nbkp.preflight import SyncStatus
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.snapshots.btrfs import prune_snapshots as btrfs_prune_snapshots
+from nbkp.snapshots.common import list_snapshots
+from nbkp.snapshots.disposition import preflight_disposition
+from nbkp.snapshots.errors import SnapshotOperationError, SnapshotPruneError
+from nbkp.snapshots.hardlinks import prune_snapshots as hl_prune_snapshots
+from nbkp.snapshots.models import PruneResult, SnapshotResultError, SnapshotSkipReason
 
 type _PruneFn = Callable[..., list[str]]
 

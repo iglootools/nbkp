@@ -9,30 +9,27 @@ from rich.console import Console, RenderableType
 from rich.panel import Panel
 from rich.text import Text
 
-from ...cliwiring.runtime import Runtime, runtime_of
-from ...config import ConfigError, load_config
-from ...config.output import format_config_error, format_human_config
-from ...ordering.output import (
+from nbkp.cliwiring.runtime import Runtime, runtime_of
+from nbkp.config import ConfigError, load_config
+from nbkp.config.output import format_config_error, format_human_config
+from nbkp.demo.cli import app, console as _console
+from nbkp.ordering.output import (
     build_mermaid_graph,
     format_mermaid_ascii_graph,
     format_rich_tree_graph,
 )
-from ...preflight.output import format_human_check, format_human_troubleshoot
-from ...remote.resolution import resolve_all_endpoints
-from ...snapshots.output import format_human_prune_results
-from ...sync.output import (
-    format_human_results,
-    format_run_preview,
-)
-from . import app, console as _console
-lazy from ...config.testkit import config_show_config
-lazy from ...preflight.testkit import (
+from nbkp.preflight.output import format_human_check, format_human_troubleshoot
+from nbkp.remote.resolution import resolve_all_endpoints
+from nbkp.snapshots.output import format_human_prune_results
+from nbkp.sync.output import format_human_results, format_run_preview
+lazy from nbkp.config.testkit import config_show_config
+lazy from nbkp.preflight.testkit import (
     check_config,
     check_data,
     troubleshoot_config,
     troubleshoot_data,
 )
-lazy from ...sync.testkit.results import (
+lazy from nbkp.sync.testkit.results import (
     dry_run_results,
     prune_dry_run_results,
     prune_results,

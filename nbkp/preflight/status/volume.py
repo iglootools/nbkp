@@ -4,16 +4,9 @@ import enum
 
 from pydantic import BaseModel, ConfigDict, computed_field
 
-from ...config import (
-    MountConfig,
-    RemoteVolume,
-    Volume,
-)
-from ...disks import (
-    MountCapabilities,
-    MountFailureKind,
-)
-from .ssh import SshEndpointStatus
+from nbkp.config import MountConfig, RemoteVolume, Volume
+from nbkp.disks import MountCapabilities, MountFailureKind
+from nbkp.preflight.status.ssh import SshEndpointStatus
 
 
 class VolumeErrorKind(enum.StrEnum):

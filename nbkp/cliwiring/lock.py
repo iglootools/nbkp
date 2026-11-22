@@ -20,7 +20,7 @@ from pathlib import Path
 
 import typer
 
-from ..clidisplay import OutputFormat, echo_json
+from nbkp.clidisplay import OutputFormat, echo_json
 
 _APP = "nbkp"
 _LOCK_FILENAME = "run.lock"

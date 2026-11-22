@@ -3,40 +3,36 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from ...clidisplay import OK_SYMBOL, severity_style, severity_symbol
-from ...clidisplay.invocation import Invocation
-from ...config import (
-    Config,
-    LocalVolume,
-    RemoteVolume,
-)
-from ...config.output import (
+from nbkp.clidisplay import OK_SYMBOL, severity_style, severity_symbol
+from nbkp.clidisplay.invocation import Invocation
+from nbkp.config import Config, LocalVolume, RemoteVolume
+from nbkp.config.output import (
     format_mount_summary,
     format_volume_display,
     sync_endpoint_display,
     sync_options_summary,
 )
-from ...fsprotocol import DEVNULL_TARGET
-from ...policy import Severity, Strictness
-from ...remote.endpoints import ResolvedEndpoints
-from ..messages import format_problem, format_problems
-from ..severity import severity_for_errors
-from ..status.endpoint import (
-    DestinationEndpointDiagnostics,
-    DestinationEndpointErrorKind,
-    LatestSymlinkState,
-    SourceEndpointErrorKind,
-)
-from ..status.ssh import INACTIVE_SSH_ERRORS, SshEndpointStatus
-from ..status.sync import SyncStatus
-from ..status.volume import VolumeStatus
-from .formatting import (
+from nbkp.fsprotocol import DEVNULL_TARGET
+from nbkp.policy import Severity, Strictness
+from nbkp.preflight.messages import format_problem, format_problems
+from nbkp.preflight.output.formatting import (
     check,
     format_capabilities,
     format_mount_status,
     join_text,
     status_text,
 )
+from nbkp.preflight.severity import severity_for_errors
+from nbkp.preflight.status.endpoint import (
+    DestinationEndpointDiagnostics,
+    DestinationEndpointErrorKind,
+    LatestSymlinkState,
+    SourceEndpointErrorKind,
+)
+from nbkp.preflight.status.ssh import INACTIVE_SSH_ERRORS, SshEndpointStatus
+from nbkp.preflight.status.sync import SyncStatus
+from nbkp.preflight.status.volume import VolumeStatus
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 def _format_latest(latest: LatestSymlinkState) -> Text:

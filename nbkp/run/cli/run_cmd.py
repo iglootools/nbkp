@@ -8,22 +8,22 @@ from rich.panel import Panel
 from rich.status import Status
 from rich.text import Text
 
-from ...clidisplay import (
+from nbkp.clidisplay import (
     OutputFormat,
     StepProgressBar,
     echo_json,
     severity_style,
     severity_symbol,
 )
-from ...clidisplay.invocation import Invocation
-from ...cliwiring.config import (
+from nbkp.clidisplay.invocation import Invocation
+from nbkp.cliwiring.config import (
     load_config_or_exit,
     require_known_syncs,
     resolve_endpoints,
 )
-from ...cliwiring.mount import format_umount_failures, managed_mount
-from ...cliwiring.mount_progress import mount_display_names
-from ...cliwiring.options import (
+from nbkp.cliwiring.mount import format_umount_failures, managed_mount
+from nbkp.cliwiring.mount_progress import mount_display_names
+from nbkp.cliwiring.options import (
     CONFIG_OPTION,
     DRY_RUN_OPTION,
     EXCLUDE_LOCATION_OPTION,
@@ -34,30 +34,30 @@ from ...cliwiring.options import (
     SYNC_OPTION,
     UMOUNT_OPTION,
 )
-from ...cliwiring.preflight import end_check_step, start_check_step
-from ...cliwiring.runtime import runtime_of
-from ...config import Config
-from ...disks import UmountResult
-from ...disks.output import umount_result_json
-from ...ordering.output import build_rich_tree_sections
-from ...policy import Strictness
-from ...preflight import (
+from nbkp.cliwiring.preflight import end_check_step, start_check_step
+from nbkp.cliwiring.runtime import runtime_of
+from nbkp.config import Config
+from nbkp.disks import UmountResult
+from nbkp.disks.output import umount_result_json
+from nbkp.ordering.output import build_rich_tree_sections
+from nbkp.policy import Strictness
+from nbkp.preflight import (
     PreflightErrorKind,
     PreflightResult,
     check_step_count,
     format_problems,
 )
-from ...preflight.output import format_human_check
-from ...remote.endpoints import ResolvedEndpoints
-from ...sync import ProgressMode, RunOptions, SyncResult, result_severity
-from ...sync.output import build_human_results_sections
-from ..pipeline import (
+from nbkp.preflight.output import format_human_check
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.run.pipeline import (
     PipelineResult,
     SyncCallbacks,
     check_and_run,
     fatal_sync_errors,
     run_failed,
 )
+from nbkp.sync import ProgressMode, RunOptions, SyncResult, result_severity
+from nbkp.sync.output import build_human_results_sections
 
 _ABORT_DETAIL_INDENT = 2
 

@@ -1,8 +1,8 @@
 import typer
 from rich.console import Console
 
-from ...clidisplay import OutputFormat, echo_json
-from ...cliwiring.options import (
+from nbkp.clidisplay import OutputFormat, echo_json
+from nbkp.cliwiring.options import (
     CONFIG_OPTION,
     DRY_RUN_OPTION,
     EXCLUDE_LOCATION_OPTION,
@@ -13,13 +13,16 @@ from ...cliwiring.options import (
     SYNC_OPTION,
     UMOUNT_OPTION,
 )
-from ...policy import Strictness
-from .. import prune_all_syncs
-from ..models import PruneResult
-from ..output import format_human_prune_results
-from . import app
-from .operation import SnapshotCommandOptions, run_snapshot_operation_or_exit
-from .options import STRICTNESS_OPTION
+from nbkp.policy import Strictness
+from nbkp.snapshots import prune_all_syncs
+from nbkp.snapshots.cli import app
+from nbkp.snapshots.cli.operation import (
+    SnapshotCommandOptions,
+    run_snapshot_operation_or_exit,
+)
+from nbkp.snapshots.cli.options import STRICTNESS_OPTION
+from nbkp.snapshots.models import PruneResult
+from nbkp.snapshots.output import format_human_prune_results
 
 
 @app.command("prune")

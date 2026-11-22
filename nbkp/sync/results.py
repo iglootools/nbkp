@@ -3,8 +3,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, computed_field, model_validator
 
-from ..policy import Severity, Strictness, classify_severity
-from ..preflight import SyncErrorKind
+from nbkp.policy import Severity, Strictness, classify_severity
+from nbkp.preflight import SyncErrorKind
 
 
 class SyncOutcome(StrEnum):

@@ -5,8 +5,8 @@ The :class:`~nbkp.policy.Strictness` enum is generic run policy and lives in
 :func:`is_fatal` predicate and :func:`has_fatal_errors`.
 """
 
-from ..policy import Strictness
-from .status.sync import SyncErrorKind, SyncStatus
+from nbkp.policy import Strictness
+from nbkp.preflight.status.sync import SyncErrorKind, SyncStatus
 
 
 def _is_disabled(status: SyncStatus) -> bool:

@@ -1,6 +1,6 @@
 """Fake ``preflight check`` data."""
 
-from ...config import (
+from nbkp.config import (
     Config,
     LocalVolume,
     LuksEncryptionConfig,
@@ -9,14 +9,14 @@ from ...config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ...config.testkit import (
+from nbkp.config.testkit import (
     base_ssh_endpoints,
     base_sync_endpoints,
     base_syncs,
     base_volumes,
 )
-from ...fsprotocol import Snapshot
-from .. import (
+from nbkp.fsprotocol import Snapshot
+from nbkp.preflight import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
     LatestSymlinkState,
@@ -31,9 +31,9 @@ from .. import (
     VolumeErrorKind,
     VolumeStatus,
 )
-from ..output.formatting import collect_ssh_endpoint_statuses
-from ..status.result import PreflightResult
-from .common import (
+from nbkp.preflight.output.formatting import collect_ssh_endpoint_statuses
+from nbkp.preflight.status.result import PreflightResult
+from nbkp.preflight.testkit.common import (
     LOCALHOST_SSH_STATUS,
     LOCALHOST_SSH_STATUS_BTRFS,
     SENTINEL_MISSING_CAPS,

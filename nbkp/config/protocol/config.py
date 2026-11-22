@@ -7,12 +7,12 @@ from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 
-from .base import ConfigModel, is_raw_mapping
-from .errors import ConfigValidationErrorKind, config_error
-from .ssh_endpoint import SshEndpoint
-from .sync import SyncConfig, sync_predecessors
-from .sync_endpoint import SyncEndpoint
-from .volume import RemoteVolume, Volume
+from nbkp.config.protocol.base import ConfigModel, is_raw_mapping
+from nbkp.config.protocol.errors import ConfigValidationErrorKind, config_error
+from nbkp.config.protocol.ssh_endpoint import SshEndpoint
+from nbkp.config.protocol.sync import SyncConfig, sync_predecessors
+from nbkp.config.protocol.sync_endpoint import SyncEndpoint
+from nbkp.config.protocol.volume import RemoteVolume, Volume
 
 
 class CredentialProvider(enum.StrEnum):

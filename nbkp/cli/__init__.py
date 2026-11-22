@@ -3,7 +3,7 @@
 The root app and all domain sub-apps are wired together in app.py.
 """
 
-from .app import app
+from nbkp.cli.app import app
 
 __all__ = ["app", "main"]
 

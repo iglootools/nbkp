@@ -9,7 +9,7 @@ app = typer.Typer(
 # Import order determines the order commands are listed in `--help` and in the
 # generated CLI reference. Keep isort out of it.
 # isort: off
-from . import check_cmd as check_cmd
-from . import troubleshoot_cmd as troubleshoot_cmd
+from nbkp.preflight.cli import check_cmd as check_cmd
+from nbkp.preflight.cli import troubleshoot_cmd as troubleshoot_cmd
 
 # isort: on

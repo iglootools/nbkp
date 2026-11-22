@@ -2,9 +2,9 @@ import enum
 
 from pydantic import BaseModel, ConfigDict, computed_field, field_serializer
 
-from ..fsprotocol import Snapshot
-from ..preflight import SyncErrorKind
-from .errors import SnapshotOp, SnapshotOperationError
+from nbkp.fsprotocol import Snapshot
+from nbkp.preflight import SyncErrorKind
+from nbkp.snapshots.errors import SnapshotOp, SnapshotOperationError
 
 
 class SnapshotSkipReason(enum.StrEnum):

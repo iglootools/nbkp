@@ -2,21 +2,32 @@ from collections.abc import Iterable
 
 from rich.text import Text
 
-from ...clidisplay import OK_SYMBOL, severity_style, severity_symbol
-from ...config import MountConfig
-from ...disks import (
+from nbkp.clidisplay import OK_SYMBOL, severity_style, severity_symbol
+from nbkp.config import MountConfig
+from nbkp.disks import (
     MountCapabilities,
     device_fail_severity,
     luks_fail_severity,
     mounted_fail_severity,
 )
-from ...policy import Severity, Strictness
-from ..messages import format_problems
-from ..severity import PreflightErrorKind, severity_for_error, severity_for_errors
-from ..status.endpoint import DestinationEndpointErrorKind, SourceEndpointErrorKind
-from ..status.ssh import SshEndpointErrorKind, SshEndpointStatus
-from ..status.sync import SyncErrorKind, SyncStatus
-from ..status.volume import VolumeCapabilities, VolumeErrorKind, VolumeStatus
+from nbkp.policy import Severity, Strictness
+from nbkp.preflight.messages import format_problems
+from nbkp.preflight.severity import (
+    PreflightErrorKind,
+    severity_for_error,
+    severity_for_errors,
+)
+from nbkp.preflight.status.endpoint import (
+    DestinationEndpointErrorKind,
+    SourceEndpointErrorKind,
+)
+from nbkp.preflight.status.ssh import SshEndpointErrorKind, SshEndpointStatus
+from nbkp.preflight.status.sync import SyncErrorKind, SyncStatus
+from nbkp.preflight.status.volume import (
+    VolumeCapabilities,
+    VolumeErrorKind,
+    VolumeStatus,
+)
 
 
 def join_text(items: Iterable[Text], separator: str = ", ") -> Text:

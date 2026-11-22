@@ -1,6 +1,6 @@
 from graphlib import TopologicalSorter
 
-from ..config.protocol import SyncConfig, sync_predecessors
+from nbkp.config.protocol import SyncConfig, sync_predecessors
 
 
 def sort_syncs(syncs: dict[str, SyncConfig]) -> list[str]:

@@ -1,7 +1,7 @@
 """Scenarios about whether a sync can run at all: disabled, unreachable,
 excluded, sentinels missing."""
 
-from ....config import (
+from nbkp.config import (
     Config,
     LocalVolume,
     RemoteVolume,
@@ -9,7 +9,7 @@ from ....config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ... import (
+from nbkp.preflight import (
     DestinationEndpointDiagnostics,
     DestinationEndpointErrorKind,
     DestinationEndpointStatus,
@@ -23,12 +23,12 @@ from ... import (
     VolumeErrorKind,
     VolumeStatus,
 )
-from ..common import (
+from nbkp.preflight.testkit.common import (
     LOCALHOST_SSH_STATUS,
     inactive_dst_ep_status,
     standalone_ssh_status,
 )
-from .scenario import (
+from nbkp.preflight.testkit.troubleshoot.scenario import (
     BOTH_ENDPOINTS_INACTIVE,
     LAPTOP_SRC,
     Scenario,

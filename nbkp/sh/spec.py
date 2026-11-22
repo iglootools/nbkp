@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from ..config import (
+from nbkp.config import (
     Config,
     LocalVolume,
     RemoteVolume,
@@ -10,8 +10,8 @@ from ..config import (
     SyncEndpoint,
     join_subdir,
 )
-from ..fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
-from ..remote.endpoints import ResolvedEndpoints
+from nbkp.fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 @dataclass(frozen=True)

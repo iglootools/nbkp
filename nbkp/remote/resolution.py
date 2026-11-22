@@ -9,12 +9,8 @@ from pathlib import Path
 
 lazy import paramiko
 
-from ..config.protocol import (
-    Config,
-    RemoteVolume,
-    SshEndpoint,
-)
-from .endpoints import (
+from nbkp.config.protocol import Config, RemoteVolume, SshEndpoint
+from nbkp.remote.endpoints import (
     EndpointFilter,
     NetworkType,
     ResolvedEndpoint,

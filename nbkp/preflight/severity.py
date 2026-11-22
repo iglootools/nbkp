@@ -6,21 +6,21 @@ The interpretation of "is this error fatal?" depends on the
 without re-implementing the policy at every call site.
 """
 
-from ..policy import Severity, Strictness, classify_severity
-from .status.endpoint import (
+from nbkp.policy import Severity, Strictness, classify_severity
+from nbkp.preflight.status.endpoint import (
     INACTIVE_DST_ENDPOINT_ERRORS,
     INACTIVE_SRC_ENDPOINT_ERRORS,
     DestinationEndpointErrorKind,
     DestinationEndpointWarningKind,
     SourceEndpointErrorKind,
 )
-from .status.ssh import (
+from nbkp.preflight.status.ssh import (
     INACTIVE_SSH_ERRORS,
     SshEndpointErrorKind,
     SshEndpointWarningKind,
 )
-from .status.sync import INACTIVE_SYNC_ERRORS, SyncErrorKind
-from .status.volume import INACTIVE_VOLUME_ERRORS, VolumeErrorKind
+from nbkp.preflight.status.sync import INACTIVE_SYNC_ERRORS, SyncErrorKind
+from nbkp.preflight.status.volume import INACTIVE_VOLUME_ERRORS, VolumeErrorKind
 
 PreflightErrorKind = (
     SshEndpointErrorKind

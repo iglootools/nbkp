@@ -10,10 +10,10 @@ import shutil
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 
-from ..config import Config
-from ..disks import MountObservation, UmountResult, any_failed
-from ..policy import Severity, Strictness
-from ..preflight import (
+from nbkp.config import Config
+from nbkp.disks import MountObservation, UmountResult, any_failed
+from nbkp.policy import Severity, Strictness
+from nbkp.preflight import (
     PreflightErrorKind,
     PreflightResult,
     SyncErrorKind,
@@ -22,9 +22,9 @@ from ..preflight import (
     has_fatal_errors,
     is_fatal,
 )
-from ..remote.dispatch import WhichFn
-from ..sync.orchestration import RunOptions, run_all_syncs
-from ..sync.results import SyncResult, result_severity
+from nbkp.remote.dispatch import WhichFn
+from nbkp.sync.orchestration import RunOptions, run_all_syncs
+from nbkp.sync.results import SyncResult, result_severity
 
 __all__ = [
     "PipelineResult",

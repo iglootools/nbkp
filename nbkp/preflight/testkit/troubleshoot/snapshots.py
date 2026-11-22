@@ -1,7 +1,7 @@
 """Scenarios about snapshot layout: filesystem support, snapshot directories,
 and the ``latest`` symlink on either side of a sync."""
 
-from ....config import (
+from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     HardLinkSnapshotConfig,
@@ -9,8 +9,8 @@ from ....config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ....fsprotocol import Snapshot
-from ... import (
+from nbkp.fsprotocol import Snapshot
+from nbkp.preflight import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
     DestinationEndpointErrorKind,
@@ -24,14 +24,14 @@ from ... import (
     SyncErrorKind,
     SyncStatus,
 )
-from ..common import (
+from nbkp.preflight.testkit.common import (
     LOCALHOST_SSH_STATUS,
     LOCALHOST_SSH_STATUS_BTRFS,
     active_dst_ep_status,
     active_src_ep_status,
     inactive_dst_ep_status,
 )
-from .scenario import (
+from nbkp.preflight.testkit.troubleshoot.scenario import (
     BOTH_ENDPOINTS_INACTIVE,
     LAPTOP_SRC,
     Scenario,
@@ -42,7 +42,7 @@ from .scenario import (
     sync_from_laptop,
     volume_status,
 )
-from .ssh import BTRFS_HOST_TOOLS, nas_status
+from nbkp.preflight.testkit.troubleshoot.ssh import BTRFS_HOST_TOOLS, nas_status
 
 _HEALTHY_SNAPSHOT_DIRS = SnapshotDirsDiagnostics(exists=True, writable=True)
 _LATEST_DEVNULL = LatestSymlinkState(exists=True, raw_target="/dev/null")

@@ -10,11 +10,11 @@ from typing import cast
 import paramiko
 from fabric import Connection  # pyright: ignore[reportMissingTypeStubs] -- fabric ships no type hints; retire when it does
 
-from ..config import SshConnectionOptions, SshEndpoint
-from .errors import ssh_connection_errors
-from .hostkeys import UnknownHostKeyError
-from .pool import ConnectionPool, active_pool
-from .ssh import shell_join
+from nbkp.config import SshConnectionOptions, SshEndpoint
+from nbkp.remote.errors import ssh_connection_errors
+from nbkp.remote.hostkeys import UnknownHostKeyError
+from nbkp.remote.pool import ConnectionPool, active_pool
+from nbkp.remote.ssh import shell_join
 
 
 def _build_single_connection(

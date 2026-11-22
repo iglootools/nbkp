@@ -16,7 +16,7 @@ from io import StringIO
 from rich.console import Console, Group, RenderableType
 from rich.text import Text
 
-from ...config import (
+from nbkp.config import (
     Config,
     LocalVolume,
     MountConfig,
@@ -25,25 +25,11 @@ from ...config import (
     SyncEndpoint,
     resolve_endpoint_path,
 )
-from ...disks import DeviceProbeError, discover_cleartext_device, generate_auth_rules
-from ...fsprotocol import SNAPSHOTS_DIR, Snapshot, parse_snapshot_listing
-from ...policy import Severity, Strictness
-from ...remote.dispatch import VolumeCommandRunner, run_on_volume
-from ...remote.endpoints import ResolvedEndpoints
-from ...remote.errors import ssh_connection_errors
-from ..messages import format_problem
-from ..severity import PreflightErrorKind, PreflightWarningKind, severity_for_error
-from ..status.endpoint import (
-    DestinationEndpointErrorKind,
-    DestinationEndpointStatus,
-    DestinationEndpointWarningKind,
-    SourceEndpointErrorKind,
-    SourceEndpointStatus,
-)
-from ..status.ssh import SshEndpointErrorKind, SshEndpointStatus, SshEndpointWarningKind
-from ..status.sync import SyncErrorKind, SyncStatus
-from ..status.volume import VolumeErrorKind, VolumeStatus
-from .remediation import (
+from nbkp.disks import DeviceProbeError, discover_cleartext_device, generate_auth_rules
+from nbkp.fsprotocol import SNAPSHOTS_DIR, Snapshot, parse_snapshot_listing
+from nbkp.policy import Severity, Strictness
+from nbkp.preflight.messages import format_problem
+from nbkp.preflight.output.remediation import (
     ERROR,
     HEADER,
     Lines,
@@ -59,6 +45,28 @@ from .remediation import (
     format_volume_error_fix,
     polkit_user,
 )
+from nbkp.preflight.severity import (
+    PreflightErrorKind,
+    PreflightWarningKind,
+    severity_for_error,
+)
+from nbkp.preflight.status.endpoint import (
+    DestinationEndpointErrorKind,
+    DestinationEndpointStatus,
+    DestinationEndpointWarningKind,
+    SourceEndpointErrorKind,
+    SourceEndpointStatus,
+)
+from nbkp.preflight.status.ssh import (
+    SshEndpointErrorKind,
+    SshEndpointStatus,
+    SshEndpointWarningKind,
+)
+from nbkp.preflight.status.sync import SyncErrorKind, SyncStatus
+from nbkp.preflight.status.volume import VolumeErrorKind, VolumeStatus
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.remote.errors import ssh_connection_errors
 
 # Cascade errors are pointers to inactive lower layers — they have no
 # actionable fix at their own layer, so troubleshoot skips them.

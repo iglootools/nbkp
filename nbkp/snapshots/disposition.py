@@ -3,9 +3,9 @@ and what their results mean for the command's outcome."""
 
 from collections.abc import Sequence
 
-from ..policy import Strictness
-from ..preflight import SyncStatus, is_fatal
-from .models import (
+from nbkp.policy import Strictness
+from nbkp.preflight import SyncStatus, is_fatal
+from nbkp.snapshots.models import (
     PruneResult,
     ShowResult,
     SnapshotErrorKind,

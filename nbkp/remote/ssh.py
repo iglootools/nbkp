@@ -3,8 +3,8 @@ import re
 import shlex
 from functools import reduce
 
-from ..config import LocalVolume, RemoteVolume, SshConnectionOptions, SshEndpoint
-lazy from .endpoints import ResolvedEndpoints
+from nbkp.config import LocalVolume, RemoteVolume, SshConnectionOptions, SshEndpoint
+lazy from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 def format_known_hosts_option(known_hosts_file: str) -> str:

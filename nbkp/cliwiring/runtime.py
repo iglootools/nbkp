@@ -27,13 +27,13 @@ from pathlib import Path
 import typer
 from platformdirs import site_config_dir, user_config_dir
 
-from ..config import Config, load_config
-from ..config.loader import ConfigDirFn
-from ..credentials import CommandFn, run_captured
-from ..remote.dispatch import VolumeCommandRunner, WhichFn, run_on_volume
-from ..sync.modes import RsyncRunner
-from ..sync.rsync import run_rsync
-from .lock import RunLockFn, hold_run_lock, resolve_run_lock_path
+from nbkp.cliwiring.lock import RunLockFn, hold_run_lock, resolve_run_lock_path
+from nbkp.config import Config, load_config
+from nbkp.config.loader import ConfigDirFn
+from nbkp.credentials import CommandFn, run_captured
+from nbkp.remote.dispatch import VolumeCommandRunner, WhichFn, run_on_volume
+from nbkp.sync.modes import RsyncRunner
+from nbkp.sync.rsync import run_rsync
 
 
 def utc_now() -> datetime:

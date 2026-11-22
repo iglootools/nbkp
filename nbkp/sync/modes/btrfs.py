@@ -2,17 +2,22 @@
 
 import subprocess
 
-from ...config import SyncConfig, SyncEndpoint
-from ...fsprotocol import STAGING_DIR, Snapshot
-from ...preflight import SyncStatus
-from ...snapshots.btrfs import (
+from nbkp.config import SyncConfig, SyncEndpoint
+from nbkp.fsprotocol import STAGING_DIR, Snapshot
+from nbkp.preflight import SyncStatus
+from nbkp.snapshots.btrfs import (
     create_snapshot,
     prune_snapshots as btrfs_prune_snapshots,
 )
-from ...snapshots.common import ensure_after_latest
-from ...snapshots.errors import SnapshotOp, SnapshotOperationError
-from ..results import SyncFailureKind, SyncResult
-from .common import RunContext, failed_after_rsync, publish_snapshot, rsync_step
+from nbkp.snapshots.common import ensure_after_latest
+from nbkp.snapshots.errors import SnapshotOp, SnapshotOperationError
+from nbkp.sync.modes.common import (
+    RunContext,
+    failed_after_rsync,
+    publish_snapshot,
+    rsync_step,
+)
+from nbkp.sync.results import SyncFailureKind, SyncResult
 
 
 def run_btrfs_sync(

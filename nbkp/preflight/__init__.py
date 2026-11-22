@@ -8,17 +8,18 @@ importing ``nbkp.preflight`` never loads Rich: display code imports
 ``nbkp.preflight.output`` explicitly.
 """
 
-from .checks import (
-    check_all_syncs,
-    check_step_count,
-)
-from .endpoint_checks import (
+from nbkp.preflight.checks import check_all_syncs, check_step_count
+from nbkp.preflight.endpoint_checks import (
     observe_destination_endpoint,
     observe_source_endpoint,
 )
-from .messages import format_problem, format_problems
-from .severity import PreflightErrorKind, severity_for_error, severity_for_errors
-from .status import (
+from nbkp.preflight.messages import format_problem, format_problems
+from nbkp.preflight.severity import (
+    PreflightErrorKind,
+    severity_for_error,
+    severity_for_errors,
+)
+from nbkp.preflight.status import (
     INACTIVE_DST_ENDPOINT_ERRORS,
     INACTIVE_SRC_ENDPOINT_ERRORS,
     INACTIVE_SSH_ERRORS,
@@ -49,8 +50,8 @@ from .status import (
     VolumeErrorKind,
     VolumeStatus,
 )
-from .strictness import has_fatal_errors, is_fatal
-from .volume_checks import (
+from nbkp.preflight.strictness import has_fatal_errors, is_fatal
+from nbkp.preflight.volume_checks import (
     check_volume_capabilities,
     observe_ssh_endpoint,
     observe_volume,

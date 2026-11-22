@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
-from ..config import (
+from nbkp.config import (
     Config,
     LocalVolume,
     RemoteVolume,
@@ -12,7 +12,7 @@ from ..config import (
     Volume,
     resolve_endpoint_path,
 )
-from ..fsprotocol import (
+from nbkp.fsprotocol import (
     DEVNULL_TARGET,
     LATEST_LINK,
     SNAPSHOTS_DIR,
@@ -20,9 +20,9 @@ from ..fsprotocol import (
     parse_snapshot_listing,
     parse_snapshot_name,
 )
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
-from .errors import (
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.snapshots.errors import (
     SnapshotOp,
     SnapshotOperationError,
     SnapshotPruneError,

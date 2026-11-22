@@ -4,20 +4,17 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from ...clidisplay import OutputFormat, echo_json
-from ...cliwiring.config import load_config_or_exit
-from ...cliwiring.options import (
-    CONFIG_OPTION,
-    OUTPUT_OPTION,
-)
-from ...cliwiring.runtime import runtime_of
-from ..output import (
+from nbkp.clidisplay import OutputFormat, echo_json
+from nbkp.cliwiring.config import load_config_or_exit
+from nbkp.cliwiring.options import CONFIG_OPTION, OUTPUT_OPTION
+from nbkp.cliwiring.runtime import runtime_of
+from nbkp.ordering.cli import app
+from nbkp.ordering.output import (
     build_graph_json,
     format_mermaid_ascii_graph,
     format_mermaid_graph,
     format_rich_tree_graph,
 )
-from . import app
 
 
 class GraphFormat(enum.StrEnum):

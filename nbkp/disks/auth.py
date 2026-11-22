@@ -14,7 +14,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from textwrap import dedent
 
-from ..config import Config
+from nbkp.config import Config
 
 POLKIT_RULES_PATH = "/etc/polkit-1/rules.d/50-nbkp.rules"
 

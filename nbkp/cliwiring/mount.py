@@ -5,26 +5,26 @@ import typer
 from rich.console import Console, Group, RenderableType
 from rich.text import Text
 
-from ..clidisplay import OutputFormat
-from ..config import Config
-from ..credentials import build_passphrase_fn
-from ..disks import (
+from nbkp.clidisplay import OutputFormat
+from nbkp.cliwiring.credentials import prompt_passphrase
+from nbkp.cliwiring.lock import is_run_lock_needed, run_lock_or_exit
+from nbkp.cliwiring.mount_progress import LifecycleProgress, mount_display_names
+from nbkp.cliwiring.runtime import Runtime
+from nbkp.config import Config
+from nbkp.credentials import build_passphrase_fn
+from nbkp.disks import (
     MountObservation,
     UmountResult,
     any_failed,
     managed_mount as _disks_managed_mount,
 )
-from ..disks.output import (
+from nbkp.disks.output import (
     build_mount_status_table,
     umount_failure_detail,
     umount_failure_warning,
 )
-from ..policy import Strictness
-from ..remote.endpoints import ResolvedEndpoints
-from .credentials import prompt_passphrase
-from .lock import is_run_lock_needed, run_lock_or_exit
-from .mount_progress import LifecycleProgress, mount_display_names
-from .runtime import Runtime
+from nbkp.policy import Strictness
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 def _format_mount_status(

@@ -5,10 +5,10 @@ from rich.console import Group, RenderableType
 from rich.text import Text
 from rich.tree import Tree
 
-from ..clidisplay import severity_icon
-from ..config import Config, SyncEndpoint
-from ..policy import Severity
-from .graph import build_adjacency
+from nbkp.clidisplay import severity_icon
+from nbkp.config import Config, SyncEndpoint
+from nbkp.ordering.graph import build_adjacency
+from nbkp.policy import Severity
 
 
 def _endpoint_annotation(ep: SyncEndpoint) -> str:

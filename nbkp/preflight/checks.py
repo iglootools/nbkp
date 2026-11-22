@@ -26,7 +26,7 @@ from functools import partial
 
 lazy import paramiko
 
-from ..config import (
+from nbkp.config import (
     Config,
     LocalVolume,
     RemoteVolume,
@@ -35,32 +35,38 @@ from ..config import (
     SyncEndpoint,
     Volume,
 )
-from ..disks import MountObservation
-from ..remote.dispatch import VolumeCommandRunner, WhichFn, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints, location_excluded
-from ..remote.errors import ssh_connection_errors
-from ..remote.resolution import (
-    endpoint_location_excluded,
-    enrich_from_ssh_config,
-    resolve_proxy_chain,
+from nbkp.disks import MountObservation
+from nbkp.preflight.endpoint_checks import (
+    observe_destination_endpoint,
+    observe_source_endpoint,
 )
-from .endpoint_checks import observe_destination_endpoint, observe_source_endpoint
-from .severity import PreflightErrorKind
-from .ssh_checks import observe_standalone_endpoint
-from .status.endpoint import DestinationEndpointStatus, SourceEndpointStatus
-from .status.result import PreflightResult
-from .status.ssh import (
+from nbkp.preflight.severity import PreflightErrorKind
+from nbkp.preflight.ssh_checks import observe_standalone_endpoint
+from nbkp.preflight.status.endpoint import (
+    DestinationEndpointStatus,
+    SourceEndpointStatus,
+)
+from nbkp.preflight.status.result import PreflightResult
+from nbkp.preflight.status.ssh import (
     HostToolCapabilities,
     SshEndpointDiagnostics,
     SshEndpointStatus,
     SshEndpointToolNeeds,
 )
-from .status.sync import SyncStatus
-from .status.volume import VolumeCapabilities, VolumeStatus
-from .volume_checks import (
+from nbkp.preflight.status.sync import SyncStatus
+from nbkp.preflight.status.volume import VolumeCapabilities, VolumeStatus
+from nbkp.preflight.volume_checks import (
     observe_ssh_endpoint,
     observe_volume,
     unreachable_diagnostics,
+)
+from nbkp.remote.dispatch import VolumeCommandRunner, WhichFn, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints, location_excluded
+from nbkp.remote.errors import ssh_connection_errors
+from nbkp.remote.resolution import (
+    endpoint_location_excluded,
+    enrich_from_ssh_config,
+    resolve_proxy_chain,
 )
 
 

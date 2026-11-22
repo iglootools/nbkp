@@ -5,9 +5,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict, computed_field
 
-from ...disks import (
-    MountToolCapabilities,
-)
+from nbkp.disks import MountToolCapabilities
 
 
 class SshEndpointErrorKind(enum.StrEnum):

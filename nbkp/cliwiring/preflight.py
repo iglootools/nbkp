@@ -10,12 +10,13 @@ from functools import partial
 
 from rich.console import Console
 
-from ..clidisplay import OutputFormat, StepProgressBar
-from ..clidisplay.invocation import Invocation
-from ..config import Config
-from ..disks import MountObservation
-from ..policy import Strictness
-from ..preflight import (
+from nbkp.clidisplay import OutputFormat, StepProgressBar
+from nbkp.clidisplay.invocation import Invocation
+from nbkp.cliwiring.runtime import Runtime
+from nbkp.config import Config
+from nbkp.disks import MountObservation
+from nbkp.policy import Strictness
+from nbkp.preflight import (
     PreflightErrorKind,
     PreflightResult,
     check_all_syncs,
@@ -23,10 +24,9 @@ from ..preflight import (
     format_problems,
     severity_for_errors,
 )
-from ..preflight.output import format_human_check
-from ..preflight.strictness import has_fatal_errors
-from ..remote.endpoints import ResolvedEndpoints
-from .runtime import Runtime
+from nbkp.preflight.output import format_human_check
+from nbkp.preflight.strictness import has_fatal_errors
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 def start_check_step(bar: StepProgressBar, label: str) -> None:

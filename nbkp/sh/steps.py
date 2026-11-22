@@ -11,16 +11,16 @@ hard-link rsync, each of which only logs a warning).
 from dataclasses import dataclass
 from textwrap import dedent
 
-from ..config import LocalVolume, RemoteVolume
-from ..fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
-from ..sync.rsync import (
+from nbkp.config import LocalVolume, RemoteVolume
+from nbkp.fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
+from nbkp.sh.commands import snapshot_date_format, vol_cmd
+from nbkp.sh.quoting import INDENT, SNAP, SNAPSHOT_TS, format_command, quote
+from nbkp.sh.spec import SyncSpec
+from nbkp.sync.rsync import (
     build_rsync_command,
     hard_link_dest_suffix,
     hard_link_link_dest,
 )
-from .commands import snapshot_date_format, vol_cmd
-from .quoting import INDENT, SNAP, SNAPSHOT_TS, format_command, quote
-from .spec import SyncSpec
 
 
 @dataclass(frozen=True)

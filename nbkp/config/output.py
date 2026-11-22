@@ -8,7 +8,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from . import (
+from nbkp.config import (
     Config,
     ConfigError,
     LocalVolume,
@@ -18,7 +18,7 @@ from . import (
     SyncEndpoint,
     join_subdir,
 )
-from .protocol.volume import MountConfig
+from nbkp.config.protocol.volume import MountConfig
 
 
 class SelectedEndpoint(Protocol):

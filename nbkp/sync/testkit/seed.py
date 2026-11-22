@@ -2,7 +2,7 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
-from ...config import (
+from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     CredentialProvider,
@@ -16,7 +16,7 @@ from ...config import (
     SyncConfig,
     SyncEndpoint,
 )
-from ...fsprotocol import (
+from nbkp.fsprotocol import (
     DESTINATION_SENTINEL,
     DEVNULL_TARGET,
     LATEST_LINK,
@@ -25,7 +25,7 @@ from ...fsprotocol import (
     STAGING_DIR,
     VOLUME_SENTINEL,
 )
-from ...remote.testkit.constants import (
+from nbkp.remote.testkit.constants import (
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_ENCRYPTED_PATH,
     REMOTE_BTRFS_PATH,

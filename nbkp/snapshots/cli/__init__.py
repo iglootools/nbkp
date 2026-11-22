@@ -7,7 +7,7 @@ app = typer.Typer(
 # Import order determines the order commands are listed in `--help` and in the
 # generated CLI reference. Keep isort out of it.
 # isort: off
-from . import prune_cmd as prune_cmd
-from . import show_cmd as show_cmd
+from nbkp.snapshots.cli import prune_cmd as prune_cmd
+from nbkp.snapshots.cli import show_cmd as show_cmd
 
 # isort: on

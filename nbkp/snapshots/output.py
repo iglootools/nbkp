@@ -1,10 +1,10 @@
 from rich.table import Table
 from rich.text import Text
 
-from ..clidisplay import dry_run_table_title
-from ..preflight import format_problems
-from .errors import SnapshotOp
-from .models import (
+from nbkp.clidisplay import dry_run_table_title
+from nbkp.preflight import format_problems
+from nbkp.snapshots.errors import SnapshotOp
+from nbkp.snapshots.models import (
     PruneResult,
     ShowResult,
     SnapshotErrorKind,

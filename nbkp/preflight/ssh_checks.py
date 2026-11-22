@@ -8,12 +8,12 @@ Separate from ``volume_checks.py`` because these endpoints have no
 volume involvement.
 """
 
-from ..config import RemoteVolume, SshEndpoint
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoint
-from ..remote.errors import ssh_connection_errors
-from .status.ssh import SshEndpointDiagnostics
-from .volume_checks import unreachable_diagnostics
+from nbkp.config import RemoteVolume, SshEndpoint
+from nbkp.preflight.status.ssh import SshEndpointDiagnostics
+from nbkp.preflight.volume_checks import unreachable_diagnostics
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoint
+from nbkp.remote.errors import ssh_connection_errors
 
 
 def observe_standalone_endpoint(

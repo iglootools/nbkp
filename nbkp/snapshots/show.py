@@ -1,12 +1,12 @@
-from ..config import Config
-from ..policy import Strictness
-from ..preflight import SyncStatus
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
-from .common import list_snapshots, read_latest_symlink
-from .disposition import preflight_disposition
-from .errors import SnapshotOperationError
-from .models import ShowResult, SnapshotResultError, SnapshotSkipReason
+from nbkp.config import Config
+from nbkp.policy import Strictness
+from nbkp.preflight import SyncStatus
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.snapshots.common import list_snapshots, read_latest_symlink
+from nbkp.snapshots.disposition import preflight_disposition
+from nbkp.snapshots.errors import SnapshotOperationError
+from nbkp.snapshots.models import ShowResult, SnapshotResultError, SnapshotSkipReason
 
 
 def _disposition(

@@ -28,8 +28,8 @@ only on the ones below it (ssh ← volume ← endpoint ← sync ← result).
 # The mount models are part of the diagnostics (``VolumeCapabilities``,
 # ``SshEndpointDiagnostics``) and were always reachable from here; they are
 # defined in ``nbkp.disks``.
-from ...disks import MountCapabilities, MountToolCapabilities
-from .endpoint import (
+from nbkp.disks import MountCapabilities, MountToolCapabilities
+from nbkp.preflight.status.endpoint import (
     INACTIVE_DST_ENDPOINT_ERRORS,
     INACTIVE_SRC_ENDPOINT_ERRORS,
     BtrfsStagingSubvolumeDiagnostics,
@@ -43,10 +43,8 @@ from .endpoint import (
     SourceEndpointErrorKind,
     SourceEndpointStatus,
 )
-from .result import (
-    PreflightResult,
-)
-from .ssh import (
+from nbkp.preflight.status.result import PreflightResult
+from nbkp.preflight.status.ssh import (
     INACTIVE_SSH_ERRORS,
     HostToolCapabilities,
     SshEndpointDiagnostics,
@@ -55,12 +53,8 @@ from .ssh import (
     SshEndpointToolNeeds,
     SshEndpointWarningKind,
 )
-from .sync import (
-    INACTIVE_SYNC_ERRORS,
-    SyncErrorKind,
-    SyncStatus,
-)
-from .volume import (
+from nbkp.preflight.status.sync import INACTIVE_SYNC_ERRORS, SyncErrorKind, SyncStatus
+from nbkp.preflight.status.volume import (
     INACTIVE_VOLUME_ERRORS,
     VolumeCapabilities,
     VolumeDiagnostics,

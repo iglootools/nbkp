@@ -6,28 +6,28 @@ from collections.abc import Mapping, Sequence
 import typer
 from rich.console import Console
 
-from ..clidisplay import OutputFormat, StepProgressBar, dry_run_labeled, echo_json
-from ..config import Config, Volume
-from ..disks.lifecycle import UmountResult, unknown_volume_names
-from ..disks.models import display_name
-from ..disks.output import (
+from nbkp.clidisplay import OutputFormat, StepProgressBar, dry_run_labeled, echo_json
+from nbkp.cliwiring.config import require_known
+from nbkp.config import Config, Volume
+from nbkp.disks.lifecycle import UmountResult, unknown_volume_names
+from nbkp.disks.models import display_name
+from nbkp.disks.output import (
     build_volume_status_table,
     format_plan_line,
     umount_result_json,
     volume_status_detail,
     volume_status_json,
 )
-from ..disks.plan import VolumePlan, plan_incomplete, plan_json
-from ..disks.status import (
+from nbkp.disks.plan import VolumePlan, plan_incomplete, plan_json
+from nbkp.disks.status import (
     ProbeEndFn,
     VolumeStatus,
     managed_volumes,
     probe_volume_statuses,
 )
-from ..policy import Severity
-from ..remote.dispatch import VolumeCommandRunner
-from ..remote.endpoints import ResolvedEndpoints
-from .config import require_known
+from nbkp.policy import Severity
+from nbkp.remote.dispatch import VolumeCommandRunner
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 def show_volume_statuses(

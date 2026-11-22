@@ -1,12 +1,12 @@
 """Remote command execution and SSH utilities."""
 
-from .ssh import (
+from nbkp.remote.ssh import (
     build_ssh_base_args,
     build_ssh_e_option,
     format_remote_path,
     shell_join,
 )
-lazy from .fabricssh import run_remote_command as run_remote_command
+lazy from nbkp.remote.fabricssh import run_remote_command as run_remote_command
 
 __all__ = [
     "build_ssh_base_args",

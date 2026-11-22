@@ -5,31 +5,31 @@ import typer
 from rich.console import Console
 from rich.text import Text
 
-from ...clidisplay import OutputFormat
-from ...clidisplay.invocation import Invocation, format_troubleshoot_hint
-from ...cliwiring.config import load_config_or_exit, resolve_endpoints
-from ...cliwiring.disks import require_known_names, show_plan, show_volume_statuses
-from ...cliwiring.lock import run_lock_or_exit
-from ...cliwiring.mount import lifecycle_session
-from ...cliwiring.mount_progress import mount_display_names
-from ...cliwiring.options import (
+from nbkp.clidisplay import OutputFormat
+from nbkp.clidisplay.invocation import Invocation, format_troubleshoot_hint
+from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
+from nbkp.cliwiring.disks import require_known_names, show_plan, show_volume_statuses
+from nbkp.cliwiring.lock import run_lock_or_exit
+from nbkp.cliwiring.mount import lifecycle_session
+from nbkp.cliwiring.mount_progress import mount_display_names
+from nbkp.cliwiring.options import (
     CONFIG_OPTION,
     EXCLUDE_LOCATION_OPTION,
     LOCATION_OPTION,
     NETWORK_OPTION,
     OUTPUT_OPTION,
 )
-from ...cliwiring.runtime import Runtime, runtime_of
-from ...config import Config
-from ...remote.endpoints import ResolvedEndpoints
-from ..context import mount_phase
-from ..lifecycle import MountResult, any_failed, refused_by_polkit
-from ..mount_checks import check_mount_status
-from ..output import mount_result_json
-from ..plan import plan_lifecycle
-from ..status import mount_result_statuses, unprobed_volume_statuses
-from . import app
-from .options import NAME_OPTION
+from nbkp.cliwiring.runtime import Runtime, runtime_of
+from nbkp.config import Config
+from nbkp.disks.cli import app
+from nbkp.disks.cli.options import NAME_OPTION
+from nbkp.disks.context import mount_phase
+from nbkp.disks.lifecycle import MountResult, any_failed, refused_by_polkit
+from nbkp.disks.mount_checks import check_mount_status
+from nbkp.disks.output import mount_result_json
+from nbkp.disks.plan import plan_lifecycle
+from nbkp.disks.status import mount_result_statuses, unprobed_volume_statuses
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 @app.command("mount")

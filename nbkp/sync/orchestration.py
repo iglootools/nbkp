@@ -9,15 +9,20 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
-from ..config import Config, sync_predecessors
-from ..ordering.graph import sort_syncs
-from ..policy import Strictness
-from ..preflight import SyncErrorKind, SyncStatus
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
-from .modes import RsyncRunner, RunContext, run_single_sync
-from .results import DISABLED_FAILURES, RUNTIME_FAILURES, SyncFailureKind, SyncResult
-from .rsync import ProgressMode, run_rsync
+from nbkp.config import Config, sync_predecessors
+from nbkp.ordering.graph import sort_syncs
+from nbkp.policy import Strictness
+from nbkp.preflight import SyncErrorKind, SyncStatus
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.sync.modes import RsyncRunner, RunContext, run_single_sync
+from nbkp.sync.results import (
+    DISABLED_FAILURES,
+    RUNTIME_FAILURES,
+    SyncFailureKind,
+    SyncResult,
+)
+from nbkp.sync.rsync import ProgressMode, run_rsync
 
 
 def _presence_proven(status: SyncStatus) -> bool:

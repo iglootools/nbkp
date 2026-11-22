@@ -3,8 +3,8 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from ....config import Config, SshEndpoint, SyncConfig, SyncEndpoint, Volume
-from ... import (
+from nbkp.config import Config, SshEndpoint, SyncConfig, SyncEndpoint, Volume
+from nbkp.preflight import (
     DestinationEndpointDiagnostics,
     DestinationEndpointErrorKind,
     DestinationEndpointStatus,
@@ -18,13 +18,13 @@ from ... import (
     VolumeErrorKind,
     VolumeStatus,
 )
-from ..common import (
+from nbkp.preflight.testkit.common import (
     LOCALHOST_SSH_STATUS,
     LOCALHOST_SSH_STATUS_BTRFS,
     SENTINEL_MISSING_CAPS,
     inactive_src_ep_status,
 )
-from .ssh import HOST_TOOLS, nas_status
+from nbkp.preflight.testkit.troubleshoot.ssh import HOST_TOOLS, nas_status
 
 #: Source endpoint most scenarios read from, on the shared ``laptop`` volume.
 LAPTOP_SRC = "laptop-src"

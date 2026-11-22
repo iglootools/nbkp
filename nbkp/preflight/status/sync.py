@@ -4,22 +4,16 @@ import enum
 
 from pydantic import BaseModel, ConfigDict, computed_field
 
-from ...config import (
-    SyncConfig,
-    SyncEndpoint,
-)
-from ...fsprotocol import (
-    DEVNULL_TARGET,
-    Snapshot,
-)
-from .endpoint import (
+from nbkp.config import SyncConfig, SyncEndpoint
+from nbkp.fsprotocol import DEVNULL_TARGET, Snapshot
+from nbkp.preflight.status.endpoint import (
     INACTIVE_DST_ENDPOINT_ERRORS,
     INACTIVE_SRC_ENDPOINT_ERRORS,
     DestinationEndpointStatus,
     SourceEndpointStatus,
 )
-from .ssh import INACTIVE_SSH_ERRORS
-from .volume import INACTIVE_VOLUME_ERRORS
+from nbkp.preflight.status.ssh import INACTIVE_SSH_ERRORS
+from nbkp.preflight.status.volume import INACTIVE_VOLUME_ERRORS
 
 
 class SyncErrorKind(enum.StrEnum):

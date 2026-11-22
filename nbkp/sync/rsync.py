@@ -6,7 +6,7 @@ import subprocess
 from collections.abc import Callable, Iterator
 from enum import StrEnum
 
-from ..config import (
+from nbkp.config import (
     Config,
     LocalVolume,
     RemoteVolume,
@@ -14,14 +14,14 @@ from ..config import (
     SyncEndpoint,
     resolve_endpoint_path,
 )
-from ..fsprotocol import LATEST_LINK, SNAPSHOTS_DIR
-from ..remote import (
+from nbkp.fsprotocol import LATEST_LINK, SNAPSHOTS_DIR
+from nbkp.remote import (
     build_ssh_base_args,
     build_ssh_e_option,
     format_remote_path,
     shell_join,
 )
-from ..remote.endpoints import ResolvedEndpoints
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 class ProgressMode(StrEnum):

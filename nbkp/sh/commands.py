@@ -1,9 +1,9 @@
 """Shell command snippets that run on a volume's host (local or over SSH)."""
 
-from ..config import LocalVolume, RemoteVolume
-from ..remote.endpoints import ResolvedEndpoints
-from ..remote.ssh import build_ssh_base_args
-from .quoting import quote, quote_args, remote_command
+from nbkp.config import LocalVolume, RemoteVolume
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.remote.ssh import build_ssh_base_args
+from nbkp.sh.quoting import quote, quote_args, remote_command
 
 # Preflight function return codes, interpreted by ``nbkp_run_sync`` and
 # ``nbkp_enforce_strictness`` in the template.

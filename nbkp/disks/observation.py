@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
-from ..config import Config, Volume
-from .lifecycle import MountResult
-from .models import MountFailureKind
+from nbkp.config import Config, Volume
+from nbkp.disks.lifecycle import MountResult
+from nbkp.disks.models import MountFailureKind
 
 
 @dataclass(frozen=True)

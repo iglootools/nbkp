@@ -1,21 +1,17 @@
 from datetime import datetime
 
-from ..config import (
-    Config,
-    SyncConfig,
-    Volume,
-)
-from ..fsprotocol import STAGING_DIR
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
-from .common import (
+from nbkp.config import Config, SyncConfig, Volume
+from nbkp.fsprotocol import STAGING_DIR
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.snapshots.common import (
     create_snapshot_timestamp,
     destination_volume,
     prune_oldest_snapshots,
     resolve_dest_path,
     snapshots_dir,
 )
-from .errors import SnapshotOp, SnapshotOperationError, run_checked
+from nbkp.snapshots.errors import SnapshotOp, SnapshotOperationError, run_checked
 
 
 def create_snapshot(

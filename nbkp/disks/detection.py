@@ -4,12 +4,9 @@ This is morally equivalent to the `preflight.queries` module, but the mounting l
 so these functions are separate and have no dependencies on preflight code.
 """
 
-from ..config import (
-    MountConfig,
-    Volume,
-)
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
+from nbkp.config import MountConfig, Volume
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 class DeviceProbeError(Exception):

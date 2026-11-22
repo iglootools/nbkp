@@ -3,8 +3,8 @@ from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 
-from .base import ConfigModel, Slug
-from .errors import ConfigValidationErrorKind, config_error
+from nbkp.config.protocol.base import ConfigModel, Slug
+from nbkp.config.protocol.errors import ConfigValidationErrorKind, config_error
 
 
 def _expand_user(v: Any) -> Any:

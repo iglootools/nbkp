@@ -1,5 +1,10 @@
-from .loader import ConfigError, ConfigErrorKind, find_config_file, load_config
-from .protocol import (
+from nbkp.config.loader import (
+    ConfigError,
+    ConfigErrorKind,
+    find_config_file,
+    load_config,
+)
+from nbkp.config.protocol import (
     BtrfsSnapshotConfig,
     Config,
     ConfigValidationErrorKind,

@@ -7,8 +7,8 @@ run the same commands through both transports to cross-check them.
 import shlex
 import subprocess
 
-from ...config import SshEndpoint
-from ..ssh import build_ssh_base_args
+from nbkp.config import SshEndpoint
+from nbkp.remote.ssh import build_ssh_base_args
 
 
 def run_remote_command(

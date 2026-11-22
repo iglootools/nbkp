@@ -13,7 +13,7 @@ import re
 import shlex
 import textwrap
 
-from ..remote import shell_join
+from nbkp.remote import shell_join
 
 _MARK = "\x00"
 _DQ_SPECIAL = re.compile(r'([\\"$`])')

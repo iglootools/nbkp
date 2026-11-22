@@ -4,8 +4,8 @@ from typing import Any
 from pydantic import Field, field_validator
 from pydantic_core import PydanticCustomError
 
-from .base import ConfigModel, Slug, is_raw_mapping, is_raw_sequence
-from .errors import ConfigValidationErrorKind, config_error
+from nbkp.config.protocol.base import ConfigModel, Slug, is_raw_mapping, is_raw_sequence
+from nbkp.config.protocol.errors import ConfigValidationErrorKind, config_error
 
 
 class RsyncOptions(ConfigModel):

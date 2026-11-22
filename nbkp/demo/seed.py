@@ -10,22 +10,17 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from ..config import (
-    Config,
-    CredentialProvider,
-    RsyncOptions,
-    SshEndpoint,
-)
-from ..config.testkit import write_config
-from ..disks import mount_phase, umount_volumes
-from ..disks.output import mount_failure_detail, umount_failure_detail
-from ..policy import Severity
-from ..remote.dispatch import VolumeCommandRunner, run_on_volume
-from ..remote.endpoints import ResolvedEndpoints
-from ..remote.resolution import resolve_all_endpoints
-from ..remote.testkit.constants import LUKS_PASSPHRASE
-from ..remote.testkit.errors import DockerError
-from ..sync.testkit.seed import (
+from nbkp.config import Config, CredentialProvider, RsyncOptions, SshEndpoint
+from nbkp.config.testkit import write_config
+from nbkp.disks import mount_phase, umount_volumes
+from nbkp.disks.output import mount_failure_detail, umount_failure_detail
+from nbkp.policy import Severity
+from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
+from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.remote.resolution import resolve_all_endpoints
+from nbkp.remote.testkit.constants import LUKS_PASSPHRASE
+from nbkp.remote.testkit.errors import DockerError
+from nbkp.sync.testkit.seed import (
     build_chain_config,
     build_local_chain_config,
     create_seed_sentinels,
@@ -34,7 +29,7 @@ from ..sync.testkit.seed import (
 
 # The 'docker' extra is optional; seed_demo(docker=True) reports it through
 # _check_docker(has_docker) before anything here resolves these lazy names.
-lazy from ..remote.testkit.docker import (
+lazy from nbkp.remote.testkit.docker import (
     DOCKER_DIR,
     build_docker_image,
     check_docker,

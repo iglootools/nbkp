@@ -2,15 +2,12 @@ from typing import Annotated
 
 import typer
 
-from ...clidisplay import OutputFormat, echo_json
-from ...cliwiring.config import load_config_or_exit
-from ...cliwiring.options import (
-    CONFIG_OPTION,
-    OUTPUT_OPTION,
-)
-from ...cliwiring.runtime import runtime_of
-from ..auth import AuthRuleBlock, generate_auth_rules
-from . import app
+from nbkp.clidisplay import OutputFormat, echo_json
+from nbkp.cliwiring.config import load_config_or_exit
+from nbkp.cliwiring.options import CONFIG_OPTION, OUTPUT_OPTION
+from nbkp.cliwiring.runtime import runtime_of
+from nbkp.disks.auth import AuthRuleBlock, generate_auth_rules
+from nbkp.disks.cli import app
 
 
 @app.command("setup-auth")

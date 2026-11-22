@@ -1,9 +1,9 @@
-from .rsync import ProgressMode as ProgressMode
-lazy from .orchestration import (
+from nbkp.sync.rsync import ProgressMode as ProgressMode
+lazy from nbkp.sync.orchestration import (
     RunOptions as RunOptions,
     run_all_syncs as run_all_syncs,
 )
-lazy from .results import (
+lazy from nbkp.sync.results import (
     SyncFailureKind as SyncFailureKind,
     SyncOutcome as SyncOutcome,
     SyncResult as SyncResult,

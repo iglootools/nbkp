@@ -8,15 +8,10 @@ import enum
 
 from pydantic import BaseModel, ConfigDict, computed_field
 
-from ...config import (
-    SyncEndpoint,
-)
-from ...fsprotocol import (
-    DEVNULL_TARGET,
-    Snapshot,
-)
-from .ssh import HostToolCapabilities
-from .volume import VolumeCapabilities, VolumeStatus
+from nbkp.config import SyncEndpoint
+from nbkp.fsprotocol import DEVNULL_TARGET, Snapshot
+from nbkp.preflight.status.ssh import HostToolCapabilities
+from nbkp.preflight.status.volume import VolumeCapabilities, VolumeStatus
 
 
 class SourceEndpointErrorKind(enum.StrEnum):

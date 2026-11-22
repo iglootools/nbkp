@@ -3,9 +3,9 @@ import subprocess
 from collections.abc import Callable
 from typing import Protocol
 
-from ..config import LocalVolume, RemoteVolume, SshEndpoint, Volume
-from .endpoints import ResolvedEndpoints
-lazy from .fabricssh import run_remote_command
+from nbkp.config import LocalVolume, RemoteVolume, SshEndpoint, Volume
+from nbkp.remote.endpoints import ResolvedEndpoints
+lazy from nbkp.remote.fabricssh import run_remote_command
 
 
 class RemoteCommandRunner(Protocol):

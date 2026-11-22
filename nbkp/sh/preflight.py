@@ -14,8 +14,8 @@ inactive rather than as a cascade of infrastructure errors, matching the
 layered model of ``nbkp preflight``.
 """
 
-from ..config import LocalVolume, RemoteVolume
-from ..fsprotocol import (
+from nbkp.config import LocalVolume, RemoteVolume
+from nbkp.fsprotocol import (
     DESTINATION_SENTINEL,
     LATEST_LINK,
     NO_HARDLINK_FILESYSTEMS,
@@ -24,7 +24,7 @@ from ..fsprotocol import (
     STAGING_DIR,
     VOLUME_SENTINEL,
 )
-from .commands import (
+from nbkp.sh.commands import (
     BROKEN,
     DRY_RUN_PENDING,
     INACTIVE,
@@ -33,8 +33,8 @@ from .commands import (
     vol_cmd,
     which_cmd,
 )
-from .quoting import quote, shell_var
-from .spec import SyncSpec
+from nbkp.sh.quoting import quote, shell_var
+from nbkp.sh.spec import SyncSpec
 
 # Tools the snapshot steps run on the destination host.
 _BTRFS_TOOLS = ("btrfs", "stat", "findmnt", "readlink", "ls", "ln")

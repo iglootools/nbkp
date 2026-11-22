@@ -8,15 +8,15 @@ here, so importing ``nbkp.disks`` never loads Rich: display code imports
 ``nbkp.disks.output`` explicitly.
 """
 
-from .auth import (
+from nbkp.disks.auth import (
     POLKIT_RULES_PATH,
     AuthRuleBlock,
     AuthRules,
     generate_auth_rules,
     generate_polkit_rules,
 )
-from .context import managed_mount, mount_phase
-from .detection import (
+from nbkp.disks.context import managed_mount, mount_phase
+from nbkp.disks.detection import (
     DeviceProbeError,
     detect_device_present,
     discover_cleartext_device,
@@ -24,7 +24,7 @@ from .detection import (
     resolve_effective_path,
     resolve_target_device,
 )
-from .lifecycle import (
+from nbkp.disks.lifecycle import (
     MountFailureKind,
     MountResult,
     UmountResult,
@@ -36,7 +36,7 @@ from .lifecycle import (
     umount_volume,
     umount_volumes,
 )
-from .models import (
+from nbkp.disks.models import (
     LifecycleFailure,
     LifecycleStep,
     MountCapabilities,
@@ -44,23 +44,23 @@ from .models import (
     UmountFailureKind,
     display_name,
 )
-from .mount_checks import (
+from nbkp.disks.mount_checks import (
     check_mount_capabilities,
     check_mount_status,
     probe_mount_tools,
 )
-from .observation import (
+from nbkp.disks.observation import (
     MountObservation,
     apply_effective_paths,
     build_mount_observations,
 )
-from .severity import (
+from nbkp.disks.severity import (
     device_fail_severity,
     luks_fail_severity,
     mount_result_severity,
     mounted_fail_severity,
 )
-from .udisks import (
+from nbkp.disks.udisks import (
     build_lock_command,
     build_mount_command,
     build_unlock_command,

@@ -6,14 +6,14 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
-from ..config import Config, Volume
-from ..remote.dispatch import VolumeCommandRunner
-from ..remote.endpoints import ResolvedEndpoints, location_excluded
-from ..remote.errors import describe_error, ssh_connection_errors
-from .lifecycle import MountResult, lifecycle_volumes, missing_local_tool
-from .models import MountFailureKind
-from .mount_checks import check_mount_status
-from .observation import MountObservation, build_mount_observations
+from nbkp.config import Config, Volume
+from nbkp.disks.lifecycle import MountResult, lifecycle_volumes, missing_local_tool
+from nbkp.disks.models import MountFailureKind
+from nbkp.disks.mount_checks import check_mount_status
+from nbkp.disks.observation import MountObservation, build_mount_observations
+from nbkp.remote.dispatch import VolumeCommandRunner
+from nbkp.remote.endpoints import ResolvedEndpoints, location_excluded
+from nbkp.remote.errors import describe_error, ssh_connection_errors
 
 
 class MountStatusData(Protocol):

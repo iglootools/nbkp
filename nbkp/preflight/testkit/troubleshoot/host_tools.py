@@ -1,7 +1,7 @@
 """Scenarios about tools missing or outdated on a host."""
 
-from ....config import BtrfsSnapshotConfig, Config, LocalVolume, SyncEndpoint
-from ... import (
+from nbkp.config import BtrfsSnapshotConfig, Config, LocalVolume, SyncEndpoint
+from nbkp.preflight import (
     BtrfsStagingSubvolumeDiagnostics,
     DestinationEndpointDiagnostics,
     DestinationEndpointErrorKind,
@@ -10,12 +10,12 @@ from ... import (
     SyncErrorKind,
     SyncStatus,
 )
-from ..common import (
+from nbkp.preflight.testkit.common import (
     active_dst_ep_status,
     active_src_ep_status,
     inactive_dst_ep_status,
 )
-from .scenario import (
+from nbkp.preflight.testkit.troubleshoot.scenario import (
     LAPTOP_SRC,
     Scenario,
     ScenarioStatuses,
@@ -25,7 +25,7 @@ from .scenario import (
     sync_from_laptop,
     volume_status,
 )
-from .ssh import (
+from nbkp.preflight.testkit.troubleshoot.ssh import (
     BTRFS_SNAPSHOT_NEEDS,
     HOST_TOOLS,
     MOUNT_NEEDS,

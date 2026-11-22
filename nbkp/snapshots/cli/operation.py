@@ -13,23 +13,23 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from ...clidisplay import OutputFormat
-from ...clidisplay.invocation import Invocation, format_troubleshoot_hint
-from ...cliwiring.config import (
+from nbkp.clidisplay import OutputFormat
+from nbkp.clidisplay.invocation import Invocation, format_troubleshoot_hint
+from nbkp.cliwiring.config import (
     load_config_or_exit,
     require_known_syncs,
     resolve_endpoints,
 )
-from ...cliwiring.mount import managed_mount
-from ...cliwiring.preflight import check_all_with_progress
-from ...cliwiring.runtime import runtime_of
-from ...config import Config
-from ...policy import Strictness
-from ...preflight import SyncStatus
-from ...remote.dispatch import VolumeCommandRunner
-from ...remote.endpoints import NetworkType, ResolvedEndpoints
-from ..disposition import failed_in_preflight, has_errors
-from ..models import PruneResult, ShowResult
+from nbkp.cliwiring.mount import managed_mount
+from nbkp.cliwiring.preflight import check_all_with_progress
+from nbkp.cliwiring.runtime import runtime_of
+from nbkp.config import Config
+from nbkp.policy import Strictness
+from nbkp.preflight import SyncStatus
+from nbkp.remote.dispatch import VolumeCommandRunner
+from nbkp.remote.endpoints import NetworkType, ResolvedEndpoints
+from nbkp.snapshots.disposition import failed_in_preflight, has_errors
+from nbkp.snapshots.models import PruneResult, ShowResult
 
 
 @dataclass(frozen=True)

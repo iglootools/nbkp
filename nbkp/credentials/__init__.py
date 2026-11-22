@@ -9,7 +9,7 @@ from enum import StrEnum
 
 from pydantic import SecretStr
 
-from ..config import Config, CredentialProvider, passphrase_env_var
+from nbkp.config import Config, CredentialProvider, passphrase_env_var
 
 
 class CredentialErrorKind(StrEnum):
