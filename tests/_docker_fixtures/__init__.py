@@ -124,7 +124,8 @@ def _docker_available() -> bool:
     """Check if Docker is available and running."""
     try:
         client = dockerlib.from_env()
-        client.ping()
+        # docker leaves ping()'s *args and **kwargs unannotated; retire when it annotates them.
+        client.ping()  # pyright: ignore[reportUnknownMemberType]
         return True
     except docker_errors.DockerException:
         return False

@@ -87,7 +87,8 @@ def create_test_ssh_endpoint(
 def check_docker() -> None:
     try:
         client = dockerlib.from_env()
-        client.ping()
+        # docker leaves ping()'s *args and **kwargs unannotated; retire when it annotates them.
+        client.ping()  # pyright: ignore[reportUnknownMemberType]
     except docker_errors.DockerException as exc:
         raise DockerError(DockerErrorKind.UNAVAILABLE, str(exc)) from exc
 
@@ -212,7 +213,8 @@ def start_storage_container(
     if network_name is not None:
         network = client.networks.get(network_name)
         aliases = [network_alias] if network_alias else None
-        network.connect(container, aliases=aliases)
+        # docker leaves connect()'s *args and **kwargs unannotated; retire when it annotates them.
+        network.connect(container, aliases=aliases)  # pyright: ignore[reportUnknownMemberType]
 
     container.reload()
     port_info = container.attrs["NetworkSettings"]["Ports"]["22/tcp"]
@@ -248,7 +250,8 @@ def start_bastion_container(
     )
 
     network = client.networks.get(network_name)
-    network.connect(container)
+    # docker leaves connect()'s *args and **kwargs unannotated; retire when it annotates them.
+    network.connect(container)  # pyright: ignore[reportUnknownMemberType]
 
     container.reload()
     port_info = container.attrs["NetworkSettings"]["Ports"]["22/tcp"]
