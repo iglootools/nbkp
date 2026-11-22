@@ -11,9 +11,14 @@ on:
     types:
       - completed
   # Manually trigger the workflow using
-  # gh workflow run demo.yml # --ref <branch>
+  # gh workflow run demo.yml -f tag=<tag>   (or --ref <branch> to try a demo change)
   # gh run list --workflow demo.yml # --branch <branch>
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to record, such as v1.2.0. Defaults to the v* tag on the dispatched commit, else the branch head.
+        type: string
+        required: false
   repository_dispatch:
 
 concurrency:
@@ -51,5 +56,7 @@ jobs:
       # the shared iglootools/common renovate/base preset keeps it current.
       # renovate: datasource=github-releases depName=jdx/mise
       version: 2026.11.12
+      # The release to record; empty for a workflow_run or a tag push, which carry their own.
+      tag: ${{ inputs.tag || github.event.client_payload.tag }}
       # pv: demo-magic's simulated typing.
       apt-packages: pv

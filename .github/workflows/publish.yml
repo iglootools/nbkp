@@ -16,9 +16,14 @@ on:
     types:
       - completed
   # The workflow is usually triggered when the release workflow completes, but it can also be re-triggered manually if needed using
-  # gh workflow run publish.yml --ref <tag>
+  # gh workflow run publish.yml -f tag=<tag>   (or --ref <tag>)
   # gh run list --workflow publish.yml
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish, such as v1.2.0. Defaults to the v* tag on the dispatched commit.
+        type: string
+        required: false
   repository_dispatch:
 
 concurrency:
@@ -64,28 +69,42 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-      # A `release` run completes successfully whether or not it released: a dry run, or a run
-      # dispatched on another branch, starts this workflow too. Only a commit carrying a v* tag
-      # was released. A dry run from a test branch once got as far as the upload, refused only
-      # because PyPI rejects local versions; see "Skip a release run that did not release" in
-      # guidelines/project-setup/pypi-publishing.md in iglootools/common.
-      - name: Check that the release run released
-        id: released
-        if: github.event_name == 'workflow_run'
+      # Build the release tag, never whatever the branch head has become: a manual re-run
+      # from main after a newer merge would otherwise publish that commit under the release's
+      # name. A `release` run also completes successfully when it released nothing (a dry run,
+      # a run dispatched on another branch), and only a commit carrying a v* tag was released.
+      # See "Build what a release triggers from its tag" in
+      # guidelines/project-setup/workflows.md in iglootools/common.
+      - name: Check out the release tag
+        id: release
+        env:
+          EVENT: ${{ github.event_name }}
+          REQUESTED: ${{ inputs.tag || github.event.client_payload.tag }}
         run: |
-          if tag=$(git describe --exact-match --tags --match 'v*' HEAD 2>/dev/null); then
-            echo "Publishing $tag"
-          else
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::$(git rev-parse --short HEAD) carries no v* tag, so the release run did not release. Nothing to publish."
+          if [ -n "$REQUESTED" ]; then
+            tag=$REQUESTED
+          elif ! tag=$(git describe --exact-match --tags --match 'v*' HEAD 2>/dev/null); then
+            if [ "$EVENT" = workflow_run ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "::notice::$(git rev-parse --short HEAD) carries no v* tag, so the release run did not release. Nothing to publish."
+              exit 0
+            fi
+            echo "::error::$(git rev-parse --short HEAD) carries no v* tag. Dispatch with -f tag=vX.Y.Z, or --ref vX.Y.Z."
+            exit 1
           fi
+          if [[ ! $tag =~ ^v[0-9] ]] || ! git rev-parse -q --verify "refs/tags/$tag^{commit}" >/dev/null; then
+            echo "::error::$tag is not a release tag of this repository."
+            exit 1
+          fi
+          git checkout -q --detach "refs/tags/$tag"
+          echo "Publishing $tag ($(git rev-parse --short HEAD))"
       - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5
-        if: steps.released.outputs.skip != 'true'
+        if: steps.release.outputs.skip != 'true'
         with:
           # renovate: datasource=github-releases depName=jdx/mise
           version: 2026.11.12
       - run: mise run ci-build
-        if: steps.released.outputs.skip != 'true'
+        if: steps.release.outputs.skip != 'true'
       - name: Publish package distributions to PyPI
-        if: steps.released.outputs.skip != 'true'
+        if: steps.release.outputs.skip != 'true'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
