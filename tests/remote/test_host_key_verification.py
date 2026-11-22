@@ -1,16 +1,21 @@
-"""Host key verification on the Paramiko/Fabric path, against an in-process
-SSH server on localhost that offers no authentication method: a connection
-gets past host key verification and then fails authentication, so the type
-of the error tells which of the two refused it."""
+"""
+Host key verification on the Paramiko/Fabric path.
 
+Tested against an in-process SSH server on localhost that offers no authentication
+method: a connection gets past host key verification and then fails authentication, so
+the type of the error tells which of the two refused it.
+"""
+
+import contextlib
 import socket
 import threading
 from collections.abc import Iterator
 from pathlib import Path
+from typing import override
 
 import paramiko
 import pytest
-from pytest import MonkeyPatch  # noqa: TID251 -- (c) HOME, read by Paramiko
+from pytest import MonkeyPatch  # noqa: PT013, TID251 -- (c) HOME, read by Paramiko
 
 from nbkp.config import SshConnectionOptions, SshEndpoint
 from nbkp.preflight.volume_checks import unreachable_diagnostics
@@ -19,8 +24,10 @@ from nbkp.remote.errors import UnknownHostKeyError
 
 
 class _NoAuthServer(paramiko.ServerInterface):
+    @override
     def get_allowed_auths(  # noqa: DC04 -- Paramiko's ServerInterface calls it
-        self, username: str
+        self,
+        username: str,
     ) -> str:
         return "publickey"
 
@@ -43,10 +50,8 @@ class _LocalSshServer:
             transport = paramiko.Transport(sock)
             transport.add_server_key(self.host_key)
             self._transports.append(transport)
-            try:
+            with contextlib.suppress(paramiko.SSHException, EOFError):
                 transport.start_server(server=_NoAuthServer())
-            except paramiko.SSHException, EOFError:
-                pass
 
     def close(self) -> None:
         self._listener.close()
@@ -76,7 +81,7 @@ def _endpoint(port: int, options: SshConnectionOptions) -> SshEndpoint:
         port=port,
         user="nobody",
         connection_options=options.model_copy(
-            update={"allow_agent": False, "look_for_keys": False}
+            update={"allow_agent": False, "look_for_keys": False},
         ),
     )
 
@@ -85,14 +90,15 @@ def _known_hosts(tmp_path: Path, server: _LocalSshServer) -> Path:
     path = tmp_path / "known_hosts"
     entry = f"[127.0.0.1]:{server.port}"
     path.write_text(
-        f"{entry} {server.host_key.get_name()} {server.host_key.get_base64()}\n"
+        f"{entry} {server.host_key.get_name()} {server.host_key.get_base64()}\n",
     )
     return path
 
 
 class TestStrictHostKeyChecking:
     def test_default_options_refuse_unknown_host(
-        self, ssh_server: _LocalSshServer
+        self,
+        ssh_server: _LocalSshServer,
     ) -> None:
         endpoint = _endpoint(ssh_server.port, SshConnectionOptions())
 
@@ -100,7 +106,9 @@ class TestStrictHostKeyChecking:
             run_remote_command(endpoint, ["true"])
 
     def test_missing_known_hosts_file_refuses_host(
-        self, ssh_server: _LocalSshServer, tmp_path: Path
+        self,
+        ssh_server: _LocalSshServer,
+        tmp_path: Path,
     ) -> None:
         options = SshConnectionOptions(known_hosts_file=str(tmp_path / "absent"))
 
@@ -108,20 +116,25 @@ class TestStrictHostKeyChecking:
             run_remote_command(_endpoint(ssh_server.port, options), ["true"])
 
     def test_known_host_passes_verification(
-        self, ssh_server: _LocalSshServer, tmp_path: Path
+        self,
+        ssh_server: _LocalSshServer,
+        tmp_path: Path,
     ) -> None:
         options = SshConnectionOptions(
-            known_hosts_file=str(_known_hosts(tmp_path, ssh_server))
+            known_hosts_file=str(_known_hosts(tmp_path, ssh_server)),
         )
 
         with pytest.raises(paramiko.SSHException) as excinfo:
             run_remote_command(_endpoint(ssh_server.port, options), ["true"])
         assert not isinstance(
-            excinfo.value, UnknownHostKeyError | paramiko.BadHostKeyException
+            excinfo.value,
+            UnknownHostKeyError | paramiko.BadHostKeyException,
         )
 
     def test_known_hosts_in_home_is_consulted(
-        self, ssh_server: _LocalSshServer, tmp_path: Path
+        self,
+        ssh_server: _LocalSshServer,
+        tmp_path: Path,
     ) -> None:
         (tmp_path / ".ssh").mkdir()
         _known_hosts(tmp_path, ssh_server).rename(tmp_path / ".ssh" / "known_hosts")
@@ -132,10 +145,12 @@ class TestStrictHostKeyChecking:
         assert not isinstance(excinfo.value, UnknownHostKeyError)
 
     def test_disabled_checking_trusts_unknown_host(
-        self, ssh_server: _LocalSshServer
+        self,
+        ssh_server: _LocalSshServer,
     ) -> None:
         options = SshConnectionOptions(
-            strict_host_key_checking=False, known_hosts_file="/dev/null"
+            strict_host_key_checking=False,
+            known_hosts_file="/dev/null",
         )
 
         with pytest.raises(paramiko.SSHException) as excinfo:
@@ -143,7 +158,9 @@ class TestStrictHostKeyChecking:
         assert not isinstance(excinfo.value, UnknownHostKeyError)
 
     def test_disabled_checking_accepts_missing_known_hosts_file(
-        self, ssh_server: _LocalSshServer, tmp_path: Path
+        self,
+        ssh_server: _LocalSshServer,
+        tmp_path: Path,
     ) -> None:
         options = SshConnectionOptions(
             strict_host_key_checking=False,

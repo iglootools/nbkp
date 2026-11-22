@@ -1,4 +1,5 @@
-"""Volume mount lifecycle management.
+"""
+Volume mount lifecycle management.
 
 This package's public interface: other modules (``preflight``, ``cliwiring``,
 ``run``, ``demo``) import from ``nbkp.disks`` rather than from its

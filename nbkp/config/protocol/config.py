@@ -1,3 +1,11 @@
+"""
+The root config model and the validation that spans its sections.
+
+Cross-references (volumes to SSH endpoints, sync endpoints to volumes, syncs to
+sync endpoints) and whole-config rules such as cycle detection are checked here,
+once every section has been parsed.
+"""
+
 import enum
 import re
 from collections.abc import Iterable, Iterator, Mapping
@@ -25,7 +33,8 @@ class CredentialProvider(enum.StrEnum):
 
 
 def passphrase_env_var(passphrase_id: str) -> str:
-    """Environment variable the ``env`` provider reads for ``passphrase_id``.
+    """
+    Environment variable the ``env`` provider reads for ``passphrase_id``.
 
     Every character outside ``[A-Z0-9]`` becomes ``_``, so the name is one a
     POSIX shell can ``export``; distinct ids can then share a name, which
@@ -58,7 +67,7 @@ def _stale_exclusive_keys(child: Mapping[str, Any]) -> set[str]:
 _MERGED_SECTIONS = frozenset({"connection-options", "connection_options"})
 
 
-def _overlay_field(key: str, parent_value: Any, child_value: Any) -> Any:
+def _overlay_field(key: str, parent_value: object, child_value: object) -> object:
     return (
         {**parent_value, **child_value}
         if key in _MERGED_SECTIONS
@@ -69,9 +78,11 @@ def _overlay_field(key: str, parent_value: Any, child_value: Any) -> Any:
 
 
 def _merge_endpoint(
-    parent: Mapping[str, Any], child: Mapping[str, Any]
+    parent: Mapping[str, Any],
+    child: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Overlay a child endpoint's raw fields on its resolved parent's.
+    """
+    Overlay a child endpoint's raw fields on its resolved parent's.
 
     The child keeps its own ``extends`` (the parent's is not inherited), so
     the merged endpoint still records which endpoint it was built from.
@@ -85,9 +96,12 @@ def _merge_endpoint(
 
 
 def _resolve_endpoint(
-    endpoints: Mapping[str, Any], slug: str, chain: tuple[str, ...]
-) -> Any:
-    """Resolve one raw endpoint's ``extends`` chain into a flat mapping.
+    endpoints: Mapping[str, Any],
+    slug: str,
+    chain: tuple[str, ...],
+) -> object:
+    """
+    Resolve one raw endpoint's ``extends`` chain into a flat mapping.
 
     ``chain`` holds the slugs visited so far, ending with ``slug``, for cycle
     detection. Non-mapping entries are returned as-is for pydantic to reject.
@@ -111,9 +125,9 @@ def _resolve_endpoint(
         return _merge_endpoint(parent, ep) if is_raw_mapping(parent) else ep
 
 
-def _inject_slug(slug: str, data: Any) -> Any:
+def _inject_slug(slug: str, data: object) -> object:
     match data:
-        case {"slug": declared} if declared != slug:
+        case {"slug": object() as declared} if declared != slug:
             # Sync endpoints and ``--name`` look entries up by key, endpoint
             # resolution and mount results by ``slug``: if they differed,
             # commands for one volume could reach another volume's host.
@@ -128,7 +142,7 @@ def _inject_slug(slug: str, data: Any) -> Any:
             return data
 
 
-def _inject_slugs(entries: Any) -> Any:
+def _inject_slugs(entries: object) -> object:
     return (
         {slug: _inject_slug(slug, data) for slug, data in entries.items()}
         if is_raw_mapping(entries)
@@ -141,7 +155,8 @@ def _unknown_reference(message: str) -> ValueError:
 
 
 def _raise_first(errors: Iterable[ValueError]) -> None:
-    """Raise the first error a lazy check yields, if any.
+    """
+    Raise the first error a lazy check yields, if any.
 
     Checks are generators consumed in order, so a later check (e.g. one that
     indexes ``volumes`` by a sync endpoint's volume) only runs once the
@@ -160,7 +175,10 @@ def _is_nested(path_a: str, path_b: str) -> bool:
 
 
 def _location_error(
-    slug_a: str, ep_a: SyncEndpoint, slug_b: str, ep_b: SyncEndpoint
+    slug_a: str,
+    ep_a: SyncEndpoint,
+    slug_b: str,
+    ep_b: SyncEndpoint,
 ) -> ValueError | None:
     path_a, path_b = ep_a.subdir or "", ep_b.subdir or ""
     if path_a == path_b:
@@ -185,6 +203,14 @@ def _location_error(
 
 
 class Config(ConfigModel):
+    """
+    A whole nbkp config: credentials, SSH endpoints, volumes, sync endpoints, syncs.
+
+    Each section maps a slug to its entry. Validation fails with a pydantic
+    ``ValidationError`` whose ``type`` is a :class:`ConfigValidationErrorKind`
+    when a reference is unknown or a cross-section rule is broken.
+    """
+
     credential_provider: CredentialProvider = Field(
         default=CredentialProvider.KEYRING,
         description=(
@@ -208,7 +234,14 @@ class Config(ConfigModel):
 
     @model_validator(mode="before")
     @classmethod
-    def resolve_ssh_endpoint_extends(cls, data: Any) -> Any:
+    def resolve_ssh_endpoint_extends(cls, data: object) -> object:
+        """
+        Flatten each raw SSH endpoint's ``extends`` chain before validation.
+
+        A child endpoint inherits its parent's fields and overrides those it
+        sets. Raises a ``circular-extends`` or ``unknown-reference`` error when
+        the chain loops or names a missing endpoint.
+        """
         if not is_raw_mapping(data):
             return data
         key = "ssh-endpoints" if "ssh-endpoints" in data else "ssh_endpoints"
@@ -221,25 +254,38 @@ class Config(ConfigModel):
         return {**data, key: resolved}
 
     @field_validator(
-        "ssh_endpoints", "volumes", "sync_endpoints", "syncs", mode="before"
+        "ssh_endpoints",
+        "volumes",
+        "sync_endpoints",
+        "syncs",
+        mode="before",
     )
     @classmethod
-    def inject_slugs(cls, v: Any) -> Any:
+    def inject_slugs(cls, v: object) -> object:
         """Let entries omit ``slug``: it is the key they are declared under."""
         return _inject_slugs(v)
 
     def source_endpoint(self, sync: SyncConfig) -> SyncEndpoint:
+        """Return the sync endpoint *sync* reads from."""
         return self.sync_endpoints[sync.source]
 
     def destination_endpoint(self, sync: SyncConfig) -> SyncEndpoint:
+        """Return the sync endpoint *sync* writes to."""
         return self.sync_endpoints[sync.destination]
 
     def known_locations(self) -> list[str]:
+        """Return every location any SSH endpoint declares, sorted, without repeats."""
         return sorted(
-            {loc for ep in self.ssh_endpoints.values() for loc in ep.location_list}
+            {loc for ep in self.ssh_endpoints.values() for loc in ep.location_list},
         )
 
     def orphan_ssh_endpoints(self) -> list[str]:
+        """
+        Return the slugs of SSH endpoints nothing uses, sorted.
+
+        An endpoint is used when a remote volume lists it, or another endpoint
+        jumps through it or extends it.
+        """
         used = {
             ref
             for vol in self.volumes.values()
@@ -253,10 +299,12 @@ class Config(ConfigModel):
         return sorted(set(self.ssh_endpoints) - used)
 
     def orphan_volumes(self) -> list[str]:
+        """Return the slugs of volumes no sync endpoint is on, sorted."""
         used = {ep.volume for ep in self.sync_endpoints.values()}
         return sorted(set(self.volumes) - used)
 
     def orphan_sync_endpoints(self) -> list[str]:
+        """Return the slugs of sync endpoints no sync reads or writes, sorted."""
         used = {
             ref
             for sync in self.syncs.values()
@@ -266,6 +314,13 @@ class Config(ConfigModel):
 
     @model_validator(mode="after")
     def validate_cross_references(self) -> Config:
+        """
+        Check the rules that span sections, and return the config unchanged.
+
+        Raises the first failure, as a pydantic error whose ``type`` is a
+        :class:`ConfigValidationErrorKind`. Checks run in order, so the later
+        ones may index sections by references the earlier ones verified.
+        """
         _raise_first(
             error
             for check in (
@@ -288,7 +343,7 @@ class Config(ConfigModel):
     def _unknown_proxy_jump_errors(self) -> Iterator[ValueError]:
         return (
             _unknown_reference(
-                f"Server '{slug}' references unknown proxy-jump server '{hop}'"
+                f"Server '{slug}' references unknown proxy-jump server '{hop}'",
             )
             for slug, server in self.ssh_endpoints.items()
             for hop in server.proxy_jump_chain
@@ -314,7 +369,7 @@ class Config(ConfigModel):
     def _volume_reference_errors(self) -> Iterator[ValueError]:
         yield from (
             _unknown_reference(
-                f"Volume '{vol_slug}' references unknown ssh-endpoint '{ref}'"
+                f"Volume '{vol_slug}' references unknown ssh-endpoint '{ref}'",
             )
             for vol_slug, vol in self.volumes.items()
             if isinstance(vol, RemoteVolume)
@@ -323,7 +378,7 @@ class Config(ConfigModel):
         )
         yield from (
             _unknown_reference(
-                f"Sync endpoint '{ep_slug}' references unknown volume '{ep.volume}'"
+                f"Sync endpoint '{ep_slug}' references unknown volume '{ep.volume}'",
             )
             for ep_slug, ep in self.sync_endpoints.items()
             if ep.volume not in self.volumes
@@ -333,7 +388,8 @@ class Config(ConfigModel):
         candidates = (
             _location_error(slug_a, ep_a, slug_b, ep_b)
             for (slug_a, ep_a), (slug_b, ep_b) in combinations(
-                self.sync_endpoints.items(), 2
+                self.sync_endpoints.items(),
+                2,
             )
             if ep_a.volume == ep_b.volume
         )
@@ -342,7 +398,7 @@ class Config(ConfigModel):
     def _sync_reference_errors(self) -> Iterator[ValueError]:
         return (
             _unknown_reference(
-                f"Sync '{sync_slug}' references unknown {role} endpoint '{ref}'"
+                f"Sync '{sync_slug}' references unknown {role} endpoint '{ref}'",
             )
             for sync_slug, sync in self.syncs.items()
             for role, ref in (
@@ -371,7 +427,8 @@ class Config(ConfigModel):
                 f" '{sync_a.destination}'",
             )
             for (slug_a, sync_a), (slug_b, sync_b) in combinations(
-                self.syncs.items(), 2
+                self.syncs.items(),
+                2,
             )
             if sync_a.destination == sync_b.destination
         )
@@ -422,7 +479,7 @@ class Config(ConfigModel):
                 vol.mount.encryption.passphrase_id
                 for vol in self.volumes.values()
                 if vol.mount is not None and vol.mount.encryption is not None
-            }
+            },
         )
         ids_by_var = {
             var: [pid for pid in passphrase_ids if passphrase_env_var(pid) == var]
@@ -454,7 +511,7 @@ class Config(ConfigModel):
                             ConfigValidationErrorKind.CREDENTIAL_COMMAND_REQUIRED,
                             "credential-command is required when"
                             " credential-provider is 'command'",
-                        )
+                        ),
                     ]
                     if missing_command
                     else []
@@ -464,10 +521,10 @@ class Config(ConfigModel):
                         config_error(
                             ConfigValidationErrorKind.CREDENTIAL_COMMAND_PLACEHOLDER,
                             "credential-command must contain the '{id}' placeholder",
-                        )
+                        ),
                     ]
                     if missing_placeholder
                     else []
                 ),
-            ]
+            ],
         )

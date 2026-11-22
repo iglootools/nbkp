@@ -1,4 +1,5 @@
-"""The flow ``snapshots show`` and ``snapshots prune`` share.
+"""
+The flow ``snapshots show`` and ``snapshots prune`` share.
 
 Load the config, take the run lock and mount what needs mounting, run
 preflight, apply the command's operation to the sync statuses, print the
@@ -48,7 +49,8 @@ class SnapshotCommandOptions:
 
 
 type SnapshotOperationFn[R: ShowResult | PruneResult] = Callable[
-    [Config, dict[str, SyncStatus], ResolvedEndpoints, VolumeCommandRunner], list[R]
+    [Config, dict[str, SyncStatus], ResolvedEndpoints, VolumeCommandRunner],
+    list[R],
 ]
 
 
@@ -60,7 +62,8 @@ def run_snapshot_operation_or_exit[R: ShowResult | PruneResult](
     *,
     writes: bool,
 ) -> None:
-    """Run *operation_fn* on the preflight statuses and print with *print_fn*.
+    """
+    Run *operation_fn* on the preflight statuses and print with *print_fn*.
 
     *writes* says whether *operation_fn* deletes snapshots; the command then
     holds the run lock even when it neither mounts nor umounts.
@@ -70,7 +73,11 @@ def run_snapshot_operation_or_exit[R: ShowResult | PruneResult](
     cfg = load_config_or_exit(runtime, options.config, output)
     require_known_syncs(cfg, options.sync, output)
     resolved = resolve_endpoints(
-        cfg, options.location, options.exclude_location, options.network, output
+        cfg,
+        options.location,
+        options.exclude_location,
+        options.network,
+        output,
     )
     with managed_mount(
         cfg,
@@ -96,7 +103,8 @@ def run_snapshot_operation_or_exit[R: ShowResult | PruneResult](
         print_fn(results)
         if has_errors(results):
             if output is OutputFormat.HUMAN and failed_in_preflight(
-                results, preflight.sync_statuses
+                results,
+                preflight.sync_statuses,
             ):
                 _print_troubleshoot_hint(options)
             raise typer.Exit(1)
@@ -110,7 +118,7 @@ def _print_troubleshoot_hint(options: SnapshotCommandOptions) -> None:
                 options.location,
                 options.exclude_location,
                 options.network,
-            )
+            ),
         ),
         soft_wrap=True,
     )

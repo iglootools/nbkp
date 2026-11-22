@@ -24,19 +24,19 @@ from nbkp.policy import Severity
 
 class TestMountStateIcon:
     def test_true(self) -> None:
-        assert mount_state_icon(True) == "[green]✓[/green]"
+        assert mount_state_icon(value=True) == "[green]✓[/green]"
 
     def test_false_default_is_error(self) -> None:
-        assert mount_state_icon(False) == "[red]✗[/red]"
+        assert mount_state_icon(value=False) == "[red]✗[/red]"
 
     def test_false_with_warning_severity(self) -> None:
         assert (
-            mount_state_icon(False, fail_severity=Severity.WARNING)
+            mount_state_icon(value=False, fail_severity=Severity.WARNING)
             == "[dark_orange]⚠[/dark_orange]"
         )
 
     def test_none(self) -> None:
-        assert mount_state_icon(None) == "—"
+        assert mount_state_icon(value=None) == "—"
 
 
 def _render(table: RenderableType) -> str:
@@ -67,8 +67,12 @@ class TestMountStatusTableSeverity:
         assert "✗" not in rendered
 
     def test_luks_false_without_failure_reason_is_warning(self) -> None:
-        """luks_unlocked=False with no recorded failure_reason is observation
-        noise (plugged in but locked), not a failure -> warning."""
+        """
+        A locked drive with no recorded failure is a warning, not a failure.
+
+        luks_unlocked=False with no recorded failure_reason is observation noise
+        (plugged in but locked), not a failure.
+        """
         obs = MountObservation(
             device_present=True,
             luks_unlocked=False,
@@ -185,7 +189,9 @@ class TestVolumeStatusJson:
 
     def test_unreachable_volume_keeps_slug_and_error_apart(self) -> None:
         status = VolumeStatus(
-            "my-vol", VolumeStatusKind.UNREACHABLE, error_message="timed out [x]"
+            "my-vol",
+            VolumeStatusKind.UNREACHABLE,
+            error_message="timed out [x]",
         )
         assert volume_status_json(status) == {
             "volume": "my-vol",
@@ -218,7 +224,9 @@ class TestFormatVolumeStatusLabel:
             ),
             (
                 VolumeStatus(
-                    "v", VolumeStatusKind.TOOL_NOT_INSTALLED, missing_tool="lsblk"
+                    "v",
+                    VolumeStatusKind.TOOL_NOT_INSTALLED,
+                    missing_tool="lsblk",
                 ),
                 "nas:v ✗ lsblk not installed",
             ),
@@ -273,7 +281,9 @@ class TestMountFailureDetail:
             (
                 MountFailureKind.UDISKS_NOT_AVAILABLE,
                 LifecycleFailure(
-                    step=LifecycleStep.MOUNT, exit_code=127, message="not found"
+                    step=LifecycleStep.MOUNT,
+                    exit_code=127,
+                    message="not found",
                 ),
                 "mount failed — udisks2 not available: not found",
             ),
@@ -305,13 +315,16 @@ class TestMountFailureDetail:
         ],
     )
     def test_renders_reason_and_facts(
-        self, reason: MountFailureKind, failure: LifecycleFailure, expected: str
+        self,
+        reason: MountFailureKind,
+        failure: LifecycleFailure,
+        expected: str,
     ) -> None:
-        result = MountResult("v", False, failure_reason=reason, failure=failure)
+        result = MountResult("v", success=False, failure_reason=reason, failure=failure)
         assert mount_failure_detail(result) == expected
 
     def test_success_has_no_detail(self) -> None:
-        assert mount_failure_detail(MountResult("v", True)) is None
+        assert mount_failure_detail(MountResult("v", success=True)) is None
 
 
 class TestUmountFailureDetail:
@@ -321,7 +334,9 @@ class TestUmountFailureDetail:
             (
                 UmountFailureKind.UNMOUNT_FAILED,
                 LifecycleFailure(
-                    step=LifecycleStep.UNMOUNT, exit_code=1, message="busy"
+                    step=LifecycleStep.UNMOUNT,
+                    exit_code=1,
+                    message="busy",
                 ),
                 "umount failed (exit 1): busy",
                 "device may still be mounted, manual umount needed",
@@ -359,11 +374,16 @@ class TestUmountFailureDetail:
         detail: str,
         warning: str,
     ) -> None:
-        result = UmountResult("v", False, failure_reason=reason, failure=failure)
+        result = UmountResult(
+            "v",
+            success=False,
+            failure_reason=reason,
+            failure=failure,
+        )
         assert umount_failure_detail(result) == detail
         assert umount_failure_warning(result) == warning
 
     def test_success_has_no_detail(self) -> None:
-        result = UmountResult("v", True)
+        result = UmountResult("v", success=True)
         assert umount_failure_detail(result) is None
         assert umount_failure_warning(result) is None

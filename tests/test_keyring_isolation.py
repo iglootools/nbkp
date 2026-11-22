@@ -1,4 +1,5 @@
-"""The test session must never reach the developer's real OS keyring.
+"""
+The test session must never reach the developer's real OS keyring.
 
 ``tests/conftest.py`` points keyring at its fail backend; these tests guard
 that isolation, so a test that loads a config with an encrypted volume can

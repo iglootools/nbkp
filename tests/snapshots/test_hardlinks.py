@@ -46,7 +46,8 @@ def _local_config() -> tuple[SyncConfig, Config]:
                 slug="ep-dst",
                 volume="dst",
                 hard_link_snapshots=HardLinkSnapshotConfig(
-                    enabled=True, max_snapshots=5
+                    enabled=True,
+                    max_snapshots=5,
                 ),
             ),
         },
@@ -73,7 +74,8 @@ def _remote_config() -> tuple[SyncConfig, Config, dict[str, ResolvedEndpoint]]:
                 slug="ep-dst",
                 volume="dst",
                 hard_link_snapshots=HardLinkSnapshotConfig(
-                    enabled=True, max_snapshots=3
+                    enabled=True,
+                    max_snapshots=3,
                 ),
             ),
         },
@@ -98,7 +100,12 @@ class TestCreateSnapshotDir:
         runner = FakeCommandRunner()
 
         path = create_snapshot_dir(
-            sync, config, now=_NOW, platform="linux", resolved_endpoints=re, run=runner
+            sync,
+            config,
+            now=_NOW,
+            platform="linux",
+            resolved_endpoints=re,
+            run=runner,
         )
 
         assert path == f"/backup/snapshots/{_TS_REMOTE.name}"
@@ -111,7 +118,8 @@ class TestCreateSnapshotDir:
     def test_failure_raises(self) -> None:
         sync, config = _local_config()
         runner = FakeCommandRunner().on(
-            "mkdir", returns=completed(1, stderr="permission denied")
+            "mkdir",
+            returns=completed(1, stderr="permission denied"),
         )
 
         with pytest.raises(
@@ -204,10 +212,15 @@ class TestCleanupOrphanedSnapshots:
         return sync, config
 
     def test_deletes_a_first_run_leftover_when_latest_is_dev_null(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
-        """A first run interrupted before ``latest`` moved leaves a partial
-        snapshot that would otherwise pass for a complete one later on."""
+        """
+        A first-run leftover is deleted while ``latest`` is ``/dev/null``.
+
+        A first run interrupted before ``latest`` moved leaves a partial snapshot that
+        would otherwise pass for a complete one later on.
+        """
         sync, config = self._leftover_config(tmp_path)
         (tmp_path / "latest").symlink_to("/dev/null")
 
@@ -273,7 +286,8 @@ class TestPruneSnapshots:
                     slug="ep-dst",
                     volume="dst",
                     hard_link_snapshots=HardLinkSnapshotConfig(
-                        enabled=True, max_snapshots=2
+                        enabled=True,
+                        max_snapshots=2,
                     ),
                 ),
             },
@@ -307,7 +321,8 @@ class TestPruneSnapshots:
                     slug="ep-dst",
                     volume="dst",
                     hard_link_snapshots=HardLinkSnapshotConfig(
-                        enabled=True, max_snapshots=1
+                        enabled=True,
+                        max_snapshots=1,
                     ),
                 ),
             },

@@ -39,9 +39,12 @@ NEW_SNAPSHOT_NAME = "2026-03-06T14:30:00.000Z"
 
 
 def run_syncs(
-    config: Config, sync_statuses: dict[str, SyncStatus], **kwargs: Any
+    config: Config,
+    sync_statuses: dict[str, SyncStatus],
+    **kwargs: Any,  # noqa: ANN401 -- RunOptions fields and run_all_syncs callbacks
 ) -> list[SyncResult]:
-    """run_all_syncs with a fixed clock and platform.
+    """
+    run_all_syncs with a fixed clock and platform.
 
     Pass ``rsync=`` and ``run_command=`` fakes (``tests.fakes``) for any sync
     that is attempted: the defaults are the real rsync and transport.
@@ -143,7 +146,8 @@ def inactive_src_ep_status(config: Config, sync: SyncConfig) -> SourceEndpointSt
 
 
 def inactive_dst_ep_status(
-    config: Config, sync: SyncConfig
+    config: Config,
+    sync: SyncConfig,
 ) -> DestinationEndpointStatus:
     ep = config.destination_endpoint(sync)
     vol = config.volumes[ep.volume]
@@ -178,7 +182,8 @@ def make_snapshot_config(
     btrfs: BtrfsSnapshotConfig | None = None,
     hard_link: HardLinkSnapshotConfig | None = None,
 ) -> Config:
-    """Local source, snapshot-enabled destination ``/dst`` on a remote host.
+    """
+    Local source, snapshot-enabled destination ``/dst`` on a remote host.
 
     Remote, so every destination operation — including the ``latest``
     symlink, which is a local filesystem call on a local volume — goes

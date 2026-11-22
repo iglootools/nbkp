@@ -1,3 +1,5 @@
+"""The ``nbkp config show`` command."""
+
 import typer
 from rich.console import Console
 
@@ -5,17 +7,20 @@ from nbkp.clidisplay import OutputFormat, echo_json
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
 from nbkp.cliwiring.options import CONFIG_OPTION, OUTPUT_OPTION
 from nbkp.cliwiring.runtime import runtime_of
-from nbkp.config.cli import app
 from nbkp.config.output import format_human_config
 
 
-@app.command("show")
 def show_cmd(
     ctx: typer.Context,
     config: CONFIG_OPTION = None,
     output: OUTPUT_OPTION = OutputFormat.HUMAN,
 ) -> None:
-    """Load, validate, and render the config as tables or JSON. Useful for verifying that inheritance, filters, and cross-references resolve correctly."""
+    """
+    Load, validate, and render the config as tables or JSON.
+
+    Useful for verifying that inheritance, filters, and cross-references resolve
+    correctly.
+    """
     cfg = load_config_or_exit(runtime_of(ctx), config, output)
     match output:
         case OutputFormat.JSON:

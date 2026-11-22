@@ -1,4 +1,5 @@
-"""Mount lifecycle context manager.
+"""
+Mount lifecycle context manager.
 
 Provides a display-agnostic building block for mount/umount lifecycle
 that both the CLI and tests can share.
@@ -41,7 +42,8 @@ def managed_mount(
     on_umount_end: Callable[[str, UmountResult], None] | None = None,
     run: VolumeCommandRunner = run_on_volume,
 ) -> Generator[tuple[Config, dict[str, MountObservation]]]:
-    """Context manager that mounts volumes on entry and umounts on exit.
+    """
+    Context manager that mounts volumes on entry and umounts on exit.
 
     Yields ``(resolved_config, mount_observations)``.  ``resolved_config`` is
     *config* with discovered mountpoints filled in for mount-managed volumes
@@ -52,6 +54,10 @@ def managed_mount(
 
     Parameters
     ----------
+    config:
+        The loaded config.
+    resolved:
+        The SSH endpoint resolution chose for each remote volume.
     passphrase_fn:
         Callable that returns a passphrase for a given passphrase-id.
         The caller is responsible for cache management (see
@@ -68,11 +74,22 @@ def managed_mount(
     names:
         When set, only mount/umount these volume names.  Passphrase
         prefetching ignores this filter on purpose.
-    on_prefetch_start / on_prefetch_end:
-        Called around each passphrase retrieval in the prefetch phase.
+    on_prefetch_start:
+        Called before each passphrase retrieval in the prefetch phase.
+    on_prefetch_end:
+        Called after each passphrase retrieval in the prefetch phase.
+    on_mount_start:
+        Called before each volume is mounted.
+    on_mount_end:
+        Called after each volume is mounted, with its result.
+    on_umount_start:
+        Called before each volume is umounted.
+    on_umount_end:
+        Called after each volume is umounted, with its result.
     run:
         Runs the device probes and ``udisksctl`` commands on the volume's
         host: :func:`remote.dispatch.run_on_volume` unless a test injects one.
+
     """
     do_mount = mount and any(v.mount is not None for v in config.volumes.values())
     do_umount = do_mount and umount
@@ -148,8 +165,10 @@ def mount_phase(
     on_mount_start: Callable[[str], None] | None = None,
     on_mount_end: Callable[[str, MountResult], None] | None = None,
 ) -> list[MountResult]:
-    """Retrieve every configured passphrase, then unlock and mount the
-    mount-managed volumes (*names* only, when given) through *run*.
+    """
+    Retrieve every passphrase, then unlock and mount the mount-managed volumes.
+
+    Only *names*, when given; the commands run through *run*.
 
     The mount half of :func:`managed_mount`, for callers that umount on their
     own terms (``disks mount`` never does). It does not umount what it

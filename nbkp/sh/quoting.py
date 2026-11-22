@@ -1,4 +1,5 @@
-"""Shell quoting for generated scripts.
+"""
+Shell quoting for generated scripts.
 
 Paths baked into the script are literal, except for a few deliberate
 runtime variables (``NBKP_SCRIPT_DIR``, ``NBKP_TS``, the ``snap`` loop
@@ -23,7 +24,7 @@ INDENT = "    "
 
 
 def shell_var(name: str) -> str:
-    """Placeholder that :func:`quote` renders as the expansion ``${name}``."""
+    """Return a placeholder :func:`quote` renders as the expansion ``${name}``."""
     return f"{_MARK}{name}{_MARK}"
 
 
@@ -33,15 +34,17 @@ SNAP = shell_var("snap")
 
 
 def has_shell_var(s: str) -> bool:
+    """Return whether *s* holds a :func:`shell_var` placeholder."""
     return _MARK in s
 
 
 def quote(s: str) -> str:
-    """Quote *s* as one shell word, expanding only placeholders.
+    r"""
+    Quote *s* as one shell word, expanding only placeholders.
 
     Without placeholders, single quotes (``shlex.quote``).  With
     placeholders, a double-quoted word in which every literal character
-    that is special inside double quotes (``\\ " $ ` ``) is escaped.
+    that is special inside double quotes (``\ " $ ` ``) is escaped.
     """
     if not has_shell_var(s):
         return shlex.quote(s)
@@ -55,11 +58,13 @@ def quote(s: str) -> str:
 
 
 def quote_args(args: list[str]) -> str:
+    """Return *args* as one command line, each quoted with :func:`quote`."""
     return " ".join(quote(a) for a in args)
 
 
 def remote_command(args: list[str]) -> str:
-    """Join *args* into one command string for the remote shell.
+    """
+    Join *args* into one command string for the remote shell.
 
     Each argument is single-quoted for the remote side, except a leading
     ``~`` / ``~/``, which the remote shell must expand to the remote user's
@@ -71,10 +76,14 @@ def remote_command(args: list[str]) -> str:
     return shell_join(args)
 
 
+# A command of this many words or fewer stays on one line.
+_MAX_ONE_LINE_PARTS = 3
+
+
 def format_command(cmd: list[str]) -> str:
     """Format a command with backslash continuations when it is long."""
     parts = [quote(arg) for arg in cmd]
-    if len(parts) <= 3:
+    if len(parts) <= _MAX_ONE_LINE_PARTS:
         return " ".join(parts)
     else:
         sep = f" \\\n{INDENT}"
@@ -87,9 +96,10 @@ def comment_out(text: str) -> str:
 
 
 def comment_text(s: str) -> str:
-    """*s* made safe to embed in a ``#`` comment line.
+    r"""
+    *s* made safe to embed in a ``#`` comment line.
 
-    Non-printable characters are written as Python escapes (``\\n``): a
+    Non-printable characters are written as Python escapes (``\n``): a
     newline would end the comment and run the rest of *s* as shell code.
     """
     return "".join(c if c.isprintable() else repr(c)[1:-1] for c in s)

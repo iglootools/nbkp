@@ -1,3 +1,5 @@
+"""The combined result of every preflight phase."""
+
 from dataclasses import dataclass
 
 from nbkp.preflight.status.endpoint import (

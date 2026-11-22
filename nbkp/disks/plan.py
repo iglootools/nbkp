@@ -1,4 +1,5 @@
-"""Dry-run planning for the mount lifecycle.
+"""
+Dry-run planning for the mount lifecycle.
 
 ``disks mount --dry-run`` / ``disks umount --dry-run`` report what *would*
 happen without calling any mutating ``udisksctl`` command: the current state
@@ -18,7 +19,8 @@ from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.remote.errors import describe_error, ssh_connection_errors
 
 type MountProbeFn = Callable[
-    [Volume, MountConfig, ResolvedEndpoints], MountCapabilities
+    [Volume, MountConfig, ResolvedEndpoints],
+    MountCapabilities,
 ]
 """Reads a volume's current mount state: :func:`check_mount_status` in
 production, a fake in tests."""
@@ -35,6 +37,13 @@ class MountAction(enum.StrEnum):
 
 @dataclass(frozen=True)
 class VolumePlan:
+    """
+    The lifecycle steps a dry run would take on one volume, in order.
+
+    ``probe_failed`` is set when the volume's state could not be probed, so
+    the plan cannot say what the real run would do.
+    """
+
     volume_slug: str
     actions: tuple[MountAction, ...]
     detail: str | None = None
@@ -43,7 +52,8 @@ class VolumePlan:
 
 
 def _mount_actions(
-    mount: MountConfig, caps: MountCapabilities
+    mount: MountConfig,
+    caps: MountCapabilities,
 ) -> tuple[tuple[MountAction, ...], str | None]:
     match (caps.device_present, caps.mounted):
         case (False, _):
@@ -62,7 +72,8 @@ def _mount_actions(
 
 
 def _umount_actions(
-    mount: MountConfig, caps: MountCapabilities
+    mount: MountConfig,
+    caps: MountCapabilities,
 ) -> tuple[tuple[MountAction, ...], str | None]:
     actions = (
         *([MountAction.UNMOUNT] if caps.mounted is True else []),
@@ -87,7 +98,10 @@ def _plan_one(
         caps = probe(volume, mount, resolved)
     except ssh_connection_errors() as e:
         return VolumePlan(
-            volume.slug, (), probe_error_detail(volume, e), probe_failed=True
+            volume.slug,
+            (),
+            probe_error_detail(volume, e),
+            probe_failed=True,
         )
     if _state_unknown(mount, caps):
         return VolumePlan(volume.slug, (), "device state unknown", probe_failed=True)
@@ -99,8 +113,11 @@ def _plan_one(
 
 
 def probe_error_detail(volume: Volume, error: BaseException) -> str:
-    """Why a volume's state could not be probed: a local tool not installed,
-    or the host unreachable."""
+    """
+    Return why a volume's state could not be probed.
+
+    A local tool not installed, or the host unreachable.
+    """
     match missing_local_tool(volume, error):
         case str() as tool:
             return f"{tool} not installed"
@@ -109,8 +126,11 @@ def probe_error_detail(volume: Volume, error: BaseException) -> str:
 
 
 def _state_unknown(mount: MountConfig, caps: MountCapabilities) -> bool:
-    """A failed ``lsblk``/``findmnt`` probe leaves the state ``None`` rather
-    than raising, and a plan built on it would read ``None`` as "not mounted".
+    """
+    Return whether a probe left the state unknown.
+
+    A failed ``lsblk``/``findmnt`` probe leaves the state ``None`` rather than raising,
+    and a plan built on it would read ``None`` as "not mounted".
     """
     return caps.device_present is not False and (
         caps.mounted is None
@@ -130,13 +150,17 @@ def plan_lifecycle(
     return [
         _plan_one(vol, mount, resolved, mounting=mounting, probe=probe)
         for _slug, vol, mount in lifecycle_volumes(
-            config, resolved, names, mounting=mounting
+            config,
+            resolved,
+            names,
+            mounting=mounting,
         )
     ]
 
 
 def plan_incomplete(plans: Sequence[VolumePlan]) -> bool:
-    """Whether a volume's state could not be probed.
+    """
+    Whether a volume's state could not be probed.
 
     The real run would fail on it too, so a dry run that cannot tell what it
     would do must not report success.
@@ -145,6 +169,7 @@ def plan_incomplete(plans: Sequence[VolumePlan]) -> bool:
 
 
 def plan_json(plans: list[VolumePlan]) -> list[dict[str, object]]:
+    """Return the plans as JSON-ready dicts for ``--output json``."""
     return [
         {
             "volume": plan.volume_slug,

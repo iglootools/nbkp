@@ -1,13 +1,17 @@
+"""The ``nbkp snapshots`` command group: ``prune`` and ``show``."""
+
 import typer
 
+from nbkp.snapshots.cli.prune_cmd import prune_cmd
+from nbkp.snapshots.cli.show_cmd import show_cmd
+
 app = typer.Typer(
-    name="snapshots", help="Snapshot management commands", no_args_is_help=True
+    name="snapshots",
+    help="Snapshot management commands",
+    no_args_is_help=True,
 )
 
-# Import order determines the order commands are listed in `--help` and in the
-# generated CLI reference. Keep isort out of it.
-# isort: off
-from nbkp.snapshots.cli import prune_cmd as prune_cmd
-from nbkp.snapshots.cli import show_cmd as show_cmd
-
-# isort: on
+# Registration order is the order commands are listed in `--help` and in the
+# generated CLI reference.
+app.command("prune")(prune_cmd)
+app.command("show")(show_cmd)

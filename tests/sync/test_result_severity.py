@@ -17,19 +17,29 @@ _OK_PROC = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=
 
 
 def _success() -> SyncResult:
-    return SyncResult.succeeded("s", False, _OK_PROC)
+    return SyncResult.succeeded("s", dry_run=False, proc=_OK_PROC)
 
 
 def _failed() -> SyncResult:
-    return SyncResult.failed("s", False, SyncFailureKind.RSYNC, "boom")
+    return SyncResult.failed(
+        "s",
+        dry_run=False,
+        failure=SyncFailureKind.RSYNC,
+        detail="boom",
+    )
 
 
 def _skipped(kind: SyncFailureKind) -> SyncResult:
-    return SyncResult.skipped("s", False, kind, (SyncErrorKind.DISABLED,))
+    return SyncResult.skipped(
+        "s",
+        dry_run=False,
+        failure=kind,
+        preflight_errors=(SyncErrorKind.DISABLED,),
+    )
 
 
 def _cancelled(kind: SyncFailureKind) -> SyncResult:
-    return SyncResult.cancelled("s", False, kind, "up")
+    return SyncResult.cancelled("s", dry_run=False, failure=kind, upstream="up")
 
 
 ALL_STRICTNESS = list(Strictness)
@@ -47,7 +57,8 @@ class TestRuntimeOutcomes:
 
     @pytest.mark.parametrize("strictness", ALL_STRICTNESS)
     def test_cancelled_by_failed_upstream_is_error(
-        self, strictness: Strictness
+        self,
+        strictness: Strictness,
     ) -> None:
         result = _cancelled(SyncFailureKind.UPSTREAM_FAILED)
         assert result_severity(result, strictness) is Severity.ERROR
@@ -73,14 +84,21 @@ class TestInactiveRootedOutcomes:
         ],
     )
     def test_follow_inactive_policy(
-        self, result: SyncResult, strictness: Strictness, expected: Severity
+        self,
+        result: SyncResult,
+        strictness: Strictness,
+        expected: Severity,
     ) -> None:
         assert result_severity(result, strictness) is expected
 
 
 class TestDisabledRootedOutcomes:
-    """A disabled sync, and what it cancels: never fatal (docs: a disabled
-    sync is never fatal, and a cancellation is as severe as its cause)."""
+    """
+    A disabled sync, and what it cancels, is never fatal.
+
+    As the docs say: a disabled sync is never fatal, and a cancellation is as severe as
+    its cause.
+    """
 
     @pytest.mark.parametrize(
         "result",
@@ -106,7 +124,9 @@ class TestPreflightSkip:
         ],
     )
     def test_follows_infrastructure_policy(
-        self, strictness: Strictness, expected: Severity
+        self,
+        strictness: Strictness,
+        expected: Severity,
     ) -> None:
         result = _skipped(SyncFailureKind.PREFLIGHT)
         assert result_severity(result, strictness) is expected

@@ -1,14 +1,18 @@
+"""The config models of an SSH endpoint and its connection options."""
+
 from pathlib import Path
-from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 
 from nbkp.config.protocol.base import ConfigModel, Slug
 from nbkp.config.protocol.errors import ConfigValidationErrorKind, config_error
 
+DEFAULT_SSH_PORT = 22
 
-def _expand_user(v: Any) -> Any:
-    """``~``-expand a path given as a string.
+
+def _expand_user(v: object) -> object:
+    """
+    ``~``-expand a path given as a string.
 
     Non-strings pass through so pydantic rejects them rather than silently
     dropping the value.
@@ -21,7 +25,10 @@ def _expand_user(v: Any) -> Any:
 
 
 class SshConnectionOptions(ConfigModel):
-    """These fields map to parameters across three layers:
+    """
+    SSH connection options, applied across three layers.
+
+    These fields map to parameters across three layers:
     - SSH client: ssh(1) -o options
     - Paramiko: SSHClient.connect() kwargs
       https://docs.paramiko.org/en/stable/api/client.html
@@ -29,61 +36,75 @@ class SshConnectionOptions(ConfigModel):
       https://docs.fabfile.org/en/stable/api/connection.html
     """
 
-    # SSH: ConnectTimeout | Paramiko: timeout | Fabric: connect_timeout
+    # Maps to ssh's ConnectTimeout, Paramiko's timeout and Fabric's connect_timeout
     connect_timeout: int = Field(
-        default=10, ge=1, description="Connection timeout in seconds"
+        default=10,
+        ge=1,
+        description="Connection timeout in seconds",
     )
-    # SSH: Compression | Paramiko: compress
+    # Maps to ssh's Compression and Paramiko's compress
     compress: bool = Field(default=False, description="Enable SSH compression")
-    # SSH: ServerAliveInterval | Paramiko: transport.set_keepalive()
+    # Maps to ssh's ServerAliveInterval and Paramiko's transport.set_keepalive()
     server_alive_interval: int | None = Field(
-        default=None, ge=1, description="Keepalive interval in seconds"
+        default=None,
+        ge=1,
+        description="Keepalive interval in seconds",
     )
 
-    # Paramiko: allow_agent
+    # Maps to Paramiko's allow_agent
     allow_agent: bool = Field(
-        default=True, description="Use SSH agent for authentication"
+        default=True,
+        description="Use SSH agent for authentication",
     )
-    # Paramiko: look_for_keys
+    # Maps to Paramiko's look_for_keys
     look_for_keys: bool = Field(default=True, description="Search ~/.ssh/ for keys")
 
-    # Paramiko: banner_timeout
+    # Maps to Paramiko's banner_timeout
     banner_timeout: float | None = Field(
-        default=None, ge=0, description="Wait time for SSH banner"
+        default=None,
+        ge=0,
+        description="Wait time for SSH banner",
     )
-    # Paramiko: auth_timeout
+    # Maps to Paramiko's auth_timeout
     auth_timeout: float | None = Field(
-        default=None, ge=0, description="Wait time for auth response"
+        default=None,
+        ge=0,
+        description="Wait time for auth response",
     )
-    # Paramiko: channel_timeout (no SSH CLI equivalent)
+    # Maps to Paramiko's channel_timeout (no SSH CLI equivalent)
     channel_timeout: float | None = Field(
         default=None,
         ge=0,
         description="Wait time for channel open (Paramiko/Fabric only)",
     )
 
-    # SSH: StrictHostKeyChecking | Paramiko: SSHClient.set_missing_host_key_policy()
+    # Maps to ssh's StrictHostKeyChecking and the policy set by Paramiko's
+    # SSHClient.set_missing_host_key_policy() method
     strict_host_key_checking: bool = Field(
-        default=True, description="Verify remote host key"
+        default=True,
+        description="Verify remote host key",
     )
-    # SSH: UserKnownHostsFile | Paramiko: SSHClient.load_host_keys()
+    # Maps to ssh's UserKnownHostsFile and Paramiko's SSHClient.load_host_keys()
     known_hosts_file: str | None = Field(
-        default=None, description="Custom known hosts file path"
+        default=None,
+        description="Custom known hosts file path",
     )
 
     @field_validator("known_hosts_file", mode="before")
     @classmethod
-    def normalize_known_hosts_file(cls, v: Any) -> Any:
+    def normalize_known_hosts_file(cls, v: object) -> object:
+        """Return the known-hosts path with ``~`` expanded."""
         # OpenSSH expands ``~`` in UserKnownHostsFile, Paramiko's
         # load_host_keys does not: expand it once here for both.
         return _expand_user(v)
 
-    # SSH: ForwardAgent | Fabric: forward_agent
+    # Maps to ssh's ForwardAgent and Fabric's forward_agent
     forward_agent: bool = Field(
-        default=False, description="Enable SSH agent forwarding"
+        default=False,
+        description="Enable SSH agent forwarding",
     )
 
-    # Paramiko: disabled_algorithms (no SSH CLI equivalent)
+    # Maps to Paramiko's disabled_algorithms (no SSH CLI equivalent)
     disabled_algorithms: dict[str, list[str]] | None = Field(
         default=None,
         description="Disable specific SSH algorithms (Paramiko/Fabric only)",
@@ -91,19 +112,28 @@ class SshConnectionOptions(ConfigModel):
 
 
 class SshEndpoint(ConfigModel):
+    """
+    A host nbkp reaches over SSH, and how to reach it.
+
+    It may jump through other endpoints (``proxy-jump`` or ``proxy-jumps``),
+    carry location tags that pick it on a given network, and ``extends``
+    another endpoint to inherit its fields.
+    """
+
     slug: Slug
     host: str = Field(..., min_length=1, description="Hostname or SSH config alias")
-    port: int = Field(default=22, ge=1, le=65535, description="SSH port")
+    port: int = Field(default=DEFAULT_SSH_PORT, ge=1, le=65535, description="SSH port")
     user: str | None = Field(default=None, description="SSH username")
     key: str | None = Field(default=None, description="Path to private key file")
 
     @field_validator("key", mode="before")
     @classmethod
-    def normalize_key(cls, v: Any) -> Any:
+    def normalize_key(cls, v: object) -> object:
+        """Return the private key path with ``~`` expanded."""
         return _expand_user(v)
 
     connection_options: SshConnectionOptions = Field(
-        default_factory=lambda: SshConnectionOptions(),
+        default_factory=SshConnectionOptions,
         description="SSH connection options",
     )
     proxy_jump: str | None = Field(
@@ -131,6 +161,7 @@ class SshEndpoint(ConfigModel):
 
     @model_validator(mode="after")
     def validate_proxy_exclusivity(self) -> SshEndpoint:
+        """Raise a ``mutually-exclusive`` error if both proxy-jump fields are set."""
         if self.proxy_jump is not None and self.proxy_jumps is not None:
             raise config_error(
                 ConfigValidationErrorKind.MUTUALLY_EXCLUSIVE,
@@ -140,6 +171,7 @@ class SshEndpoint(ConfigModel):
 
     @model_validator(mode="after")
     def validate_location_exclusivity(self) -> SshEndpoint:
+        """Raise a ``mutually-exclusive`` error if both location fields are set."""
         if self.location is not None and self.locations is not None:
             raise config_error(
                 ConfigValidationErrorKind.MUTUALLY_EXCLUSIVE,
@@ -149,6 +181,7 @@ class SshEndpoint(ConfigModel):
 
     @property
     def proxy_jump_chain(self) -> list[str]:
+        """Return the slugs of the bastions to jump through, in order; empty if none."""
         if self.proxy_jumps is not None:
             return list(self.proxy_jumps)
         elif self.proxy_jump is not None:
@@ -158,6 +191,7 @@ class SshEndpoint(ConfigModel):
 
     @property
     def location_list(self) -> list[str]:
+        """Return the endpoint's location tags, from either field; empty if none."""
         if self.locations is not None:
             return list(self.locations)
         elif self.location is not None:
@@ -174,5 +208,7 @@ class SshEndpoint(ConfigModel):
     def host_label(self) -> str:
         """The destination with its port when not 22 (``user@host:2222``)."""
         return (
-            f"{self.destination}:{self.port}" if self.port != 22 else self.destination
+            f"{self.destination}:{self.port}"
+            if self.port != DEFAULT_SSH_PORT
+            else self.destination
         )

@@ -1,3 +1,5 @@
+"""Snapshot operations shared by the btrfs and hard-link backends."""
+
 import os
 from collections.abc import Callable
 from datetime import datetime
@@ -37,20 +39,29 @@ def create_snapshot_timestamp(
     volume: Volume,
     platform: str,
 ) -> Snapshot:
+    """
+    Return the snapshot to create at *now* on *volume*.
+
+    On a local volume under macOS (*platform* is ``sys.platform``) the name
+    uses hyphens instead of colons, which APFS/HFS+ forbid in filenames.
+    """
     macos_local = isinstance(volume, LocalVolume) and platform == "darwin"
     return Snapshot.create(now, macos_local=macos_local)
 
 
 def resolve_dest_path(sync: SyncConfig, config: Config) -> str:
+    """Return the absolute path of *sync*'s destination endpoint on its volume."""
     dst = config.destination_endpoint(sync)
     return resolve_endpoint_path(config.volumes[dst.volume], dst.subdir)
 
 
 def destination_volume(sync: SyncConfig, config: Config) -> Volume:
+    """Return the volume that holds *sync*'s destination."""
     return config.volumes[config.destination_endpoint(sync).volume]
 
 
 def snapshots_dir(sync: SyncConfig, config: Config) -> str:
+    """Return the path of the ``snapshots/`` directory under *sync*'s destination."""
     return f"{resolve_dest_path(sync, config)}/{SNAPSHOTS_DIR}"
 
 
@@ -63,7 +74,8 @@ def ensure_after_latest(
     latest: Snapshot | None,
     op: SnapshotOp,
 ) -> None:
-    """Refuse to name a new snapshot that would not sort after *latest*.
+    """
+    Refuse to name a new snapshot that would not sort after *latest*.
 
     Snapshot names are timestamps, and orphan cleanup treats every
     snapshot newer than ``latest`` as a leftover of a failed sync.  A
@@ -74,7 +86,9 @@ def ensure_after_latest(
     Either way the sync must fail instead.
     """
     snapshot = create_snapshot_timestamp(
-        now, destination_volume(sync, config), platform
+        now,
+        destination_volume(sync, config),
+        platform,
     )
     if latest is not None and parse_snapshot_name(snapshot.name) <= latest.timestamp:
         path = f"{snapshots_dir(sync, config)}/{snapshot.name}"
@@ -93,7 +107,12 @@ def _snapshots_dir_exists(
 ) -> bool:
     """Whether *path* is a directory; raises when that cannot be determined."""
     result = run_snapshot_command(
-        SnapshotOp.LIST, path, ["test", "-d", path], volume, resolved_endpoints, run=run
+        SnapshotOp.LIST,
+        path,
+        ["test", "-d", path],
+        volume,
+        resolved_endpoints,
+        run=run,
     )
     match result.returncode:
         case 0:
@@ -111,7 +130,8 @@ def list_snapshots(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> list[Snapshot]:
-    """List all snapshots sorted oldest-first.
+    """
+    List all snapshots sorted oldest-first.
 
     An absent ``snapshots/`` directory means no snapshots yet and yields
     ``[]``; any other listing failure raises
@@ -122,7 +142,12 @@ def list_snapshots(
     path = snapshots_dir(sync, config)
     dst_vol = destination_volume(sync, config)
     result = run_snapshot_command(
-        SnapshotOp.LIST, path, ["ls", path], dst_vol, re, run=run
+        SnapshotOp.LIST,
+        path,
+        ["ls", path],
+        dst_vol,
+        re,
+        run=run,
     )
     if result.returncode == 0:
         return parse_snapshot_listing(result.stdout)
@@ -149,7 +174,12 @@ def _read_remote_symlink_target(
     """``readlink``; on failure, ``test -L`` tells "absent" from "broken"."""
     op = SnapshotOp.READ_LATEST
     result = run_snapshot_command(
-        op, latest_path, ["readlink", latest_path], volume, resolved_endpoints, run=run
+        op,
+        latest_path,
+        ["readlink", latest_path],
+        volume,
+        resolved_endpoints,
+        run=run,
     )
     if result.returncode == 0:
         return result.stdout.strip()
@@ -175,7 +205,8 @@ def _read_raw_symlink_target(
     resolved_endpoints: ResolvedEndpoints,
     run: VolumeCommandRunner,
 ) -> str | None:
-    """Read the raw symlink target string, or None if there is no symlink.
+    """
+    Read the raw symlink target string, or None if there is no symlink.
 
     A symlink that exists but cannot be read raises instead of returning
     ``None``: callers use the target to protect the latest snapshot from
@@ -186,7 +217,10 @@ def _read_raw_symlink_target(
             return _read_local_symlink_target(latest_path)
         case RemoteVolume():
             return _read_remote_symlink_target(
-                volume, latest_path, resolved_endpoints, run
+                volume,
+                latest_path,
+                resolved_endpoints,
+                run,
             )
 
 
@@ -197,19 +231,23 @@ def read_latest_symlink(
     resolved_endpoints: ResolvedEndpoints | None = None,
     run: VolumeCommandRunner = run_on_volume,
 ) -> Snapshot | None:
-    """Read the latest symlink target, returning a Snapshot.
+    """
+    Read the latest symlink target, returning a Snapshot.
 
     Returns ``None`` if the symlink does not exist or points to
     ``/dev/null`` (the canonical "no snapshot yet" marker).  A target that
     is not ``snapshots/<name>`` (see :meth:`Snapshot.from_latest_target`)
-    raises
-    :class:`~nbkp.snapshots.errors.SnapshotOperationError`: callers use it
+    raises :class:`~nbkp.snapshots.errors.SnapshotOperationError`: callers use it
     to protect the latest snapshot, so it must not be guessed at.
+
     """
     re = resolved_endpoints or {}
     latest_path = f"{resolve_dest_path(sync, config)}/{LATEST_LINK}"
     target = _read_raw_symlink_target(
-        destination_volume(sync, config), latest_path, re, run
+        destination_volume(sync, config),
+        latest_path,
+        re,
+        run,
     )
 
     if target is None or target == DEVNULL_TARGET:
@@ -219,12 +257,15 @@ def read_latest_symlink(
             return Snapshot.from_latest_target(target)
         except ValueError as e:
             raise SnapshotOperationError(
-                SnapshotOp.READ_LATEST, latest_path, f"not a snapshot: {target}"
+                SnapshotOp.READ_LATEST,
+                latest_path,
+                f"not a snapshot: {target}",
             ) from e
 
 
 def _replace_local_symlink(latest_path: str, target: str) -> None:
-    """Point *latest_path* at *target* in one atomic step.
+    """
+    Point *latest_path* at *target* in one atomic step.
 
     The link is made under a temporary name next to it and renamed over
     ``latest``, so an interruption leaves either the old or the new link,
@@ -249,6 +290,13 @@ def update_latest_symlink(
     resolved_endpoints: ResolvedEndpoints | None = None,
     run: VolumeCommandRunner = run_on_volume,
 ) -> None:
+    """
+    Point *sync*'s ``latest`` symlink at *snapshot*.
+
+    The target is relative (``snapshots/<name>``).  Locally the link is
+    replaced atomically; on a remote volume ``ln -sfn`` replaces it.
+    Raises :class:`SnapshotOperationError` when the update fails.
+    """
     re = resolved_endpoints or {}
     latest_path = f"{resolve_dest_path(sync, config)}/{LATEST_LINK}"
     target = f"{SNAPSHOTS_DIR}/{snapshot.name}"
@@ -257,7 +305,9 @@ def update_latest_symlink(
     match destination_volume(sync, config):
         case LocalVolume():
             local_fs_op(
-                op, latest_path, lambda: _replace_local_symlink(latest_path, target)
+                op,
+                latest_path,
+                lambda: _replace_local_symlink(latest_path, target),
             )
         case RemoteVolume() as dst_vol:
             run_checked(
@@ -280,7 +330,13 @@ class DeleteSnapshotFn(Protocol):
         resolved_endpoints: ResolvedEndpoints,
         *,
         run: VolumeCommandRunner = ...,
-    ) -> None: ...
+    ) -> None:
+        """
+        Delete the snapshot at *path* on *volume*.
+
+        Raises :class:`SnapshotOperationError` when the deletion fails.
+        """
+        ...
 
 
 def prune_oldest_snapshots(
@@ -293,8 +349,10 @@ def prune_oldest_snapshots(
     resolved_endpoints: ResolvedEndpoints | None = None,
     run: VolumeCommandRunner = run_on_volume,
 ) -> list[str]:
-    """Delete oldest snapshots exceeding max_snapshots with the backend's
-    *delete_snapshot*.
+    """
+    Delete the oldest snapshots beyond max_snapshots.
+
+    Each is deleted with the backend's *delete_snapshot*.
 
     Never prunes the snapshot that the latest symlink points to.
     Returns list of deleted (or would-be-deleted) paths.  A failed deletion
@@ -320,15 +378,19 @@ def prune_oldest_snapshots(
         if not dry_run:
             dst_vol = destination_volume(sync, config)
             _delete_in_order(
-                to_delete, lambda path: delete_snapshot(path, dst_vol, re, run=run)
+                to_delete,
+                lambda path: delete_snapshot(path, dst_vol, re, run=run),
             )
 
         return to_delete
 
 
 def _delete_in_order(paths: list[str], delete: Callable[[str], None]) -> None:
-    """Delete *paths* in order; a failure raises :class:`SnapshotPruneError`
-    with the paths already deleted."""
+    """
+    Delete *paths* in order.
+
+    A failure raises :class:`SnapshotPruneError` with the paths already deleted.
+    """
     for i, path in enumerate(paths):
         try:
             delete(path)

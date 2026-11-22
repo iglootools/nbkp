@@ -1,3 +1,5 @@
+"""The ``nbkp run`` command: preflight, then every active sync, with progress."""
+
 from collections.abc import Sequence
 from typing import Annotated
 
@@ -65,6 +67,7 @@ _ABORT_DETAIL_INDENT = 2
 def run_cmd(
     ctx: typer.Context,
     config: CONFIG_OPTION = None,
+    *,
     dry_run: DRY_RUN_OPTION = False,
     sync: SYNC_OPTION = None,
     output: OUTPUT_OPTION = OutputFormat.HUMAN,
@@ -102,7 +105,11 @@ def run_cmd(
     mount: MOUNT_OPTION = True,
     umount: UMOUNT_OPTION = True,
 ) -> None:
-    """Execute all active syncs in dependency order. Supports dry-run, progress display, snapshot creation, and automatic pruning."""
+    """
+    Execute all active syncs in dependency order.
+
+    Supports dry-run, progress display, snapshot creation, and automatic pruning.
+    """
     runtime = runtime_of(ctx)
     cfg = load_config_or_exit(runtime, config, output)
     require_known_syncs(cfg, sync, output)
@@ -130,8 +137,8 @@ def run_cmd(
                 exclude_location or [],
                 sync,
                 progress,
-                strictness,
-                invocation,
+                strictness=strictness,
+                invocation=invocation,
             )
             if output is OutputFormat.HUMAN
             else None
@@ -160,14 +167,22 @@ def run_cmd(
             which=runtime.which,
         )
     _print_outcome(
-        pipeline, cfg, resolved, output, strictness, dry_run, hint, umount_results
+        pipeline,
+        cfg,
+        resolved,
+        output,
+        strictness,
+        dry_run=dry_run,
+        hint=hint,
+        umount_results=umount_results,
     )
     if run_failed(pipeline, umount_results):
         raise typer.Exit(1)
 
 
 class _HumanProgress:
-    """Live progress display of a human-format run.
+    """
+    Live progress display of a human-format run.
 
     Mutable by necessity: it owns the check progress bar and the sync
     spinner, which callbacks start and stop as the pipeline advances.
@@ -180,6 +195,7 @@ class _HumanProgress:
         exclude_locations: list[str],
         only_syncs: list[str] | None,
         progress: ProgressMode | None,
+        *,
         strictness: Strictness,
         invocation: Invocation,
     ) -> None:
@@ -213,7 +229,7 @@ class _HumanProgress:
                 resolved_endpoints=self._resolved,
                 strictness=self._strictness,
                 invocation=self._invocation,
-            )
+            ),
         )
 
     def sync_callbacks(self) -> SyncCallbacks:
@@ -239,8 +255,9 @@ class _HumanProgress:
         severity = result_severity(result, self._strictness)
         self._console.print(
             Text.assemble(
-                (severity_symbol(severity), severity_style(severity)), f" {slug}"
-            )
+                (severity_symbol(severity), severity_style(severity)),
+                f" {slug}",
+            ),
         )
 
 
@@ -250,6 +267,7 @@ def _print_outcome(
     resolved: ResolvedEndpoints,
     output: OutputFormat,
     strictness: Strictness,
+    *,
     dry_run: bool,
     hint: str,
     umount_results: list[UmountResult],
@@ -262,17 +280,17 @@ def _print_outcome(
                     hint if aborted else None,
                     umount_results,
                     dry_run=dry_run,
-                )
+                ),
             )
         case (OutputFormat.HUMAN, True):
             Console(stderr=True).print(abort_message(pipeline, strictness, hint))
         case (OutputFormat.HUMAN, False):
             Console().print(
-                _results_panel(pipeline, cfg, resolved, strictness, dry_run)
+                _results_panel(pipeline, cfg, resolved, strictness, dry_run=dry_run),
             )
     if output is OutputFormat.HUMAN:
         Console(stderr=True).print(
-            format_umount_failures(umount_results, mount_display_names(cfg))
+            format_umount_failures(umount_results, mount_display_names(cfg)),
         )
 
 
@@ -283,10 +301,13 @@ def run_json(
     *,
     dry_run: bool,
 ) -> dict[str, object]:
-    """``run -o json``: ``"dry_run": true`` for a dry run, the preflight
-    statuses, the sync results, the umount outcome of each mount-managed
-    volume, and, when preflight aborted the run, the troubleshoot command
-    (*hint*)."""
+    """
+    Build ``run -o json``.
+
+    ``"dry_run": true`` for a dry run, the preflight statuses, the sync results, the
+    umount outcome of each mount-managed volume, and, when preflight aborted the run,
+    the troubleshoot command (*hint*).
+    """
     return {
         **({"dry_run": True} if dry_run else {}),
         "volumes": list(pipeline.preflight.volume_statuses.values()),
@@ -301,10 +322,16 @@ def run_json(
 
 
 def abort_message(
-    pipeline: PipelineResult, strictness: Strictness, hint: str
+    pipeline: PipelineResult,
+    strictness: Strictness,
+    hint: str,
 ) -> RenderableType:
-    """Why preflight aborted the run: each sync whose errors are fatal under
-    *strictness*, and the troubleshoot command (*hint*) that explains them."""
+    """
+    Explain why preflight aborted the run.
+
+    Each sync whose errors are fatal under *strictness*, and the troubleshoot command
+    (*hint*) that explains them.
+    """
     errored = fatal_sync_errors(pipeline.preflight.sync_statuses, strictness)
     plural = "s" if len(errored) != 1 else ""
     # Text, not markup: slugs and error values are not nbkp-authored markup.
@@ -330,6 +357,7 @@ def _results_panel(
     cfg: Config,
     resolved: ResolvedEndpoints,
     strictness: Strictness,
+    *,
     dry_run: bool,
 ) -> RenderableType:
     sync_severities = {
@@ -338,7 +366,12 @@ def _results_panel(
     sections = [
         *build_rich_tree_sections(cfg, sync_severities),
         Text(""),
-        *build_human_results_sections(pipeline.results, dry_run, cfg, resolved),
+        *build_human_results_sections(
+            pipeline.results,
+            dry_run=dry_run,
+            config=cfg,
+            resolved_endpoints=resolved,
+        ),
     ]
     return Panel(
         Group(*sections),

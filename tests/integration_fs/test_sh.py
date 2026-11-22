@@ -65,7 +65,8 @@ def _build_chain_config(
     step_1_options: RsyncOptions | None = None,
     max_snapshots: int | None = None,
 ) -> Config:
-    """Build a local-only 2-hop chain: src -> stage (hard-link) -> dst.
+    """
+    Build a local-only 2-hop chain: src -> stage (hard-link) -> dst.
 
     Mirrors the structure of the Docker chain test but
     restricted to local volumes (no SSH/remote).
@@ -80,7 +81,9 @@ def _build_chain_config(
     sync_endpoints: dict[str, SyncEndpoint] = {
         "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
         "ep-stage": SyncEndpoint(
-            slug="ep-stage", volume="stage", hard_link_snapshots=hl
+            slug="ep-stage",
+            volume="stage",
+            hard_link_snapshots=hl,
         ),
         "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
     }
@@ -109,7 +112,9 @@ def _seeded_chain(
     max_snapshots: int | None = None,
 ) -> Config:
     config = _build_chain_config(
-        tmp_path, step_1_options=step_1_options, max_snapshots=max_snapshots
+        tmp_path,
+        step_1_options=step_1_options,
+        max_snapshots=max_snapshots,
     )
     create_seed_sentinels(config)
     seed_volume(config.volumes["src"])
@@ -145,7 +150,8 @@ def _state_home(tmp_path: Path) -> Path:
 
 
 def _with_flock(tmp_path: Path) -> dict[str, str]:
-    """The environment, with ``flock`` on ``PATH``.
+    """
+    Return the environment, with ``flock`` on ``PATH``.
 
     Where util-linux's flock(1) is missing (macOS), a stand-in makes the
     same ``flock(2)`` call on the descriptor the script passes.
@@ -182,7 +188,8 @@ def _snapshot_names(tmp_path: Path) -> list[str]:
 
 
 def _write_rm_refusing(bin_dir: Path, name: str) -> None:
-    """An ``rm`` on *bin_dir* that fails for paths containing *name*.
+    """
+    Write an ``rm`` on *bin_dir* that fails for paths containing *name*.
 
     While ``latest`` points to /dev/null, orphan cleanup removes every
     snapshot; this keeps one in place, as a cleanup that failed would.
@@ -210,12 +217,17 @@ class TestGeneratedScriptSyntax:
             now=_NOW,
         )
         result = subprocess.run(
-            ["bash", "-n"], input=script, capture_output=True, text=True, check=False
+            ["bash", "-n"],
+            input=script,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
     def test_chain_config_valid_bash32(self, tmp_path: Path) -> None:
-        """Generated script passes syntax check with /bin/bash.
+        """
+        Generated script passes syntax check with /bin/bash.
 
         On macOS, /bin/bash is version 3.2.  This test verifies
         the generated script avoids bash 4+ features.
@@ -246,7 +258,7 @@ class TestGeneratedScriptExecution:
         assert "All syncs completed successfully" in result.stderr
         [snapshot] = _snapshot_names(tmp_path)
         latest = _stage(tmp_path) / LATEST_LINK
-        assert os.readlink(latest) == f"{SNAPSHOTS_DIR}/{snapshot}"
+        assert str(Path(latest).readlink()) == f"{SNAPSHOTS_DIR}/{snapshot}"
         assert (latest / "sample.txt").is_file()
         assert (tmp_path / _DST_DIR / "sample.txt").is_file()
         assert not (tmp_path / _DST_DIR / "excluded").exists()
@@ -270,7 +282,8 @@ class TestGeneratedScriptExecution:
         assert (snapshots / previous).exists()
 
     def test_first_run_leftover_is_removed_when_latest_is_dev_null(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         """Before the first complete snapshot, every snapshot is a leftover."""
         config = _seeded_chain(tmp_path)
@@ -346,12 +359,13 @@ class TestGeneratedScriptExecution:
 
         assert result.returncode == 0, result.stderr
         assert _snapshot_names(tmp_path) == []
-        assert os.readlink(_stage(tmp_path) / LATEST_LINK) == "/dev/null"
+        assert str(Path(_stage(tmp_path) / LATEST_LINK).readlink()) == "/dev/null"
         # step-2 reads stage's latest -> /dev/null: pending, not a failure
         assert "SKIPPED step-2: source snapshot pending (dry-run)" in result.stderr
 
     def test_rsync_failure_stops_sync_and_cancels_downstream(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         """A failed rsync must not snapshot, move latest, or run downstream."""
         config = _seeded_chain(
@@ -368,12 +382,13 @@ class TestGeneratedScriptExecution:
         assert "CANCELLED step-2" in result.stderr
         # step-2 is itself active, so its cancellation counts (as in run)
         assert "2 sync(s) failed" in result.stderr
-        assert os.readlink(_stage(tmp_path) / LATEST_LINK) == "/dev/null"
+        assert str(Path(_stage(tmp_path) / LATEST_LINK).readlink()) == "/dev/null"
         assert _snapshot_names(tmp_path) == []  # new snapshot dir removed
         assert not (tmp_path / _DST_DIR / "sample.txt").exists()
 
     def test_failure_after_rsync_stops_sync(self, tmp_path: Path) -> None:
-        """Any failing step aborts the sync, not only rsync.
+        """
+        Any failing step aborts the sync, not only rsync.
 
         Sync functions are invoked from a `||`-free context in a `set -e`
         subshell; in a `||` context bash would disable errexit and carry on.
@@ -392,7 +407,7 @@ class TestGeneratedScriptExecution:
         assert "FAILED step-1" in result.stderr
         assert "Completed sync: step-1" not in result.stderr
         assert "CANCELLED step-2" in result.stderr
-        assert os.readlink(_stage(tmp_path) / LATEST_LINK) == "/dev/null"
+        assert str(Path(_stage(tmp_path) / LATEST_LINK).readlink()) == "/dev/null"
 
     def test_missing_volume_sentinel_skips_sync(self, tmp_path: Path) -> None:
         """Like `nbkp run`: a missing .nbkp-vol makes the sync inactive."""
@@ -420,8 +435,11 @@ class TestGeneratedScriptExecution:
 
     @staticmethod
     def _with_step_1_disabled(tmp_path: Path) -> Config:
-        """The chain, run once (step-2 then has a source snapshot), with
-        step-1 disabled and the downstream copy removed."""
+        """
+        Run the chain once, then disable step-1 and remove the downstream copy.
+
+        After the run, step-2 has a source snapshot.
+        """
         chain = _seeded_chain(tmp_path)
         assert _run_script(chain, tmp_path).returncode == 0
         (tmp_path / _DST_DIR / "sample.txt").unlink()
@@ -430,22 +448,27 @@ class TestGeneratedScriptExecution:
                 "syncs": {
                     **chain.syncs,
                     "step-1": chain.syncs["step-1"].model_copy(
-                        update={"enabled": False}
+                        update={"enabled": False},
                     ),
-                }
-            }
+                },
+            },
         )
 
     def test_disabled_upstream_cancels_downstream_as_in_run(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
-        """Script and ``nbkp run`` agree: a disabled sync's downstream is
-        cancelled, not run against a stale or missing source."""
+        """
+        Script and ``nbkp run`` agree: a disabled sync's downstream is cancelled.
+
+        It is not run against a stale or missing source.
+        """
         config = self._with_step_1_disabled(tmp_path)
 
         result = _run_script(config, tmp_path)
         pipeline = check_and_run(
-            config, RunOptions(clock=lambda: _NOW, platform=sys.platform)
+            config,
+            RunOptions(clock=lambda: _NOW, platform=sys.platform),
         )
 
         assert "SKIPPED step-1: disabled" in result.stderr
@@ -459,9 +482,11 @@ class TestGeneratedScriptExecution:
         }
 
     def test_disabled_upstream_never_fails_the_run(self, tmp_path: Path) -> None:
-        """Under ignore-none too: a disabled sync is never fatal, and neither
-        is the cancellation it causes (a cancellation is as severe as its
-        cause), in the script as in ``nbkp run``."""
+        """
+        Under ignore-none too, a disabled sync and its cancellations never fail.
+
+        A cancellation is as severe as its cause, in the script as in ``nbkp run``.
+        """
         config = self._with_step_1_disabled(tmp_path)
 
         result = _run_script(config, tmp_path, "--strictness", "ignore-none")
@@ -479,7 +504,8 @@ class TestGeneratedScriptExecution:
         assert not pipeline.has_sync_failures
 
     def test_inactive_upstream_cancellation_fails_under_ignore_none(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         """ignore-none aborts on the inactive sync before anything runs."""
         config = _seeded_chain(tmp_path)
@@ -490,7 +516,8 @@ class TestGeneratedScriptExecution:
         assert result.returncode == 1
 
     def test_ignore_all_attempts_sync_with_infrastructure_errors(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         """Sentinels present, snapshots/ missing: attempted, and mkdir -p heals it."""
         config = _seeded_chain(tmp_path)
@@ -522,9 +549,11 @@ class TestGeneratedScriptExecution:
         assert (tmp_path / _DST_DIR / "sample.txt").exists()
 
     def test_prune_keeps_snapshots_when_latest_cannot_be_read(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
-        """As in `nbkp run`: an unreadable latest stops pruning, not its guard.
+        """
+        As in `nbkp run`: an unreadable latest stops pruning, not its guard.
 
         The fake readlink fails once latest names a snapshot, i.e. only in
         the prune step. Without the guard, the new snapshot (sorting before
@@ -593,7 +622,8 @@ class TestGeneratedScriptExecution:
         assert "Starting sync" not in result.stderr
 
     def test_prune_never_keeps_extra_over_latest(self, tmp_path: Path) -> None:
-        """Prune drops latest from the candidates before taking the oldest.
+        """
+        Prune drops latest from the candidates before taking the oldest.
 
         A snapshot sorting after the new one (future-dated) must be the one
         pruned, as `prune_snapshots` does, not silently kept.
@@ -607,7 +637,7 @@ class TestGeneratedScriptExecution:
         assert result.returncode == 0, result.stderr
         [snapshot] = _snapshot_names(tmp_path)
         assert snapshot != future
-        assert os.readlink(_stage(tmp_path) / LATEST_LINK) == (
+        assert str(Path(_stage(tmp_path) / LATEST_LINK).readlink()) == (
             f"{SNAPSHOTS_DIR}/{snapshot}"
         )
 
@@ -632,8 +662,12 @@ class TestGeneratedScriptExecution:
             assert (snapshots / name).is_dir()
 
     def _mixed_name_forms(self, tmp_path: Path) -> tuple[str, str]:
-        """An older Linux (colon) snapshot and a newer macOS (hyphen) one that
-        latest points to: ':' sorts after '-', so name order inverts them."""
+        """
+        Create an older Linux snapshot and a newer macOS one that latest points to.
+
+        Linux names use a colon, macOS ones a hyphen: ':' sorts after '-', so name order
+        inverts them.
+        """
         older, newer = "2020-01-01T10:15:00.000Z", "2020-01-01T10-30-00.000Z"
         for name in (older, newer):
             (_stage(tmp_path) / SNAPSHOTS_DIR / name).mkdir()
@@ -643,7 +677,8 @@ class TestGeneratedScriptExecution:
         return older, newer
 
     def test_orphan_cleanup_keeps_older_snapshot_of_other_name_form(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         config = _seeded_chain(tmp_path)
         older, newer = self._mixed_name_forms(tmp_path)
@@ -654,7 +689,8 @@ class TestGeneratedScriptExecution:
         assert {older, newer} <= set(_snapshot_names(tmp_path))
 
     def test_prune_removes_oldest_snapshot_when_name_forms_are_mixed(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         config = _seeded_chain(tmp_path, max_snapshots=2)
         older, newer = self._mixed_name_forms(tmp_path)
@@ -681,12 +717,14 @@ class TestGeneratedScriptExecution:
         assert result.returncode == 1
         assert "is the clock behind?" in result.stderr
         assert _snapshot_names(tmp_path) == [future]
-        assert os.readlink(latest) == f"{SNAPSHOTS_DIR}/{future}"
+        assert str(Path(latest).readlink()) == f"{SNAPSHOTS_DIR}/{future}"
 
     def test_existing_snapshot_dir_is_not_reused(self, tmp_path: Path) -> None:
-        """mkdir without -p: a name collision (here with a leftover that
-        orphan cleanup failed to remove) fails the sync, so a failed rsync
-        never removes a snapshot it did not create.
+        """
+        Mkdir without -p: a name collision fails the sync.
+
+        Here the collision is with a leftover that orphan cleanup failed to remove, so a
+        failed rsync never removes a snapshot it did not create.
         """
         config = _seeded_chain(tmp_path)
         fake_bin = tmp_path / "bin"

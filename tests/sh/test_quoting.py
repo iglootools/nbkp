@@ -11,7 +11,7 @@ from nbkp.sh.quoting import (
 
 
 def _echo(word: str, env: dict[str, str] | None = None) -> str:
-    """What bash produces for *word* (quoted shell text)."""
+    """Return what bash produces for *word* (quoted shell text)."""
     result = subprocess.run(
         ["bash", "-c", f"printf %s {word}"],
         capture_output=True,

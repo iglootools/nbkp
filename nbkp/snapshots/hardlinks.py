@@ -1,3 +1,5 @@
+"""Hard-link snapshots: plain directories that rsync fills using ``--link-dest``."""
+
 import shutil
 from datetime import datetime
 
@@ -24,9 +26,11 @@ def create_snapshot_dir(
     resolved_endpoints: ResolvedEndpoints | None = None,
     run: VolumeCommandRunner = run_on_volume,
 ) -> str:
-    """*now* names the snapshot and *platform* (``sys.platform``) decides the
-    macOS-safe name form; both come from the caller.  Returns the full
-    snapshot path.
+    """
+    Create the snapshot directory, returning its full path.
+
+    *now* names the snapshot and *platform* (``sys.platform``) decides the macOS-safe
+    name form; both come from the caller.
 
     The snapshot directory must not exist yet: reusing one (two runs that
     get the same name) would have rsync write into a complete snapshot,
@@ -39,7 +43,12 @@ def create_snapshot_dir(
     parent = snapshots_dir(sync, config)
     run_checked(SnapshotOp.MKDIR, parent, ["mkdir", "-p", parent], dst_vol, re, run=run)
     run_checked(
-        SnapshotOp.MKDIR, snapshot_path, ["mkdir", snapshot_path], dst_vol, re, run=run
+        SnapshotOp.MKDIR,
+        snapshot_path,
+        ["mkdir", snapshot_path],
+        dst_vol,
+        re,
+        run=run,
     )
     return snapshot_path
 
@@ -51,7 +60,8 @@ def snapshot_path_for(
     now: datetime,
     platform: str,
 ) -> str:
-    """The path :func:`create_snapshot_dir` would create, without creating it.
+    """
+    Return the path :func:`create_snapshot_dir` would create, without creating it.
 
     Used by dry runs, which must not modify the destination.
     """
@@ -67,8 +77,10 @@ def cleanup_orphaned_snapshots(
     resolved_endpoints: ResolvedEndpoints | None = None,
     run: VolumeCommandRunner = run_on_volume,
 ) -> list[str]:
-    """Remove the snapshots newer than the one ``latest`` designates: the
-    leftovers of failed syncs.  Returns the deleted paths.
+    """
+    Remove the snapshots newer than the one ``latest`` designates.
+
+    They are the leftovers of failed syncs. Returns the deleted paths.
 
     When ``latest`` is absent or points to ``/dev/null``, no sync has
     completed yet, so every snapshot directory is a leftover, including one
@@ -96,6 +108,11 @@ def delete_snapshot(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> None:
+    """
+    Delete the hard-link snapshot directory at *path* with its contents.
+
+    Raises :class:`SnapshotOperationError` when the deletion fails.
+    """
     match volume:
         case RemoteVolume():
             run_checked(

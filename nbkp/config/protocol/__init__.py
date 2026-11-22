@@ -1,7 +1,13 @@
+"""The pydantic schema of the nbkp config file."""
+
 from nbkp.config.protocol.base import ConfigModel, Slug
 from nbkp.config.protocol.config import Config, CredentialProvider, passphrase_env_var
 from nbkp.config.protocol.errors import ConfigValidationErrorKind
-from nbkp.config.protocol.ssh_endpoint import SshConnectionOptions, SshEndpoint
+from nbkp.config.protocol.ssh_endpoint import (
+    DEFAULT_SSH_PORT,
+    SshConnectionOptions,
+    SshEndpoint,
+)
 from nbkp.config.protocol.sync import RsyncOptions, SyncConfig, sync_predecessors
 from nbkp.config.protocol.sync_endpoint import (
     BtrfsSnapshotConfig,
@@ -21,6 +27,7 @@ from nbkp.config.protocol.volume import (
 )
 
 __all__ = [
+    "DEFAULT_SSH_PORT",
     "BtrfsSnapshotConfig",
     "Config",
     "ConfigModel",

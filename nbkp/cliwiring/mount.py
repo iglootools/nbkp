@@ -1,3 +1,5 @@
+"""Mount and umount drives around a command, under the run lock, with progress."""
+
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 
@@ -31,7 +33,7 @@ def _format_mount_status(
     progress: LifecycleProgress,
     mount_observations: dict[str, MountObservation],
 ) -> RenderableType:
-    """The post-mount status table (human output only)."""
+    """Format the post-mount status table (human output only)."""
     return build_mount_status_table(
         [
             (progress.display_names.get(slug, slug), obs)
@@ -52,9 +54,12 @@ def lifecycle_session(
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
     umounting: bool = True,
 ) -> Generator[tuple[Callable[[str], str], LifecycleProgress]]:
-    """The passphrase function and the progress bars (shown when *enabled*)
-    for a mount lifecycle; on exit, the bars are stopped and the cached
-    passphrases cleared."""
+    """
+    Yield the passphrase function and progress bars for a mount lifecycle.
+
+    The bars are shown when *enabled*. On exit, the bars are stopped and the cached
+    passphrases cleared.
+    """
     passphrase_fn, cache = build_passphrase_fn(
         cfg.credential_provider,
         cfg.credential_command,
@@ -90,8 +95,10 @@ def managed_mount(
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
     umount_results: list[UmountResult] | None = None,
 ) -> Generator[tuple[Config, dict[str, MountObservation]]]:
-    """Thin wrapper around :func:`disks.context.managed_mount` that adds
-    Rich display callbacks, credential management and the run lock.
+    """
+    Wrap :func:`disks.context.managed_mount` for the CLI.
+
+    Adds Rich display callbacks, credential management and the run lock.
 
     Yields ``(resolved_config, mount_observations)``.  ``resolved_config``
     is *cfg* with discovered mountpoints filled in for mount-managed volumes
@@ -100,6 +107,10 @@ def managed_mount(
 
     Parameters
     ----------
+    cfg:
+        The loaded config.
+    resolved:
+        The SSH endpoint resolution chose for each remote volume.
     runtime:
         Runs the udisks commands and the probes on the volumes' hosts, and
         supplies the credential providers' environment and command runner,
@@ -128,6 +139,7 @@ def managed_mount(
         output).  Otherwise a failed umount — a drive possibly left mounted
         or unlocked — is reported on stderr and fails a command that would
         have succeeded (exit 1).
+
     """
     with run_lock_or_exit(
         runtime.run_lock,
@@ -194,7 +206,11 @@ def _managed_mount_with_progress(
     collected: list[UmountResult],
 ) -> Generator[tuple[Config, dict[str, MountObservation]]]:
     with lifecycle_session(
-        cfg, resolved, runtime=runtime, enabled=use_progress, strictness=strictness
+        cfg,
+        resolved,
+        runtime=runtime,
+        enabled=use_progress,
+        strictness=strictness,
     ) as (passphrase_fn, progress):
 
         def on_umount_end(slug: str, result: UmountResult) -> None:
@@ -223,26 +239,32 @@ def _managed_mount_with_progress(
 
 
 def _print_umount_failures(
-    results: list[UmountResult], display_names: dict[str, str]
+    results: list[UmountResult],
+    display_names: dict[str, str],
 ) -> None:
-    """Printed to stderr in every output format, since stdout already holds
-    the command's report."""
+    """
+    Print the umount failures to stderr.
+
+    Printed to stderr in every output format, since stdout already holds the command's
+    report.
+    """
     if any_failed(results):
         Console(stderr=True).print(format_umount_failures(results, display_names))
 
 
 def _exit_on_umount_failure(
-    results: list[UmountResult], display_names: dict[str, str]
+    results: list[UmountResult],
+    display_names: dict[str, str],
 ) -> None:
-    """Fail a command whose body completed when a volume could not be
-    unmounted or locked."""
+    """Fail a completed command when a volume stayed mounted or unlocked."""
     _print_umount_failures(results, display_names)
     if any_failed(results):
         raise typer.Exit(1)
 
 
 def format_umount_failures(
-    results: list[UmountResult], display_names: dict[str, str]
+    results: list[UmountResult],
+    display_names: dict[str, str],
 ) -> Group:
     """One line per volume that could not be unmounted or locked, for stderr."""
     return Group(
@@ -255,5 +277,5 @@ def format_umount_failures(
             )
             for r in results
             if not r.success
-        )
+        ),
     )

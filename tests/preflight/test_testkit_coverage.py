@@ -1,5 +1,7 @@
-"""The troubleshoot demo data must exercise every preflight error, and
-``troubleshoot`` must print a fix for each.
+"""
+The troubleshoot demo data must exercise every preflight error.
+
+And ``troubleshoot`` must print a fix for each.
 
 ``nbkp demo output`` renders ``troubleshoot_data`` so that every remediation
 can be eyeballed; an enum member missing from it is a fix nobody ever looks
@@ -49,7 +51,9 @@ def _remediations() -> dict[enum.Enum, tuple[str, ...]]:
     config = troubleshoot_config()
     data = troubleshoot_data(config)
     issues = collect_issues(
-        data.ssh_endpoint_statuses, data.volume_statuses, data.sync_statuses
+        data.ssh_endpoint_statuses,
+        data.volume_statuses,
+        data.sync_statuses,
     )
     # Facts given up front: gathering them would probe hosts for a mapper name.
     ctx = TroubleshootContext(
@@ -59,8 +63,11 @@ def _remediations() -> dict[enum.Enum, tuple[str, ...]]:
     )
     rendered = troubleshoot_json(issues, ctx, has_fatal_errors=True)["issues"]
     assert isinstance(rendered, list)
-    items = cast(list[dict[str, Any]], rendered)
-    pairs = [(issue.error, item["remediation"]) for issue, item in zip(issues, items)]
+    items = cast("list[dict[str, Any]]", rendered)
+    pairs = [
+        (issue.error, item["remediation"])
+        for issue, item in zip(issues, items, strict=True)
+    ]
     return {error: tuple(fix for e, fix in pairs if e is error) for error, _ in pairs}
 
 

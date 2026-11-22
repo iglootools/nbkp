@@ -1,4 +1,5 @@
-"""Preflight checks: observe volumes, endpoints and syncs, then interpret them.
+"""
+Preflight checks: observe volumes, endpoints and syncs, then interpret them.
 
 This package's public interface: other modules (``run``, ``sync``,
 ``cliwiring``, ``snapshots``) import from ``nbkp.preflight`` rather than from

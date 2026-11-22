@@ -21,16 +21,21 @@ from nbkp.sync.testkit.seed import (
     create_seed_sentinels,
     seed_volume,
 )
+from tests._docker_fixtures import assert_sentinels_after_sync
 
 # Re-export so test modules can import from here
 __all__ = ["build_chain_config"]
 
 
 def _is_btrfs_readonly(
-    volume: Volume, path: str, resolved_endpoints: ResolvedEndpoints
+    volume: Volume,
+    path: str,
+    resolved_endpoints: ResolvedEndpoints,
 ) -> bool:
     result = run_on_volume(
-        ["btrfs", "property", "get", path, "ro"], volume, resolved_endpoints
+        ["btrfs", "property", "get", path, "ro"],
+        volume,
+        resolved_endpoints,
     )
     return result.returncode == 0 and "ro=true" in result.stdout
 
@@ -38,10 +43,10 @@ def _is_btrfs_readonly(
 def setup_chain(
     config: Config,
     tmp_path: Path,
-    docker_ssh_endpoint: SshEndpoint,
     resolved: ResolvedEndpoints | None = None,
 ) -> Path:
-    """Common setup: sentinels, seed data.
+    """
+    Set up the chain: sentinels, seed data.
 
     Btrfs snapshot infrastructure (``staging/`` subvolume,
     ``snapshots/`` directory, ``latest`` symlink) is created
@@ -75,7 +80,8 @@ def assert_trees_equal(
     *,
     exclude_dirs: set[str] | None = None,
 ) -> None:
-    """Assert two directory trees have identical structure and content.
+    """
+    Assert two directory trees have identical structure and content.
 
     Files under *exclude_dirs* (relative dir names) are skipped in
     the expected tree — they should NOT appear in the actual tree.
@@ -115,7 +121,8 @@ def assert_chain_results(
     docker_ssh_endpoint: SshEndpoint,
     resolved: ResolvedEndpoints,
 ) -> None:
-    """Shared assertions for chain sync results.
+    """
+    Shared assertions for chain sync results.
 
     Verifies:
     - Final destination matches source (minus excluded/)
@@ -142,7 +149,9 @@ def assert_chain_results(
 
     # Btrfs dest (step-3): snapshot + latest symlink
     btrfs_link_target = read_symlink_target(
-        btrfs_vol, f"{btrfs_vol.path}/latest", resolved
+        btrfs_vol,
+        f"{btrfs_vol.path}/latest",
+        resolved,
     )
     assert btrfs_link_target is not None, "btrfs latest symlink missing"
     assert "snapshots/" in btrfs_link_target
@@ -163,7 +172,9 @@ def assert_chain_results(
 
     # HL dest (step-5): latest symlink on remote-hl
     hl_link_target = read_symlink_target(
-        hl_vol, f"{REMOTE_BACKUP_PATH}/hl/latest", resolved
+        hl_vol,
+        f"{REMOTE_BACKUP_PATH}/hl/latest",
+        resolved,
     )
     assert hl_link_target is not None, "remote-hl latest symlink missing"
     assert "snapshots/" in hl_link_target
@@ -174,9 +185,3 @@ def assert_chain_results(
 
     step6 = config.syncs["step-6"]
     assert_sentinels_after_sync(step6, config, docker_ssh_endpoint)
-
-
-# Re-export for convenience
-from tests._docker_fixtures import (
-    assert_sentinels_after_sync,
-)

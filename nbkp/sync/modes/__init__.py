@@ -1,3 +1,5 @@
+"""The sync modes: plain, hard-link snapshots and btrfs snapshots."""
+
 from nbkp.preflight import SyncStatus
 from nbkp.sync.modes.btrfs import run_btrfs_sync
 from nbkp.sync.modes.common import RsyncRunner, RunContext
@@ -9,6 +11,11 @@ __all__ = ["RsyncRunner", "RunContext", "run_single_sync"]
 
 
 def run_single_sync(status: SyncStatus, ctx: RunContext) -> SyncResult:
+    """
+    Run one sync with the mode its destination's snapshot mode selects.
+
+    Return its result; a failed step is reported in the result, not raised.
+    """
     sync = status.config
     dst = ctx.config.destination_endpoint(sync)
     match dst.snapshot_mode:

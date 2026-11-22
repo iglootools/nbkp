@@ -1,3 +1,5 @@
+"""The human-readable report of ``nbkp preflight check``."""
+
 from rich.console import Group, RenderableType
 from rich.panel import Panel
 from rich.table import Table
@@ -36,17 +38,20 @@ from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 def _format_latest(latest: LatestSymlinkState) -> Text:
-    """A missing or invalid ``latest`` is always fatal under the standard
-    strictness modes (``LATEST_SYMLINK_NOT_FOUND`` and
-    ``LATEST_SYMLINK_INVALID`` are not in any ``INACTIVE_*_ERRORS``), so
-    either shows as an error icon.
+    """
+    Format the ``latest`` symlink item, always as an error when it is broken.
+
+    A missing or invalid ``latest`` is always fatal under the standard strictness modes
+    (``LATEST_SYMLINK_NOT_FOUND`` and ``LATEST_SYMLINK_INVALID`` are not in any
+    ``INACTIVE_*_ERRORS``), so either shows as an error icon.
     """
     match latest:
         case LatestSymlinkState(exists=True, raw_target=str() as target) if (
             target == DEVNULL_TARGET or latest.target_valid is True
         ):
             return Text(
-                f"{OK_SYMBOL}latest → {target}", style=severity_style(Severity.OK)
+                f"{OK_SYMBOL}latest → {target}",
+                style=severity_style(Severity.OK),
             )
         case LatestSymlinkState(exists=True, raw_target=str() as target):
             return Text(
@@ -71,8 +76,11 @@ def _format_volume_issues(vol_status: VolumeStatus, strictness: Strictness) -> T
 
 
 def _format_source_diagnostics(ss: SyncStatus, strictness: Strictness) -> Text:
-    """Endpoint-level items are not computed on an inactive volume, so the
-    volume's own issues are shown instead.
+    """
+    Format the source column's diagnostics.
+
+    Endpoint-level items are not computed on an inactive volume, so the volume's own
+    issues are shown instead.
     """
     src_ep = ss.source_endpoint_status
     if not src_ep.volume_status.active:
@@ -82,19 +90,19 @@ def _format_source_diagnostics(ss: SyncStatus, strictness: Strictness) -> Text:
         return Text("")
     items = [
         check(
-            diag.sentinel_exists,
-            "sentinel",
+            ok=diag.sentinel_exists,
+            label="sentinel",
             fail_error=SourceEndpointErrorKind.SENTINEL_NOT_FOUND,
             strictness=strictness,
         ),
         *(
             [
                 check(
-                    diag.snapshot_dirs.exists,
-                    "snapshots/",
+                    ok=diag.snapshot_dirs.exists,
+                    label="snapshots/",
                     fail_error=SourceEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND,
                     strictness=strictness,
-                )
+                ),
             ]
             if diag.snapshot_dirs is not None
             else []
@@ -105,8 +113,11 @@ def _format_source_diagnostics(ss: SyncStatus, strictness: Strictness) -> Text:
 
 
 def _format_destination_diagnostics(ss: SyncStatus, strictness: Strictness) -> Text:
-    """Endpoint-level items are not computed on an inactive volume, so the
-    volume's own issues are shown instead.
+    """
+    Format the destination column's diagnostics.
+
+    Endpoint-level items are not computed on an inactive volume, so the volume's own
+    issues are shown instead.
     """
     dst_ep = ss.destination_endpoint_status
     if not dst_ep.volume_status.active:
@@ -117,8 +128,8 @@ def _format_destination_diagnostics(ss: SyncStatus, strictness: Strictness) -> T
     return join_text(
         [
             check(
-                diag.sentinel_exists,
-                "sentinel",
+                ok=diag.sentinel_exists,
+                label="sentinel",
                 fail_error=DestinationEndpointErrorKind.SENTINEL_NOT_FOUND,
                 strictness=strictness,
             ),
@@ -127,11 +138,11 @@ def _format_destination_diagnostics(ss: SyncStatus, strictness: Strictness) -> T
             *(
                 [
                     check(
-                        diag.endpoint_writable,
-                        "writable",
+                        ok=diag.endpoint_writable,
+                        label="writable",
                         fail_error=DestinationEndpointErrorKind.NOT_WRITABLE,
                         strictness=strictness,
-                    )
+                    ),
                 ]
                 if diag.sentinel_exists
                 else []
@@ -144,25 +155,26 @@ def _format_destination_diagnostics(ss: SyncStatus, strictness: Strictness) -> T
                 )
                 for w in dst_ep.warnings
             ),
-        ]
+        ],
     )
 
 
 def _destination_snapshot_items(
-    diag: DestinationEndpointDiagnostics, strictness: Strictness
+    diag: DestinationEndpointDiagnostics,
+    strictness: Strictness,
 ) -> list[Text]:
     return [
         *(
             [
                 check(
-                    diag.btrfs.staging_exists,
-                    "staging/",
+                    ok=diag.btrfs.staging_exists,
+                    label="staging/",
                     fail_error=DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND,
                     strictness=strictness,
                 ),
                 check(
-                    diag.btrfs.staging_is_subvolume,
-                    "staging-subvolume",
+                    ok=diag.btrfs.staging_is_subvolume,
+                    label="staging-subvolume",
                     fail_error=DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME,
                     strictness=strictness,
                 ),
@@ -173,11 +185,11 @@ def _destination_snapshot_items(
         *(
             [
                 check(
-                    diag.snapshot_dirs.exists,
-                    "snapshots/",
+                    ok=diag.snapshot_dirs.exists,
+                    label="snapshots/",
                     fail_error=DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND,
                     strictness=strictness,
-                )
+                ),
             ]
             if diag.snapshot_dirs is not None
             else []
@@ -192,7 +204,11 @@ def _ssh_status_text(status: SshEndpointStatus | None, strictness: Strictness) -
             return Text("")
         case SshEndpointStatus():
             return Text.assemble(
-                status_text(status.active, status.errors, strictness),
+                status_text(
+                    active=status.active,
+                    errors=status.errors,
+                    strictness=strictness,
+                ),
                 *(
                     (
                         f", {severity_symbol(Severity.WARNING)}{format_problem(w)}",
@@ -204,9 +220,11 @@ def _ssh_status_text(status: SshEndpointStatus | None, strictness: Strictness) -
 
 
 def _localhost_row(
-    status: SshEndpointStatus | None, strictness: Strictness
+    status: SshEndpointStatus | None,
+    strictness: Strictness,
 ) -> list[tuple[RenderableType, ...]]:
-    """The implicit localhost endpoint, shown only when it has findings.
+    """
+    Return the implicit localhost endpoint's row, only when it has findings.
 
     Local volumes run their tools here (rsync, btrfs, udisks…), so its tool
     errors must be visible next to the configured endpoints.
@@ -222,7 +240,7 @@ def _localhost_row(
                 "",
                 "",
                 _ssh_status_text(status, strictness),
-            )
+            ),
         ]
         if status is not None and (status.errors or status.warnings)
         else []
@@ -301,7 +319,7 @@ def _build_volumes_section(
             format_mount_summary(vol.mount),
             format_mount_status(mount_caps, vol.mount, strictness),
             format_capabilities(caps),
-            status_text(vs.active, vs.errors, strictness),
+            status_text(active=vs.active, errors=vs.errors, strictness=strictness),
         )
 
     return [table, Text("")]
@@ -329,7 +347,7 @@ def _build_syncs_section(
             sync_options_summary(ss.config, config),
             _format_source_diagnostics(ss, strictness),
             _format_destination_diagnostics(ss, strictness),
-            status_text(ss.active, ss.errors, strictness),
+            status_text(active=ss.active, errors=ss.errors, strictness=strictness),
         )
 
     return [table]
@@ -366,8 +384,15 @@ def build_check_sections(
     sync_statuses: dict[str, SyncStatus],
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
+    *,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> list[RenderableType]:
+    """
+    Return the report's sections: SSH endpoints, volumes, syncs, then warnings.
+
+    The warnings name the SSH endpoints, volumes and sync endpoints nothing uses.
+    *strictness* decides which problems show as errors rather than as warnings.
+    """
     return [
         *_build_ssh_endpoints_section(config, ssh_statuses, strictness),
         *_build_volumes_section(vol_statuses, resolved_endpoints, strictness),
@@ -387,8 +412,11 @@ def format_human_check(
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
     invocation: Invocation | None = None,
 ) -> RenderableType:
-    """*invocation* carries the config path and endpoint flags so the
-    ``troubleshoot`` suggestion can be copy-pasted as-is.
+    """
+    Format the human-readable check report.
+
+    *invocation* carries the config path and endpoint flags so the ``troubleshoot``
+    suggestion can be copy-pasted as-is.
     """
     sections = Group(
         *build_check_sections(
@@ -397,7 +425,7 @@ def format_human_check(
             sync_statuses,
             config,
             resolved_endpoints or {},
-            strictness,
+            strictness=strictness,
         ),
         *_troubleshoot_hint(ssh_statuses, sync_statuses, invocation or Invocation()),
     )

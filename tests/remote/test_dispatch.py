@@ -1,4 +1,5 @@
-"""Tests for nbkp.remote.dispatch: routing a command to the volume's host.
+"""
+Tests for nbkp.remote.dispatch: routing a command to the volume's host.
 
 A local command runs as a real child process; a remote one goes to a
 recording ``run_remote``. Callers of ``run_on_volume`` take a fake
@@ -25,7 +26,7 @@ class _RemoteCall:
     server: SshEndpoint
     command: list[str]
     proxy_chain: list[SshEndpoint] | None
-    input: str | None
+    stdin: str | None
 
 
 class _RecordingRemote:
@@ -37,9 +38,9 @@ class _RecordingRemote:
         server: SshEndpoint,
         command: list[str],
         proxy_chain: list[SshEndpoint] | None = None,
-        input: str | None = None,
+        stdin: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        self.calls.append(_RemoteCall(server, command, proxy_chain, input))
+        self.calls.append(_RemoteCall(server, command, proxy_chain, stdin))
         return completed(stdout="out")
 
 
@@ -48,7 +49,11 @@ class TestRunOnVolume:
         remote = _RecordingRemote()
 
         result = run_on_volume(
-            ["ls", "/backup"], _REMOTE, _RESOLVED, input="pw", run_remote=remote
+            ["ls", "/backup"],
+            _REMOTE,
+            _RESOLVED,
+            stdin="pw",
+            run_remote=remote,
         )
 
         assert result.stdout == "out"
@@ -58,7 +63,7 @@ class TestRunOnVolume:
         vol = LocalVolume(slug="data", path="/mnt/data")
         echo_upper = "import sys; s = sys.stdin.read(); print(s.upper()); sys.exit(3)"
 
-        result = run_on_volume([sys.executable, "-c", echo_upper], vol, {}, input="pw")
+        result = run_on_volume([sys.executable, "-c", echo_upper], vol, {}, stdin="pw")
 
         assert result.returncode == 3
         assert result.stdout == "PW\n"

@@ -31,12 +31,14 @@ class TestStepProgressBarResultLine:
         assert "nbkp[keyring]" in _run(capsys, Severity.WARNING, BRACKETED)
 
     def test_label_and_symbol_rendered(
-        self, capsys: pytest.CaptureFixture[str]
+        self,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         assert "✓ mount my-vol" in _run(capsys, Severity.OK, None)
 
     def test_no_detail_omits_parentheses(
-        self, capsys: pytest.CaptureFixture[str]
+        self,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         assert "(" not in _run(capsys, Severity.OK, None)
 

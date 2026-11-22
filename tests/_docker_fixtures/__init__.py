@@ -1,4 +1,5 @@
-"""Shared Docker test fixtures for e2e and integration tests.
+"""
+Shared Docker test fixtures for e2e and integration tests.
 
 Tests share a single session-scoped container and unlock/mount/lock the same
 encrypted volume repeatedly.  This is reliable without any between-test reset
@@ -7,17 +8,25 @@ because the container shares the host ``/dev`` and ``/run/udev`` (see the
 so a fresh unlock always succeeds after a prior test's lock.
 """
 
+import contextlib
 import fcntl
 import shutil
 import tempfile
 import uuid
 from collections.abc import Generator
 from pathlib import Path
-from typing import Any
 
 import docker as dockerlib
 import docker.errors as docker_errors
 import pytest
+from docker.models.containers import Container
+from docker.models.networks import Network
+
+# Deferred: every test run loads these fixtures as a plugin, and only the Docker
+# suites start containers.
+lazy from testcontainers.core.container import DockerContainer
+lazy from testcontainers.core.image import DockerImage
+lazy from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
 from nbkp.config import (
     Config,
@@ -55,7 +64,8 @@ def assert_sentinels_after_sync(
     *,
     dest_suffix: str | None = None,
 ) -> None:
-    """Assert sentinel files are handled correctly after sync.
+    """
+    Assert sentinel files are handled correctly after sync.
 
     - .nbkp-src must NOT exist at the rsync destination
     - .nbkp-vol must NOT exist at the rsync destination
@@ -78,10 +88,7 @@ def assert_sentinels_after_sync(
     else:
         rsync_target = vol_path
 
-    if subdir:
-        sentinel_dir = f"{vol_path}/{subdir}"
-    else:
-        sentinel_dir = vol_path
+    sentinel_dir = f"{vol_path}/{subdir}" if subdir else vol_path
 
     def _remote_exists(path: str) -> bool:
         r = ssh_run(ssh_endpoint, ["test", "-f", path], check=False)
@@ -124,11 +131,13 @@ def _docker_available() -> bool:
     """Check if Docker is available and running."""
     try:
         client = dockerlib.from_env()
-        # docker leaves ping()'s *args and **kwargs unannotated; retire when it annotates them.
+        # docker leaves ping()'s *args and **kwargs unannotated; retire when it
+        # annotates them.
         client.ping()  # pyright: ignore[reportUnknownMemberType]
-        return True
     except docker_errors.DockerException:
         return False
+    else:
+        return True
 
 
 pytestmark = pytest.mark.skipif(not _docker_available(), reason="Docker not available")
@@ -169,13 +178,11 @@ def docker_image(tmp_path_factory: pytest.TempPathFactory, worker_id: str) -> st
 
 
 def _build_test_image() -> None:
-    from testcontainers.core.image import DockerImage
-
     DockerImage(path=str(DOCKER_DIR), tag=_TEST_IMAGE_TAG).build()
 
 
 @pytest.fixture(scope="session")
-def docker_network() -> Generator[Any]:
+def docker_network() -> Generator[Network]:
     """Create a Docker bridge network for inter-container comms."""
     client = dockerlib.from_env()
     name = f"nbkp-test-{uuid.uuid4().hex[:8]}"
@@ -183,15 +190,14 @@ def docker_network() -> Generator[Any]:
 
     yield network
 
-    try:
+    with contextlib.suppress(docker_errors.APIError):
         network.remove()
-    except docker_errors.APIError:
-        pass
 
 
 @pytest.fixture(scope="session")
 def luks_mapper_name() -> str:
-    """Per-worker-unique LUKS device-mapper name.
+    """
+    Per-worker-unique LUKS device-mapper name.
 
     Privileged containers share the host VM kernel's device-mapper
     namespace, so a fixed ``/dev/mapper/<name>`` collides across the
@@ -210,15 +216,10 @@ def luks_mapper_name() -> str:
 def docker_container(
     ssh_key_pair: tuple[Path, Path],
     docker_image: str,
-    docker_network: Any,
+    docker_network: Network,
     luks_mapper_name: str,
 ) -> Generator[SshEndpoint]:
     """Start Docker container and yield SshEndpoint."""
-    from testcontainers.core.container import DockerContainer
-    from testcontainers.core.wait_strategies import (
-        LogMessageWaitStrategy,
-    )
-
     private_key, public_key = ssh_key_pair
 
     # Generous startup timeout: the entrypoint formats a btrfs loop image and
@@ -263,7 +264,9 @@ def docker_container(
 
     # Connect to network with alias for bastion access
     wrapped = container.get_wrapped_container()
-    docker_network.connect(wrapped, aliases=["backup-server"])
+    # docker leaves connect()'s *args and **kwargs unannotated; retire when it
+    # annotates them.
+    docker_network.connect(wrapped, aliases=["backup-server"])  # pyright: ignore[reportUnknownMemberType]
 
     server = create_test_ssh_endpoint(
         "test-server",
@@ -280,8 +283,9 @@ def docker_container(
     container.stop()
 
 
-def _detach_container_loop_devices(wrapped: Any) -> None:
-    """Detach this container's loop devices before it is destroyed.
+def _detach_container_loop_devices(wrapped: Container) -> None:
+    """
+    Detach this container's loop devices before it is destroyed.
 
     The encrypted-volume LUKS image is attached with an explicit
     ``losetup`` (it needs a stable ``/dev/disk/by-uuid`` entry for the
@@ -307,25 +311,18 @@ for img in /srv/btrfs-encrypted-backups.img /srv/btrfs-backups.img; do
     done
 done
 """
-    try:
+    # Best-effort cleanup — never fail teardown over a leaked loop.
+    with contextlib.suppress(Exception):
         wrapped.exec_run(["bash", "-c", script])
-    except Exception:  # noqa: BLE001, S110
-        # Best-effort cleanup — never fail teardown over a leaked loop.
-        pass
 
 
 @pytest.fixture(scope="session")
 def bastion_container(
     ssh_key_pair: tuple[Path, Path],
     docker_image: str,
-    docker_network: Any,
+    docker_network: Network,
 ) -> Generator[SshEndpoint]:
     """Start a bastion (jump proxy) container."""
-    from testcontainers.core.container import DockerContainer
-    from testcontainers.core.wait_strategies import (
-        LogMessageWaitStrategy,
-    )
-
     private_key, public_key = ssh_key_pair
 
     # Generous startup timeout: the entrypoint formats a btrfs loop image and
@@ -350,7 +347,9 @@ def bastion_container(
     container.start()
 
     wrapped = container.get_wrapped_container()
-    docker_network.connect(wrapped)
+    # docker leaves connect()'s *args and **kwargs unannotated; retire when it
+    # annotates them.
+    docker_network.connect(wrapped)  # pyright: ignore[reportUnknownMemberType]
 
     server = create_test_ssh_endpoint(
         "bastion",
@@ -368,8 +367,8 @@ def bastion_container(
 @pytest.fixture(scope="session")
 def proxied_ssh_endpoint(
     ssh_key_pair: tuple[Path, Path],
-    bastion_container: SshEndpoint,
-    docker_container: SshEndpoint,
+    bastion_container: SshEndpoint,  # noqa: ARG001 -- requested to start it (pytest)
+    docker_container: SshEndpoint,  # noqa: ARG001 -- requested to start it (pytest)
 ) -> SshEndpoint:
     """SshEndpoint that routes through the bastion."""
     private_key, _ = ssh_key_pair
@@ -422,7 +421,8 @@ def remote_hardlink_volume() -> RemoteVolume:
 
 @pytest.fixture(scope="session")
 def luks_metadata(docker_ssh_endpoint: SshEndpoint) -> LuksMetadata:
-    """Lazily set up LUKS and read metadata from the Docker container.
+    """
+    Lazily set up LUKS and read metadata from the Docker container.
 
     Triggers /setup-luks.sh on first use (idempotent), so tests that
     don't request this fixture skip the ~5-10s cryptsetup overhead.
@@ -442,7 +442,8 @@ def luks_uuid(luks_metadata: LuksMetadata) -> str:
 
 @pytest.fixture(scope="session")
 def remote_encrypted_volume(luks_uuid: str) -> RemoteVolume:
-    """RemoteVolume with MountConfig pointing at /srv/btrfs-encrypted-backups.
+    """
+    RemoteVolume with MountConfig pointing at /srv/btrfs-encrypted-backups.
 
     The mount lifecycle is now driven by udisks2 (``udisksctl``); the
     container must run ``udisksd`` + polkit and carry an fstab entry that
@@ -465,9 +466,11 @@ def remote_encrypted_volume(luks_uuid: str) -> RemoteVolume:
 
 @pytest.fixture(scope="session")
 def unencrypted_uuid(
-    luks_metadata: LuksMetadata, docker_ssh_endpoint: SshEndpoint
+    luks_metadata: LuksMetadata,
+    docker_ssh_endpoint: SshEndpoint,
 ) -> str:
-    """Filesystem UUID of the container's plain (unencrypted) ext4 volume.
+    """
+    Filesystem UUID of the container's plain (unencrypted) ext4 volume.
 
     Created by ``setup-luks.sh`` alongside the LUKS volume (same
     loop-device-available gate), so it shares the LUKS availability skip.
@@ -487,7 +490,8 @@ def unencrypted_uuid(
 
 @pytest.fixture(scope="session")
 def remote_unencrypted_volume(unencrypted_uuid: str) -> RemoteVolume:
-    """RemoteVolume with a mount-managed, genuinely unencrypted ext4 device.
+    """
+    RemoteVolume with a mount-managed, genuinely unencrypted ext4 device.
 
     ``device_uuid`` is the filesystem UUID; nbkp mounts it directly via
     ``udisksctl mount`` (no LUKS unlock), and the container's fstab maps that
@@ -502,7 +506,8 @@ def remote_unencrypted_volume(unencrypted_uuid: str) -> RemoteVolume:
 
 
 def _build_cleanup_script(luks_mapper_name: str) -> str:
-    """Build a single bash script that cleans all test artifacts.
+    """
+    Build a single bash script that cleans all test artifacts.
 
     Batched into one SSH round-trip instead of N individual commands,
     which significantly reduces cleanup time per test. The LUKS mapper
@@ -546,7 +551,8 @@ if [ -f /srv/luks-uuid ]; then
             2>/dev/null || true
 
         clean_btrfs_base {REMOTE_BTRFS_ENCRYPTED_PATH}/snapshots
-        btrfs subvolume delete {REMOTE_BTRFS_ENCRYPTED_PATH}/snapshots 2>/dev/null || true
+        btrfs subvolume delete {REMOTE_BTRFS_ENCRYPTED_PATH}/snapshots \
+            2>/dev/null || true
         rm -rf {REMOTE_BTRFS_ENCRYPTED_PATH}/bare 2>/dev/null || true
         find {REMOTE_BTRFS_ENCRYPTED_PATH} -name '.nbkp-*' -delete 2>/dev/null || true
 
@@ -561,7 +567,8 @@ fi
 def cleanup_remote(
     request: pytest.FixtureRequest,
 ) -> Generator[None]:
-    """Clean up /srv/backups and /srv/btrfs-backups between tests.
+    """
+    Clean up /srv/backups and /srv/btrfs-backups between tests.
 
     All cleanup runs in a single SSH round-trip for performance.
     """

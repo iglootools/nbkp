@@ -1,4 +1,6 @@
+import errno
 import io
+import os
 import shlex
 from collections.abc import Iterator
 from functools import partial
@@ -413,8 +415,8 @@ class TestWrapCmd:
         vol = RemoteVolume(slug="v", ssh_endpoint="nas", path="/srv/my data")
         resolved = {
             "v": ResolvedEndpoint(
-                server=SshEndpoint(slug="nas", host="nas.lan", user="bk")
-            )
+                server=SshEndpoint(slug="nas", host="nas.lan", user="bk"),
+            ),
         }
         line = wrap_cmd(["touch", "/srv/my data/.nbkp-vol"], vol, resolved)
         ssh_argv = shlex.split(line)
@@ -445,7 +447,7 @@ _BASTION = SshEndpoint(slug="bastion", host="bastion.example.com")
 
 
 def _fake_connection(**kwargs: object) -> MagicMock:
-    """A distinct, connected Fabric Connection mock per construction."""
+    """Return a distinct, connected Fabric Connection mock per construction."""
     conn = MagicMock(name=str(kwargs["host"]))
     conn.host = kwargs["host"]
     conn.gateway = kwargs["gateway"]
@@ -455,7 +457,8 @@ def _fake_connection(**kwargs: object) -> MagicMock:
 
 
 class _Channel:
-    """A Paramiko session channel running one command.
+    """
+    A Paramiko session channel running one command.
 
     *reads_input* False is a command that exits without reading it: the
     channel is already closed when the input is sent, as Paramiko reports.
@@ -466,6 +469,7 @@ class _Channel:
         stdout: str = "",
         stderr: str = "",
         exit_status: int = 0,
+        *,
         reads_input: bool = True,
     ) -> None:
         self.stdout = stdout
@@ -482,16 +486,16 @@ class _Channel:
 
     def sendall(self, data: bytes) -> None:
         if not self.reads_input:
-            raise OSError("Socket is closed")
+            raise OSError(errno.EPIPE, os.strerror(errno.EPIPE))
         self.received += data
 
     def shutdown_write(self) -> None:
         self.input_closed = True
 
-    def makefile(self, mode: str) -> io.BytesIO:
+    def makefile(self, _mode: str) -> io.BytesIO:
         return io.BytesIO(self.stdout.encode())
 
-    def makefile_stderr(self, mode: str) -> io.BytesIO:
+    def makefile_stderr(self, _mode: str) -> io.BytesIO:
         return io.BytesIO(self.stderr.encode())
 
     def recv_exit_status(self) -> int:
@@ -510,14 +514,17 @@ def _answer_with(channel: _Channel, conn: MagicMock) -> None:
 
 
 def _built(mock_conn_cls: MagicMock, host: str) -> list[MagicMock]:
-    """The connections built to *host*, in construction order."""
+    """Return the connections built to *host*, in construction order."""
     return [conn for conn in mock_conn_cls.built if conn.host == host]
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_conn_cls() -> Iterator[MagicMock]:
-    """Fabric's Connection class, building a :func:`_fake_connection` per
-    call; ``configure`` adjusts each one as it is built."""
+    """
+    Yield Fabric's Connection class, building a :func:`_fake_connection` per call.
+
+    ``configure`` adjusts each one as it is built.
+    """
     with patch("nbkp.remote.fabricssh.Connection") as cls:
         cls.built = []
         cls.configure = _leave_as_built
@@ -544,7 +551,9 @@ class _Transport:
 
 class TestRunRemoteCommand:
     def test_leading_tilde_left_for_the_remote_shell(
-        self, mock_conn_cls: MagicMock, ssh_endpoint: SshEndpoint
+        self,
+        mock_conn_cls: MagicMock,
+        ssh_endpoint: SshEndpoint,
     ) -> None:
         run_remote_command(ssh_endpoint, ["test", "-f", "~/my backups/.nbkp-vol"])
 
@@ -553,12 +562,14 @@ class TestRunRemoteCommand:
         assert channel.command == "test -f ~/'my backups/.nbkp-vol'"
 
     def test_run_remote_command(
-        self, mock_conn_cls: MagicMock, ssh_endpoint: SshEndpoint
+        self,
+        mock_conn_cls: MagicMock,
+        ssh_endpoint: SshEndpoint,
     ) -> None:
         channel = _Channel(stdout="file1\nfile2\n")
         mock_conn_cls.configure = partial(_answer_with, channel)
 
-        result = run_remote_command(ssh_endpoint, ["ls", "/tmp"])
+        result = run_remote_command(ssh_endpoint, ["ls", "/tmp"])  # noqa: S108 -- lists the container's /tmp, writes nothing
 
         mock_conn_cls.assert_called_once_with(
             host="nas.example.com",
@@ -583,7 +594,8 @@ class TestRunRemoteCommand:
         assert result.stderr == ""
 
     def test_channel_timeout_and_disabled_algorithms(
-        self, mock_conn_cls: MagicMock
+        self,
+        mock_conn_cls: MagicMock,
     ) -> None:
         server = SshEndpoint(
             slug="advanced",
@@ -617,7 +629,8 @@ class TestRunRemoteCommand:
         )
 
     def test_server_alive_interval_calls_set_keepalive(
-        self, mock_conn_cls: MagicMock
+        self,
+        mock_conn_cls: MagicMock,
     ) -> None:
         server = SshEndpoint(
             slug="keepalive",
@@ -644,7 +657,9 @@ class TestRunRemoteCommand:
         mock_conn_cls.configure = partial(_answer_with, channel)
 
         result = run_remote_command(
-            _TARGET, ["udisksctl", "unlock", "--key-file", "/dev/stdin"], input="pw"
+            _TARGET,
+            ["udisksctl", "unlock", "--key-file", "/dev/stdin"],
+            stdin="pw",
         )
 
         assert channel.command == "udisksctl unlock --key-file /dev/stdin"
@@ -654,10 +669,15 @@ class TestRunRemoteCommand:
         assert (result.returncode, result.stdout) == (0, "unlocked\n")
 
     def test_command_exiting_before_reading_input_keeps_stderr(
-        self, mock_conn_cls: MagicMock
+        self,
+        mock_conn_cls: MagicMock,
     ) -> None:
-        """The remote message is what tells a polkit refusal from a device
-        udisks does not know yet, so it must survive the unread input."""
+        """
+        A command exiting before reading its input keeps its stderr.
+
+        The remote message is what tells a polkit refusal from a device udisks does not
+        know yet, so it must survive the unread input.
+        """
         channel = _Channel(
             stderr="Error looking up object for device /dev/disk/by-uuid/x\n",
             exit_status=1,
@@ -665,7 +685,7 @@ class TestRunRemoteCommand:
         )
         mock_conn_cls.configure = partial(_answer_with, channel)
 
-        result = run_remote_command(_TARGET, ["udisksctl", "unlock"], input="pw")
+        result = run_remote_command(_TARGET, ["udisksctl", "unlock"], stdin="pw")
 
         assert result.returncode == 1
         assert result.stderr == (
@@ -723,7 +743,8 @@ class TestRunRemoteCommandInScope:
         other.close.assert_called_once()
 
     def test_reuses_proxy_hops_and_closes_them_with_the_scope(
-        self, mock_conn_cls: MagicMock
+        self,
+        mock_conn_cls: MagicMock,
     ) -> None:
         with connection_scope():
             run_remote_command(_TARGET, ["true"], [_BASTION])
@@ -742,13 +763,14 @@ class TestRunRemoteCommandInScope:
     def test_sends_stdin_on_a_reused_connection(self, mock_conn_cls: MagicMock) -> None:
         with connection_scope():
             run_remote_command(_TARGET, ["true"])
-            run_remote_command(_TARGET, ["udisksctl", "unlock"], input="secret")
+            run_remote_command(_TARGET, ["udisksctl", "unlock"], stdin="secret")
 
         (target,) = _built(mock_conn_cls, "target.example.com")
         assert target.create_session.return_value.received == b"secret"
 
     def test_reconnects_when_the_transport_dropped(
-        self, mock_conn_cls: MagicMock
+        self,
+        mock_conn_cls: MagicMock,
     ) -> None:
         with connection_scope():
             run_remote_command(_TARGET, ["true"])
@@ -762,7 +784,8 @@ class TestRunRemoteCommandInScope:
             fresh.create_session.assert_called_once()
 
     def test_retries_once_when_a_reused_connection_fails(
-        self, mock_conn_cls: MagicMock
+        self,
+        mock_conn_cls: MagicMock,
     ) -> None:
         with connection_scope():
             run_remote_command(_TARGET, ["true"])
@@ -777,7 +800,8 @@ class TestRunRemoteCommandInScope:
             assert result.stdout == "ok\n"
 
     def test_a_fresh_connection_failure_is_not_retried(
-        self, mock_conn_cls: MagicMock
+        self,
+        mock_conn_cls: MagicMock,
     ) -> None:
         def reset(conn: MagicMock) -> None:
             conn.create_session.side_effect = OSError("Connection reset")

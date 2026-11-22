@@ -46,7 +46,8 @@ from nbkp.preflight.testkit.common import (
 
 
 def check_config() -> Config:
-    """Config with local + remote volumes and varied syncs.
+    """
+    Config with local + remote volumes and varied syncs.
 
     Includes orphan items to exercise the orphan-config warnings:
     - SSH endpoint ``orphan-server`` (not referenced by any volume)
@@ -68,7 +69,7 @@ def check_config() -> Config:
         mount=MountConfig(
             device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6",
             encryption=LuksEncryptionConfig(
-                passphrase_id="encrypted",
+                passphrase_id="encrypted",  # noqa: S106 -- an id naming the secret, not the secret
             ),
         ),
     )
@@ -306,10 +307,12 @@ def check_data(
             slug="disabled-backup",
             config=config.syncs["disabled-backup"],
             source_endpoint_status=inactive_src_ep_status(
-                "laptop-root", laptop_system_vs
+                "laptop-root",
+                laptop_system_vs,
             ),
             destination_endpoint_status=inactive_dst_ep_status(
-                "external-root", external_vs
+                "external-root",
+                external_vs,
             ),
             errors=[SyncErrorKind.DISABLED],
         ),
@@ -317,10 +320,12 @@ def check_data(
             slug="backup-to-encrypted",
             config=config.syncs["backup-to-encrypted"],
             source_endpoint_status=inactive_src_ep_status(
-                "laptop-root", laptop_system_vs
+                "laptop-root",
+                laptop_system_vs,
             ),
             destination_endpoint_status=inactive_dst_ep_status(
-                "mount-encrypted-dst", mount_encrypted_vs
+                "mount-encrypted-dst",
+                mount_encrypted_vs,
             ),
             errors=[SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE],
         ),

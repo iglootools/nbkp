@@ -1,4 +1,5 @@
-"""Component integration tests: btrfs module on local filesystem.
+"""
+Component integration tests: btrfs module on local filesystem.
 
 These tests exercise the local (subprocess) code path of the btrfs
 module. They require Linux with btrfs-progs installed and a btrfs
@@ -15,7 +16,11 @@ import subprocess
 from collections.abc import Generator
 from pathlib import Path
 
+import docker as dockerlib
 import pytest
+
+# Deferred: only the Docker proxy test builds an image.
+lazy from testcontainers.core.image import DockerImage
 
 from nbkp.config import (
     BtrfsSnapshotConfig,
@@ -72,12 +77,13 @@ def _make_btrfs_config(
     return sync, config
 
 
-@pytest.fixture()
-def btrfs_dst(tmp_path: Path) -> Generator[Path]:
-    """Create a destination directory on the btrfs mount.
+@pytest.fixture
+def btrfs_dst() -> Generator[Path]:
+    """
+    Create a destination directory on the btrfs mount.
 
-    Uses a subdirectory of BTRFS_MOUNT to ensure btrfs ops work.
-    Falls back to tmp_path if BTRFS_MOUNT doesn't exist.
+    Uses a subdirectory of BTRFS_MOUNT to ensure btrfs ops work, and skips the
+    test when BTRFS_MOUNT doesn't exist.
     """
     mount = Path(BTRFS_MOUNT)
     if mount.is_dir():
@@ -127,7 +133,7 @@ def btrfs_dst(tmp_path: Path) -> Generator[Path]:
         pytest.skip(f"btrfs mount not found: {BTRFS_MOUNT}")
 
 
-@pytest.fixture()
+@pytest.fixture
 def btrfs_env_local(tmp_path: Path, btrfs_dst: Path) -> BtrfsEnv:
     """BtrfsEnv backed by a local btrfs mount."""
     src = tmp_path / "src"
@@ -202,19 +208,22 @@ _docker_available_cached: bool | None = None
 def _docker_available() -> bool:
     """Check if Docker is available and daemon is running."""
     try:
-        import docker as dockerlib
-
         client = dockerlib.from_env()
-        # docker leaves ping()'s *args and **kwargs unannotated; retire when it annotates them.
+        # docker leaves ping()'s *args and **kwargs unannotated; retire when it
+        # annotates them.
         client.ping()  # pyright: ignore[reportUnknownMemberType]
-        return True
     except Exception:  # noqa: BLE001
         return False
+    else:
+        return True
 
 
 def test_btrfs_local_has_execution_path() -> None:
-    """Fail loudly if neither native btrfs nor Docker is
-    available — all other tests would silently skip."""
+    """
+    Fail loudly if neither native btrfs nor Docker is available.
+
+    All other tests would silently skip.
+    """
     assert _btrfs_available or _docker_available(), (
         "Cannot run btrfs-local tests: "
         "btrfs is not available and Docker is not running. "
@@ -236,13 +245,13 @@ _IMAGE_TAG = "nbkp-btrfs-test:latest"
     reason="Docker not available",
 )
 class TestBtrfsLocalViaDocker:
-    """Proxy: re-runs the native tests inside a privileged
-    Docker container when btrfs is not available locally."""
+    """
+    Proxy: re-run the native tests in a privileged Docker container.
+
+    Only when btrfs is not available locally.
+    """
 
     def test_all_pass_in_docker(self) -> None:
-        import docker as dockerlib
-        from testcontainers.core.image import DockerImage
-
         image = DockerImage(
             path=str(_PROJECT_ROOT),
             tag=_IMAGE_TAG,

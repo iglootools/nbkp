@@ -1,3 +1,5 @@
+"""Probes of the filesystem features snapshots rely on: btrfs and hard links."""
+
 from nbkp.config import Volume, resolve_endpoint_path
 from nbkp.fsprotocol import NO_HARDLINK_FILESYSTEMS
 from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
@@ -10,8 +12,10 @@ def probe_filesystem_type(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> str | None:
-    """The type of the filesystem holding the volume root (``stat -f``'s
-    ``%T``), or ``None`` when ``stat`` fails.
+    """
+    Return the type of the filesystem holding the volume root.
+
+    ``stat -f``'s ``%T``, or ``None`` when ``stat`` fails.
 
     Probed once per volume: both the btrfs check and the hard-link check
     derive from it, and on a remote volume each probe is an SSH round-trip.
@@ -25,15 +29,17 @@ def probe_filesystem_type(
 
 
 def is_btrfs_filesystem(fs_type: str | None) -> bool | None:
-    """``None`` when the filesystem type is unknown, which is not the same
-    as "not btrfs" (that would send the operator off to reformat a volume
-    that may be fine).
+    """
+    Return whether *fs_type* is btrfs, ``None`` when it is unknown.
+
+    Unknown is not the same as "not btrfs" (that would send the operator off to reformat
+    a volume that may be fine).
     """
     return fs_type == "btrfs" if fs_type is not None else None
 
 
 def supports_hard_links(fs_type: str | None) -> bool:
-    """An unknown filesystem type is assumed to support hard links."""
+    """Return whether *fs_type* supports hard links, assuming so when unknown."""
     return fs_type not in NO_HARDLINK_FILESYSTEMS
 
 
@@ -57,8 +63,11 @@ def probe_btrfs_readonly(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> bool | None:
-    """Whether the subvolume at *path* is read-only (``btrfs property get``
-    prints ``ro=true`` or ``ro=false``); ``None`` when that cannot be told.
+    """
+    Return whether the subvolume at *path* is read-only.
+
+    ``btrfs property get`` prints ``ro=true`` or ``ro=false``; ``None`` when that cannot
+    be told.
     """
     result = run(["btrfs", "property", "get", path, "ro"], volume, resolved_endpoints)
     match result.stdout.strip() if result.returncode == 0 else None:
@@ -77,6 +86,11 @@ def check_btrfs_mount_option(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> bool:
+    """
+    Return whether the volume's filesystem is mounted with the option *option*.
+
+    Reads the live mount options with ``findmnt``; ``False`` when it fails.
+    """
     # This is the one mount query udisks2 cannot answer, which is why findmnt
     # stays the tool for all of them. udisks exposes mountpoints
     # (Filesystem.MountPoints) and *configured* fstab/crypttab options

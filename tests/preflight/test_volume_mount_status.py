@@ -1,5 +1,8 @@
-"""Tests for how a mount-managed volume's probed mount state becomes its
-preflight errors and its rendered mount status."""
+"""
+Tests for a mount-managed volume's probed mount state.
+
+How it becomes the volume's preflight errors and its rendered mount status.
+"""
 
 from rich.text import Text
 
@@ -32,12 +35,14 @@ def _base_mount_caps(**overrides: object) -> MountCapabilities:
             "device_present": True,
             "mounted": True,
             **overrides,
-        }
+        },
     )
 
 
 def _base_caps(
-    sentinel_exists: bool = True, **mount_overrides: object
+    *,
+    sentinel_exists: bool = True,
+    **mount_overrides: object,
 ) -> VolumeCapabilities:
     """Build VolumeCapabilities with mount defaults, then apply overrides."""
     return VolumeCapabilities(
@@ -62,7 +67,9 @@ def _unencrypted_mount() -> MountConfig:
 
 def _encrypted_vol() -> LocalVolume:
     return LocalVolume(
-        slug="encrypted", path="/mnt/encrypted", mount=_encrypted_mount()
+        slug="encrypted",
+        path="/mnt/encrypted",
+        mount=_encrypted_mount(),
     )
 
 
@@ -74,23 +81,31 @@ def _active_ssh_endpoint_status() -> SshEndpointStatus:
 
 
 def _volume_errors(
-    diag: VolumeDiagnostics, mount: MountConfig | None
+    diag: VolumeDiagnostics,
+    mount: MountConfig | None,
 ) -> list[VolumeErrorKind]:
-    """The errors of a local volume at the encrypted path, mounted by *mount*."""
+    """Return the errors of the encrypted-path local volume, mounted by *mount*."""
     vol = LocalVolume(slug="v", path="/mnt/encrypted", mount=mount)
     return VolumeStatus.from_diagnostics(
-        "v", vol, _active_ssh_endpoint_status(), diag
+        "v",
+        vol,
+        _active_ssh_endpoint_status(),
+        diag,
     ).errors
 
 
 class TestVolumeErrorsMountUpgrades:
-    """When the sentinel is missing and a mount-managed volume recorded a
-    lifecycle failure, the generic SENTINEL_NOT_FOUND is upgraded to the
-    most actionable VolumeErrorKind."""
+    """
+    A recorded lifecycle failure upgrades a missing sentinel's error.
+
+    When the sentinel is missing and a mount-managed volume recorded a lifecycle
+    failure, the generic SENTINEL_NOT_FOUND is upgraded to the most actionable
+    VolumeErrorKind.
+    """
 
     def _diag(self, **mount_overrides: object) -> VolumeDiagnostics:
         return VolumeDiagnostics(
-            capabilities=_base_caps(sentinel_exists=False, **mount_overrides)
+            capabilities=_base_caps(sentinel_exists=False, **mount_overrides),
         )
 
     def test_not_authorized_upgrades_to_polkit_rules_missing(self) -> None:
@@ -192,7 +207,10 @@ class TestVolumeStatusFromDiagnostics:
     def test_all_checks_pass_active(self) -> None:
         diag = VolumeDiagnostics(capabilities=_base_caps())
         status = VolumeStatus.from_diagnostics(
-            "encrypted", _encrypted_vol(), _active_ssh_endpoint_status(), diag
+            "encrypted",
+            _encrypted_vol(),
+            _active_ssh_endpoint_status(),
+            diag,
         )
         assert status.active
 
@@ -206,7 +224,10 @@ class TestVolumeStatusFromDiagnostics:
         )
         diag = VolumeDiagnostics(capabilities=caps)
         status = VolumeStatus.from_diagnostics(
-            "encrypted", _encrypted_vol(), _active_ssh_endpoint_status(), diag
+            "encrypted",
+            _encrypted_vol(),
+            _active_ssh_endpoint_status(),
+            diag,
         )
         assert VolumeErrorKind.POLKIT_RULES_MISSING in status.errors
         assert VolumeErrorKind.SENTINEL_NOT_FOUND not in status.errors
@@ -216,7 +237,10 @@ class TestVolumeStatusFromDiagnostics:
         vol = LocalVolume(slug="plain", path="/mnt/plain")
         diag = VolumeDiagnostics(capabilities=caps)
         status = VolumeStatus.from_diagnostics(
-            "plain", vol, _active_ssh_endpoint_status(), diag
+            "plain",
+            vol,
+            _active_ssh_endpoint_status(),
+            diag,
         )
         assert not status.errors
 
@@ -224,7 +248,10 @@ class TestVolumeStatusFromDiagnostics:
         caps = _base_caps(sentinel_exists=False, device_present=False, mounted=None)
         diag = VolumeDiagnostics(capabilities=caps)
         status = VolumeStatus.from_diagnostics(
-            "encrypted", _encrypted_vol(), _active_ssh_endpoint_status(), diag
+            "encrypted",
+            _encrypted_vol(),
+            _active_ssh_endpoint_status(),
+            diag,
         )
         assert VolumeErrorKind.DEVICE_NOT_PRESENT in status.errors
 

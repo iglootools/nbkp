@@ -1,4 +1,5 @@
-"""Tests for the cleartext-device name troubleshoot prints in fstab fixes.
+"""
+Tests for the cleartext-device name troubleshoot prints in fstab fixes.
 
 ``luks-<uuid>`` is only udisks's default name for an unlocked LUKS container: a
 LUKS2 header label or an ``/etc/crypttab`` entry renames the mapper.  An fstab
@@ -51,7 +52,9 @@ def _issues(vol: LocalVolume, error: VolumeErrorKind) -> list[ts.TroubleshootIss
         slug=vol.slug,
         config=vol,
         ssh_endpoint_status=SshEndpointStatus(
-            slug="localhost", diagnostics=SshEndpointDiagnostics(), errors=[]
+            slug="localhost",
+            diagnostics=SshEndpointDiagnostics(),
+            errors=[],
         ),
         diagnostics=VolumeDiagnostics(),
         errors=[error],
@@ -76,13 +79,16 @@ class TestCleartextDeviceRendering:
         """With no unlocked device to inspect, the derived name is all there is."""
         vol = _volume()
         device, discovered = rem.cleartext_device(
-            vol, _mount(vol), rem.RemediationFacts()
+            vol,
+            _mount(vol),
+            rem.RemediationFacts(),
         )
         assert device == f"/dev/mapper/luks-{_UUID}"
         assert discovered is False
 
     def test_does_not_derive_a_name_that_contradicts_discovery(self) -> None:
-        """Regression: the UUID-derived name must not win over the real one.
+        """
+        Regression: the UUID-derived name must not win over the real one.
 
         This is the bug the preference fixes — an fstab line naming
         /dev/mapper/luks-<uuid> on a host whose mapper is /dev/mapper/<label>
@@ -102,8 +108,9 @@ class TestCleartextDeviceRendering:
         buf = StringIO()
         Console(file=buf, width=200, color_system=None).print(
             ts.format_issues(
-                _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH), ctx
-            )
+                _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH),
+                ctx,
+            ),
         )
         out = buf.getvalue()
         assert f"{_LABELLED}  /mnt/seagate8tb" in out
@@ -114,14 +121,17 @@ class TestCleartextDeviceGathering:
     def test_gathers_the_discovered_mapper(self) -> None:
         vol = _volume()
         run = FakeCommandRunner().on(
-            "lsblk", returns=completed(stdout="sdb1 part\nseagate8tb-luks crypt\n")
+            "lsblk",
+            returns=completed(stdout="sdb1 part\nseagate8tb-luks crypt\n"),
         )
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol), run=run
+            _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH),
+            _ctx(vol),
+            run=run,
         )
         assert facts.cleartext_devices == {vol.slug: _LABELLED}
         assert run.commands == [
-            ["lsblk", "-rno", "NAME,TYPE", f"/dev/disk/by-uuid/{_UUID}"]
+            ["lsblk", "-rno", "NAME,TYPE", f"/dev/disk/by-uuid/{_UUID}"],
         ]
 
     def test_locked_container_is_not_discovered(self) -> None:
@@ -129,7 +139,9 @@ class TestCleartextDeviceGathering:
         # A locked container has no crypt child.
         run = FakeCommandRunner().on("lsblk", returns=completed(stdout="sdb1 part\n"))
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeErrorKind.MOUNT_FAILED), _ctx(vol), run=run
+            _issues(vol, VolumeErrorKind.MOUNT_FAILED),
+            _ctx(vol),
+            run=run,
         )
         assert facts.cleartext_devices == {}
         assert len(run.commands) == 1
@@ -138,13 +150,16 @@ class TestCleartextDeviceGathering:
         vol = _volume()
         run = FakeCommandRunner()
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeErrorKind.UNLOCK_FAILED), _ctx(vol), run=run
+            _issues(vol, VolumeErrorKind.UNLOCK_FAILED),
+            _ctx(vol),
+            run=run,
         )
         assert facts.cleartext_devices == {}
         assert run.commands == []
 
     def test_survives_a_missing_lsblk(self) -> None:
-        """Troubleshoot output must never raise — it is the error path itself.
+        """
+        Troubleshoot output must never raise — it is the error path itself.
 
         `nbkp demo output` renders these fixes on machines with no udisks and no
         lsblk at all, so a discovery that explodes has to degrade to the derived
@@ -152,10 +167,13 @@ class TestCleartextDeviceGathering:
         """
         vol = _volume()
         run = FakeCommandRunner().on(
-            "lsblk", returns=FileNotFoundError(2, "No such file or directory", "lsblk")
+            "lsblk",
+            returns=FileNotFoundError(2, "No such file or directory", "lsblk"),
         )
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol), run=run
+            _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH),
+            _ctx(vol),
+            run=run,
         )
         assert facts.cleartext_devices == {}
 
@@ -167,17 +185,22 @@ class TestCleartextDeviceGathering:
         vol = _volume()
         run = FakeCommandRunner().on("lsblk", returns=error)
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol), run=run
+            _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH),
+            _ctx(vol),
+            run=run,
         )
         assert facts.cleartext_devices == {}
 
     def test_survives_a_failed_lsblk(self) -> None:
         vol = _volume()
         run = FakeCommandRunner().on(
-            "lsblk", returns=completed(1, stderr="permission denied")
+            "lsblk",
+            returns=completed(1, stderr="permission denied"),
         )
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH), _ctx(vol), run=run
+            _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH),
+            _ctx(vol),
+            run=run,
         )
         assert facts.cleartext_devices == {}
 
@@ -186,10 +209,12 @@ class TestPolkitRuleGathering:
     def test_gathers_the_rule_for_the_volume_user(self) -> None:
         vol = _volume()
         ctx = rem.TroubleshootContext(
-            config=Config(volumes={vol.slug: vol}), local_user="alice"
+            config=Config(volumes={vol.slug: vol}),
+            local_user="alice",
         )
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeErrorKind.POLKIT_RULES_MISSING), ctx
+            _issues(vol, VolumeErrorKind.POLKIT_RULES_MISSING),
+            ctx,
         )
         assert set(facts.polkit_rules) == {"alice"}
         assert 'subject.user == "alice"' in facts.polkit_rules["alice"].content
@@ -197,6 +222,7 @@ class TestPolkitRuleGathering:
     def test_no_rule_without_a_polkit_issue(self) -> None:
         vol = _volume()
         facts = ts.gather_remediation_facts(
-            _issues(vol, VolumeErrorKind.UNLOCK_FAILED), _ctx(vol)
+            _issues(vol, VolumeErrorKind.UNLOCK_FAILED),
+            _ctx(vol),
         )
         assert facts.polkit_rules == {}

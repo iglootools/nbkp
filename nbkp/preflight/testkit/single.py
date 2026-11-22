@@ -19,11 +19,12 @@ def check_sync(
     sync: SyncConfig,
     config: Config,
     resolved_endpoints: ResolvedEndpoints | None = None,
-    dry_run: bool = False,
     *,
+    dry_run: bool = False,
     run: VolumeCommandRunner = run_on_volume,
     which: WhichFn = shutil.which,
 ) -> SyncStatus:
+    """Return the status of *sync*, preflighting only it within *config*."""
     result = check_all_syncs(
         config,
         only_syncs=[sync.slug],
@@ -42,7 +43,8 @@ def check_volume(
     run: VolumeCommandRunner = run_on_volume,
     which: WhichFn = shutil.which,
 ) -> VolumeStatus:
-    """Preflight a config holding only *volume*.
+    """
+    Preflight a config holding only *volume*.
 
     A remote volume's SSH endpoint is a stand-in: it only has to exist for the
     config to validate, since the volume's probes connect through
@@ -53,7 +55,10 @@ def check_volume(
         volumes={volume.slug: volume},
     )
     result = check_all_syncs(
-        config, resolved_endpoints=resolved_endpoints, run=run, which=which
+        config,
+        resolved_endpoints=resolved_endpoints,
+        run=run,
+        which=which,
     )
     return result.volume_statuses[volume.slug]
 

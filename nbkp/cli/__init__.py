@@ -1,4 +1,5 @@
-"""Typer CLI entry point.
+"""
+Typer CLI entry point.
 
 The root app and all domain sub-apps are wired together in app.py.
 """
@@ -9,4 +10,5 @@ __all__ = ["app", "main"]
 
 
 def main() -> None:
+    """Run the ``nbkp`` command line (the console-script entry point)."""
     app()

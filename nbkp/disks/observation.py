@@ -1,3 +1,5 @@
+"""The mount state the lifecycle observed, reused by preflight instead of re-probing."""
+
 from dataclasses import dataclass
 
 from nbkp.config import Config, Volume
@@ -7,7 +9,8 @@ from nbkp.disks.models import MountFailureKind
 
 @dataclass(frozen=True)
 class MountObservation:
-    """Pre-computed mount state from mount lifecycle, reusable by preflight.
+    """
+    Pre-computed mount state from mount lifecycle, reusable by preflight.
 
     Fields mirror the runtime-state subset of ``MountCapabilities``.
     Preflight checks can use these values instead of re-probing device
@@ -25,7 +28,8 @@ class MountObservation:
 
     @property
     def mount_failure_reason(self) -> MountFailureKind | None:
-        """Alias of ``failure_reason``.
+        """
+        Alias of ``failure_reason``.
 
         Mirrors ``MountCapabilities.mount_failure_reason`` so that the
         ``MountStatusData`` protocol can expose a single accessor for
@@ -37,7 +41,8 @@ class MountObservation:
 def build_mount_observations(
     mount_results: list[MountResult],
 ) -> dict[str, MountObservation]:
-    """Build mount observations from lifecycle results for preflight reuse.
+    """
+    Build mount observations from lifecycle results for preflight reuse.
 
     The lifecycle already records the runtime state it observed on each
     ``MountResult`` (device present, LUKS unlocked, mounted, effective path),
@@ -71,7 +76,8 @@ def apply_effective_paths(
     config: Config,
     observations: dict[str, MountObservation],
 ) -> Config:
-    """Return a copy of *config* with discovered mount paths filled in.
+    """
+    Return a copy of *config* with discovered mount paths filled in.
 
     For each mount-managed volume whose ``path`` was omitted (Option B,
     discovered mountpoint), substitute the effective path observed during the
@@ -93,8 +99,8 @@ def apply_effective_paths(
                         slug: config.volumes[slug].model_copy(update={"path": path})
                         for slug, path in discovered.items()
                     },
-                }
-            }
+                },
+            },
         )
         if discovered
         else config

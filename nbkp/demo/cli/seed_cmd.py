@@ -1,16 +1,18 @@
+"""The ``nbkp-demo seed`` command."""
+
 import shlex
 from pathlib import Path
 from textwrap import dedent
 from typing import Annotated
 
 import typer
+from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
 from nbkp.clidisplay import StepProgressBar, dry_run_labeled
 from nbkp.config import CredentialProvider
-from nbkp.demo.cli import app, console as _console
 lazy from nbkp.demo.seed import (
     SeedError,
     SeedErrorKind,
@@ -25,6 +27,8 @@ lazy from nbkp.remote.testkit.constants import (
     NETWORK_NAME,
     STORAGE_CONTAINER_NAME,
 )
+
+_console = Console()
 
 
 def _luks_setup_instructions(provider: CredentialProvider) -> list[str]:
@@ -51,7 +55,6 @@ def _luks_setup_instructions(provider: CredentialProvider) -> list[str]:
             ]
 
 
-@app.command("seed")
 def seed_cmd(
     big_file_size: Annotated[
         int,
@@ -63,6 +66,7 @@ def seed_cmd(
             " Set to 0 to disable.",
         ),
     ] = 1,
+    *,
     docker: Annotated[
         bool,
         typer.Option(
@@ -132,13 +136,14 @@ def seed_cmd(
                 on_step_end=bar.on_end,
             )
         except SeedError as e:
-            _print_seed_error(e, docker)
-            raise typer.Exit(1)
+            _print_seed_error(e, docker=docker)
+            raise typer.Exit(1) from e
 
-    _print_summary(result, docker, credential_provider)
+    _print_summary(result, docker=docker, credential_provider=credential_provider)
 
 
 def format_seed_error(e: SeedError) -> str:
+    """Return the message shown to the user for a seed failure, with what to do."""
     match e.kind:
         case SeedErrorKind.DOCKER_EXTRA_MISSING:
             return (
@@ -170,11 +175,11 @@ def format_seed_error(e: SeedError) -> str:
             )
 
 
-def _print_seed_error(e: SeedError, docker: bool) -> None:
+def _print_seed_error(e: SeedError, *, docker: bool) -> None:
     _console.print(Text(format_seed_error(e), style="red"), highlight=False)
     if docker and e.may_leave_containers:
         _console.print(
-            Text("The demo containers may still be running. To remove them:")
+            Text("The demo containers may still be running. To remove them:"),
         )
         _console.print(Text(_docker_teardown()), highlight=False)
 
@@ -186,6 +191,7 @@ def _print_plan(steps: list[str]) -> None:
 
 def _print_summary(
     result: SeedResult,
+    *,
     docker: bool,
     credential_provider: CredentialProvider,
 ) -> None:
@@ -211,7 +217,12 @@ def _print_summary(
         v.mount is not None and v.mount.encryption is not None
         for v in result.config.volumes.values()
     )
-    _print_commands(result, docker, has_luks, credential_provider)
+    _print_commands(
+        result,
+        docker=docker,
+        has_luks=has_luks,
+        credential_provider=credential_provider,
+    )
 
 
 _SUGGESTED_COMMANDS = dedent("""\
@@ -270,11 +281,13 @@ def _docker_teardown() -> str:
 
 def commands_script(
     result: SeedResult,
+    *,
     docker: bool,
     has_luks: bool,
     credential_provider: CredentialProvider,
 ) -> str:
-    """The suggested shell session, assembled from dedented blocks.
+    """
+    Build the suggested shell session from dedented blocks.
 
     Blocks are joined *after* dedenting — splicing multi-line text into a
     dedent template would need the template's indent hardcoded — and the
@@ -284,12 +297,12 @@ def commands_script(
         [
             f"CFG={shlex.quote(str(result.config_path))}",
             f"SH={shlex.quote(str(result.base_dir / 'backup.sh'))}",
-        ]
+        ],
     )
     luks_setup = "\n".join(
         _luks_setup_instructions(credential_provider)
         if has_luks
-        else ["# No LUKS passphrase needed for this config"]
+        else ["# No LUKS passphrase needed for this config"],
     )
     return "\n\n".join(
         [
@@ -297,12 +310,13 @@ def commands_script(
             luks_setup,
             _SUGGESTED_COMMANDS,
             *([_docker_teardown()] if docker else []),
-        ]
+        ],
     )
 
 
 def _print_commands(
     result: SeedResult,
+    *,
     docker: bool,
     has_luks: bool,
     credential_provider: CredentialProvider,
@@ -310,7 +324,12 @@ def _print_commands(
     _console.print(
         Panel(
             Syntax(
-                commands_script(result, docker, has_luks, credential_provider),
+                commands_script(
+                    result,
+                    docker=docker,
+                    has_luks=has_luks,
+                    credential_provider=credential_provider,
+                ),
                 "bash",
                 theme="monokai",
                 background_color="default",
@@ -319,5 +338,5 @@ def _print_commands(
             title="[bold]Try[/bold]",
             border_style="green",
             padding=(0, 1),
-        )
+        ),
     )

@@ -1,4 +1,5 @@
-"""Map preflight errors to display severity given a strictness policy.
+"""
+Map preflight errors to display severity given a strictness policy.
 
 The interpretation of "is this error fatal?" depends on the
 ``Strictness`` mode in use.  This module turns each error into a
@@ -49,7 +50,8 @@ def _is_inactive(error: PreflightErrorKind) -> bool:
 
 
 def severity_for_error(error: PreflightErrorKind, strictness: Strictness) -> Severity:
-    """Classify a single error as fatal (ERROR) or non-fatal (WARNING).
+    """
+    Classify a single error as fatal (ERROR) or non-fatal (WARNING).
 
     Under ``IGNORE_NONE`` every error is fatal; under ``IGNORE_ALL``
     nothing is fatal; under ``IGNORE_INACTIVE`` (default) only the
@@ -60,7 +62,7 @@ def severity_for_error(error: PreflightErrorKind, strictness: Strictness) -> Sev
     return (
         Severity.WARNING
         if error is SyncErrorKind.DISABLED
-        else classify_severity(_is_inactive(error), strictness)
+        else classify_severity(is_inactive=_is_inactive(error), strictness=strictness)
     )
 
 
@@ -73,7 +75,8 @@ def severity_for_errors(
     | list[SyncErrorKind],
     strictness: Strictness,
 ) -> Severity:
-    """Highest severity across the given errors.
+    """
+    Highest severity across the given errors.
 
     Returns ``OK`` when the list is empty.  Otherwise returns
     ``ERROR`` if any error is fatal, else ``WARNING``.

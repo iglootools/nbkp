@@ -1,3 +1,5 @@
+"""Rich rendering of syncs: the dry-run preview of ``run`` and its results table."""
+
 import shlex
 
 from rich.console import Group, RenderableType
@@ -39,7 +41,10 @@ def _snapshot_preview_commands(
     match dst_ep.snapshot_mode:
         case "btrfs":
             cmds = [
-                f"btrfs subvolume snapshot -r {dest_path}/{STAGING_DIR}/ {dest_path}/{SNAPSHOTS_DIR}/<timestamp>",
+                (
+                    f"btrfs subvolume snapshot -r {dest_path}/{STAGING_DIR}/"
+                    f" {dest_path}/{SNAPSHOTS_DIR}/<timestamp>"
+                ),
                 f"ln -sfn {SNAPSHOTS_DIR}/<timestamp> {dest_path}/{LATEST_LINK}",
             ]
             return (
@@ -62,7 +67,8 @@ def _snapshot_preview_commands(
 
 
 def _preview_rsync_target(
-    ss: SyncStatus, config: Config
+    ss: SyncStatus,
+    config: Config,
 ) -> tuple[str | None, str | None]:
     """``(dest_suffix, link_dest)`` that ``run`` would pass to rsync."""
     match config.destination_endpoint(ss.config).snapshot_mode:
@@ -136,6 +142,11 @@ def build_run_preview_sections(
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
 ) -> list[RenderableType]:
+    """
+    Return the tables of the commands ``run`` would execute for the active syncs.
+
+    The rsync commands, then the snapshot commands; a table with no row is left out.
+    """
     return [
         *_build_rsync_commands_section(sync_statuses, config, resolved_endpoints),
         *_build_snapshot_commands_section(sync_statuses, config),
@@ -149,8 +160,13 @@ def format_run_preview(
     resolved_endpoints: ResolvedEndpoints | None = None,
     wrap_in_panel: bool = True,
 ) -> RenderableType:
+    """
+    Return the run preview of :func:`build_run_preview_sections` as one renderable.
+
+    In a "Run Preview" panel when *wrap_in_panel*, else as a bare group.
+    """
     sections = Group(
-        *build_run_preview_sections(sync_statuses, config, resolved_endpoints or {})
+        *build_run_preview_sections(sync_statuses, config, resolved_endpoints or {}),
     )
     return (
         Panel(
@@ -213,8 +229,11 @@ def _result_details(
             [
                 "Snapshot: "
                 + _format_snapshot_display(
-                    r.snapshot_path, r.sync_slug, config, resolved_endpoints
-                )
+                    r.snapshot_path,
+                    r.sync_slug,
+                    config,
+                    resolved_endpoints,
+                ),
             ]
             if r.snapshot_path
             else []
@@ -231,10 +250,17 @@ def _result_details(
 
 def build_human_results_sections(
     results: list[SyncResult],
+    *,
     dry_run: bool,
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
 ) -> list[RenderableType]:
+    """
+    Return the table of sync results: each sync's status and details.
+
+    The details are the error, the skip reason, the snapshot taken, the snapshots
+    pruned, the warnings, and the last lines of rsync's output for a failed sync.
+    """
     table = Table(
         title=dry_run_table_title("Sync results:", dry_run=dry_run),
     )
@@ -257,10 +283,17 @@ def build_human_results_sections(
 
 def format_human_results(
     results: list[SyncResult],
+    *,
     dry_run: bool,
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
 ) -> Group:
+    """Return the results table of :func:`build_human_results_sections` as a group."""
     return Group(
-        *build_human_results_sections(results, dry_run, config, resolved_endpoints)
+        *build_human_results_sections(
+            results,
+            dry_run=dry_run,
+            config=config,
+            resolved_endpoints=resolved_endpoints,
+        ),
     )

@@ -38,7 +38,7 @@ def _config() -> Config:
                     encryption=LuksEncryptionConfig(passphrase_id="offline-luks"),
                 ),
             ),
-        }
+        },
     )
 
 
@@ -65,7 +65,7 @@ def _udisks_steps(run: FakeCommandRunner) -> list[str]:
 
 
 def _recorder(calls: list[str]) -> Callable[[str], str]:
-    """A ``passphrase_fn`` that records the ids it is asked for."""
+    """Return a ``passphrase_fn`` that records the ids it is asked for."""
 
     def passphrase_fn(passphrase_id: str) -> str:
         calls.append(passphrase_id)
@@ -76,7 +76,8 @@ def _recorder(calls: list[str]) -> Callable[[str], str]:
 
 class TestPassphrasePrefetch:
     def test_retrieves_offline_volume_passphrase_before_mounting(self) -> None:
-        """Every configured passphrase is read up front, plugged in or not.
+        """
+        Every configured passphrase is read up front, plugged in or not.
 
         The point of prefetching: an OS secret store gates access per item,
         so reading only the online drive's passphrase would leave the offline
@@ -107,7 +108,12 @@ class TestPassphrasePrefetch:
         run = FakeCommandRunner().on("test", "-e", returns=completed(1))
 
         with managed_mount(
-            _config(), {}, _recorder(calls), names=["online"], umount=False, run=run
+            _config(),
+            {},
+            _recorder(calls),
+            names=["online"],
+            umount=False,
+            run=run,
         ):
             pass
 
@@ -125,10 +131,7 @@ class TestPassphrasePrefetch:
 
     def test_prefetch_failure_does_not_abort_the_mount_phase(self) -> None:
         def passphrase_fn(pid: str) -> str:
-            raise CredentialError(
-                f"No passphrase found in keyring for id '{pid}'",
-                reason=CredentialErrorKind.NOT_FOUND,
-            )
+            raise CredentialError(CredentialErrorKind.NOT_FOUND, passphrase_id=pid)
 
         run = FakeCommandRunner().on("test", "-e", returns=completed(1))
         with managed_mount(_config(), {}, passphrase_fn, umount=False, run=run) as (
@@ -147,7 +150,11 @@ class TestMountPhase:
         run = FakeCommandRunner().on("test", "-e", returns=completed(1))
 
         results = mount_phase(
-            _config(), {}, passphrase_fn=_recorder(calls), names=["online"], run=run
+            _config(),
+            {},
+            passphrase_fn=_recorder(calls),
+            names=["online"],
+            run=run,
         )
 
         assert calls == ["offline-luks", "online-luks"]
@@ -159,16 +166,20 @@ class TestUmountOnInterruption:
     """Regression: an interruption during mounting left drives unlocked."""
 
     def _interrupted(self, interrupt: BaseException) -> list[str]:
-        """The udisks steps run when *interrupt* stops the mount phase."""
+        """Return the udisks steps run when *interrupt* stops the mount phase."""
         run = _online_drive()
 
-        def on_mount_end(slug: str, _result: object) -> None:
+        def on_mount_end(_slug: str, _result: object) -> None:
             raise interrupt
 
         with (
             pytest.raises(type(interrupt)),
             managed_mount(
-                _config(), {}, _recorder([]), on_mount_end=on_mount_end, run=run
+                _config(),
+                {},
+                _recorder([]),
+                on_mount_end=on_mount_end,
+                run=run,
             ),
         ):
             pass

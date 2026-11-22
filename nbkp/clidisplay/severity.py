@@ -1,4 +1,5 @@
-"""How a :class:`~nbkp.policy.Severity` is displayed.
+"""
+How a :class:`~nbkp.policy.Severity` is displayed.
 
 ``OK`` (green ✓), ``WARNING`` (orange ⚠), ``ERROR`` (red ✗).  Deciding
 which severity a finding has is policy (:mod:`nbkp.policy`); this module
@@ -28,6 +29,7 @@ def severity_symbol(severity: Severity) -> str:
 
 
 def severity_style(severity: Severity) -> str:
+    """Return the Rich style (a color name) for a severity level."""
     match severity:
         case Severity.OK:
             return OK_STYLE

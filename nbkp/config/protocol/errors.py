@@ -1,4 +1,5 @@
-"""Stable error codes for the config validators nbkp owns.
+"""
+Stable error codes for the config validators nbkp owns.
 
 Validators raise :func:`config_error` instead of a bare ``ValueError`` so that
 each failure surfaces in ``ValidationError.errors()`` with a machine-readable
@@ -27,7 +28,7 @@ class ConfigValidationErrorKind(StrEnum):
     CROSS_SERVER_SYNC = "cross-server-sync"
     CREDENTIAL_COMMAND_REQUIRED = "credential-command-required"
     CREDENTIAL_COMMAND_PLACEHOLDER = "credential-command-placeholder"
-    PASSPHRASE_ENV_VAR_COLLISION = "passphrase-env-var-collision"
+    PASSPHRASE_ENV_VAR_COLLISION = "passphrase-env-var-collision"  # noqa: S105 -- an error kind, not a secret
     PATH_REQUIRED = "path-required"
     RELATIVE_PATH = "relative-path"
     INVALID_FILTER = "invalid-filter"
@@ -36,8 +37,11 @@ class ConfigValidationErrorKind(StrEnum):
 
 
 def config_error(code: ConfigValidationErrorKind, message: str) -> PydanticCustomError:
-    """The message travels as a context value behind a fixed ``{message}``
-    template, so braces in it (e.g. the literal ``{id}`` placeholder) are
-    rendered verbatim rather than read as template fields.
+    """
+    Build a validation error of kind *code* carrying *message*.
+
+    The message travels as a context value behind a fixed ``{message}`` template, so
+    braces in it (e.g. the literal ``{id}`` placeholder) are rendered verbatim rather
+    than read as template fields.
     """
     return PydanticCustomError(code.value, "{message}", {"message": message})

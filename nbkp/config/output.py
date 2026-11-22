@@ -1,3 +1,5 @@
+"""Human-readable and JSON rendering of the config and of config errors."""
+
 from collections.abc import Mapping
 from typing import Any, Protocol
 
@@ -22,14 +24,17 @@ from nbkp.config.protocol.volume import MountConfig
 
 
 class SelectedEndpoint(Protocol):
-    """The SSH endpoint chosen for a remote volume at runtime.
+    """
+    The SSH endpoint chosen for a remote volume at runtime.
 
     Structural so that config display does not depend on ``remote``, where
     endpoint selection (and its ``ResolvedEndpoint`` model) lives.
     """
 
     @property
-    def server(self) -> SshEndpoint: ...
+    def server(self) -> SshEndpoint:
+        """Return the SSH endpoint selected for the volume."""
+        ...
 
 
 type SelectedEndpoints = Mapping[str, SelectedEndpoint]
@@ -40,6 +45,12 @@ def format_volume_display(
     vol: LocalVolume | RemoteVolume,
     resolved_endpoints: SelectedEndpoints,
 ) -> str:
+    """
+    Return where a volume lives, for display: ``host:path`` or a local path.
+
+    A remote volume shows its selected endpoint's host label, or its primary
+    endpoint's slug when none was selected for it.
+    """
     match vol:
         case RemoteVolume():
             ep = resolved_endpoints.get(vol.slug)
@@ -59,6 +70,12 @@ def host_label(
     vol: LocalVolume | RemoteVolume,
     resolved_endpoints: SelectedEndpoints,
 ) -> str:
+    """
+    Return the host a volume is on: ``this machine``, or the selected host.
+
+    Raises ``KeyError`` for a remote volume with no entry in
+    *resolved_endpoints*.
+    """
     match vol:
         case LocalVolume():
             return "this machine"
@@ -71,21 +88,33 @@ def endpoint_path(
     vol: LocalVolume | RemoteVolume,
     subdir: str | None,
 ) -> str:
+    """
+    Return the volume's path joined with *subdir*, for display.
+
+    Unlike :func:`resolve_endpoint_path`, a volume whose path is not yet known
+    shows a placeholder instead of raising.
+    """
     return join_subdir(_display_path(vol), subdir)
 
 
 def format_mount_summary(mount: MountConfig | None) -> str:
+    """
+    Return a short summary of a mount config: a shortened UUID, and ``luks``.
+
+    Empty when the volume is not mount-managed.
+    """
     if mount is None:
         return ""
     return " ".join(
         [
             f"uuid:{mount.device_uuid[:8]}\u2026",
             *(["luks"] if mount.encryption is not None else []),
-        ]
+        ],
     )
 
 
 def sync_endpoint_display(endpoint: SyncEndpoint) -> str:
+    """Return a sync endpoint as ``volume`` or ``volume:/subdir``, for display."""
     if endpoint.subdir:
         return f"{endpoint.volume}:/{endpoint.subdir}"
     else:
@@ -93,7 +122,8 @@ def sync_endpoint_display(endpoint: SyncEndpoint) -> str:
 
 
 def sync_options_summary(sync: SyncConfig, config: Config) -> str:
-    """Build a comma-separated summary of notable sync options.
+    """
+    Build a comma-separated summary of notable sync options.
 
     Shown:
     - rsync-filter: filters or filter_file configured on the sync
@@ -118,7 +148,8 @@ def sync_options_summary(sync: SyncConfig, config: Config) -> str:
             if src_ep.snapshot_mode != "none"
             else "",
             _snapshot_label(
-                f"dst-snapshots:{dst_ep.snapshot_mode}", dst_ep.max_snapshots
+                f"dst-snapshots:{dst_ep.snapshot_mode}",
+                dst_ep.max_snapshots,
             )
             if dst_ep.snapshot_mode != "none"
             else "",
@@ -136,7 +167,7 @@ def format_human_config(
     *,
     resolved_endpoints: SelectedEndpoints | None = None,
 ) -> Group:
-    """The config's tables, separated by a blank line."""
+    """Format the config's tables, separated by a blank line."""
     re = resolved_endpoints or {}
     tables = [
         *([_ssh_endpoints_table(config)] if config.ssh_endpoints else []),
@@ -171,7 +202,8 @@ def _ssh_endpoints_table(config: Config) -> Table:
 
 
 def _volume_type_and_endpoint(
-    vol: LocalVolume | RemoteVolume, re: SelectedEndpoints
+    vol: LocalVolume | RemoteVolume,
+    re: SelectedEndpoints,
 ) -> tuple[str, str]:
     match vol:
         case RemoteVolume():
@@ -251,7 +283,8 @@ def _validation_errors_json(cause: ValidationError) -> list[dict[str, Any]]:
 
 
 def config_error_json(e: ConfigError) -> dict[str, Any]:
-    """A ConfigError as JSON-ready data for ``--output json``.
+    """
+    Return a ConfigError as JSON-ready data for ``--output json``.
 
     Validation failures also list each problem with its location and its
     stable ``type`` code (see ``ConfigValidationErrorKind``).
@@ -266,12 +299,12 @@ def config_error_json(e: ConfigError) -> dict[str, Any]:
                 if isinstance(cause, ValidationError)
                 else {}
             ),
-        }
+        },
     }
 
 
 def format_config_error(e: ConfigError) -> Panel:
-    """A ConfigError as a Rich panel, for stderr."""
+    """Format a ConfigError as a Rich panel, for stderr."""
     body = _config_error_body(e)
     # Both wrapped in Text: the title's own brackets would be read as a style
     # tag (rendering a bare "Config error"), and the body carries YAML parser

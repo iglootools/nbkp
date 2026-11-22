@@ -1,3 +1,5 @@
+"""Finding the config file on disk and loading it into a validated :class:`Config`."""
+
 import os
 from collections.abc import Callable, Mapping
 from enum import StrEnum
@@ -24,6 +26,8 @@ _CONFIG_EXAMPLES_URL = (
 
 
 class ConfigErrorKind(StrEnum):
+    """Why the config could not be loaded: the ``reason`` of a :class:`ConfigError`."""
+
     FILE_NOT_FOUND = "file-not-found"
     UNREADABLE = "unreadable"
     NO_CONFIG_FOUND = "no-config-found"
@@ -34,14 +38,59 @@ class ConfigErrorKind(StrEnum):
 
 
 class ConfigError(Exception):
-    def __init__(self, message: str, reason: ConfigErrorKind) -> None:
-        super().__init__(message)
+    """
+    The config could not be loaded; *reason* says why.
+
+    *path* is the file at fault (the SSH config for ``INVALID_SSH_CONFIG``),
+    *searched* the paths looked through when no file was found, and *detail*
+    the underlying error.
+    """
+
+    def __init__(
+        self,
+        reason: ConfigErrorKind,
+        *,
+        path: str | Path | None = None,
+        searched: tuple[Path, ...] = (),
+        detail: str | None = None,
+    ) -> None:
+        """Build the error from its reason and the context that explains it."""
         self.reason = reason
+        self.path = path
+        self.searched = searched
+        self.detail = detail
+        super().__init__(self._message())
+
+    def _message(self) -> str:
+        match self.reason:
+            case ConfigErrorKind.FILE_NOT_FOUND:
+                return f"Config file not found: {self.path}"
+            case ConfigErrorKind.UNREADABLE:
+                return f"Cannot read config file {self.path}: {self.detail}"
+            case ConfigErrorKind.NO_CONFIG_FOUND:
+                searched = ", ".join(str(p) for p in self.searched)
+                return (
+                    f"No config file found. Searched: {searched}."
+                    f" Create one at {self.searched[0]} or pass --config PATH"
+                    f" (format: {_CONFIG_REFERENCE_URL}). Example configs to start"
+                    f" from: {_CONFIG_EXAMPLES_URL}."
+                )
+            case ConfigErrorKind.INVALID_YAML:
+                return f"Invalid YAML in {self.path}: {self.detail}"
+            case ConfigErrorKind.NOT_A_MAPPING:
+                return "Config file must be a YAML mapping"
+            case ConfigErrorKind.VALIDATION:
+                return self.detail or "Config validation failed"
+            case ConfigErrorKind.INVALID_SSH_CONFIG:
+                return f"Invalid SSH config {self.path}: {self.detail}"
 
 
 def _xdg_config_home(environ: Mapping[str, str], home: Path) -> Path:
-    """The XDG spec says an empty or relative ``$XDG_CONFIG_HOME`` is invalid
-    and must be ignored: honouring it would search the working directory.
+    """
+    Return ``$XDG_CONFIG_HOME`` when valid, else the default under *home*.
+
+    The XDG spec says an empty or relative ``$XDG_CONFIG_HOME`` is invalid and must be
+    ignored: honouring it would search the working directory.
     """
     xdg = Path(environ.get("XDG_CONFIG_HOME", ""))
     return xdg if xdg.is_absolute() else home / ".config"
@@ -53,7 +102,8 @@ def _config_search_paths(
     user_dir: ConfigDirFn,
     site_dir: ConfigDirFn,
 ) -> list[Path]:
-    """Config file search paths in priority order.
+    """
+    Config file search paths in priority order.
 
     Order: XDG > platform user config > platform site config.
     On Linux, XDG and platform user config resolve to the same path
@@ -77,7 +127,8 @@ def find_config_file(
     user_dir: ConfigDirFn = user_config_dir,
     site_dir: ConfigDirFn = site_config_dir,
 ) -> Path:
-    """Find the configuration file using search order.
+    """
+    Find the configuration file using search order.
 
     Order: explicit path > XDG > platform user config > platform site config.
     The search reads *environ*, *home* (the user's home directory, by
@@ -87,10 +138,7 @@ def find_config_file(
     if config_path is not None:
         p = Path(config_path)
         if not p.is_file():
-            raise ConfigError(
-                f"Config file not found: {config_path}",
-                reason=ConfigErrorKind.FILE_NOT_FOUND,
-            )
+            raise ConfigError(ConfigErrorKind.FILE_NOT_FOUND, path=config_path)
         else:
             return p
     else:
@@ -104,13 +152,7 @@ def find_config_file(
         if found is not None:
             return found
         else:
-            raise ConfigError(
-                f"No config file found. Searched: {', '.join(str(p) for p in search)}."
-                f" Create one at {search[0]} or pass --config PATH (format:"
-                f" {_CONFIG_REFERENCE_URL}). Example configs to start from:"
-                f" {_CONFIG_EXAMPLES_URL}.",
-                reason=ConfigErrorKind.NO_CONFIG_FOUND,
-            )
+            raise ConfigError(ConfigErrorKind.NO_CONFIG_FOUND, searched=tuple(search))
 
 
 def load_config(
@@ -121,40 +163,46 @@ def load_config(
     user_dir: ConfigDirFn = user_config_dir,
     site_dir: ConfigDirFn = site_config_dir,
 ) -> Config:
-    """Raises ``ConfigError`` when the file is missing or unreadable, is not a
-    YAML mapping, or fails validation; ``reason`` says which.
+    """
+    Load and validate the config file.
+
+    Raises ``ConfigError`` when the file is missing or unreadable, is not a YAML
+    mapping, or fails validation; ``reason`` says which.
     """
     path = find_config_file(
-        config_path, environ, home=home, user_dir=user_dir, site_dir=site_dir
+        config_path,
+        environ,
+        home=home,
+        user_dir=user_dir,
+        site_dir=site_dir,
     )
     try:
-        with open(path, encoding="utf-8") as f:
+        with Path(path).open(encoding="utf-8") as f:
             raw = yaml.safe_load(f)
     except OSError as e:
         raise ConfigError(
-            f"Cannot read config file {path}: {e.strerror or e}",
-            reason=ConfigErrorKind.UNREADABLE,
+            ConfigErrorKind.UNREADABLE,
+            path=path,
+            detail=e.strerror or str(e),
         ) from e
     except yaml.YAMLError as e:
-        raise ConfigError(
-            f"Invalid YAML in {path}: {e}",
-            reason=ConfigErrorKind.INVALID_YAML,
-        ) from e
+        raise ConfigError(ConfigErrorKind.INVALID_YAML, path=path, detail=str(e)) from e
     except UnicodeDecodeError as e:
         raise ConfigError(
-            f"Invalid YAML in {path}: not UTF-8 (byte {e.object[e.start]:#04x}"
-            f" at offset {e.start})",
-            reason=ConfigErrorKind.INVALID_YAML,
+            ConfigErrorKind.INVALID_YAML,
+            path=path,
+            detail=f"not UTF-8 (byte {e.object[e.start]:#04x} at offset {e.start})",
         ) from e
 
     if not isinstance(raw, dict):
-        raise ConfigError(
-            "Config file must be a YAML mapping",
-            reason=ConfigErrorKind.NOT_A_MAPPING,
-        )
+        raise ConfigError(ConfigErrorKind.NOT_A_MAPPING, path=path)
     else:
         try:
             config = Config.model_validate(raw)
         except ValidationError as e:
-            raise ConfigError(str(e), reason=ConfigErrorKind.VALIDATION) from e
+            raise ConfigError(
+                ConfigErrorKind.VALIDATION,
+                path=path,
+                detail=str(e),
+            ) from e
         return config

@@ -1,4 +1,5 @@
-"""Tests for sync-endpoint error interpretation.
+"""
+Tests for sync-endpoint error interpretation.
 
 Covers the policy logic in ``preflight.status`` that translates raw
 diagnostics into error enums, separately from full ``check_all_syncs``
@@ -38,7 +39,7 @@ def _ssh_status() -> SshEndpointStatus:
                 has_btrfs=False,
                 has_stat=True,
                 has_findmnt=True,
-            )
+            ),
         ),
         errors=[],
     )
@@ -55,14 +56,15 @@ def _vol_status() -> VolumeStatus:
                 is_btrfs_filesystem=False,
                 hardlink_supported=True,
                 btrfs_user_subvol_rm=False,
-            )
+            ),
         ),
         errors=[],
     )
 
 
 class TestNotWritableSuppression:
-    """``NOT_WRITABLE`` only fires when the endpoint directory exists.
+    """
+    ``NOT_WRITABLE`` only fires when the endpoint directory exists.
 
     Approximated via ``sentinel_exists`` (the sentinel lives inside
     the dir, so its presence proves the dir exists).  This prevents
@@ -82,7 +84,8 @@ class TestNotWritableSuppression:
         assert DestinationEndpointErrorKind.NOT_WRITABLE in status.errors
 
     def test_not_writable_suppressed_when_sentinel_missing(self) -> None:
-        """Sentinel missing → dir likely doesn't exist → suppress NOT_WRITABLE.
+        """
+        Sentinel missing → dir likely doesn't exist → suppress NOT_WRITABLE.
 
         Showing both SENTINEL_NOT_FOUND (with its ``mkdir -p`` fix) and
         NOT_WRITABLE would be misleading: the create-dir fix already

@@ -6,4 +6,5 @@ __all__ = ["app", "main"]
 
 
 def main() -> None:
+    """Run the ``nbkp-demo`` command-line app."""
     app()

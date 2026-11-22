@@ -1,3 +1,5 @@
+"""The ``nbkp snapshots show`` command."""
+
 import typer
 from rich.console import Console
 
@@ -14,7 +16,6 @@ from nbkp.cliwiring.options import (
 )
 from nbkp.policy import Strictness
 from nbkp.snapshots import show_all_syncs
-from nbkp.snapshots.cli import app
 from nbkp.snapshots.cli.operation import (
     SnapshotCommandOptions,
     run_snapshot_operation_or_exit,
@@ -24,13 +25,13 @@ from nbkp.snapshots.models import ShowResult
 from nbkp.snapshots.output import format_human_show_results
 
 
-@app.command("show")
 def show_cmd(
     ctx: typer.Context,
     config: CONFIG_OPTION = None,
     sync: SYNC_OPTION = None,
     output: OUTPUT_OPTION = OutputFormat.HUMAN,
     strictness: STRICTNESS_OPTION = Strictness.IGNORE_INACTIVE,
+    *,
     location: LOCATION_OPTION = None,
     exclude_location: EXCLUDE_LOCATION_OPTION = None,
     network: NETWORK_OPTION = None,

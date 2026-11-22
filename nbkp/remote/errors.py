@@ -1,4 +1,5 @@
-"""Classification of SSH/transport exceptions.
+"""
+Classification of SSH/transport exceptions.
 
 Remote commands go through Fabric/Paramiko, which signal a failed connection
 with a variety of exception types.  Callers that turn a connection failure
@@ -21,9 +22,12 @@ lazy from nbkp.remote.hostkeys import UnknownHostKeyError
 
 @cache
 def ssh_auth_errors() -> tuple[type[BaseException], ...]:
-    """The host was reached but refused the connection (bad key, unknown or
-    changed host key).  Subclasses of ``paramiko.SSHException`` — catch these
-    first."""
+    """
+    Return the exceptions raised when the host refused the connection.
+
+    The host was reached but refused it (bad key, unknown or changed host key).
+    Subclasses of ``paramiko.SSHException``: catch these first.
+    """
     return (
         paramiko.AuthenticationException,
         paramiko.BadHostKeyException,
@@ -42,6 +46,7 @@ def ssh_connection_errors() -> tuple[type[BaseException], ...]:
 
 
 def is_auth_error(error: BaseException) -> bool:
+    """Return whether *error* means the host was reached but refused us."""
     return isinstance(error, ssh_auth_errors())
 
 

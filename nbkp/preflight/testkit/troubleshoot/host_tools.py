@@ -40,7 +40,7 @@ from nbkp.preflight.testkit.troubleshoot.ssh import (
 # from_diagnostics() would short-circuit the volume to SSH_ENDPOINT_INACTIVE.
 
 _NAS_RSYNC_MISSING_SSH = nas_status(
-    HOST_TOOLS.model_copy(update={"has_rsync": False, "rsync_version_ok": False})
+    HOST_TOOLS.model_copy(update={"has_rsync": False, "rsync_version_ok": False}),
 )
 
 
@@ -54,11 +54,12 @@ def _rsync_missing_statuses(config: Config, shared: SharedStatuses) -> ScenarioS
                 config=config.syncs["rsync-missing"],
                 source_endpoint_status=shared.laptop_src_inactive,
                 destination_endpoint_status=inactive_dst_ep_status(
-                    "dst-rsync-missing", nas
+                    "dst-rsync-missing",
+                    nas,
                 ),
                 errors=[SyncErrorKind.SOURCE_ENDPOINT_INACTIVE],
             ),
-        )
+        ),
     )
 
 
@@ -66,7 +67,9 @@ RSYNC_MISSING = Scenario(
     statuses=_rsync_missing_statuses,
     sync_endpoints=(
         SyncEndpoint(
-            slug="dst-rsync-missing", volume="nas-backup", subdir="rsync-check"
+            slug="dst-rsync-missing",
+            volume="nas-backup",
+            subdir="rsync-check",
         ),
     ),
     syncs=(sync_from_laptop("rsync-missing", "dst-rsync-missing"),),
@@ -76,7 +79,8 @@ _LOCALHOST_BTRFS_MISSING_SSH = localhost_status(needs=BTRFS_SNAPSHOT_NEEDS)
 
 
 def _btrfs_not_detected_statuses(
-    config: Config, shared: SharedStatuses
+    config: Config,
+    shared: SharedStatuses,
 ) -> ScenarioStatuses:
     # SshEndpointErrorKind.BTRFS_NOT_FOUND (Layer 1)
     # + DestinationEndpointErrorKind.VOL_NOT_BTRFS (Layer 3)
@@ -100,12 +104,12 @@ def _btrfs_not_detected_statuses(
                     snapshot_dirs=SnapshotDirsDiagnostics(exists=True, writable=True),
                     latest=LatestSymlinkState(exists=True, raw_target="/dev/null"),
                 ),
-                [
+                errors=[
                     DestinationEndpointErrorKind.VOL_NOT_BTRFS,
                     DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME,
                 ],
             ),
-        )
+        ),
     )
 
 
@@ -131,7 +135,10 @@ _LOCALHOST_TOOLS_MISSING_SSH = localhost_status(
 def _tools_missing_statuses(config: Config, shared: SharedStatuses) -> ScenarioStatuses:
     # SshEndpointErrorKind.STAT_NOT_FOUND + FINDMNT_NOT_FOUND (Layer 1)
     usb4 = volume_status(
-        config, "usb-4", _LOCALHOST_TOOLS_MISSING_SSH, healthy_caps(hardlinks=False)
+        config,
+        "usb-4",
+        _LOCALHOST_TOOLS_MISSING_SSH,
+        healthy_caps(hardlinks=False),
     )
     return ScenarioStatuses(
         syncs=(
@@ -142,7 +149,7 @@ def _tools_missing_statuses(config: Config, shared: SharedStatuses) -> ScenarioS
                 destination_endpoint_status=inactive_dst_ep_status("dst-tools", usb4),
                 errors=[SyncErrorKind.SOURCE_ENDPOINT_INACTIVE],
             ),
-        )
+        ),
     )
 
 
@@ -160,7 +167,7 @@ TOOLS_MISSING = Scenario(
 )
 
 _NAS_RSYNC_OLD_SSH = nas_status(
-    HOST_TOOLS.model_copy(update={"rsync_version_ok": False})
+    HOST_TOOLS.model_copy(update={"rsync_version_ok": False}),
 )
 
 
@@ -174,11 +181,12 @@ def _rsync_too_old_statuses(config: Config, shared: SharedStatuses) -> ScenarioS
                 config=config.syncs["rsync-too-old"],
                 source_endpoint_status=shared.laptop_src_inactive,
                 destination_endpoint_status=inactive_dst_ep_status(
-                    "dst-rsync-old", nas
+                    "dst-rsync-old",
+                    nas,
                 ),
                 errors=[SyncErrorKind.SOURCE_ENDPOINT_INACTIVE],
             ),
-        )
+        ),
     )
 
 
@@ -199,12 +207,16 @@ _LOCALHOST_LSBLK_MISSING_SSH = localhost_status(
 
 
 def _host_tool_errors_statuses(
-    config: Config, shared: SharedStatuses
+    config: Config,
+    shared: SharedStatuses,
 ) -> ScenarioStatuses:
     # SyncErrorKind.ENDPOINT_HOST_ERRORS (Layer 4; the fix lives at the SSH
     # endpoint layer)
     usb14 = volume_status(
-        config, "usb-14", _LOCALHOST_LSBLK_MISSING_SSH, healthy_caps()
+        config,
+        "usb-14",
+        _LOCALHOST_LSBLK_MISSING_SSH,
+        healthy_caps(),
     )
     return ScenarioStatuses(
         volumes=(usb14,),
@@ -213,10 +225,12 @@ def _host_tool_errors_statuses(
                 slug="host-tool-errors",
                 config=config.syncs["host-tool-errors"],
                 source_endpoint_status=active_src_ep_status(
-                    LAPTOP_SRC, shared.laptop_active
+                    LAPTOP_SRC,
+                    shared.laptop_active,
                 ),
                 destination_endpoint_status=active_dst_ep_status(
-                    "dst-host-errors", usb14
+                    "dst-host-errors",
+                    usb14,
                 ),
                 errors=[SyncErrorKind.ENDPOINT_HOST_ERRORS],
             ),

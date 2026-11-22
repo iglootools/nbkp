@@ -17,8 +17,10 @@ from nbkp.preflight.status.volume import INACTIVE_VOLUME_ERRORS
 
 
 class SyncErrorKind(enum.StrEnum):
-    """Only errors that require sync-graph context live here; the rest
-    are at the SSH endpoint, volume or sync endpoint level.
+    """
+    Errors that require sync-graph context.
+
+    The rest are at the SSH endpoint, volume or sync endpoint level.
     """
 
     DISABLED = "disabled"
@@ -42,11 +44,13 @@ INACTIVE_SYNC_ERRORS: frozenset[SyncErrorKind] = frozenset(
         SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING,
         SyncErrorKind.SOURCE_ENDPOINT_INACTIVE,
         SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE,
-    }
+    },
 )
 
 
 class SyncStatus(BaseModel):
+    """A sync's endpoint statuses and the sync-level errors they lead to."""
+
     model_config = ConfigDict(frozen=True)
 
     slug: str
@@ -64,10 +68,12 @@ class SyncStatus(BaseModel):
     @computed_field
     @property
     def active(self) -> bool:
+        """Return whether the sync has no errors."""
         return not self.errors
 
     def is_expected_inactive(self) -> bool:
-        """Whether all errors across all 4 layers are expected-inactive.
+        """
+        Whether all errors across all 4 layers are expected-inactive.
 
         Used to distinguish syncs that are inactive due to expected
         conditions (missing sentinels, offline volumes) from those with
@@ -89,7 +95,7 @@ class SyncStatus(BaseModel):
                 set(src_ep.errors) <= INACTIVE_SRC_ENDPOINT_ERRORS,
                 set(dst_ep.errors) <= INACTIVE_DST_ENDPOINT_ERRORS,
                 set(self.errors) <= INACTIVE_SYNC_ERRORS,
-            ]
+            ],
         )
 
     @staticmethod
@@ -99,8 +105,16 @@ class SyncStatus(BaseModel):
         src_ep_status: SourceEndpointStatus,
         dst_ep_status: DestinationEndpointStatus,
         selected_syncs: dict[str, SyncConfig],
+        *,
         dry_run: bool,
     ) -> SyncStatus:
+        """
+        Build the status from the endpoints' statuses.
+
+        A disabled sync gets only ``DISABLED``. *selected_syncs* are the syncs of this
+        run: only one of them can replace a source ``latest`` that points to
+        ``/dev/null``, and under *dry_run* not even that.
+        """
         dst_diag = dst_ep_status.diagnostics
         return SyncStatus(
             slug=sync.slug,
@@ -111,7 +125,11 @@ class SyncStatus(BaseModel):
                 [
                     *_host_errors(src_ep_status, dst_ep_status),
                     *_sync_errors(
-                        sync, src_endpoint, src_ep_status, selected_syncs, dry_run
+                        sync,
+                        src_endpoint,
+                        src_ep_status,
+                        selected_syncs,
+                        dry_run=dry_run,
                     ),
                     *(
                         [SyncErrorKind.SOURCE_ENDPOINT_INACTIVE]
@@ -137,7 +155,8 @@ def _host_errors(
     src_ep_status: SourceEndpointStatus,
     dst_ep_status: DestinationEndpointStatus,
 ) -> list[SyncErrorKind]:
-    """``ENDPOINT_HOST_ERRORS`` when either side's host has fatal tool errors.
+    """
+    ``ENDPOINT_HOST_ERRORS`` when either side's host has fatal tool errors.
 
     Inactive host errors (unreachable, location-excluded) are left to the
     volume cascade, which already classifies them as expected-inactive.
@@ -157,6 +176,7 @@ def _sync_errors(
     src_endpoint: SyncEndpoint,
     src_ep_status: SourceEndpointStatus,
     selected_syncs: dict[str, SyncConfig],
+    *,
     dry_run: bool,
 ) -> list[SyncErrorKind]:
     if not src_ep_status.active:

@@ -1,3 +1,5 @@
+"""Running syncs: rsync into each destination, then snapshot and prune."""
+
 from nbkp.sync.rsync import ProgressMode as ProgressMode
 lazy from nbkp.sync.orchestration import (
     RunOptions as RunOptions,

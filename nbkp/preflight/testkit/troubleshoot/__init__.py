@@ -1,4 +1,5 @@
-"""Fake ``preflight troubleshoot`` data covering every preflight error.
+"""
+Fake ``preflight troubleshoot`` data covering every preflight error.
 
 Each scenario contributes its config entries and the statuses that exercise
 them, so a new preflight error is one new :class:`Scenario` added to
@@ -102,7 +103,8 @@ SCENARIOS: tuple[Scenario, ...] = (
 
 
 def troubleshoot_config() -> Config:
-    """The base config plus every scenario's entries.
+    """
+    Return the base config plus every scenario's entries.
 
     Each sync needs a unique destination endpoint, and each endpoint a unique
     (volume, subdir) pair, so most scenarios bring a volume of their own.
@@ -125,8 +127,11 @@ def troubleshoot_config() -> Config:
 
 
 def troubleshoot_data(config: Config) -> PreflightResult:
-    """Statuses of every scenario, against *config* from
-    :func:`troubleshoot_config`."""
+    """
+    Return the statuses of every scenario.
+
+    Against *config* from :func:`troubleshoot_config`.
+    """
     shared = shared_statuses(config)
     results: list[ScenarioStatuses] = [s.statuses(config, shared) for s in SCENARIOS]
     vol_statuses = {

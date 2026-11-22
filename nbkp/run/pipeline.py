@@ -1,4 +1,5 @@
-"""Check-then-run pipeline: preflight checks followed by sync execution.
+"""
+Check-then-run pipeline: preflight checks followed by sync execution.
 
 Composes ``check_all_syncs`` and ``run_all_syncs`` into a single
 reusable function shared by the CLI ``run`` command and integration
@@ -39,6 +40,8 @@ __all__ = [
 
 @dataclass(frozen=True)
 class PipelineResult:
+    """The outcome of :func:`check_and_run`: the preflight result and the syncs'."""
+
     preflight: PreflightResult
     results: list[SyncResult]
     """Empty when preflight found fatal errors and syncs were not executed."""
@@ -50,13 +53,21 @@ class PipelineResult:
 
 @dataclass(frozen=True)
 class SyncCallbacks:
+    """
+    Hooks the caller gets as syncs run, each optional.
+
+    ``on_rsync_output`` gets rsync's output as it arrives, in chunks; ``on_sync_start``
+    the slug of the sync about to run; ``on_sync_end`` its slug and result.
+    """
+
     on_rsync_output: Callable[[str], None] | None = None
     on_sync_start: Callable[[str], None] | None = None
     on_sync_end: Callable[[str, SyncResult], None] | None = None
 
 
 def sync_failed(result: SyncResult, strictness: Strictness) -> bool:
-    """Whether *result* makes the run fail under *strictness*.
+    """
+    Whether *result* makes the run fail under *strictness*.
 
     Runtime failures, and cancellations caused by one, always do.  Skips
     and cancellations rooted in expected inactivity only do under
@@ -78,23 +89,34 @@ def check_and_run(
     exclude_locations: Collection[str] = (),
     which: WhichFn = shutil.which,
 ) -> PipelineResult:
-    """Run preflight checks, then execute syncs if no fatal errors.
+    """
+    Run preflight checks, then execute syncs if no fatal errors.
 
     Parameters
     ----------
+    config:
+        The loaded config.
     options:
         The run's choices, shared by preflight and the syncs; its
         ``strictness`` controls how preflight errors are treated (see
         :class:`~nbkp.policy.Strictness`).
-    on_check_start / on_check_end:
-        Called before / after each check with a label (e.g.
-        ``"ssh:localhost"``) and, after, the check's errors.
+    on_check_start:
+        Called before each check with its label (e.g. ``"ssh:localhost"``).
+    on_check_end:
+        Called after each check with its label and its errors.
     on_checks_done:
         Called after preflight completes but before syncs start, whether
         or not there are fatal errors, so the CLI can print the check
         table in both cases.
+    callbacks:
+        Called as each sync starts and ends.
+    mount_observations:
+        What mounting observed, so preflight reuses it instead of re-probing.
+    exclude_locations:
+        Locations whose endpoints are left out (``--exclude-location``).
     which:
         Finds tools on the orchestrator.
+
     """
     preflight = check_all_syncs(
         config,
@@ -119,9 +141,11 @@ def run_checked(
     options: RunOptions,
     callbacks: SyncCallbacks | None = None,
 ) -> PipelineResult:
-    """The second half of :func:`check_and_run`: abort when *preflight*
-    found errors fatal under the options' strictness, else run the syncs and
-    judge their results.
+    """
+    Run the syncs unless *preflight* found fatal errors, and judge their results.
+
+    The second half of :func:`check_and_run`: abort when *preflight* found errors fatal
+    under the options' strictness, else run the syncs and judge their results.
     """
     strictness = options.strictness
     if has_fatal_errors(preflight.sync_statuses, strictness=strictness):
@@ -150,7 +174,8 @@ def run_checked(
 
 
 def fatal_sync_errors(
-    sync_statuses: dict[str, SyncStatus], strictness: Strictness
+    sync_statuses: dict[str, SyncStatus],
+    strictness: Strictness,
 ) -> dict[str, list[SyncErrorKind]]:
     """Errors of the syncs that made preflight abort under *strictness*."""
     return {
@@ -161,9 +186,12 @@ def fatal_sync_errors(
 
 
 def run_failed(pipeline: PipelineResult, umount_results: list[UmountResult]) -> bool:
-    """Whether a run exits non-zero: preflight aborted it, a sync failed
-    under its strictness, or a volume could not be unmounted or locked
-    afterwards (a drive possibly left mounted or unlocked)."""
+    """
+    Return whether a run exits non-zero.
+
+    Preflight aborted it, a sync failed under its strictness, or a volume could not be
+    unmounted or locked afterwards (a drive possibly left mounted or unlocked).
+    """
     return (
         pipeline.has_preflight_errors
         or pipeline.has_sync_failures

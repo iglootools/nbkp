@@ -1,4 +1,5 @@
-"""Options that several commands share, each declared once.
+"""
+Options that several commands share, each declared once.
 
 A command takes one as ``config: CONFIG_OPTION = None`` and keeps the default
 in its own signature, as Typer requires.

@@ -29,7 +29,7 @@ def _local_vol(path: str | None = "/mnt/disk") -> LocalVolume:
     return LocalVolume(slug="disk", path=path)
 
 
-def _mount_config(encrypted: bool) -> MountConfig:
+def _mount_config(*, encrypted: bool) -> MountConfig:
     if encrypted:
         return MountConfig(
             device_uuid=_UUID,
@@ -79,7 +79,7 @@ class TestDiscoverCleartextDevice:
         run = _lsblk(f"luks-{_UUID} crypt\n")
         discover_cleartext_device(_local_vol(), _UUID, {}, run=run)
         assert run.commands == [
-            ["lsblk", "-rno", "NAME,TYPE", f"/dev/disk/by-uuid/{_UUID}"]
+            ["lsblk", "-rno", "NAME,TYPE", f"/dev/disk/by-uuid/{_UUID}"],
         ]
 
     def test_returns_mapper_for_crypt_child(self) -> None:
@@ -101,7 +101,8 @@ class TestDiscoverCleartextDevice:
     def test_lsblk_failure_raises(self) -> None:
         # A failed probe is not "locked": callers must not act on a guess.
         run = FakeCommandRunner().on(
-            "lsblk", returns=completed(127, stderr="lsblk: command not found")
+            "lsblk",
+            returns=completed(127, stderr="lsblk: command not found"),
         )
         with pytest.raises(DeviceProbeError) as exc_info:
             discover_cleartext_device(_local_vol(), _UUID, {}, run=run)
@@ -111,19 +112,34 @@ class TestDiscoverCleartextDevice:
 class TestResolveTargetDevice:
     def test_unencrypted_is_by_uuid(self) -> None:
         run = FakeCommandRunner()
-        device = resolve_target_device(_local_vol(), _mount_config(False), {}, run=run)
+        device = resolve_target_device(
+            _local_vol(),
+            _mount_config(encrypted=False),
+            {},
+            run=run,
+        )
         assert device == f"/dev/disk/by-uuid/{_UUID}"
         assert run.commands == []
 
     def test_encrypted_discovers_cleartext(self) -> None:
         run = _lsblk(f"sdb part\nluks-{_UUID} crypt\n")
-        device = resolve_target_device(_local_vol(), _mount_config(True), {}, run=run)
+        device = resolve_target_device(
+            _local_vol(),
+            _mount_config(encrypted=True),
+            {},
+            run=run,
+        )
         assert device == f"/dev/mapper/luks-{_UUID}"
 
     def test_encrypted_locked_returns_none(self) -> None:
         run = _lsblk("sdb part\n")
         assert (
-            resolve_target_device(_local_vol(), _mount_config(True), {}, run=run)
+            resolve_target_device(
+                _local_vol(),
+                _mount_config(encrypted=True),
+                {},
+                run=run,
+            )
             is None
         )
 
@@ -133,7 +149,7 @@ class TestFindMountpoint:
         run = FakeCommandRunner().on("findmnt", returns=completed(0, "/mnt/disk\n"))
         find_mountpoint(_local_vol(), "/dev/mapper/x", {}, run=run)
         assert run.commands == [
-            ["findmnt", "--source", "/dev/mapper/x", "-n", "-o", "TARGET"]
+            ["findmnt", "--source", "/dev/mapper/x", "-n", "-o", "TARGET"],
         ]
 
     def test_mounted_returns_target(self) -> None:
@@ -160,7 +176,8 @@ class TestFindMountpoint:
     def test_findmnt_failure_raises(self, returncode: int, stderr: str) -> None:
         """A failed findmnt is not "not mounted": umount would skip the unmount."""
         run = FakeCommandRunner().on(
-            "findmnt", returns=completed(returncode, stderr=stderr)
+            "findmnt",
+            returns=completed(returncode, stderr=stderr),
         )
         with pytest.raises(DeviceProbeError) as exc_info:
             find_mountpoint(_local_vol(), "/dev/mapper/x", {}, run=run)
@@ -175,7 +192,10 @@ class TestResolveEffectivePath:
         # Option A: volume.path declared — returned directly, no probing.
         run = FakeCommandRunner()
         path = resolve_effective_path(
-            _local_vol("/mnt/disk"), _mount_config(False), {}, run=run
+            _local_vol("/mnt/disk"),
+            _mount_config(encrypted=False),
+            {},
+            run=run,
         )
         assert path == "/mnt/disk"
         assert run.commands == []
@@ -183,10 +203,14 @@ class TestResolveEffectivePath:
     def test_discovered_path_when_omitted(self) -> None:
         # Option B: no volume.path — discover via findmnt.
         run = FakeCommandRunner().on(
-            "findmnt", returns=completed(0, "/run/media/backup/label\n")
+            "findmnt",
+            returns=completed(0, "/run/media/backup/label\n"),
         )
         path = resolve_effective_path(
-            _local_vol(None), _mount_config(False), {}, run=run
+            _local_vol(None),
+            _mount_config(encrypted=False),
+            {},
+            run=run,
         )
         assert path == "/run/media/backup/label"
         assert run.commands == [_FINDMNT]
@@ -194,7 +218,12 @@ class TestResolveEffectivePath:
     def test_omitted_path_device_locked_returns_none(self) -> None:
         run = _lsblk("sdb part\n")
         assert (
-            resolve_effective_path(_local_vol(None), _mount_config(True), {}, run=run)
+            resolve_effective_path(
+                _local_vol(None),
+                _mount_config(encrypted=True),
+                {},
+                run=run,
+            )
             is None
         )
         # No cleartext device: nothing to look up a mountpoint for.
@@ -203,6 +232,11 @@ class TestResolveEffectivePath:
     def test_omitted_path_unmounted_returns_none(self) -> None:
         run = FakeCommandRunner().on("findmnt", returns=completed(1))
         assert (
-            resolve_effective_path(_local_vol(None), _mount_config(False), {}, run=run)
+            resolve_effective_path(
+                _local_vol(None),
+                _mount_config(encrypted=False),
+                {},
+                run=run,
+            )
             is None
         )

@@ -1,3 +1,10 @@
+"""
+Seed data for demos and tests: sample files, sentinels and chain configs.
+
+Seeds local volumes directly and remote ones through a caller-given command
+runner.
+"""
+
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -15,6 +22,7 @@ from nbkp.config import (
     SshEndpoint,
     SyncConfig,
     SyncEndpoint,
+    resolve_endpoint_path,
 )
 from nbkp.fsprotocol import (
     DESTINATION_SENTINEL,
@@ -58,16 +66,20 @@ def _write_zeroed_file(path: Path, size_bytes: int) -> None:
 
 
 def _unless_exists(path: str, *command: str) -> list[str]:
-    """Run *command* unless *path* exists; the paths stay arguments, never
-    shell text."""
+    """
+    Run *command* unless *path* exists.
+
+    The paths stay arguments, never shell text.
+    """
     return ["sh", "-c", 'test -e "$1" || { shift; exec "$@"; }', "sh", path, *command]
 
 
 def create_seed_sentinels(
     config: Config,
-    remote_exec: Callable[[RemoteVolume, list[str]], None] | None = None,
+    remote_exec: Callable[[RemoteVolume, list[str]], object] | None = None,
 ) -> None:
-    """Create volume, source, and destination sentinels.
+    """
+    Create volume, source, and destination sentinels.
 
     For local volumes, creates directories and sentinel files directly.  For
     remote volumes, uses *remote_exec(volume, argv)* to run each command on
@@ -78,15 +90,14 @@ def create_seed_sentinels(
     for vol in config.volumes.values():
         match vol:
             case LocalVolume():
-                assert vol.path is not None
-                vol_path = Path(vol.path)
+                vol_path = Path(resolve_endpoint_path(vol, None))
                 vol_path.mkdir(parents=True, exist_ok=True)
                 (vol_path / VOLUME_SENTINEL).touch()
             case RemoteVolume():
                 if remote_exec is not None:
-                    assert vol.path is not None
-                    remote_exec(vol, ["mkdir", "-p", vol.path])
-                    remote_exec(vol, ["touch", f"{vol.path}/{VOLUME_SENTINEL}"])
+                    vol_path = resolve_endpoint_path(vol, None)
+                    remote_exec(vol, ["mkdir", "-p", vol_path])
+                    remote_exec(vol, ["touch", f"{vol_path}/{VOLUME_SENTINEL}"])
 
     seen_src: set[str] = set()
     seen_dst: set[str] = set()
@@ -101,7 +112,10 @@ def create_seed_sentinels(
             dst_ep = config.destination_endpoint(sync)
             dst_vol = config.volumes[dst_ep.volume]
             _create_endpoint_sentinels(
-                dst_vol, dst_ep, DESTINATION_SENTINEL, remote_exec
+                dst_vol,
+                dst_ep,
+                DESTINATION_SENTINEL,
+                remote_exec,
             )
 
 
@@ -109,65 +123,76 @@ def _create_endpoint_sentinels(
     vol: LocalVolume | RemoteVolume,
     ep: SyncEndpoint,
     sentinel_name: str,
-    remote_exec: Callable[[RemoteVolume, list[str]], None] | None,
+    remote_exec: Callable[[RemoteVolume, list[str]], object] | None,
 ) -> None:
     """Create sentinels and snapshot infrastructure for an endpoint."""
-    btrfs = ep.btrfs_snapshots
-    hard_link = ep.hard_link_snapshots
-
     match vol:
         case LocalVolume():
-            assert vol.path is not None
-            path = Path(vol.path)
-            if ep.subdir:
-                path = path / ep.subdir
-            path.mkdir(parents=True, exist_ok=True)
-            (path / sentinel_name).touch()
-            if hard_link.enabled:
-                (path / SNAPSHOTS_DIR).mkdir(exist_ok=True)
-                latest = path / LATEST_LINK
-                if not latest.exists():
-                    latest.symlink_to(DEVNULL_TARGET)
-            elif btrfs.enabled:
-                if not (path / STAGING_DIR).exists():
-                    subprocess.run(
-                        [
-                            "btrfs",
-                            "subvolume",
-                            "create",
-                            str(path / STAGING_DIR),
-                        ],
-                        check=True,
-                    )
-                (path / SNAPSHOTS_DIR).mkdir(exist_ok=True)
-                latest = path / LATEST_LINK
-                if not latest.exists():
-                    latest.symlink_to(DEVNULL_TARGET)
+            _create_local_sentinels(
+                Path(resolve_endpoint_path(vol, ep.subdir)),
+                ep,
+                sentinel_name,
+            )
         case RemoteVolume():
             if remote_exec is not None:
-                assert vol.path is not None
-                rp = vol.path
-                if ep.subdir:
-                    rp = f"{rp}/{ep.subdir}"
-                latest = f"{rp}/{LATEST_LINK}"
-                link_latest = _unless_exists(
-                    latest, "ln", "-sfn", DEVNULL_TARGET, latest
-                )
-                remote_exec(vol, ["mkdir", "-p", rp])
-                remote_exec(vol, ["touch", f"{rp}/{sentinel_name}"])
-                if hard_link.enabled:
-                    remote_exec(vol, ["mkdir", "-p", f"{rp}/{SNAPSHOTS_DIR}"])
-                    remote_exec(vol, link_latest)
-                elif btrfs.enabled:
-                    staging = f"{rp}/{STAGING_DIR}"
-                    remote_exec(
-                        vol,
-                        _unless_exists(
-                            staging, "btrfs", "subvolume", "create", staging
-                        ),
-                    )
-                    remote_exec(vol, ["mkdir", "-p", f"{rp}/{SNAPSHOTS_DIR}"])
-                    remote_exec(vol, link_latest)
+                rp = resolve_endpoint_path(vol, ep.subdir)
+                for command in _remote_sentinel_commands(rp, ep, sentinel_name):
+                    remote_exec(vol, command)
+
+
+def _create_local_sentinels(path: Path, ep: SyncEndpoint, sentinel_name: str) -> None:
+    """Create the sentinel and, if the endpoint snapshots, the snapshot layout."""
+    path.mkdir(parents=True, exist_ok=True)
+    (path / sentinel_name).touch()
+    match (ep.hard_link_snapshots.enabled, ep.btrfs_snapshots.enabled):
+        case (True, _):
+            _create_local_snapshot_layout(path)
+        case (False, True):
+            _create_local_btrfs_staging(path)
+            _create_local_snapshot_layout(path)
+        case _:
+            pass  # no snapshots: the sentinel is all the endpoint needs
+
+
+def _create_local_btrfs_staging(path: Path) -> None:
+    """Create the btrfs staging subvolume unless it exists."""
+    staging = path / STAGING_DIR
+    if not staging.exists():
+        subprocess.run(["btrfs", "subvolume", "create", str(staging)], check=True)
+
+
+def _create_local_snapshot_layout(path: Path) -> None:
+    """Create the snapshots directory, and the latest link unless it exists."""
+    (path / SNAPSHOTS_DIR).mkdir(exist_ok=True)
+    latest = path / LATEST_LINK
+    if not latest.exists():
+        latest.symlink_to(DEVNULL_TARGET)
+
+
+def _remote_sentinel_commands(
+    rp: str,
+    ep: SyncEndpoint,
+    sentinel_name: str,
+) -> list[list[str]]:
+    """Return the commands creating an endpoint's sentinel and snapshots at *rp*."""
+    latest = f"{rp}/{LATEST_LINK}"
+    staging = f"{rp}/{STAGING_DIR}"
+    sentinel_commands = [["mkdir", "-p", rp], ["touch", f"{rp}/{sentinel_name}"]]
+    snapshot_layout = [
+        ["mkdir", "-p", f"{rp}/{SNAPSHOTS_DIR}"],
+        _unless_exists(latest, "ln", "-sfn", DEVNULL_TARGET, latest),
+    ]
+    match (ep.hard_link_snapshots.enabled, ep.btrfs_snapshots.enabled):
+        case (True, _):
+            return [*sentinel_commands, *snapshot_layout]
+        case (False, True):
+            return [
+                *sentinel_commands,
+                _unless_exists(staging, "btrfs", "subvolume", "create", staging),
+                *snapshot_layout,
+            ]
+        case _:
+            return sentinel_commands
 
 
 def seed_volume(
@@ -177,16 +202,21 @@ def seed_volume(
     big_file_size_bytes: int = 0,
     remote_exec: Callable[[list[str]], None] | None = None,
 ) -> None:
+    """
+    Write the sample files, ``excluded/`` included, into *vol* (under *subdir*).
+
+    With *big_file_size_bytes*, also write a zeroed ``large-file.bin`` of that
+    size. A remote volume is seeded by running each command with *remote_exec*,
+    and left alone when it is ``None``.
+    """
     match vol:
         case LocalVolume():
-            assert vol.path is not None
-            base = Path(vol.path)
-            path = base / subdir if subdir else base
+            path = Path(resolve_endpoint_path(vol, subdir))
             path.mkdir(parents=True, exist_ok=True)
             for name, content in _SAMPLE_FILES:
                 file_path = path / name
                 file_path.parent.mkdir(parents=True, exist_ok=True)
-                file_path.write_text(content)
+                file_path.write_text(content, encoding="utf-8")
             if big_file_size_bytes:
                 _write_zeroed_file(
                     path / "large-file.bin",
@@ -195,21 +225,30 @@ def seed_volume(
         case RemoteVolume():
             if remote_exec is None:
                 return
-            assert vol.path is not None
-            rp = vol.path
-            if subdir:
-                rp = f"{rp}/{subdir}"
+            rp = resolve_endpoint_path(vol, subdir)
             remote_exec(["mkdir", "-p", rp])
             for name, content in _SAMPLE_FILES:
                 if "/" in name:
                     parent = name.rsplit("/", 1)[0]
                     remote_exec(["mkdir", "-p", f"{rp}/{parent}"])
                 remote_exec(
-                    ["sh", "-c", 'printf %s "$1" > "$2"', "sh", content, f"{rp}/{name}"]
+                    [
+                        "sh",
+                        "-c",
+                        'printf %s "$1" > "$2"',
+                        "sh",
+                        content,
+                        f"{rp}/{name}",
+                    ],
                 )
             if big_file_size_bytes:
                 remote_exec(
-                    ["truncate", "-s", str(big_file_size_bytes), f"{rp}/large-file.bin"]
+                    [
+                        "truncate",
+                        "-s",
+                        str(big_file_size_bytes),
+                        f"{rp}/large-file.bin",
+                    ],
                 )
 
 
@@ -219,7 +258,8 @@ def build_local_chain_config(
     rsync_options: RsyncOptions | None = None,
     max_snapshots: int | None = None,
 ) -> Config:
-    """Build a 2-step local-only chain config.
+    """
+    Build a 2-step local-only chain config.
 
     Volumes::
 
@@ -296,7 +336,8 @@ def build_chain_config(
     credential_provider: CredentialProvider = CredentialProvider.KEYRING,
     credential_command: list[str] | None = None,
 ) -> Config:
-    """Build a 6-hop chain config across local and remote volumes.
+    """
+    Build a 6-hop chain config across local and remote volumes.
 
     Volumes::
 
@@ -345,7 +386,7 @@ def build_chain_config(
                 MountConfig(
                     device_uuid=luks_uuid,
                     encryption=LuksEncryptionConfig(
-                        passphrase_id="test-luks",
+                        passphrase_id="test-luks",  # noqa: S106 -- an id naming the secret, not the secret
                     ),
                 )
                 if luks_uuid is not None

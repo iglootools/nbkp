@@ -1,4 +1,5 @@
-"""Integration test: end-to-end chain sync pipeline.
+"""
+Integration test: end-to-end chain sync pipeline.
 
 Verifies data propagates through a 6-hop chain using all
 supported sync variants and snapshot modes, with bastion SSH
@@ -59,9 +60,11 @@ class TestChainSync:
         proxied_ssh_endpoint: SshEndpoint,
         luks_uuid: str,
     ) -> None:
-        """Data seeded in src-local-bare arrives at
-        dst-local-bare after traversing the full chain,
-        with btrfs volumes on a LUKS-encrypted filesystem."""
+        """
+        Data seeded in src-local-bare reaches dst-local-bare through the chain.
+
+        The chain has btrfs volumes on a LUKS-encrypted filesystem.
+        """
         config = build_chain_config(
             tmp_path,
             bastion_container,
@@ -74,7 +77,7 @@ class TestChainSync:
             _resolved_config,
             mount_observations,
         ):
-            src = setup_chain(config, tmp_path, docker_ssh_endpoint, resolved)
+            src = setup_chain(config, tmp_path, resolved)
 
             pipeline = check_and_run(
                 config,
@@ -108,8 +111,11 @@ class TestChainSync:
         proxied_ssh_endpoint: SshEndpoint,
         luks_uuid: str,
     ) -> None:
-        """When an upstream sync is skipped (inactive), all transitive
-        downstream syncs are cancelled via failure propagation."""
+        """
+        A skipped (inactive) upstream sync cancels every transitive downstream sync.
+
+        The cancellation travels by failure propagation.
+        """
         config = build_chain_config(
             tmp_path,
             bastion_container,
@@ -122,7 +128,7 @@ class TestChainSync:
             _resolved_config,
             mount_observations,
         ):
-            setup_chain(config, tmp_path, docker_ssh_endpoint, resolved)
+            setup_chain(config, tmp_path, resolved)
 
             # Without the .nbkp-dst sentinel on its destination
             # (ep-stage-remote-bare), step-2 is inactive.
@@ -146,7 +152,8 @@ class TestChainSync:
             # Only the expected-inactive skips are tolerated: any other
             # preflight error aborts the run before a sync starts.
             assert not pipeline.has_preflight_errors, fatal_sync_errors(
-                pipeline.preflight.sync_statuses, Strictness.IGNORE_INACTIVE
+                pipeline.preflight.sync_statuses,
+                Strictness.IGNORE_INACTIVE,
             )
 
             results_by_slug = {r.sync_slug: r for r in pipeline.results}

@@ -124,6 +124,11 @@ build-constraint-dependencies = [
 target-version = "py315"
 
 [tool.ruff.lint]
+# Every rule, minus those our conventions are against: iglootools/common's
+# docs/architecture-decision-record.md, ADR-003, gives the reason for each entry in
+# `ignore` below. preview turns on PLW1514 (still a preview rule);
+# explicit-preview-rules keeps ALL from selecting the other preview rules.
+#
 # TID255: a `lazy` import that module-level code uses right away (a global, a base
 # class, a decorator argument) is reified at import time anyway, so `lazy` silently
 # does nothing. That nbkp.cli stays free of the heavy imports is asserted by
@@ -134,7 +139,51 @@ target-version = "py315"
 # replaces the monkeypatch fixture with one that fails, so the class is the only way
 # left to patch. Each documented exception carries `# noqa: TID251` on its import, and RUF100
 # reports a noqa that is no longer needed.
-extend-select = ["RUF100", "TID251", "TID255"]
+preview = true
+explicit-preview-rules = true
+select = ["ALL"]
+extend-select = ["PLW1514"]
+# deadcode's `# noqa: DCxx` markers, which RUF100 and RUF102 would otherwise report.
+external = ["DC"]
+ignore = [
+  # Each is the opposite of a D rule we keep: D211 and D213.
+  "D203",
+  "D212",
+  # The LICENSE file covers every file.
+  "CPY001",
+  # Imports stay at module level, never in a TYPE_CHECKING block.
+  "TC001",
+  "TC002",
+  "TC003",
+  # The explicit else python.md asks for.
+  "RET505",
+  "RET506",
+  "RET507",
+  "RET508",
+  # They count each case of a match.
+  "C901",
+  "PLR0911",
+  "PLR0912",
+  # Keyword seams add parameters by design; PLR0917 still caps positional ones.
+  "PLR0913",
+  # A command is an argument list, its program found on PATH.
+  "S603",
+  "S607",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# A test's name says what it checks; pytest asserts with assert; a test's literals are its
+# specification; its "secrets" are fakes or keyring entry names. S108 stays on: a test
+# writes under tmp_path, never /tmp.
+"tests/**" = ["D1", "PLR2004", "S101", "S105", "S106", "S107"]
+# A directory of scripts mise runs by path, not a package to import.
+"build-scripts/**" = ["INP001"]
+
+[tool.ruff.lint.pylint]
+max-statements = 30
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "unittest.mock".msg = "Inject a fake through a parameter instead of patching (docs/guidelines.md, Testing)."

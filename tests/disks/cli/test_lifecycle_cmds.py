@@ -1,4 +1,5 @@
-"""Tests for `disks mount` / `disks umount` / `disks setup-auth`.
+"""
+Tests for `disks mount` / `disks umount` / `disks setup-auth`.
 
 The decisions behind the commands' outcome are tested from plain results;
 the commands run against a host whose answers a FakeCommandRunner scripts
@@ -50,7 +51,8 @@ def _config() -> Config:
 
 @pytest.fixture(autouse=True)
 def run_from_config_dir(tmp_path: Path, chdir: Callable[[Path], None]) -> None:
-    """Run every test from a directory holding ``_config()`` as ``config.yaml``.
+    """
+    Run every test from a directory holding ``_config()`` as ``config.yaml``.
 
     Commands get ``-c config.yaml``, and the hints they print show that
     same short relative path.
@@ -69,13 +71,18 @@ def _locked_drive() -> FakeCommandRunner:
 
 
 def _mounted_drive(**udisks: subprocess.CompletedProcess[str]) -> FakeCommandRunner:
-    """``enc`` unlocked and mounted until unmounted; the ``udisksctl``
-    subcommands in *udisks* answer as given."""
+    """
+    Script ``enc`` unlocked and mounted until unmounted.
+
+    The ``udisksctl`` subcommands in *udisks* answer as given.
+    """
     run = FakeCommandRunner()
     for step, answer in udisks.items():
         run.on("udisksctl", step, returns=answer)
     return run.on("lsblk", returns=_UNLOCKED).on(
-        "findmnt", "--source", returns=[_MOUNTED, _NOT_MOUNTED]
+        "findmnt",
+        "--source",
+        returns=[_MOUNTED, _NOT_MOUNTED],
     )
 
 
@@ -93,7 +100,9 @@ def _udisks_steps(run: FakeCommandRunner) -> list[str]:
 
 
 def _failed_mount(
-    reason: MountFailureKind, step: LifecycleStep, message: str
+    reason: MountFailureKind,
+    step: LifecycleStep,
+    message: str,
 ) -> MountResult:
     return MountResult(
         volume_slug="enc",
@@ -113,10 +122,14 @@ class TestOutcomeDecisions:
 
     def test_polkit_refusal_is_told_apart(self) -> None:
         refused = _failed_mount(
-            MountFailureKind.NOT_AUTHORIZED, LifecycleStep.UNLOCK, "denied"
+            MountFailureKind.NOT_AUTHORIZED,
+            LifecycleStep.UNLOCK,
+            "denied",
         )
         bad_key = _failed_mount(
-            MountFailureKind.UNLOCK_FAILED, LifecycleStep.UNLOCK, "bad key"
+            MountFailureKind.UNLOCK_FAILED,
+            LifecycleStep.UNLOCK,
+            "bad key",
         )
         assert refused_by_polkit([bad_key, refused])
         assert not refused_by_polkit([bad_key])
@@ -150,7 +163,7 @@ class TestPlanDecisions:
         planned = VolumePlan("usb", (MountAction.MOUNT,))
         assert not plan_incomplete([planned])
         assert plan_incomplete(
-            [planned, VolumePlan("enc", (), "unreachable", probe_failed=True)]
+            [planned, VolumePlan("enc", (), "unreachable", probe_failed=True)],
         )
 
 
@@ -186,11 +199,13 @@ class TestMount:
         assert (entry["luks_unlocked"], entry["mounted"]) == (True, True)
         assert _udisks_steps(run) == ["unlock", "mount"]
         [unlock] = [c for c in run.calls if c.cmd[:2] == ["udisksctl", "unlock"]]
-        assert unlock.input == "secret"
+        assert unlock.stdin == "secret"
 
     def test_failure_is_reported_in_json(self) -> None:
         run = _locked_drive().on(
-            "udisksctl", "unlock", returns=completed(1, stderr="bad key")
+            "udisksctl",
+            "unlock",
+            returns=completed(1, stderr="bad key"),
         )
 
         exit_code, output = _invoke(run, "mount", "-o", "json")
@@ -222,7 +237,9 @@ class TestMount:
 
     def test_failure_suggests_troubleshoot(self) -> None:
         run = _locked_drive().on(
-            "udisksctl", "mount", returns=completed(1, stderr="mount failed")
+            "udisksctl",
+            "mount",
+            returns=completed(1, stderr="mount failed"),
         )
 
         exit_code, output = _invoke(run, "mount", "-N", "private")
@@ -266,7 +283,9 @@ class TestRunLock:
 
     @pytest.mark.parametrize("command", ["mount", "umount"])
     def test_a_held_lock_stops_the_command_before_any_udisks_call(
-        self, command: str, tmp_path: Path
+        self,
+        command: str,
+        tmp_path: Path,
     ) -> None:
         state_home = tmp_path / "state"
         lock_path = state_home / "nbkp" / "run.lock"
@@ -303,7 +322,9 @@ class TestRunLock:
         )
 
         result = runner.invoke(
-            app, ["disks", command, "-c", "config.yaml", "--dry-run"], obj=runtime
+            app,
+            ["disks", command, "-c", "config.yaml", "--dry-run"],
+            obj=runtime,
         )
 
         assert result.exit_code == 0, result.output
@@ -325,7 +346,7 @@ class TestDryRun:
                 "actions": ["unlock", "mount"],
                 "detail": None,
                 "probe_failed": False,
-            }
+            },
         ]
         assert _udisks_steps(run) == []
 
@@ -340,7 +361,9 @@ class TestDryRun:
 
     def test_absent_drive_needs_nothing(self) -> None:
         exit_code, output = _invoke(
-            FakeCommandRunner().on("test", "-e", returns=FAILS), "mount", "--dry-run"
+            FakeCommandRunner().on("test", "-e", returns=FAILS),
+            "mount",
+            "--dry-run",
         )
 
         assert exit_code == 0
@@ -348,7 +371,8 @@ class TestDryRun:
         assert "device not plugged in" in output
 
     def test_an_empty_plan_still_prints_a_labeled_line(
-        self, capsys: pytest.CaptureFixture[str]
+        self,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         show_plan([], {}, OutputFormat.HUMAN)
 

@@ -42,12 +42,12 @@ def _validation_errors(path: Path) -> list[ErrorDetails]:
 
 
 def _error_types(error: ValidationError) -> set[str]:
-    """The pydantic error ``type`` codes carried by a ValidationError."""
+    """Return the pydantic error ``type`` codes carried by a ValidationError."""
     return {err["type"] for err in error.errors()}
 
 
 def _validation_error_types(path: Path) -> set[str]:
-    """The pydantic error ``type`` codes raised when loading ``path``."""
+    """Return the pydantic error ``type`` codes raised when loading ``path``."""
     return {err["type"] for err in _validation_errors(path)}
 
 
@@ -56,7 +56,7 @@ _SHIPPED_EXAMPLES = sorted(
     [
         *(_PROJECT_ROOT / "docs" / "config-examples").glob("*.yaml"),
         _PROJECT_ROOT / "marketing" / "r-backup-intro" / "config.yaml",
-    ]
+    ],
 )
 
 
@@ -67,8 +67,11 @@ class _SearchArgs(TypedDict):
 
 
 def _search_in(tmp_path: Path) -> _SearchArgs:
-    """Search arguments that keep the lookup under *tmp_path*: a home there,
-    and platform config directories there, none of which exists yet."""
+    """
+    Return search arguments that keep the lookup under *tmp_path*.
+
+    A home there, and platform config directories there, none of which exists yet.
+    """
     return {
         "home": tmp_path / "home",
         "user_dir": lambda app: str(tmp_path / "user-config" / app),
@@ -98,7 +101,8 @@ class TestFindConfigFile:
         cfg = _place_config(xdg / "nbkp")
         _place_config(tmp_path / "user-config" / "nbkp")
         result = find_config_file(
-            environ={"XDG_CONFIG_HOME": str(xdg)}, **_search_in(tmp_path)
+            environ={"XDG_CONFIG_HOME": str(xdg)},
+            **_search_in(tmp_path),
         )
         assert result == cfg
 
@@ -108,14 +112,18 @@ class TestFindConfigFile:
 
     @pytest.mark.parametrize("xdg", ["", "relative"])
     def test_empty_or_relative_xdg_ignored(
-        self, tmp_path: Path, chdir: Callable[[Path], None], xdg: str
+        self,
+        tmp_path: Path,
+        chdir: Callable[[Path], None],
+        xdg: str,
     ) -> None:
         workdir = tmp_path / "workdir"
         _place_config(workdir / (xdg or ".") / "nbkp")
         cfg = _place_config(tmp_path / "home" / ".config" / "nbkp")
         chdir(workdir)
         result = find_config_file(
-            environ={"XDG_CONFIG_HOME": xdg}, **_search_in(tmp_path)
+            environ={"XDG_CONFIG_HOME": xdg},
+            **_search_in(tmp_path),
         )
         assert result == cfg
 
@@ -142,7 +150,9 @@ class TestLoadConfig:
         assert cfg == sample_config
 
     def test_minimal_config(
-        self, sample_minimal_config: Config, sample_minimal_config_file: Path
+        self,
+        sample_minimal_config: Config,
+        sample_minimal_config_file: Path,
     ) -> None:
         cfg = load_config(str(sample_minimal_config_file))
         assert cfg == sample_minimal_config
@@ -186,7 +196,7 @@ class TestLoadConfig:
                 type: ftp
                 path: /x
             syncs: {}
-        """)
+        """),
         )
         assert "union_tag_invalid" in _validation_error_types(p)
 
@@ -198,7 +208,7 @@ class TestLoadConfig:
               v:
                 type: local
             syncs: {}
-        """)
+        """),
         )
         # ``path`` is Optional with a model validator enforcing "path
         # required iff no mount", so a missing path surfaces as a model-level
@@ -222,7 +232,7 @@ class TestLoadConfig:
                 ssh-endpoint: s
                 path: /x
             syncs: {}
-        """)
+        """),
         )
         assert any(
             "host" in err["loc"] and err["type"] == "missing"
@@ -240,7 +250,7 @@ class TestLoadConfig:
                 ssh-endpoint: missing
                 path: /x
             syncs: {}
-        """)
+        """),
         )
         assert ConfigValidationErrorKind.UNKNOWN_REFERENCE in _validation_error_types(p)
 
@@ -261,7 +271,7 @@ class TestLoadConfig:
               s:
                 source: ep-src
                 destination: ep-dst
-        """)
+        """),
         )
         assert ConfigValidationErrorKind.UNKNOWN_REFERENCE in _validation_error_types(p)
 
@@ -282,7 +292,7 @@ class TestLoadConfig:
               s:
                 source: ep-src
                 destination: ep-dst
-        """)
+        """),
         )
         assert ConfigValidationErrorKind.UNKNOWN_REFERENCE in _validation_error_types(p)
 
@@ -300,7 +310,7 @@ class TestLoadConfig:
             syncs:
               s:
                 destination: ep-dst
-        """)
+        """),
         )
         assert any(
             err["loc"] == ("syncs", "s", "source") and err["type"] == "missing"
@@ -331,7 +341,7 @@ class TestLoadConfig:
                   - include: "*.jpg"
                   - exclude: "*.tmp"
                   - "H .git"
-        """)
+        """),
         )
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
@@ -360,7 +370,7 @@ class TestLoadConfig:
                 filters:
                   - merge: /etc/nbkp/rules.txt
                   - dir-merge: .rsync-filter
-        """)
+        """),
         )
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
@@ -393,7 +403,7 @@ class TestLoadConfig:
                   - dir-merge:
                       path: .rsync-filter
                       exclude-self: true
-        """)
+        """),
         )
         cfg = load_config(str(p))
         sync = cfg.syncs["s"]
@@ -578,8 +588,8 @@ class TestLoadConfig:
                             "proxy-jump": "nonexistent",
                         },
                     },
-                }
-            )
+                },
+            ),
         )
         assert ConfigValidationErrorKind.UNKNOWN_REFERENCE in _validation_error_types(p)
 
@@ -598,11 +608,11 @@ class TestLoadConfig:
                             "proxy-jump": "a",
                         },
                     },
-                }
-            )
+                },
+            ),
         )
         assert ConfigValidationErrorKind.CIRCULAR_PROXY_JUMP in _validation_error_types(
-            p
+            p,
         )
 
     def test_proxy_jumps_valid(self, tmp_path: Path) -> None:
@@ -653,7 +663,8 @@ class TestLoadConfig:
         assert chain[0].host == "bastion.example.com"
 
     def test_proxy_jump_and_proxy_jumps_mutual_exclusivity(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         p = tmp_path / "exclusive.yaml"
         p.write_text(
@@ -669,11 +680,11 @@ class TestLoadConfig:
                             "proxy-jumps": ["bastion"],
                         },
                     },
-                }
-            )
+                },
+            ),
         )
         assert ConfigValidationErrorKind.MUTUALLY_EXCLUSIVE in _validation_error_types(
-            p
+            p,
         )
 
     def test_proxy_jumps_unknown_server(self, tmp_path: Path) -> None:
@@ -687,8 +698,8 @@ class TestLoadConfig:
                             "proxy-jumps": ["nonexistent"],
                         },
                     },
-                }
-            )
+                },
+            ),
         )
         assert ConfigValidationErrorKind.UNKNOWN_REFERENCE in _validation_error_types(p)
 
@@ -707,15 +718,16 @@ class TestLoadConfig:
                             "proxy-jumps": ["a"],
                         },
                     },
-                }
-            )
+                },
+            ),
         )
         assert ConfigValidationErrorKind.CIRCULAR_PROXY_JUMP in _validation_error_types(
-            p
+            p,
         )
 
     def test_extends_proxy_jumps_overrides_parent_proxy_jump(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         p = tmp_path / "extends_jumps.yaml"
         p.write_text(
@@ -744,8 +756,8 @@ class TestLoadConfig:
                             ],
                         },
                     },
-                }
-            )
+                },
+            ),
         )
         cfg = load_config(str(p))
         chain = resolve_proxy_chain(cfg, cfg.ssh_endpoints["child"])
@@ -776,8 +788,8 @@ class TestLoadConfig:
                             },
                         },
                     },
-                }
-            )
+                },
+            ),
         )
         options = load_config(p).ssh_endpoints["nas-wan"].connection_options
         assert options == SshConnectionOptions(
@@ -788,7 +800,8 @@ class TestLoadConfig:
         )
 
     def test_extends_proxy_jump_overrides_parent_proxy_jumps(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         p = tmp_path / "extends_jump.yaml"
         p.write_text(
@@ -817,8 +830,8 @@ class TestLoadConfig:
                             "proxy-jump": "bastion3",
                         },
                     },
-                }
-            )
+                },
+            ),
         )
         cfg = load_config(str(p))
         chain = resolve_proxy_chain(cfg, cfg.ssh_endpoints["child"])
@@ -869,7 +882,7 @@ class TestLoadConfig:
                 destination: ep-dst
                 filters:
                   - badkey: value
-        """)
+        """),
         )
         assert ConfigValidationErrorKind.INVALID_FILTER in _validation_error_types(p)
 
@@ -885,7 +898,8 @@ class TestLoadConfig:
                     volume="v",
                     subdir="dst",
                     hard_link_snapshots=HardLinkSnapshotConfig(
-                        enabled=True, max_snapshots=10
+                        enabled=True,
+                        max_snapshots=10,
                     ),
                 ),
             },
@@ -937,7 +951,7 @@ class TestLoadConfig:
         assert dst_ep.hard_link_snapshots.enabled is True
         assert dst_ep.hard_link_snapshots.max_snapshots is None
 
-    def test_mutual_exclusivity_btrfs_and_hardlink(self, tmp_path: Path) -> None:
+    def test_mutual_exclusivity_btrfs_and_hardlink(self) -> None:
         with pytest.raises(ValidationError) as excinfo:
             SyncEndpoint(
                 slug="ep",
@@ -946,7 +960,7 @@ class TestLoadConfig:
                 hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
             )
         assert _error_types(excinfo.value) == {
-            ConfigValidationErrorKind.MUTUALLY_EXCLUSIVE
+            ConfigValidationErrorKind.MUTUALLY_EXCLUSIVE,
         }
 
     def test_snapshot_mode_none(self) -> None:
@@ -1002,11 +1016,11 @@ class TestLoadConfig:
                             "locations": ["home", "travel"],
                         },
                     },
-                }
-            )
+                },
+            ),
         )
         assert ConfigValidationErrorKind.MUTUALLY_EXCLUSIVE in _validation_error_types(
-            p
+            p,
         )
 
     def test_location_list_property(self) -> None:
@@ -1046,8 +1060,8 @@ class TestLoadConfig:
                             "locations": ["home", "travel"],
                         },
                     },
-                }
-            )
+                },
+            ),
         )
         cfg = load_config(str(p))
         assert cfg.ssh_endpoints["child"].location_list == [
@@ -1074,8 +1088,8 @@ class TestLoadConfig:
                             "location": "office",
                         },
                     },
-                }
-            )
+                },
+            ),
         )
         cfg = load_config(str(p))
         assert cfg.ssh_endpoints["child"].location_list == [
@@ -1160,7 +1174,7 @@ class TestLoadConfig:
               s:
                 source: missing
                 destination: ep-dst
-        """)
+        """),
         )
         assert ConfigValidationErrorKind.UNKNOWN_REFERENCE in _validation_error_types(p)
 
@@ -1179,7 +1193,7 @@ class TestLoadConfig:
               s:
                 source: ep-src
                 destination: missing
-        """)
+        """),
         )
         assert ConfigValidationErrorKind.UNKNOWN_REFERENCE in _validation_error_types(p)
 
@@ -1217,10 +1231,10 @@ class TestLoadConfig:
               s2:
                 source: ep-src2
                 destination: ep-dst
-        """)
+        """),
         )
         assert ConfigValidationErrorKind.SHARED_DESTINATION in _validation_error_types(
-            p
+            p,
         )
 
     def test_cyclic_sync_dependency(self, tmp_path: Path) -> None:
@@ -1245,7 +1259,7 @@ class TestLoadConfig:
               b:
                 source: ep-y
                 destination: ep-x
-        """)
+        """),
         )
         assert ConfigValidationErrorKind.CYCLIC_DEPENDENCY in _validation_error_types(p)
 
@@ -1265,7 +1279,7 @@ class TestLoadConfig:
                 volume: v
                 subdir: data
             syncs: {}
-        """)
+        """),
         )
         assert (
             ConfigValidationErrorKind.DUPLICATE_ENDPOINT_LOCATION
@@ -1288,13 +1302,13 @@ class TestLoadConfig:
                 volume: v
                 subdir: backups/photos
             syncs: {}
-        """)
+        """),
         )
         [error] = _validation_errors(p)
         assert error["type"] == ConfigValidationErrorKind.NESTED_ENDPOINT
         # The message names the child first: it is the one to move or drop.
         assert error["msg"].startswith(
-            "Sync endpoint 'ep-child' is nested inside 'ep-parent'"
+            "Sync endpoint 'ep-child' is nested inside 'ep-parent'",
         )
 
     def test_nested_endpoint_root_contains_subdir(self, tmp_path: Path) -> None:
@@ -1312,7 +1326,7 @@ class TestLoadConfig:
                 volume: v
                 subdir: data
             syncs: {}
-        """)
+        """),
         )
         assert ConfigValidationErrorKind.NESTED_ENDPOINT in _validation_error_types(p)
 
@@ -1332,7 +1346,7 @@ class TestLoadConfig:
                 volume: v
                 subdir: a/b/c
             syncs: {}
-        """)
+        """),
         )
         assert ConfigValidationErrorKind.NESTED_ENDPOINT in _validation_error_types(p)
 
@@ -1373,7 +1387,9 @@ class TestLoadConfig:
                 "b2": SshEndpoint(slug="b2", host="b2.example.com"),
                 "b1": SshEndpoint(slug="b1", host="b1.example.com", proxy_jump="b2"),
                 "target": SshEndpoint(
-                    slug="target", host="target.internal", proxy_jumps=["b1", "b2"]
+                    slug="target",
+                    host="target.internal",
+                    proxy_jumps=["b1", "b2"],
                 ),
             },
         )
@@ -1393,8 +1409,8 @@ class TestLoadConfig:
                         "a": {"host": "a.example.com", "extends": "b"},
                         "b": {"host": "b.example.com", "extends": "a"},
                     },
-                }
-            )
+                },
+            ),
         )
         [error] = _validation_errors(p)
         assert error["type"] == ConfigValidationErrorKind.CIRCULAR_EXTENDS
@@ -1408,8 +1424,8 @@ class TestLoadConfig:
                     "ssh-endpoints": {
                         "a": {"host": "a.example.com", "extends": "missing"},
                     },
-                }
-            )
+                },
+            ),
         )
         assert ConfigValidationErrorKind.UNKNOWN_REFERENCE in _validation_error_types(p)
 
@@ -1425,7 +1441,7 @@ class TestLoadConfig:
               ep:
                 volume: nonexistent
             syncs: {}
-        """)
+        """),
         )
         assert ConfigValidationErrorKind.UNKNOWN_REFERENCE in _validation_error_types(p)
 
@@ -1501,7 +1517,7 @@ class TestPathNormalization:
             filter_file="~/.config/nbkp/filters.rules",
         )
         assert sync.filter_file == str(
-            Path("~/.config/nbkp/filters.rules").expanduser()
+            Path("~/.config/nbkp/filters.rules").expanduser(),
         )
 
     def test_filter_file_no_tilde(self) -> None:
@@ -1528,7 +1544,7 @@ class TestPathNormalization:
                 "source": "src",
                 "destination": "dst",
                 "filters": [{"merge": "~/rules.txt"}],
-            }
+            },
         )
         assert sync.filters == [f"merge {Path('~/rules.txt').expanduser()}"]
 
@@ -1539,7 +1555,7 @@ class TestPathNormalization:
                 "source": "src",
                 "destination": "dst",
                 "filters": [{"merge": "/etc/rules.txt"}],
-            }
+            },
         )
         assert sync.filters == ["merge /etc/rules.txt"]
 
@@ -1550,7 +1566,7 @@ class TestPathNormalization:
                 "source": "src",
                 "destination": "dst",
                 "filters": [{"dir-merge": ".rsync-filter"}],
-            }
+            },
         )
         assert sync.filters == ["dir-merge .rsync-filter"]
 
@@ -1562,10 +1578,10 @@ class TestPathNormalization:
                     "source": "src",
                     "destination": "dst",
                     "filters": [{"dir-merge": {"path": ".rsync-filter", "bad": True}}],
-                }
+                },
             )
         assert _error_types(excinfo.value) == {
-            ConfigValidationErrorKind.UNKNOWN_DIR_MERGE_OPTION
+            ConfigValidationErrorKind.UNKNOWN_DIR_MERGE_OPTION,
         }
 
     def test_ssh_key_tilde_expansion(self) -> None:
@@ -1584,7 +1600,7 @@ class TestPathNormalization:
         """Paramiko's load_host_keys does not expand ``~`` the way ssh does."""
         opts = SshConnectionOptions(known_hosts_file="~/.ssh/nbkp_known_hosts")
         assert opts.known_hosts_file == str(
-            Path("~/.ssh/nbkp_known_hosts").expanduser()
+            Path("~/.ssh/nbkp_known_hosts").expanduser(),
         )
 
     def test_known_hosts_file_dev_null_unchanged(self) -> None:
@@ -1604,14 +1620,14 @@ class TestNoSilentCoercion:
     def test_non_string_filter_file_rejected(self) -> None:
         with pytest.raises(ValidationError) as excinfo:
             SyncConfig.model_validate(
-                {"slug": "s", "source": "a", "destination": "b", "filter-file": 42}
+                {"slug": "s", "source": "a", "destination": "b", "filter-file": 42},
             )
         assert _error_types(excinfo.value) == {"string_type"}
 
     def test_non_string_ssh_key_rejected(self) -> None:
         with pytest.raises(ValidationError) as excinfo:
             SshEndpoint.model_validate(
-                {"slug": "s", "host": "example.com", "key": ["~/.ssh/id"]}
+                {"slug": "s", "host": "example.com", "key": ["~/.ssh/id"]},
             )
         assert _error_types(excinfo.value) == {"string_type"}
 
@@ -1619,10 +1635,10 @@ class TestNoSilentCoercion:
         # A bare string used to be iterated into one rule per character.
         with pytest.raises(ValidationError) as excinfo:
             SyncConfig.model_validate(
-                {"slug": "s", "source": "a", "destination": "b", "filters": "- *.tmp"}
+                {"slug": "s", "source": "a", "destination": "b", "filters": "- *.tmp"},
             )
         assert _error_types(excinfo.value) == {
-            ConfigValidationErrorKind.FILTERS_NOT_A_LIST
+            ConfigValidationErrorKind.FILTERS_NOT_A_LIST,
         }
 
     def test_filters_as_mapping_rejected(self) -> None:
@@ -1633,16 +1649,16 @@ class TestNoSilentCoercion:
                     "source": "a",
                     "destination": "b",
                     "filters": {"exclude": "*.tmp"},
-                }
+                },
             )
         assert _error_types(excinfo.value) == {
-            ConfigValidationErrorKind.FILTERS_NOT_A_LIST
+            ConfigValidationErrorKind.FILTERS_NOT_A_LIST,
         }
 
     def test_filters_null_rejected(self) -> None:
         with pytest.raises(ValidationError) as excinfo:
             SyncConfig.model_validate(
-                {"slug": "s", "source": "a", "destination": "b", "filters": None}
+                {"slug": "s", "source": "a", "destination": "b", "filters": None},
             )
         assert _error_types(excinfo.value) == {"list_type"}
 
@@ -1654,7 +1670,7 @@ class TestNoSilentCoercion:
                     "source": "a",
                     "destination": "b",
                     "filters": [{"badkey": "value"}],
-                }
+                },
             )
         assert _error_types(excinfo.value) == {ConfigValidationErrorKind.INVALID_FILTER}
 
@@ -1667,11 +1683,12 @@ class TestNoSilentCoercion:
         ],
     )
     def test_filter_mapping_with_several_keys_rejected(
-        self, item: dict[str, str]
+        self,
+        item: dict[str, str],
     ) -> None:
         with pytest.raises(ValidationError) as excinfo:
             SyncConfig.model_validate(
-                {"slug": "s", "source": "a", "destination": "b", "filters": [item]}
+                {"slug": "s", "source": "a", "destination": "b", "filters": [item]},
             )
         assert _error_types(excinfo.value) == {ConfigValidationErrorKind.INVALID_FILTER}
 
@@ -1684,18 +1701,22 @@ class TestUnknownKeys:
         return sample_config.model_dump(by_alias=True, mode="json")
 
     def test_unknown_top_level_key_rejected(
-        self, sample_config: Config, tmp_path: Path
+        self,
+        sample_config: Config,
+        tmp_path: Path,
     ) -> None:
         raw = {**self._raw_config(sample_config), "credential-providr": "command"}
         p = tmp_path / "typo.yaml"
         p.write_text(yaml.safe_dump(raw))
         errors = _validation_errors(p)
         assert [(e["type"], e["loc"]) for e in errors] == [
-            ("extra_forbidden", ("credential-providr",))
+            ("extra_forbidden", ("credential-providr",)),
         ]
 
     def test_unknown_nested_key_rejected(
-        self, sample_config: Config, tmp_path: Path
+        self,
+        sample_config: Config,
+        tmp_path: Path,
     ) -> None:
         raw = self._raw_config(sample_config)
         slug, endpoint = next(iter(raw["sync-endpoints"].items()))
@@ -1707,7 +1728,7 @@ class TestUnknownKeys:
             (
                 "extra_forbidden",
                 ("sync-endpoints", slug, "hard-link-snapshots", "max-snapshot"),
-            )
+            ),
         ]
 
 
@@ -1725,11 +1746,11 @@ class TestSlugs:
                 type: local
                 slug: x
                 path: /mnt/b
-        """)
+        """),
         )
         errors = _validation_errors(p)
         assert [(e["type"], e["loc"]) for e in errors] == [
-            (ConfigValidationErrorKind.SLUG_MISMATCH, ("volumes",))
+            (ConfigValidationErrorKind.SLUG_MISMATCH, ("volumes",)),
         ]
 
     def test_slug_equal_to_key_accepted(self, tmp_path: Path) -> None:
@@ -1741,7 +1762,7 @@ class TestSlugs:
                 type: local
                 slug: a
                 path: /mnt/a
-        """)
+        """),
         )
         assert load_config(p).volumes["a"].slug == "a"
 
@@ -1752,7 +1773,9 @@ class TestShippedExamples:
         assert all(path.is_file() for path in _SHIPPED_EXAMPLES)
 
     @pytest.mark.parametrize(
-        "path", _SHIPPED_EXAMPLES, ids=lambda p: str(p.relative_to(_PROJECT_ROOT))
+        "path",
+        _SHIPPED_EXAMPLES,
+        ids=lambda p: str(p.relative_to(_PROJECT_ROOT)),
     )
     def test_example_loads(self, path: Path) -> None:
         load_config(path)

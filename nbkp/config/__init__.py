@@ -1,3 +1,5 @@
+"""Finding, loading and validating the nbkp config file."""
+
 from nbkp.config.loader import (
     ConfigError,
     ConfigErrorKind,
@@ -5,6 +7,7 @@ from nbkp.config.loader import (
     load_config,
 )
 from nbkp.config.protocol import (
+    DEFAULT_SSH_PORT,
     BtrfsSnapshotConfig,
     Config,
     ConfigValidationErrorKind,
@@ -30,6 +33,7 @@ from nbkp.config.protocol import (
 )
 
 __all__ = [
+    "DEFAULT_SSH_PORT",
     "BtrfsSnapshotConfig",
     "Config",
     "ConfigError",

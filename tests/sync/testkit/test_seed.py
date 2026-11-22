@@ -39,11 +39,15 @@ def _run_here(_vol: object, command: list[str]) -> None:
 
 
 class TestRemoteSeeding:
-    """The "remote" commands run locally: each must keep a path with spaces
-    and shell metacharacters as one argument."""
+    """
+    The "remote" commands run locally, each path kept as one argument.
+
+    Even a path with spaces and shell metacharacters.
+    """
 
     def test_remote_sentinels_land_at_paths_with_shell_metacharacters(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         remote = tmp_path / "my backups; touch pwned $(id)"
         create_seed_sentinels(_config(tmp_path / "src", remote), remote_exec=_run_here)

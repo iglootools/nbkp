@@ -1,4 +1,5 @@
-"""Structured snapshot operation errors.
+"""
+Structured snapshot operation errors.
 
 Every snapshot backend failure — a non-zero exit status, a local
 ``OSError``, or an SSH transport error — surfaces as a single
@@ -18,6 +19,8 @@ from nbkp.remote.errors import ssh_connection_errors
 
 
 class SnapshotOp(enum.StrEnum):
+    """Which snapshot operation failed, carried by :class:`SnapshotOperationError`."""
+
     CREATE = "create"
     MKDIR = "mkdir"
     MAKE_WRITABLE = "make-writable"
@@ -29,7 +32,8 @@ class SnapshotOp(enum.StrEnum):
 
 
 class SnapshotOperationError(Exception):
-    """A snapshot operation failed on the destination volume.
+    """
+    A snapshot operation failed on the destination volume.
 
     Not a dataclass: Python assigns ``__traceback__`` on raise, which a
     frozen dataclass forbids.  The attributes are set once here and
@@ -37,6 +41,7 @@ class SnapshotOperationError(Exception):
     """
 
     def __init__(self, op: SnapshotOp, path: str, stderr: str) -> None:
+        """Build the error from the failed operation, its path and its stderr."""
         self.op = op
         self.path = path
         self.stderr = stderr
@@ -44,13 +49,15 @@ class SnapshotOperationError(Exception):
 
 
 class SnapshotPruneError(SnapshotOperationError):
-    """A deletion failed partway through pruning.
+    """
+    A deletion failed partway through pruning.
 
     ``deleted`` holds the snapshots removed before the failure, oldest
     first, so callers can still report them.
     """
 
     def __init__(self, cause: SnapshotOperationError, deleted: tuple[str, ...]) -> None:
+        """Build the error from the failure and the snapshots deleted before it."""
         super().__init__(cause.op, cause.path, cause.stderr)
         self.deleted = deleted
 
@@ -64,7 +71,8 @@ def run_snapshot_command(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> subprocess.CompletedProcess[str]:
-    """Run *cmd* on *volume*, translating transport errors.
+    """
+    Run *cmd* on *volume*, translating transport errors.
 
     The exit status is left to the caller, since some commands (``test``,
     ``ls``) use a non-zero status as an answer rather than a failure.

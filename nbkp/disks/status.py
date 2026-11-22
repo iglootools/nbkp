@@ -1,12 +1,15 @@
-"""The mount status of each volume, as ``disks status`` and ``disks mount``
-report it: probed, or why it was not."""
+"""
+The mount status of each volume, as ``disks status`` and ``disks mount`` report it.
+
+Probed, or why it was not.
+"""
 
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
-from nbkp.config import Config, Volume
+from nbkp.config import Config, MountConfig, Volume
 from nbkp.disks.lifecycle import MountResult, lifecycle_volumes, missing_local_tool
 from nbkp.disks.models import MountFailureKind
 from nbkp.disks.mount_checks import check_mount_status
@@ -17,26 +20,37 @@ from nbkp.remote.errors import describe_error, ssh_connection_errors
 
 
 class MountStatusData(Protocol):
-    """Structural protocol for mount runtime state.
+    """
+    Structural protocol for mount runtime state.
 
     Satisfied by both ``MountObservation`` (dataclass) and
     ``MountCapabilities`` (Pydantic model).
     """
 
     @property
-    def device_present(self) -> bool | None: ...
+    def device_present(self) -> bool | None:
+        """Return whether the volume's device is attached; None when unknown."""
+        ...
 
     @property
-    def luks_unlocked(self) -> bool | None: ...
+    def luks_unlocked(self) -> bool | None:
+        """Return whether the LUKS container is unlocked; None when unknown."""
+        ...
 
     @property
-    def mounted(self) -> bool | None: ...
+    def mounted(self) -> bool | None:
+        """Return whether the volume is mounted; None when unknown."""
+        ...
 
     @property
-    def mount_failure_reason(self) -> MountFailureKind | None: ...
+    def mount_failure_reason(self) -> MountFailureKind | None:
+        """Return why mounting failed; None when it did not fail or is unknown."""
+        ...
 
 
 class VolumeStatusKind(StrEnum):
+    """Whether a volume was probed and, if not, why."""
+
     PROBED = "probed"
     UNREACHABLE = "unreachable"
     TOOL_NOT_INSTALLED = "tool-not-installed"
@@ -49,6 +63,8 @@ _UNKNOWN_STATE = MountObservation()
 
 @dataclass(frozen=True)
 class VolumeStatus:
+    """The mount status of one volume, as ``disks status`` reports it."""
+
     volume_slug: str
     kind: VolumeStatusKind
     state: MountStatusData = _UNKNOWN_STATE
@@ -67,7 +83,9 @@ def _probe_failure_status(volume: Volume, error: BaseException) -> VolumeStatus:
     match missing_local_tool(volume, error):
         case str() as tool:
             return VolumeStatus(
-                volume.slug, VolumeStatusKind.TOOL_NOT_INSTALLED, missing_tool=tool
+                volume.slug,
+                VolumeStatusKind.TOOL_NOT_INSTALLED,
+                missing_tool=tool,
             )
         case None:
             return VolumeStatus(
@@ -78,22 +96,31 @@ def _probe_failure_status(volume: Volume, error: BaseException) -> VolumeStatus:
 
 
 def probe_volume_status(
-    volume: Volume, resolved: ResolvedEndpoints, *, run: VolumeCommandRunner
+    volume: Volume,
+    mount: MountConfig,
+    resolved: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
 ) -> VolumeStatus:
-    """Probe one mount-managed volume; a host that cannot be reached, or a
-    local tool not installed, is a status rather than an exception."""
-    assert volume.mount is not None
+    """
+    Probe one mount-managed volume.
+
+    A host that cannot be reached, or a local tool not installed, is a status rather
+    than an exception.
+    """
     try:
-        state = check_mount_status(volume, volume.mount, resolved, run=run)
+        state = check_mount_status(volume, mount, resolved, run=run)
         return VolumeStatus(volume.slug, VolumeStatusKind.PROBED, state)
     except ssh_connection_errors() as e:
         return _probe_failure_status(volume, e)
 
 
 def managed_volumes(
-    cfg: Config, resolved: ResolvedEndpoints, names: list[str] | None = None
+    cfg: Config,
+    resolved: ResolvedEndpoints,
+    names: list[str] | None = None,
 ) -> list[Volume]:
-    """The volumes ``probe_volume_statuses`` probes, in that order."""
+    """Return the volumes ``probe_volume_statuses`` probes, in that order."""
     return [vol for _slug, vol, _mount in lifecycle_volumes(cfg, resolved, names)]
 
 
@@ -109,8 +136,15 @@ def probe_volume_statuses(
     """Probe the mount-managed volumes, then list the others unprobed."""
     return [
         *(
-            _probe_with_callbacks(vol, resolved, run, on_probe_start, on_probe_end)
-            for vol in managed_volumes(cfg, resolved, names)
+            _probe_with_callbacks(
+                vol,
+                mount,
+                resolved,
+                run,
+                on_probe_start=on_probe_start,
+                on_probe_end=on_probe_end,
+            )
+            for _slug, vol, mount in lifecycle_volumes(cfg, resolved, names)
         ),
         *unprobed_volume_statuses(cfg, resolved, names),
     ]
@@ -118,21 +152,24 @@ def probe_volume_statuses(
 
 def _probe_with_callbacks(
     volume: Volume,
+    mount: MountConfig,
     resolved: ResolvedEndpoints,
     run: VolumeCommandRunner,
+    *,
     on_probe_start: ProbeStartFn | None,
     on_probe_end: ProbeEndFn | None,
 ) -> VolumeStatus:
     if on_probe_start is not None:
         on_probe_start(volume)
-    status = probe_volume_status(volume, resolved, run=run)
+    status = probe_volume_status(volume, mount, resolved, run=run)
     if on_probe_end is not None:
         on_probe_end(volume, status)
     return status
 
 
 def _unprobed_kind(
-    volume: Volume, resolved: ResolvedEndpoints
+    volume: Volume,
+    resolved: ResolvedEndpoints,
 ) -> VolumeStatusKind | None:
     match volume.mount:
         case None:
@@ -144,7 +181,9 @@ def _unprobed_kind(
 
 
 def unprobed_volume_statuses(
-    cfg: Config, resolved: ResolvedEndpoints, names: list[str] | None = None
+    cfg: Config,
+    resolved: ResolvedEndpoints,
+    names: list[str] | None = None,
 ) -> list[VolumeStatus]:
     """Volumes listed without a probe: unmanaged, or excluded by location."""
     kinds = {
@@ -158,12 +197,17 @@ def unprobed_volume_statuses(
 
 
 def mount_result_statuses(results: list[MountResult]) -> list[VolumeStatus]:
-    """The status of each volume ``disks mount`` acted on: the state the
-    lifecycle observed, or why it could not reach the volume."""
+    """
+    Return the status of each volume ``disks mount`` acted on.
+
+    The state the lifecycle observed, or why it could not reach the volume.
+    """
     observations = build_mount_observations(results)
     return [
         VolumeStatus(
-            r.volume_slug, VolumeStatusKind.PROBED, observations[r.volume_slug]
+            r.volume_slug,
+            VolumeStatusKind.PROBED,
+            observations[r.volume_slug],
         )
         if r.volume_slug in observations
         else VolumeStatus(

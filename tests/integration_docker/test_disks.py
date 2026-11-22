@@ -1,4 +1,5 @@
-"""Integration tests: mount management detection and LUKS operations.
+"""
+Integration tests: mount management detection and LUKS operations.
 
 These tests run against the Docker container with a real LUKS-encrypted
 file-backed volume. Tests that require dm-crypt (LUKS) are skipped
@@ -55,6 +56,7 @@ from tests._docker_fixtures import (
     resolved_endpoints_for,
     ssh_exec,
 )
+from tests.fakes import BodyError
 
 
 def _unlock_luks(
@@ -63,7 +65,7 @@ def _unlock_luks(
     luks_uuid: str,
 ) -> None:
     """Unlock the LUKS container via the production udisksctl builder."""
-    run_udisks(build_unlock_command(luks_uuid), volume, resolved, input=LUKS_PASSPHRASE)
+    run_udisks(build_unlock_command(luks_uuid), volume, resolved, stdin=LUKS_PASSPHRASE)
 
 
 def _lock_luks(
@@ -138,7 +140,9 @@ class TestDiscoverCleartextDevice:
         _unlock_luks(remote_encrypted_volume, resolved, luks_uuid)
         try:
             device = discover_cleartext_device(
-                remote_encrypted_volume, luks_uuid, resolved
+                remote_encrypted_volume,
+                luks_uuid,
+                resolved,
             )
             assert device is not None
             assert device.startswith("/dev/mapper/")
@@ -194,7 +198,9 @@ class TestLuksLifecycle:
             assert read_result.stdout.strip() == "luks-test-data"
 
             umount_result = umount_volume(
-                remote_encrypted_volume, mount_config, resolved
+                remote_encrypted_volume,
+                mount_config,
+                resolved,
             )
             assert umount_result.success, umount_result.failure
 
@@ -264,11 +270,11 @@ def _make_config(
 
 
 class TestFindMountpoint:
+    @pytest.mark.usefixtures("luks_uuid")
     def test_none_when_umounted(
         self,
         docker_ssh_endpoint: SshEndpoint,
         remote_encrypted_volume: RemoteVolume,
-        luks_uuid: str,
     ) -> None:
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
         mount_config = remote_encrypted_volume.mount
@@ -299,7 +305,9 @@ class TestFindMountpoint:
         assert result.success, result.failure
         try:
             device = resolve_target_device(
-                remote_encrypted_volume, mount_config, resolved
+                remote_encrypted_volume,
+                mount_config,
+                resolved,
             )
             assert device is not None
             assert (
@@ -339,10 +347,10 @@ class TestMountVolumeIdempotency:
         finally:
             _cleanup(remote_encrypted_volume, resolved, luks_uuid)
 
+    @pytest.mark.usefixtures("luks_uuid")
     def test_mount_device_not_present_returns_structured_failure(
         self,
         docker_ssh_endpoint: SshEndpoint,
-        luks_uuid: str,
     ) -> None:
         """mount_volume with a fake UUID returns DEVICE_NOT_PRESENT."""
         volume = RemoteVolume(
@@ -383,11 +391,11 @@ class TestUmountVolumeIdempotency:
 
 
 class TestMountObservations:
+    @pytest.mark.usefixtures("luks_uuid")
     def test_observations_after_successful_mount(
         self,
         docker_ssh_endpoint: SshEndpoint,
         remote_encrypted_volume: RemoteVolume,
-        luks_uuid: str,
     ) -> None:
         """Observations from a successful mount reflect actual state."""
         config, resolved = _make_config(docker_ssh_endpoint, remote_encrypted_volume)
@@ -410,10 +418,10 @@ class TestMountObservations:
         finally:
             umount_volumes(config, resolved)
 
+    @pytest.mark.usefixtures("luks_uuid")
     def test_observations_after_device_not_present(
         self,
         docker_ssh_endpoint: SshEndpoint,
-        luks_uuid: str,
     ) -> None:
         """Observations from a failed mount capture device_present=False."""
         volume = RemoteVolume(
@@ -442,11 +450,11 @@ class TestMountObservations:
 
 
 class TestManagedMount:
+    @pytest.mark.usefixtures("luks_uuid")
     def test_mounts_and_umounts(
         self,
         docker_ssh_endpoint: SshEndpoint,
         remote_encrypted_volume: RemoteVolume,
-        luks_uuid: str,
     ) -> None:
         config, resolved = _make_config(docker_ssh_endpoint, remote_encrypted_volume)
         with managed_mount(config, resolved, lambda _: LUKS_PASSPHRASE) as (
@@ -470,11 +478,11 @@ class TestManagedMount:
         )
         assert ls.returncode != 0
 
+    @pytest.mark.usefixtures("luks_uuid")
     def test_yields_observations(
         self,
         docker_ssh_endpoint: SshEndpoint,
         remote_encrypted_volume: RemoteVolume,
-        luks_uuid: str,
     ) -> None:
         """managed_mount yields observations with correct state."""
         config, resolved = _make_config(docker_ssh_endpoint, remote_encrypted_volume)
@@ -489,11 +497,11 @@ class TestManagedMount:
             assert obs.luks_unlocked is True
             assert obs.mounted is True
 
+    @pytest.mark.usefixtures("luks_uuid")
     def test_callbacks_invoked(
         self,
         docker_ssh_endpoint: SshEndpoint,
         remote_encrypted_volume: RemoteVolume,
-        luks_uuid: str,
     ) -> None:
         """Mount/umount callbacks are called with correct arguments."""
         config, resolved = _make_config(docker_ssh_endpoint, remote_encrypted_volume)
@@ -506,9 +514,9 @@ class TestManagedMount:
             config,
             resolved,
             lambda _: LUKS_PASSPHRASE,
-            on_mount_start=lambda slug: mount_starts.append(slug),
+            on_mount_start=mount_starts.append,
             on_mount_end=lambda slug, r: mount_ends.append((slug, r.success)),
-            on_umount_start=lambda slug: umount_starts.append(slug),
+            on_umount_start=umount_starts.append,
             on_umount_end=lambda slug, r: umount_ends.append((slug, r.success)),
         ):
             pass
@@ -519,18 +527,18 @@ class TestManagedMount:
         assert umount_starts == [slug]
         assert umount_ends == [(slug, True)]
 
+    @pytest.mark.usefixtures("luks_uuid")
     def test_umounts_on_exception(
         self,
         docker_ssh_endpoint: SshEndpoint,
         remote_encrypted_volume: RemoteVolume,
-        luks_uuid: str,
     ) -> None:
         config, resolved = _make_config(docker_ssh_endpoint, remote_encrypted_volume)
         with (
-            pytest.raises(RuntimeError, match="deliberate"),
+            pytest.raises(BodyError),
             managed_mount(config, resolved, lambda _: LUKS_PASSPHRASE),
         ):
-            raise RuntimeError("deliberate")
+            raise BodyError
 
         mount_config = remote_encrypted_volume.mount
         assert mount_config is not None
@@ -547,7 +555,8 @@ class TestUnencryptedMount:
         docker_ssh_endpoint: SshEndpoint,
         remote_unencrypted_volume: RemoteVolume,
     ) -> None:
-        """Full mount/umount lifecycle for a genuinely unencrypted device.
+        """
+        Full mount/umount lifecycle for a genuinely unencrypted device.
 
         ``device_uuid`` is the filesystem UUID; nbkp mounts it directly via
         ``udisksctl mount`` with no unlock step (the MountConfig has no

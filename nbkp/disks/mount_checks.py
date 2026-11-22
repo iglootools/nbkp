@@ -1,4 +1,5 @@
-"""Mount state probing: tool availability, config validation, runtime state.
+"""
+Mount state probing: tool availability, config validation, runtime state.
 
 Probes whether udisks tools are installed and whether volumes are currently
 unlocked/mounted.  Used by both ``disks status`` and preflight checks.
@@ -44,7 +45,8 @@ def probe_mount_tools(
     run: VolumeCommandRunner = run_on_volume,
     which: WhichFn = shutil.which,
 ) -> MountToolCapabilities:
-    """Probe mount management tool availability on the host.
+    """
+    Probe mount management tool availability on the host.
 
     Probes all tools that might be needed by any volume on this host.
     Which tools are actually *required* is determined during error
@@ -94,7 +96,8 @@ def _check_fstab_entry(
     *,
     run: VolumeCommandRunner,
 ) -> FstabEntry | None:
-    """Return the fstab entry whose TARGET is *path*, or None when there is none.
+    """
+    Return the fstab entry whose TARGET is *path*, or None when there is none.
 
     Confirms udisks will mount the device at the declared *path* (rather than
     at ``/run/media/...``).  Only meaningful when ``volume.path`` is declared.
@@ -132,7 +135,8 @@ def fstab_source_matches(
     mount: MountConfig,
     cleartext_device: str | None,
 ) -> bool:
-    """Whether an fstab SOURCE plausibly designates this volume's device.
+    """
+    Whether an fstab SOURCE plausibly designates this volume's device.
 
     Only *contradictions* are rejected — a spec that names a different device
     in a form we can check.  Forms nbkp cannot resolve without extra probes
@@ -165,7 +169,9 @@ def fstab_source_matches(
 
 
 def _matches_cleartext_mapper(
-    spec: str, uuid: str, cleartext_device: str | None
+    spec: str,
+    uuid: str,
+    cleartext_device: str | None,
 ) -> bool:
     match cleartext_device:
         case None:
@@ -193,7 +199,8 @@ def _probe_runtime_state(
     *,
     run: VolumeCommandRunner,
 ) -> _RuntimeState:
-    """Probe device presence, LUKS unlock and mount state over the wire.
+    """
+    Probe device presence, LUKS unlock and mount state over the wire.
 
     A tool reported missing by *mount_tools* is not invoked — the matching
     field stays ``None`` (unknown) and the SSH-endpoint layer reports the
@@ -203,7 +210,10 @@ def _probe_runtime_state(
     can_lsblk = mount_tools is None or mount_tools.has_lsblk is not False
     can_findmnt = mount_tools is None or mount_tools.has_findmnt is not False
     device_present = detect_device_present(
-        volume, mount.device_uuid, resolved_endpoints, run=run
+        volume,
+        mount.device_uuid,
+        resolved_endpoints,
+        run=run,
     )
     cleartext_device, luks_known = (
         _probe_cleartext(volume, mount, resolved_endpoints, run=run)
@@ -241,7 +251,10 @@ def _probe_cleartext(
     try:
         return (
             discover_cleartext_device(
-                volume, mount.device_uuid, resolved_endpoints, run=run
+                volume,
+                mount.device_uuid,
+                resolved_endpoints,
+                run=run,
             ),
             True,
         )
@@ -282,7 +295,8 @@ def check_mount_capabilities(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> MountCapabilities:
-    """Probe volume-specific mount config and runtime state.
+    """
+    Probe volume-specific mount config and runtime state.
 
     Tool availability comes from *mount_tools* at the SSH endpoint level and
     gates which probes run.  This function probes the fstab entry (when
@@ -294,7 +308,11 @@ def check_mount_capabilities(
         _observed_state(mount_observation)
         if mount_observation is not None
         else _probe_runtime_state(
-            volume, mount, mount_tools, resolved_endpoints, run=run
+            volume,
+            mount,
+            mount_tools,
+            resolved_endpoints,
+            run=run,
         )
     )
     fstab = _fstab_check(volume, mount, mount_tools, state, resolved_endpoints, run=run)
@@ -322,7 +340,8 @@ def _fstab_check(
     *,
     run: VolumeCommandRunner,
 ) -> tuple[bool | None, FstabEntry | None]:
-    """``(has_matching_entry, entry)`` for the fixed-path (Option A) model.
+    """
+    ``(has_matching_entry, entry)`` for the fixed-path (Option A) model.
 
     ``None`` when not applicable (no declared path) or not checkable (findmnt
     missing — reported at the SSH endpoint level instead of as a false
@@ -348,7 +367,8 @@ def check_mount_status(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> MountCapabilities:
-    """Probe mount capabilities and runtime state for a single volume.
+    """
+    Probe mount capabilities and runtime state for a single volume.
 
     Lightweight alternative to ``check_volume_capabilities`` — only probes
     mount-related capabilities (fstab + runtime device/luks/mounted state).
@@ -356,5 +376,9 @@ def check_mount_status(
     attempted and a missing tool surfaces as an unknown state.
     """
     return check_mount_capabilities(
-        volume, mount, mount_tools, resolved_endpoints or {}, run=run
+        volume,
+        mount,
+        mount_tools,
+        resolved_endpoints or {},
+        run=run,
     )

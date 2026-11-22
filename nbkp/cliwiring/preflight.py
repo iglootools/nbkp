@@ -1,4 +1,5 @@
-"""Preflight checks with a progress bar, shared by every command that runs them.
+"""
+Preflight checks with a progress bar, shared by every command that runs them.
 
 ``preflight check|troubleshoot``, ``snapshots show|prune`` and ``run`` all
 probe the config before acting on it; they share the step counting and the
@@ -30,6 +31,7 @@ from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 def start_check_step(bar: StepProgressBar, label: str) -> None:
+    """Show on *bar* that the step *label* is being checked."""
     bar.on_start(f"Checking {label}...")
 
 
@@ -48,6 +50,7 @@ def end_check_step(
 
 def check_all_with_progress(
     cfg: Config,
+    *,
     use_progress: bool,
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
@@ -55,13 +58,14 @@ def check_all_with_progress(
     mount_observations: dict[str, MountObservation] | None = None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
     exclude_locations: Collection[str] = (),
-    *,
     runtime: Runtime,
 ) -> PreflightResult:
-    """*strictness* picks the per-step icon: errors that are fatal under
-    the current policy show ``✗`` (red), errors that are non-fatal
-    (e.g. inactive volumes under ``IGNORE_INACTIVE``) show ``⚠``
-    (orange).  The probes run through *runtime*.
+    """
+    Run every check, showing a progress step per check.
+
+    *strictness* picks the per-step icon: errors that are fatal under the current policy
+    show ``✗`` (red), errors that are non-fatal (e.g. inactive volumes under
+    ``IGNORE_INACTIVE``) show ``⚠`` (orange). The probes run through *runtime*.
     """
     total = check_step_count(cfg, only_syncs, resolved_endpoints, exclude_locations)
 
@@ -82,7 +86,10 @@ def check_all_with_progress(
             cfg,
             on_check_start=partial(start_check_step, bar),
             on_check_end=lambda label, errors: end_check_step(
-                bar, label, errors, strictness
+                bar,
+                label,
+                errors,
+                strictness,
             ),
             only_syncs=only_syncs,
             resolved_endpoints=resolved_endpoints,
@@ -100,14 +107,15 @@ def check_and_display(
     strictness: Strictness,
     only_syncs: list[str] | None = None,
     resolved_endpoints: ResolvedEndpoints | None = None,
+    *,
     dry_run: bool = False,
     mount_observations: dict[str, MountObservation] | None = None,
     invocation: Invocation | None = None,
     exclude_locations: Collection[str] = (),
-    *,
     runtime: Runtime,
 ) -> tuple[PreflightResult, bool]:
-    """Compute statuses, display human output, and check for errors.
+    """
+    Compute statuses, display human output, and check for errors.
 
     Returns the preflight result and whether there are fatal errors.
     When *only_syncs* is given, only those syncs (and the volumes
@@ -135,7 +143,7 @@ def check_and_display(
                 resolved_endpoints=resolved_endpoints,
                 strictness=strictness,
                 invocation=invocation,
-            )
+            ),
         )
 
     return preflight, has_fatal_errors(preflight.sync_statuses, strictness=strictness)

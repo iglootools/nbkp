@@ -1,3 +1,5 @@
+"""The result of a sync: its outcome, why it did not succeed, and its warnings."""
+
 import subprocess
 from enum import StrEnum
 
@@ -8,6 +10,13 @@ from nbkp.preflight import SyncErrorKind
 
 
 class SyncOutcome(StrEnum):
+    """
+    How a sync ended.
+
+    Succeeded, failed in a step that ran, cancelled because an upstream sync did
+    not succeed, or skipped by preflight.
+    """
+
     SUCCESS = "success"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -69,13 +78,13 @@ RUNTIME_FAILURES: frozenset[SyncFailureKind] = frozenset(
         SyncFailureKind.SNAPSHOT,
         SyncFailureKind.SYMLINK,
         SyncFailureKind.UPSTREAM_FAILED,
-    }
+    },
 )
 
 #: Non-runs rooted in a disabled sync: never fatal, under any strictness,
 #: since nobody asked for that sync to run.
 DISABLED_FAILURES: frozenset[SyncFailureKind] = frozenset(
-    {SyncFailureKind.DISABLED, SyncFailureKind.UPSTREAM_DISABLED}
+    {SyncFailureKind.DISABLED, SyncFailureKind.UPSTREAM_DISABLED},
 )
 
 #: Non-runs rooted in expected inactivity.
@@ -84,7 +93,7 @@ _INACTIVE_FAILURES: frozenset[SyncFailureKind] = frozenset(
         SyncFailureKind.INACTIVE,
         SyncFailureKind.DRY_RUN_PENDING,
         SyncFailureKind.UPSTREAM_SKIPPED,
-    }
+    },
 )
 
 
@@ -97,6 +106,8 @@ class SyncWarningKind(StrEnum):
 
 
 class SyncWarning(BaseModel):
+    """A best-effort step of a sync that failed, and the message saying how."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     kind: SyncWarningKind
@@ -104,11 +115,13 @@ class SyncWarning(BaseModel):
 
 
 class SyncResult(BaseModel):
-    """``failure`` says why a sync did not succeed and determines
-    ``outcome``; ``detail`` describes a failed or cancelled step, and
-    ``preflight_errors`` the errors that kept a skipped sync from running.
-    Prefer the constructors (:meth:`succeeded`, :meth:`failed`,
-    :meth:`skipped`, :meth:`cancelled`), which keep the two consistent.
+    """
+    The result of one sync.
+
+    ``failure`` says why a sync did not succeed and determines ``outcome``; ``detail``
+    describes a failed or cancelled step, and ``preflight_errors`` the errors that kept
+    a skipped sync from running. Prefer the constructors (:meth:`succeeded`,
+    :meth:`failed`, :meth:`skipped`, :meth:`cancelled`), which keep the two consistent.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -134,6 +147,7 @@ class SyncResult(BaseModel):
     @computed_field
     @property
     def success(self) -> bool:
+        """Return whether the sync succeeded; serialized with the result."""
         return self.outcome is SyncOutcome.SUCCESS
 
     @model_validator(mode="after")
@@ -154,13 +168,14 @@ class SyncResult(BaseModel):
     @staticmethod
     def succeeded(
         slug: str,
+        *,
         dry_run: bool,
         proc: subprocess.CompletedProcess[str],
-        *,
         snapshot_path: str | None = None,
         pruned_paths: tuple[str, ...] | None = None,
         warnings: tuple[SyncWarning, ...] = (),
     ) -> SyncResult:
+        """Return the result of a sync whose rsync run *proc* succeeded."""
         return SyncResult(
             sync_slug=slug,
             outcome=SyncOutcome.SUCCESS,
@@ -175,14 +190,20 @@ class SyncResult(BaseModel):
     @staticmethod
     def failed(
         slug: str,
+        *,
         dry_run: bool,
         failure: SyncFailureKind,
         detail: str,
-        *,
         rsync_exit_code: int = -1,
         output: str = "",
         warnings: tuple[SyncWarning, ...] = (),
     ) -> SyncResult:
+        """
+        Return the result of a sync that ran and failed at the step *failure* names.
+
+        *detail* describes the failure; *rsync_exit_code* and *output* are rsync's,
+        when rsync ran.
+        """
         return SyncResult(
             sync_slug=slug,
             outcome=SyncOutcome.FAILED,
@@ -197,10 +218,12 @@ class SyncResult(BaseModel):
     @staticmethod
     def skipped(
         slug: str,
+        *,
         dry_run: bool,
         failure: SyncFailureKind,
         preflight_errors: tuple[SyncErrorKind, ...],
     ) -> SyncResult:
+        """Return the result of a sync that *preflight_errors* kept from running."""
         return SyncResult(
             sync_slug=slug,
             outcome=SyncOutcome.SKIPPED,
@@ -211,8 +234,18 @@ class SyncResult(BaseModel):
 
     @staticmethod
     def cancelled(
-        slug: str, dry_run: bool, failure: SyncFailureKind, upstream: str
+        slug: str,
+        *,
+        dry_run: bool,
+        failure: SyncFailureKind,
+        upstream: str,
     ) -> SyncResult:
+        """
+        Return the result of a sync cancelled because *upstream* did not succeed.
+
+        *failure* says whether *upstream* failed, was skipped or is disabled; the
+        detail message names it.
+        """
         match failure:
             case SyncFailureKind.UPSTREAM_FAILED:
                 reason = "failed"
@@ -230,7 +263,7 @@ class SyncResult(BaseModel):
         )
 
     def with_warnings(self, warnings: tuple[SyncWarning, ...]) -> SyncResult:
-        """A copy with *warnings* appended."""
+        """Return a copy with *warnings* appended."""
         return self.model_copy(update={"warnings": (*self.warnings, *warnings)})
 
 
@@ -238,12 +271,14 @@ def result_severity(
     result: SyncResult,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Severity:
-    """Runtime failures — and cancellations caused by one — are errors under
-    every strictness.  Non-runs rooted in expected inactivity follow the
-    strictness policy for inactive errors, and syncs skipped for
-    infrastructure errors follow the policy for infrastructure errors.
-    A disabled sync, and what it cancels, is never more than a warning.
-    ``ERROR`` is exactly what makes ``run`` exit non-zero.
+    """
+    Return the severity of a sync's result under *strictness*.
+
+    Runtime failures, and cancellations caused by one, are errors under every
+    strictness. Non-runs rooted in expected inactivity follow the strictness policy for
+    inactive errors, and syncs skipped for infrastructure errors follow the policy for
+    infrastructure errors. A disabled sync, and what it cancels, is never more than a
+    warning. ``ERROR`` is exactly what makes ``run`` exit non-zero.
     """
     match result.failure:
         case None:
@@ -253,4 +288,7 @@ def result_severity(
         case kind if kind in DISABLED_FAILURES:
             return Severity.WARNING
         case kind:
-            return classify_severity(kind in _INACTIVE_FAILURES, strictness)
+            return classify_severity(
+                is_inactive=kind in _INACTIVE_FAILURES,
+                strictness=strictness,
+            )

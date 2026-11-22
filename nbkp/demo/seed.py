@@ -1,3 +1,10 @@
+"""
+Seeding a demo directory: a config, sample data and, optionally, containers.
+
+The demo runs nbkp against local volumes and, with Docker, a bastion and a
+storage container reached over SSH, optionally with a LUKS-encrypted volume.
+"""
+
 import shlex
 import subprocess
 import tempfile
@@ -56,6 +63,8 @@ DEMO_CREDENTIAL_COMMAND = [
 
 
 class SeedErrorKind(StrEnum):
+    """Why seeding the demo failed: the ``kind`` of a :class:`SeedError`."""
+
     DOCKER_EXTRA_MISSING = "docker-extra-missing"
     DOCKER_UNAVAILABLE = "docker-unavailable"
     DOCKER_DIR_MISSING = "docker-dir-missing"
@@ -73,7 +82,7 @@ _PREREQUISITE_KINDS = frozenset(
         SeedErrorKind.DOCKER_EXTRA_MISSING,
         SeedErrorKind.DOCKER_UNAVAILABLE,
         SeedErrorKind.DOCKER_DIR_MISSING,
-    }
+    },
 )
 
 
@@ -81,6 +90,7 @@ class SeedError(Exception):
     """*detail* is the failing tool's message, or the missing path."""
 
     def __init__(self, kind: SeedErrorKind, detail: str = "") -> None:
+        """Build the error from its kind and the detail that explains it."""
         super().__init__(f"{kind}: {detail}" if detail else kind)
         self.kind = kind
         self.detail = detail
@@ -92,6 +102,12 @@ class SeedError(Exception):
 
 
 class SeedResult(BaseModel):
+    """
+    What a seed produced: its directory, config file and config.
+
+    The container SSH ports are set only when the demo started containers.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     base_dir: Path
@@ -122,7 +138,7 @@ _SEED_VOLUMES = SeedStep("Seeding volumes...", "seed volumes")
 
 
 def seed_steps(*, docker: bool, luks: bool) -> list[SeedStep]:
-    """The steps :func:`seed_demo` reports through its callbacks, in order."""
+    """Return the steps :func:`seed_demo` reports through its callbacks, in order."""
     return [
         *(
             [
@@ -151,7 +167,7 @@ class _Steps:
         if self.on_start is not None:
             self.on_start(step.running)
 
-    def end(self, step: SeedStep, success: bool, detail: str | None = None) -> None:
+    def end(self, step: SeedStep, *, success: bool, detail: str | None = None) -> None:
         if self.on_end is not None:
             self.on_end(step.done, Severity.OK if success else Severity.ERROR, detail)
 
@@ -162,12 +178,12 @@ class _Steps:
         try:
             yield
         except SeedError as e:
-            self.end(step, False, e.detail or None)
+            self.end(step, success=False, detail=e.detail or None)
             raise
         except Exception as e:
-            self.end(step, False, str(e))
+            self.end(step, success=False, detail=str(e))
             raise
-        self.end(step, True)
+        self.end(step, success=True)
 
 
 @dataclass(frozen=True)
@@ -179,7 +195,7 @@ class _Containers:
     storage_port: int
 
 
-def _check_docker(has_docker: bool) -> None:
+def _check_docker(*, has_docker: bool) -> None:
     """Fail before anything is created when the demo cannot use Docker."""
     if not has_docker:
         raise SeedError(SeedErrorKind.DOCKER_EXTRA_MISSING)
@@ -205,7 +221,7 @@ def seed_plan(
     docker: bool = True,
     luks: bool = True,
 ) -> list[str]:
-    """Steps :func:`seed_demo` would perform, for ``demo seed --dry-run``."""
+    """Return the steps :func:`seed_demo` would perform, for ``--dry-run``."""
     target = str(base_dir) if base_dir is not None else "a new temp dir (nbkp-demo-*)"
     return [
         f"create seed directory {target}",
@@ -240,7 +256,8 @@ def seed_demo(
     on_step_end: Callable[[str, Severity, str | None], None] | None = None,
     has_docker: bool = _HAS_DOCKER,
 ) -> SeedResult:
-    """Seed *base_dir*, or a new temp dir when it is ``None``.
+    """
+    Seed *base_dir*, or a new temp dir when it is ``None``.
 
     *on_step_start* and *on_step_end* receive each step of :func:`seed_steps`:
     its in-progress label (e.g. ``"Building Docker image..."``), then its
@@ -256,7 +273,7 @@ def seed_demo(
         else RsyncOptions()
     )
     if docker:
-        _check_docker(has_docker)
+        _check_docker(has_docker=has_docker)
     try:
         return _seed(
             _seed_dir(base_dir),
@@ -273,7 +290,8 @@ def seed_demo(
         raise SeedError(SeedErrorKind.SSH_NOT_READY, str(e)) from e
     except subprocess.CalledProcessError as e:
         raise SeedError(
-            SeedErrorKind.REMOTE_COMMAND_FAILED, _called_process_detail(e)
+            SeedErrorKind.REMOTE_COMMAND_FAILED,
+            _called_process_detail(e),
         ) from e
 
 
@@ -292,7 +310,7 @@ def _seed(
     credential_provider: CredentialProvider,
     steps: _Steps,
 ) -> SeedResult:
-    containers = _start_containers(base_dir, luks, steps) if docker else None
+    containers = _start_containers(base_dir, luks=luks, steps=steps) if docker else None
     luks_uuid = (
         _read_luks_uuid(containers, steps) if containers is not None and luks else None
     )
@@ -307,7 +325,9 @@ def _seed(
         )
         if containers is not None
         else build_local_chain_config(
-            base_dir, rsync_options=rsync_opts, max_snapshots=5
+            base_dir,
+            rsync_options=rsync_opts,
+            max_snapshots=5,
         )
     )
     resolved = resolve_all_endpoints(config)
@@ -333,7 +353,7 @@ def _seed(
     )
 
 
-def _start_containers(base_dir: Path, luks: bool, steps: _Steps) -> _Containers:
+def _start_containers(base_dir: Path, *, luks: bool, steps: _Steps) -> _Containers:
     private_key, pub_key = generate_ssh_keypair(base_dir)
 
     with steps.run(_BUILD_IMAGE):
@@ -345,7 +365,10 @@ def _start_containers(base_dir: Path, luks: bool, steps: _Steps) -> _Containers:
     with steps.run(_START_BASTION):
         bastion_port = start_bastion_container(pub_key, network_name)
     bastion = create_test_ssh_endpoint(
-        "bastion", "127.0.0.1", bastion_port, private_key
+        "bastion",
+        "127.0.0.1",
+        bastion_port,
+        private_key,
     )
     with steps.run(_WAIT_BASTION):
         wait_for_ssh(bastion)
@@ -358,7 +381,10 @@ def _start_containers(base_dir: Path, luks: bool, steps: _Steps) -> _Containers:
             luks_enabled=luks,
         )
     storage = create_test_ssh_endpoint(
-        "storage", "127.0.0.1", storage_port, private_key
+        "storage",
+        "127.0.0.1",
+        storage_port,
+        private_key,
     )
     with steps.run(_WAIT_STORAGE):
         # Generous timeout: the storage container formats a btrfs loop image
@@ -386,7 +412,8 @@ def docker_demo_config(
     rsync_options: RsyncOptions,
     credential_provider: CredentialProvider,
 ) -> Config:
-    """Chain layout matching the integration test, through *bastion*.
+    """
+    Chain layout matching the integration test, through *bastion*.
 
     The storage container is reached as ``backup-server`` behind the bastion,
     with *private_key*. Without *luks_uuid* there is no encrypted volume, and
@@ -426,7 +453,8 @@ def encrypted_volume_mounted(
     on_step_start: Callable[[str], None] | None = None,
     on_step_end: Callable[[str, Severity, str | None], None] | None = None,
 ) -> Generator[None]:
-    """Mount the demo's encrypted volume around the block, and check the umount.
+    """
+    Mount the demo's encrypted volume around the block, and check the umount.
 
     The umount + lock also runs when mounting fails, as in
     ``disks/context.py``: the volume may already be unlocked by then.  A
@@ -443,7 +471,10 @@ def encrypted_volume_mounted(
                 (
                     r
                     for r in mount_phase(
-                        config, resolved, passphrase_fn=passphrase_fn, run=run
+                        config,
+                        resolved,
+                        passphrase_fn=passphrase_fn,
+                        run=run,
                     )
                     if not r.success
                 ),
@@ -471,14 +502,15 @@ def _umount_encrypted(
     """Umount + lock; returns the failure detail, if any."""
     steps.start(_UMOUNT)
     failed = next(
-        (r for r in umount_volumes(config, resolved, run=run) if not r.success), None
+        (r for r in umount_volumes(config, resolved, run=run) if not r.success),
+        None,
     )
     detail = (
         (umount_failure_detail(failed) or "unknown error")
         if failed is not None
         else None
     )
-    steps.end(_UMOUNT, failed is None, detail)
+    steps.end(_UMOUNT, success=failed is None, detail=detail)
     return detail
 
 
@@ -490,13 +522,14 @@ def _seed_data(
 ) -> None:
     storage = containers.storage if containers is not None else None
 
-    def _run_remote(_vol: object, command: list[str]) -> None:
-        assert storage is not None
-        ssh_run(storage, command)
-
     with steps.run(_SEED_VOLUMES):
         create_seed_sentinels(
-            config, remote_exec=_run_remote if storage is not None else None
+            config,
+            remote_exec=(
+                (lambda _vol, command: ssh_run(storage, command))
+                if storage is not None
+                else None
+            ),
         )
         seed_volume(
             config.volumes["src-local-bare"],

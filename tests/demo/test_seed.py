@@ -34,7 +34,7 @@ from tests.fixtures.disks import UUID, encrypted_volume
 
 class TestDryRun:
     def test_plan_lists_docker_steps(self) -> None:
-        steps = seed_plan(Path("/tmp/x"), docker=True, luks=True)
+        steps = seed_plan(Path("/tmp/x"), docker=True, luks=True)  # noqa: S108 -- a plan only, never written
         assert steps[0] == "create seed directory /tmp/x"
         assert "start the bastion and storage containers" in steps
         assert "mount, seed and umount the encrypted volume" in steps
@@ -42,7 +42,8 @@ class TestDryRun:
     def test_cli_dry_run_creates_nothing(self, tmp_path: Path) -> None:
         target = tmp_path / "seed"
         result = CliRunner().invoke(
-            app, ["seed", "--dry-run", "--no-docker", "--base-dir", str(target)]
+            app,
+            ["seed", "--dry-run", "--no-docker", "--base-dir", str(target)],
         )
         assert result.exit_code == 0, result.output
         assert result.output.startswith("[dry-run] Would create seed directory")
@@ -63,10 +64,14 @@ class TestSteps:
 
 class TestCredentialProvider:
     def test_command_provider_config_retrieves_the_demo_passphrase(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
-        """Regression: the config had no credential-command and failed
-        validation after the containers had started."""
+        """
+        Regression: the demo config lacked a credential-command.
+
+        It failed validation after the containers had started.
+        """
         config = docker_demo_config(
             tmp_path,
             bastion=SshEndpoint(slug="bastion", host="127.0.0.1"),
@@ -77,7 +82,9 @@ class TestCredentialProvider:
         )
         assert config.credential_provider == CredentialProvider.COMMAND
         passphrase = retrieve_passphrase(
-            "test-luks", config.credential_provider, config.credential_command
+            "test-luks",
+            config.credential_provider,
+            config.credential_command,
         )
         assert passphrase == LUKS_PASSPHRASE
 
@@ -95,11 +102,16 @@ _ENC = Config(volumes={"enc": encrypted_volume()})
 
 
 def _drive(
-    *, mounts: bool = True, **udisks: subprocess.CompletedProcess[str]
+    *,
+    mounts: bool = True,
+    **udisks: subprocess.CompletedProcess[str],
 ) -> FakeCommandRunner:
-    """``enc`` plugged in and locked, unlocked once unlocked, and mounted once
-    mounted if it *mounts*; the ``udisksctl`` subcommands in *udisks* answer
-    as given."""
+    """
+    Script a host where ``enc`` is plugged in and locked.
+
+    Unlocked once unlocked, and mounted once mounted if it *mounts*; the ``udisksctl``
+    subcommands in *udisks* answer as given.
+    """
     run = FakeCommandRunner()
     for step, answer in udisks.items():
         run.on("udisksctl", step, returns=answer)
@@ -173,7 +185,7 @@ class TestStepFailure:
                 passphrase_fn=lambda _: "x",
                 run=run,
                 on_step_end=lambda step, severity, detail: ends.append(
-                    (step, severity, detail)
+                    (step, severity, detail),
                 ),
             ),
         ):
@@ -194,7 +206,7 @@ class TestStepFailure:
                 docker=False,
                 big_file_size=0,
                 on_step_end=lambda step, severity, detail: ends.append(
-                    (step, severity, detail)
+                    (step, severity, detail),
                 ),
             )
         assert ends == [("seed volumes", "error", str(exc.value))]
@@ -205,7 +217,7 @@ class TestSeedErrorRendering:
         "kind",
         sorted(
             set(SeedErrorKind)
-            - {SeedErrorKind.DOCKER_EXTRA_MISSING, SeedErrorKind.LUKS_UNAVAILABLE}
+            - {SeedErrorKind.DOCKER_EXTRA_MISSING, SeedErrorKind.LUKS_UNAVAILABLE},
         ),
     )
     def test_a_kind_with_a_detail_renders_it(self, kind: SeedErrorKind) -> None:
@@ -218,14 +230,19 @@ class TestSeedErrorRendering:
 
 class TestCommandsScript:
     def test_paths_are_quoted(self) -> None:
-        base = Path("/tmp/my demo")
+        base = Path("/tmp/my demo")  # noqa: S108 -- data only, never written
         result = SeedResult(
             base_dir=base,
             config_path=base / "config.yaml",
             config=Config(volumes={"v": LocalVolume(slug="v", path="/v")}),
         )
-        script = commands_script(result, False, False, CredentialProvider.KEYRING)
-        assert f"CFG={shlex.quote('/tmp/my demo/config.yaml')}" in script
+        script = commands_script(
+            result,
+            docker=False,
+            has_luks=False,
+            credential_provider=CredentialProvider.KEYRING,
+        )
+        assert f"CFG={shlex.quote('/tmp/my demo/config.yaml')}" in script  # noqa: S108 -- data only, never written
         assert 'nbkp run --config "$CFG"' in script
         assert " $CFG" not in script
         # No stray indentation from splicing into a dedent template.

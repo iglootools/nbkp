@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
@@ -499,11 +501,11 @@ class TestObserveEndpoints:
 
 
 class TestMountCapabilities:
+    @pytest.mark.usefixtures("luks_uuid")
     def test_udisks_mount_capabilities_encrypted(
         self,
         docker_ssh_endpoint: SshEndpoint,
         remote_encrypted_volume: RemoteVolume,
-        luks_uuid: str,
     ) -> None:
         """Mount capabilities are probed for an encrypted volume after mounting."""
         resolved = resolved_endpoints_for(docker_ssh_endpoint, remote_encrypted_volume)
@@ -533,7 +535,9 @@ class TestMountCapabilities:
             resolved = resolve_all_endpoints(config)
 
             ssh_diag = observe_ssh_endpoint(
-                remote_encrypted_volume, resolved, probe_mount_tools=True
+                remote_encrypted_volume,
+                resolved,
+                probe_mount_tools=True,
             )
             assert ssh_diag.host_tools is not None
             assert ssh_diag.mount_tools is not None
@@ -558,10 +562,10 @@ class TestMountCapabilities:
         finally:
             umount_volume(remote_encrypted_volume, mount_config, resolved)
 
+    @pytest.mark.usefixtures("luks_uuid")
     def test_udisks_mount_capabilities_device_not_present(
         self,
         docker_ssh_endpoint: SshEndpoint,
-        luks_uuid: str,
     ) -> None:
         """Mount capabilities report device_present=False for a fake UUID."""
         volume = RemoteVolume(

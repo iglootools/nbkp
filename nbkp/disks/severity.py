@@ -1,4 +1,5 @@
-"""Severity of mount results and of the mount-state columns.
+"""
+Severity of mount results and of the mount-state columns.
 
 Decisions, not display: shared by the mount progress bars, the disks status
 table and the preflight check display, which render the result with their own
@@ -20,7 +21,8 @@ from nbkp.policy import Severity, Strictness, classify_severity
 def device_fail_severity(
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Severity:
-    """Severity for ``device_present=False``.
+    """
+    Severity for ``device_present=False``.
 
     A missing device is by definition an "observation, not failure"
     state, so it's always inactive at this layer and the strictness
@@ -33,7 +35,8 @@ def luks_fail_severity(
     mount_failure_reason: MountFailureKind | None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Severity:
-    """Severity for ``luks_unlocked=False``.
+    """
+    Severity for ``luks_unlocked=False``.
 
     Real LUKS-stage failures (``PASSPHRASE_NOT_AVAILABLE`` /
     ``UNLOCK_FAILED`` / ``NOT_AUTHORIZED``)
@@ -50,7 +53,8 @@ def mounted_fail_severity(
     mount_failure_reason: MountFailureKind | None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Severity:
-    """Severity for ``mounted=False``.
+    """
+    Severity for ``mounted=False``.
 
     Real mount-stage failures (``MOUNT_FAILED`` / ``NOT_AUTHORIZED``)
     are non-inactive.  Other states (probe-only, or a cascade from an
@@ -69,7 +73,7 @@ _INACTIVE_MOUNT_REASONS: frozenset[MountFailureKind] = frozenset(
     {
         MountFailureKind.DEVICE_NOT_PRESENT,
         MountFailureKind.UNREACHABLE,
-    }
+    },
 )
 
 
@@ -77,7 +81,8 @@ def mount_result_severity(
     result: MountResult,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> Severity:
-    """Map a mount lifecycle result to display severity under *strictness*.
+    """
+    Map a mount lifecycle result to display severity under *strictness*.
 
     A drive not being plugged in is an expected condition (the user
     backs up to removable media), so under the default
@@ -91,6 +96,7 @@ def mount_result_severity(
         Severity.OK
         if result.success
         else classify_severity(
-            result.failure_reason in _INACTIVE_MOUNT_REASONS, strictness
+            is_inactive=result.failure_reason in _INACTIVE_MOUNT_REASONS,
+            strictness=strictness,
         )
     )

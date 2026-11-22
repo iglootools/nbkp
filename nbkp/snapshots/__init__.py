@@ -1,4 +1,5 @@
-"""Snapshot backends (btrfs, hard-link), their shared helpers, and show/prune.
+"""
+Snapshot backends (btrfs, hard-link), their shared helpers, and show/prune.
 
 Re-exports all public names so that external code can import from
 ``nbkp.snapshots`` without knowing which submodule provides

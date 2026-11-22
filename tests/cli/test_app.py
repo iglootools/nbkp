@@ -5,9 +5,8 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from nbkp.cli import app
-from nbkp.config import Config, Volume
+from nbkp.config import Config
 from nbkp.config.testkit import write_config
-from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.remote.pool import ConnectionPool, active_pool
 from tests.fakes import completed, fake_runtime
 from tests.fixtures.disks import encrypted_volume
@@ -17,11 +16,8 @@ def test_subcommands_run_in_one_ssh_connection_scope(tmp_path: Path) -> None:
     seen: list[ConnectionPool | None] = []
 
     def record_pool(
-        cmd: list[str],
-        volume: Volume,
-        resolved_endpoints: ResolvedEndpoints,
-        *,
-        input: str | None = None,
+        *_args: object,
+        **_kwargs: object,
     ) -> subprocess.CompletedProcess[str]:
         seen.append(active_pool())
         return completed()

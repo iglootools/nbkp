@@ -32,13 +32,17 @@ from tests.fixtures.cli import runner
 def _render(renderable: RenderableType) -> str:
     buf = StringIO()
     Console(file=buf, highlight=False, markup=True, force_terminal=False).print(
-        renderable
+        renderable,
     )
     return buf.getvalue()
 
 
 def _two_sync_chain_config() -> Config:
-    """A → B → C config: source-a → ep-b (via sync-ab) → ep-c (via sync-bc)."""
+    """
+    Build an A → B → C config.
+
+    source-a → ep-b (via sync-ab) → ep-c (via sync-bc).
+    """
     return Config(
         volumes={"vol": LocalVolume(slug="vol", path="/mnt/vol")},
         sync_endpoints={
@@ -105,7 +109,9 @@ def _chain_config() -> Config:
         },
         sync_endpoints={
             "laptop-docs": SyncEndpoint(
-                slug="laptop-docs", volume="laptop", subdir="docs"
+                slug="laptop-docs",
+                volume="laptop",
+                subdir="docs",
             ),
             "server-docs": SyncEndpoint(
                 slug="server-docs",
@@ -118,11 +124,14 @@ def _chain_config() -> Config:
                 volume="usb",
                 subdir="docs",
                 hard_link_snapshots=HardLinkSnapshotConfig(
-                    enabled=True, max_snapshots=5
+                    enabled=True,
+                    max_snapshots=5,
                 ),
             ),
             "offsite-docs": SyncEndpoint(
-                slug="offsite-docs", volume="offsite", subdir="docs"
+                slug="offsite-docs",
+                volume="offsite",
+                subdir="docs",
             ),
         },
         syncs={

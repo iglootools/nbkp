@@ -1,4 +1,5 @@
-"""Tests for the credentials keyring-status command.
+"""
+Tests for the credentials keyring-status command.
 
 The command reads passphrases through the runtime's environment (``env``
 provider) and credential command runner (``command`` provider), which the
@@ -58,7 +59,8 @@ def _invoke(
         app,
         ["credentials", "keyring-status", "--config", str(config_path), *args],
         obj=fake_runtime(
-            environ=environ, run_credential_command=run_credential_command
+            environ=environ,
+            run_credential_command=run_credential_command,
         ),
     )
 
@@ -82,7 +84,7 @@ class TestKeyringStatusJson:
                     "available": False,
                     "error": "missing",
                     "reason": "not-found",
-                }
+                },
             },
         }
 
@@ -130,7 +132,8 @@ class TestKeyringStatus:
 
     def test_prompt_provider_never_prompts(self, tmp_path: Path) -> None:
         config_path = write_config(
-            tmp_path, _config(provider=CredentialProvider.PROMPT)
+            tmp_path,
+            _config(provider=CredentialProvider.PROMPT),
         )
 
         result = _invoke(config_path, "-o", "json")

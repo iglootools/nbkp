@@ -61,7 +61,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 vol_statuses,
                 "btrfs-sync",
                 dst_ep_errors=[DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND],
-            )
+            ),
         }
         console, buf = _make_console()
         console.print(
@@ -70,7 +70,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 vol_statuses,
                 sync_statuses,
                 config,
-            )
+            ),
         )
         output = buf.getvalue()
         assert "staging" in output
@@ -87,7 +87,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 vol_statuses,
                 "btrfs-sync",
                 dst_ep_errors=[DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND],
-            )
+            ),
         }
         console, buf = _make_console()
         console.print(
@@ -96,7 +96,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 vol_statuses,
                 sync_statuses,
                 config,
-            )
+            ),
         )
         output = buf.getvalue()
         assert "btrfs subvolume create /mnt/dst/staging" in output
@@ -110,7 +110,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 vol_statuses,
                 "btrfs-sync",
                 dst_ep_errors=[DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND],
-            )
+            ),
         }
         console, buf = _make_console()
         console.print(
@@ -119,7 +119,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 vol_statuses,
                 sync_statuses,
                 config,
-            )
+            ),
         )
         output = buf.getvalue()
         assert "staging/ directory not found" in output
@@ -135,7 +135,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 vol_statuses,
                 sync_statuses,
                 config,
-            )
+            ),
         )
         output = buf.getvalue()
         assert "No issues found" in output
@@ -183,7 +183,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 vol_statuses,
                 "btrfs-sync",
                 dst_ep_errors=[DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_FOUND],
-            )
+            ),
         }
         console, buf = _make_console()
         console.print(
@@ -192,7 +192,7 @@ class TestTroubleshootBtrfsStagingNotFound:
                 vol_statuses,
                 sync_statuses,
                 config,
-            )
+            ),
         )
         output = buf.getvalue()
         assert "/mnt/dst/backup/staging" in output
@@ -202,8 +202,12 @@ class TestTroubleshootStagingNotBtrfsSubvolume:
     def test_moves_the_plain_directory_aside_before_creating_the_subvolume(
         self,
     ) -> None:
-        """staging/ exists as a plain directory, so `subvolume create` on its
-        path alone would fail with "target path already exists"."""
+        """
+        Move a plain ``staging/`` directory aside before creating the subvolume.
+
+        staging/ exists as a plain directory, so `subvolume create` on its path alone
+        would fail with "target path already exists".
+        """
         config = btrfs_config()
         vol_statuses = local_vol_statuses(config)
         sync_statuses = {
@@ -212,9 +216,9 @@ class TestTroubleshootStagingNotBtrfsSubvolume:
                 vol_statuses,
                 "btrfs-sync",
                 dst_ep_errors=[
-                    DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME
+                    DestinationEndpointErrorKind.STAGING_NOT_BTRFS_SUBVOLUME,
                 ],
-            )
+            ),
         }
         console, buf = _make_console()
         console.print(
@@ -223,7 +227,7 @@ class TestTroubleshootStagingNotBtrfsSubvolume:
                 vol_statuses,
                 sync_statuses,
                 config,
-            )
+            ),
         )
         output = buf.getvalue()
         move = output.index("sudo mv /mnt/dst/staging /mnt/dst/staging.old")
@@ -242,7 +246,7 @@ class TestTroubleshootDryRunPendingSnapshot:
                 vol_statuses,
                 "btrfs-sync",
                 sync_errors=[SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING],
-            )
+            ),
         }
         console, buf = _make_console()
         console.print(
@@ -251,7 +255,7 @@ class TestTroubleshootDryRunPendingSnapshot:
                 vol_statuses,
                 sync_statuses,
                 config,
-            )
+            ),
         )
         output = buf.getvalue()
         assert "dry-run" in output
@@ -301,7 +305,7 @@ class TestTroubleshootLocationExcluded:
                 vol_statuses,
                 {},
                 config,
-            )
+            ),
         )
         output = buf.getvalue()
         assert "excluded by location filter" in output
@@ -319,13 +323,14 @@ def _check_output(sync: SyncStatus, config: Config) -> str:
             {sync.slug: sync},
             config,
             wrap_in_panel=False,
-        )
+        ),
     )
     return buf.getvalue()
 
 
 def _with_destination_diagnostics(
-    sync: SyncStatus, **diagnostics: object
+    sync: SyncStatus,
+    **diagnostics: object,
 ) -> SyncStatus:
     dst = sync.destination_endpoint_status
     return sync.model_copy(
@@ -333,11 +338,11 @@ def _with_destination_diagnostics(
             "destination_endpoint_status": dst.model_copy(
                 update={
                     "diagnostics": DestinationEndpointDiagnostics.model_validate(
-                        {"endpoint_slug": dst.endpoint_slug, **diagnostics}
-                    )
-                }
-            )
-        }
+                        {"endpoint_slug": dst.endpoint_slug, **diagnostics},
+                    ),
+                },
+            ),
+        },
     )
 
 
@@ -347,7 +352,10 @@ class TestCheckLatestColumn:
         sync = sync_status(config, local_vol_statuses(config), "btrfs-sync")
         return _check_output(
             _with_destination_diagnostics(
-                sync, sentinel_exists=True, endpoint_writable=True, latest=latest
+                sync,
+                sentinel_exists=True,
+                endpoint_writable=True,
+                latest=latest,
             ),
             config,
         )
@@ -355,15 +363,17 @@ class TestCheckLatestColumn:
     def test_invalid_target_shown_as_error(self) -> None:
         output = self._output(
             LatestSymlinkState(
-                exists=True, raw_target="snapshots/foo", target_valid=False
-            )
+                exists=True,
+                raw_target="snapshots/foo",
+                target_valid=False,
+            ),
         )
         assert "✗latest → snapshots/foo" in output
 
     def test_valid_target_shown_as_ok(self) -> None:
         target = "snapshots/2026-03-06T14:30:00.000Z"
         output = self._output(
-            LatestSymlinkState(exists=True, raw_target=target, target_valid=True)
+            LatestSymlinkState(exists=True, raw_target=target, target_valid=True),
         )
         assert f"✓latest → {target}" in output
 
@@ -383,7 +393,7 @@ class TestCheckLatestSnapshotWritable:
         sync = troubleshoot_data(config).sync_statuses["latest-snapshot-writable"]
         buf = StringIO()
         Console(file=buf, highlight=False, markup=False, width=400).print(
-            format_human_check({}, {}, {sync.slug: sync}, config, wrap_in_panel=False)
+            format_human_check({}, {}, {sync.slug: sync}, config, wrap_in_panel=False),
         )
         output = buf.getvalue()
         assert "the snapshot latest points to is not read-only" in output
@@ -396,7 +406,9 @@ class TestCheckDestinationColumn:
         sync = sync_status(config, local_vol_statuses(config), "btrfs-sync")
         return _check_output(
             _with_destination_diagnostics(
-                sync, sentinel_exists=sentinel_exists, endpoint_writable=False
+                sync,
+                sentinel_exists=sentinel_exists,
+                endpoint_writable=False,
             ),
             config,
         )

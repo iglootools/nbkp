@@ -46,8 +46,8 @@ _NOT_AUTHORIZED_SIGNATURES = (
 _UDISKS_UNAVAILABLE_SIGNATURES = (
     "command not found",  # bash: udisksctl: command not found
     "udisksctl: not found",  # dash (sh -c): udisksctl: not found
-    # udisksctl 2.10 with no system bus to reach udisksd through:
-    # "Error connecting to the udisks daemon: Could not connect: Connection refused"
+    # udisksctl 2.10 with no system bus to reach udisksd through prints
+    # Error connecting to the udisks daemon: Could not connect: Connection refused
     "error connecting to the udisks daemon",
     "error connecting to the system message bus",
     "org.freedesktop.dbus.error.serviceunknown",
@@ -74,12 +74,12 @@ def run_udisks(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
     *,
-    input: str | None = None,
+    stdin: str | None = None,
     sleep: Callable[[float], None] = time.sleep,
     run: VolumeCommandRunner = run_on_volume,
 ) -> subprocess.CompletedProcess[str]:
     """Run a ``udisksctl`` command, retrying while udisks catches up with udev."""
-    result = run(command, volume, resolved_endpoints, input=input)
+    result = run(command, volume, resolved_endpoints, stdin=stdin)
     attempts = 1
     while (
         result.returncode != 0
@@ -88,7 +88,7 @@ def run_udisks(
     ):
         settle_udev(volume, resolved_endpoints, run=run)
         sleep(_UDISKS_RETRY_DELAY_S)
-        result = run(command, volume, resolved_endpoints, input=input)
+        result = run(command, volume, resolved_endpoints, stdin=stdin)
         attempts += 1
     return result
 
@@ -104,7 +104,7 @@ LUKS_STAGE_FAILURES: frozenset[MountFailureKind] = frozenset(
         MountFailureKind.PASSPHRASE_NOT_AVAILABLE,
         MountFailureKind.UNLOCK_FAILED,
         MountFailureKind.NOT_AUTHORIZED,
-    }
+    },
 )
 
 
@@ -112,7 +112,7 @@ MOUNT_STAGE_FAILURES: frozenset[MountFailureKind] = frozenset(
     {
         MountFailureKind.MOUNT_FAILED,
         MountFailureKind.NOT_AUTHORIZED,
-    }
+    },
 )
 
 
@@ -121,7 +121,8 @@ def _classify_udisks_failure(
     failed: MountFailureKind,
     step: LifecycleStep,
 ) -> tuple[MountFailureKind, LifecycleFailure]:
-    """Classify a failed udisksctl step into a reason and its facts.
+    """
+    Classify a failed udisksctl step into a reason and its facts.
 
     A polkit refusal (``--no-user-interaction`` with no rule) maps to
     ``NOT_AUTHORIZED`` so preflight can route to the polkit-rules fix; a
@@ -139,21 +140,27 @@ def _classify_udisks_failure(
 
 
 def _command_failure(
-    step: LifecycleStep, result: subprocess.CompletedProcess[str]
+    step: LifecycleStep,
+    result: subprocess.CompletedProcess[str],
 ) -> LifecycleFailure:
     return LifecycleFailure(
-        step=step, exit_code=result.returncode, message=result.stderr.strip()
+        step=step,
+        exit_code=result.returncode,
+        message=result.stderr.strip(),
     )
 
 
 def _probe_failure(error: DeviceProbeError) -> LifecycleFailure:
     return LifecycleFailure(
-        command=error.command, exit_code=error.returncode, message=error.stderr
+        command=error.command,
+        exit_code=error.returncode,
+        message=error.stderr,
     )
 
 
 def missing_local_tool(volume: Volume, error: BaseException) -> str | None:
-    """The tool an error caught as a connection failure says is not installed.
+    """
+    Return the tool an error caught as a connection failure says is not installed.
 
     Locally, a ``FileNotFoundError`` means ``udisksctl``, ``lsblk`` or
     ``findmnt`` is not installed; it is only a connection failure for a
@@ -167,7 +174,8 @@ def missing_local_tool(volume: Volume, error: BaseException) -> str | None:
 
 
 def _connection_failure(
-    volume: Volume, error: BaseException
+    volume: Volume,
+    error: BaseException,
 ) -> tuple[bool, LifecycleFailure]:
     """``(tool_missing, failure)`` for an error caught as a connection failure."""
     match missing_local_tool(volume, error):
@@ -179,7 +187,8 @@ def _connection_failure(
 
 @dataclass(frozen=True)
 class MountResult:
-    """Result of attempting to mount a single volume.
+    """
+    Result of attempting to mount a single volume.
 
     Carries the runtime state observed during the lifecycle so that
     ``build_mount_observations`` can reuse it without re-probing, and so the
@@ -199,6 +208,8 @@ class MountResult:
 
 @dataclass(frozen=True)
 class UmountResult:
+    """Result of attempting to unmount (and lock) a single volume."""
+
     volume_slug: str
     success: bool
     failure_reason: UmountFailureKind | None = None
@@ -206,14 +217,20 @@ class UmountResult:
 
 
 def any_failed(results: Sequence[MountResult | UmountResult]) -> bool:
-    """Whether a mount or umount pass left a volume short of the state it
-    was asked for, which fails the command that ran it."""
+    """
+    Return whether a mount or umount pass left a volume short of its target state.
+
+    Such a pass fails the command that ran it.
+    """
     return any(not r.success for r in results)
 
 
 def refused_by_polkit(results: Sequence[MountResult]) -> bool:
-    """Whether udisks refused an unlock or mount for want of a polkit rule,
-    the failure ``disks setup-auth`` fixes."""
+    """
+    Return whether udisks refused an unlock or mount for want of a polkit rule.
+
+    That is the failure ``disks setup-auth`` fixes.
+    """
     return any(r.failure_reason is MountFailureKind.NOT_AUTHORIZED for r in results)
 
 
@@ -224,7 +241,8 @@ def lifecycle_volumes(
     *,
     mounting: bool = True,
 ) -> list[tuple[str, Volume, MountConfig]]:
-    """The mount-managed volumes a mount (or umount) acts on, in that order.
+    """
+    Return the mount-managed volumes a mount (or umount) acts on, in that order.
 
     Umount walks the mount order backwards. The one selection shared by the
     lifecycle, its dry-run plan and ``disks status``, so they cannot drift.
@@ -242,7 +260,8 @@ def lifecycle_volumes(
 
 
 def unknown_volume_names(config: Config, names: list[str] | None) -> list[str]:
-    """Names passed via ``--name`` that match no volume in *config*.
+    """
+    Names passed via ``--name`` that match no volume in *config*.
 
     Validated up front so that a typo fails loudly instead of silently
     matching nothing and reporting success.
@@ -255,6 +274,7 @@ def mount_count(
     resolved_endpoints: ResolvedEndpoints,
     names: list[str] | None = None,
 ) -> int:
+    """Return how many volumes a mount acts on, for progress display."""
     return len(lifecycle_volumes(config, resolved_endpoints, names))
 
 
@@ -266,7 +286,8 @@ def mount_volume(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> MountResult:
-    """Mount a single volume via udisks. Idempotent: skips already mounted.
+    """
+    Mount a single volume via udisks. Idempotent: skips already mounted.
 
     Connection failures (timeout, DNS, SSH errors) yield a failed
     ``MountResult`` with ``UNREACHABLE`` rather than crashing, and a failed
@@ -275,7 +296,11 @@ def mount_volume(
     """
     try:
         return _mount_volume_inner(
-            volume, mount_config, resolved_endpoints, passphrase_fn, run=run
+            volume,
+            mount_config,
+            resolved_endpoints,
+            passphrase_fn,
+            run=run,
         )
     except DeviceProbeError as e:
         return MountResult(
@@ -310,7 +335,10 @@ def _mount_volume_inner(
     """Core mount logic, separated for exception boundary in ``mount_volume``."""
     settle_udev(volume, resolved_endpoints, run=run)
     if not detect_device_present(
-        volume, mount_config.device_uuid, resolved_endpoints, run=run
+        volume,
+        mount_config.device_uuid,
+        resolved_endpoints,
+        run=run,
     ):
         return MountResult(
             volume_slug=volume.slug,
@@ -320,13 +348,21 @@ def _mount_volume_inner(
             device_present=False,
         )
     match _resolve_device_to_mount(
-        volume, mount_config, resolved_endpoints, passphrase_fn, run=run
+        volume,
+        mount_config,
+        resolved_endpoints,
+        passphrase_fn,
+        run=run,
     ):
         case MountResult() as failure:
             return failure
         case str() as device:
             return _mount_device(
-                volume, mount_config, device, resolved_endpoints, run=run
+                volume,
+                mount_config,
+                device,
+                resolved_endpoints,
+                run=run,
             )
 
 
@@ -338,7 +374,8 @@ def _resolve_device_to_mount(
     *,
     run: VolumeCommandRunner,
 ) -> str | MountResult:
-    """The block device to mount, unlocking the LUKS container first if needed.
+    """
+    Return the block device to mount, unlocking the LUKS container first if needed.
 
     Returns a failed ``MountResult`` when the device cannot be produced.
     """
@@ -347,7 +384,10 @@ def _resolve_device_to_mount(
             return f"/dev/disk/by-uuid/{mount_config.device_uuid}"
         case encryption:
             existing = discover_cleartext_device(
-                volume, mount_config.device_uuid, resolved_endpoints, run=run
+                volume,
+                mount_config.device_uuid,
+                resolved_endpoints,
+                run=run,
             )
             return existing or _unlock(
                 volume,
@@ -360,7 +400,9 @@ def _resolve_device_to_mount(
 
 
 def _unlock_failure(
-    slug: str, reason: MountFailureKind, failure: LifecycleFailure
+    slug: str,
+    reason: MountFailureKind,
+    failure: LifecycleFailure,
 ) -> MountResult:
     """Failed ``MountResult`` for the unlock stage (device is present)."""
     return MountResult(
@@ -382,7 +424,8 @@ def _unlock(
     *,
     run: VolumeCommandRunner,
 ) -> str | MountResult:
-    """Unlock a LUKS container and return its cleartext device.
+    """
+    Unlock a LUKS container and return its cleartext device.
 
     A passphrase that cannot be retrieved is reported as
     ``PASSPHRASE_NOT_AVAILABLE`` for a drive that *is* plugged in — the case
@@ -401,19 +444,24 @@ def _unlock(
         build_unlock_command(device_uuid),
         volume,
         resolved_endpoints,
-        input=passphrase,
+        stdin=passphrase,
         run=run,
     )
     if result.returncode != 0:
         reason, failure = _classify_udisks_failure(
-            result, MountFailureKind.UNLOCK_FAILED, LifecycleStep.UNLOCK
+            result,
+            MountFailureKind.UNLOCK_FAILED,
+            LifecycleStep.UNLOCK,
         )
         return _unlock_failure(volume.slug, reason, failure)
     # Prefer the device udisks reports on stdout ("Unlocked X as /dev/dm-N");
     # re-probing with lsblk here races the cleartext device's sysfs entry
     # appearing asynchronously after unlock.
     device = parse_unlocked_device(result.stdout) or discover_cleartext_device(
-        volume, device_uuid, resolved_endpoints, run=run
+        volume,
+        device_uuid,
+        resolved_endpoints,
+        run=run,
     )
     return (
         device
@@ -447,14 +495,22 @@ def _mount_device(
     if existing is not None:
         return result_for(success=True, mounted=True, effective_path=existing)
     result = run_udisks(
-        build_mount_command(device), volume, resolved_endpoints, run=run
+        build_mount_command(device),
+        volume,
+        resolved_endpoints,
+        run=run,
     )
     if result.returncode != 0:
         reason, failure = _classify_udisks_failure(
-            result, MountFailureKind.MOUNT_FAILED, LifecycleStep.MOUNT
+            result,
+            MountFailureKind.MOUNT_FAILED,
+            LifecycleStep.MOUNT,
         )
         return result_for(
-            success=False, failure_reason=reason, failure=failure, mounted=False
+            success=False,
+            failure_reason=reason,
+            failure=failure,
+            mounted=False,
         )
     else:
         return result_for(
@@ -471,7 +527,8 @@ def umount_volume(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> UmountResult:
-    """Umount and lock LUKS for a single volume.
+    """
+    Umount and lock LUKS for a single volume.
 
     Always attempts umount + lock LUKS regardless of who mounted.
     Connection failures and failed device probes yield a failed
@@ -513,10 +570,16 @@ def _umount_volume_inner(
     device = resolve_target_device(volume, mount_config, resolved_endpoints, run=run)
 
     if device is not None and find_mountpoint(
-        volume, device, resolved_endpoints, run=run
+        volume,
+        device,
+        resolved_endpoints,
+        run=run,
     ):
         result = run_udisks(
-            build_unmount_command(device), volume, resolved_endpoints, run=run
+            build_unmount_command(device),
+            volume,
+            resolved_endpoints,
+            run=run,
         )
         if result.returncode != 0:
             return UmountResult(
@@ -589,7 +652,8 @@ def umount_volumes(
     on_umount_end: Callable[[str, UmountResult], None] | None = None,
     run: VolumeCommandRunner = run_on_volume,
 ) -> list[UmountResult]:
-    """Umount and lock LUKS for all volumes with mount config.
+    """
+    Umount and lock LUKS for all volumes with mount config.
 
     Always umounts regardless of who mounted — avoids fragile
     action tracking across failed/restarted runs.  Umounts in reverse order.
@@ -611,6 +675,9 @@ def umount_volumes(
     return [
         _umount_one(slug, vol, mount_cfg)
         for slug, vol, mount_cfg in lifecycle_volumes(
-            config, resolved_endpoints, names, mounting=False
+            config,
+            resolved_endpoints,
+            names,
+            mounting=False,
         )
     ]

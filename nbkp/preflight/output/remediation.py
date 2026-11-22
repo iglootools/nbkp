@@ -1,4 +1,5 @@
-"""Per-error remediation instructions shown by ``preflight troubleshoot``.
+"""
+Per-error remediation instructions shown by ``preflight troubleshoot``.
 
 Every line goes through :func:`format_line` (or :func:`format_command` for
 shell commands): config values — paths, hosts, passphrase ids — are not authored by
@@ -24,6 +25,7 @@ from rich.text import Text
 
 from nbkp.clidisplay.invocation import Invocation
 from nbkp.config import (
+    DEFAULT_SSH_PORT,
     Config,
     LocalVolume,
     MountConfig,
@@ -87,12 +89,12 @@ class RemediationFacts:
     or discovery failed; the fix then shows udisks's default name with a
     caveat."""
     polkit_rules: Mapping[str, AuthRuleBlock] = field(
-        default_factory=dict[str, AuthRuleBlock]
+        default_factory=dict[str, AuthRuleBlock],
     )
     """System user → the polkit rule block authorizing that user.  A user is
     absent when no volume declares a ``mount`` section."""
     newest_snapshots: Mapping[str, str | None] = field(
-        default_factory=dict[str, str | None]
+        default_factory=dict[str, str | None],
     )
     """Sync endpoint slug → name of its newest snapshot, ``None`` when it has
     none.  An endpoint is absent when its snapshots could not be listed; the
@@ -105,7 +107,7 @@ class TroubleshootContext:
 
     config: Config
     resolved_endpoints: ResolvedEndpoints = field(
-        default_factory=dict[str, ResolvedEndpoint]
+        default_factory=dict[str, ResolvedEndpoint],
     )
     invocation: Invocation = field(default_factory=Invocation)
     """Config path and endpoint flags, so suggested commands copy-paste."""
@@ -127,6 +129,7 @@ def format_line(level: int, *parts: Part) -> Padding:
 
 
 def format_command(cmd: str, level: int = FIX) -> Padding:
+    """Return the shell command *cmd*, bash-highlighted, at nesting *level*."""
     syntax = Syntax(cmd, "bash", theme="monokai", background_color="default")
     return Padding(syntax, (0, 0, 0, level * _INDENT_WIDTH))
 
@@ -194,14 +197,14 @@ def _install(what: str, host: str, recipe: str) -> Lines:
 def _sentinel_fix(
     vol: LocalVolume | RemoteVolume,
     path: str,
-    sentinel: str,
+    sentinel_name: str,
     ctx: TroubleshootContext,
 ) -> Lines:
     return [
         format_line(FIX, "Ensure the volume is mounted, then:"),
         format_command(wrap_cmd(["mkdir", "-p", path], vol, ctx.resolved_endpoints)),
         format_command(
-            wrap_cmd(["touch", f"{path}/{sentinel}"], vol, ctx.resolved_endpoints),
+            wrap_cmd(["touch", f"{path}/{sentinel_name}"], vol, ctx.resolved_endpoints),
         ),
     ]
 
@@ -215,8 +218,10 @@ def _reset_latest(
     endpoint_slug: str,
     ctx: TroubleshootContext,
 ) -> Lines:
-    """Point ``latest`` at the newest snapshot, or at ``/dev/null`` only when
-    there is none: a hard-link sync deletes every snapshot as a leftover of a
+    """
+    Point ``latest`` at the newest snapshot, or at ``/dev/null`` when there is none.
+
+    Only when there is none: a hard-link sync deletes every snapshot as a leftover of a
     failed run while ``latest`` points to ``/dev/null``.
     """
     newest_snapshots = ctx.known_facts.newest_snapshots
@@ -275,9 +280,11 @@ def _chown(
     return [
         format_command(
             wrap_cmd(
-                ["sudo", "chown", "<user>:<group>", path], vol, ctx.resolved_endpoints
+                ["sudo", "chown", "<user>:<group>", path],
+                vol,
+                ctx.resolved_endpoints,
             ),
-        )
+        ),
     ]
 
 
@@ -287,7 +294,7 @@ def _mkdir(
     ctx: TroubleshootContext,
 ) -> Lines:
     return [
-        format_command(wrap_cmd(["mkdir", "-p", path], vol, ctx.resolved_endpoints))
+        format_command(wrap_cmd(["mkdir", "-p", path], vol, ctx.resolved_endpoints)),
     ]
 
 
@@ -309,10 +316,10 @@ def _ssh_copy_id_cmd(server: SshEndpoint, proxy_chain: list[SshEndpoint] | None)
                 if proxy_chain
                 else []
             ),
-            *(["-p", str(server.port)] if server.port != 22 else []),
+            *(["-p", str(server.port)] if server.port != DEFAULT_SSH_PORT else []),
             *(["-i", server.key] if server.key else []),
             user_host,
-        ]
+        ],
     )
 
 
@@ -364,8 +371,11 @@ def _ssh_unreachable(status: SshEndpointStatus, ctx: TroubleshootContext) -> Lin
 
 
 def _ssh_auth_failed(status: SshEndpointStatus, ctx: TroubleshootContext) -> Lines:
-    """The host answered but refused the key, or its host key is unknown or
-    changed."""
+    """
+    Explain the fix when the host answered but refused the connection.
+
+    It refused the key, or its host key is unknown or changed.
+    """
     server = ctx.config.ssh_endpoints.get(status.slug)
     host = server.host if server is not None else status.slug
     known_hosts_file = (
@@ -373,7 +383,9 @@ def _ssh_auth_failed(status: SshEndpointStatus, ctx: TroubleshootContext) -> Lin
     )
     # known_hosts records a non-default port as "[host]:port".
     known_hosts_name = (
-        host if server is None or server.port == 22 else f"[{host}]:{server.port}"
+        host
+        if server is None or server.port == DEFAULT_SSH_PORT
+        else f"[{host}]:{server.port}"
     )
     cause = status.diagnostics.ssh_error
     return [
@@ -399,7 +411,7 @@ def _ssh_auth_failed(status: SshEndpointStatus, ctx: TroubleshootContext) -> Lin
                     *(["-f", known_hosts_file] if known_hosts_file else []),
                     "-R",
                     known_hosts_name,
-                ]
+                ],
             ),
             STEP,
         ),
@@ -418,9 +430,13 @@ def _unknown_host_key_steps(
     server: SshEndpoint,
     proxy_chain: list[SshEndpoint] | None,
 ) -> Lines:
-    """nbkp never trusts a host key on first use while
-    ``strict-host-key-checking`` is on: the operator adds it once, after
-    comparing the fingerprint OpenSSH shows with the host's own."""
+    """
+    List the steps that add an unknown host key.
+
+    Nbkp never trusts a host key on first use while ``strict-host-key-checking`` is on:
+    the operator adds it once, after comparing the fingerprint OpenSSH shows with the
+    host's own.
+    """
     known_hosts_file = server.connection_options.known_hosts_file
     ssh = ssh_prefix(server, proxy_chain)
     return [
@@ -440,7 +456,7 @@ def _unknown_host_key_steps(
                     ),
                     *ssh[1:],
                     "true",
-                ]
+                ],
             ),
             STEP,
         ),
@@ -452,6 +468,7 @@ def format_ssh_endpoint_error_fix(
     error: SshEndpointErrorKind,
     ctx: TroubleshootContext,
 ) -> Lines:
+    """Return the fix for the SSH endpoint error *error* on the endpoint *status*."""
     slug = status.slug
     match error:
         case SshEndpointErrorKind.UNREACHABLE:
@@ -486,13 +503,16 @@ def format_ssh_endpoint_error_fix(
         case SshEndpointErrorKind.UDISKSD_NOT_RUNNING:
             return _titled(
                 Text.assemble(
-                    "udisksd (the udisks2 daemon) is not running on ", slug, "."
+                    "udisksd (the udisks2 daemon) is not running on ",
+                    slug,
+                    ".",
                 ),
                 _UDISKSD_DETAILS,
             )
         case SshEndpointErrorKind.LSBLK_NOT_FOUND:
             return _titled(
-                Text.assemble("lsblk not found on ", slug, "."), _LSBLK_DETAILS
+                Text.assemble("lsblk not found on ", slug, "."),
+                _LSBLK_DETAILS,
             )
 
 
@@ -504,7 +524,7 @@ def _location_excluded(ctx: TroubleshootContext) -> Lines:
             "All SSH endpoints for volumes on this host are at an excluded location",
             *([" (", excluded, ")"] if excluded else []),
             ". Remove --exclude-location or add an endpoint at a different location.",
-        )
+        ),
     ]
 
 
@@ -512,11 +532,14 @@ def format_ssh_endpoint_warning_fix(
     status: SshEndpointStatus,
     warning: SshEndpointWarningKind,
 ) -> Lines:
+    """Return the fix for the SSH endpoint warning *warning* on *status*."""
     match warning:
         case SshEndpointWarningKind.UDISKS_BTRFS_MODULE_MISSING:
             return _titled(
                 Text.assemble(
-                    "udisks2 btrfs module not installed on ", status.slug, "."
+                    "udisks2 btrfs module not installed on ",
+                    status.slug,
+                    ".",
                 ),
                 _UDISKS_BTRFS_DETAILS,
             )
@@ -527,6 +550,7 @@ def format_volume_error_fix(
     error: VolumeErrorKind,
     ctx: TroubleshootContext,
 ) -> Lines:
+    """Return the fix for the volume error *error* on the volume *vol_status*."""
     vol = vol_status.config
     match error:
         case VolumeErrorKind.SENTINEL_NOT_FOUND:
@@ -570,7 +594,8 @@ def cleartext_device(
     mount: MountConfig,
     facts: RemediationFacts,
 ) -> tuple[str, bool]:
-    """Cleartext device path to show in a fix, and whether it was discovered.
+    """
+    Cleartext device path to show in a fix, and whether it was discovered.
 
     ``luks-<uuid>`` is only udisks's default: a LUKS2 header label or an
     ``/etc/crypttab`` entry renames the mapper, so deriving the name from the
@@ -594,7 +619,7 @@ def _mapper_name_caveat(level: int) -> Lines:
             "The container is locked, so the device above is udisks's default name."
             "  A LUKS2 header label or crypttab entry renames it — unlock the volume"
             " and check `lsblk` before writing it into fstab.",
-        )
+        ),
     ]
 
 
@@ -609,8 +634,9 @@ def _fstab_line(
         case MountConfig(encryption=None):
             return [
                 format_command(
-                    f"UUID={mount.device_uuid}  {path}  {fs_and_options}", STEP
-                )
+                    f"UUID={mount.device_uuid}  {path}  {fs_and_options}",
+                    STEP,
+                ),
             ]
         case MountConfig():
             device, discovered = cleartext_device(vol, mount, ctx.known_facts)
@@ -626,7 +652,10 @@ def _fstab_mountpoint_mismatch_fix(
     vol_status: VolumeStatus,
     ctx: TroubleshootContext,
 ) -> Lines:
-    """The volume declares a fixed ``path`` but no ``/etc/fstab`` entry maps the
+    """
+    Fix a declared ``path`` that no ``/etc/fstab`` entry maps the device to.
+
+    The volume declares a fixed ``path`` but no ``/etc/fstab`` entry maps the
     device to that path (none at all, or one naming another device), so
     udisks would mount it at its own ``/run/media/<user>/<label>`` location
     instead.  Two remediations: add/fix the fstab entry, or drop ``path``.
@@ -638,7 +667,12 @@ def _fstab_mountpoint_mismatch_fix(
     other_source = caps.mount.fstab_source if caps and caps.mount else None
     return [
         format_line(
-            FIX, "No /etc/fstab entry maps the device to ", path, " on ", host, "."
+            FIX,
+            "No /etc/fstab entry maps the device to ",
+            path,
+            " on ",
+            host,
+            ".",
         ),
         *(
             [
@@ -649,7 +683,7 @@ def _fstab_mountpoint_mismatch_fix(
                     " mounts ",
                     other_source,
                     ", a different device.",
-                )
+                ),
             ]
             if other_source is not None
             else []
@@ -661,7 +695,11 @@ def _fstab_mountpoint_mismatch_fix(
         ),
         format_line(FIX, "Option A — add an /etc/fstab entry (no crypttab needed):"),
         *_fstab_line(
-            vol, vol.mount, path, "<FS>  noauto,nofail,x-udisks-auth  0 0", ctx
+            vol,
+            vol.mount,
+            path,
+            "<FS>  noauto,nofail,x-udisks-auth  0 0",
+            ctx,
         ),
         format_line(
             STEP,
@@ -680,7 +718,10 @@ def _user_subvol_rm_fix(
     vol: LocalVolume | RemoteVolume,
     ctx: TroubleshootContext,
 ) -> Lines:
-    """The option is required for snapshot pruning.  nbkp does not pass it to
+    """
+    Fix a mount missing the ``user_subvol_rm_allowed`` option.
+
+    The option is required for snapshot pruning.  nbkp does not pass it to
     udisks at mount time — udisks rejects any non-allowlisted mount option
     (``OptionNotPermitted``), which would fail the mount — so the option must
     come from operator config: ``/etc/fstab`` (udisks honors fstab verbatim) or,
@@ -719,7 +760,7 @@ def _user_subvol_rm_persistence(
                     " options for ",
                     path,
                     ".",
-                )
+                ),
             ]
         case MountConfig():
             return _udisks_persistence(vol, path, ctx)
@@ -777,7 +818,9 @@ def _passphrase_not_available_fix(
         format_line(FIX, "Check credential status:"),
         format_command(
             ctx.invocation.command(
-                "credentials", "keyring-status", endpoint_flags=False
+                "credentials",
+                "keyring-status",
+                endpoint_flags=False,
             ),
             STEP,
         ),
@@ -790,7 +833,9 @@ def _passphrase_not_available_fix(
         format_line(STEP, "keyring: ", shlex.join(["keyring", "set", "nbkp", pid])),
         format_line(STEP, "env: export ", passphrase_env_var(pid), "=..."),
         format_line(
-            STEP, "command: ensure the credential-command prints it for id ", pid
+            STEP,
+            "command: ensure the credential-command prints it for id ",
+            pid,
         ),
     ]
 
@@ -810,7 +855,9 @@ def _unlock_failed_fix(
         ),
         format_command(
             ctx.invocation.command(
-                "credentials", "keyring-status", endpoint_flags=False
+                "credentials",
+                "keyring-status",
+                endpoint_flags=False,
             ),
             STEP,
         ),
@@ -861,6 +908,12 @@ def _mount_failed_fix(
 
 
 def polkit_user(vol: LocalVolume | RemoteVolume, ctx: TroubleshootContext) -> str:
+    """
+    Return the system user the polkit rule must authorize to mount *vol*.
+
+    The SSH user of a remote volume's endpoint, or ``ctx.local_user`` for a local
+    volume and for a remote one whose endpoint sets no user.
+    """
     match vol:
         case RemoteVolume():
             ep = ctx.resolved_endpoints.get(vol.slug)
@@ -898,7 +951,11 @@ def _polkit_rules_missing_fix(
         format_line(FIX, "Or generate it with:"),
         format_command(
             ctx.invocation.command(
-                "disks", "setup-auth", "-u", user, endpoint_flags=False
+                "disks",
+                "setup-auth",
+                "-u",
+                user,
+                endpoint_flags=False,
             ),
             STEP,
         ),
@@ -910,6 +967,7 @@ def format_source_endpoint_error_fix(
     sync: SyncConfig,
     ctx: TroubleshootContext,
 ) -> Lines:
+    """Return the fix for the error *error* on the source endpoint of *sync*."""
     src_ep = ctx.config.source_endpoint(sync)
     src_vol = ctx.config.volumes[src_ep.volume]
     path = endpoint_path(src_vol, src_ep.subdir)
@@ -951,6 +1009,7 @@ def format_destination_endpoint_error_fix(
     sync: SyncConfig,
     ctx: TroubleshootContext,
 ) -> Lines:
+    """Return the fix for the error *error* on the destination endpoint of *sync*."""
     dst_ep = ctx.config.destination_endpoint(sync)
     dst_vol = ctx.config.volumes[dst_ep.volume]
     path = endpoint_path(dst_vol, dst_ep.subdir)
@@ -975,6 +1034,11 @@ def format_destination_endpoint_warning_fix(
     status: DestinationEndpointStatus,
     ctx: TroubleshootContext,
 ) -> Lines:
+    """
+    Return the fix for the warning *warning* on the destination endpoint of *sync*.
+
+    *status* is that endpoint's status, whose diagnostics name the snapshot concerned.
+    """
     dst_ep = ctx.config.destination_endpoint(sync)
     dst_vol = ctx.config.volumes[dst_ep.volume]
     match warning:
@@ -1000,7 +1064,7 @@ def format_destination_endpoint_warning_fix(
                         ["btrfs", "property", "set", snapshot, "ro", "true"],
                         dst_vol,
                         ctx.resolved_endpoints,
-                    )
+                    ),
                 ),
             ]
 
@@ -1012,7 +1076,7 @@ def _destination_layout_fix(
     endpoint_slug: str,
     ctx: TroubleshootContext,
 ) -> Lines:
-    """Fixes for the directory layout shared by every destination."""
+    """Return the fixes for the directory layout shared by every destination."""
     snapshots = f"{path}/{SNAPSHOTS_DIR}"
     latest = f"{path}/{LATEST_LINK}"
     match error:
@@ -1115,7 +1179,7 @@ def _destination_snapshot_backend_fix(
                         vol,
                         ctx.resolved_endpoints,
                     ),
-                )
+                ),
             ]
         case DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_WRITABLE:
             return [
@@ -1161,7 +1225,7 @@ def _destination_snapshot_backend_fix(
                     "The destination filesystem does not support hard links (e.g."
                     " FAT/exFAT). Use a filesystem like ext4, xfs, or btrfs, or use"
                     " btrfs-snapshots instead.",
-                )
+                ),
             ]
         case _:
             return []
@@ -1172,6 +1236,7 @@ def format_sync_error_fix(
     error: SyncErrorKind,
     ctx: TroubleshootContext,
 ) -> Lines:
+    """Return the fix for the sync-level error *error* on *sync*."""
     match error:
         case SyncErrorKind.DISABLED:
             return [format_line(FIX, "Enable the sync in the configuration file.")]
@@ -1182,7 +1247,7 @@ def format_sync_error_fix(
                     "A host this sync runs on is missing required tools. Fix the SSH"
                     " endpoint errors reported above (for local volumes, under"
                     " 'localhost').",
-                )
+                ),
             ]
         case SyncErrorKind.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM:
             src_ep = ctx.config.source_endpoint(sync)
@@ -1196,7 +1261,7 @@ def format_sync_error_fix(
                     " writes to this endpoint. Either run the upstream sync first"
                     " (or select it too with --sync) or reset the symlink to point"
                     " to a valid snapshot.",
-                )
+                ),
             ]
         case SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING:
             return [
@@ -1206,7 +1271,7 @@ def format_sync_error_fix(
                     " snapshot yet). In dry-run mode, the upstream sync does not"
                     " create a real snapshot, so this sync is skipped. Run without"
                     " --dry-run to execute the full chain.",
-                )
+                ),
             ]
         case (
             SyncErrorKind.SOURCE_ENDPOINT_INACTIVE

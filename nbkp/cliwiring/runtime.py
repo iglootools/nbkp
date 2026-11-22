@@ -1,4 +1,5 @@
-"""The host I/O a command performs, gathered in one object tests can replace.
+"""
+The host I/O a command performs, gathered in one object tests can replace.
 
 The root callback installs the real :class:`Runtime` on the Typer context
 unless the caller already put one there; every command reads it with
@@ -37,6 +38,7 @@ from nbkp.sync.rsync import run_rsync
 
 
 def utc_now() -> datetime:
+    """Return the current time as an aware UTC datetime."""
     return datetime.now(UTC)
 
 
@@ -73,12 +75,15 @@ class Runtime:
     :meth:`run_lock_path` gives."""
 
     def run_lock_path(self) -> Path:
-        """The run lock under this runtime's ``XDG_STATE_HOME`` or home."""
+        """Return the run lock under this runtime's ``XDG_STATE_HOME`` or home."""
         return resolve_run_lock_path(self.environ, self.home())
 
     def load_config(self, config_path: str | Path | None) -> Config:
-        """Load *config_path*, or search for the config in this runtime's
-        environment, home and platform directories."""
+        """
+        Load *config_path*, or search for the config.
+
+        The search covers this runtime's environment, home and platform directories.
+        """
         return load_config(
             config_path,
             self.environ,
@@ -89,8 +94,10 @@ class Runtime:
 
 
 def runtime_of(ctx: typer.Context) -> Runtime:
-    """The runtime a command runs with: the one on *ctx* (a test's, or the
-    real one the root callback installed), else a new real one, as when a
-    sub-app runs on its own (``nbkp-demo``).
+    """
+    Return the runtime a command runs with.
+
+    The one on *ctx* (a test's, or the real one the root callback installed), else a new
+    real one, as when a sub-app runs on its own (``nbkp-demo``).
     """
     return ctx.ensure_object(Runtime)

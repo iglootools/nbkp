@@ -1,3 +1,5 @@
+"""The ``nbkp ordering graph`` command."""
+
 import enum
 from typing import Annotated
 
@@ -8,7 +10,6 @@ from nbkp.clidisplay import OutputFormat, echo_json
 from nbkp.cliwiring.config import load_config_or_exit
 from nbkp.cliwiring.options import CONFIG_OPTION, OUTPUT_OPTION
 from nbkp.cliwiring.runtime import runtime_of
-from nbkp.ordering.cli import app
 from nbkp.ordering.output import (
     build_graph_json,
     format_mermaid_ascii_graph,
@@ -18,12 +19,13 @@ from nbkp.ordering.output import (
 
 
 class GraphFormat(enum.StrEnum):
+    """How ``nbkp ordering graph`` draws the graph in human output."""
+
     RICH_TREE = "rich-tree"
     MERMAID_ASCII = "mermaid-ascii"
     MERMAID = "mermaid"
 
 
-@app.command("graph")
 def graph_cmd(
     ctx: typer.Context,
     config: CONFIG_OPTION = None,

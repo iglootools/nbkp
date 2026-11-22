@@ -1,5 +1,6 @@
 """Docker helpers for the developer test CLI seed command."""
 
+import contextlib
 import functools
 import os
 import socket
@@ -26,7 +27,12 @@ from nbkp.remote.testkit.constants import (
     REMOTE_BTRFS_PATH,
     STORAGE_CONTAINER_NAME,
 )
-from nbkp.remote.testkit.errors import DockerError, DockerErrorKind
+from nbkp.remote.testkit.errors import (
+    DockerError,
+    DockerErrorKind,
+    SentinelCreationError,
+    SshNotReadyError,
+)
 
 DOCKER_DIR = Path(__file__).resolve().parent / "dockerbuild"
 _IMAGE_TAG = "nbkp-demo-server:latest"
@@ -55,6 +61,12 @@ def _as_docker_error[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
 
 @dataclass(frozen=True)
 class LuksMetadata:
+    """
+    Whether the test container set up its LUKS volume, and the volume's UUID.
+
+    *uuid* is ``None`` when LUKS is not *available*.
+    """
+
     available: bool
     uuid: str | None = None
 
@@ -67,8 +79,11 @@ def create_test_ssh_endpoint(
     *,
     proxy_jump: str | None = None,
 ) -> SshEndpoint:
-    """All test containers use ``testuser``, disabled host-key checking,
-    and ``/dev/null`` as the known-hosts file.
+    """
+    Build an SSH endpoint for a test container.
+
+    All test containers use ``testuser``, disabled host-key checking, and ``/dev/null``
+    as the known-hosts file.
     """
     return SshEndpoint(
         slug=slug,
@@ -85,9 +100,11 @@ def create_test_ssh_endpoint(
 
 
 def check_docker() -> None:
+    """Raise :class:`DockerError` (``UNAVAILABLE``) unless the Docker daemon answers."""
     try:
         client = dockerlib.from_env()
-        # docker leaves ping()'s *args and **kwargs unannotated; retire when it annotates them.
+        # docker leaves ping()'s *args and **kwargs unannotated; retire when it
+        # annotates them.
         client.ping()  # pyright: ignore[reportUnknownMemberType]
     except docker_errors.DockerException as exc:
         raise DockerError(DockerErrorKind.UNAVAILABLE, str(exc)) from exc
@@ -96,9 +113,13 @@ def check_docker() -> None:
 def generate_ssh_keypair(
     seed_dir: Path,
 ) -> tuple[Path, Path]:
-    """The key logs into a privileged container with the host's /dev, and
-    the seed dir may be a predictable path under /tmp, so the key is never
-    readable by other users, not even until a chmod."""
+    """
+    Generate an SSH key pair readable by its owner alone.
+
+    The key logs into a privileged container with the host's /dev, and the seed dir may
+    be a predictable path under /tmp, so the key is never readable by other users, not
+    even until a chmod.
+    """
     ssh_dir = seed_dir / "ssh"
     ssh_dir.mkdir(mode=0o700)
     private_key_path = ssh_dir / "id_ed25519"
@@ -112,13 +133,13 @@ def generate_ssh_keypair(
                 serialization.Encoding.PEM,
                 serialization.PrivateFormat.OpenSSH,
                 serialization.NoEncryption(),
-            )
+            ),
         )
     pub_bytes = key.public_key().public_bytes(
         serialization.Encoding.OpenSSH,
         serialization.PublicFormat.OpenSSH,
     )
-    public_key_path.write_text(f"{pub_bytes.decode()} nbkp-demo\n")
+    public_key_path.write_text(f"{pub_bytes.decode()} nbkp-demo\n", encoding="utf-8")
 
     return private_key_path, public_key_path
 
@@ -131,10 +152,9 @@ def create_docker_network() -> str:
         old = client.networks.get(NETWORK_NAME)
         old.reload()
         for cid in list(old.attrs.get("Containers") or {}):
-            try:
+            # The container may have left the network on its own meanwhile.
+            with contextlib.suppress(docker_errors.NotFound):
                 old.disconnect(cid, force=True)
-            except docker_errors.NotFound:
-                pass  # The container left the network on its own meanwhile.
         old.remove()
     except docker_errors.NotFound:
         pass
@@ -144,6 +164,11 @@ def create_docker_network() -> str:
 
 @_as_docker_error
 def build_docker_image() -> None:
+    """
+    Build the demo server image from ``dockerbuild``, without the build cache.
+
+    Raises :class:`DockerError` (``IMAGE_BUILD_FAILED``) when the build fails.
+    """
     client = dockerlib.from_env()
     try:
         client.images.build(
@@ -163,7 +188,8 @@ def start_storage_container(
     *,
     luks_enabled: bool = False,
 ) -> int:
-    """Replace any existing container; return the host port mapped to its SSH.
+    """
+    Replace any existing container; return the host port mapped to its SSH.
 
     The image must already be built via build_docker_image().
     """
@@ -213,7 +239,8 @@ def start_storage_container(
     if network_name is not None:
         network = client.networks.get(network_name)
         aliases = [network_alias] if network_alias else None
-        # docker leaves connect()'s *args and **kwargs unannotated; retire when it annotates them.
+        # docker leaves connect()'s *args and **kwargs unannotated; retire when it
+        # annotates them.
         network.connect(container, aliases=aliases)  # pyright: ignore[reportUnknownMemberType]
 
     container.reload()
@@ -245,12 +272,13 @@ def start_bastion_container(
             str(pub_key): {
                 "bind": SSH_AUTHORIZED_KEYS_PATH,
                 "mode": "ro",
-            }
+            },
         },
     )
 
     network = client.networks.get(network_name)
-    # docker leaves connect()'s *args and **kwargs unannotated; retire when it annotates them.
+    # docker leaves connect()'s *args and **kwargs unannotated; retire when it
+    # annotates them.
     network.connect(container)  # pyright: ignore[reportUnknownMemberType]
 
     container.reload()
@@ -267,7 +295,8 @@ def wait_for_ssh(
     while time.time() < deadline:
         try:
             with socket.create_connection(
-                (server.host, server.port), timeout=2
+                (server.host, server.port),
+                timeout=2,
             ) as sock:
                 data = sock.recv(256)
                 if data.startswith(b"SSH-"):
@@ -275,7 +304,7 @@ def wait_for_ssh(
         except OSError:
             pass
         time.sleep(1)
-    raise TimeoutError(f"SSH not ready after {timeout}s")
+    raise SshNotReadyError(timeout)
 
 
 def ssh_run(
@@ -284,8 +313,11 @@ def ssh_run(
     *,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    """Run *command* on *server*, each element one argument: a path or a
-    value in it is never parsed by the remote shell."""
+    """
+    Run *command* on *server*, each element one argument.
+
+    A path or a value in it is never parsed by the remote shell.
+    """
     result = run_remote_command(server, command)
     if check and result.returncode != 0:
         raise subprocess.CalledProcessError(
@@ -303,8 +335,11 @@ def ssh_exec(
     *,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a fixed shell script on *server*; :func:`ssh_run` takes anything
-    built from a path or a value."""
+    """
+    Run a fixed shell script on *server*.
+
+    :func:`ssh_run` takes anything built from a path or a value.
+    """
     return ssh_run(server, ["sh", "-c", command], check=check)
 
 
@@ -313,10 +348,15 @@ def create_sentinels(
     path: str,
     sentinels: list[str],
 ) -> None:
-    for sentinel in sentinels:
-        result = ssh_run(server, ["touch", f"{path}/{sentinel}"], check=False)
+    """
+    Create an empty file named after each of *sentinels* in *path* on *server*.
+
+    Raises :class:`SentinelCreationError` at the first one that fails.
+    """
+    for sentinel_name in sentinels:
+        result = ssh_run(server, ["touch", f"{path}/{sentinel_name}"], check=False)
         if result.returncode != 0:
-            raise RuntimeError(f"Failed to create sentinel {sentinel}: {result.stderr}")
+            raise SentinelCreationError(sentinel_name, result.stderr)
 
 
 # Tests drive LUKS through the production lifecycle functions
@@ -326,11 +366,16 @@ def create_sentinels(
 
 
 def read_luks_metadata(server: SshEndpoint) -> LuksMetadata:
-    """Returns ``LuksMetadata(available=False)`` if LUKS was not set up
-    (e.g. dm-crypt kernel module unavailable on the Docker host).
+    """
+    Read the LUKS metadata of the test container.
+
+    Returns ``LuksMetadata(available=False)`` if LUKS was not set up (e.g. dm-crypt
+    kernel module unavailable on the Docker host).
     """
     available_result = ssh_exec(
-        server, "cat /srv/luks-available 2>/dev/null || echo 0", check=False
+        server,
+        "cat /srv/luks-available 2>/dev/null || echo 0",
+        check=False,
     )
     if available_result.stdout.strip() != "1":
         return LuksMetadata(available=False)

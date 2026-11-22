@@ -115,7 +115,7 @@ class TestOrphanSshEndpoints:
                 "volumes": {
                     "v": {"type": "remote", "ssh-endpoint": "nas-wan", "path": "/d"},
                 },
-            }
+            },
         )
         assert cfg.ssh_endpoints["nas-wan"].extends == "base"
         assert cfg.orphan_ssh_endpoints() == []

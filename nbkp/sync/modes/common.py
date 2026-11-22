@@ -1,3 +1,5 @@
+"""The steps every sync mode shares: running rsync, publishing a snapshot."""
+
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -16,8 +18,10 @@ from nbkp.sync.rsync import ProgressMode, run_rsync
 
 
 class RsyncRunner(Protocol):
-    """Runs rsync for a sync: :func:`~nbkp.sync.rsync.run_rsync` in
-    production, a fake in tests.
+    """
+    Runs rsync for a sync.
+
+    :func:`~nbkp.sync.rsync.run_rsync` in production, a fake in tests.
     """
 
     def __call__(
@@ -31,13 +35,22 @@ class RsyncRunner(Protocol):
         on_output: Callable[[str], None] | None,
         resolved_endpoints: ResolvedEndpoints,
         dest_suffix: str | None,
-    ) -> subprocess.CompletedProcess[str]: ...
+    ) -> subprocess.CompletedProcess[str]:
+        """
+        Run rsync for *sync* and return its result; a non-zero exit is not raised.
+
+        *on_output* receives rsync's output as it streams, when given.
+        """
+        ...
 
 
 @dataclass(frozen=True)
 class RunContext:
-    """*rsync* and *run_command* reach the destination host; tests replace
-    them with fakes instead of patching the transport.
+    """
+    What a sync mode needs to run a sync.
+
+    *rsync* and *run_command* reach the destination host; tests replace them with fakes
+    instead of patching the transport.
     """
 
     config: Config
@@ -75,13 +88,18 @@ def rsync_step(
     # the caller reports per-sync status instead of aborting the whole run.
     # Programming errors still propagate.
     except ssh_connection_errors() as e:
-        return SyncResult.failed(sync.slug, ctx.dry_run, SyncFailureKind.RSYNC, str(e))
+        return SyncResult.failed(
+            sync.slug,
+            dry_run=ctx.dry_run,
+            failure=SyncFailureKind.RSYNC,
+            detail=str(e),
+        )
     if proc.returncode != 0:
         return SyncResult.failed(
             sync.slug,
-            ctx.dry_run,
-            SyncFailureKind.RSYNC,
-            f"rsync exited with code {proc.returncode}",
+            dry_run=ctx.dry_run,
+            failure=SyncFailureKind.RSYNC,
+            detail=f"rsync exited with code {proc.returncode}",
             rsync_exit_code=proc.returncode,
             output=_rsync_output(proc),
         )
@@ -90,8 +108,11 @@ def rsync_step(
 
 
 def _rsync_output(proc: subprocess.CompletedProcess[str]) -> str:
-    """rsync's stdout and stderr: apart when captured, merged into stdout
-    (with an empty stderr) when streamed."""
+    """
+    Return rsync's stdout and stderr.
+
+    Apart when captured, merged into stdout (with an empty stderr) when streamed.
+    """
     return proc.stdout + proc.stderr
 
 
@@ -102,11 +123,16 @@ def failed_after_rsync(
     failure: SyncFailureKind,
     detail: str,
 ) -> SyncResult:
+    """
+    Return the failed result of a step after rsync succeeded, keeping rsync's output.
+
+    *failure* names the step and *detail* describes how it failed.
+    """
     return SyncResult.failed(
         sync.slug,
-        ctx.dry_run,
-        failure,
-        detail,
+        dry_run=ctx.dry_run,
+        failure=failure,
+        detail=detail,
         rsync_exit_code=proc.returncode,
         output=_rsync_output(proc),
     )
@@ -118,7 +144,8 @@ def _prune(
     prune_fn: Callable[..., list[str]],
     ctx: RunContext,
 ) -> tuple[tuple[str, ...] | None, tuple[SyncWarning, ...]]:
-    """Best-effort retention after a successful snapshot.
+    """
+    Best-effort retention after a successful snapshot.
 
     The new snapshot is complete and ``latest`` points to it, so a pruning
     failure only leaves extra snapshots behind: it becomes a warning, not a
@@ -147,8 +174,16 @@ def publish_snapshot(
     snapshot_path: str,
     max_snapshots: int | None,
     prune_fn: Callable[..., list[str]],
+    *,
     ctx: RunContext,
 ) -> SyncResult:
+    """
+    Point ``latest`` at the new snapshot, prune, and return the sync's result.
+
+    A failed symlink update fails the sync (``SYMLINK``); pruning, done with
+    *prune_fn* down to *max_snapshots* when ``ctx.prune`` is set, only ever adds a
+    warning.
+    """
     try:
         update_latest_symlink(
             sync,
@@ -159,13 +194,17 @@ def publish_snapshot(
         )
     except SnapshotOperationError as e:
         return failed_after_rsync(
-            sync, proc, ctx, SyncFailureKind.SYMLINK, f"Symlink update failed: {e}"
+            sync,
+            proc,
+            ctx,
+            SyncFailureKind.SYMLINK,
+            f"Symlink update failed: {e}",
         )
     pruned, warnings = _prune(sync, max_snapshots, prune_fn, ctx)
     return SyncResult.succeeded(
         sync.slug,
-        ctx.dry_run,
-        proc,
+        dry_run=ctx.dry_run,
+        proc=proc,
         snapshot_path=snapshot_path,
         pruned_paths=pruned,
         warnings=warnings,

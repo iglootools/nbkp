@@ -1,4 +1,5 @@
-"""The CLI entry points do not load heavy dependencies only some commands need.
+"""
+The CLI entry points do not load heavy dependencies only some commands need.
 
 These modules are imported with ``lazy`` (PEP 810) so that ``nbkp --help`` and
 every command that does not use them skip their import cost. A single eager
@@ -41,7 +42,10 @@ def _loaded_after(setup: str) -> list[str]:
         f"print(json.dumps([m for m in {DEFERRED_MODULES!r} if m in sys.modules]))\n"
     )
     result = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=True,
     )
     return json.loads(result.stdout)
 

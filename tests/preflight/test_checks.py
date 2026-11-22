@@ -69,7 +69,7 @@ _ACTIVE_LOCALHOST_SSH = SshEndpointStatus(
             has_btrfs=False,
             has_stat=True,
             has_findmnt=True,
-        )
+        ),
     ),
     errors=[],
 )
@@ -219,7 +219,7 @@ class TestCheckLocalVolume:
         assert status.diagnostics.capabilities.sentinel_exists is True
         # The capabilities were probed, on the volume itself.
         assert run.commands_starting_with("stat", "-f") == [
-            ["stat", "-f", "-c", "%T", str(tmp_path)]
+            ["stat", "-f", "-c", "%T", str(tmp_path)],
         ]
 
     def test_inactive(self, tmp_path: Path) -> None:
@@ -242,7 +242,8 @@ class TestCheckLocalVolume:
         assert status.errors == [VolumeErrorKind.SENTINEL_NOT_FOUND]
 
     def test_endpoint_sentinel_directory_is_not_a_sentinel(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         (tmp_path / "photos" / ".nbkp-src").mkdir(parents=True)
         vol = LocalVolume(slug="data", path=str(tmp_path))
@@ -269,7 +270,7 @@ class TestCheckRemoteVolume:
     def test_sentinel_missing(self) -> None:
         """SSH succeeds but sentinel file is absent."""
         run = healthy_host(
-            FakeCommandRunner().on("test", "-f", "/backup/.nbkp-vol", returns=FAILS)
+            FakeCommandRunner().on("test", "-f", "/backup/.nbkp-vol", returns=FAILS),
         )
         vol, config = _remote_config()
         resolved = _make_resolved(config)
@@ -374,7 +375,10 @@ class TestCheckVolumeCapabilitiesFilesystemProbe:
             has_findmnt=False,
         )
         caps = check_volume_capabilities(
-            vol, tools, resolved_endpoints=resolved, run=run
+            vol,
+            tools,
+            resolved_endpoints=resolved,
+            run=run,
         )
         assert caps.is_btrfs_filesystem is False
         assert caps.hardlink_supported is False
@@ -431,7 +435,8 @@ class TestCheckBtrfsSubvolumeRemote:
 class TestCheckBtrfsMountOptionLocal:
     def test_option_present(self) -> None:
         run = FakeCommandRunner().on(
-            "findmnt", returns=completed(stdout="rw,relatime,user_subvol_rm_allowed\n")
+            "findmnt",
+            returns=completed(stdout="rw,relatime,user_subvol_rm_allowed\n"),
         )
         vol = LocalVolume(slug="data", path="/mnt/data")
         assert (
@@ -441,7 +446,8 @@ class TestCheckBtrfsMountOptionLocal:
 
     def test_option_missing(self) -> None:
         run = FakeCommandRunner().on(
-            "findmnt", returns=completed(stdout="rw,relatime\n")
+            "findmnt",
+            returns=completed(stdout="rw,relatime\n"),
         )
         vol = LocalVolume(slug="data", path="/mnt/data")
         assert (
@@ -461,7 +467,8 @@ class TestCheckBtrfsMountOptionLocal:
 class TestCheckBtrfsMountOptionRemote:
     def test_option_present(self) -> None:
         run = FakeCommandRunner().on(
-            "findmnt", returns=completed(stdout="rw,relatime,user_subvol_rm_allowed\n")
+            "findmnt",
+            returns=completed(stdout="rw,relatime,user_subvol_rm_allowed\n"),
         )
         vol, config = _remote_config()
         resolved = _make_resolved(config)
@@ -474,7 +481,8 @@ class TestCheckBtrfsMountOptionRemote:
 
     def test_option_missing(self) -> None:
         run = FakeCommandRunner().on(
-            "findmnt", returns=completed(stdout="rw,relatime\n")
+            "findmnt",
+            returns=completed(stdout="rw,relatime\n"),
         )
         vol, config = _remote_config()
         resolved = _make_resolved(config)
@@ -494,8 +502,11 @@ def _check(
     missing_tools: Collection[str] = (),
     dry_run: bool = False,
 ) -> SyncStatus:
-    """Preflight *sync* with every host healthy but for *run*'s own answers,
-    and *missing_tools* missing from the orchestrator's ``PATH``."""
+    """
+    Preflight *sync* with every host healthy but for *run*'s own answers.
+
+    *missing_tools* are missing from the orchestrator's ``PATH``.
+    """
     return check_sync(
         sync,
         config,
@@ -516,8 +527,11 @@ def src_dst(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def _setup_active_sentinels(src: Path, dst: Path) -> None:
-    """Volume sentinels on both roots, endpoint sentinels in ``data`` (source)
-    and ``backup`` (destination)."""
+    """
+    Create volume sentinels on both roots, and endpoint sentinels.
+
+    The endpoints are ``data`` (source) and ``backup`` (destination).
+    """
     (src / ".nbkp-vol").touch()
     (dst / ".nbkp-vol").touch()
     (src / "data").mkdir(exist_ok=True)
@@ -533,8 +547,11 @@ def _local_sync(
     dst_btrfs: bool = False,
     enabled: bool = True,
 ) -> tuple[Config, SyncConfig]:
-    """``s1``: ``src/data`` → ``dst/backup``, btrfs snapshots at the
-    destination when *dst_btrfs*."""
+    """
+    Build ``s1``: ``src/data`` → ``dst/backup``.
+
+    With btrfs snapshots at the destination when *dst_btrfs*.
+    """
     sync = SyncConfig(slug="s1", source="ep-src", destination="ep-dst", enabled=enabled)
     config = Config(
         volumes={
@@ -598,8 +615,11 @@ class TestCheckSync:
         )
 
     def test_rsync_not_found_on_source(self, src_dst: tuple[Path, Path]) -> None:
-        """Rsync missing on a local volume: reported at SSH endpoint level,
-        but local volumes are still probed (no SSH_ENDPOINT_INACTIVE cascade)."""
+        """
+        Rsync missing on a local volume is reported at the SSH endpoint level.
+
+        Local volumes are still probed (no SSH_ENDPOINT_INACTIVE cascade).
+        """
         _setup_active_sentinels(*src_dst)
         config, sync = _local_sync(*src_dst)
 
@@ -617,12 +637,15 @@ class TestCheckSync:
         assert status.is_expected_inactive() is False
 
     def test_openrsync_on_the_orchestrator_is_too_old(
-        self, src_dst: tuple[Path, Path]
+        self,
+        src_dst: tuple[Path, Path],
     ) -> None:
         _setup_active_sentinels(*src_dst)
         config, sync = _local_sync(*src_dst)
         run = FakeCommandRunner().on(
-            "rsync", "--version", returns=completed(stdout="openrsync: protocol 29\n")
+            "rsync",
+            "--version",
+            returns=completed(stdout="openrsync: protocol 29\n"),
         )
 
         status = _check(sync, config, run=run)
@@ -633,7 +656,8 @@ class TestCheckSync:
         assert SyncErrorKind.ENDPOINT_HOST_ERRORS in status.errors
 
     def test_rsync_found_btrfs_not_found_on_destination(
-        self, src_dst: tuple[Path, Path]
+        self,
+        src_dst: tuple[Path, Path],
     ) -> None:
         _setup_active_sentinels(*src_dst)
         config, sync = _local_sync(*src_dst, dst_btrfs=True)
@@ -646,10 +670,14 @@ class TestCheckSync:
         assert SshEndpointErrorKind.BTRFS_NOT_FOUND in ssh_errors
 
     def test_disabled_sync_does_not_add_tool_needs(
-        self, src_dst: tuple[Path, Path]
+        self,
+        src_dst: tuple[Path, Path],
     ) -> None:
-        """A disabled btrfs sync must not make the host's missing btrfs fatal
-        for the enabled syncs sharing it."""
+        """
+        A disabled btrfs sync does not make the host's missing btrfs fatal.
+
+        Fatal, that is, for the enabled syncs sharing the host.
+        """
         src, dst = src_dst
         _setup_active_sentinels(src, dst)
         config = Config(
@@ -660,10 +688,14 @@ class TestCheckSync:
             sync_endpoints={
                 "ep-src": SyncEndpoint(slug="ep-src", volume="src", subdir="data"),
                 "ep-plain": SyncEndpoint(
-                    slug="ep-plain", volume="dst", subdir="backup"
+                    slug="ep-plain",
+                    volume="dst",
+                    subdir="backup",
                 ),
                 "ep-old-src": SyncEndpoint(
-                    slug="ep-old-src", volume="src", subdir="old"
+                    slug="ep-old-src",
+                    volume="src",
+                    subdir="old",
                 ),
                 "ep-btrfs": SyncEndpoint(
                     slug="ep-btrfs",
@@ -674,7 +706,9 @@ class TestCheckSync:
             },
             syncs={
                 "plain": SyncConfig(
-                    slug="plain", source="ep-src", destination="ep-plain"
+                    slug="plain",
+                    source="ep-src",
+                    destination="ep-plain",
                 ),
                 "old-btrfs": SyncConfig(
                     slug="old-btrfs",
@@ -686,7 +720,9 @@ class TestCheckSync:
         )
 
         result = check_all_syncs(
-            config, run=healthy_host(), which=local_tools(missing={"btrfs"})
+            config,
+            run=healthy_host(),
+            which=local_tools(missing={"btrfs"}),
         )
         assert result.ssh_endpoint_statuses["localhost"].errors == []
         assert result.sync_statuses["plain"].active is True
@@ -717,7 +753,11 @@ class TestCheckSync:
 
         run = FakeCommandRunner()
         status = _check(
-            sync, config, run=run, fs_type="btrfs", missing_tools={"findmnt"}
+            sync,
+            config,
+            run=run,
+            fs_type="btrfs",
+            missing_tools={"findmnt"},
         )
         assert run.commands_starting_with("findmnt") == []
         assert status.active is False
@@ -736,7 +776,10 @@ class TestCheckSync:
         config, sync = _local_sync(*src_dst, dst_btrfs=True)
 
         status = _check(
-            sync, config, fs_type="btrfs", missing_tools={"stat", "findmnt"}
+            sync,
+            config,
+            fs_type="btrfs",
+            missing_tools={"stat", "findmnt"},
         )
         assert status.active is False
         ssh_errors = (
@@ -763,7 +806,10 @@ class TestCheckSync:
         (dst / "backup" / "staging").mkdir(parents=True)
         config, sync = _local_sync(src, dst, dst_btrfs=True)
         run = FakeCommandRunner().on(
-            "stat", "-c", "%i", returns=completed(stdout="1234\n")
+            "stat",
+            "-c",
+            "%i",
+            returns=completed(stdout="1234\n"),
         )
 
         status = _check(sync, config, run=run, fs_type="btrfs")
@@ -773,11 +819,12 @@ class TestCheckSync:
             in status.destination_endpoint_status.errors
         )
         assert run.commands_starting_with("stat", "-c") == [
-            ["stat", "-c", "%i", f"{dst}/backup/staging"]
+            ["stat", "-c", "%i", f"{dst}/backup/staging"],
         ]
 
     def test_destination_not_mounted_user_subvol_rm(
-        self, src_dst: tuple[Path, Path]
+        self,
+        src_dst: tuple[Path, Path],
     ) -> None:
         src, dst = src_dst
         _setup_active_sentinels(src, dst)
@@ -785,7 +832,10 @@ class TestCheckSync:
         (dst / "backup" / "snapshots").mkdir()
         config, sync = _local_sync(src, dst, dst_btrfs=True)
         run = FakeCommandRunner().on(
-            "findmnt", "-T", str(dst), returns=completed(stdout="rw,relatime\n")
+            "findmnt",
+            "-T",
+            str(dst),
+            returns=completed(stdout="rw,relatime\n"),
         )
 
         status = _check(sync, config, run=run, fs_type="btrfs")
@@ -809,7 +859,8 @@ class TestCheckSync:
         assert DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND not in dst_ep_errors
 
     def test_destination_snapshots_dir_not_found(
-        self, src_dst: tuple[Path, Path]
+        self,
+        src_dst: tuple[Path, Path],
     ) -> None:
         src, dst = src_dst
         _setup_active_sentinels(src, dst)
@@ -826,7 +877,8 @@ class TestCheckSync:
         )
 
     def test_destination_latest_and_snapshots_both_missing(
-        self, src_dst: tuple[Path, Path]
+        self,
+        src_dst: tuple[Path, Path],
     ) -> None:
         _setup_active_sentinels(*src_dst)
         # neither staging nor snapshots exist
@@ -839,7 +891,8 @@ class TestCheckSync:
         assert DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND in dst_ep_errors
 
     def test_btrfs_check_skipped_when_not_enabled(
-        self, src_dst: tuple[Path, Path]
+        self,
+        src_dst: tuple[Path, Path],
     ) -> None:
         _setup_active_sentinels(*src_dst)
         config, sync = _local_sync(*src_dst)
@@ -852,10 +905,13 @@ class TestCheckSync:
         assert run.commands_starting_with("stat", "-c") == []
 
     def test_multiple_failures_accumulated(self, src_dst: tuple[Path, Path]) -> None:
-        """Rsync missing on local volume: SSH endpoint reports the error,
-        but the volume is still probed (local volumes don't cascade
-        SSH_ENDPOINT_INACTIVE).  The sync is inactive because the source
-        endpoint sentinel is missing."""
+        """
+        Every failure is reported, not only the first.
+
+        Rsync missing on a local volume: the SSH endpoint reports the error, but the
+        volume is still probed (local volumes don't cascade SSH_ENDPOINT_INACTIVE). The
+        sync is inactive because the source endpoint sentinel is missing.
+        """
         src, dst = src_dst
         _setup_active_sentinels(src, dst)
         (src / "data" / ".nbkp-src").unlink()
@@ -889,12 +945,18 @@ class TestCheckSync:
 
 
 def _sync_with_remote(
-    local_root: Path, remote: str, *, dst_btrfs: bool = False
+    local_root: Path,
+    remote: str,
+    *,
+    dst_btrfs: bool = False,
 ) -> tuple[Config, SyncConfig]:
-    """``s1`` between a local volume at *local_root* and the remote volume
-    *remote* (``"src"`` at ``src-server:/data``, or ``"dst"`` at
-    ``dst-server:/backup``); endpoints in ``data`` (source) and ``backup``
-    (destination), with active local sentinels."""
+    """
+    Build ``s1`` between a local volume and the remote volume *remote*.
+
+    The local volume is at *local_root*; *remote* is ``"src"`` at ``src-server:/data``
+    or ``"dst"`` at ``dst-server:/backup``. Endpoints are in ``data`` (source) and
+    ``backup`` (destination), with active local sentinels.
+    """
     server = f"{remote}-server"
     remote_vol = RemoteVolume(
         slug=remote,
@@ -903,11 +965,11 @@ def _sync_with_remote(
     )
     local = "dst" if remote == "src" else "src"
     (local_root / ".nbkp-vol").touch()
-    local_subdir, sentinel = (
+    local_subdir, sentinel_name = (
         ("backup", ".nbkp-dst") if local == "dst" else ("data", ".nbkp-src")
     )
     (local_root / local_subdir).mkdir()
-    (local_root / local_subdir / sentinel).touch()
+    (local_root / local_subdir / sentinel_name).touch()
     sync = SyncConfig(slug="s1", source="ep-src", destination="ep-dst")
     config = Config(
         ssh_endpoints={server: SshEndpoint(slug=server, host=f"{remote}.local")},
@@ -959,7 +1021,11 @@ class TestCheckSyncRemoteCommands:
         run = FakeCommandRunner().on("which", "btrfs", returns=FAILS, volume="dst")
 
         status = _check(
-            sync, config, resolved=_make_resolved(config), run=run, fs_type="btrfs"
+            sync,
+            config,
+            resolved=_make_resolved(config),
+            run=run,
+            fs_type="btrfs",
         )
         assert status.active is False
         ssh_errors = (
@@ -970,11 +1036,20 @@ class TestCheckSyncRemoteCommands:
     def test_destination_not_btrfs_on_remote(self, tmp_path: Path) -> None:
         config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
         run = FakeCommandRunner().on(
-            "stat", "-f", "-c", "%T", "/backup", returns=completed(stdout="ext4\n")
+            "stat",
+            "-f",
+            "-c",
+            "%T",
+            "/backup",
+            returns=completed(stdout="ext4\n"),
         )
 
         status = _check(
-            sync, config, resolved=_make_resolved(config), run=run, fs_type="btrfs"
+            sync,
+            config,
+            resolved=_make_resolved(config),
+            run=run,
+            fs_type="btrfs",
         )
         assert status.active is False
         assert (
@@ -993,7 +1068,11 @@ class TestCheckSyncRemoteCommands:
         )
 
         status = _check(
-            sync, config, resolved=_make_resolved(config), run=run, fs_type="btrfs"
+            sync,
+            config,
+            resolved=_make_resolved(config),
+            run=run,
+            fs_type="btrfs",
         )
         assert status.active is False
         assert (
@@ -1002,15 +1081,23 @@ class TestCheckSyncRemoteCommands:
         )
 
     def test_destination_not_mounted_user_subvol_rm_on_remote(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
         run = FakeCommandRunner().on(
-            "findmnt", "-T", "/backup", returns=completed(stdout="rw,relatime\n")
+            "findmnt",
+            "-T",
+            "/backup",
+            returns=completed(stdout="rw,relatime\n"),
         )
 
         status = _check(
-            sync, config, resolved=_make_resolved(config), run=run, fs_type="btrfs"
+            sync,
+            config,
+            resolved=_make_resolved(config),
+            run=run,
+            fs_type="btrfs",
         )
         assert status.active is False
         assert (
@@ -1024,7 +1111,11 @@ class TestCheckSyncRemoteCommands:
         run = FakeCommandRunner().on("which", "stat", returns=FAILS, volume="dst")
 
         status = _check(
-            sync, config, resolved=_make_resolved(config), run=run, fs_type="ext4"
+            sync,
+            config,
+            resolved=_make_resolved(config),
+            run=run,
+            fs_type="ext4",
         )
         assert status.active is False
         ssh_errors = (
@@ -1046,7 +1137,11 @@ class TestCheckSyncRemoteCommands:
         )
 
         status = _check(
-            sync, config, resolved=_make_resolved(config), run=run, fs_type="btrfs"
+            sync,
+            config,
+            resolved=_make_resolved(config),
+            run=run,
+            fs_type="btrfs",
         )
         assert status.active is False
         ssh_errors = (
@@ -1061,11 +1156,18 @@ class TestCheckSyncRemoteCommands:
     def test_destination_latest_not_found_on_remote(self, tmp_path: Path) -> None:
         config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
         run = FakeCommandRunner().on(
-            "test", "-d", "/backup/backup/staging", returns=FAILS
+            "test",
+            "-d",
+            "/backup/backup/staging",
+            returns=FAILS,
         )
 
         status = _check(
-            sync, config, resolved=_make_resolved(config), run=run, fs_type="btrfs"
+            sync,
+            config,
+            resolved=_make_resolved(config),
+            run=run,
+            fs_type="btrfs",
         )
         assert status.active is False
         assert (
@@ -1078,15 +1180,23 @@ class TestCheckSyncRemoteCommands:
         )
 
     def test_destination_snapshots_dir_not_found_on_remote(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
         run = FakeCommandRunner().on(
-            "test", "-d", "/backup/backup/snapshots", returns=FAILS
+            "test",
+            "-d",
+            "/backup/backup/snapshots",
+            returns=FAILS,
         )
 
         status = _check(
-            sync, config, resolved=_make_resolved(config), run=run, fs_type="btrfs"
+            sync,
+            config,
+            resolved=_make_resolved(config),
+            run=run,
+            fs_type="btrfs",
         )
         assert status.active is False
         assert (
@@ -1100,10 +1210,15 @@ class TestCheckSyncRemoteCommands:
 
 
 def _check_all(
-    config: Config, run: FakeCommandRunner | None = None, **kwargs: Any
+    config: Config,
+    run: FakeCommandRunner | None = None,
+    **kwargs: Any,  # noqa: ANN401 -- forwarded to check_all_syncs
 ) -> PreflightResult:
-    """``check_all_syncs`` with every host healthy but for *run*'s own
-    answers, and no ``~/.ssh/config``."""
+    """
+    Run ``check_all_syncs`` with every host healthy but for *run*'s own answers.
+
+    And no ``~/.ssh/config``.
+    """
     return check_all_syncs(
         config,
         run=healthy_host(run),
@@ -1151,8 +1266,7 @@ class TestCheckAllSyncs:
         assert result.sync_statuses["s1"].active is True
 
     def test_only_syncs_filters_syncs_and_volumes(self, tmp_path: Path) -> None:
-        """When only_syncs is given, only those syncs and their
-        referenced volumes are checked."""
+        """With only_syncs, only those syncs and their volumes are checked."""
         src1 = tmp_path / "src1"
         dst1 = tmp_path / "dst1"
         src2 = tmp_path / "src2"
@@ -1202,7 +1316,9 @@ class TestCheckAllSyncs:
 
     @pytest.mark.parametrize("only_syncs", [None, ["s1"]])
     def test_step_count_matches_reported_steps(
-        self, only_syncs: list[str] | None, tmp_path: Path
+        self,
+        only_syncs: list[str] | None,
+        tmp_path: Path,
     ) -> None:
         config = Config(
             ssh_endpoints={"orphan": SshEndpoint(slug="orphan", host="orphan")},
@@ -1280,7 +1396,9 @@ class TestStandaloneEndpointProbing:
         config = self._make_bastion_config(tmp_path)
         run = FakeCommandRunner()
         result = _check_all(
-            config, run, resolved_endpoints=self._through_bastion(config)
+            config,
+            run,
+            resolved_endpoints=self._through_bastion(config),
         )
         assert "bastion" in result.ssh_endpoint_statuses
         assert result.ssh_endpoint_statuses["bastion"].active is True
@@ -1294,10 +1412,14 @@ class TestStandaloneEndpointProbing:
         """Unreachable bastion gets UNREACHABLE error."""
         config = self._make_bastion_config(tmp_path)
         run = FakeCommandRunner().on(
-            "true", returns=TimeoutError("timed out"), volume="bastion"
+            "true",
+            returns=TimeoutError("timed out"),
+            volume="bastion",
         )
         result = _check_all(
-            config, run, resolved_endpoints=self._through_bastion(config)
+            config,
+            run,
+            resolved_endpoints=self._through_bastion(config),
         )
         assert "bastion" in result.ssh_endpoint_statuses
         bastion_status = result.ssh_endpoint_statuses["bastion"]
@@ -1313,7 +1435,9 @@ class TestStandaloneEndpointProbing:
         (src / ".nbkp-dst").touch()
 
         bastion1 = SshEndpoint(
-            slug="bastion1", host="bastion1.example.com", user="admin"
+            slug="bastion1",
+            host="bastion1.example.com",
+            user="admin",
         )
         bastion2 = SshEndpoint(
             slug="bastion2",
@@ -1336,7 +1460,9 @@ class TestStandaloneEndpointProbing:
             volumes={
                 "local": LocalVolume(slug="local", path=str(src)),
                 "remote": RemoteVolume(
-                    slug="remote", ssh_endpoint="target", path="/data"
+                    slug="remote",
+                    ssh_endpoint="target",
+                    path="/data",
                 ),
             },
             sync_endpoints={
@@ -1414,7 +1540,9 @@ class TestStandaloneEndpointProbing:
             volumes={
                 "local": LocalVolume(slug="local", path=str(src)),
                 "remote": RemoteVolume(
-                    slug="remote", ssh_endpoint="target", path="/data"
+                    slug="remote",
+                    ssh_endpoint="target",
+                    path="/data",
                 ),
             },
             sync_endpoints={
@@ -1442,20 +1570,25 @@ class TestStandaloneEndpointProbing:
         # No tool probing on standalone endpoints
         assert result.ssh_endpoint_statuses["orphan"].diagnostics.host_tools is None
         assert _standalone_probes(run) == {
-            "orphan": ResolvedEndpoint(server=orphan, proxy_chain=[])
+            "orphan": ResolvedEndpoint(server=orphan, proxy_chain=[]),
         }
 
     def _make_alternate_config(self, tmp_path: Path) -> Config:
-        """``remote`` (via ``target``, through ``bastion``) is synced by
-        ``s1``; ``other`` (via ``other-host``, or the ``home``-only
-        alternate ``other-lan``) by ``s2``."""
+        """
+        Build two remote volumes with alternate endpoints.
+
+        ``remote`` (via ``target``, through ``bastion``) is synced by ``s1``; ``other``
+        (via ``other-host``, or the ``home``-only alternate ``other-lan``) by ``s2``.
+        """
         config = self._make_bastion_config(tmp_path)
         return Config(
             ssh_endpoints={
                 **config.ssh_endpoints,
                 "other-host": SshEndpoint(slug="other-host", host="other.example"),
                 "other-lan": SshEndpoint(
-                    slug="other-lan", host="other.lan", location="home"
+                    slug="other-lan",
+                    host="other.lan",
+                    location="home",
                 ),
             },
             volumes={
@@ -1488,7 +1621,10 @@ class TestStandaloneEndpointProbing:
         resolved = self._resolved(config)
         run = FakeCommandRunner()
         result = _check_all(
-            config, run, resolved_endpoints=resolved, exclude_locations=["home"]
+            config,
+            run,
+            resolved_endpoints=resolved,
+            exclude_locations=["home"],
         )
         assert set(_standalone_probes(run)) == {"bastion"}
         assert "other-lan" not in result.ssh_endpoint_statuses
@@ -1500,7 +1636,8 @@ class TestStandaloneEndpointProbing:
         )
 
     def test_only_syncs_probes_only_endpoints_of_selected_volumes(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         config = self._make_alternate_config(tmp_path)
         run = FakeCommandRunner()
@@ -1519,13 +1656,19 @@ class TestStandaloneEndpointProbing:
 
 
 def _alternate_endpoint_config(laptop: Path, archive: str, photos: str) -> Config:
-    """``archive`` is only reachable from home (``nas-lan``); ``photos`` has
-    the same primary but also ``nas-wan``, reachable while travelling."""
+    """
+    Build ``archive``, reachable from home only, and ``photos``, reachable anywhere.
+
+    ``archive`` is only reachable from home (``nas-lan``); ``photos`` has the same
+    primary but also ``nas-wan``, reachable while travelling.
+    """
     return Config(
         ssh_endpoints={
             "nas-lan": SshEndpoint(slug="nas-lan", host="nas.lan", location="home"),
             "nas-wan": SshEndpoint(
-                slug="nas-wan", host="nas.example.com", location="travel"
+                slug="nas-wan",
+                host="nas.example.com",
+                location="travel",
             ),
         },
         volumes={
@@ -1545,7 +1688,9 @@ def _alternate_endpoint_config(laptop: Path, archive: str, photos: str) -> Confi
         },
         syncs={
             "to-archive": SyncConfig(
-                slug="to-archive", source="ep-src", destination="ep-archive"
+                slug="to-archive",
+                source="ep-src",
+                destination="ep-archive",
             ),
         },
     )
@@ -1559,7 +1704,10 @@ class TestAlternateEndpointUnderLocationExclusion:
         [("a-archive", "b-photos"), ("z-archive", "b-photos")],
     )
     def test_each_volume_is_checked_through_its_resolved_endpoint(
-        self, archive: str, photos: str, tmp_path: Path
+        self,
+        archive: str,
+        photos: str,
+        tmp_path: Path,
     ) -> None:
         config = _alternate_endpoint_config(tmp_path, archive, photos)
         resolved = resolve_all_endpoints(
@@ -1585,7 +1733,7 @@ class TestAlternateEndpointUnderLocationExclusion:
         assert result.ssh_endpoint_statuses["nas-wan"].active is True
         assert result.volume_statuses[archive].active is False
         assert result.ssh_endpoint_statuses["nas-lan"].errors == [
-            SshEndpointErrorKind.LOCATION_EXCLUDED
+            SshEndpointErrorKind.LOCATION_EXCLUDED,
         ]
         assert check_step_count(config, None, resolved) == (
             len(result.ssh_endpoint_statuses)
@@ -1597,7 +1745,9 @@ class TestAlternateEndpointUnderLocationExclusion:
 
 class TestCheckHardLinkDest:
     def _make_hl_config(
-        self, tmp_src: Path, tmp_dst: Path
+        self,
+        tmp_src: Path,
+        tmp_dst: Path,
     ) -> tuple[Config, SyncConfig]:
         src_vol = LocalVolume(slug="src", path=str(tmp_src))
         dst_vol = LocalVolume(slug="dst", path=str(tmp_dst))
@@ -1782,7 +1932,10 @@ class TestCheckHardLinkDest:
             syncs={"s1": sync},
         )
         run = FakeCommandRunner().on(
-            "stat", "-f", returns=completed(stdout="vfat\n"), volume="dst"
+            "stat",
+            "-f",
+            returns=completed(stdout="vfat\n"),
+            volume="dst",
         )
 
         status = _check(sync, config, run=run, resolved=_make_resolved(config))
@@ -2174,8 +2327,7 @@ class TestCheckDevnullLatest:
         (dst / "backup" / ".nbkp-dst").touch()
 
     def _make_upstream_config(self, tmp_path: Path) -> Config:
-        """s1 reads endpoint ep-up-src, whose latest → /dev/null, and
-        upstream writes it."""
+        """Build s1 reading ep-up-src (latest → /dev/null), which upstream writes."""
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         upstream_src = tmp_path / "upstream"
@@ -2214,10 +2366,14 @@ class TestCheckDevnullLatest:
             },
             syncs={
                 "s1": SyncConfig(
-                    slug="s1", source="ep-up-src", destination="ep-up-dst"
+                    slug="s1",
+                    source="ep-up-src",
+                    destination="ep-up-dst",
                 ),
                 "upstream": SyncConfig(
-                    slug="upstream", source="ep-up-usrc", destination="ep-up-src"
+                    slug="upstream",
+                    source="ep-up-usrc",
+                    destination="ep-up-src",
                 ),
             },
         )
@@ -2226,8 +2382,7 @@ class TestCheckDevnullLatest:
         self,
         tmp_path: Path,
     ) -> None:
-        """Source latest → /dev/null is valid when an upstream
-        sync writes to this source endpoint."""
+        """Source latest → /dev/null is valid when an upstream sync writes it."""
         config = self._make_upstream_config(tmp_path)
         status = _check_all(config).sync_statuses["s1"]
         assert (
@@ -2244,8 +2399,11 @@ class TestCheckDevnullLatest:
         self,
         tmp_path: Path,
     ) -> None:
-        """An upstream sync left out by --sync never replaces the /dev/null
-        marker, so the downstream sync would read /dev/null."""
+        """
+        An upstream sync left out by --sync never replaces the /dev/null marker.
+
+        So the downstream sync would read /dev/null.
+        """
         config = self._make_upstream_config(tmp_path)
         status = _check_all(config, only_syncs=["s1"]).sync_statuses["s1"]
         assert SyncErrorKind.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM in status.errors
@@ -2254,9 +2412,11 @@ class TestCheckDevnullLatest:
         self,
         tmp_path: Path,
     ) -> None:
-        """Source latest → /dev/null with upstream sync is marked
-        inactive in dry-run mode because the upstream won't create
-        a real snapshot."""
+        """
+        Source latest → /dev/null with an upstream sync is inactive in a dry run.
+
+        The upstream won't create a real snapshot.
+        """
         config = self._make_upstream_config(tmp_path)
         status = _check_all(config, dry_run=True).sync_statuses["s1"]
         assert SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING in status.errors
@@ -2266,8 +2426,7 @@ class TestCheckDevnullLatest:
         self,
         tmp_path: Path,
     ) -> None:
-        """Source latest → /dev/null is invalid when no upstream
-        sync writes to this source endpoint."""
+        """Source latest → /dev/null is invalid when no upstream sync writes it."""
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -2287,8 +2446,7 @@ class TestCheckDevnullLatest:
         self,
         tmp_path: Path,
     ) -> None:
-        """Source latest pointing to non-existent snapshot is
-        invalid."""
+        """Source latest pointing to non-existent snapshot is invalid."""
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -2317,8 +2475,7 @@ class TestCheckDevnullLatest:
         self,
         tmp_path: Path,
     ) -> None:
-        """Destination latest → /dev/null is valid (no snapshot
-        yet)."""
+        """Destination latest → /dev/null is valid (no snapshot yet)."""
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -2364,8 +2521,7 @@ class TestCheckDevnullLatest:
         self,
         tmp_path: Path,
     ) -> None:
-        """Destination latest pointing to non-existent snapshot is
-        invalid."""
+        """Destination latest pointing to non-existent snapshot is invalid."""
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
@@ -2399,7 +2555,7 @@ class TestCheckRemoteVolumeSpaces:
         assert status.diagnostics is not None
         assert status.diagnostics.capabilities is not None
         assert run.commands_starting_with("test", "-f") == [
-            ["test", "-f", "/my backup/.nbkp-vol"]
+            ["test", "-f", "/my backup/.nbkp-vol"],
         ]
 
 
@@ -2432,7 +2588,9 @@ class TestParseRsyncVersion:
 
 def _rsync_answers(stdout: str, returncode: int = 0) -> FakeCommandRunner:
     return FakeCommandRunner().on(
-        "rsync", "--version", returns=completed(returncode, stdout)
+        "rsync",
+        "--version",
+        returns=completed(returncode, stdout),
     )
 
 
@@ -2450,7 +2608,7 @@ class TestCheckRsyncVersionLocal:
 
     def test_openrsync(self) -> None:
         run = _rsync_answers(
-            "openrsync: protocol version 29\nrsync version 2.6.9 compatible\n"
+            "openrsync: protocol version 29\nrsync version 2.6.9 compatible\n",
         )
         vol = LocalVolume(slug="data", path="/mnt/data")
         assert check_rsync_version(vol, {}, run=run) is False
@@ -2482,14 +2640,19 @@ class TestCheckRsyncVersionRemote:
 
 
 def _nas_and_local_config(tmp_path: Path) -> Config:
-    """``remote``: NAS → local ``a``; ``local``: local ``b`` → local ``c``.
+    """
+    ``remote``: NAS → local ``a``; ``local``: local ``b`` → local ``c``.
 
     The local volumes carry their sentinels, so only the NAS can fail.
     """
-    for name, sentinel in (("a", ".nbkp-dst"), ("b", ".nbkp-src"), ("c", ".nbkp-dst")):
+    for name, sentinel_name in (
+        ("a", ".nbkp-dst"),
+        ("b", ".nbkp-src"),
+        ("c", ".nbkp-dst"),
+    ):
         (tmp_path / name).mkdir()
         (tmp_path / name / ".nbkp-vol").touch()
-        (tmp_path / name / sentinel).touch()
+        (tmp_path / name / sentinel_name).touch()
     return Config(
         ssh_endpoints={"nas": SshEndpoint(slug="nas", host="nas.example")},
         volumes={
@@ -2512,7 +2675,8 @@ def _nas_and_local_config(tmp_path: Path) -> Config:
 
 
 class TestConnectionLostDuringPreflight:
-    """A host that drops after the first probe is unreachable for that host only.
+    """
+    A host that drops after the first probe is unreachable for that host only.
 
     Every remote command opens its own connection, so the NAS can answer the
     host-tool probes and then go away (asleep, Wi-Fi dropped).
@@ -2521,7 +2685,10 @@ class TestConnectionLostDuringPreflight:
     def test_during_volume_observation(self, tmp_path: Path) -> None:
         config = _nas_and_local_config(tmp_path)
         run = FakeCommandRunner().on(
-            "test", "-f", returns=EOFError("connection closed by peer"), volume="nas"
+            "test",
+            "-f",
+            returns=EOFError("connection closed by peer"),
+            volume="nas",
         )
 
         result = _check_all(config, run, resolved_endpoints=_make_resolved(config))
@@ -2550,7 +2717,7 @@ class TestConnectionLostDuringPreflight:
         src = result.source_endpoint_statuses["ep-nas"]
         assert src.errors == [SourceEndpointErrorKind.VOLUME_INACTIVE]
         assert src.volume_status.ssh_endpoint_status.errors == [
-            SshEndpointErrorKind.UNREACHABLE
+            SshEndpointErrorKind.UNREACHABLE,
         ]
         assert result.sync_statuses["remote"].is_expected_inactive()
         assert result.sync_statuses["local"].active
@@ -2567,12 +2734,16 @@ class TestConnectionLostDuringPreflight:
                     if slug != "ep-nas"
                 },
                 "ep-nas-dst": SyncEndpoint(
-                    slug="ep-nas-dst", volume="nas", subdir="backup"
+                    slug="ep-nas-dst",
+                    volume="nas",
+                    subdir="backup",
                 ),
             },
             syncs={
                 "push": SyncConfig(
-                    slug="push", source="ep-b", destination="ep-nas-dst"
+                    slug="push",
+                    source="ep-b",
+                    destination="ep-nas-dst",
                 ),
                 "local": base.syncs["local"],
             },
@@ -2590,7 +2761,7 @@ class TestConnectionLostDuringPreflight:
         dst = result.destination_endpoint_statuses["ep-nas-dst"]
         assert dst.errors == [DestinationEndpointErrorKind.VOLUME_INACTIVE]
         assert dst.volume_status.ssh_endpoint_status.errors == [
-            SshEndpointErrorKind.UNREACHABLE
+            SshEndpointErrorKind.UNREACHABLE,
         ]
         assert result.sync_statuses["push"].is_expected_inactive()
         assert result.sync_statuses["local"].active
@@ -2598,7 +2769,10 @@ class TestConnectionLostDuringPreflight:
     def test_local_errors_still_propagate(self, tmp_path: Path) -> None:
         config = _nas_and_local_config(tmp_path)
         run = FakeCommandRunner().on(
-            "stat", "-f", returns=OSError("disk gone"), volume="b"
+            "stat",
+            "-f",
+            returns=OSError("disk gone"),
+            volume="b",
         )
         with pytest.raises(OSError, match="disk gone"):
             _check_all(config, run, resolved_endpoints=_make_resolved(config))
@@ -2608,8 +2782,10 @@ class TestConnectionLostDuringPreflight:
         # The host tools answer; the connection drops at the mount tools.
         run = healthy_host(
             FakeCommandRunner().on(
-                "which", "udisksctl", returns=EOFError("connection closed by peer")
-            )
+                "which",
+                "udisksctl",
+                returns=EOFError("connection closed by peer"),
+            ),
         )
 
         diag = observe_ssh_endpoint(

@@ -4,14 +4,18 @@ from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
-from nbkp.fsprotocol import format_snapshot_name, parse_snapshot_name
+from nbkp.fsprotocol import (
+    InvalidSnapshotNameError,
+    format_snapshot_name,
+    parse_snapshot_name,
+)
 
 _TS = datetime(2026, 3, 6, 14, 30, 5, 123000, tzinfo=UTC)
 
 
 class TestParseSnapshotName:
     @pytest.mark.parametrize("macos_local", [False, True])
-    def test_round_trips_both_forms(self, macos_local: bool) -> None:
+    def test_round_trips_both_forms(self, *, macos_local: bool) -> None:
         name = format_snapshot_name(_TS, macos_local=macos_local)
 
         assert parse_snapshot_name(name) == _TS
@@ -36,15 +40,16 @@ class TestParseSnapshotName:
         ],
     )
     def test_rejects_other_names(self, name: str) -> None:
-        with pytest.raises(ValueError):
+        with pytest.raises(InvalidSnapshotNameError) as info:
             parse_snapshot_name(name)
+        assert info.value.name == name
 
 
 class TestFormatSnapshotName:
     @pytest.mark.parametrize(
         "now",
         [
-            datetime(2026, 3, 6, 14, 30),
+            datetime(2026, 3, 6, 14, 30),  # noqa: DTZ001 -- naive on purpose: rejected
             datetime(2026, 3, 6, 14, 30, tzinfo=timezone(timedelta(hours=1))),
         ],
     )

@@ -104,14 +104,16 @@ class TestRunPreviewRsyncCommandDisplay:
                     dst,
                     "linux",
                 ),
-            )
+            ),
         }
         sections = build_run_preview_sections(sync_s, config, resolved_endpoints={})
         output = _render_sections(sections)
         assert "/mnt/dst/snapshots/<timestamp>/" in output
         assert "--link-dest" in output
         expected_ts = create_snapshot_timestamp(
-            datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC), dst, "linux"
+            datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC),
+            dst,
+            "linux",
         )
         assert f"../{expected_ts.name}" in output
 
@@ -155,7 +157,10 @@ class TestRunResultsMarkupSafety:
         buf = StringIO()
         console = Console(file=buf, width=300)
         for section in build_human_results_sections(
-            results, dry_run=False, config=Config(), resolved_endpoints={}
+            results,
+            dry_run=False,
+            config=Config(),
+            resolved_endpoints={},
         ):
             console.print(section)
         return buf.getvalue()
@@ -163,9 +168,9 @@ class TestRunResultsMarkupSafety:
     def test_rsync_output_brackets_survive(self) -> None:
         result = SyncResult.failed(
             "s",
-            False,
-            SyncFailureKind.RSYNC,
-            "rsync exited with code 23",
+            dry_run=False,
+            failure=SyncFailureKind.RSYNC,
+            detail="rsync exited with code 23",
             rsync_exit_code=23,
             output=self.RSYNC_ERROR,
         )
@@ -176,19 +181,22 @@ class TestRunResultsMarkupSafety:
     def test_detail_brackets_survive(self) -> None:
         result = SyncResult.failed(
             "s",
-            False,
-            SyncFailureKind.SNAPSHOT,
-            "Snapshot failed: mkdir '/mnt/x[1]' failed",
+            dry_run=False,
+            failure=SyncFailureKind.SNAPSHOT,
+            detail="Snapshot failed: mkdir '/mnt/x[1]' failed",
         )
         assert "/mnt/x[1]" in self._render_with_markup([result])
 
 
 class TestRunResultsTitle:
-    def _title_line(self, dry_run: bool) -> str:
+    def _title_line(self, *, dry_run: bool) -> str:
         text = _render_sections(
             build_human_results_sections(
-                [], dry_run=dry_run, config=Config(), resolved_endpoints={}
-            )
+                [],
+                dry_run=dry_run,
+                config=Config(),
+                resolved_endpoints={},
+            ),
         )
         return text.splitlines()[0].strip()
 
@@ -205,17 +213,20 @@ class TestRunResultsFailedOutput:
         error = "rsync error: some files could not be transferred (code 23)"
         result = SyncResult.failed(
             "s",
-            False,
-            SyncFailureKind.RSYNC,
-            "rsync exited with code 23",
+            dry_run=False,
+            failure=SyncFailureKind.RSYNC,
+            detail="rsync exited with code 23",
             rsync_exit_code=23,
             output="\n".join([*progress, error]) + "\n",
         )
 
         text = _render_sections(
             build_human_results_sections(
-                [result], dry_run=False, config=Config(), resolved_endpoints={}
-            )
+                [result],
+                dry_run=False,
+                config=Config(),
+                resolved_endpoints={},
+            ),
         )
 
         assert "(code 23)" in text
@@ -227,15 +238,18 @@ class TestRunResultsSkipped:
     def test_words_the_preflight_errors(self) -> None:
         result = SyncResult.skipped(
             "s",
-            False,
-            SyncFailureKind.INACTIVE,
-            (SyncErrorKind.SOURCE_ENDPOINT_INACTIVE,),
+            dry_run=False,
+            failure=SyncFailureKind.INACTIVE,
+            preflight_errors=(SyncErrorKind.SOURCE_ENDPOINT_INACTIVE,),
         )
 
         text = _render_sections(
             build_human_results_sections(
-                [result], dry_run=False, config=Config(), resolved_endpoints={}
-            )
+                [result],
+                dry_run=False,
+                config=Config(),
+                resolved_endpoints={},
+            ),
         )
 
         assert "Sync not active: source endpoint inactive" in text
@@ -245,9 +259,9 @@ class TestRunResultsWarnings:
     def test_warnings_are_listed(self) -> None:
         result = SyncResult.failed(
             "s",
-            False,
-            SyncFailureKind.RSYNC,
-            "rsync exited with code 23",
+            dry_run=False,
+            failure=SyncFailureKind.RSYNC,
+            detail="rsync exited with code 23",
             warnings=(
                 SyncWarning(
                     kind=SyncWarningKind.SNAPSHOT_DIR_CLEANUP,
@@ -258,7 +272,10 @@ class TestRunResultsWarnings:
         buf = StringIO()
         console = Console(file=buf, width=300)
         for section in build_human_results_sections(
-            [result], dry_run=False, config=Config(), resolved_endpoints={}
+            [result],
+            dry_run=False,
+            config=Config(),
+            resolved_endpoints={},
         ):
             console.print(section)
         assert "Warning: Failed to remove [dir]" in buf.getvalue()

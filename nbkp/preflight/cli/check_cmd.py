@@ -1,3 +1,5 @@
+"""The ``nbkp preflight check`` command and its JSON output."""
+
 from typing import Annotated
 
 import typer
@@ -18,11 +20,9 @@ from nbkp.cliwiring.options import (
 from nbkp.cliwiring.preflight import check_and_display
 from nbkp.cliwiring.runtime import runtime_of
 from nbkp.policy import Strictness
-from nbkp.preflight.cli import app
 from nbkp.preflight.status.result import PreflightResult
 
 
-@app.command("check")
 def check_cmd(
     ctx: typer.Context,
     config: CONFIG_OPTION = None,
@@ -41,12 +41,18 @@ def check_cmd(
         ),
     ] = Strictness.IGNORE_INACTIVE,
     location: LOCATION_OPTION = None,
+    *,
     exclude_location: EXCLUDE_LOCATION_OPTION = None,
     network: NETWORK_OPTION = None,
     mount: MOUNT_OPTION = True,
     umount: UMOUNT_OPTION = True,
 ) -> None:
-    """Verify that volumes are reachable, sentinel files exist, SSH connectivity works, and required tools are available. Use this before `run` to confirm everything is ready."""
+    """
+    Verify that volumes are reachable and ready for a run.
+
+    Checks that sentinel files exist, SSH connectivity works, and required tools
+    are available. Use this before `run` to confirm everything is ready.
+    """
     runtime = runtime_of(ctx)
     cfg = load_config_or_exit(runtime, config, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
@@ -79,7 +85,8 @@ def check_cmd(
 
 
 def check_json(preflight: PreflightResult) -> dict[str, object]:
-    """JSON view of a check: every layer that can carry an error.
+    """
+    JSON view of a check: every layer that can carry an error.
 
     ``ssh_endpoints`` includes the implicit ``localhost`` endpoint, whose
     tool errors (rsync missing, …) block the syncs of local volumes.

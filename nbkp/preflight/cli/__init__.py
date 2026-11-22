@@ -1,4 +1,9 @@
+"""The ``nbkp preflight`` sub-app: the ``check`` and ``troubleshoot`` commands."""
+
 import typer
+
+from nbkp.preflight.cli.check_cmd import check_cmd
+from nbkp.preflight.cli.troubleshoot_cmd import troubleshoot_cmd
 
 app = typer.Typer(
     name="preflight",
@@ -6,10 +11,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-# Import order determines the order commands are listed in `--help` and in the
-# generated CLI reference. Keep isort out of it.
-# isort: off
-from nbkp.preflight.cli import check_cmd as check_cmd
-from nbkp.preflight.cli import troubleshoot_cmd as troubleshoot_cmd
-
-# isort: on
+# Registration order is the order commands are listed in `--help` and in the
+# generated CLI reference.
+app.command("check")(check_cmd)
+app.command("troubleshoot")(troubleshoot_cmd)

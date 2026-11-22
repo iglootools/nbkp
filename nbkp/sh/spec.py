@@ -16,7 +16,8 @@ from nbkp.remote.endpoints import ResolvedEndpoints
 
 @dataclass(frozen=True)
 class SyncSpec:
-    """Everything needed to emit shell code for one sync.
+    """
+    Everything needed to emit shell code for one sync.
 
     Paths are the effective paths baked into the script (possibly
     relative to ``NBKP_SCRIPT_DIR`` placeholders for local volumes).
@@ -39,18 +40,22 @@ class SyncSpec:
 
     @property
     def snapshots_dir(self) -> str:
+        """Return the destination's snapshots directory."""
         return f"{self.dst_path}/{SNAPSHOTS_DIR}"
 
     @property
     def staging_dir(self) -> str:
+        """Return the destination's btrfs staging directory, where rsync writes."""
         return f"{self.dst_path}/{STAGING_DIR}"
 
     @property
     def dst_latest(self) -> str:
+        """Return the path of the destination's ``latest`` symlink."""
         return f"{self.dst_path}/{LATEST_LINK}"
 
     @property
     def max_snapshots(self) -> int | None:
+        """Return how many snapshots the destination keeps; ``None`` keeps all."""
         return self.dst_ep.max_snapshots
 
 
@@ -61,6 +66,11 @@ def build_sync_spec(
     resolved_endpoints: ResolvedEndpoints,
     platform: str,
 ) -> SyncSpec:
+    """
+    Return the :class:`SyncSpec` of the sync *slug*.
+
+    *vol_paths* maps each volume slug to the path baked into the script for it.
+    """
     sync = config.syncs[slug]
     src_ep = config.source_endpoint(sync)
     dst_ep = config.destination_endpoint(sync)

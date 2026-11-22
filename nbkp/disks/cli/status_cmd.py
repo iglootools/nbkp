@@ -1,3 +1,5 @@
+"""The ``nbkp disks status`` command."""
+
 import typer
 
 from nbkp.clidisplay import OutputFormat
@@ -11,17 +13,16 @@ from nbkp.cliwiring.options import (
     OUTPUT_OPTION,
 )
 from nbkp.cliwiring.runtime import runtime_of
-from nbkp.disks.cli import app
 from nbkp.disks.cli.options import NAME_OPTION
 
 
-@app.command("status")
 def status_cmd(
     ctx: typer.Context,
     config: CONFIG_OPTION = None,
     output: OUTPUT_OPTION = OutputFormat.HUMAN,
     name: NAME_OPTION = None,
     location: LOCATION_OPTION = None,
+    *,
     exclude_location: EXCLUDE_LOCATION_OPTION = None,
     network: NETWORK_OPTION = None,
 ) -> None:

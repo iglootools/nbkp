@@ -1,4 +1,5 @@
-"""udisks2 (``udisksctl``) command builders for mount/umount and LUKS unlock/lock.
+"""
+udisks2 (``udisksctl``) command builders for mount/umount and LUKS unlock/lock.
 
 All functions are pure — they receive pre-resolved values (device paths, LUKS
 UUIDs) and return command lists. No host calls at this layer.
@@ -18,7 +19,8 @@ _UNLOCKED_AS_RE = re.compile(r"\bas\s+(/dev/\S+?)\.?\s*$", re.MULTILINE)
 
 
 def parse_unlocked_device(stdout: str) -> str | None:
-    """Extract the cleartext device from ``udisksctl unlock`` output.
+    """
+    Extract the cleartext device from ``udisksctl unlock`` output.
 
     Returns the ``/dev/...`` path udisks reported (e.g. ``/dev/dm-0``), or
     ``None`` if the output didn't match.  Reading udisks's own output is
@@ -31,7 +33,8 @@ def parse_unlocked_device(stdout: str) -> str | None:
 
 
 def cleartext_mapper_name(luks_uuid: str) -> str:
-    """Fallback name udisks gives the unlocked device for a LUKS container.
+    """
+    Fallback name udisks gives the unlocked device for a LUKS container.
 
     ``luks-<UUID>`` (lowercase) is only the default.  Two things override it:
     a **LUKS2 header label** (a container labelled ``seagate8tb-luks`` unlocks
@@ -44,7 +47,8 @@ def cleartext_mapper_name(luks_uuid: str) -> str:
 
 
 def build_unlock_command(luks_uuid: str) -> list[str]:
-    """Build command to unlock a LUKS container via udisksctl.
+    """
+    Build command to unlock a LUKS container via udisksctl.
 
     Passphrase is read from stdin (``--key-file /dev/stdin``).
 
@@ -65,7 +69,8 @@ def build_unlock_command(luks_uuid: str) -> list[str]:
 
 
 def build_lock_command(luks_uuid: str) -> list[str]:
-    """Build command to lock a LUKS container via udisksctl.
+    """
+    Build command to lock a LUKS container via udisksctl.
 
     Returns e.g.::
 
@@ -82,7 +87,8 @@ def build_lock_command(luks_uuid: str) -> list[str]:
 
 
 def build_mount_command(device: str) -> list[str]:
-    """Build command to mount a block device via udisksctl.
+    """
+    Build command to mount a block device via udisksctl.
 
     ``device`` is the *discovered* cleartext mapper for encrypted volumes
     (``/dev/mapper/luks-<uuid>``, or the LUKS2 header label / crypttab name
@@ -106,7 +112,8 @@ def build_mount_command(device: str) -> list[str]:
 
 
 def build_unmount_command(device: str) -> list[str]:
-    """Build command to unmount a block device via udisksctl.
+    """
+    Build command to unmount a block device via udisksctl.
 
     Returns e.g.::
 

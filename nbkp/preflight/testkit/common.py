@@ -23,7 +23,8 @@ def demo_ssh_statuses(
     vol_statuses: dict[str, VolumeStatus],
     sync_statuses: dict[str, SyncStatus],
 ) -> dict[str, SshEndpointStatus]:
-    """Every distinct SSH endpoint status embedded in the demo statuses.
+    """
+    Every distinct SSH endpoint status embedded in the demo statuses.
 
     Production has one status per endpoint, but the demo reuses ``localhost``
     and ``nas`` across scenarios with different tool errors.  Keying by slug
@@ -75,6 +76,7 @@ LOCALHOST_SSH_STATUS_BTRFS = SshEndpointStatus.from_diagnostics(
 
 
 def standalone_ssh_status(slug: str, *, reachable: bool = True) -> SshEndpointStatus:
+    """Return the status of SSH endpoint *slug*, with no host tools probed."""
     return SshEndpointStatus.from_diagnostics(
         slug=slug,
         diagnostics=SshEndpointDiagnostics(ssh_reachable=reachable),
@@ -95,6 +97,11 @@ def active_src_ep_status(
     *,
     snapshot_mode: bool = False,
 ) -> SourceEndpointStatus:
+    """
+    Return an error-free source endpoint status on *volume_status*.
+
+    With *snapshot_mode*, it also has snapshot directories and a valid ``latest``.
+    """
     return SourceEndpointStatus(
         endpoint_slug=endpoint_slug,
         volume_status=volume_status,
@@ -126,6 +133,11 @@ def active_dst_ep_status(
     volume_status: VolumeStatus,
     diagnostics: DestinationEndpointDiagnostics | None = None,
 ) -> DestinationEndpointStatus:
+    """
+    Return an error-free destination endpoint status on *volume_status*.
+
+    *diagnostics* defaults to a writable endpoint with its sentinel.
+    """
     diag = diagnostics or DestinationEndpointDiagnostics(
         endpoint_slug=endpoint_slug,
         sentinel_exists=True,
@@ -143,6 +155,11 @@ def inactive_dst_ep_status(
     endpoint_slug: str,
     volume_status: VolumeStatus,
 ) -> DestinationEndpointStatus:
+    """
+    Return an unobserved destination endpoint status on *volume_status*.
+
+    Its error is ``VOLUME_INACTIVE`` when the volume is inactive, and none otherwise.
+    """
     return DestinationEndpointStatus(
         endpoint_slug=endpoint_slug,
         volume_status=volume_status,
@@ -159,6 +176,11 @@ def inactive_src_ep_status(
     endpoint_slug: str,
     volume_status: VolumeStatus,
 ) -> SourceEndpointStatus:
+    """
+    Return an unobserved source endpoint status on *volume_status*.
+
+    Its error is ``VOLUME_INACTIVE`` when the volume is inactive, and none otherwise.
+    """
     return SourceEndpointStatus(
         endpoint_slug=endpoint_slug,
         volume_status=volume_status,

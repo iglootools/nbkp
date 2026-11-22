@@ -10,8 +10,11 @@ from nbkp.preflight.status.ssh import SshEndpointStatus
 
 
 class VolumeErrorKind(enum.StrEnum):
-    """SSH reachability and host tool availability errors are
-    ``SshEndpointErrorKind``s, not volume errors.
+    """
+    Errors of a volume.
+
+    SSH reachability and host tool availability errors are ``SshEndpointErrorKind``s,
+    not volume errors.
     """
 
     VOLUME_NOT_MOUNTED = "volume-not-mounted"
@@ -21,7 +24,7 @@ class VolumeErrorKind(enum.StrEnum):
     DEVICE_NOT_PRESENT = "device-not-present"
     UNLOCK_FAILED = "unlock-failed"
     MOUNT_FAILED = "mount-failed"
-    PASSPHRASE_NOT_AVAILABLE = "passphrase-not-available"
+    PASSPHRASE_NOT_AVAILABLE = "passphrase-not-available"  # noqa: S105 -- an error kind, not a secret
 
     # fstab config: fixed-path (Option A) mounts only
     FSTAB_MOUNTPOINT_MISMATCH = "fstab-mountpoint-mismatch"
@@ -39,12 +42,13 @@ INACTIVE_VOLUME_ERRORS: frozenset[VolumeErrorKind] = frozenset(
         VolumeErrorKind.DEVICE_NOT_PRESENT,
         VolumeErrorKind.VOLUME_NOT_MOUNTED,
         VolumeErrorKind.SSH_ENDPOINT_INACTIVE,
-    }
+    },
 )
 
 
 class VolumeCapabilities(BaseModel):
-    """Volume-level capabilities, computed once per reachable volume.
+    """
+    Volume-level capabilities, computed once per reachable volume.
 
     Host-level tool availability (rsync, btrfs, stat, findmnt) lives
     on ``HostToolCapabilities`` at the SSH endpoint level.  This model
@@ -62,7 +66,8 @@ class VolumeCapabilities(BaseModel):
 
 
 class VolumeDiagnostics(BaseModel):
-    """Observed state of a volume.
+    """
+    Observed state of a volume.
 
     Pure diagnostics — no interpretation of what constitutes an error.
     ``VolumeStatus.from_diagnostics`` translates these into
@@ -78,6 +83,8 @@ class VolumeDiagnostics(BaseModel):
 
 
 class VolumeStatus(BaseModel):
+    """A volume's diagnostics, its SSH endpoint's status, and the errors they mean."""
+
     model_config = ConfigDict(frozen=True)
 
     slug: str
@@ -91,6 +98,7 @@ class VolumeStatus(BaseModel):
     @computed_field
     @property
     def active(self) -> bool:
+        """Return whether the volume has no errors."""
         return not self.errors
 
     @staticmethod
@@ -100,8 +108,11 @@ class VolumeStatus(BaseModel):
         ssh_endpoint_status: SshEndpointStatus,
         diagnostics: VolumeDiagnostics | None,
     ) -> VolumeStatus:
-        """Only remote volumes cascade an inactive SSH endpoint: localhost is
-        always reachable, and its tool errors surface at the sync level as
+        """
+        Build the status from the diagnostics and the SSH endpoint's status.
+
+        Only remote volumes cascade an inactive SSH endpoint: localhost is always
+        reachable, and its tool errors surface at the sync level as
         ``SyncErrorKind.ENDPOINT_HOST_ERRORS`` instead.
         """
         return VolumeStatus(
@@ -133,7 +144,8 @@ def _volume_errors(
 
 
 def _mount_sentinel_error(mount_caps: MountCapabilities) -> VolumeErrorKind:
-    """Most specific reason a mount-managed volume's sentinel is missing.
+    """
+    Most specific reason a mount-managed volume's sentinel is missing.
 
     A cause the mount lifecycle recorded (e.g. NOT_AUTHORIZED →
     POLKIT_RULES_MISSING) wins, so troubleshoot points at the real fix.
@@ -157,8 +169,11 @@ def _mount_sentinel_error(mount_caps: MountCapabilities) -> VolumeErrorKind:
 def _mount_lifecycle_failure_error(
     mount_caps: MountCapabilities,
 ) -> VolumeErrorKind | None:
-    """Returns ``None`` when no upgrade is available — caller falls back to
-    DEVICE_NOT_PRESENT / VOLUME_NOT_MOUNTED / SENTINEL_NOT_FOUND.
+    """
+    Return the error a recorded mount lifecycle failure upgrades to.
+
+    ``None`` when no upgrade is available; the caller falls back to DEVICE_NOT_PRESENT /
+    VOLUME_NOT_MOUNTED / SENTINEL_NOT_FOUND.
     """
     match mount_caps.mount_failure_reason:
         case MountFailureKind.NOT_AUTHORIZED:

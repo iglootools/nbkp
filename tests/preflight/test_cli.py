@@ -1,4 +1,5 @@
-"""Tests for `preflight check`.
+"""
+Tests for `preflight check`.
 
 Its JSON view is tested from testkit statuses; the command runs against
 the fake NAS (``tests.nas``) through an injected runtime.
@@ -30,21 +31,24 @@ from tests.nas import healthy_nas, nas_config
 from tests.preflight.fake_hosts import FAILS
 
 
-def _as_json(data: object, capsys: pytest.CaptureFixture[str]) -> Any:
+def _as_json(data: object, capsys: pytest.CaptureFixture[str]) -> Any:  # noqa: ANN401 -- json.loads's value, which the test indexes freely
     echo_json(data)
     return json.loads(capsys.readouterr().out)
 
 
 class TestCheckJson:
     def test_lists_every_layer(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """``ssh_endpoints`` includes the endpoints the volumes reach, with
-        their warnings; volumes and syncs follow."""
+        """
+        Every layer is listed: SSH endpoints first, then volumes and syncs.
+
+        ``ssh_endpoints`` includes the endpoints the volumes reach, with their warnings.
+        """
         config = sample_config()
         vol_s = sample_all_active_vol_statuses(config)
 
         data = _as_json(
             check_json(
-                preflight(vol_s, sample_all_active_sync_statuses(config, vol_s))
+                preflight(vol_s, sample_all_active_sync_statuses(config, vol_s)),
             ),
             capsys,
         )
@@ -55,9 +59,11 @@ class TestCheckJson:
         assert [s["slug"] for s in data["syncs"]] == ["photos-to-nas"]
 
     def test_snapshot_timestamps_serialize(
-        self, capsys: pytest.CaptureFixture[str]
+        self,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """A populated ``latest`` snapshot puts a datetime in the status tree.
+        """
+        A populated ``latest`` snapshot puts a datetime in the status tree.
 
         Regression: the statuses were dumped with a bare ``model_dump()``,
         which leaves ``Snapshot.timestamp`` as a ``datetime`` for
@@ -72,14 +78,16 @@ class TestCheckJson:
 
         sync = data["syncs"][0]
         assert sync["destination_latest_snapshot"]["timestamp"].startswith(
-            "2026-03-06T14:30:00"
+            "2026-03-06T14:30:00",
         )
         nested = sync["destination_endpoint_status"]["diagnostics"]["latest"]
         assert nested["snapshot"]["name"] == "2026-03-06T14:30:00.000Z"
 
 
 def _check(
-    config_path: Path, *args: str, run: FakeCommandRunner | None = None
+    config_path: Path,
+    *args: str,
+    run: FakeCommandRunner | None = None,
 ) -> tuple[int, str]:
     result = runner.invoke(
         app,
@@ -91,7 +99,7 @@ def _check(
 
 def _destination_sentinel_missing() -> FakeCommandRunner:
     return healthy_nas(
-        FakeCommandRunner().on("test", "-f", "/backup/photos/.nbkp-dst", returns=FAILS)
+        FakeCommandRunner().on("test", "-f", "/backup/photos/.nbkp-dst", returns=FAILS),
     )
 
 
@@ -134,7 +142,7 @@ class TestCheckCommand:
 
     def test_infrastructure_error_exits_1(self, tmp_path: Path) -> None:
         rsync_missing = healthy_nas(
-            FakeCommandRunner().on("which", "rsync", returns=FAILS)
+            FakeCommandRunner().on("which", "rsync", returns=FAILS),
         )
 
         exit_code, _ = _check(write_config(tmp_path, nas_config()), run=rsync_missing)
@@ -142,7 +150,9 @@ class TestCheckCommand:
         assert exit_code == 1
 
     def test_hint_carries_config_and_endpoint_flags(
-        self, tmp_path: Path, chdir: Callable[[Path], None]
+        self,
+        tmp_path: Path,
+        chdir: Callable[[Path], None],
     ) -> None:
         # Run from the config's directory: the hint shows the path relative
         # to it, short enough not to wrap inside the panel.
@@ -150,7 +160,10 @@ class TestCheckCommand:
         write_config(tmp_path, nas_config())
 
         _, output = _check(
-            Path("config.yaml"), "-N", "private", run=_destination_sentinel_missing()
+            Path("config.yaml"),
+            "-N",
+            "private",
+            run=_destination_sentinel_missing(),
         )
 
         flat = " ".join(
@@ -160,18 +173,24 @@ class TestCheckCommand:
 
 
 class TestRunLock:
-    """A check mounts and umounts drives, so it takes the lock another nbkp
-    command may hold, unless it does neither."""
+    """
+    A check takes the run lock, unless it neither mounts nor umounts.
+
+    It mounts and umounts drives, so it takes the lock another nbkp command may hold.
+    """
 
     def test_a_held_lock_stops_the_check_before_anything_runs(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         config_path = write_config(tmp_path, nas_config())
         state_home = tmp_path / "state"
         lock_path = state_home / "nbkp" / "run.lock"
         run = healthy_nas()
         runtime = fake_runtime(
-            run=run, environ={"XDG_STATE_HOME": str(state_home)}, run_lock=hold_run_lock
+            run=run,
+            environ={"XDG_STATE_HOME": str(state_home)},
+            run_lock=hold_run_lock,
         )
 
         with hold_run_lock(lock_path):
@@ -192,7 +211,11 @@ class TestRunLock:
         [([], True), (["--no-mount", "--no-umount"], False)],
     )
     def test_the_lock_is_taken_only_when_mounting_or_umounting(
-        self, args: list[str], locked: bool, tmp_path: Path
+        self,
+        args: list[str],
+        *,
+        locked: bool,
+        tmp_path: Path,
     ) -> None:
         config_path = write_config(tmp_path, nas_config())
         lock = FakeRunLock()
@@ -213,7 +236,10 @@ class TestLocationValidation:
         run = healthy_nas()
 
         exit_code, output = _check(
-            write_config(tmp_path, config_with_locations()), flag, "office", run=run
+            write_config(tmp_path, config_with_locations()),
+            flag,
+            "office",
+            run=run,
         )
 
         assert exit_code == 2
@@ -243,14 +269,18 @@ class TestLocationValidation:
 
     def test_known_location_accepted(self, tmp_path: Path) -> None:
         exit_code, _ = _check(
-            write_config(tmp_path, config_with_locations()), "--location", "home"
+            write_config(tmp_path, config_with_locations()),
+            "--location",
+            "home",
         )
 
         assert exit_code == 0
 
     def test_location_on_config_without_locations(self, tmp_path: Path) -> None:
         exit_code, output = _check(
-            write_config(tmp_path, nas_config()), "--location", "home"
+            write_config(tmp_path, nas_config()),
+            "--location",
+            "home",
         )
 
         assert exit_code == 2

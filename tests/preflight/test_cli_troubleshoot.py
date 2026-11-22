@@ -1,4 +1,5 @@
-"""Tests for `preflight troubleshoot`, run against the fake NAS (``tests.nas``).
+"""
+Tests for `preflight troubleshoot`, run against the fake NAS (``tests.nas``).
 
 The issues and their remediation text are tested in
 test_troubleshoot_render.py; these check what the command reports and its
@@ -17,7 +18,9 @@ from tests.preflight.fake_hosts import FAILS
 
 
 def _troubleshoot(
-    tmp_path: Path, run: FakeCommandRunner, *args: str
+    tmp_path: Path,
+    run: FakeCommandRunner,
+    *args: str,
 ) -> tuple[int, str]:
     config_path = write_config(tmp_path, nas_config())
     result = runner.invoke(
@@ -31,7 +34,7 @@ def _troubleshoot(
 class TestTroubleshootCommand:
     def test_json_lists_issues_and_exits_1_on_fatal(self, tmp_path: Path) -> None:
         rsync_missing = healthy_nas(
-            FakeCommandRunner().on("which", "rsync", returns=FAILS)
+            FakeCommandRunner().on("which", "rsync", returns=FAILS),
         )
 
         exit_code, output = _troubleshoot(tmp_path, rsync_missing, "-o", "json")
@@ -47,8 +50,11 @@ class TestTroubleshootCommand:
         def sentinel_missing() -> FakeCommandRunner:
             return healthy_nas(
                 FakeCommandRunner().on(
-                    "test", "-f", "/data/photos/.nbkp-src", returns=FAILS
-                )
+                    "test",
+                    "-f",
+                    "/data/photos/.nbkp-src",
+                    returns=FAILS,
+                ),
             )
 
         exit_code, output = _troubleshoot(tmp_path, sentinel_missing())

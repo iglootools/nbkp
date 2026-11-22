@@ -62,8 +62,9 @@ class TestLuksEncryptionConfig:
         assert cfg.passphrase_id == "my-disk"
 
     def test_empty_passphrase_id_rejected(self) -> None:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError) as info:
             LuksEncryptionConfig(passphrase_id="")
+        assert [e["type"] for e in info.value.errors()] == ["string_too_short"]
 
 
 class TestVolumeWithMount:
@@ -127,7 +128,8 @@ class TestVolumePathRequirement:
 
     def test_local_tilde_path_is_absolute_once_expanded(self) -> None:
         vol = LocalVolume(slug="data", path="~/backups")
-        assert vol.path is not None and vol.path.startswith("/")
+        assert vol.path is not None
+        assert vol.path.startswith("/")
 
     def test_remote_path_optional_with_mount(self) -> None:
         vol = RemoteVolume(
@@ -163,7 +165,7 @@ class TestResolveEndpointPath:
 
 
 class TestCredentialProviderConfig:
-    def _minimal_config(self, **kwargs: Any) -> Config:
+    def _minimal_config(self, **kwargs: Any) -> Config:  # noqa: ANN401 -- Config's fields
         return Config(
             **kwargs,
             volumes={
@@ -195,7 +197,7 @@ class TestCredentialProviderConfig:
         with pytest.raises(ValidationError) as excinfo:
             self._minimal_config(credential_provider="command")
         assert _error_types(excinfo.value) == {
-            ConfigValidationErrorKind.CREDENTIAL_COMMAND_REQUIRED
+            ConfigValidationErrorKind.CREDENTIAL_COMMAND_REQUIRED,
         }
 
     def test_provider_command_with_credential_command(self) -> None:
@@ -213,7 +215,7 @@ class TestCredentialProviderConfig:
                 credential_command=["pass", "show", "nbkp/fixed"],
             )
         assert _error_types(excinfo.value) == {
-            ConfigValidationErrorKind.CREDENTIAL_COMMAND_PLACEHOLDER
+            ConfigValidationErrorKind.CREDENTIAL_COMMAND_PLACEHOLDER,
         }
 
     def test_credential_command_without_command_provider(self) -> None:

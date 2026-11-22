@@ -20,17 +20,20 @@ def docker_client() -> MagicMock:
     client = MagicMock()
     container = client.containers.run.return_value
     container.attrs = {
-        "NetworkSettings": {"Ports": {"22/tcp": [{"HostPort": "32768"}]}}
+        "NetworkSettings": {"Ports": {"22/tcp": [{"HostPort": "32768"}]}},
     }
     return client
 
 
 class TestSshPortBinding:
     def test_storage_container_publishes_ssh_on_loopback_only(
-        self, docker_client: MagicMock, tmp_path: Path
+        self,
+        docker_client: MagicMock,
+        tmp_path: Path,
     ) -> None:
         with patch(
-            "nbkp.remote.testkit.docker.dockerlib.from_env", return_value=docker_client
+            "nbkp.remote.testkit.docker.dockerlib.from_env",
+            return_value=docker_client,
         ):
             port = start_storage_container(tmp_path / "id.pub")
 
@@ -39,10 +42,13 @@ class TestSshPortBinding:
         assert ports == {"22/tcp": ("127.0.0.1", 0)}
 
     def test_bastion_container_publishes_ssh_on_loopback_only(
-        self, docker_client: MagicMock, tmp_path: Path
+        self,
+        docker_client: MagicMock,
+        tmp_path: Path,
     ) -> None:
         with patch(
-            "nbkp.remote.testkit.docker.dockerlib.from_env", return_value=docker_client
+            "nbkp.remote.testkit.docker.dockerlib.from_env",
+            return_value=docker_client,
         ):
             start_bastion_container(tmp_path / "id.pub", "net")
 
@@ -73,7 +79,8 @@ class TestNetworkRecreation:
     def test_a_container_already_gone_is_not_an_error(self) -> None:
         client = self._client_with_attached(docker_errors.NotFound("gone"))
         with patch(
-            "nbkp.remote.testkit.docker.dockerlib.from_env", return_value=client
+            "nbkp.remote.testkit.docker.dockerlib.from_env",
+            return_value=client,
         ):
             assert create_docker_network() == NETWORK_NAME
         client.networks.get.return_value.remove.assert_called_once()

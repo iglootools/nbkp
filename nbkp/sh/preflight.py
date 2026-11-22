@@ -1,4 +1,5 @@
-"""Generated preflight checks, mirroring ``nbkp preflight``.
+"""
+Generated preflight checks, mirroring ``nbkp preflight``.
 
 Each sync gets a ``<fn>_preflight`` shell function returning:
 
@@ -73,16 +74,18 @@ def _sentinel_checks(spec: SyncSpec) -> list[str]:
     ]
     return [
         guard(
-            _test(vol, ["-f", sentinel], spec),
-            f"{role} sentinel {sentinel} not found (or host unreachable)",
+            _test(vol, ["-f", sentinel_path], spec),
+            f"{role} sentinel {sentinel_path} not found (or host unreachable)",
             INACTIVE,
         )
-        for vol, sentinel, role in checks
+        for vol, sentinel_path, role in checks
     ]
 
 
 def _rsync_checks(
-    vol: LocalVolume | RemoteVolume, role: str, spec: SyncSpec
+    vol: LocalVolume | RemoteVolume,
+    role: str,
+    spec: SyncSpec,
 ) -> list[str]:
     re = spec.resolved_endpoints
     version = output_of(vol, ["rsync", "--version"], re)
@@ -109,10 +112,16 @@ def _tool_checks(tools: tuple[str, ...], spec: SyncSpec) -> list[str]:
 
 
 def _latest_checks(
-    vol: LocalVolume | RemoteVolume, path: str, role: str, var: str, spec: SyncSpec
+    vol: LocalVolume | RemoteVolume,
+    path: str,
+    role: str,
+    var: str,
+    spec: SyncSpec,
 ) -> list[str]:
-    """``latest`` must be a symlink to ``/dev/null`` or to a snapshot dir
-    (``snapshots/<timestamp>``, as in ``nbkp run``'s preflight).
+    """
+    Check that ``latest`` is a symlink to ``/dev/null`` or to a snapshot dir.
+
+    As in ``nbkp run``'s preflight, a snapshot dir is ``snapshots/<timestamp>``.
 
     Leaves the raw target in ``$var`` for the caller's further checks.
     """
@@ -135,7 +144,7 @@ def _latest_checks(
 
 
 def _source_snapshot_checks(spec: SyncSpec) -> list[str]:
-    """A snapshot-enabled source is read through its ``latest`` symlink."""
+    """Check a snapshot-enabled source, read through its ``latest`` symlink."""
     if spec.src_ep.snapshot_mode == "none":
         return []
     else:
@@ -143,7 +152,11 @@ def _source_snapshot_checks(spec: SyncSpec) -> list[str]:
         devnull = '[ "$NBKP_SRC_LATEST" != /dev/null ]'
         return [
             *_latest_checks(
-                spec.src_vol, spec.src_path, "source", "NBKP_SRC_LATEST", spec
+                spec.src_vol,
+                spec.src_path,
+                "source",
+                "NBKP_SRC_LATEST",
+                spec,
             ),
             guard(
                 _test(spec.src_vol, ["-d", snaps], spec),
@@ -174,7 +187,11 @@ def _destination_snapshot_checks(spec: SyncSpec) -> list[str]:
                 *_btrfs_checks(spec),
                 *_snapshot_dir_checks(spec),
                 *_latest_checks(
-                    spec.dst_vol, spec.dst_path, "destination", "NBKP_DST_LATEST", spec
+                    spec.dst_vol,
+                    spec.dst_path,
+                    "destination",
+                    "NBKP_DST_LATEST",
+                    spec,
                 ),
                 _latest_readonly_warning(spec),
             ]
@@ -184,7 +201,11 @@ def _destination_snapshot_checks(spec: SyncSpec) -> list[str]:
                 _hardlink_support_check(spec),
                 *_snapshot_dir_checks(spec),
                 *_latest_checks(
-                    spec.dst_vol, spec.dst_path, "destination", "NBKP_DST_LATEST", spec
+                    spec.dst_vol,
+                    spec.dst_path,
+                    "destination",
+                    "NBKP_DST_LATEST",
+                    spec,
                 ),
             ]
         case _:
@@ -196,7 +217,9 @@ def _btrfs_checks(spec: SyncSpec) -> list[str]:
     staging = spec.staging_dir
     fs_type = output_of(vol, ["stat", "-f", "-c", "%T", spec.dst_vol_path], re)
     options = output_of(
-        vol, ["findmnt", "-T", spec.dst_vol_path, "-n", "-o", "OPTIONS"], re
+        vol,
+        ["findmnt", "-T", spec.dst_vol_path, "-n", "-o", "OPTIONS"],
+        re,
     )
     inode = output_of(vol, ["stat", "-c", "%i", staging], re)
     return [
@@ -231,8 +254,11 @@ def _btrfs_checks(spec: SyncSpec) -> list[str]:
 
 
 def _latest_readonly_warning(spec: SyncSpec) -> str:
-    """Warn, without failing, when the snapshot ``latest`` points to has lost
-    its read-only flag, as ``nbkp preflight`` does."""
+    """
+    Warn when the snapshot ``latest`` points to has lost its read-only flag.
+
+    Without failing, as ``nbkp preflight`` does.
+    """
     snapshot = f"{spec.dst_path}/{shell_var('NBKP_DST_LATEST')}"
     ro = output_of(
         spec.dst_vol,
@@ -240,7 +266,7 @@ def _latest_readonly_warning(spec: SyncSpec) -> str:
         spec.resolved_endpoints,
     )
     message = quote(
-        f"WARN: the snapshot {LATEST_LINK} points to is not read-only ({snapshot})"
+        f"WARN: the snapshot {LATEST_LINK} points to is not read-only ({snapshot})",
     )
     return (
         f'if [ "$NBKP_DST_LATEST" != /dev/null ] && [ {ro} = ro=false ]; then'

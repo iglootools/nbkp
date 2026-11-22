@@ -1,3 +1,5 @@
+"""Rendering the sync dependency graph as a tree, mermaid text, ASCII art or JSON."""
+
 # mermaid-ascii-diagrams leaves render_ascii's parameter unannotated; retire when
 # it annotates it.
 from mermaid_ascii import parse_mermaid, render_ascii  # pyright: ignore[reportUnknownVariableType]
@@ -22,6 +24,12 @@ def _endpoint_annotation(ep: SyncEndpoint) -> str:
 
 
 def build_mermaid_graph(config: Config) -> str:
+    """
+    Return the sync graph as mermaid ``graph LR`` source.
+
+    Nodes are sync endpoints and each edge is a sync labelled with its slug,
+    walked from the root endpoints first, then from any endpoint left over.
+    """
     children, roots = build_adjacency(config.syncs)
     lines = ["graph LR"]
     visited: set[str] = set()
@@ -46,8 +54,10 @@ def build_mermaid_graph(config: Config) -> str:
 
 
 def format_mermaid_ascii_graph(config: Config) -> Text:
-    """Text, not markup: the ASCII art is drawing, and any bracket in it is a
-    box character, not a style tag.
+    """
+    Format the ASCII-art graph as text, not markup.
+
+    The ASCII art is drawing, and any bracket in it is a box character, not a style tag.
     """
     return Text(render_ascii(parse_mermaid(build_mermaid_graph(config))))
 
@@ -56,11 +66,13 @@ def build_rich_tree_sections(
     config: Config,
     sync_severities: dict[str, Severity] | None = None,
 ) -> list[RenderableType]:
-    """When *sync_severities* is given, each sync node's label is
-    prefixed with the matching severity icon (``✓`` / ``⚠`` / ``✗``)
-    so the tree doubles as a per-sync result summary.  Syncs missing
-    from the map render without an icon (e.g. config preview where
-    no run results are available).
+    """
+    Build the sync tree sections, one per root.
+
+    When *sync_severities* is given, each sync node's label is prefixed with the
+    matching severity icon (``✓`` / ``⚠`` / ``✗``) so the tree doubles as a per-sync
+    result summary. Syncs missing from the map render without an icon (e.g. config
+    preview where no run results are available).
     """
     children, roots = build_adjacency(config.syncs)
     severities = sync_severities or {}
@@ -96,18 +108,27 @@ def build_rich_tree_sections(
 
 
 def format_rich_tree_graph(config: Config) -> Group:
+    """Format the sync graph as Rich trees, one per root endpoint, without icons."""
     return Group(*build_rich_tree_sections(config))
 
 
 def format_mermaid_graph(config: Config) -> Text:
-    """The exact mermaid text, ready to pipe into a renderer: a ``Text`` is
-    never parsed for markup or emoji codes, nor highlighted.  Print it with
+    """
+    Return the exact mermaid text, ready to pipe into a renderer.
+
+    A ``Text`` is never parsed for markup or emoji codes, nor highlighted. Print it with
     ``soft_wrap=True`` so long lines are neither wrapped nor cropped.
     """
     return Text(build_mermaid_graph(config))
 
 
 def build_graph_json(config: Config) -> dict[str, list[dict[str, object]]]:
+    """
+    Return the sync graph as JSON-ready data for ``--output json``.
+
+    ``nodes`` holds each sync endpoint a sync uses, sorted by slug; ``edges``
+    holds each sync, from its source to its destination endpoint.
+    """
     ep_slugs = {
         slug
         for sync in config.syncs.values()

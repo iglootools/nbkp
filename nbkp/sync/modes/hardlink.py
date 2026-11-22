@@ -18,11 +18,15 @@ from nbkp.sync.rsync import hard_link_dest_suffix, hard_link_link_dest
 
 
 def run_hard_link_sync(
-    status: SyncStatus, dst: SyncEndpoint, ctx: RunContext
+    status: SyncStatus,
+    dst: SyncEndpoint,
+    ctx: RunContext,
 ) -> SyncResult:
-    """A dry run never modifies the destination: no orphan cleanup, and
-    rsync previews a transfer into a snapshot directory that is never
-    created.
+    """
+    Run a sync into a new hard-link snapshot.
+
+    A dry run never modifies the destination: no orphan cleanup, and rsync previews a
+    transfer into a snapshot directory that is never created.
     """
     sync = status.config
     warnings = () if ctx.dry_run else _cleanup_orphans(sync, ctx)
@@ -33,7 +37,12 @@ def run_hard_link_sync(
             return failure.with_warnings(warnings)
         case snapshot_path:
             return _rsync_into_snapshot(
-                sync, dst, snapshot_path, link_dest, warnings, ctx
+                sync,
+                dst,
+                snapshot_path,
+                link_dest,
+                warnings,
+                ctx=ctx,
             )
 
 
@@ -46,7 +55,6 @@ def _cleanup_orphans(sync: SyncConfig, ctx: RunContext) -> tuple[SyncWarning, ..
             resolved_endpoints=ctx.resolved_endpoints,
             run=ctx.run_command,
         )
-        return ()
     except SnapshotOperationError as e:
         return (
             SyncWarning(
@@ -54,12 +62,17 @@ def _cleanup_orphans(sync: SyncConfig, ctx: RunContext) -> tuple[SyncWarning, ..
                 message=f"Orphaned snapshot cleanup failed: {e}",
             ),
         )
+    else:
+        return ()
 
 
 def _prepare_snapshot_dir(
-    sync: SyncConfig, latest: Snapshot | None, ctx: RunContext
+    sync: SyncConfig,
+    latest: Snapshot | None,
+    ctx: RunContext,
 ) -> str | SyncResult:
-    """The new snapshot's path; created on disk unless dry-running.
+    """
+    Return the new snapshot's path, created on disk unless dry-running.
 
     A snapshot that would not come after *latest* is refused (see
     :func:`~nbkp.snapshots.common.ensure_after_latest`).
@@ -87,9 +100,9 @@ def _prepare_snapshot_dir(
     except SnapshotOperationError as e:
         return SyncResult.failed(
             sync.slug,
-            ctx.dry_run,
-            SyncFailureKind.MKDIR,
-            f"Failed to create snapshot dir: {e}",
+            dry_run=ctx.dry_run,
+            failure=SyncFailureKind.MKDIR,
+            detail=f"Failed to create snapshot dir: {e}",
         )
 
 
@@ -99,6 +112,7 @@ def _rsync_into_snapshot(
     snapshot_path: str,
     link_dest: str | None,
     warnings: tuple[SyncWarning, ...],
+    *,
     ctx: RunContext,
 ) -> SyncResult:
     suffix = hard_link_dest_suffix(Snapshot.from_path(snapshot_path).name)
@@ -107,7 +121,12 @@ def _rsync_into_snapshot(
             discard = _discard_snapshot_dir(snapshot_path, sync, ctx)
             return failure.with_warnings((*warnings, *discard))
         case proc if ctx.dry_run:
-            return SyncResult.succeeded(sync.slug, ctx.dry_run, proc, warnings=warnings)
+            return SyncResult.succeeded(
+                sync.slug,
+                dry_run=ctx.dry_run,
+                proc=proc,
+                warnings=warnings,
+            )
         case proc:
             result = publish_snapshot(
                 sync,
@@ -115,16 +134,21 @@ def _rsync_into_snapshot(
                 snapshot_path,
                 dst.hard_link_snapshots.max_snapshots,
                 hl_prune_snapshots,
-                ctx,
+                ctx=ctx,
             )
             return result.with_warnings(warnings)
 
 
 def _discard_snapshot_dir(
-    snapshot_path: str, sync: SyncConfig, ctx: RunContext
+    snapshot_path: str,
+    sync: SyncConfig,
+    ctx: RunContext,
 ) -> tuple[SyncWarning, ...]:
-    """A leftover is harmless — the next run's orphan cleanup removes it — so
-    a failure is a warning.  Dry runs never created the directory.
+    """
+    Remove a snapshot directory a failed sync left, warning when that fails.
+
+    A leftover is harmless (the next run's orphan cleanup removes it), so a failure is a
+    warning. Dry runs never created the directory.
     """
     if ctx.dry_run:
         return ()
@@ -135,7 +159,6 @@ def _discard_snapshot_dir(
             ctx.resolved_endpoints,
             run=ctx.run_command,
         )
-        return ()
     except SnapshotOperationError as e:
         return (
             SyncWarning(
@@ -143,3 +166,5 @@ def _discard_snapshot_dir(
                 message=f"Failed to remove snapshot dir after rsync failure: {e}",
             ),
         )
+    else:
+        return ()

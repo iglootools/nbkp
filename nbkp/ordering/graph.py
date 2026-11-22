@@ -1,10 +1,13 @@
+"""Ordering syncs by their dependencies, and the endpoint graph they form."""
+
 from graphlib import TopologicalSorter
 
 from nbkp.config.protocol import SyncConfig, sync_predecessors
 
 
 def sort_syncs(syncs: dict[str, SyncConfig]) -> list[str]:
-    """Slugs in dependency order, upstream first.
+    """
+    Slugs in dependency order, upstream first.
 
     ``Config`` validation rejects dependency cycles, so the ``CycleError``
     ``static_order`` raises on one would mean a bug, not a config error.
@@ -15,9 +18,11 @@ def sort_syncs(syncs: dict[str, SyncConfig]) -> list[str]:
 def build_adjacency(
     syncs: dict[str, SyncConfig],
 ) -> tuple[dict[str, list[SyncConfig]], set[str]]:
-    """Returns (children, roots) where:
-    - children maps source endpoint slug → list of SyncConfig
-    - roots is the set of endpoint slugs that are never destinations
+    """
+    Return the children of each endpoint, and the root endpoints.
+
+    ``children`` maps a source endpoint slug to its syncs (``SyncConfig``); ``roots`` is
+    the set of endpoint slugs that are never destinations.
     """
     all_sources = {sync.source for sync in syncs.values()}
     all_destinations = {sync.destination for sync in syncs.values()}

@@ -1,3 +1,5 @@
+"""The root ``nbkp`` Typer app, with every command group attached."""
+
 import importlib.metadata
 from typing import Annotated
 
@@ -16,10 +18,10 @@ from nbkp.sh.cli.sh_cmd import sh_cmd
 from nbkp.snapshots.cli import app as snapshots_app
 
 
-def _version_callback(value: bool) -> None:
+def _version_callback(*, value: bool) -> None:
     if value:
         typer.echo(importlib.metadata.version("nbkp"))
-        raise typer.Exit()
+        raise typer.Exit
 
 
 app = typer.Typer(
@@ -32,7 +34,7 @@ app = typer.Typer(
 @app.callback(invoke_without_command=True)
 def app_callback(
     ctx: typer.Context,
-    version: Annotated[
+    version: Annotated[  # noqa: ARG001 -- read by its eager callback, for Typer
         bool | None,
         typer.Option(
             "--version",
@@ -43,6 +45,7 @@ def app_callback(
         ),
     ] = None,
 ) -> None:
+    """Install the host I/O and the shared SSH connections for the subcommand."""
     # The subcommand runs with the real host I/O, unless the caller passed its
     # own Runtime as the context object (tests do, with fakes).
     runtime_of(ctx)

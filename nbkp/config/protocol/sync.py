@@ -1,3 +1,5 @@
+"""The config models of a sync and its rsync options and filter rules."""
+
 from pathlib import Path
 from typing import Any
 
@@ -9,10 +11,13 @@ from nbkp.config.protocol.errors import ConfigValidationErrorKind, config_error
 
 
 class RsyncOptions(ConfigModel):
+    """The rsync flags a sync adds to, or uses instead of, nbkp's defaults."""
+
     compress: bool = Field(default=False, description="Enable rsync `--compress`")
     checksum: bool = Field(default=False, description="Enable rsync `--checksum`")
     default_options_override: list[str] | None = Field(
-        default=None, description="Replace default rsync flags entirely"
+        default=None,
+        description="Replace default rsync flags entirely",
     )
     extra_options: list[str] = Field(
         default_factory=list,
@@ -33,8 +38,9 @@ def _validate_dir_merge_opts(opts: dict[str, Any]) -> None:
         )
 
 
-def _filter_rules(item: Any) -> list[str]:
-    """Translate one ``filters`` entry into its rsync filter rule(s).
+def _filter_rules(item: object) -> list[str]:
+    """
+    Translate one ``filters`` entry into its rsync filter rule(s).
 
     Most entries map to a single rule; ``dir-merge`` with ``exclude-self``
     maps to two (the merge plus an exclude of the filter file itself).
@@ -55,7 +61,7 @@ def _filter_rules(item: Any) -> list[str]:
             return [f"merge {Path(path).expanduser()}"]
         case {"dir-merge": str() as path}:
             return [f"dir-merge {path}"]
-        case {"dir-merge": opts} if is_raw_mapping(opts) and "path" in opts:
+        case {"dir-merge": object() as opts} if is_raw_mapping(opts) and "path" in opts:
             _validate_dir_merge_opts(opts)
             return [
                 f"dir-merge {opts['path']}",
@@ -65,7 +71,7 @@ def _filter_rules(item: Any) -> list[str]:
             raise _invalid_filter(item)
 
 
-def _invalid_filter(item: Any) -> PydanticCustomError:
+def _invalid_filter(item: object) -> PydanticCustomError:
     return config_error(
         ConfigValidationErrorKind.INVALID_FILTER,
         "Filter must be a string or a dict with exactly one"
@@ -75,26 +81,39 @@ def _invalid_filter(item: Any) -> PydanticCustomError:
 
 
 class SyncConfig(ConfigModel):
+    """
+    One sync: rsync from a source sync endpoint to a destination sync endpoint.
+
+    ``filters`` holds rsync filter rules once validated: the config's
+    ``include``/``exclude``/``merge``/``dir-merge`` entries are translated into
+    rule strings.
+    """
+
     slug: Slug
     source: str = Field(..., min_length=1, description="Source sync endpoint slug")
     destination: str = Field(
-        ..., min_length=1, description="Destination sync endpoint slug"
+        ...,
+        min_length=1,
+        description="Destination sync endpoint slug",
     )
     enabled: bool = Field(default=True, description="Whether this sync is active")
     rsync_options: RsyncOptions = Field(
-        default_factory=lambda: RsyncOptions(),
+        default_factory=RsyncOptions,
         description="Rsync flag configuration",
     )
     filters: list[str] = Field(
-        default_factory=list, description="Rsync filter rules (see below)"
+        default_factory=list,
+        description="Rsync filter rules (see below)",
     )
     filter_file: str | None = Field(
-        default=None, description="Path to external rsync filter file"
+        default=None,
+        description="Path to external rsync filter file",
     )
 
     @field_validator("filter_file", mode="before")
     @classmethod
-    def normalize_filter_file(cls, v: Any) -> Any:
+    def normalize_filter_file(cls, v: object) -> object:
+        """Return the filter file path with ``~`` expanded."""
         # Non-strings pass through so pydantic rejects them rather than
         # silently dropping the filter file.
         match v:
@@ -105,7 +124,14 @@ class SyncConfig(ConfigModel):
 
     @field_validator("filters", mode="before")
     @classmethod
-    def normalize_filters(cls, v: Any) -> Any:
+    def normalize_filters(cls, v: object) -> object:
+        """
+        Translate the raw ``filters`` entries into rsync filter rule strings.
+
+        Raises a ``filters-not-a-list`` error for a mapping or a single string,
+        whose entries would otherwise be misread, and an ``invalid-filter`` or
+        ``unknown-dir-merge-option`` error for an entry it cannot translate.
+        """
         match v:
             case _ if is_raw_sequence(v):
                 return [rule for item in v for rule in _filter_rules(item)]
@@ -130,7 +156,8 @@ class SyncConfig(ConfigModel):
 def sync_predecessors(
     syncs: dict[str, SyncConfig],
 ) -> dict[str, set[str]]:
-    """Direct upstream syncs for each sync slug.
+    """
+    Direct upstream syncs for each sync slug.
 
     A sync B depends on sync A when A's destination endpoint
     slug matches B's source endpoint slug.

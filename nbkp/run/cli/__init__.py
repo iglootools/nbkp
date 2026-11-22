@@ -1,2 +1,1 @@
-# Imported to register its command on the Typer app.
-from nbkp.run.cli import run_cmd as run_cmd
+"""The ``nbkp run`` command, which the root app registers."""

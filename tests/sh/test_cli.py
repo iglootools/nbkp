@@ -54,7 +54,8 @@ class TestShCommand:
         write_config(tmp_path, sample_config())
 
         result = runner.invoke(
-            app, ["sh", "--config", "config.yaml", "-o", "out/backup.sh"]
+            app,
+            ["sh", "--config", "config.yaml", "-o", "out/backup.sh"],
         )
         assert result.exit_code == 0
         assert "Written to out/backup.sh" in result.output
@@ -94,7 +95,8 @@ class TestShCommand:
         assert result.exit_code == 2
 
     def test_volume_without_path_is_an_error_not_a_traceback(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         config_path = write_config(tmp_path, mount_managed_config())
 
@@ -105,7 +107,8 @@ class TestShCommand:
         assert "volume 'dst' has no 'path'" in result.output
 
     def test_output_file_is_replaced_not_rewritten_in_place(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         """A copy of the script already running keeps reading the old file."""
         config_path = write_config(tmp_path, sample_config())
@@ -115,7 +118,8 @@ class TestShCommand:
 
         with out.open(encoding="utf-8") as running:
             result = runner.invoke(
-                app, ["sh", "--config", str(config_path), "-o", str(out)]
+                app,
+                ["sh", "--config", str(config_path), "-o", str(out)],
             )
             assert running.read() == "#!/bin/bash\n# old\n"
 
@@ -125,12 +129,15 @@ class TestShCommand:
         assert [p.name for p in tmp_path.iterdir() if p.name.startswith(".")] == []
 
     def test_header_timestamp_comes_from_the_runtime_clock(
-        self, tmp_path: Path
+        self,
+        tmp_path: Path,
     ) -> None:
         config_path = write_config(tmp_path, sample_config())
 
         result = runner.invoke(
-            app, ["sh", "--config", str(config_path)], obj=fake_runtime()
+            app,
+            ["sh", "--config", str(config_path)],
+            obj=fake_runtime(),
         )
 
         assert result.exit_code == 0

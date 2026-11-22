@@ -1,4 +1,5 @@
-"""Regression tests for the `nbkp demo output` command and its fake data.
+"""
+Regression tests for the `nbkp demo output` command and its fake data.
 
 The demo builders (``config_show_config``, ``check_config``,
 ``troubleshoot_config``, …) are the source of truth for manual QA via

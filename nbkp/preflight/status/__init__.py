@@ -1,4 +1,5 @@
-"""Runtime status types for the 4-layer preflight error model.
+"""
+Runtime status types for the 4-layer preflight error model.
 
 Capabilities are probed at the level where they physically exist,
 but interpreted as errors at the level where the requirement originates.

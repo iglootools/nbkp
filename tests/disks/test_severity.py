@@ -5,7 +5,7 @@ from nbkp.disks.severity import mount_result_severity
 from nbkp.policy import Severity, Strictness
 
 
-def _result(success: bool, reason: MountFailureKind | None = None) -> MountResult:
+def _result(*, success: bool, reason: MountFailureKind | None = None) -> MountResult:
     return MountResult(
         volume_slug="vol",
         success=success,
@@ -17,59 +17,74 @@ class TestMountResultSeverityDefaultStrictness:
     """Under IGNORE_INACTIVE (default), only inactive-class failures warn."""
 
     def test_success_is_ok(self) -> None:
-        assert mount_result_severity(_result(True)) is Severity.OK
+        assert mount_result_severity(_result(success=True)) is Severity.OK
 
     def test_device_not_present_is_warning(self) -> None:
         """A drive being unplugged is expected for removable media."""
         assert (
-            mount_result_severity(_result(False, MountFailureKind.DEVICE_NOT_PRESENT))
+            mount_result_severity(
+                _result(success=False, reason=MountFailureKind.DEVICE_NOT_PRESENT),
+            )
             is Severity.WARNING
         )
 
     def test_unreachable_is_warning(self) -> None:
         """SSH unreachable maps to INACTIVE_SSH_ERRORS — also warning."""
         assert (
-            mount_result_severity(_result(False, MountFailureKind.UNREACHABLE))
+            mount_result_severity(
+                _result(success=False, reason=MountFailureKind.UNREACHABLE),
+            )
             is Severity.WARNING
         )
 
     def test_unlock_failure_is_error(self) -> None:
         assert (
-            mount_result_severity(_result(False, MountFailureKind.UNLOCK_FAILED))
+            mount_result_severity(
+                _result(success=False, reason=MountFailureKind.UNLOCK_FAILED),
+            )
             is Severity.ERROR
         )
 
     def test_mount_failure_is_error(self) -> None:
         assert (
-            mount_result_severity(_result(False, MountFailureKind.MOUNT_FAILED))
+            mount_result_severity(
+                _result(success=False, reason=MountFailureKind.MOUNT_FAILED),
+            )
             is Severity.ERROR
         )
 
     def test_not_authorized_is_error(self) -> None:
         assert (
-            mount_result_severity(_result(False, MountFailureKind.NOT_AUTHORIZED))
+            mount_result_severity(
+                _result(success=False, reason=MountFailureKind.NOT_AUTHORIZED),
+            )
             is Severity.ERROR
         )
 
     def test_udisks_not_available_is_error(self) -> None:
         assert (
-            mount_result_severity(_result(False, MountFailureKind.UDISKS_NOT_AVAILABLE))
+            mount_result_severity(
+                _result(success=False, reason=MountFailureKind.UDISKS_NOT_AVAILABLE),
+            )
             is Severity.ERROR
         )
 
     def test_no_reason_is_error(self) -> None:
         """Failure without a structured reason still surfaces as an error."""
-        assert mount_result_severity(_result(False)) is Severity.ERROR
+        assert mount_result_severity(_result(success=False)) is Severity.ERROR
 
 
 class TestMountResultSeverityIgnoreNone:
-    """Under IGNORE_NONE, every mount failure is fatal (consistent with
-    preflight aborting the run shortly afterwards)."""
+    """
+    Under IGNORE_NONE, every mount failure is fatal.
+
+    Consistent with preflight aborting the run shortly afterwards.
+    """
 
     def test_device_not_present_is_error(self) -> None:
         assert (
             mount_result_severity(
-                _result(False, MountFailureKind.DEVICE_NOT_PRESENT),
+                _result(success=False, reason=MountFailureKind.DEVICE_NOT_PRESENT),
                 Strictness.IGNORE_NONE,
             )
             is Severity.ERROR
@@ -78,7 +93,7 @@ class TestMountResultSeverityIgnoreNone:
     def test_unreachable_is_error(self) -> None:
         assert (
             mount_result_severity(
-                _result(False, MountFailureKind.UNREACHABLE),
+                _result(success=False, reason=MountFailureKind.UNREACHABLE),
                 Strictness.IGNORE_NONE,
             )
             is Severity.ERROR
@@ -91,7 +106,7 @@ class TestMountResultSeverityIgnoreAll:
     def test_device_not_present_is_warning(self) -> None:
         assert (
             mount_result_severity(
-                _result(False, MountFailureKind.DEVICE_NOT_PRESENT),
+                _result(success=False, reason=MountFailureKind.DEVICE_NOT_PRESENT),
                 Strictness.IGNORE_ALL,
             )
             is Severity.WARNING
@@ -100,7 +115,7 @@ class TestMountResultSeverityIgnoreAll:
     def test_unlock_failure_is_warning(self) -> None:
         assert (
             mount_result_severity(
-                _result(False, MountFailureKind.UNLOCK_FAILED),
+                _result(success=False, reason=MountFailureKind.UNLOCK_FAILED),
                 Strictness.IGNORE_ALL,
             )
             is Severity.WARNING

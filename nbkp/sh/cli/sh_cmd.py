@@ -1,3 +1,5 @@
+"""The ``nbkp sh`` command: write the config out as a standalone bash script."""
+
 import os
 import stat
 import sys
@@ -32,6 +34,7 @@ def sh_cmd(
             resolve_path=True,
         ),
     ] = None,
+    *,
     relative_src: Annotated[
         bool,
         typer.Option(
@@ -76,9 +79,14 @@ def sh_cmd(
         ),
     ] = sys.platform,
 ) -> None:
-    """Compile the config into a self-contained bash script. The generated script performs the same operations as `run` without requiring Python or the config file at runtime.
+    """
+    Compile the config into a self-contained bash script.
 
-    This is useful for deploying to systems without Python, or eyeballing the actual commands before letting anything touch your data.
+    The generated script performs the same operations as `run` without requiring
+    Python or the config file at runtime.
+
+    This is useful for deploying to systems without Python, or eyeballing the
+    actual commands before letting anything touch your data.
     """
     if (relative_src or relative_dst) and output_file is None:
         typer.echo(
@@ -115,7 +123,8 @@ def sh_cmd(
 
 
 def _write_script(path: Path, script: str) -> None:
-    """Write *script* to *path*, executable, in one atomic step.
+    """
+    Write *script* to *path*, executable, in one atomic step.
 
     Written under a temporary name and renamed over *path*: bash reads a
     script as it runs, so rewriting it in place while a copy runs (from

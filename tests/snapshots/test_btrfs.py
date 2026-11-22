@@ -161,7 +161,7 @@ class TestCreateSnapshot:
                 "-r",
                 "/mnt/dst/backup/staging",
                 f"/mnt/dst/backup/snapshots/{expected_ts.name}",
-            ]
+            ],
         ]
         assert runner.calls[0].volume == config.volumes["dst"]
 
@@ -170,7 +170,8 @@ class TestCreateSnapshot:
         runner = FakeCommandRunner().on("btrfs", returns=_DENIED)
 
         with pytest.raises(
-            SnapshotOperationError, check=lambda e: e.op is SnapshotOp.CREATE
+            SnapshotOperationError,
+            check=lambda e: e.op is SnapshotOp.CREATE,
         ):
             create_snapshot(sync, config, now=_NOW, platform="linux", run=runner)
 
@@ -189,7 +190,7 @@ class TestCreateSnapshot:
                 "-r",
                 "/backup/data/staging",
                 "/backup/data/snapshots/2024-01-15T12:00:00.000Z",
-            ]
+            ],
         ]
         assert runner.calls[0].volume == config.volumes["dst"]
 
@@ -209,7 +210,7 @@ class TestCreateSnapshot:
                 "-r",
                 "/mnt/my dst/my backup/staging",
                 f"/mnt/my dst/my backup/snapshots/{expected_ts.name}",
-            ]
+            ],
         ]
 
     def test_remote_paths_with_spaces(self) -> None:
@@ -227,7 +228,7 @@ class TestCreateSnapshot:
                 "-r",
                 "/my backup/my data/staging",
                 "/my backup/my data/snapshots/2024-01-15T12:00:00.000Z",
-            ]
+            ],
         ]
 
 
@@ -320,7 +321,7 @@ class TestDeleteSnapshot:
 
 
 def _listing(stdout: str, latest: str | None = None) -> FakeCommandRunner:
-    """A remote destination listing *stdout*, with ``latest`` → *latest*."""
+    """Script a remote destination listing *stdout*, with ``latest`` → *latest*."""
     readlink = completed(0, f"snapshots/{latest}\n") if latest else completed(1)
     return (
         FakeCommandRunner()
@@ -363,7 +364,11 @@ class TestPruneSnapshots:
         runner = _listing(_THREE)
 
         deleted = prune_snapshots(
-            sync, config, max_snapshots=1, dry_run=True, run=runner
+            sync,
+            config,
+            max_snapshots=1,
+            dry_run=True,
+            run=runner,
         )
 
         assert deleted == [

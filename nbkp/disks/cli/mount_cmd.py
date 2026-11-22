@@ -1,3 +1,5 @@
+"""The ``nbkp disks mount`` command."""
+
 from functools import partial
 from typing import Annotated
 
@@ -21,7 +23,6 @@ from nbkp.cliwiring.options import (
 )
 from nbkp.cliwiring.runtime import Runtime, runtime_of
 from nbkp.config import Config
-from nbkp.disks.cli import app
 from nbkp.disks.cli.options import NAME_OPTION
 from nbkp.disks.context import mount_phase
 from nbkp.disks.lifecycle import MountResult, any_failed, refused_by_polkit
@@ -32,13 +33,13 @@ from nbkp.disks.status import mount_result_statuses, unprobed_volume_statuses
 from nbkp.remote.endpoints import ResolvedEndpoints
 
 
-@app.command("mount")
 def mount_cmd(
     ctx: typer.Context,
     config: CONFIG_OPTION = None,
     output: OUTPUT_OPTION = OutputFormat.HUMAN,
     name: NAME_OPTION = None,
     location: LOCATION_OPTION = None,
+    *,
     exclude_location: EXCLUDE_LOCATION_OPTION = None,
     network: NETWORK_OPTION = None,
     dry_run: Annotated[
@@ -53,7 +54,11 @@ def mount_cmd(
         ),
     ] = False,
 ) -> None:
-    """Unlock LUKS and mount volumes. Mounts all volumes with mount config, or specific ones via --name."""
+    """
+    Unlock LUKS and mount volumes.
+
+    Mounts all volumes with mount config, or specific ones via --name.
+    """
     runtime = runtime_of(ctx)
     cfg = load_config_or_exit(runtime, config, output)
     require_known_names(cfg, name, output)
@@ -81,7 +86,8 @@ def mount_cmd(
     if any_failed(results):
         if output is OutputFormat.HUMAN:
             Console(stderr=True).print(
-                format_troubleshoot_hint(invocation), soft_wrap=True
+                format_troubleshoot_hint(invocation),
+                soft_wrap=True,
             )
         raise typer.Exit(1)
 
@@ -124,7 +130,8 @@ def _show_results(
     names: list[str] | None,
     output: OutputFormat,
 ) -> None:
-    """Status table: observed, unreachable, unmanaged and excluded volumes.
+    """
+    Status table: observed, unreachable, unmanaged and excluded volumes.
 
     The JSON entries of the volumes acted on also carry why a mount failed,
     not only the state it left.
@@ -145,7 +152,7 @@ def _print_auth_hint(results: list[MountResult], invocation: Invocation) -> None
     if refused_by_polkit(results):
         console = Console()
         console.print(
-            "udisks refused the operation (no polkit rule). Generate one with:"
+            "udisks refused the operation (no polkit rule). Generate one with:",
         )
         # soft_wrap: the command must stay on one line to copy-paste.
         console.print(

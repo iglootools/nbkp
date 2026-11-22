@@ -1,3 +1,5 @@
+"""Btrfs snapshots: read-only subvolume snapshots of the ``staging/`` subvolume."""
+
 from datetime import datetime
 
 from nbkp.config import Config, SyncConfig, Volume
@@ -23,7 +25,8 @@ def create_snapshot(
     resolved_endpoints: ResolvedEndpoints | None = None,
     run: VolumeCommandRunner = run_on_volume,
 ) -> str:
-    """Create a read-only btrfs snapshot of staging/ into snapshots/.
+    """
+    Create a read-only btrfs snapshot of staging/ into snapshots/.
 
     *now* names the snapshot and *platform* (``sys.platform``) decides the
     macOS-safe name form; both come from the caller so this stays
@@ -45,7 +48,7 @@ def create_snapshot(
     return snapshot_path
 
 
-def _readonly_cmd(path: str, readonly: bool) -> list[str]:
+def _readonly_cmd(path: str, *, readonly: bool) -> list[str]:
     return ["btrfs", "property", "set", path, "ro", "true" if readonly else "false"]
 
 
@@ -60,7 +63,7 @@ def _restore_readonly_failure(
         run_checked(
             SnapshotOp.MAKE_READONLY,
             path,
-            _readonly_cmd(path, True),
+            _readonly_cmd(path, readonly=True),
             volume,
             resolved_endpoints,
             run=run,
@@ -78,7 +81,8 @@ def delete_snapshot(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> None:
-    """Delete a single btrfs snapshot subvolume.
+    """
+    Delete a single btrfs snapshot subvolume.
 
     First unsets the readonly property (needed when the filesystem
     is mounted with user_subvol_rm_allowed instead of granting
@@ -89,7 +93,7 @@ def delete_snapshot(
     run_checked(
         SnapshotOp.MAKE_WRITABLE,
         path,
-        _readonly_cmd(path, False),
+        _readonly_cmd(path, readonly=False),
         volume,
         resolved_endpoints,
         run=run,
@@ -105,7 +109,10 @@ def delete_snapshot(
         )
     except SnapshotOperationError as e:
         restore_failure = _restore_readonly_failure(
-            path, volume, resolved_endpoints, run
+            path,
+            volume,
+            resolved_endpoints,
+            run,
         )
         note = (
             "the snapshot was made read-only again"
@@ -114,7 +121,9 @@ def delete_snapshot(
             f" writable: {restore_failure}"
         )
         raise SnapshotOperationError(
-            SnapshotOp.DELETE, path, f"{e.stderr.strip()}; {note}"
+            SnapshotOp.DELETE,
+            path,
+            f"{e.stderr.strip()}; {note}",
         ) from e
 
 

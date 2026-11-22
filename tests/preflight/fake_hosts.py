@@ -1,4 +1,5 @@
-"""Scripted hosts for the preflight tests.
+r"""
+Scripted hosts for the preflight tests.
 
 Preflight observes a host through two seams: the command runner (every probe
 on a remote host, and the commands a local probe spawns) and the local tool
@@ -6,7 +7,7 @@ lookup.  :func:`healthy_host` scripts the runner the way a healthy host
 answers; a test prepends the one answer its scenario changes::
 
     run = healthy_host(
-        FakeCommandRunner().on("stat", "-c", "%i", returns=completed(stdout="5\\n")),
+        FakeCommandRunner().on("stat", "-c", "%i", returns=completed(stdout="5\n")),
         fs_type="btrfs",
     )
     check_sync(sync, config, run=run, which=local_tools())
@@ -27,7 +28,7 @@ FAILS = completed(returncode=1)
 
 
 def local_tools(*, missing: Collection[str] = ()) -> WhichFn:
-    """The orchestrator's ``PATH``: every tool but *missing*."""
+    """Return the orchestrator's ``PATH``: every tool but *missing*."""
     return lambda tool: None if tool in missing else f"/usr/bin/{tool}"
 
 
@@ -36,8 +37,10 @@ def healthy_host(
     *,
     fs_type: str = "ext2/ext3",
 ) -> FakeCommandRunner:
-    """*run* (a new runner by default) answering what its rules leave out as a
-    healthy host does.
+    """
+    Make *run* answer what its rules leave out as a healthy host does.
+
+    *run* is a new runner by default.
 
     GNU rsync 3.2.7, volume roots on *fs_type* mounted with
     ``user_subvol_rm_allowed``, btrfs staging directories that are

@@ -34,11 +34,8 @@ class TestLocalVolume:
 
     def test_frozen(self) -> None:
         vol = LocalVolume(slug="data", path="/mnt/data")
-        try:
+        with pytest.raises((AttributeError, pydantic.ValidationError)):
             vol.slug = "other"
-            assert False, "Should be frozen"
-        except AttributeError, pydantic.ValidationError:
-            pass
 
 
 class TestSshEndpoint:
@@ -96,11 +93,8 @@ class TestRemoteVolume:
             ssh_endpoint="nas-server",
             path="/backup",
         )
-        try:
+        with pytest.raises((AttributeError, pydantic.ValidationError)):
             vol.path = "other"
-            assert False, "Should be frozen"
-        except AttributeError, pydantic.ValidationError:
-            pass
 
 
 class TestSyncEndpoint:
@@ -221,7 +215,7 @@ class TestCrossServerValidation:
                         slug="x",
                         source="ep-src",
                         destination="ep-dst",
-                    )
+                    ),
                 },
             )
 
@@ -251,14 +245,15 @@ class TestCrossServerValidation:
                     slug="x",
                     source="ep-src",
                     destination="ep-dst",
-                )
+                ),
             },
         )
         assert "x" in config.syncs
 
 
 def _remote_to_remote_config(
-    src_candidates: list[str], dst_candidates: list[str]
+    src_candidates: list[str],
+    dst_candidates: list[str],
 ) -> Config:
     return Config(
         ssh_endpoints={
@@ -295,12 +290,14 @@ class TestCrossServerCandidates:
         [(["lan", "wan"], ["lan"]), (["lan", "wan"], ["wan", "lan"])],
     )
     def test_differing_candidates_rejected(
-        self, src_candidates: list[str], dst_candidates: list[str]
+        self,
+        src_candidates: list[str],
+        dst_candidates: list[str],
     ) -> None:
         with pytest.raises(pydantic.ValidationError) as excinfo:
             _remote_to_remote_config(src_candidates, dst_candidates)
         assert _error_types(excinfo.value) == {
-            ConfigValidationErrorKind.CROSS_SERVER_SYNC
+            ConfigValidationErrorKind.CROSS_SERVER_SYNC,
         }
 
     def test_same_candidates_allowed(self) -> None:
@@ -309,7 +306,8 @@ class TestCrossServerCandidates:
 
 
 def _encrypted_volumes_config(
-    provider: CredentialProvider, *passphrase_ids: str
+    provider: CredentialProvider,
+    *passphrase_ids: str,
 ) -> Config:
     return Config(
         credential_provider=provider,
@@ -331,7 +329,7 @@ class TestPassphraseEnvVarCollision:
         with pytest.raises(pydantic.ValidationError) as excinfo:
             _encrypted_volumes_config(CredentialProvider.ENV, "usb-drive", "usb_drive")
         assert _error_types(excinfo.value) == {
-            ConfigValidationErrorKind.PASSPHRASE_ENV_VAR_COLLISION
+            ConfigValidationErrorKind.PASSPHRASE_ENV_VAR_COLLISION,
         }
 
     def test_shared_id_allowed(self) -> None:
@@ -340,7 +338,9 @@ class TestPassphraseEnvVarCollision:
 
     def test_ids_sharing_a_variable_allowed_with_other_providers(self) -> None:
         config = _encrypted_volumes_config(
-            CredentialProvider.KEYRING, "usb-drive", "usb_drive"
+            CredentialProvider.KEYRING,
+            "usb-drive",
+            "usb_drive",
         )
         assert len(config.volumes) == 2
 
@@ -374,7 +374,7 @@ class TestSlugValidation:
         with pytest.raises(pydantic.ValidationError) as excinfo:
             LocalVolume(slug=slug, path="/mnt")
         assert [(e["loc"], e["type"]) for e in excinfo.value.errors()] == [
-            (("slug",), error_type)
+            (("slug",), error_type),
         ]
 
     def test_valid_max_length(self) -> None:

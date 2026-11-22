@@ -1,3 +1,5 @@
+"""The ``nbkp-demo output`` command: every human output rendered with fake data."""
+
 import contextlib
 import tempfile
 from io import StringIO
@@ -12,7 +14,6 @@ from rich.text import Text
 from nbkp.cliwiring.runtime import Runtime, runtime_of
 from nbkp.config import ConfigError, load_config
 from nbkp.config.output import format_config_error, format_human_config
-from nbkp.demo.cli import app, console as _console
 from nbkp.ordering.output import (
     build_mermaid_graph,
     format_mermaid_ascii_graph,
@@ -36,12 +37,16 @@ lazy from nbkp.sync.testkit.results import (
     run_results,
 )
 
+_console = Console()
+
 
 def _show(title: str, renderable: RenderableType, *, markup: bool = True) -> None:
     """Render *renderable* in a panel titled after the function that built it."""
     buf = StringIO()
     Console(file=buf, force_terminal=True, width=_console.width - 4).print(
-        renderable, highlight=markup, markup=markup
+        renderable,
+        highlight=markup,
+        markup=markup,
     )
     _console.print(
         Panel(
@@ -49,11 +54,10 @@ def _show(title: str, renderable: RenderableType, *, markup: bool = True) -> Non
             title=f"[bold]{title}[/bold]",
             border_style="cyan",
             padding=(0, 1),
-        )
+        ),
     )
 
 
-@app.command("output")
 def output_cmd(ctx: typer.Context) -> None:
     """Render all human output functions with fake data."""
     _show_config_show()
@@ -70,7 +74,8 @@ def _show_config_show() -> None:
     config = config_show_config()
     resolved = resolve_all_endpoints(config)
     _show(
-        "format_human_config", format_human_config(config, resolved_endpoints=resolved)
+        "format_human_config",
+        format_human_config(config, resolved_endpoints=resolved),
     )
 
 
@@ -120,11 +125,21 @@ def _show_results() -> None:
     resolved = resolve_all_endpoints(config)
     _show(
         "format_human_results (run)",
-        format_human_results(run_results(config), False, config, resolved),
+        format_human_results(
+            run_results(config),
+            dry_run=False,
+            config=config,
+            resolved_endpoints=resolved,
+        ),
     )
     _show(
         "format_human_results (--dry-run)",
-        format_human_results(dry_run_results(config), True, config, resolved),
+        format_human_results(
+            dry_run_results(config),
+            dry_run=True,
+            config=config,
+            resolved_endpoints=resolved,
+        ),
     )
 
 
@@ -156,9 +171,19 @@ def _show_troubleshoot(runtime: Runtime) -> None:
     )
 
 
+class _DemoConfigLoadsError(AssertionError):
+    """A demo config meant to fail loading loaded."""
+
+    def __init__(self, text: str | None) -> None:
+        super().__init__(f"demo config unexpectedly loads: {text!r}")
+        self.text = text
+
+
 def _load_error(name: str, text: str | None) -> ConfigError:
-    """The ConfigError ``load_config`` raises for a config file holding
-    *text*, or for a missing one when *text* is ``None``.
+    """
+    Return the ConfigError ``load_config`` raises for a config file holding *text*.
+
+    A missing file when *text* is ``None``.
 
     Raises when the file unexpectedly loads: the panel would otherwise
     render empty and the demo would silently stop showing that error.
@@ -170,7 +195,7 @@ def _load_error(name: str, text: str | None) -> ConfigError:
         load_config(path)
     except ConfigError as e:
         return e
-    raise AssertionError(f"demo config unexpectedly loads: {text!r}")
+    raise _DemoConfigLoadsError(text)
 
 
 def _show_config_errors() -> None:
@@ -187,10 +212,14 @@ def _show_config_errors() -> None:
                 {
                     "ssh-endpoints": {},
                     "volumes": {
-                        "v": {"type": "remote", "ssh-endpoint": "missing", "path": "/x"}
+                        "v": {
+                            "type": "remote",
+                            "ssh-endpoint": "missing",
+                            "path": "/x",
+                        },
                     },
                     "syncs": {},
-                }
+                },
             ),
         ),
         (

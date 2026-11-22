@@ -1,4 +1,5 @@
-"""Importing core code loads neither Rich nor Typer.
+"""
+Importing core code loads neither Rich nor Typer.
 
 Presentation lives in each package's ``output`` modules, which core code never
 imports: display code imports them explicitly. The import-linter contracts let
@@ -41,22 +42,30 @@ def _core_modules(package: str) -> list[str]:
     submodules = (
         m.name
         for m in pkgutil.walk_packages(
-            getattr(root, "__path__", []), f"{root.__name__}."
+            getattr(root, "__path__", []),
+            f"{root.__name__}.",
         )
     )
-    return [root.__name__] + sorted(
-        name for name in submodules if NON_CORE_PARTS.isdisjoint(name.split("."))
-    )
+    return [
+        root.__name__,
+        *sorted(
+            name for name in submodules if NON_CORE_PARTS.isdisjoint(name.split("."))
+        ),
+    ]
 
 
 def _loaded_after_import(modules: list[str]) -> list[str]:
     code = (
         "import importlib, json, sys\n"
         f"for m in {modules!r}: importlib.import_module(m)\n"
-        f"print(json.dumps([m for m in {PRESENTATION_MODULES!r} if m in sys.modules]))\n"
+        f"print(json.dumps([m for m in {PRESENTATION_MODULES!r}"
+        " if m in sys.modules]))\n"
     )
     result = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=True,
     )
     return json.loads(result.stdout)
 

@@ -1,3 +1,5 @@
+"""The ``nbkp disks umount`` command."""
+
 from functools import partial
 from typing import Annotated
 
@@ -19,7 +21,6 @@ from nbkp.cliwiring.options import (
 )
 from nbkp.cliwiring.runtime import Runtime, runtime_of
 from nbkp.config import Config
-from nbkp.disks.cli import app
 from nbkp.disks.cli.options import NAME_OPTION
 from nbkp.disks.lifecycle import UmountResult, any_failed, umount_volumes
 from nbkp.disks.mount_checks import check_mount_status
@@ -27,13 +28,13 @@ from nbkp.disks.plan import plan_lifecycle
 from nbkp.remote.endpoints import ResolvedEndpoints
 
 
-@app.command("umount")
 def umount_cmd(
     ctx: typer.Context,
     config: CONFIG_OPTION = None,
     output: OUTPUT_OPTION = OutputFormat.HUMAN,
     name: NAME_OPTION = None,
     location: LOCATION_OPTION = None,
+    *,
     exclude_location: EXCLUDE_LOCATION_OPTION = None,
     network: NETWORK_OPTION = None,
     dry_run: Annotated[
@@ -48,7 +49,11 @@ def umount_cmd(
         ),
     ] = False,
 ) -> None:
-    """Umount volumes and lock LUKS. Umounts all volumes with mount config, or specific ones via --name."""
+    """
+    Umount volumes and lock LUKS.
+
+    Umounts all volumes with mount config, or specific ones via --name.
+    """
     runtime = runtime_of(ctx)
     cfg = load_config_or_exit(runtime, config, output)
     require_known_names(cfg, name, output)
@@ -70,7 +75,12 @@ def umount_cmd(
 
     results = _umount_with_progress(cfg, resolved, name, output, runtime)
     probe_and_show_status(
-        cfg, resolved, output, name, umount_results=results, run=runtime.run
+        cfg,
+        resolved,
+        output,
+        name,
+        umount_results=results,
+        run=runtime.run,
     )
     if any_failed(results):
         if output is OutputFormat.HUMAN:
@@ -81,7 +91,7 @@ def umount_cmd(
                         location,
                         exclude_location,
                         network,
-                    )
+                    ),
                 ),
                 soft_wrap=True,
             )

@@ -1,5 +1,9 @@
+"""The ``nbkp-demo`` command-line app."""
+
 import typer
-from rich.console import Console
+
+from nbkp.demo.cli.output_cmd import output_cmd
+from nbkp.demo.cli.seed_cmd import seed_cmd
 
 app = typer.Typer(
     name="nbkp-demo",
@@ -7,12 +11,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-console = Console()
-
-# Import order determines the order commands are listed in `--help`.
-# Keep isort out of it.
-# isort: off
-from nbkp.demo.cli import output_cmd as output_cmd
-from nbkp.demo.cli import seed_cmd as seed_cmd
-
-# isort: on
+# Registration order is the order commands are listed in `--help` and in the
+# generated CLI reference.
+app.command("output")(output_cmd)
+app.command("seed")(seed_cmd)

@@ -32,11 +32,11 @@ def _ssh_config(text: str) -> paramiko.SSHConfig:
 
 
 def _fixed_lookup(table: dict[str, set[str]]) -> AddressLookupFn:
-    """An address lookup answering from ``table`` (unknown hosts: None)."""
-    return lambda host: table.get(host)
+    """Return an address lookup answering from ``table`` (unknown hosts: None)."""
+    return table.get
 
 
-def _unresolvable(host: str) -> set[str] | None:
+def _unresolvable(_host: str) -> set[str] | None:
     return None
 
 
@@ -67,7 +67,7 @@ class TestResolveHostname:
 
     def test_with_port_and_user(self) -> None:
         cfg = _ssh_config(
-            "Host mynas\n  HostName 192.168.1.100\n  Port 2222\n  User backup\n"
+            "Host mynas\n  HostName 192.168.1.100\n  Port 2222\n  User backup\n",
         )
         # resolve_hostname only returns the hostname
         assert resolve_hostname("mynas", cfg) == "192.168.1.100"
@@ -125,7 +125,7 @@ _NAS_SSH_CONFIG = _ssh_config(
     "  HostName 192.168.1.100\n"
     "  Port 5022\n"
     "  User backup\n"
-    "  IdentityFile ~/.ssh/nas_key\n"
+    "  IdentityFile ~/.ssh/nas_key\n",
 )
 
 
@@ -240,7 +240,7 @@ class TestResolveAllEndpoints:
 
     def test_network_filter_uses_given_lookup(self) -> None:
         lookup = _fixed_lookup(
-            {"192.168.1.100": {"192.168.1.100"}, "nas.example.com": {"8.8.8.8"}}
+            {"192.168.1.100": {"192.168.1.100"}, "nas.example.com": {"8.8.8.8"}},
         )
         resolved = resolve_all_endpoints(
             self._config(),
@@ -273,14 +273,16 @@ class TestResolveAllEndpoints:
             self._config(),
             ssh_config=_NO_SSH_CONFIG,
             lookup=_fixed_lookup(
-                {"mynas": {"192.168.1.100"}, "nas.example.com": {"8.8.8.8"}}
+                {"mynas": {"192.168.1.100"}, "nas.example.com": {"8.8.8.8"}},
             ),
         )
         assert resolved["nas"].server.slug == "nas-lan"
 
     def test_no_candidate_resolves_falls_back_to_first(self) -> None:
         resolved = resolve_all_endpoints(
-            self._config(), ssh_config=_NO_SSH_CONFIG, lookup=_unresolvable
+            self._config(),
+            ssh_config=_NO_SSH_CONFIG,
+            lookup=_unresolvable,
         )
         assert resolved["nas"].server.slug == "nas-lan"
 
@@ -298,7 +300,9 @@ class TestResolveAllEndpoints:
             },
         )
         resolved = resolve_all_endpoints(
-            config, ssh_config=_NO_SSH_CONFIG, lookup=lookup
+            config,
+            ssh_config=_NO_SSH_CONFIG,
+            lookup=lookup,
         )
         assert resolved["nas"].server.slug == "nas-lan"
         assert looked_up == []

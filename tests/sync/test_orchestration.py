@@ -78,7 +78,10 @@ class TestRunAllSyncs:
         rsync = FakeRsync()
 
         results = run_syncs(
-            config, sync_statuses, rsync=rsync, only_syncs=["nonexistent"]
+            config,
+            sync_statuses,
+            rsync=rsync,
+            only_syncs=["nonexistent"],
         )
         assert len(results) == 0
 
@@ -240,7 +243,7 @@ class TestFailurePropagation:
 class TestPruneFailureDoesNotAbortRun:
     def test_later_syncs_still_run(self) -> None:
         config = make_snapshot_config(
-            btrfs=BtrfsSnapshotConfig(enabled=True, max_snapshots=1)
+            btrfs=BtrfsSnapshotConfig(enabled=True, max_snapshots=1),
         )
         config = config.model_copy(
             update={
@@ -257,10 +260,12 @@ class TestPruneFailureDoesNotAbortRun:
                 "syncs": {
                     **config.syncs,
                     "s2": SyncConfig(
-                        slug="s2", source="ep-src2", destination="ep-dst2"
+                        slug="s2",
+                        source="ep-src2",
+                        destination="ep-dst2",
                     ),
                 },
-            }
+            },
         )
         _, statuses = active_statuses(config)
         rsync = FakeRsync()
@@ -269,7 +274,8 @@ class TestPruneFailureDoesNotAbortRun:
             .on(
                 "ls",
                 returns=completed(
-                    0, f"2026-03-05T10:00:00.000Z\n{NEW_SNAPSHOT_NAME}\n"
+                    0,
+                    f"2026-03-05T10:00:00.000Z\n{NEW_SNAPSHOT_NAME}\n",
                 ),
             )
             .on("readlink", returns=completed(0, f"snapshots/{NEW_SNAPSHOT_NAME}\n"))
@@ -352,7 +358,9 @@ class TestCancellationCause:
 
 
 def _infra_broken_statuses(
-    config: Config, *, presence_proven: bool
+    config: Config,
+    *,
+    presence_proven: bool,
 ) -> dict[str, SyncStatus]:
     """Destination snapshots/ missing (infrastructure), sentinels observed."""
     _, statuses = active_statuses(config)
@@ -362,13 +370,13 @@ def _infra_broken_statuses(
             update={
                 "errors": [DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_FOUND],
                 **({} if presence_proven else {"diagnostics": None}),
-            }
+            },
         )
         return ss.model_copy(
             update={
                 "destination_endpoint_status": dst,
                 "errors": [SyncErrorKind.DESTINATION_ENDPOINT_INACTIVE],
-            }
+            },
         )
 
     return {k: broken(v) for k, v in statuses.items()}
@@ -381,7 +389,10 @@ class TestIgnoreAll:
         rsync = FakeRsync()
 
         results = run_syncs(
-            config, statuses, rsync=rsync, strictness=Strictness.IGNORE_ALL
+            config,
+            statuses,
+            rsync=rsync,
+            strictness=Strictness.IGNORE_ALL,
         )
 
         assert results[0].outcome == SyncOutcome.SUCCESS
@@ -393,7 +404,10 @@ class TestIgnoreAll:
         rsync = FakeRsync()
 
         results = run_syncs(
-            config, statuses, rsync=rsync, strictness=Strictness.IGNORE_ALL
+            config,
+            statuses,
+            rsync=rsync,
+            strictness=Strictness.IGNORE_ALL,
         )
 
         assert results[0].failure == SyncFailureKind.PREFLIGHT
@@ -405,7 +419,10 @@ class TestIgnoreAll:
         rsync = FakeRsync()
 
         results = run_syncs(
-            config, statuses, rsync=rsync, strictness=Strictness.IGNORE_ALL
+            config,
+            statuses,
+            rsync=rsync,
+            strictness=Strictness.IGNORE_ALL,
         )
 
         assert results[0].failure == SyncFailureKind.INACTIVE
@@ -417,7 +434,10 @@ class TestIgnoreAll:
         rsync = FakeRsync()
 
         results = run_syncs(
-            config, statuses, rsync=rsync, strictness=Strictness.IGNORE_INACTIVE
+            config,
+            statuses,
+            rsync=rsync,
+            strictness=Strictness.IGNORE_INACTIVE,
         )
 
         assert results[0].failure == SyncFailureKind.PREFLIGHT
@@ -425,12 +445,15 @@ class TestIgnoreAll:
 
 
 def _pending_middle_statuses(config: Config) -> dict[str, SyncStatus]:
-    """``a → b → c`` in a dry run where ``b`` reads a snapshot ``a`` would
-    create: preflight observed every sentinel but flags ``b`` pending.
+    """
+    Return statuses for ``a → b → c`` where ``b`` is pending in a dry run.
+
+    ``b`` reads a snapshot ``a`` would create: preflight observed every sentinel but
+    flags ``b`` pending.
     """
     _, statuses = active_statuses(config)
     pending = statuses["b"].model_copy(
-        update={"errors": [SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING]}
+        update={"errors": [SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING]},
     )
     return {**statuses, "b": pending}
 
@@ -444,7 +467,10 @@ class TestDryRunPending:
         results = {
             r.sync_slug: r
             for r in run_syncs(
-                config, _pending_middle_statuses(config), dry_run=True, rsync=rsync
+                config,
+                _pending_middle_statuses(config),
+                dry_run=True,
+                rsync=rsync,
             )
         }
 

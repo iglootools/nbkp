@@ -15,6 +15,7 @@ from nbkp.cliwiring.lock import (
     resolve_run_lock_path,
     run_lock_or_exit,
 )
+from tests.fakes import BodyError
 
 _HOME = Path("/home/alice")
 
@@ -26,7 +27,8 @@ class TestResolveRunLockPath:
 
     @pytest.mark.parametrize("environ", [{}, {"XDG_STATE_HOME": ""}])
     def test_falls_back_to_local_state_when_unset(
-        self, environ: dict[str, str]
+        self,
+        environ: dict[str, str],
     ) -> None:
         path = resolve_run_lock_path(environ, _HOME)
         assert path == _HOME / ".local/state/nbkp/run.lock"
@@ -62,8 +64,8 @@ class TestHoldRunLock:
 
     def test_is_released_when_the_block_raises(self, tmp_path: Path) -> None:
         path = tmp_path / "run.lock"
-        with pytest.raises(ValueError), hold_run_lock(path):
-            raise ValueError
+        with pytest.raises(BodyError), hold_run_lock(path):
+            raise BodyError
         with hold_run_lock(path):
             pass
 
@@ -88,14 +90,21 @@ class TestIsRunLockNeeded:
         ],
     )
     def test_only_a_command_that_neither_writes_mounts_nor_umounts_skips_it(
-        self, writes: bool, mount: bool, umount: bool, needed: bool
+        self,
+        *,
+        writes: bool,
+        mount: bool,
+        umount: bool,
+        needed: bool,
     ) -> None:
         assert is_run_lock_needed(writes=writes, mount=mount, umount=umount) is needed
 
 
 class TestRunLockOrExit:
     def test_a_held_lock_exits_1_before_the_block(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         path = tmp_path / "run.lock"
         entered = False
@@ -114,7 +123,9 @@ class TestRunLockOrExit:
         assert "another nbkp command" in error["message"]
 
     def test_a_held_lock_is_reported_on_stderr_for_humans(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         path = tmp_path / "run.lock"
         with (

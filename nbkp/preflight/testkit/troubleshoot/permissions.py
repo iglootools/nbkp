@@ -59,7 +59,7 @@ def _btrfs_statuses(config: Config, shared: SharedStatuses) -> ScenarioStatuses:
                     snapshot_dirs=_READ_ONLY_SNAPSHOT_DIRS,
                     latest=_LATEST_DEVNULL,
                 ),
-                [
+                errors=[
                     DestinationEndpointErrorKind.NOT_WRITABLE,
                     DestinationEndpointErrorKind.STAGING_SUBVOL_NOT_WRITABLE,
                     DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_WRITABLE,
@@ -100,7 +100,7 @@ def _hardlink_statuses(config: Config, shared: SharedStatuses) -> ScenarioStatus
                     snapshot_dirs=_READ_ONLY_SNAPSHOT_DIRS,
                     latest=_LATEST_DEVNULL,
                 ),
-                [
+                errors=[
                     DestinationEndpointErrorKind.NOT_WRITABLE,
                     DestinationEndpointErrorKind.SNAPSHOTS_DIR_NOT_WRITABLE,
                 ],
@@ -138,7 +138,7 @@ def _no_snapshots_statuses(config: Config, shared: SharedStatuses) -> ScenarioSt
                     sentinel_exists=True,
                     endpoint_writable=False,
                 ),
-                [DestinationEndpointErrorKind.NOT_WRITABLE],
+                errors=[DestinationEndpointErrorKind.NOT_WRITABLE],
             ),
         ),
     )

@@ -1,4 +1,5 @@
-"""Filesystem protocol: sentinel names, directory layout, and snapshot types.
+"""
+Filesystem protocol: sentinel names, directory layout, and snapshot types.
 
 This module is a leaf dependency with no internal imports, so any
 module can use it without introducing circular dependencies.
@@ -36,7 +37,8 @@ NO_HARDLINK_FILESYSTEMS = ("vfat", "msdos", "exfat")
 
 
 def format_snapshot_name(now: datetime, *, macos_local: bool = False) -> str:
-    """Format a UTC timestamp as a snapshot directory name.
+    """
+    Format a UTC timestamp as a snapshot directory name.
 
     Standard form uses colons (``2026-03-06T14:30:00.000Z``).
     When *macos_local* is True, colons are replaced with hyphens
@@ -59,33 +61,47 @@ def format_snapshot_name(now: datetime, *, macos_local: bool = False) -> str:
 #: listings with the same pattern (``nbkp_snapshot_names``).
 _SNAPSHOT_NAME = re.compile(
     r"([0-9]{4})-([0-9]{2})-([0-9]{2})"
-    r"T([0-9]{2})([:-])([0-9]{2})\5([0-9]{2})\.([0-9]{3})Z"
+    r"T([0-9]{2})([:-])([0-9]{2})\5([0-9]{2})\.([0-9]{3})Z",
 )
 
 
+class InvalidSnapshotNameError(ValueError):
+    """*name* is not a snapshot directory name nbkp creates."""
+
+    def __init__(self, name: str) -> None:
+        """Build the error from the rejected *name*."""
+        super().__init__(f"not a snapshot name: {name!r}")
+        self.name = name
+
+
 def parse_snapshot_name(name: str) -> datetime:
-    """Parse a snapshot directory name back to an aware UTC datetime.
+    """
+    Parse a snapshot directory name back to an aware UTC datetime.
 
     Only the exact forms :func:`format_snapshot_name` produces are
     accepted; anything else (``2026-01-01T00``, a naive timestamp, an
-    offset other than ``Z``) raises :class:`ValueError`, so a directory
+    offset other than ``Z``) raises :class:`InvalidSnapshotNameError`, a
+    :class:`ValueError`, so a directory
     nbkp did not create is never mistaken for a snapshot.
     """
     match = _SNAPSHOT_NAME.fullmatch(name)
     if match is None:
-        msg = f"not a snapshot name: {name!r}"
-        raise ValueError(msg)
+        raise InvalidSnapshotNameError(name)
     year, month, day, hour, _, minute, second, millis = match.groups()
-    return datetime(
-        int(year),
-        int(month),
-        int(day),
-        int(hour),
-        int(minute),
-        int(second),
-        int(millis) * 1000,
-        tzinfo=UTC,
-    )
+    try:
+        return datetime(
+            int(year),
+            int(month),
+            int(day),
+            int(hour),
+            int(minute),
+            int(second),
+            int(millis) * 1000,
+            tzinfo=UTC,
+        )
+    except ValueError as e:
+        # A well-formed name naming a date that does not exist (month 13).
+        raise InvalidSnapshotNameError(name) from e
 
 
 class Snapshot(BaseModel):
@@ -114,11 +130,17 @@ class Snapshot(BaseModel):
 
     @staticmethod
     def from_path(path: str) -> Snapshot:
+        """
+        Parse the last component of a snapshot *path* into a Snapshot.
+
+        Raises :class:`InvalidSnapshotNameError` when it is not a snapshot name.
+        """
         return Snapshot.from_name(path.rsplit("/", 1)[-1])
 
     @staticmethod
     def from_latest_target(target: str) -> Snapshot:
-        """The snapshot a ``latest`` symlink *target* designates.
+        """
+        Return the snapshot a ``latest`` symlink *target* designates.
 
         Only ``snapshots/<name>``, as nbkp writes it, qualifies: a hand-edited
         target whose last component merely looks like a timestamp
@@ -141,7 +163,8 @@ def _parse_snapshot_name(name: str) -> Snapshot | None:
 
 
 def parse_snapshot_listing(stdout: str) -> list[Snapshot]:
-    """Parse ``ls`` output into snapshots sorted oldest-first.
+    """
+    Parse ``ls`` output into snapshots sorted oldest-first.
 
     Entries that are not snapshot timestamps (``lost+found`` at the root
     of a dedicated filesystem, ``.DS_Store``, a stray file an operator
