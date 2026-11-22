@@ -45,7 +45,7 @@ jobs:
     # holds the guards publish.yml has: a workflow_run is skipped unless the release run
     # succeeded and its commit carries a v* tag, so a failed or dry-run release records
     # nothing.
-    uses: iglootools/common/.github/workflows/reusable-demo.yml@9ad4604b3b82bf509586d267b4aa5e45bb65015c # v1.36.0
+    uses: iglootools/common/.github/workflows/reusable-demo.yml@c1124c1c8980586b2033d889087330c7d103ffc5 # v1.37.0
     with:
       # Pinned here, matching the version mise.lock was generated with; the custom manager in
       # the shared iglootools/common renovate/base preset keeps it current.
