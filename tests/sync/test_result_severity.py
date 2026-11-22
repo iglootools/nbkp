@@ -139,4 +139,4 @@ class TestSyncResultModel:
     def test_frozen(self) -> None:
         result = _success()
         with pytest.raises(ValueError, match="frozen"):
-            result.detail = "x"  # type: ignore[misc]
+            result.detail = "x"

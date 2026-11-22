@@ -1744,10 +1744,10 @@ class TestShippedExamples:
 class TestFrozenModels:
     def test_config_is_immutable(self, sample_config: Config) -> None:
         with pytest.raises(ValidationError) as excinfo:
-            sample_config.credential_command = ["x"]  # type: ignore[misc]
+            sample_config.credential_command = ["x"]
         assert _error_types(excinfo.value) == {"frozen_instance"}
 
     def test_sync_endpoint_is_immutable(self) -> None:
         ep = SyncEndpoint(slug="ep", volume="v")
         with pytest.raises(ValidationError):
-            ep.subdir = "x"  # type: ignore[misc]
+            ep.subdir = "x"

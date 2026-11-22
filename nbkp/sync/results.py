@@ -131,7 +131,7 @@ class SyncResult(BaseModel):
     pruned_paths: tuple[str, ...] | None = None
     warnings: tuple[SyncWarning, ...] = ()
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def success(self) -> bool:
         return self.outcome is SyncOutcome.SUCCESS

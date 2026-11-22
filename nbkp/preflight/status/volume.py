@@ -95,7 +95,7 @@ class VolumeStatus(BaseModel):
     excluded)."""
     errors: list[VolumeErrorKind]
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def active(self) -> bool:
         return not self.errors
