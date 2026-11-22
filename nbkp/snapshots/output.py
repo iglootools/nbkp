@@ -1,6 +1,7 @@
 from rich.table import Table
 from rich.text import Text
 
+from ..clidisplay import dry_run_table_title
 from ..preflight import format_problems
 from .errors import SnapshotOp
 from .models import (
@@ -76,10 +77,8 @@ def _status_text(
 
 
 def format_human_prune_results(results: list[PruneResult], dry_run: bool) -> Table:
-    mode = " (dry run)" if dry_run else ""
-
     table = Table(
-        title=f"NBKP prune{mode}:",
+        title=dry_run_table_title("NBKP prune:", dry_run=dry_run),
     )
     table.add_column("Name", style="bold")
     table.add_column("Deleted")

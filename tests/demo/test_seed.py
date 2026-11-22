@@ -45,7 +45,7 @@ class TestDryRun:
             app, ["seed", "--dry-run", "--no-docker", "--base-dir", str(target)]
         )
         assert result.exit_code == 0, result.output
-        assert "nothing created" in result.output
+        assert result.output.startswith("[dry-run] Would create seed directory")
         assert not target.exists()
 
 

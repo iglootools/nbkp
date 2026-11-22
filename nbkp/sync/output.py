@@ -5,6 +5,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from ..clidisplay import dry_run_table_title
 from ..config import (
     Config,
     LocalVolume,
@@ -234,10 +235,8 @@ def build_human_results_sections(
     config: Config,
     resolved_endpoints: ResolvedEndpoints,
 ) -> list[RenderableType]:
-    mode = " (dry run)" if dry_run else ""
-
     table = Table(
-        title=f"Sync results{mode}:",
+        title=dry_run_table_title("Sync results:", dry_run=dry_run),
     )
     table.add_column("Name", style="bold")
     table.add_column("Status")

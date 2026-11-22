@@ -11,7 +11,7 @@ before any change; it overrides the shared guidelines where they disagree.
 
 - [Area conventions](#area-conventions)
 - [Exceptions](#exceptions)
-  - [Exception — SSH timeouts in plain seconds](#exception--ssh-timeouts-in-plain-seconds)
+  - [Keep the SSH timeout keys in plain seconds](#keep-the-ssh-timeout-keys-in-plain-seconds)
 - [Rules](#rules)
   - [Wrap text nbkp did not author in `rich.text.Text`](#wrap-text-nbkp-did-not-author-in-richtexttext)
   - [Mirror a change to `run` or the sync logic in `sh`](#mirror-a-change-to-run-or-the-sync-logic-in-sh)
@@ -33,7 +33,7 @@ checklist for adding a preflight error, or a config field a check validates.
 
 ## Exceptions
 
-### Exception — SSH timeouts in plain seconds
+### Keep the SSH timeout keys in plain seconds
 
 `connect-timeout`, `server-alive-interval`, `banner-timeout`, `auth-timeout` and
 `channel-timeout` are numbers of seconds, with no unit in the name and no

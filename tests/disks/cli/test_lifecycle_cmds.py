@@ -16,6 +16,8 @@ import pytest
 from rich.console import Console
 
 from nbkp.cli import app
+from nbkp.clidisplay import OutputFormat
+from nbkp.cliwiring.disks import show_plan
 from nbkp.cliwiring.lock import hold_run_lock
 from nbkp.config import Config, CredentialProvider
 from nbkp.config.testkit import write_config
@@ -131,15 +133,15 @@ class TestPlanDecisions:
     def test_lines(self) -> None:
         assert (
             _line(VolumePlan("enc", (MountAction.UNMOUNT, MountAction.LOCK)))
-            == "✓ would unmount, lock enc"
+            == "[dry-run] ✓ Would unmount, lock enc"
         )
         assert (
             _line(VolumePlan("enc", (), "device not plugged in"))
-            == "✓ nothing to do for enc (device not plugged in)"
+            == "[dry-run] ✓ Nothing to do for enc (device not plugged in)"
         )
         assert (
             _line(VolumePlan("enc", (), "unreachable: timed out", probe_failed=True))
-            == "✗ cannot plan enc (unreachable: timed out)"
+            == "[dry-run] ✗ Cannot plan enc (unreachable: timed out)"
         )
 
     def test_a_volume_that_could_not_be_probed_makes_the_plan_incomplete(
@@ -333,7 +335,7 @@ class TestDryRun:
         exit_code, output = _invoke(run, "umount", "--dry-run")
 
         assert exit_code == 0, output
-        assert "would unmount, lock enc" in output
+        assert output.splitlines() == ["[dry-run] ✓ Would unmount, lock enc"]
         assert _udisks_steps(run) == []
 
     def test_absent_drive_needs_nothing(self) -> None:
@@ -342,8 +344,15 @@ class TestDryRun:
         )
 
         assert exit_code == 0
-        assert "nothing to do for enc" in output
+        assert "[dry-run] ✓ Nothing to do for enc" in output
         assert "device not plugged in" in output
+
+    def test_an_empty_plan_still_prints_a_labeled_line(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        show_plan([], {}, OutputFormat.HUMAN)
+
+        assert capsys.readouterr().out == "[dry-run] No volumes found.\n"
 
     @pytest.mark.parametrize("command", ["mount", "umount"])
     def test_failed_probe_fails_the_dry_run(self, command: str) -> None:

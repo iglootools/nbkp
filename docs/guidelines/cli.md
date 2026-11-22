@@ -52,10 +52,36 @@ at its own.
 
 ### Give every data-mutating or long-running operation a dry run
 
-Such a command takes `--dry-run`, with `-n` as its short flag.
+Such a command takes `--dry-run`, with `-n` as its short flag, and labels what
+it prints in a dry run with `[dry-run]`:
+
+- **A line per action** that would be taken starts with the label and says
+  "Would …": `[dry-run] ✓ Would unlock, mount enc`.
+- **A table or summary** carries the label once, at the start of its title, not
+  on every row: `[dry-run] Sync results:`.
+- **JSON output** carries a top-level `"dry_run": true` field, never a prefix. A
+  command whose JSON is a list prints an object in a dry run, the list under a
+  key (`{"dry_run": true, "results": [...]}`), as `snapshots prune` does.
+- **Another tool's output**, such as rsync's lines under `rsync --dry-run`, is
+  left as that tool printed it; the label goes on nbkp's own title.
+- The label and its helpers live in `nbkp/clidisplay/dryrun.py`, and build it as
+  `rich.text.Text`: in a markup string, Rich would parse `[dry-run]` as a style
+  tag and drop it.
 
 **Why:** the user sees what a backup, a prune or a mount would do before it does
-it.
+it, and one label in one place tells a dry run's output from a real run's at a
+glance, on screen, in a log or in a script.
+
+#### Exception — the label in the script `sh` generates
+
+The generated script's log lines in a dry run start with `[nbkp] [dry-run]`,
+not with the label.
+
+**Why:** every line the script logs starts with `[nbkp]`, which tells its lines
+apart from rsync's on the same stderr, and a log filter or cron mail rule may
+match on it.
+
+- **Retire it** if the script drops its `[nbkp]` prefix.
 
 #### Exception — `-n` in `disks`
 

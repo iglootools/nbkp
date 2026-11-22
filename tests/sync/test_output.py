@@ -183,6 +183,22 @@ class TestRunResultsMarkupSafety:
         assert "/mnt/x[1]" in self._render_with_markup([result])
 
 
+class TestRunResultsTitle:
+    def _title_line(self, dry_run: bool) -> str:
+        text = _render_sections(
+            build_human_results_sections(
+                [], dry_run=dry_run, config=Config(), resolved_endpoints={}
+            )
+        )
+        return text.splitlines()[0].strip()
+
+    def test_a_dry_run_is_labeled_once_at_the_start_of_the_title(self) -> None:
+        assert self._title_line(dry_run=True) == "[dry-run] Sync results:"
+
+    def test_a_real_run_is_not_labeled(self) -> None:
+        assert self._title_line(dry_run=False) == "Sync results:"
+
+
 class TestRunResultsFailedOutput:
     def test_shows_the_last_lines_where_rsyncs_error_is(self) -> None:
         progress = [f"file-{i}.txt" for i in range(20)]

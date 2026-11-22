@@ -95,7 +95,7 @@ class TestRunJson:
             [_ok("photos-to-nas")],
         )
 
-        data = _as_json(run_json(pipeline, None, []), capsys)
+        data = _as_json(run_json(pipeline, None, [], dry_run=False), capsys)
 
         assert [v["slug"] for v in data["volumes"]] == ["local-data", "nas"]
         assert [s["slug"] for s in data["syncs"]] == ["photos-to-nas"]
@@ -104,11 +104,14 @@ class TestRunJson:
         ]
         assert data["umount"] == []
         assert "hint" not in data
+        assert "dry_run" not in data
 
     def test_aborted_run_carries_the_hint(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        data = _as_json(run_json(_aborted(sample_config()), _HINT, []), capsys)
+        data = _as_json(
+            run_json(_aborted(sample_config()), _HINT, [], dry_run=False), capsys
+        )
 
         assert data["results"] == []
         assert data["hint"] == _HINT
@@ -130,7 +133,7 @@ class TestRunJson:
             [_ok("photos-to-nas")],
         )
 
-        data = _as_json(run_json(pipeline, None, []), capsys)
+        data = _as_json(run_json(pipeline, None, [], dry_run=False), capsys)
 
         assert data["syncs"][0]["destination_latest_snapshot"]["timestamp"].startswith(
             "2026-03-06T14:30:00"
@@ -146,7 +149,7 @@ class TestRunJson:
         )
         umounts = [UmountResult("plain", success=True), LOCK_FAILED]
 
-        data = _as_json(run_json(pipeline, None, umounts), capsys)
+        data = _as_json(run_json(pipeline, None, umounts, dry_run=False), capsys)
 
         assert data["umount"] == [
             {"volume": "plain", "success": True},
@@ -278,7 +281,9 @@ class TestRunCommand:
         )
 
         assert exit_code == 0
-        [result] = json.loads(output)["results"]
+        data = json.loads(output)
+        assert data["dry_run"] is True
+        [result] = data["results"]
         assert (result["sync_slug"], result["dry_run"]) == ("photos", True)
         assert rsync.synced == ["photos"]
         assert rsync.last_kwargs["dry_run"] is True

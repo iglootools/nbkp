@@ -118,7 +118,7 @@ class TestPruneOutput:
             dry_run=True,
         )
 
-        assert "NBKP prune (dry run):" in output
+        assert "[dry-run] NBKP prune:" in output
         ok = _row(output, "ok-sync")
         assert " 2 " in ok
         assert " 3 " in ok

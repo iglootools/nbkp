@@ -5,9 +5,8 @@ from collections.abc import Mapping, Sequence
 
 import typer
 from rich.console import Console
-from rich.text import Text
 
-from ..clidisplay import OutputFormat, StepProgressBar, echo_json
+from ..clidisplay import OutputFormat, StepProgressBar, dry_run_labeled, echo_json
 from ..config import Config, Volume
 from ..disks.lifecycle import UmountResult, unknown_volume_names
 from ..disks.models import display_name
@@ -150,7 +149,9 @@ def show_plan(
             echo_json({"dry_run": True, "volumes": plan_json(plans)})
         case OutputFormat.HUMAN:
             console = Console()
-            console.print(Text("Dry run — no udisksctl changes made.", style="bold"))
+            if not plans:
+                # As the real run does, rather than print nothing.
+                console.print(dry_run_labeled("No volumes found."))
             for plan in plans:
                 console.print(
                     format_plan_line(

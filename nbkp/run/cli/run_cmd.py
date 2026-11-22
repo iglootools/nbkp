@@ -256,7 +256,14 @@ def _print_outcome(
 ) -> None:
     match (output, pipeline.has_preflight_errors):
         case (OutputFormat.JSON, aborted):
-            echo_json(run_json(pipeline, hint if aborted else None, umount_results))
+            echo_json(
+                run_json(
+                    pipeline,
+                    hint if aborted else None,
+                    umount_results,
+                    dry_run=dry_run,
+                )
+            )
         case (OutputFormat.HUMAN, True):
             Console(stderr=True).print(abort_message(pipeline, strictness, hint))
         case (OutputFormat.HUMAN, False):
@@ -273,11 +280,15 @@ def run_json(
     pipeline: PipelineResult,
     hint: str | None,
     umount_results: list[UmountResult],
+    *,
+    dry_run: bool,
 ) -> dict[str, object]:
-    """``run -o json``: the preflight statuses, the sync results, the umount
-    outcome of each mount-managed volume, and, when preflight aborted the
-    run, the troubleshoot command (*hint*)."""
+    """``run -o json``: ``"dry_run": true`` for a dry run, the preflight
+    statuses, the sync results, the umount outcome of each mount-managed
+    volume, and, when preflight aborted the run, the troubleshoot command
+    (*hint*)."""
     return {
+        **({"dry_run": True} if dry_run else {}),
         "volumes": list(pipeline.preflight.volume_statuses.values()),
         "syncs": list(pipeline.preflight.sync_statuses.values()),
         "results": list(pipeline.results),

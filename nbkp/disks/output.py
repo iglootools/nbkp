@@ -4,7 +4,12 @@ from dataclasses import asdict
 from rich.table import Table
 from rich.text import Text
 
-from ..clidisplay import severity_icon, severity_style, severity_symbol
+from ..clidisplay import (
+    dry_run_labeled,
+    severity_icon,
+    severity_style,
+    severity_symbol,
+)
 from ..policy import Severity, Strictness
 from .lifecycle import MountResult, UmountResult
 from .models import (
@@ -291,18 +296,20 @@ def umount_result_json(result: UmountResult) -> dict[str, object]:
 
 
 def format_plan_line(plan: VolumePlan, name: str) -> Text:
-    """One human line: ``would unlock, mount <name>``, ``nothing to do``, or
-    ``cannot plan`` when the state could not be probed."""
+    """One labeled dry-run line: ``Would unlock, mount <name>``,
+    ``Nothing to do``, or ``Cannot plan`` when the state could not be probed."""
     severity = Severity.ERROR if plan.probe_failed else Severity.OK
     verbs = ", ".join(action.value for action in plan.actions)
-    return Text.assemble(
-        (severity_symbol(severity), severity_style(severity)),
-        (
-            f" cannot plan {name}"
-            if plan.probe_failed
-            else f" would {verbs} {name}"
-            if plan.actions
-            else f" nothing to do for {name}"
-        ),
-        *([(f" ({plan.detail})", "dim")] if plan.detail else []),
+    return dry_run_labeled(
+        Text.assemble(
+            (severity_symbol(severity), severity_style(severity)),
+            (
+                f" Cannot plan {name}"
+                if plan.probe_failed
+                else f" Would {verbs} {name}"
+                if plan.actions
+                else f" Nothing to do for {name}"
+            ),
+            *([(f" ({plan.detail})", "dim")] if plan.detail else []),
+        )
     )
