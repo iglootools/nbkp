@@ -5,8 +5,8 @@
   ],
   "extends": [
     "config:recommended",
-    "github>iglootools/common//renovate/base#v1.35.0",
-    "github>iglootools/common//renovate/python#v1.35.0"
+    "github>iglootools/common//renovate/base#v1.36.0",
+    "github>iglootools/common//renovate/python#v1.36.0"
   ],
   "separateMajorMinor": false,
   "packageRules": [
