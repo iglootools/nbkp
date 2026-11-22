@@ -349,13 +349,15 @@ run = "asciinema upload demo/demo.cast"
 description = "Download the demo recorded by CI and upload it to asciinema.org"
 run = "uv run --no-sync iglootools demo upload"
 
+# marketing/ holds posts pasted into other sites, Reddit's among them, which a table of contents
+# would only clutter.
 [tasks.toc]
-description = "Regenerate the tables of contents in the Markdown docs (add one with --add <file>)"
-run = "uv run --no-sync iglootools docs toc"
+description = "Add and regenerate the tables of contents in the Markdown docs"
+run = "uv run --no-sync iglootools docs toc --exclude 'marketing/**'"
 
 [tasks.lint-toc]
-description = "Check that the Markdown tables of contents are up to date (fix with `mise run toc`)"
-run = "uv run --no-sync iglootools docs toc --check"
+description = "Check that every Markdown document has an up-to-date table of contents (fix with `mise run toc`)"
+run = "uv run --no-sync iglootools docs toc --check --exclude 'marketing/**'"
 
 [tasks.reference-doc]
 description = "Regenerate the reference documentation"
