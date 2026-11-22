@@ -115,8 +115,7 @@ pyright's `pythonVersion`, and the base image in
 Dockerfile pins Python and uv by digest and Renovate's dockerfile manager
 updates them on their own, so between minor bumps their patch versions can
 differ from `mise.toml`'s; the btrfs tests do not need them to match. See the
-[Target only the latest stable Python](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#target-only-the-latest-stable-python)
-for the rationale.
+[rationale for targeting the latest stable Python](https://github.com/iglootools/common/blob/main/guidelines/project-setup/python-tooling.md#target-the-latest-stable-python-unless-others-install-the-package-1).
 
 ## Parallel test execution
 
