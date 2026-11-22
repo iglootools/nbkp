@@ -4,7 +4,7 @@ from typing import Any
 from pydantic import Field, field_validator
 from pydantic_core import PydanticCustomError
 
-from .base import ConfigModel, Slug
+from .base import ConfigModel, Slug, is_raw_mapping, is_raw_sequence
 from .errors import ConfigValidationErrorKind, config_error
 
 
@@ -42,7 +42,7 @@ def _filter_rules(item: Any) -> list[str]:
     match item:
         case str():
             return [item]
-        case dict() if len(item) != 1:
+        case _ if is_raw_mapping(item) and len(item) != 1:
             # Mapping patterns ignore extra keys, so without this guard
             # ``{include: a, exclude: b}`` would keep the include and drop
             # the exclude.
@@ -55,7 +55,7 @@ def _filter_rules(item: Any) -> list[str]:
             return [f"merge {Path(path).expanduser()}"]
         case {"dir-merge": str() as path}:
             return [f"dir-merge {path}"]
-        case {"dir-merge": dict() as opts} if "path" in opts:
+        case {"dir-merge": opts} if is_raw_mapping(opts) and "path" in opts:
             _validate_dir_merge_opts(opts)
             return [
                 f"dir-merge {opts['path']}",
@@ -107,7 +107,7 @@ class SyncConfig(ConfigModel):
     @classmethod
     def normalize_filters(cls, v: Any) -> Any:
         match v:
-            case list() | tuple():
+            case _ if is_raw_sequence(v):
                 return [rule for item in v for rule in _filter_rules(item)]
             case dict():
                 raise config_error(
