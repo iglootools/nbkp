@@ -9,8 +9,9 @@ import pytest
 import typer
 
 from nbkp.clidisplay import OutputFormat
-from nbkp.cliwiring.mount import managed_mount
-from nbkp.config import Config
+from nbkp.cliwiring.mount import lifecycle_session, managed_mount
+from nbkp.cliwiring.mount_progress import LifecycleProgress
+from nbkp.config import Config, CredentialProvider
 from nbkp.disks import UmountResult
 from tests.fakes import BodyError, completed, fake_runtime
 from tests.fixtures.disks import BUSY, LOCK_FAILED, encrypted_volume, mounted_drive_host
@@ -92,3 +93,34 @@ class TestUmountFailure:
             "unmount",
             "lock",
         ]
+
+
+class TestPassphrasePrompt:
+    def test_the_progress_bar_is_hidden_while_the_prompt_asks(self) -> None:
+        config = _CONFIG.model_copy(
+            update={"credential_provider": CredentialProvider.PROMPT},
+        )
+        sessions: list[LifecycleProgress] = []
+        bar_shown_while_asking: list[bool] = []
+
+        def prompt(_passphrase_id: str) -> str:
+            [progress] = sessions
+            assert progress.mount_bar is not None
+            bar_shown_while_asking.append(progress.mount_bar.shown)
+            return "typed-secret"
+
+        with lifecycle_session(
+            config,
+            {},
+            runtime=fake_runtime(prompt_passphrase=prompt),
+            enabled=True,
+        ) as (passphrase_fn, progress):
+            sessions.append(progress)
+            assert progress.mount_bar is not None
+            # Unlocking happens with the mount bar on screen.
+            progress.on_mount_start("enc")
+
+            assert passphrase_fn("enc") == "typed-secret"
+
+            assert bar_shown_while_asking == [False]
+            assert progress.mount_bar.shown

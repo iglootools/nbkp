@@ -143,6 +143,32 @@ class TestKeyringStatus:
         assert data["checked"] is False
         assert data["passphrases"] == {"disk[1]": {"volumes": ["usb"]}}
 
+    def test_human_prompt_provider_says_there_is_nothing_to_check(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        config_path = write_config(
+            tmp_path,
+            _config(provider=CredentialProvider.PROMPT),
+        )
+
+        result = _invoke(config_path)
+
+        assert result.exit_code == 0
+        assert result.stdout == ""
+        assert "Credential provider 'prompt' asks for each passphrase" in (
+            result.stderr
+        )
+
+    def test_human_no_encrypted_volumes(self, tmp_path: Path) -> None:
+        config_path = write_config(tmp_path, _config(passphrase_id=None))
+
+        result = _invoke(config_path)
+
+        assert result.exit_code == 0
+        assert result.stdout == ""
+        assert result.stderr == "No encrypted volumes found.\n"
+
     def test_no_encrypted_volumes_json_is_valid(self, tmp_path: Path) -> None:
         config_path = write_config(tmp_path, _config(passphrase_id=None))
         result = _invoke(config_path, "-o", "json")

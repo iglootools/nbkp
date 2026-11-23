@@ -8,7 +8,6 @@ from rich.console import Console, Group, RenderableType
 from rich.text import Text
 
 from nbkp.clidisplay import OutputFormat
-from nbkp.cliwiring.credentials import prompt_passphrase
 from nbkp.cliwiring.lock import is_run_lock_needed, run_lock_or_exit
 from nbkp.cliwiring.mount_progress import LifecycleProgress, mount_display_names
 from nbkp.cliwiring.runtime import Runtime
@@ -57,16 +56,9 @@ def lifecycle_session(
     """
     Yield the passphrase function and progress bars for a mount lifecycle.
 
-    The bars are shown when *enabled*. On exit, the bars are stopped and the cached
-    passphrases cleared.
+    The bars are shown when *enabled*, and hidden while the ``prompt`` provider asks
+    for a passphrase. On exit, the bars are stopped and the cached passphrases cleared.
     """
-    passphrase_fn, cache = build_passphrase_fn(
-        cfg.credential_provider,
-        cfg.credential_command,
-        prompt=prompt_passphrase,
-        environ=runtime.environ,
-        run=runtime.run_credential_command,
-    )
     progress = LifecycleProgress.create(
         cfg,
         resolved,
@@ -74,6 +66,19 @@ def lifecycle_session(
         names=names,
         strictness=strictness,
         umounting=umounting,
+    )
+
+    def prompt(passphrase_id: str) -> str:
+        # The prompt fires at unlock, under the live mount bar.
+        with progress.hidden():
+            return runtime.prompt_passphrase(passphrase_id)
+
+    passphrase_fn, cache = build_passphrase_fn(
+        cfg.credential_provider,
+        cfg.credential_command,
+        prompt=prompt,
+        environ=runtime.environ,
+        run=runtime.run_credential_command,
     )
     try:
         yield passphrase_fn, progress

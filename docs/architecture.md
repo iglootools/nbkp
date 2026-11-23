@@ -234,16 +234,16 @@ dependencies; the contracts are what reject a new import that breaks a rule:
   `clidisplay/` is presentation only (output format, JSON, severity symbols and
   styles, progress bars, and the `Invocation` that echoes the current flags in
   suggested follow-up commands); core modules import neither it nor `rich` /
-  `typer`. The `prompt` credential provider gets its terminal prompt injected
-  from `cliwiring/credentials.py`. The two-way edges between `cliwiring/` and
-  the modules in the graph above are between a module's `cli/` subpackage and
-  `cliwiring/`, never with the module's core: the sub-apps sit above
-  `cliwiring/`, the module cores below it. Importing a core package
-  (`nbkp.disks`, `nbkp.preflight`, `nbkp.sync`, …) loads neither Rich nor Typer:
-  presentation is imported explicitly from `output` modules. Those may import
-  Rich and `clidisplay/` but not Typer, `cliwiring/` or any `cli/` package. Core
-  code never imports an `output` module, its own included: the "Only
-  presentation code imports output modules" contract allows only `cli/`
+  `typer`. The `prompt` credential provider gets its terminal prompt injected as
+  a `Runtime` port, whose real one is in `cliwiring/credentials.py`. The two-way
+  edges between `cliwiring/` and the modules in the graph above are between a
+  module's `cli/` subpackage and `cliwiring/`, never with the module's core: the
+  sub-apps sit above `cliwiring/`, the module cores below it. Importing a core
+  package (`nbkp.disks`, `nbkp.preflight`, `nbkp.sync`, …) loads neither Rich
+  nor Typer: presentation is imported explicitly from `output` modules. Those
+  may import Rich and `clidisplay/` but not Typer, `cliwiring/` or any `cli/`
+  package. Core code never imports an `output` module, its own included: the
+  "Only presentation code imports output modules" contract allows only `cli/`
   packages, `cliwiring/`, `clidisplay/`, other `output` modules, testkits and
   `demo/` to. Likewise "Only the root app imports a CLI sub-app" keeps a core
   module off its own `cli/` package, an edge the forbidden contract skips

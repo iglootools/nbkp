@@ -289,7 +289,8 @@ net — the option is guaranteed present at run time however it was configured.
 - **keyring** (default): `keyring.get_password("nbkp", passphrase_id)` — uses
   macOS Keychain or Linux SecretService. Store via
   `keyring set nbkp <passphrase-id>`.
-- **prompt**: interactive password prompt via Typer's hidden input.
+- **prompt**: interactive password prompt via Typer's hidden input, asked at
+  unlock time; the progress bar is taken off screen while it asks.
 - **env**: reads `NBKP_PASSPHRASE_<ID>` environment variable (uppercased, every
   character other than a letter or digit replaced with an underscore, so the
   name can always be exported; ids that would share a variable are rejected at
@@ -298,6 +299,10 @@ net — the option is guaranteed present at run time however it was configured.
   `["pass", "show", "nbkp/{id}"]`) with `{id}` replaced by the passphrase-id,
   and uses the first line of its output, without the line break, as the
   passphrase.
+
+An empty passphrase (an empty variable, a command printing an empty first line)
+is a retrieval failure naming the provider and the passphrase-id, never sent to
+unlock.
 
 Passphrases are cached in memory during a single run, so the user is only
 prompted once per unique passphrase-id even if multiple volumes share it.

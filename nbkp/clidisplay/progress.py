@@ -1,5 +1,7 @@
 """A step progress bar that prints each step's result line above it."""
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from types import TracebackType
 from typing import Self
 
@@ -88,6 +90,30 @@ class StepProgressBar:
                 ),
             )
             progress.advance(task_id)
+
+    @property
+    def shown(self) -> bool:
+        """Whether the bar is on screen: started by a step and not stopped."""
+        return self._bar is not None and self._bar[0].live.is_started
+
+    @contextmanager
+    def hidden(self) -> Generator[None]:
+        """
+        Take the bar off screen for the block, then show it again.
+
+        For an interactive prompt: the bar redraws its line several times a second,
+        which would erase a prompt written to the terminal behind its back.  Does
+        nothing when the bar is not shown.
+        """
+        if self._bar is None or not self.shown:
+            yield
+            return
+        progress = self._bar[0]
+        progress.stop()
+        try:
+            yield
+        finally:
+            progress.start()
 
     def stop(self) -> None:
         """Idempotent."""

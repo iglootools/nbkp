@@ -18,7 +18,7 @@ from typing import Any
 from nbkp.cliwiring.lock import RunLockFn
 from nbkp.cliwiring.runtime import Runtime
 from nbkp.config import Config, SyncConfig, Volume
-from nbkp.credentials import CommandFn
+from nbkp.credentials import CommandFn, PromptFn
 from nbkp.remote.dispatch import VolumeCommandRunner, WhichFn
 from nbkp.remote.endpoints import ResolvedEndpoint, ResolvedEndpoints
 from nbkp.sync.modes import RsyncRunner
@@ -173,6 +173,17 @@ def _no_credential_command(command: list[str]) -> subprocess.CompletedProcess[st
     raise UnexpectedCommandError(command)
 
 
+class UnexpectedPromptError(AssertionError):
+    """A fake runtime was asked to prompt for a passphrase the test did not expect."""
+
+    def __init__(self, passphrase_id: str) -> None:
+        super().__init__(f"unexpected passphrase prompt: {passphrase_id}")
+
+
+def _no_prompt(passphrase_id: str) -> str:
+    raise UnexpectedPromptError(passphrase_id)
+
+
 @dataclass
 class FakeRunLock:
     """
@@ -199,6 +210,7 @@ def fake_runtime(
     rsync: RsyncRunner | None = None,
     environ: Mapping[str, str] | None = None,
     run_credential_command: CommandFn | None = None,
+    prompt_passphrase: PromptFn | None = None,
     local_user: str = "backup",
     home: Path = _NOWHERE / "home",
     run_lock: RunLockFn | None = None,
@@ -211,8 +223,8 @@ def fake_runtime(
     orchestrator's ``PATH``, a :class:`FakeRsync`, a clock stopped at
     :data:`FIXED_NOW` on Linux, an empty environment, a home and platform
     config directories that do not exist (so the config search never finds
-    the developer's), a :class:`FakeRunLock`, and no credential command
-    (calling it fails the test).  Pass it to
+    the developer's), a :class:`FakeRunLock`, and no credential command or
+    passphrase prompt (calling either fails the test).  Pass it to
     ``CliRunner().invoke(app, args, obj=...)``.
     """
     return Runtime(
@@ -226,6 +238,7 @@ def fake_runtime(
         user_config_dir=lambda app: str(_NOWHERE / "user-config" / app),
         site_config_dir=lambda app: str(_NOWHERE / "site-config" / app),
         run_credential_command=run_credential_command or _no_credential_command,
+        prompt_passphrase=prompt_passphrase or _no_prompt,
         local_user=lambda: local_user,
         run_lock=run_lock if run_lock is not None else FakeRunLock(),
     )
