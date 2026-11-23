@@ -392,24 +392,30 @@ def prune_oldest_snapshots(
 
     Each is deleted with the backend's *delete_snapshot*.
 
-    Never prunes the snapshot that the latest symlink points to.
+    Never prunes the snapshot that the latest symlink points to, and
+    neither counts nor prunes the snapshots newer than it: those are left
+    by failed syncs, possibly incomplete, and orphan cleanup removes them.
+    Counted, each would cost a complete snapshot its place.
     Returns list of deleted (or would-be-deleted) paths.  A failed deletion
     raises :class:`~nbkp.snapshots.errors.SnapshotPruneError`, which names
     the snapshots deleted before it.
     """
     re = resolved_endpoints or {}
     snapshots = list_snapshots(sync, config, re, run=run)
-    excess = len(snapshots) - max_snapshots
-    if excess <= 0:
+    if len(snapshots) <= max_snapshots:
         return []
     else:
         latest = read_latest_symlink(sync, config, resolved_endpoints=re, run=run)
+        counted = [
+            s for s in snapshots if latest is None or s.timestamp <= latest.timestamp
+        ]
+        excess = max(len(counted) - max_snapshots, 0)
         base = snapshots_dir(sync, config)
 
         # list_snapshots sorts oldest first, so the slice takes the oldest.
         to_delete = [
             f"{base}/{s.name}"
-            for s in snapshots
+            for s in counted
             if latest is None or s.name != latest.name
         ][:excess]
 

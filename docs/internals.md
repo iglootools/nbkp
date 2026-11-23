@@ -71,7 +71,11 @@ special filesystem commands are needed for creation or pruning.
 **Pruning** — When `max-snapshots` is set, old snapshots beyond the limit are
 removed after each `run`. The snapshot that `latest` points to is never pruned:
 if `latest` exists but cannot be read, pruning stops with an error rather than
-proceeding without that protection. When a deletion fails partway, the snapshots
+proceeding without that protection. Snapshots newer than the one `latest`
+points to are neither counted toward the limit nor pruned: they are left by
+failed syncs, possibly incomplete, and counting them would cost complete
+snapshots their place; orphan cleanup removes the hard-link ones. When a
+deletion fails partway, the snapshots
 already deleted are still reported (`pruned_paths` in `run`, `deleted` in
 `snapshots prune`, whose `kept` is then counted afresh). Pruning can also be
 triggered manually with the `snapshots prune` command. Deleting a btrfs snapshot

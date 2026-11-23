@@ -641,6 +641,36 @@ class TestGeneratedScriptExecution:
             f"{SNAPSHOTS_DIR}/{snapshot}"
         )
 
+    def test_prune_does_not_count_snapshots_newer_than_latest(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """
+        As in `nbkp run`: a failed sync's leftover never costs a complete snapshot.
+
+        The fake rm keeps the future-dated leftover through orphan cleanup, as a
+        cleanup that failed would. Counted, it would make the previous complete
+        snapshot the excess.
+        """
+        config = _seeded_chain(tmp_path, max_snapshots=2)
+        snapshots = _stage(tmp_path) / SNAPSHOTS_DIR
+        previous, leftover = "2020-01-01T00-00-00.000Z", "2099-01-01T00-00-00.000Z"
+        for name in (previous, leftover):
+            (snapshots / name).mkdir()
+        latest = _stage(tmp_path) / LATEST_LINK
+        latest.unlink()
+        latest.symlink_to(f"{SNAPSHOTS_DIR}/{previous}")
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        _write_rm_refusing(bin_dir, leftover)
+        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+
+        result = _run_script(config, tmp_path, env=env)
+
+        assert result.returncode == 0, result.stderr
+        assert "Pruning snapshot" not in result.stderr
+        assert {previous, leftover} < set(_snapshot_names(tmp_path))
+
     def test_ignores_lookalike_snapshot_names(self, tmp_path: Path) -> None:
         """Only the exact names nbkp writes are pruned or removed as orphans."""
         config = _seeded_chain(tmp_path, max_snapshots=1)
