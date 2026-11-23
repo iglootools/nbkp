@@ -1,9 +1,8 @@
-"""Rich rendering of syncs: the dry-run preview of ``run`` and its results table."""
+"""Rich rendering of syncs: the commands ``run --dry-run`` previews, and its results."""
 
 import shlex
 
-from rich.console import Group, RenderableType
-from rich.panel import Panel
+from rich.console import RenderableType
 from rich.table import Table
 from rich.text import Text
 
@@ -55,7 +54,9 @@ def _snapshot_preview_commands(
             )
         case "hard-link":
             cmds = [
-                f"mkdir -p {dest_path}/{SNAPSHOTS_DIR}/<timestamp>",
+                # Plain mkdir, as create_snapshot_dir runs it: the run fails
+                # when the snapshot directory already exists.
+                f"mkdir {dest_path}/{SNAPSHOTS_DIR}/<timestamp>",
                 f"ln -sfn {SNAPSHOTS_DIR}/<timestamp> {dest_path}/{LATEST_LINK}",
             ]
             return (
@@ -93,7 +94,7 @@ def _build_rsync_commands_section(
     active_syncs = [ss for ss in sync_statuses.values() if ss.active]
     if not active_syncs:
         return []
-    table = Table(title="Rsync Commands:")
+    table = Table(title=dry_run_table_title("Rsync commands:", dry_run=True))
     table.add_column("Sync", style="bold")
     table.add_column("Command")
 
@@ -126,10 +127,10 @@ def _build_snapshot_commands_section(
     ]
     if not rows:
         return []
-    table = Table(title="Snapshot Commands:")
+    table = Table(title=dry_run_table_title("Snapshot commands:", dry_run=True))
     table.add_column("Sync", style="bold")
     table.add_column("Mode")
-    table.add_column("Post-rsync")
+    table.add_column("Commands")
     table.add_column("Retention")
 
     for slug, (mode, cmds, retention) in rows:
@@ -147,38 +148,12 @@ def build_run_preview_sections(
     Return the tables of the commands ``run`` would execute for the active syncs.
 
     The rsync commands, then the snapshot commands; a table with no row is left out.
+    Shown by ``run --dry-run``, so each title carries the dry-run label.
     """
     return [
         *_build_rsync_commands_section(sync_statuses, config, resolved_endpoints),
         *_build_snapshot_commands_section(sync_statuses, config),
     ]
-
-
-def format_run_preview(
-    sync_statuses: dict[str, SyncStatus],
-    config: Config,
-    *,
-    resolved_endpoints: ResolvedEndpoints | None = None,
-    wrap_in_panel: bool = True,
-) -> RenderableType:
-    """
-    Return the run preview of :func:`build_run_preview_sections` as one renderable.
-
-    In a "Run Preview" panel when *wrap_in_panel*, else as a bare group.
-    """
-    sections = Group(
-        *build_run_preview_sections(sync_statuses, config, resolved_endpoints or {}),
-    )
-    return (
-        Panel(
-            sections,
-            title="[bold]Run Preview[/bold]",
-            border_style="cyan",
-            padding=(0, 1),
-        )
-        if wrap_in_panel
-        else sections
-    )
 
 
 def _format_snapshot_display(
@@ -280,21 +255,3 @@ def build_human_results_sections(
         )
 
     return [table]
-
-
-def format_human_results(
-    results: list[SyncResult],
-    *,
-    dry_run: bool,
-    config: Config,
-    resolved_endpoints: ResolvedEndpoints,
-) -> Group:
-    """Return the results table of :func:`build_human_results_sections` as a group."""
-    return Group(
-        *build_human_results_sections(
-            results,
-            dry_run=dry_run,
-            config=config,
-            resolved_endpoints=resolved_endpoints,
-        ),
-    )

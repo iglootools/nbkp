@@ -150,7 +150,8 @@ nbkp run --exclude-location home
 # Only backup photos (an unknown sync name is an error, exit code 2)
 nbkp run --sync photos-to-nas
 
-# Preview what would happen
+# Preview what would happen: rsync --dry-run for each active sync, and the
+# rsync and snapshot commands a real run would execute
 nbkp run --dry-run
 
 # Generate a portable script for the USB drive

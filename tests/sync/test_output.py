@@ -74,6 +74,29 @@ class TestRunPreviewRsyncCommandDisplay:
         # No previous snapshot: --link-dest is omitted
         assert "--link-dest" not in output
 
+    def test_hard_link_creates_the_snapshot_directory_without_p(self) -> None:
+        src = LocalVolume(slug="src", path="/mnt/src")
+        dst = LocalVolume(slug="dst", path="/mnt/dst")
+        ep_src = SyncEndpoint(slug="ep-src", volume="src")
+        ep_dst = SyncEndpoint(
+            slug="ep-dst",
+            volume="dst",
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
+        )
+        sync = SyncConfig(slug="hl-sync", source="ep-src", destination="ep-dst")
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
+            syncs={"hl-sync": sync},
+        )
+        vol_s = local_vol_statuses(config)
+        sync_s = {"hl-sync": sync_status(config, vol_s, "hl-sync")}
+        sections = build_run_preview_sections(sync_s, config, resolved_endpoints={})
+        output = _render_sections(sections)
+        # As create_snapshot_dir runs it: an existing snapshot fails the run.
+        assert "mkdir /mnt/dst/snapshots/<timestamp>" in output
+        assert "mkdir -p" not in output
+
     def test_hard_link_shows_link_dest_when_previous_exists(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/src")
         dst = LocalVolume(slug="dst", path="/mnt/dst")

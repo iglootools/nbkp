@@ -39,7 +39,9 @@ behavior.
 - **Failure propagation**: a failed sync cancels all downstream dependents;
   independent syncs continue normally
 - **Dry-run mode**: preview what would happen without making changes; the
-  output is labeled `[dry-run]`, and its JSON carries `"dry_run": true`
+  output is labeled `[dry-run]`, and its JSON carries `"dry_run": true`.
+  `run --dry-run` also lists the rsync and snapshot commands a real run would
+  execute for each active sync
 - **Real-time progress**: four display modes (none, overall, per-file, full)
 - **Per-sync rsync options**: checksum, compression, custom flags, default
   overrides, extra options, and whether files that vanish from a busy source

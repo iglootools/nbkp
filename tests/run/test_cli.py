@@ -337,6 +337,26 @@ class TestRunCommand:
         # Preflight checks only the selected sync's endpoints.
         assert [cmd for cmd in run.commands if any("music" in a for a in cmd)] == []
 
+    def test_human_dry_run_previews_the_rsync_commands(
+        self,
+        nas_config_file: str,
+    ) -> None:
+        exit_code, output = _invoke(nas_config_file, "--dry-run", rsync=FakeRsync())
+
+        assert exit_code == 0
+        preview = output.index("[dry-run] Rsync commands:")
+        assert preview < output.index("[dry-run] Sync results:")
+        assert "rsync " in output[preview:]
+
+    def test_human_run_does_not_preview_the_commands(
+        self,
+        nas_config_file: str,
+    ) -> None:
+        exit_code, output = _invoke(nas_config_file, rsync=FakeRsync())
+
+        assert exit_code == 0
+        assert "Rsync commands:" not in output
+
     def test_progress_streams_rsync_output(self, nas_config_file: str) -> None:
         rsync = FakeRsync()
 

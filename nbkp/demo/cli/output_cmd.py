@@ -8,7 +8,7 @@ from pathlib import Path
 
 import typer
 import yaml
-from rich.console import Console, RenderableType
+from rich.console import Console, Group, RenderableType
 from rich.panel import Panel
 from rich.text import Text
 
@@ -28,7 +28,7 @@ from nbkp.preflight.output import (
 )
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.snapshots.output import format_human_prune_results
-from nbkp.sync.output import format_human_results, format_run_preview
+from nbkp.sync.output import build_human_results_sections, build_run_preview_sections
 lazy from nbkp.config.testkit import config_show_config
 lazy from nbkp.preflight.testkit import (
     check_config,
@@ -116,12 +116,13 @@ def _show_run_preview() -> None:
     config = check_config()
     preflight = check_data(config)
     _show(
-        "format_run_preview",
-        format_run_preview(
-            preflight.sync_statuses,
-            config,
-            resolved_endpoints=resolve_all_endpoints(config),
-            wrap_in_panel=False,
+        "build_run_preview_sections",
+        Group(
+            *build_run_preview_sections(
+                preflight.sync_statuses,
+                config,
+                resolve_all_endpoints(config),
+            ),
         ),
     )
 
@@ -130,21 +131,25 @@ def _show_results() -> None:
     config = config_show_config()
     resolved = resolve_all_endpoints(config)
     _show(
-        "format_human_results (run)",
-        format_human_results(
-            run_results(config),
-            dry_run=False,
-            config=config,
-            resolved_endpoints=resolved,
+        "build_human_results_sections (run)",
+        Group(
+            *build_human_results_sections(
+                run_results(config),
+                dry_run=False,
+                config=config,
+                resolved_endpoints=resolved,
+            ),
         ),
     )
     _show(
-        "format_human_results (--dry-run)",
-        format_human_results(
-            dry_run_results(config),
-            dry_run=True,
-            config=config,
-            resolved_endpoints=resolved,
+        "build_human_results_sections (--dry-run)",
+        Group(
+            *build_human_results_sections(
+                dry_run_results(config),
+                dry_run=True,
+                config=config,
+                resolved_endpoints=resolved,
+            ),
         ),
     )
 
