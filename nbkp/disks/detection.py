@@ -1,7 +1,7 @@
 """
 Drive detection and state queries for mount management.
 
-This is morally equivalent to the `preflight.queries` module, but the mounting logic
+This is morally equivalent to the `nbkp.preflight.probes` module, but the mounting logic
 runs before any preflight checks in the lifecycle, so these functions are separate
 and have no dependencies on preflight code.
 """
