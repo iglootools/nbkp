@@ -12,8 +12,9 @@ dprint = "0.64.3"
 rumdl = "0.3.4"
 # Renovate, for lint-renovate and renovate-dry-run (guidelines/project-setup/dependency-automation.md
 # in iglootools/common, which explains both options). trust_policy_excludes exempts one reviewed
-# release, published by hand without provenance; allow_builds lets re2 build its native module,
-# so the validator checks regexes with RE2, the engine Renovate runs.
+# release, published by hand without provenance. Drop the exclusion once Renovate no longer
+# resolves to @yarnpkg/libzip@3.2.2; reviewed in iglootools/common's mise.toml. allow_builds lets
+# re2 build its native module, so the validator checks regexes with RE2, the engine Renovate runs.
 "npm:renovate" = { version = "44.239.1", trust_policy_excludes = ["@yarnpkg/libzip@3.2.2"], allow_builds = ["re2"] }
 node = "26.13.0"
 jq = "1.8.2"
