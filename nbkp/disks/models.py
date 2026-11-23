@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel, ConfigDict
 
 lazy from nbkp.config.protocol.volume import LocalVolume, RemoteVolume
+lazy from nbkp.credentials import CredentialError
 
 
 class MountFailureKind(enum.StrEnum):
@@ -67,6 +68,8 @@ class LifecycleFailure:
     """A probe that failed (``lsblk``, ``findmnt``), or a tool not installed."""
     device_uuid: str | None = None
     passphrase_id: str | None = None
+    credential_error: CredentialError | None = None
+    """Why the passphrase could not be retrieved (``PASSPHRASE_NOT_AVAILABLE``)."""
 
 
 class MountToolCapabilities(BaseModel):

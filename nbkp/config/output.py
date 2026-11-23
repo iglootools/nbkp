@@ -13,6 +13,7 @@ from rich.text import Text
 from nbkp.config import (
     Config,
     ConfigError,
+    ConfigErrorKind,
     LocalVolume,
     RemoteVolume,
     SshEndpoint,
@@ -38,6 +39,13 @@ class SelectedEndpoint(Protocol):
 
 
 type SelectedEndpoints = Mapping[str, SelectedEndpoint]
+
+_CONFIG_REFERENCE_URL = (
+    "https://github.com/iglootools/nbkp/blob/main/docs/config-reference.md"
+)
+_CONFIG_EXAMPLES_URL = (
+    "https://github.com/iglootools/nbkp/tree/main/docs/config-examples"
+)
 """Selected endpoint per remote volume slug (``remote.endpoints.SelectedEndpoints``)."""
 
 
@@ -263,6 +271,31 @@ def _format_validation_error(err: ErrorDetails) -> str:
     return f"{loc}: {msg}" if loc else msg
 
 
+def _config_error_message(e: ConfigError) -> str:
+    """Render the sentence that tells the user why the config could not be loaded."""
+    match e.kind:
+        case ConfigErrorKind.FILE_NOT_FOUND:
+            return f"Config file not found: {e.path}"
+        case ConfigErrorKind.UNREADABLE:
+            return f"Cannot read config file {e.path}: {e.detail}"
+        case ConfigErrorKind.NO_CONFIG_FOUND:
+            searched = ", ".join(str(p) for p in e.searched)
+            return (
+                f"No config file found. Searched: {searched}."
+                f" Create one at {e.searched[0]} or pass --config PATH"
+                f" (format: {_CONFIG_REFERENCE_URL}). Example configs to start"
+                f" from: {_CONFIG_EXAMPLES_URL}."
+            )
+        case ConfigErrorKind.INVALID_YAML:
+            return f"Invalid YAML in {e.path}: {e.detail}"
+        case ConfigErrorKind.NOT_A_MAPPING:
+            return f"Config file {e.path} must be a YAML mapping"
+        case ConfigErrorKind.VALIDATION:
+            return f"Invalid config {e.path}: {e.detail}"
+        case ConfigErrorKind.INVALID_SSH_CONFIG:
+            return f"Invalid SSH config {e.path}: {e.detail}"
+
+
 def _config_error_body(e: ConfigError) -> str:
     match e.__cause__:
         case ValidationError() as cause:
@@ -274,7 +307,7 @@ def _config_error_body(e: ConfigError) -> str:
                 ],
             )
         case _:
-            return str(e)
+            return _config_error_message(e)
 
 
 def _validation_errors_json(cause: ValidationError) -> list[dict[str, Any]]:

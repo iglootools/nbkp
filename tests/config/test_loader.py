@@ -140,8 +140,9 @@ class TestFindConfigFile:
         with pytest.raises(ConfigError) as excinfo:
             find_config_file(environ={}, **_search_in(tmp_path))
         assert excinfo.value.kind == ConfigErrorKind.NO_CONFIG_FOUND
-        assert str(tmp_path / "home" / ".config" / "nbkp") in str(excinfo.value)
-        assert "docs/config-examples" in str(excinfo.value)
+        assert excinfo.value.searched[0] == (
+            tmp_path / "home" / ".config" / "nbkp" / "config.yaml"
+        )
 
 
 class TestLoadConfig:
@@ -192,7 +193,8 @@ class TestLoadConfig:
         p.write_text("")
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
-        assert str(excinfo.value) == f"Config file {p} must be a YAML mapping"
+        assert excinfo.value.kind == ConfigErrorKind.NOT_A_MAPPING
+        assert Path(str(excinfo.value.path)) == p
 
     def test_invalid_volume_type(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_type.yaml"

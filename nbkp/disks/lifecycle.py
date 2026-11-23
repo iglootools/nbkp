@@ -472,7 +472,7 @@ def _unlock(
         return _unlock_failure(
             volume.slug,
             MountFailureKind.PASSPHRASE_NOT_AVAILABLE,
-            LifecycleFailure(passphrase_id=passphrase_id, message=describe_error(e)),
+            LifecycleFailure(passphrase_id=passphrase_id, credential_error=e),
         )
     result = run_udisks(
         build_unlock_command(device_uuid),

@@ -1,6 +1,7 @@
 """Tests for config error display."""
 
 from io import StringIO
+from pathlib import Path
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -30,6 +31,20 @@ class TestFormatConfigError:
             detail="found unexpected ']' at line 3",
         )
         assert "unexpected ']'" in _render(e)
+
+    def test_not_a_mapping_names_config_file(self) -> None:
+        e = ConfigError(ConfigErrorKind.NOT_A_MAPPING, path="/etc/nbkp/config.yaml")
+        assert "Config file /etc/nbkp/config.yaml must be a YAML mapping" in _render(e)
+
+    def test_no_config_found_says_where_to_create_one(self) -> None:
+        """The message lists the paths searched and points at the examples."""
+        e = ConfigError(
+            ConfigErrorKind.NO_CONFIG_FOUND,
+            searched=(Path("/home/me/.config/nbkp/config.yaml"),),
+        )
+        message = config_error_json(e)["error"]["message"]
+        assert "Create one at /home/me/.config/nbkp/config.yaml" in message
+        assert "docs/config-examples" in message
 
     def test_validation_error_details_rendered(self) -> None:
         """Each problem is listed with its location and its message."""
