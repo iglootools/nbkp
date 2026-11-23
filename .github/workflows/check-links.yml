@@ -34,3 +34,8 @@ jobs:
     # reason guidelines/project-setup/workflows.md in iglootools/common gives for actions, with
     # the version in the trailing comment so Renovate can raise the update.
     uses: iglootools/common/.github/workflows/reusable-check-links.yml@ca431c28524979baf5a95137171abad93e7bafe6 # v2.0.0
+    with:
+      # Pinned here, matching the version mise.lock was generated with; the custom manager in
+      # the shared iglootools/common renovate/base preset keeps it current.
+      # renovate: datasource=github-releases depName=jdx/mise
+      version: 2026.11.12
