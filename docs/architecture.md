@@ -309,7 +309,8 @@ Domain cores:
   observation (`probes.py`, `volume_checks.py`, `endpoint_checks.py`,
   `ssh_checks.py`, `snapshot_checks.py`) and interpretation (`status/`, one
   module per layer). `output/` renders `check` and `troubleshoot`, including
-  remediation text.
+  remediation text, and holds the sentence each problem kind is shown as
+  (`messages.py`).
 - **`snapshots/`** — listing, creation and pruning for both backends
   (`btrfs.py`, `hardlinks.py`, shared code in `common.py`), and the
   `snapshots show` / `prune` decisions: which syncs are read, skipped or pruned

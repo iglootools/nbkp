@@ -13,7 +13,7 @@ from nbkp.disks import (
     mounted_fail_severity,
 )
 from nbkp.policy import Severity, Strictness
-from nbkp.preflight.messages import format_problems
+from nbkp.preflight.output.messages import format_problems
 from nbkp.preflight.severity import (
     PreflightErrorKind,
     severity_for_error,

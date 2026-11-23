@@ -47,9 +47,8 @@ from nbkp.preflight import (
     PreflightErrorKind,
     PreflightResult,
     check_step_count,
-    format_problems,
 )
-from nbkp.preflight.output import format_human_check
+from nbkp.preflight.output import format_human_check, format_problems
 from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.run.pipeline import (
     PipelineResult,

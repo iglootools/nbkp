@@ -11,7 +11,8 @@ from nbkp.clidisplay import dry_run_table_title
 from nbkp.config import Config, LocalVolume, RemoteVolume
 from nbkp.config.output import endpoint_path
 from nbkp.fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
-from nbkp.preflight import SyncStatus, format_problems
+from nbkp.preflight import SyncStatus
+from nbkp.preflight.output import format_problems
 from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.snapshots.output import retention_display as _retention_display
 from nbkp.sync.results import SyncOutcome, SyncResult

@@ -14,7 +14,6 @@ from nbkp.preflight.endpoint_checks import (
     observe_destination_endpoint,
     observe_source_endpoint,
 )
-from nbkp.preflight.messages import format_problem, format_problems
 from nbkp.preflight.severity import (
     PreflightErrorKind,
     severity_for_error,
@@ -92,8 +91,6 @@ __all__ = [
     "check_all_syncs",
     "check_step_count",
     "check_volume_capabilities",
-    "format_problem",
-    "format_problems",
     "has_fatal_errors",
     "is_fatal",
     "observe_destination_endpoint",
