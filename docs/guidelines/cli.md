@@ -1,22 +1,20 @@
 # CLI Conventions
 
-What nbkp's commands and options must respect, and the commands that are
+What nbkp's commands and options must respect beyond the shared
+[general.md › Command Line](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#command-line)
+rules, the helper modules that implement them, and the commands that are
 exceptions. Read it before changing `nbkp/cli/`, any `nbkp/*/cli/`,
 `nbkp/cliwiring/` or `nbkp/clidisplay/`, and before adding a command or an
-option anywhere. The shared
-[general.md › Command Line](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#command-line)
-rules apply too, among them
-[Expand `~` in every path a user writes](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#expand--in-every-path-a-user-writes);
-the Typer layout and names are
+option anywhere. The Typer layout and names are
 [python.md › Naming](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#naming)'s.
 
 <!-- toc -->
 **On this page**
 
 - [Options](#options)
-  - [Give every command human-readable and JSON output, human by default](#give-every-command-human-readable-and-json-output-human-by-default)
+  - [Give every command JSON output](#give-every-command-json-output)
   - [Accept a config file on every command](#accept-a-config-file-on-every-command)
-  - [Give every data-mutating or long-running operation a dry run](#give-every-data-mutating-or-long-running-operation-a-dry-run)
+  - [Label a dry run through `nbkp/clidisplay/dryrun.py`](#label-a-dry-run-through-nbkpclidisplaydryrunpy)
   - [Declare each shared option once](#declare-each-shared-option-once)
 - [Commands that are exceptions](#commands-that-are-exceptions)
   - [Exception — `demo` takes neither `--output` nor `--config`](#exception--demo-takes-neither---output-nor---config)
@@ -24,24 +22,28 @@ the Typer layout and names are
 
 ## Options
 
-### Give every command human-readable and JSON output, human by default
+### Give every command JSON output
 
-Every command takes `--output human|json` (`-o`), defaulting to `human`.
+Every command takes the `-o/--output human|json` that
+[general.md › Select the output format with `-o/--output`, and write a file with `-f/--file`](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#select-the-output-format-with--o--output-and-write-a-file-with--f--file)
+describes, not only the commands that print a report.
 
-**Why:** a person reads the human report, and a script parses the JSON one
-without scraping it.
+**Why:** a script parses any command's result without scraping the human
+report.
 
-#### Exception — `sh`
+#### Exception — `sh` writes its script with `-o/--output-file`
 
-`sh` has no JSON mode, and its `-o` means `--output-file` (where to write the
-script) rather than the `--output` format selector.
+Overrides
+[general.md › Select the output format with `-o/--output`, and write a file with `-f/--file`](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#select-the-output-format-with--o--output-and-write-a-file-with--f--file):
+`sh` has no JSON mode, and its `-o` is `--output-file`, where to write the
+script, rather than the format selector or `-f/--file`.
 
 **Why:** its output is a bash script, not a report. Renaming the flag would
 break existing invocations and cron entries for no gain in function.
 
-- **Retire it** if `sh` gains a structured report worth emitting (e.g. the list
-  of generated syncs), at which point it takes `--output human|json` and the
-  script path moves to a long-only `--output-file` in a major release.
+**Retires when:** nbkp's next major release moves the script path to
+`-f/--file`, leaving `-o/--output` to select a format if `sh` gains a
+structured report (such as the list of generated syncs).
 
 ### Accept a config file on every command
 
@@ -50,49 +52,50 @@ Every command takes `--config`.
 **Why:** a user keeps more than one configuration, and a test points a command
 at its own.
 
-### Give every data-mutating or long-running operation a dry run
+### Label a dry run through `nbkp/clidisplay/dryrun.py`
 
-Such a command takes `--dry-run`, with `-n` as its short flag, and labels what
-it prints in a dry run with `[dry-run]`:
+Every command that changes data or runs long takes the `--dry-run`/`-n` that
+[general.md › Offer `--dry-run` on every command that changes data or runs long](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#offer---dry-run-on-every-command-that-changes-data-or-runs-long)
+describes, and prints its `[dry-run]` label through `dry_run_labeled` and
+`dry_run_table_title` in `nbkp/clidisplay/dryrun.py`. They build the label as
+`rich.text.Text`, as
+[Wrap text nbkp did not author in `rich.text.Text`](../guidelines.md#wrap-text-nbkp-did-not-author-in-richtexttext)
+explains.
 
-- **A line per action** that would be taken starts with the label and says
-  "Would …": `[dry-run] ✓ Would unlock, mount enc`.
-- **A table or summary** carries the label once, at the start of its title, not
-  on every row: `[dry-run] Sync results:`.
-- **JSON output** carries a top-level `"dry_run": true` field, never a prefix. A
-  command whose JSON is a list prints an object in a dry run, the list under a
-  key (`{"dry_run": true, "results": [...]}`), as `snapshots prune` does.
+**Why:** one label built in one place reads the same in every command, on
+screen, in a log or in a script.
+
+- **A command whose JSON is a list** prints an object in a dry run, the list
+  under a key (`{"dry_run": true, "results": [...]}`), as `snapshots prune`
+  does.
 - **Another tool's output**, such as rsync's lines under `rsync --dry-run`, is
   left as that tool printed it; the label goes on nbkp's own title.
-- The label and its helpers live in `nbkp/clidisplay/dryrun.py`, and build it as
-  `rich.text.Text`: in a markup string, Rich would parse `[dry-run]` as a style
-  tag and drop it.
-
-**Why:** the user sees what a backup, a prune or a mount would do before it does
-it, and one label in one place tells a dry run's output from a real run's at a
-glance, on screen, in a log or in a script.
 
 #### Exception — the label in the script `sh` generates
 
-The generated script's log lines in a dry run start with `[nbkp] [dry-run]`,
+Overrides
+[general.md › Offer `--dry-run` on every command that changes data or runs long](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#offer---dry-run-on-every-command-that-changes-data-or-runs-long):
+the generated script's log lines in a dry run start with `[nbkp] [dry-run]`,
 not with the label.
 
 **Why:** every line the script logs starts with `[nbkp]`, which tells its lines
 apart from rsync's on the same stderr, and a log filter or cron mail rule may
 match on it.
 
-- **Retire it** if the script drops its `[nbkp]` prefix.
+**Retires when:** the script drops its `[nbkp]` prefix.
 
 #### Exception — `-n` in `disks`
 
-In `disks mount|umount|status`, `-n` is `--name`, so their `--dry-run` is
+Overrides
+[general.md › Offer `--dry-run` on every command that changes data or runs long](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#offer---dry-run-on-every-command-that-changes-data-or-runs-long):
+in `disks mount|umount|status`, `-n` is `--name`, so their `--dry-run` is
 long-only.
 
 **Why:** `-n` meant `--name` there first; swapping it would turn existing
 `disks mount -n <volume>` invocations into silent dry runs.
 
-- **Retire it** in the next major release by moving `--name` to a long-only flag
-  (or `-V`) and giving `-n` to `--dry-run` everywhere.
+**Retires when:** nbkp's next major release moves `--name` to a long-only flag
+(or `-V`) and gives `-n` to `--dry-run` everywhere.
 
 ### Declare each shared option once
 
@@ -106,6 +109,8 @@ every command.
 
 #### Exception — options whose help is per command
 
+Overrides
+[Declare each shared option once](#declare-each-shared-option-once):
 `--strictness` in `run`, `preflight check` and `preflight troubleshoot`, and the
 long-only `--dry-run` of `disks mount` and `disks umount` and the one of
 `demo seed`, are written inline in each command rather than as a shared
@@ -115,17 +120,16 @@ long-only `--dry-run` of `disks mount` and `disks umount` and the one of
 that command does at each strictness level, or what a dry run skips there, and
 one constant would carry one wording for all of them.
 
-- **Retire it** for a flag once its commands behave alike, or if Typer lets a
-  shared option take per-command help.
+**Retires when:** for a flag, once its commands behave alike; for every flag,
+if Typer lets a shared option take per-command help.
 
 ## Commands that are exceptions
 
 ### Exception — `demo` takes neither `--output` nor `--config`
 
-`demo seed` and `demo output` take neither option, against
-[Give every command human-readable and JSON output](#give-every-command-human-readable-and-json-output-human-by-default)
-and
-[Accept a config file on every command](#accept-a-config-file-on-every-command).
+Overrides [Give every command JSON output](#give-every-command-json-output) and
+[Accept a config file on every command](#accept-a-config-file-on-every-command):
+`demo seed` and `demo output` take neither option.
 
 **Why:** they are manual-QA helpers, not backup commands. `seed` *writes* a
 config (to `<base-dir>/config.yaml`) rather than reading one, and `output`
@@ -135,7 +139,7 @@ summary for the person running the demo, and the one scripted caller,
 `demo/demo.sh`, already knows where the config lands because it passes
 `--base-dir`.
 
-- **Retire it**, by giving `seed` `--output json` (the base directory, config
-  path and container ports), once a script or workflow has to read what `seed`
-  created; drop it if `demo` leaves the user-facing `nbkp` app for a
-  development-only entry point, where these rules no longer apply.
+**Retires when:** a script or workflow has to read what `seed` created, by
+giving `seed` `--output json` (the base directory, config path and container
+ports); or `demo` leaves the user-facing `nbkp` app for a development-only entry
+point, where these rules no longer apply.
