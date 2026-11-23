@@ -48,6 +48,27 @@ def demo_ssh_statuses(
     }
 
 
+def collect_ssh_endpoint_statuses(
+    vol_statuses: dict[str, VolumeStatus],
+    sync_statuses: dict[str, SyncStatus],
+) -> dict[str, SshEndpointStatus]:
+    """
+    Extract the SSH endpoint statuses embedded in volume statuses.
+
+    They feed the SSH Endpoints table. First-seen wins for duplicate slugs.
+    """
+    all_ssh = [
+        *[vs.ssh_endpoint_status for vs in vol_statuses.values()],
+        *[
+            ep.volume_status.ssh_endpoint_status
+            for ss in sync_statuses.values()
+            for ep in [ss.source_endpoint_status, ss.destination_endpoint_status]
+        ],
+    ]
+    # dict.fromkeys-style: first occurrence wins
+    return {s.slug: s for s in reversed(all_ssh)}
+
+
 LOCALHOST_SSH_STATUS = SshEndpointStatus.from_diagnostics(
     slug="localhost",
     diagnostics=SshEndpointDiagnostics(
