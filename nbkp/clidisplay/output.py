@@ -2,8 +2,8 @@
 
 import enum
 import json
+import sys
 
-import typer
 from pydantic import BaseModel
 
 
@@ -53,4 +53,4 @@ def echo_json(data: object) -> None:
     ``latest`` symlink's snapshot is actually populated, so a fixture that
     leaves it unset reports success either way.
     """
-    typer.echo(json.dumps(data, indent=2, default=_as_json_value))
+    sys.stdout.write(json.dumps(data, indent=2, default=_as_json_value) + "\n")

@@ -345,7 +345,10 @@ name = "clidisplay is a presentation leaf"
 type = "forbidden"
 source_modules = ["nbkp.clidisplay"]
 # Every nbkp package except policy: a new package belongs on this list.
+# Typer too: every output module imports clidisplay, and output modules do
+# not load Typer.
 forbidden_modules = [
+  "typer",
   "nbkp.cli",
   "nbkp.cliwiring",
   "nbkp.config",

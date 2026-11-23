@@ -271,7 +271,7 @@ dependencies; the contracts are what reject a new import that breaks a rule:
   instead). A new core package needs a place in this order, in the `layers`
   contract.
 - **`clidisplay/` is a presentation leaf.** It imports nothing from nbkp but
-  `policy`.
+  `policy`, and not Typer, since every `output` module imports it.
 - **Test and demo fixtures (`testkit`) follow the same rules as core code.**
   They build scenarios for the tests and ship in the wheel for `nbkp demo`,
   which imports them at runtime, so they sit in their package's layer and import
