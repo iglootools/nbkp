@@ -1402,6 +1402,12 @@ class TestRunLocalProcess:
         assert result.stdout == "out\n"
         assert result.stderr == "err\n"
 
+    def test_replaces_undecodable_bytes(self) -> None:
+        """Regression: a name not in the locale's encoding aborted the run."""
+        result = run_local_process(_emit_cmd(b"caf\xe9\n", stderr=b"\xff\n"))
+        assert result.stdout == "caf\ufffd\n"
+        assert result.stderr == "\ufffd\n"
+
     def test_streams_output_to_the_callback(self) -> None:
         chunks: list[str] = []
 
@@ -1444,6 +1450,13 @@ class TestRunStreaming:
         # One byte per read: the halves of "é" and of "\r\n" are joined.
         assert chunks == ["é", "\n", "€"]
         assert "" not in chunks
+
+    def test_replaces_undecodable_bytes(self) -> None:
+        """Regression: a name not in the locale's encoding aborted the run."""
+        chunks: list[str] = []
+        result = run_streaming(_emit_cmd(b"caf\xe9\n"), chunks.append)
+        assert result.stdout == "caf\ufffd\n"
+        assert "".join(chunks) == result.stdout
 
     def test_merges_stderr_and_keeps_exit_code(self) -> None:
         result = run_streaming(

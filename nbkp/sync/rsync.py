@@ -223,7 +223,13 @@ def run_local_process(
     and forwarded to *on_output* as they arrive otherwise.
     """
     if on_output is None:
-        return subprocess.run(cmd, capture_output=True, text=True, check=False)
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            check=False,
+        )
     else:
         return run_streaming(cmd, on_output)
 
@@ -310,15 +316,19 @@ class _OutputTail:
 
 def _text_decoder() -> io.IncrementalNewlineDecoder:
     r"""
-    Decode bytes exactly as a ``text=True`` pipe would.
+    Decode bytes as a ``text=True, errors="replace"`` pipe would.
 
-    Same encoding and strictness as ``io.TextIOWrapper``'s defaults, and the
-    same universal-newline translation (``\r\n`` and ``\r`` become ``\n``),
+    Same encoding as ``io.TextIOWrapper``'s default, and the same
+    universal-newline translation (``\r\n`` and ``\r`` become ``\n``),
     including a multi-byte character or a ``\r\n`` split across two reads.
+    Undecodable bytes become U+FFFD: rsync prints file names as they are on
+    disk, which need not be in the locale's encoding, and the output is only
+    displayed and kept for the result, so a strict decoder would abort the
+    whole run over a name it only had to show.
     """
     encoding = locale.getpreferredencoding(do_setlocale=False)
     return io.IncrementalNewlineDecoder(
-        codecs.getincrementaldecoder(encoding)(),
+        codecs.getincrementaldecoder(encoding)(errors="replace"),
         translate=True,
     )
 
