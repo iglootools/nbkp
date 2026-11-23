@@ -250,6 +250,13 @@ automatically:
 - Run the tests
 - Tear down the container on completion
 
+Without a running Docker daemon, the Docker tests fail rather than skip: the
+first test to need a container errors with `DockerError` (`unavailable`). The
+Docker suites run through their own mise tasks, where a skip would let a run
+that tested nothing pass. The daemon is probed only when a Docker test first
+needs it, so the unit suite never touches Docker. The local btrfs tests follow
+the same rule when btrfs is missing locally and they would run in Docker.
+
 ### Known Gaps in Test Coverage
 
 The following functionality is covered by unit tests but intentionally excluded

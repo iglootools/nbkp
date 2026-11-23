@@ -29,6 +29,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.remote.testkit.docker import check_docker
 from tests.integration_docker._btrfs_helpers import (
     BtrfsEnv,
     run_test_creates_readonly_snapshot,
@@ -202,35 +203,6 @@ class TestPruneSnapshots:
         run_test_dry_run_preserves_all(btrfs_env_local)
 
 
-_docker_available_cached: bool | None = None
-
-
-def _docker_available() -> bool:
-    """Check if Docker is available and daemon is running."""
-    try:
-        client = dockerlib.from_env()
-        # docker leaves ping()'s *args and **kwargs unannotated; retire when it
-        # annotates them.
-        client.ping()  # pyright: ignore[reportUnknownMemberType]
-    except Exception:  # noqa: BLE001
-        return False
-    else:
-        return True
-
-
-def test_btrfs_local_has_execution_path() -> None:
-    """
-    Fail loudly if neither native btrfs nor Docker is available.
-
-    All other tests would silently skip.
-    """
-    assert _btrfs_available or _docker_available(), (
-        "Cannot run btrfs-local tests: "
-        "btrfs is not available and Docker is not running. "
-        "Install btrfs-progs (Linux) or start Docker."
-    )
-
-
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _DOCKERFILE = "nbkp/remote/testkit/dockerbuild/Dockerfile.btrfs-local-test"
 _IMAGE_TAG = "nbkp-btrfs-test:latest"
@@ -240,18 +212,16 @@ _IMAGE_TAG = "nbkp-btrfs-test:latest"
     _btrfs_available,
     reason="btrfs available locally, running tests directly",
 )
-@pytest.mark.skipif(
-    not _docker_available(),
-    reason="Docker not available",
-)
 class TestBtrfsLocalViaDocker:
     """
     Proxy: re-run the native tests in a privileged Docker container.
 
-    Only when btrfs is not available locally.
+    Only when btrfs is not available locally. Without Docker either, it fails rather
+    than skips, so that a run never passes without the btrfs tests running somewhere.
     """
 
     def test_all_pass_in_docker(self) -> None:
+        check_docker()
         image = DockerImage(
             path=str(_PROJECT_ROOT),
             tag=_IMAGE_TAG,

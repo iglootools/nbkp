@@ -50,6 +50,7 @@ from nbkp.remote.testkit.docker import (
     ContainerSpec,
     LuksMetadata,
     bastion_container_spec,
+    check_docker,
     create_sentinels as create_sentinels,
     create_test_ssh_endpoint,
     generate_ssh_keypair,
@@ -131,22 +132,6 @@ def resolved_endpoints_for(
     return resolve_all_endpoints(config)
 
 
-def _docker_available() -> bool:
-    """Check if Docker is available and running."""
-    try:
-        client = dockerlib.from_env()
-        # docker leaves ping()'s *args and **kwargs unannotated; retire when it
-        # annotates them.
-        client.ping()  # pyright: ignore[reportUnknownMemberType]
-    except docker_errors.DockerException:
-        return False
-    else:
-        return True
-
-
-pytestmark = pytest.mark.skipif(not _docker_available(), reason="Docker not available")
-
-
 @pytest.fixture(scope="session")
 def ssh_key_pair() -> Generator[tuple[Path, Path]]:
     """Generate an ephemeral ed25519 SSH key pair for tests."""
@@ -163,6 +148,12 @@ _TEST_IMAGE_TAG = "nbkp-test-server:latest"
 
 @pytest.fixture(scope="session")
 def docker_image(tmp_path_factory: pytest.TempPathFactory, worker_id: str) -> str:
+    # Every container fixture starts from this image, so this is where a Docker
+    # test first needs the daemon. Without one it fails, never skips: the Docker
+    # suites run through their own mise tasks, where a skip would pass a run
+    # that tested nothing. Probing here, not at import, also spares the unit
+    # suite, which loads this plugin too, a ping of the daemon.
+    check_docker()
     # xdist instantiates session fixtures once per worker, and concurrent builds
     # of one tag race inside the Docker daemon ("already exists, but accessing it
     # also failed"). So the first worker builds, under a lock, and the others wait
