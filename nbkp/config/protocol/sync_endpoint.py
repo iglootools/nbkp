@@ -48,20 +48,35 @@ class SyncEndpoint(ConfigModel):
     subdir: str | None = Field(
         default=None,
         description=(
-            "Subdirectory within the volume. Leading and trailing slashes are stripped."
+            "Subdirectory within the volume. Empty and `.` segments are dropped"
+            " (`/photos/./2024/` is `photos/2024`); a `..` segment is rejected."
         ),
     )
 
     @field_validator("subdir", mode="before")
     @classmethod
     def normalize_subdir(cls, v: object) -> object:
-        """Return the subdir without outer slashes, or ``None`` if nothing is left."""
+        """
+        Return the subdir in canonical form, or ``None`` if nothing is left.
+
+        Empty and ``.`` segments are dropped, so that equivalent spellings
+        compare equal in the duplicate and nested location checks. A ``..``
+        segment is an ``invalid-subdir`` error: it could point outside the
+        volume and its sentinel.
+        """
         # Non-strings pass through so pydantic rejects them (e.g. an unquoted
         # ``subdir: 2024``) instead of silently targeting the volume root.
         match v:
             case str():
-                stripped = v.strip("/")
-                return stripped or None
+                segments = [s for s in v.split("/") if s not in {"", "."}]
+                if ".." in segments:
+                    raise config_error(
+                        ConfigValidationErrorKind.INVALID_SUBDIR,
+                        f"subdir {v!r} contains a '..' segment: a subdir must"
+                        " name a directory inside its volume",
+                    )
+                else:
+                    return "/".join(segments) or None
             case _:
                 return v
 

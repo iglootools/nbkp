@@ -1286,6 +1286,29 @@ class TestLoadConfig:
             in _validation_error_types(p)
         )
 
+    def test_duplicate_location_spelled_differently(self, tmp_path: Path) -> None:
+        p = tmp_path / "dup_loc_spelling.yaml"
+        p.write_text(
+            dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep1:
+                volume: v
+                subdir: data
+              ep2:
+                volume: v
+                subdir: ./data
+            syncs: {}
+        """),
+        )
+        assert (
+            ConfigValidationErrorKind.DUPLICATE_ENDPOINT_LOCATION
+            in _validation_error_types(p)
+        )
+
     def test_nested_endpoint_subdir(self, tmp_path: Path) -> None:
         p = tmp_path / "nested.yaml"
         p.write_text(
@@ -1538,6 +1561,20 @@ class TestPathNormalization:
     def test_subdir_slash_only_becomes_none(self) -> None:
         ep = SyncEndpoint(slug="ep", volume="v", subdir="/")
         assert ep.subdir is None
+
+    def test_subdir_dot_and_empty_segments_dropped(self) -> None:
+        ep = SyncEndpoint(slug="ep", volume="v", subdir="./backups//./docs/.")
+        assert ep.subdir == "backups/docs"
+
+    def test_subdir_dot_only_becomes_none(self) -> None:
+        ep = SyncEndpoint(slug="ep", volume="v", subdir="./")
+        assert ep.subdir is None
+
+    @pytest.mark.parametrize("subdir", ["..", "../etc", "photos/../../etc", "a/.."])
+    def test_subdir_parent_segment_rejected(self, subdir: str) -> None:
+        with pytest.raises(ValidationError) as excinfo:
+            SyncEndpoint(slug="ep", volume="v", subdir=subdir)
+        assert _error_types(excinfo.value) == {ConfigValidationErrorKind.INVALID_SUBDIR}
 
     def test_subdir_none_stays_none(self) -> None:
         ep = SyncEndpoint(slug="ep", volume="v")
