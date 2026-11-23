@@ -469,7 +469,9 @@ class TestGeneratedScriptExecution:
         pipeline = check_and_run(
             config,
             RunOptions(
-                clock=lambda: _NOW, platform=sys.platform, resolved_endpoints={}
+                clock=lambda: _NOW,
+                platform=sys.platform,
+                resolved_endpoints={},
             ),
         )
 

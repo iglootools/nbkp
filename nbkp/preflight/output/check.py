@@ -5,7 +5,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from nbkp.clidisplay import OK_SYMBOL, severity_style, severity_symbol
+from nbkp.clidisplay import severity_style, severity_symbol
 from nbkp.clidisplay.invocation import Invocation
 from nbkp.config import Config, LocalVolume, RemoteVolume
 from nbkp.config.output import (
@@ -37,31 +37,38 @@ from nbkp.preflight.status.volume import VolumeStatus
 from nbkp.remote.endpoints import ResolvedEndpoints
 
 
-def _format_latest(latest: LatestSymlinkState) -> Text:
+def _format_latest(
+    latest: LatestSymlinkState,
+    *,
+    not_found: SourceEndpointErrorKind | DestinationEndpointErrorKind,
+    invalid: SourceEndpointErrorKind | DestinationEndpointErrorKind,
+    strictness: Strictness,
+) -> Text:
     """
-    Format the ``latest`` symlink item, always as an error when it is broken.
+    Format the ``latest`` symlink item.
 
-    A missing or invalid ``latest`` is always fatal under the standard strictness modes
-    (``LATEST_SYMLINK_NOT_FOUND`` and ``LATEST_SYMLINK_INVALID`` are not in any
-    ``INACTIVE_*_ERRORS``), so either shows as an error icon.
+    A missing ``latest`` is classified as *not_found*, one pointing at no snapshot as
+    *invalid*, under *strictness*: an error under the standard modes, a warning under
+    ``ignore-all``.
     """
     match latest:
         case LatestSymlinkState(exists=True, raw_target=str() as target) if (
             target == DEVNULL_TARGET or latest.target_valid is True
         ):
-            return Text(
-                f"{OK_SYMBOL}latest → {target}",
-                style=severity_style(Severity.OK),
-            )
+            return check(ok=True, label=f"latest → {target}")
         case LatestSymlinkState(exists=True, raw_target=str() as target):
-            return Text(
-                f"{severity_symbol(Severity.ERROR)}latest → {target}",
-                style=severity_style(Severity.ERROR),
+            return check(
+                ok=False,
+                label=f"latest → {target}",
+                fail_error=invalid,
+                strictness=strictness,
             )
         case _:
-            return Text(
-                f"{severity_symbol(Severity.ERROR)}latest",
-                style=severity_style(Severity.ERROR),
+            return check(
+                ok=False,
+                label="latest",
+                fail_error=not_found,
+                strictness=strictness,
             )
 
 
@@ -107,7 +114,18 @@ def _format_source_diagnostics(ss: SyncStatus, strictness: Strictness) -> Text:
             if diag.snapshot_dirs is not None
             else []
         ),
-        *([_format_latest(diag.latest)] if diag.latest is not None else []),
+        *(
+            [
+                _format_latest(
+                    diag.latest,
+                    not_found=SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND,
+                    invalid=SourceEndpointErrorKind.LATEST_SYMLINK_INVALID,
+                    strictness=strictness,
+                ),
+            ]
+            if diag.latest is not None
+            else []
+        ),
     ]
     return join_text(items)
 
@@ -194,7 +212,18 @@ def _destination_snapshot_items(
             if diag.snapshot_dirs is not None
             else []
         ),
-        *([_format_latest(diag.latest)] if diag.latest is not None else []),
+        *(
+            [
+                _format_latest(
+                    diag.latest,
+                    not_found=DestinationEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND,
+                    invalid=DestinationEndpointErrorKind.LATEST_SYMLINK_INVALID,
+                    strictness=strictness,
+                ),
+            ]
+            if diag.latest is not None
+            else []
+        ),
     ]
 
 
