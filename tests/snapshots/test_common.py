@@ -23,8 +23,10 @@ from nbkp.config import (
 from nbkp.remote.endpoints import ResolvedEndpoint
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.snapshots.common import (
+    NoLatestSnapshot,
     create_snapshot_timestamp,
     list_snapshots,
+    read_latest_link,
     read_latest_symlink,
     update_latest_symlink,
 )
@@ -384,6 +386,40 @@ class TestReadLatestSymlink:
 
         result = read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
         assert result is None
+
+
+class TestReadLatestLink:
+    """Unlike read_latest_symlink, it tells an absent link from /dev/null."""
+
+    def test_remote_missing(self) -> None:
+        runner = (
+            FakeCommandRunner()
+            .on("readlink", returns=completed(1))
+            .on("test", "-L", returns=completed(1))
+        )
+        sync, config, re = _hl_remote_config()
+
+        result = read_latest_link(sync, config, resolved_endpoints=re, run=runner)
+
+        assert result is NoLatestSnapshot.ABSENT
+
+    def test_remote_devnull(self) -> None:
+        runner = FakeCommandRunner().on(returns=completed(0, "/dev/null\n"))
+        sync, config, re = _hl_remote_config()
+
+        result = read_latest_link(sync, config, resolved_endpoints=re, run=runner)
+
+        assert result is NoLatestSnapshot.NONE_YET
+
+    def test_remote_snapshot(self) -> None:
+        runner = FakeCommandRunner().on(
+            returns=completed(0, f"snapshots/{_TS_REMOTE.name}\n"),
+        )
+        sync, config, re = _hl_remote_config()
+
+        result = read_latest_link(sync, config, resolved_endpoints=re, run=runner)
+
+        assert result == _TS_REMOTE
 
 
 class TestUpdateLatestSymlink:

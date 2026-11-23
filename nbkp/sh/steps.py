@@ -106,9 +106,8 @@ def _orphan_cleanup_block(spec: SyncSpec) -> str:
     And all of them while ``latest`` points to ``/dev/null``, as in ``nbkp run``.
 
     Best-effort, as in ``nbkp run``: a failed removal is only a warning.
-    Unlike ``nbkp run``, an unreadable ``latest`` skips the cleanup instead
-    of counting as absent: the script cannot tell a missing link from a
-    failed ``readlink``, and preflight has already required the link.
+    A ``latest`` that cannot be read, absent or not, skips the cleanup, as
+    ``nbkp run`` skips it when the link is absent.
     """
     rm = _rm_snapshot(spec, SNAP)
     warn = 'nbkp_log "WARN: failed to remove orphaned snapshot: $snap"'

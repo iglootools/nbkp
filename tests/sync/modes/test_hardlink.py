@@ -123,6 +123,28 @@ class TestHardLinkSync:
         assert results[0].outcome == SyncOutcome.SUCCESS
         assert [w.kind for w in results[0].warnings] == [SyncWarningKind.ORPHAN_CLEANUP]
 
+    def test_absent_latest_keeps_every_snapshot_with_a_warning(self) -> None:
+        """
+        A lost ``latest`` is not "no sync yet": orphan cleanup deletes nothing.
+
+        Reached under ``--strictness ignore-all``, which attempts the sync despite
+        the missing link.
+        """
+        config = _make_hard_link_config()
+        _, statuses = active_statuses(config)
+        runner = (
+            FakeCommandRunner()
+            .on("readlink", returns=completed(1))
+            .on("test", "-L", returns=completed(1))
+            .on("ls", returns=completed(0, f"{_PREVIOUS.name}\n{_ORPHAN}\n"))
+        )
+
+        results = run_syncs(config, statuses, rsync=FakeRsync(), run_command=runner)
+
+        assert results[0].outcome == SyncOutcome.SUCCESS
+        assert [w.kind for w in results[0].warnings] == [SyncWarningKind.ORPHAN_CLEANUP]
+        assert runner.commands_starting_with("rm") == []
+
     def test_mkdir_failure(self) -> None:
         config = _make_hard_link_config()
         _, statuses = active_statuses(config)

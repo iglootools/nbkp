@@ -229,12 +229,20 @@ class TestCleanupOrphanedSnapshots:
         assert deleted == [f"{tmp_path}/snapshots/2024-01-01T00:00:00.000Z"]
         assert list((tmp_path / "snapshots").iterdir()) == []
 
-    def test_deletes_every_snapshot_when_latest_is_absent(self, tmp_path: Path) -> None:
+    def test_keeps_every_snapshot_when_latest_is_absent(self, tmp_path: Path) -> None:
+        """
+        An absent ``latest`` is outside damage, not "no sync yet": nothing is deleted.
+
+        nbkp never removes the link, so the snapshots may be complete.
+        """
         sync, config = self._leftover_config(tmp_path)
 
-        deleted = cleanup_orphaned_snapshots(sync, config)
+        with pytest.raises(SnapshotOperationError) as info:
+            cleanup_orphaned_snapshots(sync, config)
 
-        assert deleted == [f"{tmp_path}/snapshots/2024-01-01T00:00:00.000Z"]
+        assert info.value.op == SnapshotOp.READ_LATEST
+        assert info.value.path == f"{tmp_path}/latest"
+        assert (tmp_path / "snapshots" / "2024-01-01T00:00:00.000Z").is_dir()
 
     def test_nothing_to_delete_without_snapshots_dir(self, tmp_path: Path) -> None:
         sync, config = self._leftover_config(tmp_path)

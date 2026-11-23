@@ -83,13 +83,16 @@ generated script logs a warning when it did not.
 **Orphan cleanup** — Hard-link syncs detect and clean up orphaned snapshot
 directories before each run. An orphan is a `snapshots/{timestamp}/` directory
 newer than the snapshot `latest` points to: one left behind by a previously
-failed sync. While `latest` is absent or points to `/dev/null`, no sync has
-completed yet, so every snapshot directory is an orphan: a first run interrupted
-before `latest` moved leaves a partial snapshot, which would otherwise sort
-before the next complete one and pass for complete. The generated script does
-the same when `latest` points to `/dev/null`, but skips the cleanup when it
-cannot read `latest`, since it cannot tell a missing link from a failed
-`readlink` (its preflight has already required the link). After a failed rsync
+failed sync. While `latest` points to `/dev/null`, no sync has completed yet, so
+every snapshot directory is an orphan: a first run interrupted before `latest`
+moved leaves a partial snapshot, which would otherwise sort before the next
+complete one and pass for complete. When `latest` is absent, the cleanup deletes
+nothing and records an `orphan-cleanup` warning: nbkp never removes the link
+(`init` points it at `/dev/null`), so its absence is outside damage, and the
+snapshots may well be complete. Preflight reports the missing link, so only
+`--strictness ignore-all` attempts such a sync. The generated script does the
+same: it removes every snapshot when `latest` points to `/dev/null`, and skips
+the cleanup when it cannot read `latest`. After a failed rsync
 the new snapshot directory is also removed straight away. Btrfs snapshots do not
 need orphan cleanup because snapshots are created atomically from a complete
 sync to `staging/` — a failed sync leaves `staging/` in a partial state but

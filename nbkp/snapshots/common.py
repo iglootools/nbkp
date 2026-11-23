@@ -1,5 +1,6 @@
 """Snapshot operations shared by the btrfs and hard-link backends."""
 
+import enum
 import os
 from collections.abc import Callable
 from datetime import datetime
@@ -223,6 +224,57 @@ def _read_raw_symlink_target(
             )
 
 
+class NoLatestSnapshot(enum.Enum):
+    """Why ``latest`` designates no snapshot, as :func:`read_latest_link` reports it."""
+
+    ABSENT = "absent"
+    """There is no ``latest`` symlink: nbkp never removes it, so it was lost."""
+    NONE_YET = "none-yet"
+    """``latest`` points to ``/dev/null``: no sync has completed yet."""
+
+
+def read_latest_link(
+    sync: SyncConfig,
+    config: Config,
+    *,
+    resolved_endpoints: ResolvedEndpoints | None = None,
+    run: VolumeCommandRunner = run_on_volume,
+) -> Snapshot | NoLatestSnapshot:
+    """
+    Read the snapshot *sync*'s ``latest`` symlink designates.
+
+    Tells an absent symlink from one pointing to ``/dev/null`` (the
+    canonical "no snapshot yet" marker), for callers that act differently on
+    each.  A target that is not ``snapshots/<name>`` (see
+    :meth:`Snapshot.from_latest_target`) raises
+    :class:`~nbkp.snapshots.errors.SnapshotOperationError`: callers use it to
+    protect the latest snapshot, so it must not be guessed at.
+    """
+    re = resolved_endpoints or {}
+    latest_path = f"{resolve_dest_path(sync, config)}/{LATEST_LINK}"
+    target = _read_raw_symlink_target(
+        destination_volume(sync, config),
+        latest_path,
+        re,
+        run,
+    )
+
+    match target:
+        case None:
+            return NoLatestSnapshot.ABSENT
+        case str() if target == DEVNULL_TARGET:
+            return NoLatestSnapshot.NONE_YET
+        case _:
+            try:
+                return Snapshot.from_latest_target(target)
+            except ValueError as e:
+                raise SnapshotOperationError(
+                    SnapshotOp.READ_LATEST,
+                    latest_path,
+                    f"not a snapshot: {target}",
+                ) from e
+
+
 def read_latest_symlink(
     sync: SyncConfig,
     config: Config,
@@ -234,32 +286,19 @@ def read_latest_symlink(
     Read the latest symlink target, returning a Snapshot.
 
     Returns ``None`` if the symlink does not exist or points to
-    ``/dev/null`` (the canonical "no snapshot yet" marker).  A target that
-    is not ``snapshots/<name>`` (see :meth:`Snapshot.from_latest_target`)
-    raises :class:`~nbkp.snapshots.errors.SnapshotOperationError`: callers use it
-    to protect the latest snapshot, so it must not be guessed at.
-
+    ``/dev/null``; :func:`read_latest_link` tells the two apart.  An
+    invalid target raises as there.
     """
-    re = resolved_endpoints or {}
-    latest_path = f"{resolve_dest_path(sync, config)}/{LATEST_LINK}"
-    target = _read_raw_symlink_target(
-        destination_volume(sync, config),
-        latest_path,
-        re,
-        run,
-    )
-
-    if target is None or target == DEVNULL_TARGET:
-        return None
-    else:
-        try:
-            return Snapshot.from_latest_target(target)
-        except ValueError as e:
-            raise SnapshotOperationError(
-                SnapshotOp.READ_LATEST,
-                latest_path,
-                f"not a snapshot: {target}",
-            ) from e
+    match read_latest_link(
+        sync,
+        config,
+        resolved_endpoints=resolved_endpoints,
+        run=run,
+    ):
+        case Snapshot() as snapshot:
+            return snapshot
+        case NoLatestSnapshot():
+            return None
 
 
 def _replace_local_symlink(latest_path: str, target: str) -> None:

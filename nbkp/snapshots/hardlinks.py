@@ -4,17 +4,25 @@ import shutil
 from datetime import datetime
 
 from nbkp.config import Config, LocalVolume, RemoteVolume, SyncConfig, Volume
+from nbkp.fsprotocol import LATEST_LINK, Snapshot
 from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.snapshots.common import (
+    NoLatestSnapshot,
     create_snapshot_timestamp,
     destination_volume,
     list_snapshots,
     prune_oldest_snapshots,
-    read_latest_symlink,
+    read_latest_link,
+    resolve_dest_path,
     snapshots_dir,
 )
-from nbkp.snapshots.errors import SnapshotOp, local_fs_op, run_checked
+from nbkp.snapshots.errors import (
+    SnapshotOp,
+    SnapshotOperationError,
+    local_fs_op,
+    run_checked,
+)
 
 
 def create_snapshot_dir(
@@ -82,13 +90,18 @@ def cleanup_orphaned_snapshots(
 
     They are the leftovers of failed syncs. Returns the deleted paths.
 
-    When ``latest`` is absent or points to ``/dev/null``, no sync has
-    completed yet, so every snapshot directory is a leftover, including one
-    a first run left half-written.  Kept, it would sort before the next
-    complete snapshot and pass for a complete one itself.
+    When ``latest`` points to ``/dev/null``, no sync has completed yet, so
+    every snapshot directory is a leftover, including one a first run left
+    half-written.  Kept, it would sort before the next complete snapshot and
+    pass for a complete one itself.
+
+    When ``latest`` is absent, nothing is deleted and
+    :class:`SnapshotOperationError` is raised: nbkp never removes the link
+    (init points it at ``/dev/null``), so its absence is outside damage, and
+    the snapshots may well be complete.
     """
     re = resolved_endpoints or {}
-    latest = read_latest_symlink(sync, config, resolved_endpoints=re, run=run)
+    latest = _last_complete_snapshot(sync, config, re, run)
     base = snapshots_dir(sync, config)
     orphans = [
         f"{base}/{s.name}"
@@ -99,6 +112,31 @@ def cleanup_orphaned_snapshots(
     for path in orphans:
         delete_snapshot(path, dst_vol, re, run=run)
     return orphans
+
+
+def _last_complete_snapshot(
+    sync: SyncConfig,
+    config: Config,
+    re: ResolvedEndpoints,
+    run: VolumeCommandRunner,
+) -> Snapshot | None:
+    """
+    Return the snapshot ``latest`` designates, ``None`` while none completed.
+
+    Raises :class:`SnapshotOperationError` when ``latest`` is absent.
+    """
+    match read_latest_link(sync, config, resolved_endpoints=re, run=run):
+        case Snapshot() as latest:
+            return latest
+        case NoLatestSnapshot.NONE_YET:
+            return None
+        case NoLatestSnapshot.ABSENT:
+            latest_path = f"{resolve_dest_path(sync, config)}/{LATEST_LINK}"
+            raise SnapshotOperationError(
+                SnapshotOp.READ_LATEST,
+                latest_path,
+                "latest symlink not found; orphaned snapshots left in place",
+            )
 
 
 def delete_snapshot(
