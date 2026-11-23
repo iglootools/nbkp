@@ -238,19 +238,17 @@ _DISCRIMINATOR_OVERRIDES: dict[str, tuple[str, str]] = {
 }
 
 
-def _to_kebab(name: str) -> str:
-    return name.replace("_", "-")
-
-
 def _constraints_str(info: FieldInfo) -> str:
     """Extract constraint annotations (ge, le) from field metadata."""
-    constraints: list[str] = []
-    if info.metadata:
-        for m in info.metadata:
-            if hasattr(m, "ge") and m.ge is not None:
-                constraints.append(f">= {m.ge}")
-            if hasattr(m, "le") and m.le is not None:
-                constraints.append(f"<= {m.le}")
+    constraints = [
+        f"{operator} {bound}"
+        for m in info.metadata
+        for operator, bound in (
+            (">=", getattr(m, "ge", None)),
+            ("<=", getattr(m, "le", None)),
+        )
+        if bound is not None
+    ]
     return f" ({', '.join(constraints)})" if constraints else ""
 
 
@@ -352,28 +350,31 @@ def table_cell(text: str) -> str:
     return text.replace("|", "\\|")
 
 
-def _generate_table(model: type[BaseModel]) -> str:
+def _table_row(name: str, info: FieldInfo) -> str:
+    """Return the row documenting the field *name*, under its config key."""
+    default, description = _DISCRIMINATOR_OVERRIDES.get(name) or (
+        _default_str(info),
+        info.description or "",
+    )
+    return (
+        f"| `{info.alias or name}` | {_type_str(info)} | {default}"
+        f" | {table_cell(description)} |"
+    )
+
+
+def generate_table(model: type[BaseModel]) -> str:
     """Generate a markdown table from a Pydantic model's fields."""
-    rows = ["| Field | Type | Default | Description |", "|---|---|---|---|"]
-    for name, info in model.model_fields.items():
-        if name in _HIDDEN_FIELDS:
-            continue
-        field_name = f"`{_to_kebab(name)}`"
-        if name in _DISCRIMINATOR_OVERRIDES:
-            override_default, override_desc = _DISCRIMINATOR_OVERRIDES[name]
-            field_type = _type_str(info)
-            rows.append(
-                f"| {field_name} | {field_type} | {override_default}"
-                f" | {table_cell(override_desc)} |",
-            )
-        else:
-            field_type = _type_str(info)
-            field_default = _default_str(info)
-            field_desc = table_cell(info.description or "")
-            rows.append(
-                f"| {field_name} | {field_type} | {field_default} | {field_desc} |",
-            )
-    return "\n".join(rows)
+    return "\n".join(
+        [
+            "| Field | Type | Default | Description |",
+            "|---|---|---|---|",
+            *(
+                _table_row(name, info)
+                for name, info in model.model_fields.items()
+                if name not in _HIDDEN_FIELDS
+            ),
+        ],
+    )
 
 
 def _generate_sections() -> dict[str, str]:
@@ -386,7 +387,7 @@ def _generate_sections() -> dict[str, str]:
         [
             "#### `ssh-endpoints.<slug>` — SSH Endpoint",
             "",
-            _generate_table(SshEndpoint),
+            generate_table(SshEndpoint),
             "",
             _SSH_ENDPOINT_NOTES,
             "",
@@ -394,7 +395,7 @@ def _generate_sections() -> dict[str, str]:
             "",
             "#### `connection-options` — SSH Connection Options",
             "",
-            _generate_table(SshConnectionOptions),
+            generate_table(SshConnectionOptions),
             "",
         ],
     )
@@ -403,25 +404,25 @@ def _generate_sections() -> dict[str, str]:
         [
             "#### `volumes.<slug>` — Local Volume",
             "",
-            _generate_table(LocalVolume),
+            generate_table(LocalVolume),
             "",
             _LOCAL_VOLUME_NOTES,
             "",
             "#### `volumes.<slug>` — Remote Volume",
             "",
-            _generate_table(RemoteVolume),
+            generate_table(RemoteVolume),
             "",
             "---",
             "",
             "#### `mount` — Mount Config",
             "",
-            _generate_table(MountConfig),
+            generate_table(MountConfig),
             "",
             _MOUNT_CONFIG_NOTES,
             "",
             "#### `encryption` — LUKS Encryption Config",
             "",
-            _generate_table(LuksEncryptionConfig),
+            generate_table(LuksEncryptionConfig),
             "",
             _LUKS_ENCRYPTION_NOTES,
             "",
@@ -436,7 +437,7 @@ def _generate_sections() -> dict[str, str]:
         [
             "#### `sync-endpoints.<slug>` — Sync Endpoint",
             "",
-            _generate_table(SyncEndpoint),
+            generate_table(SyncEndpoint),
             "",
             _SYNC_ENDPOINT_NOTES,
             "",
@@ -444,7 +445,7 @@ def _generate_sections() -> dict[str, str]:
             "",
             "#### `btrfs-snapshots` / `hard-link-snapshots`",
             "",
-            _generate_table(BtrfsSnapshotConfig),
+            generate_table(BtrfsSnapshotConfig),
             "",
         ],
     )
@@ -453,7 +454,7 @@ def _generate_sections() -> dict[str, str]:
         [
             "#### `syncs.<slug>` — Sync Config",
             "",
-            _generate_table(SyncConfig),
+            generate_table(SyncConfig),
             "",
             _SYNC_CONFIG_NOTES,
             "",
@@ -461,7 +462,7 @@ def _generate_sections() -> dict[str, str]:
             "",
             "#### `rsync-options` — Rsync Options",
             "",
-            _generate_table(RsyncOptions),
+            generate_table(RsyncOptions),
             "",
             _RSYNC_OPTIONS_NOTES,
             "",
