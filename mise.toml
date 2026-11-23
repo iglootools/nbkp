@@ -82,7 +82,7 @@ run = "mise deps install uv"
 description = "Run every lint and every test, Docker suites included (what CI runs, across its three jobs)"
 run = [
   { task = "lint" },
-  { task = "test-all" },
+  { task = "test" },
 ]
 
 [tasks.preflight-quick]
@@ -180,7 +180,7 @@ description = "Run filesystem integration tests"
 # don't contend for shared filesystem state.
 run = "uv run --no-sync pytest tests/integration_fs/ -n auto -v"
 
-[tasks.test-all]
+[tasks.test]
 description = "Run all tests"
 run = [
   { task = "test-unit" },

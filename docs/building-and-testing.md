@@ -21,7 +21,7 @@ mise run preflight          # every lint and every test, Docker suites included 
 mise run preflight-quick    # every lint, and the unit and filesystem tests (no Docker)
 mise run lint               # every lint below
 
-mise run test-all           # All tests
+mise run test               # All tests
 
 mise run test-unit               # Unit tests only (no Docker, no external dependencies)
 
