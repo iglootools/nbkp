@@ -505,6 +505,33 @@ class TestLocationExcluded:
         _bash_n(script)
 
 
+class TestArguments:
+    """The generated script's own options and exit codes match ``nbkp run``'s."""
+
+    @pytest.mark.parametrize("flag", ["-h", "--help"])
+    def test_help(self, flag: str) -> None:
+        result = _run_script(generate_script(Config(), _OPTIONS, now=_NOW), flag)
+        assert result.returncode == 0, result.stderr
+        assert "Usage: " in result.stdout
+        assert "--strictness LEVEL" in result.stdout
+
+    @pytest.mark.parametrize(
+        ("args", "message"),
+        [
+            (["--nope"], "unknown option: --nope"),
+            (["--strictness", "strict"], "unknown strictness: strict"),
+            (["--progress=bars"], "unknown progress mode: bars"),
+            (["--progress"], "option --progress requires a value"),
+            (["-n", "-S"], "option -S requires a value"),
+        ],
+    )
+    def test_usage_error_exits_2(self, args: list[str], message: str) -> None:
+        result = _run_script(generate_script(Config(), _OPTIONS, now=_NOW), *args)
+        assert result.returncode == 2
+        assert f"Error: {message}" in result.stderr
+        assert "--help" in result.stderr
+
+
 class TestDisabledSync:
     def test_commented_out(self) -> None:
         config = _disabled_config()

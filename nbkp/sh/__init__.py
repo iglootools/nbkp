@@ -4,7 +4,8 @@ Generate a standalone bash script from nbkp config.
 Compiles a Config into a self-contained shell script that performs
 the same sync operations as ``nbkp run``, with all paths and
 options baked in.  The generated script accepts ``--dry-run``,
-``--progress`` and ``--strictness`` flags at runtime.
+``--progress``, ``--strictness`` and ``--help`` flags at runtime, and exits
+with the codes of ``nbkp run`` (2 on a usage error).
 """
 
 import importlib.resources

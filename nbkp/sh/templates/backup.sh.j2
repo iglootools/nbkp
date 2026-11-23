@@ -49,7 +49,8 @@ ${{ config_line }}
 #   - The run lock: one run at a time per user, shared with nbkp run
 #     ($XDG_STATE_HOME/nbkp/run.lock, else ~/.local/state/nbkp/run.lock), taken
 #     with flock(1) except in a dry run, which touches no destination
-#   - Nonzero exit on any sync failure
+#   - Exit codes: 0 on success (inactive syncs skipped), 1 when a sync failed or
+#     the run was aborted, 2 on a usage error
 #
 # Dropped from nbkp run:
 #   - Rich console output (spinners, tables, progress bars) → simple log messages
@@ -81,20 +82,52 @@ NBKP_DRY_RUN=false
 NBKP_PROGRESS=""
 NBKP_STRICTNESS=ignore-inactive
 
-# --- Argument parsing ---
+# --- Argument parsing (a usage error exits 2, as in nbkp run) ---
+nbkp_usage() {
+    printf 'Usage: %s [OPTIONS]\n' "${0##*/}"
+    cat <<'NBKP_USAGE'
+
+Run the backup syncs this script was generated with (by nbkp sh).
+
+Options:
+  -n, --dry-run           Show what the syncs would do, without changing any
+                          destination
+  -p, --progress MODE     rsync progress: none, overall, per-file or full
+  -S, --strictness LEVEL  How preflight errors affect the run: ignore-inactive
+                          (default), ignore-none or ignore-all
+  -h, --help              Show this message and exit
+
+Exit codes: 0 on success (inactive syncs skipped), 1 when a sync failed or the
+run was aborted, 2 on a usage error.
+NBKP_USAGE
+}
+nbkp_usage_error() {
+    echo "Error: $1" >&2
+    echo "Try '${0##*/} --help' for help." >&2
+    exit 2
+}
 while [ $# -gt 0 ]; do
   case "$1" in
+    -h|--help) nbkp_usage; exit 0;;
     -n|--dry-run) NBKP_DRY_RUN=true; shift;;
     --progress=*) NBKP_PROGRESS="${1#--progress=}"; shift;;
-    --progress|-p) NBKP_PROGRESS="$2"; shift 2;;
+    --progress|-p)
+      [ $# -ge 2 ] || nbkp_usage_error "option $1 requires a value"
+      NBKP_PROGRESS="$2"; shift 2;;
     --strictness=*) NBKP_STRICTNESS="${1#--strictness=}"; shift;;
-    --strictness|-S) NBKP_STRICTNESS="$2"; shift 2;;
-    *) echo "Unknown option: $1" >&2; exit 1;;
+    --strictness|-S)
+      [ $# -ge 2 ] || nbkp_usage_error "option $1 requires a value"
+      NBKP_STRICTNESS="$2"; shift 2;;
+    *) nbkp_usage_error "unknown option: $1";;
   esac
 done
 case "$NBKP_STRICTNESS" in
   ignore-inactive|ignore-none|ignore-all) ;;
-  *) echo "Unknown strictness: $NBKP_STRICTNESS (use 'ignore-inactive', 'ignore-none', or 'ignore-all')" >&2; exit 1;;
+  *) nbkp_usage_error "unknown strictness: $NBKP_STRICTNESS (use 'ignore-inactive', 'ignore-none', or 'ignore-all')";;
+esac
+case "$NBKP_PROGRESS" in
+  ""|none|overall|per-file|full) ;;
+  *) nbkp_usage_error "unknown progress mode: $NBKP_PROGRESS (use 'none', 'overall', 'per-file', or 'full')";;
 esac
 
 NBKP_FAILURES=0
@@ -118,7 +151,6 @@ case "$NBKP_PROGRESS" in
   per-file) RSYNC_PROGRESS_FLAGS=(-v --progress --human-readable);;
   full) RSYNC_PROGRESS_FLAGS=(-v --progress --info=progress2 --stats --human-readable);;
   "") ;;
-  *) echo "Unknown progress mode: $NBKP_PROGRESS (use 'none', 'overall', 'per-file', or 'full')" >&2; exit 1;;
 esac
 
 # --- Helpers ---
