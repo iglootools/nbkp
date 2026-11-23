@@ -1,7 +1,5 @@
 """Delete the snapshots beyond each sync's ``max-snapshots`` limit."""
 
-from collections.abc import Callable
-
 from nbkp.config import Config, SyncConfig
 from nbkp.config.protocol.sync_endpoint import SyncEndpoint
 from nbkp.policy import Strictness
@@ -9,13 +7,11 @@ from nbkp.preflight import SyncStatus
 from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.snapshots.btrfs import prune_snapshots as btrfs_prune_snapshots
-from nbkp.snapshots.common import list_snapshots
+from nbkp.snapshots.common import PruneSnapshotsFn, list_snapshots
 from nbkp.snapshots.disposition import preflight_disposition
 from nbkp.snapshots.errors import SnapshotOperationError, SnapshotPruneError
 from nbkp.snapshots.hardlinks import prune_snapshots as hl_prune_snapshots
 from nbkp.snapshots.models import PruneResult, SnapshotResultError, SnapshotSkipReason
-
-type _PruneFn = Callable[..., list[str]]
 
 
 def _config_skip_reason(dst_ep: SyncEndpoint) -> SnapshotSkipReason | None:
@@ -29,7 +25,7 @@ def _config_skip_reason(dst_ep: SyncEndpoint) -> SnapshotSkipReason | None:
             return None
 
 
-def _prune_backend(dst_ep: SyncEndpoint) -> _PruneFn | None:
+def _prune_backend(dst_ep: SyncEndpoint) -> PruneSnapshotsFn | None:
     match dst_ep.snapshot_mode:
         case "btrfs":
             return btrfs_prune_snapshots
@@ -91,7 +87,7 @@ def _skipped(
 def _execute_prune(
     slug: str,
     sync: SyncConfig,
-    prune_fn: _PruneFn,
+    prune_fn: PruneSnapshotsFn,
     limit: int,
     config: Config,
     *,

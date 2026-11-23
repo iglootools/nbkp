@@ -304,6 +304,23 @@ class DeleteSnapshotFn(Protocol):
         ...
 
 
+class PruneSnapshotsFn(Protocol):
+    """A backend's retention, :func:`prune_oldest_snapshots` bound to its deletion."""
+
+    def __call__(
+        self,
+        sync: SyncConfig,
+        config: Config,
+        max_snapshots: int,
+        *,
+        dry_run: bool = ...,
+        resolved_endpoints: ResolvedEndpoints | None = ...,
+        run: VolumeCommandRunner = ...,
+    ) -> list[str]:
+        """Delete the oldest snapshots of *sync* beyond *max_snapshots*."""
+        ...
+
+
 def prune_oldest_snapshots(
     sync: SyncConfig,
     config: Config,
