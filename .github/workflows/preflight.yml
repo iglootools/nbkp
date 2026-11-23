@@ -39,8 +39,9 @@ env:
 
 jobs:
   # Three jobs in parallel, one per ci-* task, so the two minute-long Docker suites do not
-  # wait for each other. The `preflight` job at the end gathers them under the one check
-  # name the main ruleset requires, since together they are what `mise run preflight` runs.
+  # wait for each other, and together they are what `mise run preflight` runs. The `build`
+  # job runs beside them, and the `preflight` job at the end gathers all four under the one
+  # check name the main ruleset requires.
   preflight-quick:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -92,15 +93,45 @@ jobs:
       contents: read
     steps: *steps
 
+  # The pull-request build: ci-preflight-quick does not build (mise.md, "Give each workflow job
+  # one `ci-*` task"), and the publish workflows are the only other callers of ci-build.
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Checkout only. Declared so the job does not inherit the repository's read-write default.
+    permissions:
+      contents: read
+    steps:
+      # The history and tags, as publish.yml checks them out: uv-dynamic-versioning reads the
+      # version from the last tag, and build-verify fails on the 0.0.0 fallback it builds
+      # without one.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5
+        with:
+          # renovate: datasource=github-releases depName=jdx/mise
+          version: 2026.11.12
+      # The same uv cache as the other jobs, for the pyyaml wheel built from its sdist.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+      - run: mise run ci-build
+      - run: uv cache prune --ci
+
   preflight:
     # The main ruleset requires a check named "preflight". A job skipped because a dependency
-    # failed would count as passing, so this one always runs and fails unless all three did.
+    # failed would count as passing, so this one always runs and fails unless all four did.
+    # build is among them so that a pull request that breaks the package cannot merge
+    # without a ruleset change.
     if: always()
-    needs: [preflight-quick, test-docker, test-e2e]
+    needs: [preflight-quick, test-docker, test-e2e, build]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
     steps:
       - env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
-        run: '[ "$RESULTS" = "success success success" ]'
+        run: '[ "$RESULTS" = "success success success success" ]'

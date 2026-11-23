@@ -117,7 +117,7 @@ run = [
 ]
 
 [tasks.ci-build]
-description = "Install, build the package and verify its version (what the publish workflows run)"
+description = "Install, build the package and verify its version (the preflight build job and the publish workflows)"
 run = [
   { task = "install" },
   { task = "build" },
