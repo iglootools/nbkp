@@ -34,7 +34,8 @@ RUN mkdir -p /run/sshd
 
 COPY entrypoint.sh /entrypoint.sh
 COPY setup-luks.sh /setup-luks.sh
-RUN chmod +x /entrypoint.sh /setup-luks.sh && \
+COPY wait-for-udisks.sh /wait-for-udisks.sh
+RUN chmod +x /entrypoint.sh /setup-luks.sh /wait-for-udisks.sh && \
     printf '%s\n' \
       'testuser ALL=(root) NOPASSWD: /setup-luks.sh' \
       > /etc/sudoers.d/nbkp-setup && \

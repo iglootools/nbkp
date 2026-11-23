@@ -114,6 +114,12 @@ if command -v cryptsetup >/dev/null 2>&1; then
         # Save metadata for tests to read via SSH
         echo "$LUKS_UUID" > /srv/luks-uuid
 
+        # The trigger and settle above only wait for udev; udisks then creates its object
+        # for the device asynchronously, and a test unlocking before that fails with
+        # "Error looking up object for device". Wait for it, as entrypoint.sh does when
+        # LUKS is set up at startup.
+        /wait-for-udisks.sh "/dev/disk/by-uuid/$LUKS_UUID"
+
         # Install the polkit rule that grants testuser the udisks actions
         # nbkp needs over SSH (inactive session) — this mirrors what
         # `nbkp disks setup-auth --user testuser` generates.  udisks is
