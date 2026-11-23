@@ -276,7 +276,7 @@ def docker_container(
         private_key,
     )
 
-    wait_for_ssh(server, timeout=30)
+    wait_for_ssh(server, timeout_seconds=30)
 
     yield server
 
@@ -359,7 +359,7 @@ def bastion_container(
         private_key,
     )
 
-    wait_for_ssh(server, timeout=30)
+    wait_for_ssh(server, timeout_seconds=30)
     yield server
 
     container.stop()

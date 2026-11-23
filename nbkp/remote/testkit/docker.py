@@ -288,10 +288,10 @@ def start_bastion_container(
 
 def wait_for_ssh(
     server: SshEndpoint,
-    timeout: int = 30,
+    timeout_seconds: int = 30,
 ) -> None:
     """Poll SSH until the daemon sends its banner."""
-    deadline = time.time() + timeout
+    deadline = time.time() + timeout_seconds
     while time.time() < deadline:
         try:
             with socket.create_connection(
@@ -304,7 +304,7 @@ def wait_for_ssh(
         except OSError:
             pass
         time.sleep(1)
-    raise SshNotReadyError(timeout)
+    raise SshNotReadyError(timeout_seconds)
 
 
 def ssh_run(

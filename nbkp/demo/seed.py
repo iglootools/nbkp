@@ -442,7 +442,7 @@ def _start_containers(base_dir: Path, *, luks: bool, steps: _Steps) -> _Containe
         # and brings up dbus/udevd/udisksd (probing the shared host /dev)
         # before sshd is ready, which can exceed the 30s default on a loaded
         # machine.
-        wait_for_ssh(storage, timeout=90)
+        wait_for_ssh(storage, timeout_seconds=90)
     return _Containers(private_key, bastion, storage, bastion_port, storage_port)
 
 
