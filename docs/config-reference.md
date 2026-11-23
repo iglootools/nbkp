@@ -180,8 +180,11 @@ use `-J`: the rsync and generated-script SSH commands nest one
 `-o ProxyCommand=ssh … -W %h:%p <hop>` per hop, so each hop gets its own port,
 key and `connection-options` (with `-J`, a hop's options would come only from
 `~/.ssh/config`), and Fabric/Paramiko opens each hop as a gateway connection.
-See [SSH transport](./internals.md#ssh-transport). Circular chains are rejected
-at load time.
+See [SSH transport](./internals.md#ssh-transport). A hop may have its own
+`proxy-jump(s)`: nbkp reaches it through its chain first, so `proxy-jump: b1`
+where `b1` jumps through `b2` connects through `b2`, then `b1`. A bastion that
+several hops share is jumped through once, where it is first needed. Circular
+chains are rejected at load time.
 
 **`location` / `locations`** — Network-context tags (e.g. `home`, `travel`)
 consumed by `--location` / `--exclude-location` at runtime. See
@@ -200,9 +203,12 @@ rsync) and onto Paramiko/Fabric (used by checks and snapshot operations).
 `channel-timeout` and `disabled-algorithms` only apply to the Paramiko/Fabric
 path. **Host key verification** — Both paths verify the host key the same way.
 With `strict-host-key-checking: true` (the default), the host's key must already
-be in `~/.ssh/known_hosts`, or in `known-hosts-file` when it is set (it replaces
-`~/.ssh/known_hosts`, like OpenSSH's `UserKnownHostsFile`; a missing file counts
-as empty). nbkp never trusts a new host on first use: an unknown host or a
+be in `~/.ssh/known_hosts` or in the system-wide `/etc/ssh/ssh_known_hosts`
+(OpenSSH's default `GlobalKnownHostsFile`), or in `known-hosts-file` when it is
+set (it replaces `~/.ssh/known_hosts`, like OpenSSH's `UserKnownHostsFile`; a
+missing file counts as empty). With `known-hosts-file` set, nbkp's own checks
+consult only that file, while OpenSSH, behind rsync, still also trusts the
+system-wide one. nbkp never trusts a new host on first use: an unknown host or a
 changed key is refused, and preflight reports it as
 `ssh authentication or host key verification failed` (`auth-failed` in JSON
 output). Add a new host once with `ssh <host> true`, after checking the

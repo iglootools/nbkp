@@ -642,6 +642,30 @@ class TestProxyJump:
         assert "admin@bastion1.example.com" in script
         assert "bastion2.example.com" in script
 
+    def test_bastion_own_proxy_jump_in_ssh(self) -> None:
+        base = _proxy_jump_config()
+        config = base.model_copy(
+            update={
+                "ssh_endpoints": {
+                    **base.ssh_endpoints,
+                    "outer": SshEndpoint(slug="outer", host="outer.example.com"),
+                    "bastion": base.ssh_endpoints["bastion"].model_copy(
+                        update={"proxy_jump": "outer"},
+                    ),
+                },
+            },
+        )
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config,
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints=resolved,
+        )
+        assert "admin@bastion.example.com" in script
+        assert "outer.example.com" in script
+        _bash_n(script)
+
     def test_proxy_jumps_valid_syntax(self) -> None:
         config = _proxy_jumps_config()
         resolved = resolve_all_endpoints(config)

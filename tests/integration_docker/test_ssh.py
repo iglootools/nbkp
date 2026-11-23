@@ -9,7 +9,7 @@ checking).
 
 import os
 import subprocess
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -578,3 +578,26 @@ class TestRemoteCommandInput:
 
         assert result.returncode == 3
         assert result.stderr == "no such device\n"
+
+
+type _RunRemote = Callable[[SshEndpoint, list[str]], subprocess.CompletedProcess[str]]
+
+
+class TestTransportsAgree:
+    """Both transports hand the remote shell the same command line."""
+
+    @pytest.mark.parametrize(
+        "run_remote",
+        [fabric_run_remote, ssh_run_remote],
+        ids=["fabric", "ssh-cli"],
+    )
+    def test_leading_tilde_expands_to_remote_home(
+        self,
+        docker_ssh_endpoint: SshEndpoint,
+        run_remote: _RunRemote,
+    ) -> None:
+        home = ssh_exec(docker_ssh_endpoint, "echo ~").stdout.strip()
+
+        result = run_remote(docker_ssh_endpoint, ["echo", "~/a b"])
+
+        assert (result.returncode, result.stdout) == (0, f"{home}/a b\n")

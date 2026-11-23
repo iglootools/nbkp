@@ -581,15 +581,16 @@ Checks include:
   or changed, is `AUTH_FAILED`, an infrastructure error. The Paramiko/Fabric
   connections behind checks, snapshot operations and the mount lifecycle verify
   host keys like OpenSSH does for rsync: with `strict-host-key-checking` on (the
-  default), against `~/.ssh/known_hosts` or `known-hosts-file`, refusing any
-  host not listed there. Fabric's own default trusts every host key, which would
-  let a host impersonating a NAS on an untrusted network receive a LUKS
-  passphrase at unlock time, so nbkp replaces it. A connection lost later in
-  preflight (each remote command connects anew, so a host can fall asleep
-  half-way) makes the volume or sync endpoint being probed unreachable in the
-  same way, with its cause, instead of aborting the checks of every other host.
-  Any other exception during the probe is a bug and propagates instead of being
-  reported as an unreachable host.
+  default), against `~/.ssh/known_hosts` and the system-wide
+  `/etc/ssh/ssh_known_hosts`, or against `known-hosts-file` alone when it is
+  set, refusing any host not listed there. Fabric's own default trusts every
+  host key, which would let a host impersonating a NAS on an untrusted network
+  receive a LUKS passphrase at unlock time, so nbkp replaces it. A connection
+  lost later in preflight (each remote command connects anew, so a host can fall
+  asleep half-way) makes the volume or sync endpoint being probed unreachable in
+  the same way, with its cause, instead of aborting the checks of every other
+  host. Any other exception during the probe is a bug and propagates instead of
+  being reported as an unreachable host.
 - **Rsync availability** — rsync must be installed and version 3.0+ (macOS
   `openrsync` is rejected). Host tool errors apply to localhost too: a remote
   host's errors cascade to its volumes (`SSH_ENDPOINT_INACTIVE`), while the

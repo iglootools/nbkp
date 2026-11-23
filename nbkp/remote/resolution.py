@@ -233,8 +233,30 @@ def resolve_proxy_chain(
     config: Config,
     server: SshEndpoint,
 ) -> list[SshEndpoint]:
-    """Return the endpoints *server* jumps through, outermost first."""
-    return [config.ssh_endpoints[slug] for slug in server.proxy_jump_chain]
+    """
+    Return the endpoints *server* jumps through, outermost first.
+
+    A bastion with its own ``proxy-jump`` is reached through its chain, so each hop's
+    chain comes before it, expanded the same way. A bastion several hops share is
+    jumped through once, where it is first needed. Config validation rejects cycles,
+    so the expansion terminates.
+    """
+    return [
+        config.ssh_endpoints[slug]
+        for slug in _expand_proxy_hops(config, server.proxy_jump_chain)
+    ]
+
+
+def _expand_proxy_hops(config: Config, hops: list[str]) -> list[str]:
+    expanded = [
+        slug
+        for hop in hops
+        for slug in [
+            *_expand_proxy_hops(config, config.ssh_endpoints[hop].proxy_jump_chain),
+            hop,
+        ]
+    ]
+    return list(dict.fromkeys(expanded))
 
 
 def endpoint_location_excluded(
