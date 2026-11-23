@@ -74,17 +74,14 @@ datasource of its `mise.toml` twin.
 
 ### Wrap text nbkp did not author in `rich.text.Text`
 
-- Rich parses `[...]` in a plain `str` as a style tag and drops it. Never
-  interpolate text nbkp did not author — an exception message, a command's
-  stderr, a generated command line, a config path — into a markup string. Wrap
-  it in `rich.text.Text` (or `Text.assemble` when part of the line *is* styled),
-  which never parses its content. Rendering an `str` is only for markup nbkp
-  wrote itself. Silent truncation is the failure mode:
-  `pip install nbkp[keyring]` renders as `pip install nbkp`, and rsync's
-  `... (code 23) [sender=3.4.1]` loses its tail.
-- A value that feeds both the Rich table and the JSON output must be
-  markup-free. `Text` satisfies both: `str(text)` yields the plain content for
-  JSON.
+Print text nbkp did not author (an exception message, a command's stderr, a
+generated command line, a config path) as `rich.text.Text`, or `Text.assemble`
+when part of the line is styled: the `Text` form of
+[python.md › Print through Rich, escaping interpolated text exactly once](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#print-through-rich-escaping-interpolated-text-exactly-once),
+not `rich.markup.escape`.
+
+**Why:** most values nbkp prints also feed its JSON output, which must be
+markup-free, and `str(text)` yields the plain content for it.
 
 ### Mirror a change to `run` or the sync logic in `sh`
 
