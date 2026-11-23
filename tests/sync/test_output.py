@@ -1,5 +1,6 @@
 """Tests for nbkp.sync.output (run preview formatting)."""
 
+import subprocess
 from datetime import UTC, datetime
 from io import StringIO
 
@@ -15,10 +16,12 @@ from nbkp.config import (
 from nbkp.preflight import (
     SyncErrorKind,
 )
+from nbkp.snapshots import SnapshotOp
 from nbkp.snapshots.common import create_snapshot_timestamp
 from nbkp.sync.output import (
     build_human_results_sections,
     build_run_preview_sections,
+    sync_result_json,
 )
 from nbkp.sync.results import (
     SyncFailureKind,
@@ -288,7 +291,9 @@ class TestRunResultsWarnings:
             warnings=(
                 SyncWarning(
                     kind=SyncWarningKind.SNAPSHOT_DIR_CLEANUP,
-                    message="Failed to remove [dir]",
+                    op=SnapshotOp.DELETE,
+                    path="/dst/snapshots/[dir]",
+                    stderr="Permission denied",
                 ),
             ),
         )
@@ -301,4 +306,26 @@ class TestRunResultsWarnings:
             resolved_endpoints={},
         ):
             console.print(section)
-        assert "Warning: Failed to remove [dir]" in buf.getvalue()
+        assert (
+            "Warning: Failed to remove snapshot dir after rsync failure:"
+            " delete failed for /dst/snapshots/[dir]: Permission denied"
+        ) in buf.getvalue()
+
+    def test_json_warning_has_kind_facts_and_message(self) -> None:
+        """Scripts read the kind and its facts; ``message`` stays for display."""
+        result = SyncResult.succeeded(
+            "s",
+            dry_run=False,
+            proc=subprocess.CompletedProcess(["rsync"], 24, "", ""),
+            warnings=(SyncWarning(kind=SyncWarningKind.VANISHED_FILES, exit_code=24),),
+        )
+        assert sync_result_json(result)["warnings"] == [
+            {
+                "kind": "vanished-files",
+                "exit_code": 24,
+                "message": (
+                    "Some files vanished from the source during the transfer"
+                    " (rsync exit code 24); everything else was copied"
+                ),
+            },
+        ]

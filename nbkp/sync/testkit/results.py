@@ -52,11 +52,9 @@ def run_results(config: Config) -> list[SyncResult]:
             warnings=(
                 SyncWarning(
                     kind=SyncWarningKind.ORPHAN_CLEANUP,
-                    message=(
-                        "Orphaned snapshot cleanup failed: delete snapshot failed"
-                        f" for {local_snap_base}/2026-02-18T10-30-00.000Z:"
-                        " Permission denied"
-                    ),
+                    op=SnapshotOp.DELETE,
+                    path=f"{local_snap_base}/2026-02-18T10-30-00.000Z",
+                    stderr="Permission denied",
                 ),
             ),
         ),

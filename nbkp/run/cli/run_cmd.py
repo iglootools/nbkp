@@ -60,7 +60,11 @@ from nbkp.run.pipeline import (
     run_failed,
 )
 from nbkp.sync import ProgressMode, RunOptions, SyncResult, result_severity
-from nbkp.sync.output import build_human_results_sections, build_run_preview_sections
+from nbkp.sync.output import (
+    build_human_results_sections,
+    build_run_preview_sections,
+    sync_result_json,
+)
 
 _ABORT_DETAIL_INDENT = 2
 
@@ -364,7 +368,7 @@ def run_json(
         **({"dry_run": True} if dry_run else {}),
         "volumes": list(pipeline.preflight.volume_statuses.values()),
         "syncs": list(pipeline.preflight.sync_statuses.values()),
-        "results": list(pipeline.results),
+        "results": [sync_result_json(r) for r in pipeline.results],
         "umount": [
             {"volume": r.volume_slug, "success": r.success, **umount_result_json(r)}
             for r in umount_results
