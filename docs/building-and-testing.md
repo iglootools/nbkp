@@ -71,13 +71,11 @@ uv run --no-sync pyright                                             # type-chec
 uv run --no-sync pytest tests/remote/test_ssh.py::TestBuildSshBaseArgs::test_full -v  # run a single test
 ```
 
-`uv run --no-sync` is the prefix to use rather than a bare `pytest`/`ruff`, as
-the mise tasks above do. `uv run` resolves the environment from the project
-root, so it is correct regardless of what is on `PATH` — a bare command in a
-shell that has *another* project's `.venv` active silently runs that project's
-copy of the tool. `--no-sync` stops it from syncing `.venv` on every call,
-leaving installation to `[deps.uv]` (below). From a shell where mise is not
-activated, run a tool with `mise exec -- <tool>` instead.
+Run a tool in the project's environment with `uv run --no-sync <tool>`, as the
+mise tasks above do, and a tool mise installs (dprint, rumdl) with
+`mise exec -- <tool>`, never bare, as
+[python-tooling.md › Invoke tools through `uv run --no-sync <tool>`](https://github.com/iglootools/common/blob/main/guidelines/project-setup/python-tooling.md#invoke-tools-through-uv-run---no-sync-tool-in-mise-tasks-not-bare)
+explains.
 
 Dependencies install themselves: `[deps.uv]` in `mise.toml` runs
 `uv sync --all-extras` before any `mise run` whenever `uv.lock` or
