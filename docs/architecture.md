@@ -244,12 +244,12 @@ dependencies; the contracts are what reject a new import that breaks a rule:
   may import Rich and `clidisplay/` but not Typer, `cliwiring/` or any `cli/`
   package. Core code never imports an `output` module, its own included: the
   "Only presentation code imports output modules" contract allows only `cli/`
-  packages, `cliwiring/`, `clidisplay/`, other `output` modules, testkits and
-  `demo/` to. Likewise "Only the root app imports a CLI sub-app" keeps a core
-  module off its own `cli/` package, an edge the forbidden contract skips
-  because source and target overlap. `tests/test_core_imports.py` asserts the
-  outcome as well, by importing every core module in a fresh interpreter and
-  checking that neither Rich nor Typer loaded.
+  packages, `cliwiring/`, `clidisplay/` and other `output` modules to. Likewise
+  "Only the root app imports a CLI sub-app" keeps a core module off its own
+  `cli/` package, an edge the forbidden contract skips because source and target
+  overlap. `tests/test_core_imports.py` asserts the outcome as well, by
+  importing every core module, testkits and `demo/seed.py` included, in a fresh
+  interpreter and checking that neither Rich nor Typer loaded.
 - **`config/` is the base layer.** Its core (models, loader) imports nothing
   else from nbkp. Endpoint selection — the `EndpointFilter` / `ResolvedEndpoint`
   models (`remote/endpoints.py`) and the algorithm (`remote/resolution.py`) —
@@ -322,6 +322,7 @@ Domain cores:
 
 Outside the runtime layers, `demo/` implements `nbkp demo`: the seeding workflow
 in `seed.py`, which like a core module imports neither Rich nor Typer, and its
-Typer sub-app in `cli/`. The testkits (`remote/testkit/` for Docker and SSH
-fixtures, `sync/testkit/` for seeding and result helpers, `config/testkit.py`,
-`preflight/testkit/`) supply test scenarios.
+Typer sub-app in `cli/`, which also holds the `nbkp-demo` entry point so that
+importing `nbkp.demo.seed` does not load Typer. The testkits (`remote/testkit/`
+for Docker and SSH fixtures, `sync/testkit/` for seeding and result helpers,
+`config/testkit.py`, `preflight/testkit/`) supply test scenarios.

@@ -15,3 +15,8 @@ app = typer.Typer(
 # generated CLI reference.
 app.command("output")(output_cmd)
 app.command("seed")(seed_cmd)
+
+
+def main() -> None:
+    """Run the ``nbkp-demo`` command-line app."""
+    app()

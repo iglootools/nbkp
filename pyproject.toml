@@ -38,7 +38,7 @@ keyring = ["keyring>=25.0,<26.0"]
 
 [project.scripts]
 nbkp = "nbkp.cli:main"
-nbkp-demo = "nbkp.demo:main"
+nbkp-demo = "nbkp.demo.cli:main"
 
 [dependency-groups]
 dev = [
@@ -287,10 +287,6 @@ type = "protected"
 # cli/ package: it skips a source and a target that overlap.
 protected_modules = ["nbkp.*.cli"]
 allowed_importers = ["nbkp.cli"]
-ignore_imports = [
-  # The package re-exports its app for the nbkp-demo entry point.
-  "nbkp.demo -> nbkp.demo.cli",
-]
 
 [[tool.importlinter.contracts]]
 name = "Only presentation code imports output modules"
@@ -304,8 +300,6 @@ allowed_importers = [
   "nbkp.clidisplay",
   "nbkp.cliwiring",
   "nbkp.**.output",
-  "nbkp.**.testkit",
-  "nbkp.demo",
 ]
 
 [[tool.importlinter.contracts]]

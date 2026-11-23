@@ -8,7 +8,7 @@ import typer
 from nbkp.cliwiring.runtime import runtime_of
 from nbkp.config.cli import app as config_app
 from nbkp.credentials.cli import app as credentials_app
-from nbkp.demo import app as demo_app
+from nbkp.demo.cli import app as demo_app
 from nbkp.disks.cli import app as disks_app
 from nbkp.ordering.cli import app as ordering_app
 from nbkp.preflight.cli import app as preflight_app
