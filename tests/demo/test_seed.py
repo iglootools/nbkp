@@ -200,7 +200,7 @@ class TestStepFailure:
         # A file where the seeding creates the source volume's directory.
         (tmp_path / "src-local-bare").write_text("")
         ends: list[tuple[str, str, str | None]] = []
-        with pytest.raises(FileExistsError) as exc:
+        with pytest.raises(SeedError) as exc:
             seed_demo(
                 tmp_path,
                 docker=False,
@@ -209,7 +209,37 @@ class TestStepFailure:
                     (step, severity, detail),
                 ),
             )
-        assert ends == [("seed volumes", "error", str(exc.value))]
+        assert ends == [("seed volumes", "error", exc.value.detail)]
+
+    def test_a_file_error_is_a_seed_error(self, tmp_path: Path) -> None:
+        """Regression: an OSError escaped seed_demo as a traceback."""
+        base_dir = tmp_path / "seed"
+        base_dir.write_text("")  # A file where the seed directory goes.
+        with pytest.raises(SeedError) as exc:
+            seed_demo(base_dir, docker=False, big_file_size=0)
+        assert exc.value.kind == SeedErrorKind.FILE_OPERATION_FAILED
+        assert str(base_dir) in format_seed_error(exc.value)
+
+    def test_cli_reports_a_file_error_without_a_traceback(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        # A file where the seeding creates the source volume's directory.
+        (tmp_path / "src-local-bare").write_text("")
+        result = CliRunner().invoke(
+            app,
+            [
+                "seed",
+                "--no-docker",
+                "--big-file-size",
+                "0",
+                "--base-dir",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 1, result.output
+        assert not isinstance(result.exception, OSError)
+        assert "Writing the demo files failed" in result.output
 
 
 class TestSeedErrorRendering:

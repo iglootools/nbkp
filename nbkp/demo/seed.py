@@ -74,6 +74,7 @@ class SeedErrorKind(StrEnum):
     LUKS_UNAVAILABLE = "luks-unavailable"
     MOUNT_FAILED = "mount-failed"
     UMOUNT_FAILED = "umount-failed"
+    FILE_OPERATION_FAILED = "file-operation-failed"
 
 
 # Raised before any container starts.
@@ -293,6 +294,9 @@ def seed_demo(
             SeedErrorKind.REMOTE_COMMAND_FAILED,
             _called_process_detail(e),
         ) from e
+    # After TimeoutError, which is an OSError too.
+    except OSError as e:
+        raise SeedError(SeedErrorKind.FILE_OPERATION_FAILED, str(e)) from e
 
 
 def _called_process_detail(e: subprocess.CalledProcessError) -> str:

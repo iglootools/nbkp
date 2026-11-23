@@ -173,6 +173,8 @@ def format_seed_error(e: SeedError) -> str:
                 f"Umount failed: {e.detail}. The encrypted volume may still be"
                 " mounted; run nbkp disks umount on the seeded config."
             )
+        case SeedErrorKind.FILE_OPERATION_FAILED:
+            return f"Writing the demo files failed: {e.detail}"
 
 
 def _print_seed_error(e: SeedError, *, docker: bool) -> None:
