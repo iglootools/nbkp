@@ -6,6 +6,8 @@ context manager used by ``run`` / ``preflight`` / ``snapshots``, which used
 to each carry their own copy of these callbacks.
 """
 
+from collections.abc import Generator
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 
 from nbkp.clidisplay import StepProgressBar
@@ -128,6 +130,15 @@ class LifecycleProgress:
                 umount_failure_detail(result),
                 umount_failure_warning(result),
             )
+
+    @contextmanager
+    def hidden(self) -> Generator[None]:
+        """Take the bar on screen off it for the block, as a passphrase prompt needs."""
+        with ExitStack() as stack:
+            for bar in (self.credential_bar, self.mount_bar, self.umount_bar):
+                if bar is not None:
+                    stack.enter_context(bar.hidden())
+            yield
 
     def stop_credentials(self) -> None:
         """Stop the credential bar, if shown; safe to call more than once."""

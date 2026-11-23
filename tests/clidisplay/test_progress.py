@@ -45,3 +45,22 @@ class TestStepProgressBarResultLine:
     def test_warning_brackets_survive(self, capsys: pytest.CaptureFixture[str]) -> None:
         line = _run(capsys, Severity.ERROR, "lock failed", "still held [see lsblk]")
         assert "✗ mount my-vol (lock failed) warning: still held [see lsblk]" in line
+
+
+class TestStepProgressBarHidden:
+    def test_takes_the_bar_off_screen_for_the_block(self) -> None:
+        bar = StepProgressBar(1)
+        bar.on_start("Mounting my-vol...")
+
+        with bar.hidden():
+            assert not bar.shown
+        assert bar.shown
+        bar.stop()
+
+    def test_does_not_show_a_bar_that_was_not_shown(self) -> None:
+        bar = StepProgressBar(1)
+
+        with bar.hidden():
+            pass
+
+        assert not bar.shown

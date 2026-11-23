@@ -289,7 +289,8 @@ net — the option is guaranteed present at run time however it was configured.
 - **keyring** (default): `keyring.get_password("nbkp", passphrase_id)` — uses
   macOS Keychain or Linux SecretService. Store via
   `keyring set nbkp <passphrase-id>`.
-- **prompt**: interactive password prompt via Typer's hidden input.
+- **prompt**: interactive password prompt via Typer's hidden input, asked at
+  unlock time; the progress bar is taken off screen while it asks.
 - **env**: reads `NBKP_PASSPHRASE_<ID>` environment variable (uppercased, every
   character other than a letter or digit replaced with an underscore, so the
   name can always be exported; ids that would share a variable are rejected at

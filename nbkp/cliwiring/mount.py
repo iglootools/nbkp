@@ -56,16 +56,9 @@ def lifecycle_session(
     """
     Yield the passphrase function and progress bars for a mount lifecycle.
 
-    The bars are shown when *enabled*. On exit, the bars are stopped and the cached
-    passphrases cleared.
+    The bars are shown when *enabled*, and hidden while the ``prompt`` provider asks
+    for a passphrase. On exit, the bars are stopped and the cached passphrases cleared.
     """
-    passphrase_fn, cache = build_passphrase_fn(
-        cfg.credential_provider,
-        cfg.credential_command,
-        prompt=runtime.prompt_passphrase,
-        environ=runtime.environ,
-        run=runtime.run_credential_command,
-    )
     progress = LifecycleProgress.create(
         cfg,
         resolved,
@@ -73,6 +66,19 @@ def lifecycle_session(
         names=names,
         strictness=strictness,
         umounting=umounting,
+    )
+
+    def prompt(passphrase_id: str) -> str:
+        # The prompt fires at unlock, under the live mount bar.
+        with progress.hidden():
+            return runtime.prompt_passphrase(passphrase_id)
+
+    passphrase_fn, cache = build_passphrase_fn(
+        cfg.credential_provider,
+        cfg.credential_command,
+        prompt=prompt,
+        environ=runtime.environ,
+        run=runtime.run_credential_command,
     )
     try:
         yield passphrase_fn, progress
