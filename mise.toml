@@ -254,7 +254,7 @@ run = "rumdl check ."
 
 [tasks.lint-ruff]
 description = "Lint the Python with ruff"
-run = "uv run --no-sync ruff check nbkp/ tests/ build-scripts/"
+run = "uv run --no-sync ruff check ."
 
 [tasks.lint-types]
 description = "Type-check with pyright"
