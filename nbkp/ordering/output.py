@@ -1,14 +1,18 @@
 """Rendering the sync dependency graph as a tree, mermaid text, ASCII art or JSON."""
 
-# mermaid-ascii-diagrams leaves render_ascii's parameter unannotated; retire when
-# it annotates it.
-from mermaid_ascii import parse_mermaid, render_ascii  # pyright: ignore[reportUnknownVariableType]
+from dataclasses import dataclass
+
 from rich.console import Group, RenderableType
 from rich.text import Text
 from rich.tree import Tree
 
+# Only `ordering graph --format ascii` and `demo output` draw ASCII art.
+# mermaid-ascii-diagrams leaves render_ascii's parameter unannotated; retire the
+# pyright ignore when it annotates it.
+lazy from mermaid_ascii import parse_mermaid, render_ascii  # pyright: ignore[reportUnknownVariableType]
+
 from nbkp.clidisplay import severity_icon
-from nbkp.config import Config, SyncEndpoint
+from nbkp.config import Config, SyncConfig, SyncEndpoint
 from nbkp.ordering.graph import build_adjacency
 from nbkp.policy import Severity
 
@@ -23,34 +27,58 @@ def _endpoint_annotation(ep: SyncEndpoint) -> str:
             return f"{mode}, max: {max_s}"
 
 
+@dataclass(frozen=True)
+class _Branch:
+    """A sync, and the branches out of its destination endpoint."""
+
+    sync: SyncConfig
+    branches: tuple[_Branch, ...]
+
+
+def _sync_forest(config: Config) -> list[tuple[str, tuple[_Branch, ...]]]:
+    """
+    Return each root endpoint, sorted, with the branches out of it.
+
+    Config validation rejects self-syncs, shared destinations and dependency cycles,
+    so the endpoints form a forest: each one is reached once, from a single root.
+    """
+    children, roots = build_adjacency(config.syncs)
+
+    def branches(ep_slug: str) -> tuple[_Branch, ...]:
+        return tuple(
+            _Branch(sync, branches(sync.destination))
+            for sync in children.get(ep_slug, [])
+        )
+
+    return [(root, branches(root)) for root in sorted(roots)]
+
+
+def _depth_first(branches: tuple[_Branch, ...]) -> list[SyncConfig]:
+    """Return the syncs in *branches*, each one before those downstream of it."""
+    return [
+        sync
+        for branch in branches
+        for sync in (branch.sync, *_depth_first(branch.branches))
+    ]
+
+
 def build_mermaid_graph(config: Config) -> str:
     """
     Return the sync graph as mermaid ``graph LR`` source.
 
     Nodes are sync endpoints and each edge is a sync labelled with its slug,
-    walked from the root endpoints first, then from any endpoint left over.
+    walked depth-first from each root endpoint in turn.
     """
-    children, roots = build_adjacency(config.syncs)
-    lines = ["graph LR"]
-    visited: set[str] = set()
-
-    def _walk(ep_slug: str) -> None:
-        if ep_slug in visited:
-            return
-        visited.add(ep_slug)
-        for sync in children.get(ep_slug, []):
-            dst_slug = sync.destination
-            lines.append(f"    {ep_slug} -->|{sync.slug}| {dst_slug}")
-            _walk(dst_slug)
-
-    for root in sorted(roots):
-        _walk(root)
-
-    # Include any endpoints not reachable from roots (cycles or isolated)
-    for ep_slug in sorted(children.keys()):
-        _walk(ep_slug)
-
-    return "\n".join(lines)
+    return "\n".join(
+        [
+            "graph LR",
+            *(
+                f"    {sync.source} -->|{sync.slug}| {sync.destination}"
+                for _, branches in _sync_forest(config)
+                for sync in _depth_first(branches)
+            ),
+        ],
+    )
 
 
 def format_mermaid_ascii_graph(config: Config) -> Text:
@@ -74,37 +102,34 @@ def build_rich_tree_sections(
     result summary. Syncs missing from the map render without an icon (e.g. config
     preview where no run results are available).
     """
-    children, roots = build_adjacency(config.syncs)
     severities = sync_severities or {}
 
-    def _add_children(tree: Tree, ep_slug: str, visited: set[str]) -> None:
-        for sync in children.get(ep_slug, []):
-            dst_slug = sync.destination
-            annotation = _endpoint_annotation(config.sync_endpoints[dst_slug])
+    def _add_branches(tree: Tree, branches: tuple[_Branch, ...]) -> None:
+        for branch in branches:
+            sync = branch.sync
+            annotation = _endpoint_annotation(config.sync_endpoints[sync.destination])
             severity = severities.get(sync.slug)
             icon_prefix = f"{severity_icon(severity)} " if severity is not None else ""
             label = " ".join(
                 part
                 for part in [
-                    f"{icon_prefix}[bold]{sync.slug}[/bold] -> {dst_slug}",
+                    f"{icon_prefix}[bold]{sync.slug}[/bold] -> {sync.destination}",
                     f"({annotation})" if annotation else "",
                     "(disabled)" if not sync.enabled else "",
                 ]
                 if part
             )
-            child = tree.add(label, style="dim" if not sync.enabled else "")
+            _add_branches(
+                tree.add(label, style="dim" if not sync.enabled else ""),
+                branch.branches,
+            )
 
-            if dst_slug not in visited:
-                visited.add(dst_slug)
-                _add_children(child, dst_slug, visited)
-
-    trees: list[RenderableType] = []
-    for root in sorted(roots):
+    def _tree(root: str, branches: tuple[_Branch, ...]) -> Tree:
         tree = Tree(f"[bold]{root}[/bold]")
-        visited: set[str] = {root}
-        _add_children(tree, root, visited)
-        trees.append(tree)
-    return trees
+        _add_branches(tree, branches)
+        return tree
+
+    return [_tree(root, branches) for root, branches in _sync_forest(config)]
 
 
 def format_rich_tree_graph(config: Config) -> Group:

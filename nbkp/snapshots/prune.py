@@ -1,7 +1,5 @@
 """Delete the snapshots beyond each sync's ``max-snapshots`` limit."""
 
-from collections.abc import Callable
-
 from nbkp.config import Config, SyncConfig
 from nbkp.config.protocol.sync_endpoint import SyncEndpoint
 from nbkp.policy import Strictness
@@ -9,13 +7,11 @@ from nbkp.preflight import SyncStatus
 from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.snapshots.btrfs import prune_snapshots as btrfs_prune_snapshots
-from nbkp.snapshots.common import list_snapshots
+from nbkp.snapshots.common import PruneSnapshotsFn, list_snapshots
 from nbkp.snapshots.disposition import preflight_disposition
 from nbkp.snapshots.errors import SnapshotOperationError, SnapshotPruneError
 from nbkp.snapshots.hardlinks import prune_snapshots as hl_prune_snapshots
 from nbkp.snapshots.models import PruneResult, SnapshotResultError, SnapshotSkipReason
-
-type _PruneFn = Callable[..., list[str]]
 
 
 def _config_skip_reason(dst_ep: SyncEndpoint) -> SnapshotSkipReason | None:
@@ -29,7 +25,7 @@ def _config_skip_reason(dst_ep: SyncEndpoint) -> SnapshotSkipReason | None:
             return None
 
 
-def _prune_backend(dst_ep: SyncEndpoint) -> _PruneFn | None:
+def _prune_backend(dst_ep: SyncEndpoint) -> PruneSnapshotsFn | None:
     match dst_ep.snapshot_mode:
         case "btrfs":
             return btrfs_prune_snapshots
@@ -42,12 +38,12 @@ def _prune_backend(dst_ep: SyncEndpoint) -> _PruneFn | None:
 def _count_snapshots(
     sync: SyncConfig,
     config: Config,
-    re: ResolvedEndpoints,
+    resolved: ResolvedEndpoints,
     run: VolumeCommandRunner,
 ) -> tuple[int, SnapshotResultError | None]:
     """``(count, None)``, or ``(0, error)`` when the listing fails."""
     try:
-        return (len(list_snapshots(sync, config, re, run=run)), None)
+        return (len(list_snapshots(sync, config, resolved, run=run)), None)
     except SnapshotOperationError as e:
         return (0, SnapshotResultError.from_operation(e))
 
@@ -56,7 +52,7 @@ def _skipped(
     slug: str,
     status: SyncStatus,
     config: Config,
-    re: ResolvedEndpoints,
+    resolved: ResolvedEndpoints,
     *,
     dry_run: bool,
     skip_reason: SnapshotSkipReason | None,
@@ -76,7 +72,9 @@ def _skipped(
         and config.destination_endpoint(status.config).snapshot_mode != "none"
     )
     kept, count_error = (
-        _count_snapshots(status.config, config, re, run) if countable else (0, None)
+        _count_snapshots(status.config, config, resolved, run)
+        if countable
+        else (0, None)
     )
     return PruneResult(
         sync_slug=slug,
@@ -91,11 +89,11 @@ def _skipped(
 def _execute_prune(
     slug: str,
     sync: SyncConfig,
-    prune_fn: _PruneFn,
+    prune_fn: PruneSnapshotsFn,
     limit: int,
     config: Config,
     *,
-    re: ResolvedEndpoints,
+    resolved: ResolvedEndpoints,
     dry_run: bool,
     run: VolumeCommandRunner,
 ) -> PruneResult:
@@ -105,10 +103,10 @@ def _execute_prune(
             config,
             limit,
             dry_run=dry_run,
-            resolved_endpoints=re,
+            resolved_endpoints=resolved,
             run=run,
         )
-        remaining = list_snapshots(sync, config, re, run=run)
+        remaining = list_snapshots(sync, config, resolved, run=run)
         return PruneResult(
             sync_slug=slug,
             deleted=tuple(deleted),
@@ -118,7 +116,7 @@ def _execute_prune(
     except SnapshotOperationError as e:
         # A deletion that fails partway has already removed some snapshots:
         # report them, and count what is left afresh (0 if that fails too).
-        kept, _ = _count_snapshots(sync, config, re, run)
+        kept, _ = _count_snapshots(sync, config, resolved, run)
         return PruneResult(
             sync_slug=slug,
             deleted=e.deleted if isinstance(e, SnapshotPruneError) else (),
@@ -132,7 +130,7 @@ def _process_candidate(
     slug: str,
     status: SyncStatus,
     config: Config,
-    re: ResolvedEndpoints,
+    resolved: ResolvedEndpoints,
     *,
     dry_run: bool,
     strictness: Strictness,
@@ -153,7 +151,7 @@ def _process_candidate(
                 prune_fn,
                 limit,
                 config,
-                re=re,
+                resolved=resolved,
                 dry_run=dry_run,
                 run=run,
             )
@@ -162,7 +160,7 @@ def _process_candidate(
                 slug,
                 status,
                 config,
-                re,
+                resolved,
                 dry_run=dry_run,
                 skip_reason=skip_reason,
                 error=error,
@@ -185,13 +183,13 @@ def prune_all_syncs(
 
     Every listing and deletion runs through *run*.
     """
-    re = resolved_endpoints or {}
+    resolved = resolved_endpoints or {}
     return [
         _process_candidate(
             slug,
             status,
             config,
-            re,
+            resolved,
             dry_run=dry_run,
             strictness=strictness,
             run=run,

@@ -155,8 +155,8 @@ def _hl_remote_config() -> tuple[SyncConfig, Config, dict[str, ResolvedEndpoint]
         },
         syncs={"s1": sync},
     )
-    re = {"dst": ResolvedEndpoint(server=server)}
-    return sync, config, re
+    resolved = {"dst": ResolvedEndpoint(server=server)}
+    return sync, config, resolved
 
 
 _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
@@ -335,16 +335,26 @@ class TestReadLatestSymlink:
                 stdout=f"snapshots/{_TS_REMOTE.name}\n",
             ),
         )
-        sync, config, re = _hl_remote_config()
+        sync, config, resolved = _hl_remote_config()
 
-        result = read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
+        result = read_latest_symlink(
+            sync,
+            config,
+            resolved_endpoints=resolved,
+            run=runner,
+        )
         assert result == _TS_REMOTE
 
     def test_remote_missing(self) -> None:
         runner = FakeCommandRunner().on(returns=completed(returncode=1, stdout=""))
-        sync, config, re = _hl_remote_config()
+        sync, config, resolved = _hl_remote_config()
 
-        result = read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
+        result = read_latest_symlink(
+            sync,
+            config,
+            resolved_endpoints=resolved,
+            run=runner,
+        )
         assert result is None
 
     def test_local_devnull(self, tmp_path: Path) -> None:
@@ -382,9 +392,14 @@ class TestReadLatestSymlink:
                 stdout="/dev/null\n",
             ),
         )
-        sync, config, re = _hl_remote_config()
+        sync, config, resolved = _hl_remote_config()
 
-        result = read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
+        result = read_latest_symlink(
+            sync,
+            config,
+            resolved_endpoints=resolved,
+            run=runner,
+        )
         assert result is None
 
 
@@ -397,17 +412,17 @@ class TestReadLatestLink:
             .on("readlink", returns=completed(1))
             .on("test", "-L", returns=completed(1))
         )
-        sync, config, re = _hl_remote_config()
+        sync, config, resolved = _hl_remote_config()
 
-        result = read_latest_link(sync, config, resolved_endpoints=re, run=runner)
+        result = read_latest_link(sync, config, resolved_endpoints=resolved, run=runner)
 
         assert result is NoLatestSnapshot.ABSENT
 
     def test_remote_devnull(self) -> None:
         runner = FakeCommandRunner().on(returns=completed(0, "/dev/null\n"))
-        sync, config, re = _hl_remote_config()
+        sync, config, resolved = _hl_remote_config()
 
-        result = read_latest_link(sync, config, resolved_endpoints=re, run=runner)
+        result = read_latest_link(sync, config, resolved_endpoints=resolved, run=runner)
 
         assert result is NoLatestSnapshot.NONE_YET
 
@@ -415,9 +430,9 @@ class TestReadLatestLink:
         runner = FakeCommandRunner().on(
             returns=completed(0, f"snapshots/{_TS_REMOTE.name}\n"),
         )
-        sync, config, re = _hl_remote_config()
+        sync, config, resolved = _hl_remote_config()
 
-        result = read_latest_link(sync, config, resolved_endpoints=re, run=runner)
+        result = read_latest_link(sync, config, resolved_endpoints=resolved, run=runner)
 
         assert result == _TS_REMOTE
 
@@ -479,13 +494,13 @@ class TestUpdateLatestSymlink:
 
     def test_remote(self) -> None:
         runner = FakeCommandRunner().on(returns=completed(returncode=0, stderr=""))
-        sync, config, re = _hl_remote_config()
+        sync, config, resolved = _hl_remote_config()
 
         update_latest_symlink(
             sync,
             config,
             _TS_REMOTE,
-            resolved_endpoints=re,
+            resolved_endpoints=resolved,
             run=runner,
         )
         assert runner.commands == [
@@ -560,9 +575,15 @@ class TestListSnapshotsFailures:
             returns=completed(0, "snapshots/2026-03-01T10-45-00.000Z\n"),
         )
         runner.on("rm", returns=completed(0))
-        sync, config, re = _hl_remote_config()
+        sync, config, resolved = _hl_remote_config()
 
-        deleted = hl_prune_snapshots(sync, config, 2, resolved_endpoints=re, run=runner)
+        deleted = hl_prune_snapshots(
+            sync,
+            config,
+            2,
+            resolved_endpoints=resolved,
+            run=runner,
+        )
         assert [p.rsplit("/", 1)[-1] for p in deleted] == ["2026-03-01T10:15:00.000Z"]
 
     @pytest.mark.parametrize(
@@ -593,13 +614,13 @@ class TestReadLatestSymlinkFailures:
                 completed(returncode=0, stdout="", stderr=""),  # test -L: exists
             ],
         )
-        sync, config, re = _hl_remote_config()
+        sync, config, resolved = _hl_remote_config()
 
         with pytest.raises(
             SnapshotOperationError,
             check=_is_op(SnapshotOp.READ_LATEST),
         ):
-            read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
+            read_latest_symlink(sync, config, resolved_endpoints=resolved, run=runner)
 
     def test_target_not_a_snapshot_raises(self) -> None:
         """A latest target nbkp did not write is an error, not a guess."""
@@ -607,13 +628,13 @@ class TestReadLatestSymlinkFailures:
             "readlink",
             returns=completed(0, "snapshots/2026-03-07T09:00:00\n"),
         )
-        sync, config, re = _hl_remote_config()
+        sync, config, resolved = _hl_remote_config()
 
         with pytest.raises(
             SnapshotOperationError,
             check=_is_op(SnapshotOp.READ_LATEST),
         ):
-            read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
+            read_latest_symlink(sync, config, resolved_endpoints=resolved, run=runner)
 
     def test_non_snapshot_target_raises(self) -> None:
         """A target that is not a snapshot name is a failed read, not a crash."""
@@ -621,13 +642,13 @@ class TestReadLatestSymlinkFailures:
             "readlink",
             returns=completed(0, "snapshots/foo\n"),
         )
-        sync, config, re = _hl_remote_config()
+        sync, config, resolved = _hl_remote_config()
 
         with pytest.raises(
             SnapshotOperationError,
             check=lambda e: e.op is SnapshotOp.READ_LATEST and "foo" in e.stderr,
         ):
-            read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
+            read_latest_symlink(sync, config, resolved_endpoints=resolved, run=runner)
 
     @pytest.mark.parametrize(
         "target",
@@ -640,13 +661,13 @@ class TestReadLatestSymlinkFailures:
     def test_target_outside_snapshots_dir_raises(self, target: str) -> None:
         """Only ``snapshots/<name>`` designates one of this endpoint's snapshots."""
         runner = FakeCommandRunner().on("readlink", returns=completed(0, f"{target}\n"))
-        sync, config, re = _hl_remote_config()
+        sync, config, resolved = _hl_remote_config()
 
         with pytest.raises(
             SnapshotOperationError,
             check=_is_op(SnapshotOp.READ_LATEST),
         ):
-            read_latest_symlink(sync, config, resolved_endpoints=re, run=runner)
+            read_latest_symlink(sync, config, resolved_endpoints=resolved, run=runner)
 
     def test_prune_does_not_delete_when_latest_unknown(self) -> None:
         """An unreadable latest disables pruning instead of its protection."""
@@ -663,13 +684,13 @@ class TestReadLatestSymlinkFailures:
                 completed(returncode=2, stdout="", stderr=""),  # test -L: error
             ],
         )
-        sync, config, re = _hl_remote_config()
+        sync, config, resolved = _hl_remote_config()
 
         with pytest.raises(
             SnapshotOperationError,
             check=_is_op(SnapshotOp.READ_LATEST),
         ):
-            hl_prune_snapshots(sync, config, 3, resolved_endpoints=re, run=runner)
+            hl_prune_snapshots(sync, config, 3, resolved_endpoints=resolved, run=runner)
         assert len(runner.calls) == 3  # no rm -rf issued
 
 

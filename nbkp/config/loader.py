@@ -108,7 +108,7 @@ def _config_search_paths(
     Order: XDG > platform user config > platform site config.
     On Linux, XDG and platform user config resolve to the same path
     and are deduped (dict.fromkeys preserves insertion order).
-    Added explicitly so that ~/.config/nbkp/config.yml works on Mac OS X
+    Added explicitly so that ~/.config/nbkp/config.yaml works on Mac OS X
     (for which user_config_dir(_APP) defaults to ~/Library/Application Support/nbkp).
     """
     candidates = [

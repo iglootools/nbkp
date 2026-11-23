@@ -20,6 +20,7 @@ import pytest
 DEFERRED_MODULES = [
     "docker",  # only `nbkp demo seed --docker`; also an optional extra
     "jinja2",  # only `nbkp sh`
+    "mermaid_ascii",  # only `ordering graph --format ascii` and `demo output`
     # only when a config has a remote volume (SSH commands, ~/.ssh/config)
     "nbkp.remote.fabricssh",
     "fabric",

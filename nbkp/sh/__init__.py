@@ -85,9 +85,9 @@ def generate_script(
     Raises :class:`VolumeWithoutPathError` when a volume an enabled sync uses
     has no ``path``.
     """
-    re = resolved_endpoints or {}
+    resolved = resolved_endpoints or {}
     vol_paths = _build_vol_paths(config, options)
-    ctx = _build_script_context(config, options, vol_paths, now, re)
+    ctx = _build_script_context(config, options, vol_paths, now, resolved)
     return _load_template().render(ctx) + "\n"
 
 

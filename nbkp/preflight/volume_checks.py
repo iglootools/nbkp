@@ -68,12 +68,12 @@ def observe_ssh_endpoint(
     *probe_mount_tools* should be True when any volume on this host has
     mount config.
     """
-    re = resolved_endpoints or {}
+    resolved = resolved_endpoints or {}
     match volume:
         case LocalVolume():
             return _observe_ssh_endpoint_local(
                 volume,
-                re,
+                resolved,
                 probe_mount_tools=probe_mount_tools,
                 run=run,
                 which=which,
@@ -81,7 +81,7 @@ def observe_ssh_endpoint(
         case RemoteVolume():
             return _observe_ssh_endpoint_remote(
                 volume,
-                re,
+                resolved,
                 probe_mount_tools=probe_mount_tools,
                 run=run,
                 which=which,
@@ -217,22 +217,22 @@ def observe_volume(
     *host_tools* and *mount_tools* come from the SSH endpoint observation;
     *platform* is the orchestrator's ``sys.platform``.
     """
-    re = resolved_endpoints or {}
+    resolved = resolved_endpoints or {}
     caps = (
         check_volume_capabilities(
             volume,
             host_tools,
             mount_tools,
-            re,
+            resolved,
             mount_observation,
             platform=platform,
             run=run,
         )
-        if _volume_sentinel_exists(volume, re, run=run)
+        if _volume_sentinel_exists(volume, resolved, run=run)
         else _sentinel_only_capabilities(
             volume,
             mount_tools,
-            re,
+            resolved,
             mount_observation,
             run=run,
         )
@@ -291,16 +291,16 @@ def check_volume_capabilities(
     orchestrator's ``sys.platform``) decides how a local volume's filesystem
     type is probed.
     """
-    re = resolved_endpoints or {}
+    resolved = resolved_endpoints or {}
     fs_type = (
-        probe_filesystem_type(volume, re, platform=platform, run=run)
+        probe_filesystem_type(volume, resolved, platform=platform, run=run)
         if host_tools.has_stat
         else None
     )
     is_btrfs = is_btrfs_filesystem(fs_type) if host_tools.has_stat else False
     hardlink_supported = supports_hard_links(fs_type)
     btrfs_user_subvol_rm = (
-        check_btrfs_mount_option(volume, "user_subvol_rm_allowed", re, run=run)
+        check_btrfs_mount_option(volume, "user_subvol_rm_allowed", resolved, run=run)
         if host_tools.has_findmnt and is_btrfs
         else False
     )
@@ -310,7 +310,7 @@ def check_volume_capabilities(
             volume,
             volume.mount,
             mount_tools,
-            re,
+            resolved,
             mount_observation,
             run=run,
         )

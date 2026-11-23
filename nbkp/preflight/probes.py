@@ -4,7 +4,7 @@ Filesystem and tool probes run on a volume's host, locally or over SSH.
 Each takes the command runner as *run*, so tests can inject a fake one.
 """
 
-import re as regex
+import re
 from pathlib import Path
 
 from nbkp.config import LocalVolume, RemoteVolume, Volume, resolve_endpoint_path
@@ -172,7 +172,7 @@ def read_symlink_target(
 
 _MIN_RSYNC_VERSION = (3, 0, 0)
 
-_GNU_RSYNC_RE = regex.compile(r"rsync\s+version\s+(\d+)\.(\d+)\.(\d+)")
+_GNU_RSYNC_RE = re.compile(r"rsync\s+version\s+(\d+)\.(\d+)\.(\d+)")
 
 
 def parse_rsync_version(output: str) -> tuple[int, ...]:

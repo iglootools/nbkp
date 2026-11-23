@@ -62,7 +62,7 @@ def sh_cmd(
         bool,
         typer.Option(
             "--portable/--no-portable",
-            help=("Generate bash 3.2-compatible script (default: enabled)"),
+            help="Generate bash 3.2-compatible script",
         ),
     ] = True,
     platform: Annotated[

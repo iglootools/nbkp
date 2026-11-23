@@ -137,7 +137,7 @@ def check_all_syncs(
     test injects fakes); standalone endpoints are enriched from *ssh_config*
     (default: ``~/.ssh/config``).
     """
-    re = resolved_endpoints
+    resolved = resolved_endpoints
     progress = _Progress(on_check_start, on_check_end)
     syncs = _selected_syncs(config, only_syncs)
     needed_volumes = _needed_volumes(config, syncs, only_syncs)
@@ -146,7 +146,7 @@ def check_all_syncs(
         config,
         needed_volumes,
         syncs,
-        re,
+        resolved,
         _standalone_candidates(config, needed_volumes, only_syncs, exclude_locations),
         progress=progress,
         host=_Host(run, which, partial(enrich_from_ssh_config, ssh_config=ssh_config)),
@@ -155,7 +155,7 @@ def check_all_syncs(
         config,
         needed_volumes,
         ssh_statuses,
-        re,
+        resolved,
         mount_observations or {},
         progress=progress,
         platform=platform,
@@ -165,7 +165,7 @@ def check_all_syncs(
         config,
         syncs,
         volume_statuses,
-        re,
+        resolved,
         progress,
         run=run,
     )
@@ -197,12 +197,12 @@ def check_step_count(
     One per SSH endpoint, volume, source endpoint and destination endpoint,
     so a progress bar can be sized before the checks start.
     """
-    re = resolved_endpoints
+    resolved = resolved_endpoints
     syncs = _selected_syncs(config, only_syncs)
     needed_volumes = _needed_volumes(config, syncs, only_syncs)
     volume_endpoints = {
-        *_volumes_by_ssh_endpoint(config, needed_volumes, re),
-        *_excluded_endpoints(config, needed_volumes, re),
+        *_volumes_by_ssh_endpoint(config, needed_volumes, resolved),
+        *_excluded_endpoints(config, needed_volumes, resolved),
     }
     return (
         len(volume_endpoints)

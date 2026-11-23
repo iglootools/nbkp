@@ -87,10 +87,10 @@ def _rsync_checks(
     role: str,
     spec: SyncSpec,
 ) -> list[str]:
-    re = spec.resolved_endpoints
-    version = output_of(vol, ["rsync", "--version"], re)
+    resolved = spec.resolved_endpoints
+    version = output_of(vol, ["rsync", "--version"], resolved)
     return [
-        guard(which_cmd(vol, "rsync", re), f"rsync not found on {role}", BROKEN),
+        guard(which_cmd(vol, "rsync", resolved), f"rsync not found on {role}", BROKEN),
         guard(
             f"nbkp_rsync_version_ok {version}",
             f"rsync on {role} is too old or openrsync (GNU rsync 3.0+ required)",
@@ -100,10 +100,10 @@ def _rsync_checks(
 
 
 def _tool_checks(tools: tuple[str, ...], spec: SyncSpec) -> list[str]:
-    re = spec.resolved_endpoints
+    resolved = spec.resolved_endpoints
     return [
         guard(
-            which_cmd(spec.dst_vol, tool, re),
+            which_cmd(spec.dst_vol, tool, resolved),
             f"{tool} not found on destination",
             BROKEN,
         )
@@ -213,15 +213,15 @@ def _destination_snapshot_checks(spec: SyncSpec) -> list[str]:
 
 
 def _btrfs_checks(spec: SyncSpec) -> list[str]:
-    vol, re = spec.dst_vol, spec.resolved_endpoints
+    vol, resolved = spec.dst_vol, spec.resolved_endpoints
     staging = spec.staging_dir
-    fs_type = output_of(vol, ["stat", "-f", "-c", "%T", spec.dst_vol_path], re)
+    fs_type = output_of(vol, ["stat", "-f", "-c", "%T", spec.dst_vol_path], resolved)
     options = output_of(
         vol,
         ["findmnt", "-T", spec.dst_vol_path, "-n", "-o", "OPTIONS"],
-        re,
+        resolved,
     )
-    inode = output_of(vol, ["stat", "-c", "%i", staging], re)
+    inode = output_of(vol, ["stat", "-c", "%i", staging], resolved)
     return [
         guard(
             f"[ {fs_type} = btrfs ]",

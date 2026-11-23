@@ -11,7 +11,7 @@ from nbkp.fsprotocol import Snapshot
 from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.remote.errors import ssh_connection_errors
-from nbkp.snapshots.common import update_latest_symlink
+from nbkp.snapshots.common import PruneSnapshotsFn, update_latest_symlink
 from nbkp.snapshots.errors import SnapshotOperationError, SnapshotPruneError
 from nbkp.sync.results import SyncFailureKind, SyncResult, SyncWarning, SyncWarningKind
 from nbkp.sync.rsync import RSYNC_VANISHED_FILES_EXIT, ProgressMode, run_rsync
@@ -200,7 +200,7 @@ def failed_after_rsync(
 def _prune(
     sync: SyncConfig,
     max_snapshots: int | None,
-    prune_fn: Callable[..., list[str]],
+    prune_fn: PruneSnapshotsFn,
     ctx: RunContext,
 ) -> tuple[tuple[str, ...] | None, tuple[SyncWarning, ...]]:
     """
@@ -232,7 +232,7 @@ def publish_snapshot(
     proc: subprocess.CompletedProcess[str],
     snapshot_path: str,
     max_snapshots: int | None,
-    prune_fn: Callable[..., list[str]],
+    prune_fn: PruneSnapshotsFn,
     *,
     ctx: RunContext,
 ) -> SyncResult:
