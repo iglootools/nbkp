@@ -32,7 +32,7 @@ def create_snapshot(
     macOS-safe name form; both come from the caller so this stays
     deterministic.  Returns the snapshot path.
     """
-    re = resolved_endpoints or {}
+    resolved = resolved_endpoints or {}
     dst_vol = destination_volume(sync, config)
     snapshot = create_snapshot_timestamp(now, dst_vol, platform)
     snapshot_path = f"{snapshots_dir(sync, config)}/{snapshot.name}"
@@ -42,7 +42,7 @@ def create_snapshot(
         snapshot_path,
         ["btrfs", "subvolume", "snapshot", "-r", staging_path, snapshot_path],
         dst_vol,
-        re,
+        resolved,
         run=run,
     )
     return snapshot_path

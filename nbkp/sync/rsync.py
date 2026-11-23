@@ -179,7 +179,7 @@ def build_rsync_command(
     dest_suffix: str | None = None,
 ) -> list[str]:
     """For a remote-to-remote sync the command is wrapped in SSH."""
-    re = resolved_endpoints or {}
+    resolved = resolved_endpoints or {}
     src_ep = config.source_endpoint(sync)
     dst_ep = config.destination_endpoint(sync)
     src_vol = config.volumes[src_ep.volume]
@@ -200,7 +200,7 @@ def build_rsync_command(
         case (RemoteVolume(), RemoteVolume() as dv):
             # Same server (enforced by config validation): SSH in once and
             # run rsync there with local paths.
-            dst_re = re[dv.slug]
+            dst_re = resolved[dv.slug]
             local_cmd = [
                 *rsync_args,
                 f"{src_path}/",
@@ -211,7 +211,7 @@ def build_rsync_command(
                 shell_join(local_cmd),
             ]
         case (RemoteVolume() as sv, LocalVolume()):
-            src_re = re[sv.slug]
+            src_re = resolved[sv.slug]
             remote_src = _protected_remote_path(src_path)
             return [
                 *rsync_args,
@@ -221,7 +221,7 @@ def build_rsync_command(
                 _dest_target(dst_path, dest_suffix),
             ]
         case (LocalVolume(), RemoteVolume() as dv):
-            dst_re = re[dv.slug]
+            dst_re = resolved[dv.slug]
             remote_dst = _protected_remote_path(dst_path)
             dst_target = format_remote_path(dst_re.server, remote_dst)
             return [

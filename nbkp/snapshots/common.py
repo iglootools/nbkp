@@ -177,12 +177,12 @@ def read_latest_link(
     :class:`~nbkp.snapshots.errors.SnapshotOperationError`: callers use it to
     protect the latest snapshot, so it must not be guessed at.
     """
-    re = resolved_endpoints or {}
+    resolved = resolved_endpoints or {}
     latest_path = f"{resolve_dest_path(sync, config)}/{LATEST_LINK}"
     target = _read_raw_symlink_target(
         destination_volume(sync, config),
         latest_path,
-        re,
+        resolved,
         run,
     )
 
@@ -262,7 +262,7 @@ def update_latest_symlink(
     replaced atomically; on a remote volume ``ln -sfn`` replaces it.
     Raises :class:`SnapshotOperationError` when the update fails.
     """
-    re = resolved_endpoints or {}
+    resolved = resolved_endpoints or {}
     latest_path = f"{resolve_dest_path(sync, config)}/{LATEST_LINK}"
     target = f"{SNAPSHOTS_DIR}/{snapshot.name}"
     op = SnapshotOp.UPDATE_LATEST
@@ -280,7 +280,7 @@ def update_latest_symlink(
                 latest_path,
                 ["ln", "-sfn", target, latest_path],
                 dst_vol,
-                re,
+                resolved,
                 run=run,
             )
 
@@ -344,12 +344,12 @@ def prune_oldest_snapshots(
     raises :class:`~nbkp.snapshots.errors.SnapshotPruneError`, which names
     the snapshots deleted before it.
     """
-    re = resolved_endpoints or {}
-    snapshots = list_snapshots(sync, config, re, run=run)
+    resolved = resolved_endpoints or {}
+    snapshots = list_snapshots(sync, config, resolved, run=run)
     if len(snapshots) <= max_snapshots:
         return []
     else:
-        latest = read_latest_symlink(sync, config, resolved_endpoints=re, run=run)
+        latest = read_latest_symlink(sync, config, resolved_endpoints=resolved, run=run)
         counted = [
             s for s in snapshots if latest is None or s.timestamp <= latest.timestamp
         ]
@@ -367,7 +367,7 @@ def prune_oldest_snapshots(
             dst_vol = destination_volume(sync, config)
             _delete_in_order(
                 to_delete,
-                lambda path: delete_snapshot(path, dst_vol, re, run=run),
+                lambda path: delete_snapshot(path, dst_vol, resolved, run=run),
             )
 
         return to_delete

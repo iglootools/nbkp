@@ -45,17 +45,24 @@ def create_snapshot_dir(
     possibly the one ``latest`` points to, and a failed rsync would then
     delete it.  Only ``snapshots/`` itself is created when missing.
     """
-    re = resolved_endpoints or {}
+    resolved = resolved_endpoints or {}
     dst_vol = destination_volume(sync, config)
     snapshot_path = snapshot_path_for(sync, config, now=now, platform=platform)
     parent = snapshots_dir(sync, config)
-    run_checked(SnapshotOp.MKDIR, parent, ["mkdir", "-p", parent], dst_vol, re, run=run)
+    run_checked(
+        SnapshotOp.MKDIR,
+        parent,
+        ["mkdir", "-p", parent],
+        dst_vol,
+        resolved,
+        run=run,
+    )
     run_checked(
         SnapshotOp.MKDIR,
         snapshot_path,
         ["mkdir", snapshot_path],
         dst_vol,
-        re,
+        resolved,
         run=run,
     )
     return snapshot_path
@@ -100,24 +107,24 @@ def cleanup_orphaned_snapshots(
     (init points it at ``/dev/null``), so its absence is outside damage, and
     the snapshots may well be complete.
     """
-    re = resolved_endpoints or {}
-    latest = _last_complete_snapshot(sync, config, re, run)
+    resolved = resolved_endpoints or {}
+    latest = _last_complete_snapshot(sync, config, resolved, run)
     base = snapshots_dir(sync, config)
     orphans = [
         f"{base}/{s.name}"
-        for s in list_snapshots(sync, config, re, run=run)
+        for s in list_snapshots(sync, config, resolved, run=run)
         if latest is None or s.timestamp > latest.timestamp
     ]
     dst_vol = destination_volume(sync, config)
     for path in orphans:
-        delete_snapshot(path, dst_vol, re, run=run)
+        delete_snapshot(path, dst_vol, resolved, run=run)
     return orphans
 
 
 def _last_complete_snapshot(
     sync: SyncConfig,
     config: Config,
-    re: ResolvedEndpoints,
+    resolved: ResolvedEndpoints,
     run: VolumeCommandRunner,
 ) -> Snapshot | None:
     """
@@ -125,7 +132,7 @@ def _last_complete_snapshot(
 
     Raises :class:`SnapshotOperationError` when ``latest`` is absent.
     """
-    match read_latest_link(sync, config, resolved_endpoints=re, run=run):
+    match read_latest_link(sync, config, resolved_endpoints=resolved, run=run):
         case Snapshot() as latest:
             return latest
         case NoLatestSnapshot.NONE_YET:

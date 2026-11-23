@@ -81,8 +81,8 @@ def _remote_config() -> tuple[SyncConfig, Config, dict[str, ResolvedEndpoint]]:
         },
         syncs={"s1": sync},
     )
-    re = {"dst": ResolvedEndpoint(server=server)}
-    return sync, config, re
+    resolved = {"dst": ResolvedEndpoint(server=server)}
+    return sync, config, resolved
 
 
 class TestCreateSnapshotDir:
@@ -96,7 +96,7 @@ class TestCreateSnapshotDir:
         assert runner.commands == [["mkdir", "-p", "/dst/snapshots"], ["mkdir", path]]
 
     def test_remote(self) -> None:
-        sync, config, re = _remote_config()
+        sync, config, resolved = _remote_config()
         runner = FakeCommandRunner()
 
         path = create_snapshot_dir(
@@ -104,7 +104,7 @@ class TestCreateSnapshotDir:
             config,
             now=_NOW,
             platform="linux",
-            resolved_endpoints=re,
+            resolved_endpoints=resolved,
             run=runner,
         )
 

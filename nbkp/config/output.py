@@ -168,10 +168,10 @@ def format_human_config(
     resolved_endpoints: SelectedEndpoints | None = None,
 ) -> Group:
     """Format the config's tables, separated by a blank line."""
-    re = resolved_endpoints or {}
+    resolved = resolved_endpoints or {}
     tables = [
         *([_ssh_endpoints_table(config)] if config.ssh_endpoints else []),
-        _volumes_table(config, re),
+        _volumes_table(config, resolved),
         _syncs_table(config),
     ]
     return Group(*tables[:1], *(part for t in tables[1:] for part in (Text(""), t)))
@@ -203,17 +203,17 @@ def _ssh_endpoints_table(config: Config) -> Table:
 
 def _volume_type_and_endpoint(
     vol: LocalVolume | RemoteVolume,
-    re: SelectedEndpoints,
+    resolved: SelectedEndpoints,
 ) -> tuple[str, str]:
     match vol:
         case RemoteVolume():
-            ep = re.get(vol.slug)
+            ep = resolved.get(vol.slug)
             return "remote", ep.server.slug if ep else vol.ssh_endpoint
         case LocalVolume():
             return "local", ""
 
 
-def _volumes_table(config: Config, re: SelectedEndpoints) -> Table:
+def _volumes_table(config: Config, resolved: SelectedEndpoints) -> Table:
     table = Table(title="Volumes:")
     table.add_column("Name", style="bold")
     table.add_column("Type")
@@ -221,12 +221,12 @@ def _volumes_table(config: Config, re: SelectedEndpoints) -> Table:
     table.add_column("URI")
     table.add_column("Mount Config")
     for vol in config.volumes.values():
-        vol_type, ssh_ep = _volume_type_and_endpoint(vol, re)
+        vol_type, ssh_ep = _volume_type_and_endpoint(vol, resolved)
         table.add_row(
             vol.slug,
             vol_type,
             ssh_ep,
-            Text(format_volume_display(vol, re)),
+            Text(format_volume_display(vol, resolved)),
             format_mount_summary(vol.mount),
         )
     return table
