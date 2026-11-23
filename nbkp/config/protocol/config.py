@@ -77,6 +77,10 @@ def _overlay_field(key: str, parent_value: object, child_value: object) -> objec
     )
 
 
+# Keys that identify the parent endpoint rather than configure it.
+_NOT_INHERITED = frozenset({"extends", "slug"})
+
+
 def _merge_endpoint(
     parent: Mapping[str, Any],
     child: Mapping[str, Any],
@@ -85,11 +89,13 @@ def _merge_endpoint(
     Overlay a child endpoint's raw fields on its resolved parent's.
 
     The child keeps its own ``extends`` (the parent's is not inherited), so
-    the merged endpoint still records which endpoint it was built from.
+    the merged endpoint still records which endpoint it was built from. The
+    parent's ``slug`` is not inherited either: it names the parent, and the
+    child takes its slug from its own key.
     """
     stale = _stale_exclusive_keys(child)
     merged = {
-        **{k: v for k, v in parent.items() if k != "extends"},
+        **{k: v for k, v in parent.items() if k not in _NOT_INHERITED},
         **{k: _overlay_field(k, parent.get(k), v) for k, v in child.items()},
     }
     return {k: v for k, v in merged.items() if k not in stale}

@@ -1416,6 +1416,21 @@ class TestLoadConfig:
         assert error["type"] == ConfigValidationErrorKind.CIRCULAR_EXTENDS
         assert error["msg"] == "Circular extends chain: a -> b -> a"
 
+    def test_extends_does_not_inherit_parent_slug(self, tmp_path: Path) -> None:
+        p = tmp_path / "extends_slug.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "ssh-endpoints": {
+                        "base": {"slug": "base", "host": "h.example.com"},
+                        "a": {"extends": "base"},
+                    },
+                },
+            ),
+        )
+        endpoint = load_config(str(p)).ssh_endpoints["a"]
+        assert (endpoint.slug, endpoint.host) == ("a", "h.example.com")
+
     def test_extends_unknown_endpoint(self, tmp_path: Path) -> None:
         p = tmp_path / "unknown_extends.yaml"
         p.write_text(
