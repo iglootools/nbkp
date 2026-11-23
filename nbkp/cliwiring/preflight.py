@@ -7,6 +7,7 @@ per-step severity icons here.
 """
 
 from collections.abc import Collection, Sequence
+from contextlib import nullcontext
 from functools import partial
 
 from rich.console import Console
@@ -73,28 +74,15 @@ def check_all_with_progress(
         exclude_locations=exclude_locations,
     )
 
-    if not use_progress or total == 0:
+    progress = StepProgressBar(total) if use_progress and total > 0 else nullcontext()
+    with progress as bar:
         return check_all_syncs(
             cfg,
-            only_syncs=only_syncs,
-            resolved_endpoints=resolved_endpoints,
-            dry_run=dry_run,
-            mount_observations=mount_observations,
-            exclude_locations=exclude_locations,
-            platform=runtime.platform,
-            run=runtime.run,
-            which=runtime.which,
-        )
-
-    with StepProgressBar(total) as bar:
-        return check_all_syncs(
-            cfg,
-            on_check_start=partial(start_check_step, bar),
-            on_check_end=lambda label, errors: end_check_step(
-                bar,
-                label,
-                errors,
-                strictness,
+            on_check_start=None if bar is None else partial(start_check_step, bar),
+            on_check_end=(
+                None
+                if bar is None
+                else partial(end_check_step, bar, strictness=strictness)
             ),
             only_syncs=only_syncs,
             resolved_endpoints=resolved_endpoints,
