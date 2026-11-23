@@ -187,6 +187,13 @@ class TestLoadConfig:
             load_config(str(p))
         assert excinfo.value.reason == ConfigErrorKind.NOT_A_MAPPING
 
+    def test_empty_file_names_config_file(self, tmp_path: Path) -> None:
+        p = tmp_path / "empty.yaml"
+        p.write_text("")
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        assert str(excinfo.value) == f"Config file {p} must be a YAML mapping"
+
     def test_invalid_volume_type(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_type.yaml"
         p.write_text(
@@ -1286,6 +1293,29 @@ class TestLoadConfig:
             in _validation_error_types(p)
         )
 
+    def test_duplicate_location_spelled_differently(self, tmp_path: Path) -> None:
+        p = tmp_path / "dup_loc_spelling.yaml"
+        p.write_text(
+            dedent("""\
+            volumes:
+              v:
+                type: local
+                path: /x
+            sync-endpoints:
+              ep1:
+                volume: v
+                subdir: data
+              ep2:
+                volume: v
+                subdir: ./data
+            syncs: {}
+        """),
+        )
+        assert (
+            ConfigValidationErrorKind.DUPLICATE_ENDPOINT_LOCATION
+            in _validation_error_types(p)
+        )
+
     def test_nested_endpoint_subdir(self, tmp_path: Path) -> None:
         p = tmp_path / "nested.yaml"
         p.write_text(
@@ -1416,6 +1446,40 @@ class TestLoadConfig:
         assert error["type"] == ConfigValidationErrorKind.CIRCULAR_EXTENDS
         assert error["msg"] == "Circular extends chain: a -> b -> a"
 
+    def test_extends_does_not_inherit_parent_slug(self, tmp_path: Path) -> None:
+        p = tmp_path / "extends_slug.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "ssh-endpoints": {
+                        "base": {"slug": "base", "host": "h.example.com"},
+                        "a": {"extends": "base"},
+                    },
+                },
+            ),
+        )
+        endpoint = load_config(str(p)).ssh_endpoints["a"]
+        assert (endpoint.slug, endpoint.host) == ("a", "h.example.com")
+
+    @pytest.mark.parametrize("extends", [["base"], {"x": 1}])
+    def test_extends_not_a_string(self, tmp_path: Path, extends: object) -> None:
+        p = tmp_path / "extends_list.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "ssh-endpoints": {
+                        "base": {"host": "h.example.com"},
+                        "a": {"host": "a.example.com", "extends": extends},
+                    },
+                },
+            ),
+        )
+        [error] = _validation_errors(p)
+        assert (error["loc"], error["type"]) == (
+            ("ssh-endpoints", "a", "extends"),
+            "string_type",
+        )
+
     def test_extends_unknown_endpoint(self, tmp_path: Path) -> None:
         p = tmp_path / "unknown_extends.yaml"
         p.write_text(
@@ -1504,6 +1568,20 @@ class TestPathNormalization:
     def test_subdir_slash_only_becomes_none(self) -> None:
         ep = SyncEndpoint(slug="ep", volume="v", subdir="/")
         assert ep.subdir is None
+
+    def test_subdir_dot_and_empty_segments_dropped(self) -> None:
+        ep = SyncEndpoint(slug="ep", volume="v", subdir="./backups//./docs/.")
+        assert ep.subdir == "backups/docs"
+
+    def test_subdir_dot_only_becomes_none(self) -> None:
+        ep = SyncEndpoint(slug="ep", volume="v", subdir="./")
+        assert ep.subdir is None
+
+    @pytest.mark.parametrize("subdir", ["..", "../etc", "photos/../../etc", "a/.."])
+    def test_subdir_parent_segment_rejected(self, subdir: str) -> None:
+        with pytest.raises(ValidationError) as excinfo:
+            SyncEndpoint(slug="ep", volume="v", subdir=subdir)
+        assert _error_types(excinfo.value) == {ConfigValidationErrorKind.INVALID_SUBDIR}
 
     def test_subdir_none_stays_none(self) -> None:
         ep = SyncEndpoint(slug="ep", volume="v")

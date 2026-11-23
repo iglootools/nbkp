@@ -77,6 +77,10 @@ def _overlay_field(key: str, parent_value: object, child_value: object) -> objec
     )
 
 
+# Keys that identify the parent endpoint rather than configure it.
+_NOT_INHERITED = frozenset({"extends", "slug"})
+
+
 def _merge_endpoint(
     parent: Mapping[str, Any],
     child: Mapping[str, Any],
@@ -85,11 +89,13 @@ def _merge_endpoint(
     Overlay a child endpoint's raw fields on its resolved parent's.
 
     The child keeps its own ``extends`` (the parent's is not inherited), so
-    the merged endpoint still records which endpoint it was built from.
+    the merged endpoint still records which endpoint it was built from. The
+    parent's ``slug`` is not inherited either: it names the parent, and the
+    child takes its slug from its own key.
     """
     stale = _stale_exclusive_keys(child)
     merged = {
-        **{k: v for k, v in parent.items() if k != "extends"},
+        **{k: v for k, v in parent.items() if k not in _NOT_INHERITED},
         **{k: _overlay_field(k, parent.get(k), v) for k, v in child.items()},
     }
     return {k: v for k, v in merged.items() if k not in stale}
@@ -104,11 +110,12 @@ def _resolve_endpoint(
     Resolve one raw endpoint's ``extends`` chain into a flat mapping.
 
     ``chain`` holds the slugs visited so far, ending with ``slug``, for cycle
-    detection. Non-mapping entries are returned as-is for pydantic to reject.
+    detection. Non-mapping entries, and entries whose ``extends`` is not a
+    string, are returned as-is for pydantic to reject.
     """
     ep = endpoints[slug]
     parent_slug = ep.get("extends") if is_raw_mapping(ep) else None
-    if parent_slug is None:
+    if not isinstance(parent_slug, str):
         return ep
     elif parent_slug in chain:
         raise config_error(

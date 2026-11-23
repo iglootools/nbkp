@@ -71,10 +71,13 @@ characters.
 
 **Path normalization** — Volume paths and sync endpoint subdirectories are
 normalized at load time: trailing slashes are stripped, so `path: /mnt/data/`
-and `path: /mnt/data` are equivalent. For local volumes, `~` is expanded to the
-current user's home directory (`path: ~/data` becomes `/home/user/data`). Remote
-volume paths are not `~`-expanded: there the tilde refers to the remote user's
-home and is resolved by SSH/rsync on the remote side.
+and `path: /mnt/data` are equivalent. A `subdir` also drops its empty and `.`
+segments (`subdir: ./photos//2024/` is `photos/2024`), and one containing a `..`
+segment is rejected: a subdir must name a directory inside its volume. For local
+volumes, `~` is expanded to the current user's home directory (`path: ~/data`
+becomes `/home/user/data`). Remote volume paths are not `~`-expanded: there the
+tilde refers to the remote user's home and is resolved by SSH/rsync on the
+remote side.
 
 **`path` and `mount`** — `path` is required unless the volume declares a `mount`
 section. For a mount-managed volume, declare `path` (backed by an `/etc/fstab`
@@ -262,7 +265,7 @@ Fields not explicitly set (`port`, `user`, `key`) are automatically filled from 
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `volume` | string | **required** | Volume slug |
-| `subdir` | string | `null` | Subdirectory within the volume. Leading and trailing slashes are stripped. |
+| `subdir` | string | `null` | Subdirectory within the volume. Empty and `.` segments are dropped (`/photos/./2024/` is `photos/2024`); a `..` segment is rejected. |
 | `btrfs-snapshots` | object | see below | Btrfs snapshot config |
 | `hard-link-snapshots` | object | see below | Hard-link snapshot config |
 
@@ -399,6 +402,7 @@ Checked when the config is loaded, before anything runs:
   `~` and an absolute path on the same host), so endpoints on such volumes can
   overlap undetected. Declare a directory tree as one volume and split it with
   `subdir`s rather than as nested volumes.
+- A sync endpoint's `subdir` has no `..` segment.
 - At most one of `btrfs-snapshots` and `hard-link-snapshots` is enabled per sync
   endpoint.
 - A sync's `source` and `destination` are different endpoints.

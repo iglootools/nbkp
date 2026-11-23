@@ -22,6 +22,7 @@ class ConfigValidationErrorKind(StrEnum):
     MUTUALLY_EXCLUSIVE = "mutually-exclusive"
     DUPLICATE_ENDPOINT_LOCATION = "duplicate-endpoint-location"
     NESTED_ENDPOINT = "nested-endpoint"
+    INVALID_SUBDIR = "invalid-subdir"
     SELF_SYNC = "self-sync"
     SHARED_DESTINATION = "shared-destination"
     CYCLIC_DEPENDENCY = "cyclic-dependency"
