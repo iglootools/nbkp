@@ -16,7 +16,7 @@
 5. Activate the virtual environment:
 
    ```bash
-   # Install all the tools defined in mise.toml (python, uv, ...). This does not create
+   # Install all the tools defined in mise.toml (python, uv, pv for the demo, ...). This does not create
    # .venv: the first `mise run <task>` does (see below), and mise activates it from then on.
    mise install
 
@@ -42,12 +42,6 @@
 
    ```bash
    brew install rsync
-   ```
-
-7. (Optional) If you want to record the demo, install pv:
-
-   ```bash
-   brew install pv
    ```
 
 ## Editor and Claude Code Setup

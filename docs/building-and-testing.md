@@ -10,8 +10,6 @@ testing/QA. The `seed --docker` command requires the `docker` extra:
 `uv tool install 'nbkp[docker]'`. In dev, run it from the project environment:
 `uv run --no-sync nbkp demo seed` (or `uv run --no-sync nbkp demo output`).
 
-Run automated tests and checks (no external dependencies):
-
 Tasks come in families, as
 [mise.md › Name tasks by family](https://github.com/iglootools/common/blob/main/guidelines/project-setup/mise.md#name-tasks-by-family)
 describes: `fmt*`, `toc` and the reference generators rewrite files, `lint*`
@@ -172,7 +170,7 @@ testkit ([`entrypoint.sh`](../nbkp/remote/testkit/dockerbuild/entrypoint.sh),
   (it would yank live siblings' devices); it only detaches loops whose backing
   file is `(deleted)`, as a best-effort reap of orphans from killed runs.
 
-Within a worker, the autouse `_cleanup_remote` fixture scrubs shared remote
+Within a worker, the autouse `cleanup_remote` fixture scrubs shared remote
 paths between tests, keeping them independent.
 
 Keep xdist's default `load` scheduling. `--dist worksteal` moves queued tests
@@ -200,7 +198,7 @@ used for manual testing and debugging. It generates:
 `mise run demo-record` is a great way to iterate quickly on test scenarios: it
 runs the `demo seed` command as well as a few test scenarios exercising
 different features of the tool. It needs Docker, plus `pv` for the simulated
-typing; `mise run install` provides `pv`, from conda-forge, on Linux and macOS.
+typing; `mise install` provides `pv`, from conda-forge, on Linux and macOS.
 `mise run demo-preflight` checks these dependencies and says how to fix what is
 missing; `demo-record` runs it first.
 
@@ -342,8 +340,8 @@ The steps to cut a release are in
   # expect: ["deletion","non_fast_forward","pull_request","required_status_checks"]
   ```
 
-  `test` must keep running on every pull request (no `paths` filter on its
-  workflow), or a pull request it skips can never be merged.
+  `preflight` must keep running on every pull request (no `paths` filter on
+  `preflight.yml`), or a pull request it skips can never be merged.
 - **Keep the dependency graph on.** Dependabot security updates (below) read it
   to find vulnerable dependencies. GitHub enables it on every public repository
   and offers no switch to turn it off there, so there is nothing to apply while
