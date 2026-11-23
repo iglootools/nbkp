@@ -51,6 +51,12 @@ See
 
 See [docs/usage.md](https://github.com/iglootools/nbkp/blob/main/docs/usage.md).
 
+Reference:
+[every command and option](https://github.com/iglootools/nbkp/blob/main/docs/cli-reference.md),
+[every configuration key](https://github.com/iglootools/nbkp/blob/main/docs/config-reference.md),
+and
+[the concepts behind them](https://github.com/iglootools/nbkp/blob/main/docs/domain.md).
+
 ## Tutorial
 
 For a complete end-to-end walkthrough — backing up a laptop to a Raspberry Pi
