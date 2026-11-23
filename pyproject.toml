@@ -336,7 +336,9 @@ forbidden_modules = ["nbkp.disks.**"]
 # Importing nbkp.disks reaches its submodules through its __init__.
 allow_indirect_imports = true
 ignore_imports = [
+  # Its rendering of mount and disk results, which the command wiring and demo seed print.
   "** -> nbkp.disks.output",
+  # The root app mounts the disks sub-app.
   "nbkp.cli.app -> nbkp.disks.cli",
 ]
 
@@ -367,9 +369,13 @@ forbidden_modules = ["nbkp.preflight.**"]
 # Importing nbkp.preflight reaches its submodules through its __init__.
 allow_indirect_imports = true
 ignore_imports = [
+  # Its rendering of preflight results, which the command wiring prints and the sync and
+  # snapshot output reuses.
   "** -> nbkp.preflight.output",
   "** -> nbkp.preflight.output.**",
+  # Its sample results, which demo output renders without a real check.
   "** -> nbkp.preflight.testkit",
+  # The root app mounts the preflight sub-app.
   "nbkp.cli.app -> nbkp.preflight.cli",
 ]
 
