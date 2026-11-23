@@ -89,7 +89,7 @@ class TestRetrievePassphraseKeyring:
         use_keyring(_StoreKeyring({("nbkp", "other"): "secret123"}))
         with pytest.raises(CredentialError) as excinfo:
             retrieve_passphrase("disk1", CredentialProvider.KEYRING)
-        assert excinfo.value.reason == CredentialErrorKind.NOT_FOUND
+        assert excinfo.value.kind == CredentialErrorKind.NOT_FOUND
 
     @pytest.mark.parametrize(
         "backend_error",
@@ -106,7 +106,7 @@ class TestRetrievePassphraseKeyring:
         use_keyring(_StoreKeyring(error=backend_error))
         with pytest.raises(CredentialError) as excinfo:
             retrieve_passphrase("disk1", CredentialProvider.KEYRING)
-        assert excinfo.value.reason == CredentialErrorKind.BACKEND_UNAVAILABLE
+        assert excinfo.value.kind == CredentialErrorKind.BACKEND_UNAVAILABLE
 
     def test_raises_when_keyring_not_installed(self) -> None:
         # The test environment installs every extra, so the missing one is
@@ -115,7 +115,7 @@ class TestRetrievePassphraseKeyring:
             patch.setitem(sys.modules, "keyring", None)
             with pytest.raises(CredentialError) as excinfo:
                 retrieve_passphrase("disk1", CredentialProvider.KEYRING)
-        assert excinfo.value.reason == CredentialErrorKind.NOT_INSTALLED
+        assert excinfo.value.kind == CredentialErrorKind.NOT_INSTALLED
 
 
 class TestRetrievePassphrasePrompt:
@@ -158,7 +158,7 @@ class TestRetrievePassphraseEnv:
     def test_raises_when_env_not_set(self) -> None:
         with pytest.raises(CredentialError) as excinfo:
             retrieve_passphrase("disk1", CredentialProvider.ENV, environ={})
-        assert excinfo.value.reason == CredentialErrorKind.ENV_UNSET
+        assert excinfo.value.kind == CredentialErrorKind.ENV_UNSET
         assert passphrase_env_var("disk1") in str(excinfo.value)
 
 
@@ -213,7 +213,7 @@ class TestRetrievePassphraseCommand:
                 command_template=["pass", "show", "nbkp/{id}"],
                 run=run,
             )
-        assert excinfo.value.reason == CredentialErrorKind.COMMAND_FAILED
+        assert excinfo.value.kind == CredentialErrorKind.COMMAND_FAILED
 
     def test_default_runner_captures_stdout(self) -> None:
         """The real runner, with a harmless command: stdout is the secret."""
@@ -257,13 +257,13 @@ class TestRetrievePassphraseCommand:
                 CredentialProvider.COMMAND,
                 command_template=["nbkp-no-such-executable", "{id}"],
             )
-        assert excinfo.value.reason == CredentialErrorKind.COMMAND_NOT_RUNNABLE
+        assert excinfo.value.kind == CredentialErrorKind.COMMAND_NOT_RUNNABLE
         assert "nbkp-no-such-executable" in str(excinfo.value)
 
     def test_raises_when_no_command_template(self) -> None:
         with pytest.raises(CredentialError) as excinfo:
             retrieve_passphrase("disk1", CredentialProvider.COMMAND)
-        assert excinfo.value.reason == CredentialErrorKind.COMMAND_MISSING
+        assert excinfo.value.kind == CredentialErrorKind.COMMAND_MISSING
 
 
 class TestRetrievePassphraseEmpty:
@@ -274,7 +274,7 @@ class TestRetrievePassphraseEmpty:
                 CredentialProvider.ENV,
                 environ={"NBKP_PASSPHRASE_DISK1": ""},
             )
-        assert excinfo.value.reason == CredentialErrorKind.EMPTY
+        assert excinfo.value.kind == CredentialErrorKind.EMPTY
         assert str(excinfo.value) == (
             "Credential provider 'env' returned an empty passphrase for id 'disk1'."
         )
@@ -290,7 +290,7 @@ class TestRetrievePassphraseEmpty:
                 command_template=["pass", "show", "nbkp/{id}"],
                 run=run,
             )
-        assert excinfo.value.reason == CredentialErrorKind.EMPTY
+        assert excinfo.value.kind == CredentialErrorKind.EMPTY
         assert "'command'" in str(excinfo.value)
 
 
@@ -408,9 +408,9 @@ class TestPrefetchPassphrases:
 
         results = {r.passphrase_id: r for r in prefetch_passphrases(cfg, passphrase_fn)}
         assert results["present"].success
-        assert results["present"].reason is None
+        assert results["present"].kind is None
         assert not results["absent"].success
-        assert results["absent"].reason == CredentialErrorKind.NOT_FOUND
+        assert results["absent"].kind == CredentialErrorKind.NOT_FOUND
 
     def test_skipped_for_prompt_provider(self) -> None:
         cfg = _cfg(provider=CredentialProvider.PROMPT, encrypted={"a": "id"})

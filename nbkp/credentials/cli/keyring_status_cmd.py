@@ -86,7 +86,7 @@ def _result_json(result: PassphrasePrefetch) -> dict[str, Any]:
     return {
         "available": result.success,
         **({"error": result.detail} if result.detail else {}),
-        **({"reason": result.reason.value} if result.reason else {}),
+        **({"reason": result.kind.value} if result.kind else {}),
     }
 
 

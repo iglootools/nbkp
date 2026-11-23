@@ -298,7 +298,7 @@ def config_error_json(e: ConfigError) -> dict[str, Any]:
     cause = e.__cause__
     return {
         "error": {
-            "reason": e.reason.value,
+            "reason": e.kind.value,
             "message": _config_error_body(e),
             **(
                 {"errors": _validation_errors_json(cause)}
@@ -315,5 +315,5 @@ def format_config_error(e: ConfigError) -> Panel:
     # Both wrapped in Text: the title's own brackets would be read as a style
     # tag (rendering a bare "Config error"), and the body carries YAML parser
     # and pydantic messages, which embed "[type=..., input_value=...]".
-    title = Text(f"Config error [{e.reason}]")
+    title = Text(f"Config error [{e.kind}]")
     return Panel(Text(body), title=title, style="red")

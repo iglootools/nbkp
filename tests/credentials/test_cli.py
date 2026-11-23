@@ -72,7 +72,7 @@ class TestKeyringStatusJson:
             ("usb",),
             success=False,
             detail="missing",
-            reason=CredentialErrorKind.NOT_FOUND,
+            kind=CredentialErrorKind.NOT_FOUND,
         )
 
         assert keyring_status_json(_config(CredentialProvider.KEYRING), [missing]) == {

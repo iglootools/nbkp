@@ -27,9 +27,9 @@ class CredentialErrorKind(StrEnum):
 
 class CredentialError(Exception):
     """
-    A passphrase could not be retrieved; *reason* says why.
+    A passphrase could not be retrieved; *kind* says why.
 
-    The fields that apply to *reason* are set: *passphrase_id* for the keyring,
+    The fields that apply to *kind* are set: *passphrase_id* for the keyring,
     *env_var* for the environment, *command* (and *exit_code*) for a credential
     command, *detail* for the underlying error or the command's stderr, and
     *provider* and *passphrase_id* for an empty passphrase.
@@ -37,7 +37,7 @@ class CredentialError(Exception):
 
     def __init__(
         self,
-        reason: CredentialErrorKind,
+        kind: CredentialErrorKind,
         *,
         passphrase_id: str | None = None,
         env_var: str | None = None,
@@ -46,8 +46,8 @@ class CredentialError(Exception):
         detail: str | None = None,
         provider: CredentialProvider | None = None,
     ) -> None:
-        """Build the error from its reason and the fields that apply to it."""
-        self.reason = reason
+        """Build the error from its kind and the fields that apply to it."""
+        self.kind = kind
         self.passphrase_id = passphrase_id
         self.env_var = env_var
         self.command = command
@@ -58,7 +58,7 @@ class CredentialError(Exception):
 
     def _message(self) -> str:
         command = self.command or []
-        match self.reason:
+        match self.kind:
             case CredentialErrorKind.NOT_INSTALLED:
                 return (
                     "keyring package not installed."
@@ -358,14 +358,14 @@ class PassphrasePrefetch:
     """
     The outcome of prefetching one passphrase-id, and the volumes that use it.
 
-    On failure, *detail* holds the error message and *reason* its kind.
+    On failure, *detail* holds the error message and *kind* its kind.
     """
 
     passphrase_id: str
     volumes: tuple[str, ...]
     success: bool
     detail: str | None = None
-    reason: CredentialErrorKind | None = None
+    kind: CredentialErrorKind | None = None
 
 
 def prefetch_passphrases(
@@ -431,7 +431,7 @@ def _prefetch_one(
             volumes,
             success=False,
             detail=str(e),
-            reason=e.reason,
+            kind=e.kind,
         )
     if on_prefetch_end is not None:
         on_prefetch_end(pid, result)

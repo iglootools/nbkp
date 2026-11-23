@@ -26,7 +26,7 @@ _CONFIG_EXAMPLES_URL = (
 
 
 class ConfigErrorKind(StrEnum):
-    """Why the config could not be loaded: the ``reason`` of a :class:`ConfigError`."""
+    """Why the config could not be loaded: the ``kind`` of a :class:`ConfigError`."""
 
     FILE_NOT_FOUND = "file-not-found"
     UNREADABLE = "unreadable"
@@ -39,7 +39,7 @@ class ConfigErrorKind(StrEnum):
 
 class ConfigError(Exception):
     """
-    The config could not be loaded; *reason* says why.
+    The config could not be loaded; *kind* says why.
 
     *path* is the file at fault (the SSH config for ``INVALID_SSH_CONFIG``),
     *searched* the paths looked through when no file was found, and *detail*
@@ -48,21 +48,21 @@ class ConfigError(Exception):
 
     def __init__(
         self,
-        reason: ConfigErrorKind,
+        kind: ConfigErrorKind,
         *,
         path: str | Path | None = None,
         searched: tuple[Path, ...] = (),
         detail: str | None = None,
     ) -> None:
-        """Build the error from its reason and the context that explains it."""
-        self.reason = reason
+        """Build the error from its kind and the context that explains it."""
+        self.kind = kind
         self.path = path
         self.searched = searched
         self.detail = detail
         super().__init__(self._message())
 
     def _message(self) -> str:
-        match self.reason:
+        match self.kind:
             case ConfigErrorKind.FILE_NOT_FOUND:
                 return f"Config file not found: {self.path}"
             case ConfigErrorKind.UNREADABLE:
@@ -167,7 +167,7 @@ def load_config(
     Load and validate the config file.
 
     Raises ``ConfigError`` when the file is missing or unreadable, is not a YAML
-    mapping, or fails validation; ``reason`` says which.
+    mapping, or fails validation; ``kind`` says which.
     """
     path = find_config_file(
         config_path,

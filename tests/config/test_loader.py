@@ -35,7 +35,7 @@ def _validation_errors(path: Path) -> list[ErrorDetails]:
     """Load ``path``, expecting a validation failure, and return its errors."""
     with pytest.raises(ConfigError) as excinfo:
         load_config(str(path))
-    assert excinfo.value.reason == ConfigErrorKind.VALIDATION
+    assert excinfo.value.kind == ConfigErrorKind.VALIDATION
     cause = excinfo.value.__cause__
     assert isinstance(cause, ValidationError)
     return cause.errors()
@@ -94,7 +94,7 @@ class TestFindConfigFile:
     def test_explicit_path_missing(self) -> None:
         with pytest.raises(ConfigError) as excinfo:
             find_config_file("/nonexistent/config.yaml")
-        assert excinfo.value.reason == ConfigErrorKind.FILE_NOT_FOUND
+        assert excinfo.value.kind == ConfigErrorKind.FILE_NOT_FOUND
 
     def test_xdg_config(self, tmp_path: Path) -> None:
         xdg = tmp_path / "xdg"
@@ -139,7 +139,7 @@ class TestFindConfigFile:
     def test_no_config_found(self, tmp_path: Path) -> None:
         with pytest.raises(ConfigError) as excinfo:
             find_config_file(environ={}, **_search_in(tmp_path))
-        assert excinfo.value.reason == ConfigErrorKind.NO_CONFIG_FOUND
+        assert excinfo.value.kind == ConfigErrorKind.NO_CONFIG_FOUND
         assert str(tmp_path / "home" / ".config" / "nbkp") in str(excinfo.value)
         assert "docs/config-examples" in str(excinfo.value)
 
@@ -162,7 +162,7 @@ class TestLoadConfig:
         p.write_text("not_a_list:\n  - [invalid")
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorKind.INVALID_YAML
+        assert excinfo.value.kind == ConfigErrorKind.INVALID_YAML
 
     @pytest.mark.skipif(os.geteuid() == 0, reason="root reads any file")
     def test_non_utf8_file(self, tmp_path: Path) -> None:
@@ -170,7 +170,7 @@ class TestLoadConfig:
         p.write_bytes("# caf\u00e9\nvolumes: {}\n".encode("latin-1"))
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorKind.INVALID_YAML
+        assert excinfo.value.kind == ConfigErrorKind.INVALID_YAML
 
     def test_unreadable_file(self, tmp_path: Path) -> None:
         p = tmp_path / "config.yaml"
@@ -178,14 +178,14 @@ class TestLoadConfig:
         p.chmod(0)
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorKind.UNREADABLE
+        assert excinfo.value.kind == ConfigErrorKind.UNREADABLE
 
     def test_not_a_mapping(self, tmp_path: Path) -> None:
         p = tmp_path / "list.yaml"
         p.write_text("- item1\n- item2\n")
         with pytest.raises(ConfigError) as excinfo:
             load_config(str(p))
-        assert excinfo.value.reason == ConfigErrorKind.NOT_A_MAPPING
+        assert excinfo.value.kind == ConfigErrorKind.NOT_A_MAPPING
 
     def test_empty_file_names_config_file(self, tmp_path: Path) -> None:
         p = tmp_path / "empty.yaml"
