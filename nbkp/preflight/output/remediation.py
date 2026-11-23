@@ -59,6 +59,7 @@ from nbkp.preflight.status.ssh import (
 from nbkp.preflight.status.sync import SyncErrorKind
 from nbkp.preflight.status.volume import VolumeErrorKind, VolumeStatus
 from nbkp.remote.endpoints import ResolvedEndpoint, ResolvedEndpoints
+from nbkp.remote.resolution import resolve_proxy_chain
 from nbkp.remote.ssh import (
     format_known_hosts_option,
     format_proxy_jump_chain,
@@ -299,11 +300,7 @@ def _mkdir(
 
 
 def _proxy_chain(config: Config, server: SshEndpoint) -> list[SshEndpoint] | None:
-    return (
-        [config.ssh_endpoints[s] for s in server.proxy_jump_chain]
-        if server.proxy_jump_chain
-        else None
-    )
+    return resolve_proxy_chain(config, server) or None
 
 
 def _ssh_copy_id_cmd(server: SshEndpoint, proxy_chain: list[SshEndpoint] | None) -> str:

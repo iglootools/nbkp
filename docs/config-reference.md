@@ -180,8 +180,11 @@ use `-J`: the rsync and generated-script SSH commands nest one
 `-o ProxyCommand=ssh … -W %h:%p <hop>` per hop, so each hop gets its own port,
 key and `connection-options` (with `-J`, a hop's options would come only from
 `~/.ssh/config`), and Fabric/Paramiko opens each hop as a gateway connection.
-See [SSH transport](./internals.md#ssh-transport). Circular chains are rejected
-at load time.
+See [SSH transport](./internals.md#ssh-transport). A hop may have its own
+`proxy-jump(s)`: nbkp reaches it through its chain first, so `proxy-jump: b1`
+where `b1` jumps through `b2` connects through `b2`, then `b1`. A bastion that
+several hops share is jumped through once, where it is first needed. Circular
+chains are rejected at load time.
 
 **`location` / `locations`** — Network-context tags (e.g. `home`, `travel`)
 consumed by `--location` / `--exclude-location` at runtime. See

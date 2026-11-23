@@ -22,6 +22,7 @@ from nbkp.remote.resolution import (
     resolve_all_endpoints,
     resolve_host,
     resolve_hostname,
+    resolve_proxy_chain,
 )
 
 _NO_SSH_CONFIG = paramiko.SSHConfig()
@@ -338,3 +339,68 @@ class TestResolveAllEndpoints:
         )
         assert {r.server.slug for r in resolved.values()} == {"nas-lan"}
         assert sorted(queried) == ["nas.example.com", "nas.lan"]
+
+
+def _nested_proxy_config() -> Config:
+    """``target`` jumps through ``b1``, which is reachable only through ``b2``."""
+    return Config(
+        ssh_endpoints={
+            "b2": SshEndpoint(slug="b2", host="b2.example.com"),
+            "b1": SshEndpoint(slug="b1", host="b1.internal", proxy_jump="b2"),
+            "target": SshEndpoint(
+                slug="target",
+                host="target.internal",
+                proxy_jump="b1",
+            ),
+        },
+        volumes={
+            "nas": RemoteVolume(slug="nas", ssh_endpoint="target", path="/backups"),
+        },
+    )
+
+
+class TestResolveProxyChain:
+    def test_no_proxy(self) -> None:
+        config = Config(ssh_endpoints={"s": SshEndpoint(slug="s", host="s.lan")})
+        assert resolve_proxy_chain(config, config.ssh_endpoints["s"]) == []
+
+    def test_bastion_chain_comes_before_bastion(self) -> None:
+        config = _nested_proxy_config()
+        chain = resolve_proxy_chain(config, config.ssh_endpoints["target"])
+        assert [ep.slug for ep in chain] == ["b2", "b1"]
+
+    def test_expands_every_level(self) -> None:
+        config = Config(
+            ssh_endpoints={
+                "b3": SshEndpoint(slug="b3", host="b3.example.com"),
+                "b2": SshEndpoint(slug="b2", host="b2.internal", proxy_jump="b3"),
+                "b1": SshEndpoint(slug="b1", host="b1.internal", proxy_jump="b2"),
+                "target": SshEndpoint(slug="target", host="t", proxy_jump="b1"),
+            },
+        )
+        chain = resolve_proxy_chain(config, config.ssh_endpoints["target"])
+        assert [ep.slug for ep in chain] == ["b3", "b2", "b1"]
+
+    def test_shared_bastion_jumped_through_once(self) -> None:
+        """``proxy-jumps: [b1, b2]`` where ``b1`` jumps through ``b2``."""
+        config = Config(
+            ssh_endpoints={
+                "b2": SshEndpoint(slug="b2", host="b2.example.com"),
+                "b1": SshEndpoint(slug="b1", host="b1.internal", proxy_jump="b2"),
+                "target": SshEndpoint(
+                    slug="target",
+                    host="t",
+                    proxy_jumps=["b1", "b2"],
+                ),
+            },
+        )
+        chain = resolve_proxy_chain(config, config.ssh_endpoints["target"])
+        assert [ep.slug for ep in chain] == ["b2", "b1"]
+
+    def test_resolved_endpoint_carries_nested_hops(self) -> None:
+        resolved = resolve_all_endpoints(
+            _nested_proxy_config(),
+            ssh_config=_NO_SSH_CONFIG,
+            lookup=_unresolvable,
+        )
+        assert [ep.slug for ep in resolved["nas"].proxy_chain] == ["b2", "b1"]
