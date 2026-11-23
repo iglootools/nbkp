@@ -54,7 +54,7 @@
       "envManager": "ms-python.python:venv"
     }
   ],
-  // Format on save with the tool the `format` task runs for each language, so a saved file
+  // Format on save with the tool the `fmt` task runs for each language, so a saved file
   // passes `lint-fmt`: tombi and VSCode's built-in formatters would otherwise claim TOML,
   // JSON and Markdown. See guidelines/project-setup/ide.md in iglootools/common.
   "editor.formatOnSave": true,
