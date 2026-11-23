@@ -9,6 +9,7 @@ output: the device is present, the LUKS container locked, nothing mounted.
 """
 
 import subprocess
+from collections.abc import Callable
 
 import paramiko
 import pytest
@@ -476,9 +477,13 @@ class TestMountVolume:
         assert result.failure == LifecycleFailure(command="lsblk")
 
 
-def _umount(vol: LocalVolume, run: FakeCommandRunner) -> UmountResult:
+def _umount(
+    vol: LocalVolume,
+    run: FakeCommandRunner,
+    sleep: Callable[[float], None] = lambda _: None,
+) -> UmountResult:
     assert vol.mount is not None
-    return umount_volume(vol, vol.mount, {}, run=run)
+    return umount_volume(vol, vol.mount, {}, run=run, sleep=sleep)
 
 
 class TestUmountVolume:
@@ -539,6 +544,28 @@ class TestUmountVolume:
             exit_code=1,
             message="Error locking: device busy",
         )
+
+    def test_retries_unmount_and_lock_while_udisks_catches_up(self) -> None:
+        sleeps: list[float] = []
+        run = (
+            FakeCommandRunner()
+            .on("lsblk", returns=_UNLOCKED)
+            .on("findmnt", returns=_mounted_at("/mnt/encrypted"))
+            .on(
+                "udisksctl",
+                "unmount",
+                returns=[completed(1, stderr=_LOOKUP_ERROR), completed(0)],
+            )
+            .on(
+                "udisksctl",
+                "lock",
+                returns=[completed(1, stderr=_LOOKUP_ERROR), completed(0)],
+            )
+        )
+        result = _umount(_encrypted_vol(), run, sleeps.append)
+        assert result.success
+        assert _udisks_steps(run) == ["unmount", "unmount", "lock", "lock"]
+        assert len(sleeps) == 2
 
     def test_umount_failure(self) -> None:
         run = (

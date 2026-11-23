@@ -563,16 +563,25 @@ def umount_volume(
     resolved_endpoints: ResolvedEndpoints,
     *,
     run: VolumeCommandRunner = run_on_volume,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> UmountResult:
     """
     Umount and lock LUKS for a single volume.
 
     Always attempts umount + lock LUKS regardless of who mounted.
+    *sleep* paces the retries while udisks catches up with udev (see
+    :func:`run_udisks`).
     Connection failures and failed device probes yield a failed
     ``UmountResult`` rather than crashing; programming errors propagate.
     """
     try:
-        return _umount_volume_inner(volume, mount_config, resolved_endpoints, run=run)
+        return _umount_volume_inner(
+            volume,
+            mount_config,
+            resolved_endpoints,
+            run=run,
+            sleep=sleep,
+        )
     except DeviceProbeError as e:
         return UmountResult(
             volume_slug=volume.slug,
@@ -600,6 +609,7 @@ def _umount_volume_inner(
     resolved_endpoints: ResolvedEndpoints,
     *,
     run: VolumeCommandRunner,
+    sleep: Callable[[float], None],
 ) -> UmountResult:
     """Core umount logic, separated for exception boundary in ``umount_volume``."""
     slug = volume.slug
@@ -616,6 +626,7 @@ def _umount_volume_inner(
             build_unmount_command(device),
             volume,
             resolved_endpoints,
+            sleep=sleep,
             run=run,
         )
         if result.returncode != 0:
@@ -633,6 +644,7 @@ def _umount_volume_inner(
             build_lock_command(mount_config.device_uuid),
             volume,
             resolved_endpoints,
+            sleep=sleep,
             run=run,
         )
         if result.returncode != 0:
