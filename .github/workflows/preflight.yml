@@ -49,7 +49,8 @@ jobs:
       contents: read
     # No Python matrix: the supported floor is the version pinned in mise.toml, so the one
     # interpreter worth testing is the one the locked install below already provides.
-    # See common/guidelines/coding/python.md "Python Version Policy".
+    # See common/guidelines/project-setup/python-tooling.md "Target the latest stable Python,
+    # unless others install the package".
     steps: &steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # graphviz not available on mise

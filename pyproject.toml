@@ -2,10 +2,9 @@
 name = "nbkp"
 description = "Nomad Backup: An rsync-based backup tool for nomadic setups where sources and destinations aren't always available — laptops on the move, removable drives, home servers behind changing networks. Sentinel files ensure backups only run when volumes are genuinely present, with optional btrfs or hard-link snapshots for point-in-time recovery."
 readme = "README.md"
-# Floor is the same version as local development and CI (mise.toml [tools] python): the
-# latest stable CPython every dependency installs on. pyyaml ships no wheel for it yet and
-# builds from its sdist, which preflight.yml caches. The upper bound keeps installs off
-# an untested Python. See common/guidelines/coding/python.md "Python Version Policy".
+# The latest stable Python, as guidelines/project-setup/python-tooling.md in iglootools/common
+# sets ("Target the latest stable Python, unless others install the package"). pyyaml ships no
+# wheel for it yet and builds from its sdist, which preflight.yml caches.
 requires-python = ">=3.15,<3.16"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
