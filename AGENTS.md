@@ -6,8 +6,8 @@ uv, Typer; tasks run through mise.
 
 ## Commands
 
-- `mise run preflight-quick`: every lint and the fast tests (no Docker suites),
-  before each commit.
+- `mise run preflight-quick`: every lint and the unit tests, before each
+  commit.
 - `mise run preflight`: every lint and test CI runs, every few commits and
   before review.
 - `mise tasks` lists the rest.

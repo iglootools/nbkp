@@ -18,7 +18,7 @@ fail without writing, and `lint` runs every one of them.
 ```bash
 # mise tasks
 mise run preflight          # every lint and every test, Docker suites included (what CI runs)
-mise run preflight-quick    # every lint, and the unit and filesystem tests (no Docker)
+mise run preflight-quick    # every lint and the unit tests
 mise run lint               # every lint below
 
 mise run test               # All tests

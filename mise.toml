@@ -86,20 +86,22 @@ run = [
 ]
 
 [tasks.preflight-quick]
-description = "Run every lint and the tests that need no Docker (unit and filesystem)"
+description = "Run every lint and the unit tests"
 run = [
   { task = "lint" },
-  { tasks = ["test-unit", "test-integration-fs"] },
+  { task = "test-unit" },
 ]
 
 # CI runs three jobs in parallel, one per ci-* task: the two Docker suites take about a
 # minute each and do not need each other, so running them one after the other only made
-# CI wait. Together the three cover preflight.
+# CI wait. Together the three cover preflight; the first adds the filesystem suite, which
+# needs no Docker, to preflight-quick.
 [tasks.ci-preflight-quick]
 description = "Install, then run every lint and the unit and filesystem tests (CI job 1/3)"
 run = [
   { task = "install" },
   { task = "preflight-quick" },
+  { task = "test-integration-fs" },
 ]
 
 [tasks.ci-test-docker]
