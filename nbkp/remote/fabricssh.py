@@ -60,7 +60,7 @@ def _build_single_connection(
     # fabric declares ``client = None`` on the class, so pyright infers it as
     # optional, but ``Connection.__init__`` always sets an SSHClient. Retire
     # both fabric ignores below when fabric ships type hints.
-    _configure_host_key_verification(conn.client, opts)  # pyright: ignore[reportArgumentType]
+    configure_host_key_verification(conn.client, opts)  # pyright: ignore[reportArgumentType]
     return conn
 
 
@@ -83,16 +83,27 @@ class _RejectUnknownHostKey(paramiko.MissingHostKeyPolicy):
         raise UnknownHostKeyError(hostname)
 
 
-def _configure_host_key_verification(
+#: OpenSSH's default ``GlobalKnownHostsFile``: host keys trusted for every user.
+GLOBAL_KNOWN_HOSTS_FILES = (
+    Path("/etc/ssh/ssh_known_hosts"),
+    Path("/etc/ssh/ssh_known_hosts2"),
+)
+
+
+def configure_host_key_verification(
     client: paramiko.SSHClient,
     opts: SshConnectionOptions,
+    *,
+    global_known_hosts_files: tuple[Path, ...] = GLOBAL_KNOWN_HOSTS_FILES,
 ) -> None:
     """
     Mirror OpenSSH's host key verification, which the rsync path uses.
 
     With strict checking, the host key must already be in ``known-hosts-file`` (which
-    replaces ``~/.ssh/known_hosts``, like ``UserKnownHostsFile``). Fabric's own default
-    is to trust any host key without loading a known_hosts file at all.
+    replaces ``~/.ssh/known_hosts``, like ``UserKnownHostsFile``). Without one, the
+    system-wide *global_known_hosts_files* are trusted too, as OpenSSH trusts its
+    ``GlobalKnownHostsFile``. Fabric's own default is to trust any host key without
+    loading a known_hosts file at all.
     """
     # A missing file is an empty one for OpenSSH: every host is unknown.
     known_hosts = (
@@ -108,6 +119,11 @@ def _configure_host_key_verification(
 
     client.set_missing_host_key_policy(_RejectUnknownHostKey())
     if known_hosts is None:
+        # Loaded first, so the user's own file wins a conflicting entry.
+        for global_file in global_known_hosts_files:
+            # OpenSSH skips a global file it cannot read, like a missing one.
+            with suppress(OSError):
+                client.load_system_host_keys(str(global_file))
         client.load_system_host_keys()
     elif known_hosts.exists():
         client.load_system_host_keys(str(known_hosts))

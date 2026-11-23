@@ -21,6 +21,7 @@ from nbkp.config import SshConnectionOptions, SshEndpoint
 from nbkp.preflight.volume_checks import unreachable_diagnostics
 from nbkp.remote import run_remote_command
 from nbkp.remote.errors import UnknownHostKeyError
+from nbkp.remote.fabricssh import configure_host_key_verification
 
 
 class _NoAuthServer(paramiko.ServerInterface):
@@ -170,6 +171,68 @@ class TestStrictHostKeyChecking:
         with pytest.raises(paramiko.SSHException) as excinfo:
             run_remote_command(_endpoint(ssh_server.port, options), ["true"])
         assert not isinstance(excinfo.value, UnknownHostKeyError)
+
+
+class TestGlobalKnownHosts:
+    """The system-wide known_hosts files OpenSSH trusts as ``GlobalKnownHostsFile``."""
+
+    def _connect(
+        self,
+        server: _LocalSshServer,
+        options: SshConnectionOptions,
+        global_files: tuple[Path, ...],
+    ) -> None:
+        client = paramiko.SSHClient()
+        configure_host_key_verification(
+            client,
+            options,
+            global_known_hosts_files=global_files,
+        )
+        try:
+            client.connect(
+                "127.0.0.1",
+                port=server.port,
+                username="nobody",
+                allow_agent=False,
+                look_for_keys=False,
+            )
+        finally:
+            client.close()
+
+    def test_global_file_trusted_without_known_hosts_file(
+        self,
+        ssh_server: _LocalSshServer,
+        tmp_path: Path,
+    ) -> None:
+        global_file = _known_hosts(tmp_path, ssh_server)
+
+        with pytest.raises(paramiko.SSHException) as excinfo:
+            self._connect(
+                ssh_server,
+                SshConnectionOptions(),
+                (tmp_path / "absent", global_file),
+            )
+        assert not isinstance(excinfo.value, UnknownHostKeyError)
+
+    def test_missing_global_files_refuse_unknown_host(
+        self,
+        ssh_server: _LocalSshServer,
+        tmp_path: Path,
+    ) -> None:
+        with pytest.raises(UnknownHostKeyError):
+            self._connect(ssh_server, SshConnectionOptions(), (tmp_path / "absent",))
+
+    def test_known_hosts_file_skips_global_files(
+        self,
+        ssh_server: _LocalSshServer,
+        tmp_path: Path,
+    ) -> None:
+        """A ``known-hosts-file`` keeps verification to that one file."""
+        global_file = _known_hosts(tmp_path, ssh_server)
+        options = SshConnectionOptions(known_hosts_file=str(tmp_path / "absent"))
+
+        with pytest.raises(UnknownHostKeyError):
+            self._connect(ssh_server, options, (global_file,))
 
 
 def test_unknown_host_is_an_auth_failure() -> None:

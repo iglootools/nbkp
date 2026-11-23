@@ -203,9 +203,12 @@ rsync) and onto Paramiko/Fabric (used by checks and snapshot operations).
 `channel-timeout` and `disabled-algorithms` only apply to the Paramiko/Fabric
 path. **Host key verification** — Both paths verify the host key the same way.
 With `strict-host-key-checking: true` (the default), the host's key must already
-be in `~/.ssh/known_hosts`, or in `known-hosts-file` when it is set (it replaces
-`~/.ssh/known_hosts`, like OpenSSH's `UserKnownHostsFile`; a missing file counts
-as empty). nbkp never trusts a new host on first use: an unknown host or a
+be in `~/.ssh/known_hosts` or in the system-wide `/etc/ssh/ssh_known_hosts`
+(OpenSSH's default `GlobalKnownHostsFile`), or in `known-hosts-file` when it is
+set (it replaces `~/.ssh/known_hosts`, like OpenSSH's `UserKnownHostsFile`; a
+missing file counts as empty). With `known-hosts-file` set, nbkp's own checks
+consult only that file, while OpenSSH, behind rsync, still also trusts the
+system-wide one. nbkp never trusts a new host on first use: an unknown host or a
 changed key is refused, and preflight reports it as
 `ssh authentication or host key verification failed` (`auth-failed` in JSON
 output). Add a new host once with `ssh <host> true`, after checking the
