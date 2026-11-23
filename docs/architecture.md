@@ -244,12 +244,12 @@ dependencies; the contracts are what reject a new import that breaks a rule:
   may import Rich and `clidisplay/` but not Typer, `cliwiring/` or any `cli/`
   package. Core code never imports an `output` module, its own included: the
   "Only presentation code imports output modules" contract allows only `cli/`
-  packages, `cliwiring/`, `clidisplay/`, other `output` modules, testkits and
-  `demo/` to. Likewise "Only the root app imports a CLI sub-app" keeps a core
-  module off its own `cli/` package, an edge the forbidden contract skips
-  because source and target overlap. `tests/test_core_imports.py` asserts the
-  outcome as well, by importing every core module in a fresh interpreter and
-  checking that neither Rich nor Typer loaded.
+  packages, `cliwiring/`, `clidisplay/` and other `output` modules to. Likewise
+  "Only the root app imports a CLI sub-app" keeps a core module off its own
+  `cli/` package, an edge the forbidden contract skips because source and target
+  overlap. `tests/test_core_imports.py` asserts the outcome as well, by
+  importing every core module, testkits and `demo/seed.py` included, in a fresh
+  interpreter and checking that neither Rich nor Typer loaded.
 - **`config/` is the base layer.** Its core (models, loader) imports nothing
   else from nbkp. Endpoint selection — the `EndpointFilter` / `ResolvedEndpoint`
   models (`remote/endpoints.py`) and the algorithm (`remote/resolution.py`) —
@@ -270,8 +270,12 @@ dependencies; the contracts are what reject a new import that breaks a rule:
   subpackages sit above all of it (they are constrained by the rules above
   instead). A new core package needs a place in this order, in the `layers`
   contract.
+- **`disks/` and `preflight/` are imported through the package.** Their
+  `__init__` re-exports what other packages use; their other submodules are
+  implementation details, which no other package imports directly. Only their
+  `output`, `cli/` and testkit packages are imported by path.
 - **`clidisplay/` is a presentation leaf.** It imports nothing from nbkp but
-  `policy`.
+  `policy`, and not Typer, since every `output` module imports it.
 - **Test and demo fixtures (`testkit`) follow the same rules as core code.**
   They build scenarios for the tests and ship in the wheel for `nbkp demo`,
   which imports them at runtime, so they sit in their package's layer and import
@@ -305,7 +309,8 @@ Domain cores:
   observation (`probes.py`, `volume_checks.py`, `endpoint_checks.py`,
   `ssh_checks.py`, `snapshot_checks.py`) and interpretation (`status/`, one
   module per layer). `output/` renders `check` and `troubleshoot`, including
-  remediation text.
+  remediation text, and holds the sentence each problem kind is shown as
+  (`messages.py`).
 - **`snapshots/`** — listing, creation and pruning for both backends
   (`btrfs.py`, `hardlinks.py`, shared code in `common.py`), and the
   `snapshots show` / `prune` decisions: which syncs are read, skipped or pruned
@@ -322,6 +327,7 @@ Domain cores:
 
 Outside the runtime layers, `demo/` implements `nbkp demo`: the seeding workflow
 in `seed.py`, which like a core module imports neither Rich nor Typer, and its
-Typer sub-app in `cli/`. The testkits (`remote/testkit/` for Docker and SSH
-fixtures, `sync/testkit/` for seeding and result helpers, `config/testkit.py`,
-`preflight/testkit/`) supply test scenarios.
+Typer sub-app in `cli/`, which also holds the `nbkp-demo` entry point so that
+importing `nbkp.demo.seed` does not load Typer. The testkits (`remote/testkit/`
+for Docker and SSH fixtures, `sync/testkit/` for seeding and result helpers,
+`config/testkit.py`, `preflight/testkit/`) supply test scenarios.

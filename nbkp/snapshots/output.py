@@ -4,7 +4,7 @@ from rich.table import Table
 from rich.text import Text
 
 from nbkp.clidisplay import dry_run_table_title
-from nbkp.preflight import format_problems
+from nbkp.preflight.output import format_problems
 from nbkp.snapshots.errors import SnapshotOp
 from nbkp.snapshots.models import (
     PruneResult,

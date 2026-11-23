@@ -31,7 +31,6 @@ from nbkp.preflight import (
     VolumeErrorKind,
     VolumeStatus,
 )
-from nbkp.preflight.output.formatting import collect_ssh_endpoint_statuses
 from nbkp.preflight.status.result import PreflightResult
 from nbkp.preflight.testkit.common import (
     LOCALHOST_SSH_STATUS,
@@ -39,6 +38,7 @@ from nbkp.preflight.testkit.common import (
     SENTINEL_MISSING_CAPS,
     active_dst_ep_status,
     active_src_ep_status,
+    collect_ssh_endpoint_statuses,
     inactive_dst_ep_status,
     inactive_src_ep_status,
     standalone_ssh_status,

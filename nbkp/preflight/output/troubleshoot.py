@@ -29,7 +29,7 @@ from nbkp.config import (
 from nbkp.disks import DeviceProbeError, discover_cleartext_device, generate_auth_rules
 from nbkp.fsprotocol import SNAPSHOTS_DIR, Snapshot, parse_snapshot_listing
 from nbkp.policy import Severity, Strictness
-from nbkp.preflight.messages import format_problem
+from nbkp.preflight.output.messages import format_problem
 from nbkp.preflight.output.remediation import (
     ERROR,
     HEADER,

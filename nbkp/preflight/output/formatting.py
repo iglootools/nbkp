@@ -13,7 +13,7 @@ from nbkp.disks import (
     mounted_fail_severity,
 )
 from nbkp.policy import Severity, Strictness
-from nbkp.preflight.messages import format_problems
+from nbkp.preflight.output.messages import format_problems
 from nbkp.preflight.severity import (
     PreflightErrorKind,
     severity_for_error,
@@ -23,12 +23,11 @@ from nbkp.preflight.status.endpoint import (
     DestinationEndpointErrorKind,
     SourceEndpointErrorKind,
 )
-from nbkp.preflight.status.ssh import SshEndpointErrorKind, SshEndpointStatus
-from nbkp.preflight.status.sync import SyncErrorKind, SyncStatus
+from nbkp.preflight.status.ssh import SshEndpointErrorKind
+from nbkp.preflight.status.sync import SyncErrorKind
 from nbkp.preflight.status.volume import (
     VolumeCapabilities,
     VolumeErrorKind,
-    VolumeStatus,
 )
 
 
@@ -183,24 +182,3 @@ def format_mount_status(
         for value, label, fail_sev in items
         if value is not None
     )
-
-
-def collect_ssh_endpoint_statuses(
-    vol_statuses: dict[str, VolumeStatus],
-    sync_statuses: dict[str, SyncStatus],
-) -> dict[str, SshEndpointStatus]:
-    """
-    Extract the SSH endpoint statuses embedded in volume statuses.
-
-    They feed the SSH Endpoints table. First-seen wins for duplicate slugs.
-    """
-    all_ssh = [
-        *[vs.ssh_endpoint_status for vs in vol_statuses.values()],
-        *[
-            ep.volume_status.ssh_endpoint_status
-            for ss in sync_statuses.values()
-            for ep in [ss.source_endpoint_status, ss.destination_endpoint_status]
-        ],
-    ]
-    # dict.fromkeys-style: first occurrence wins
-    return {s.slug: s for s in reversed(all_ssh)}

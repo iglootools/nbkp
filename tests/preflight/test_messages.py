@@ -8,9 +8,8 @@ from nbkp.preflight import (
     SshEndpointErrorKind,
     SyncErrorKind,
     VolumeErrorKind,
-    format_problem,
-    format_problems,
 )
+from nbkp.preflight.output import format_problem, format_problems
 from nbkp.preflight.severity import PreflightErrorKind, PreflightWarningKind
 from nbkp.preflight.status.ssh import SshEndpointWarningKind
 from nbkp.snapshots.errors import SnapshotOp

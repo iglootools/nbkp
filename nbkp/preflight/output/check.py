@@ -16,7 +16,6 @@ from nbkp.config.output import (
 )
 from nbkp.fsprotocol import DEVNULL_TARGET
 from nbkp.policy import Severity, Strictness
-from nbkp.preflight.messages import format_problem, format_problems
 from nbkp.preflight.output.formatting import (
     check,
     format_capabilities,
@@ -24,6 +23,7 @@ from nbkp.preflight.output.formatting import (
     join_text,
     status_text,
 )
+from nbkp.preflight.output.messages import format_problem, format_problems
 from nbkp.preflight.severity import severity_for_errors
 from nbkp.preflight.status.endpoint import (
     DestinationEndpointDiagnostics,

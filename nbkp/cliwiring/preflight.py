@@ -22,11 +22,10 @@ from nbkp.preflight import (
     PreflightResult,
     check_all_syncs,
     check_step_count,
-    format_problems,
+    has_fatal_errors,
     severity_for_errors,
 )
-from nbkp.preflight.output import format_human_check
-from nbkp.preflight.strictness import has_fatal_errors
+from nbkp.preflight.output import format_human_check, format_problems
 from nbkp.remote.endpoints import ResolvedEndpoints
 
 
