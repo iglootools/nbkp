@@ -1,11 +1,13 @@
 """Rendering the sync dependency graph as a tree, mermaid text, ASCII art or JSON."""
 
-# mermaid-ascii-diagrams leaves render_ascii's parameter unannotated; retire when
-# it annotates it.
-from mermaid_ascii import parse_mermaid, render_ascii  # pyright: ignore[reportUnknownVariableType]
 from rich.console import Group, RenderableType
 from rich.text import Text
 from rich.tree import Tree
+
+# Only `ordering graph --format ascii` and `demo output` draw ASCII art.
+# mermaid-ascii-diagrams leaves render_ascii's parameter unannotated; retire the
+# pyright ignore when it annotates it.
+lazy from mermaid_ascii import parse_mermaid, render_ascii  # pyright: ignore[reportUnknownVariableType]
 
 from nbkp.clidisplay import severity_icon
 from nbkp.config import Config, SyncEndpoint
