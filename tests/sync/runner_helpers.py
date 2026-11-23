@@ -11,7 +11,6 @@ from nbkp.config import (
     RemoteVolume,
     SshEndpoint,
     SyncConfig,
-    SyncEndpoint,
     Volume,
 )
 from nbkp.preflight import (
@@ -33,6 +32,7 @@ from nbkp.preflight import (
 )
 from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.sync import RunOptions, SyncResult, run_all_syncs
+from tests.fixtures.config import two_volume_config
 
 FIXED_NOW = datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC)
 # The snapshot a real run names from FIXED_NOW on a remote destination.
@@ -167,21 +167,11 @@ def inactive_dst_ep_status(
 
 
 def make_local_config() -> Config:
-    src = LocalVolume(slug="src", path="/src")
-    dst = LocalVolume(slug="dst", path="/dst")
-    sync = SyncConfig(
-        slug="s1",
-        source="ep-src",
-        destination="ep-dst",
+    _, config = two_volume_config(
+        src=LocalVolume(slug="src", path="/src"),
+        dst=LocalVolume(slug="dst", path="/dst"),
     )
-    return Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
-        },
-        syncs={"s1": sync},
-    )
+    return config
 
 
 def make_snapshot_config(
@@ -196,56 +186,24 @@ def make_snapshot_config(
     symlink, which is a local filesystem call on a local volume — goes
     through the injected command runner.
     """
-    nas = SshEndpoint(slug="nas", host="nas.local")
-    return Config(
-        ssh_endpoints={"nas": nas},
-        volumes={
-            "src": LocalVolume(slug="src", path="/src"),
-            "dst": RemoteVolume(slug="dst", ssh_endpoint="nas", path="/dst"),
-        },
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                btrfs_snapshots=btrfs or BtrfsSnapshotConfig(),
-                hard_link_snapshots=hard_link or HardLinkSnapshotConfig(),
-            ),
-        },
-        syncs={"s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst")},
+    _, config = two_volume_config(
+        src=LocalVolume(slug="src", path="/src"),
+        dst=RemoteVolume(slug="dst", ssh_endpoint="nas", path="/dst"),
+        ssh_endpoints=[SshEndpoint(slug="nas", host="nas.local")],
+        dst_btrfs=btrfs,
+        dst_hard_link=hard_link,
     )
+    return config
 
 
 def make_remote_same_server_btrfs_config() -> Config:
-    server = SshEndpoint(slug="server", host="nas.local", user="backup")
-    src = RemoteVolume(
-        slug="src",
-        ssh_endpoint="server",
-        path="/data",
+    _, config = two_volume_config(
+        src=RemoteVolume(slug="src", ssh_endpoint="server", path="/data"),
+        dst=RemoteVolume(slug="dst", ssh_endpoint="server", path="/backup"),
+        ssh_endpoints=[SshEndpoint(slug="server", host="nas.local", user="backup")],
+        dst_btrfs=BtrfsSnapshotConfig(enabled=True),
     )
-    dst = RemoteVolume(
-        slug="dst",
-        ssh_endpoint="server",
-        path="/backup",
-    )
-    sync = SyncConfig(
-        slug="s1",
-        source="ep-src",
-        destination="ep-dst",
-    )
-    return Config(
-        ssh_endpoints={"server": server},
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
-        },
-        syncs={"s1": sync},
-    )
+    return config
 
 
 def active_statuses(

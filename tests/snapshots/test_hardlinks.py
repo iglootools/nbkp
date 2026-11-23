@@ -10,7 +10,6 @@ from nbkp.config import (
     RemoteVolume,
     SshEndpoint,
     SyncConfig,
-    SyncEndpoint,
 )
 from nbkp.remote.endpoints import ResolvedEndpoint
 from nbkp.snapshots.common import create_snapshot_timestamp
@@ -22,6 +21,7 @@ from nbkp.snapshots.hardlinks import (
     prune_snapshots,
 )
 from tests.fakes import FakeCommandRunner, completed
+from tests.fixtures.config import two_volume_config
 
 _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
 _LOCAL_VOL = LocalVolume(slug="dummy", path="/dummy")
@@ -31,55 +31,26 @@ _TS_REMOTE = create_snapshot_timestamp(_NOW, _REMOTE_VOL, "linux")
 
 
 def _local_config() -> tuple[SyncConfig, Config]:
-    src = LocalVolume(slug="src", path="/src")
-    dst = LocalVolume(slug="dst", path="/dst")
-    sync = SyncConfig(
-        slug="s1",
-        source="ep-src",
-        destination="ep-dst",
+    return two_volume_config(
+        src=LocalVolume(slug="src", path="/src"),
+        dst=LocalVolume(slug="dst", path="/dst"),
+        dst_hard_link=HardLinkSnapshotConfig(
+            enabled=True,
+            max_snapshots=5,
+        ),
     )
-    config = Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                hard_link_snapshots=HardLinkSnapshotConfig(
-                    enabled=True,
-                    max_snapshots=5,
-                ),
-            ),
-        },
-        syncs={"s1": sync},
-    )
-    return sync, config
 
 
 def _remote_config() -> tuple[SyncConfig, Config, dict[str, ResolvedEndpoint]]:
     server = SshEndpoint(slug="nas", host="nas.local", user="backup")
-    src = LocalVolume(slug="src", path="/src")
-    dst = RemoteVolume(slug="dst", ssh_endpoint="nas", path="/backup")
-    sync = SyncConfig(
-        slug="s1",
-        source="ep-src",
-        destination="ep-dst",
-    )
-    config = Config(
-        ssh_endpoints={"nas": server},
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                hard_link_snapshots=HardLinkSnapshotConfig(
-                    enabled=True,
-                    max_snapshots=3,
-                ),
-            ),
-        },
-        syncs={"s1": sync},
+    sync, config = two_volume_config(
+        src=LocalVolume(slug="src", path="/src"),
+        dst=RemoteVolume(slug="dst", ssh_endpoint="nas", path="/backup"),
+        ssh_endpoints=[server],
+        dst_hard_link=HardLinkSnapshotConfig(
+            enabled=True,
+            max_snapshots=3,
+        ),
     )
     resolved = {"dst": ResolvedEndpoint(server=server)}
     return sync, config, resolved
@@ -133,24 +104,10 @@ class TestCreateSnapshotDir:
 
 class TestCleanupOrphanedSnapshots:
     def test_deletes_orphans(self, tmp_path: Path) -> None:
-        dst = LocalVolume(slug="dst", path=str(tmp_path))
-        src = LocalVolume(slug="src", path="/src")
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
+        sync, config = two_volume_config(
+            src=LocalVolume(slug="src", path="/src"),
+            dst=LocalVolume(slug="dst", path=str(tmp_path)),
+            dst_hard_link=HardLinkSnapshotConfig(enabled=True),
         )
 
         snaps = tmp_path / "snapshots"
@@ -166,24 +123,10 @@ class TestCleanupOrphanedSnapshots:
         assert not (snaps / "2024-01-02T00:00:00.000Z").exists()
 
     def test_no_orphans(self, tmp_path: Path) -> None:
-        dst = LocalVolume(slug="dst", path=str(tmp_path))
-        src = LocalVolume(slug="src", path="/src")
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
+        sync, config = two_volume_config(
+            src=LocalVolume(slug="src", path="/src"),
+            dst=LocalVolume(slug="dst", path=str(tmp_path)),
+            dst_hard_link=HardLinkSnapshotConfig(enabled=True),
         )
         latest = tmp_path / "latest"
         latest.symlink_to("snapshots/2024-01-02T00:00:00.000Z")
@@ -193,20 +136,10 @@ class TestCleanupOrphanedSnapshots:
 
     @staticmethod
     def _leftover_config(tmp_path: Path) -> tuple[SyncConfig, Config]:
-        dst = LocalVolume(slug="dst", path=str(tmp_path))
-        src = LocalVolume(slug="src", path="/src")
-        sync = SyncConfig(slug="s1", source="ep-src", destination="ep-dst")
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
+        sync, config = two_volume_config(
+            src=LocalVolume(slug="src", path="/src"),
+            dst=LocalVolume(slug="dst", path=str(tmp_path)),
+            dst_hard_link=HardLinkSnapshotConfig(enabled=True),
         )
         (tmp_path / "snapshots" / "2024-01-01T00:00:00.000Z").mkdir(parents=True)
         return sync, config
@@ -279,27 +212,13 @@ _S3 = "2024-01-03T00:00:00.000Z"
 
 class TestPruneSnapshots:
     def test_prune_excess(self, tmp_path: Path) -> None:
-        dst = LocalVolume(slug="dst", path=str(tmp_path))
-        src = LocalVolume(slug="src", path="/src")
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(
-                        enabled=True,
-                        max_snapshots=2,
-                    ),
-                ),
-            },
-            syncs={"s1": sync},
+        sync, config = two_volume_config(
+            src=LocalVolume(slug="src", path="/src"),
+            dst=LocalVolume(slug="dst", path=str(tmp_path)),
+            dst_hard_link=HardLinkSnapshotConfig(
+                enabled=True,
+                max_snapshots=2,
+            ),
         )
 
         snaps = tmp_path / "snapshots"
@@ -314,27 +233,13 @@ class TestPruneSnapshots:
         assert _S1 in deleted[0]
 
     def test_never_prunes_latest(self, tmp_path: Path) -> None:
-        dst = LocalVolume(slug="dst", path=str(tmp_path))
-        src = LocalVolume(slug="src", path="/src")
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(
-                        enabled=True,
-                        max_snapshots=1,
-                    ),
-                ),
-            },
-            syncs={"s1": sync},
+        sync, config = two_volume_config(
+            src=LocalVolume(slug="src", path="/src"),
+            dst=LocalVolume(slug="dst", path=str(tmp_path)),
+            dst_hard_link=HardLinkSnapshotConfig(
+                enabled=True,
+                max_snapshots=1,
+            ),
         )
 
         snaps = tmp_path / "snapshots"
@@ -357,20 +262,10 @@ class TestPruneSnapshots:
         Counted, the half-written _S3 would make _S1 the excess, and the next
         orphan cleanup would then remove _S3 too, leaving one snapshot short.
         """
-        dst = LocalVolume(slug="dst", path=str(tmp_path))
-        src = LocalVolume(slug="src", path="/src")
-        sync = SyncConfig(slug="s1", source="ep-src", destination="ep-dst")
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
+        sync, config = two_volume_config(
+            src=LocalVolume(slug="src", path="/src"),
+            dst=LocalVolume(slug="dst", path=str(tmp_path)),
+            dst_hard_link=HardLinkSnapshotConfig(enabled=True),
         )
         snaps = tmp_path / "snapshots"
         snaps.mkdir()
@@ -384,24 +279,10 @@ class TestPruneSnapshots:
         assert sorted(p.name for p in snaps.iterdir()) == [_S1, _S2, _S3]
 
     def test_dry_run(self, tmp_path: Path) -> None:
-        dst = LocalVolume(slug="dst", path=str(tmp_path))
-        src = LocalVolume(slug="src", path="/src")
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
+        sync, config = two_volume_config(
+            src=LocalVolume(slug="src", path="/src"),
+            dst=LocalVolume(slug="dst", path=str(tmp_path)),
+            dst_hard_link=HardLinkSnapshotConfig(enabled=True),
         )
 
         snaps = tmp_path / "snapshots"
@@ -417,24 +298,10 @@ class TestPruneSnapshots:
         assert (snaps / _S2).exists()
 
     def test_no_excess(self, tmp_path: Path) -> None:
-        dst = LocalVolume(slug="dst", path=str(tmp_path))
-        src = LocalVolume(slug="src", path="/src")
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
+        sync, config = two_volume_config(
+            src=LocalVolume(slug="src", path="/src"),
+            dst=LocalVolume(slug="dst", path=str(tmp_path)),
+            dst_hard_link=HardLinkSnapshotConfig(enabled=True),
         )
         (tmp_path / "snapshots" / _S1).mkdir(parents=True)
 

@@ -9,9 +9,6 @@ from rich.console import Console, RenderableType
 from nbkp.config import (
     Config,
     HardLinkSnapshotConfig,
-    LocalVolume,
-    SyncConfig,
-    SyncEndpoint,
 )
 from nbkp.preflight import (
     SyncErrorKind,
@@ -30,6 +27,7 @@ from nbkp.sync.results import (
     SyncWarning,
     SyncWarningKind,
 )
+from tests.fixtures.config import two_volume_config
 from tests.fixtures.preflight import btrfs_config, local_vol_statuses, sync_status
 from tests.sync.runner_helpers import make_local_config, make_snapshot_config
 
@@ -53,26 +51,11 @@ class TestRunPreviewRsyncCommandDisplay:
         assert "--link-dest" not in output
 
     def test_hard_link_shows_snapshots_timestamp_suffix(self) -> None:
-        src = LocalVolume(slug="src", path="/mnt/src")
-        dst = LocalVolume(slug="dst", path="/mnt/dst")
-        ep_src = SyncEndpoint(slug="ep-src", volume="src")
-        ep_dst = SyncEndpoint(
-            slug="ep-dst",
-            volume="dst",
-            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
-        )
-        sync = SyncConfig(
-            slug="hl-sync",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
-            syncs={"hl-sync": sync},
+        _, config = two_volume_config(
+            dst_hard_link=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
         )
         vol_s = local_vol_statuses(config)
-        sync_s = {"hl-sync": sync_status(config, vol_s, "hl-sync")}
+        sync_s = {"s1": sync_status(config, vol_s, "s1")}
         sections = build_run_preview_sections(sync_s, config, resolved_endpoints={})
         output = _render_sections(sections)
         assert "/mnt/dst/snapshots/<timestamp>/" in output
@@ -80,22 +63,11 @@ class TestRunPreviewRsyncCommandDisplay:
         assert "--link-dest" not in output
 
     def test_hard_link_creates_the_snapshot_directory_without_p(self) -> None:
-        src = LocalVolume(slug="src", path="/mnt/src")
-        dst = LocalVolume(slug="dst", path="/mnt/dst")
-        ep_src = SyncEndpoint(slug="ep-src", volume="src")
-        ep_dst = SyncEndpoint(
-            slug="ep-dst",
-            volume="dst",
-            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
-        )
-        sync = SyncConfig(slug="hl-sync", source="ep-src", destination="ep-dst")
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
-            syncs={"hl-sync": sync},
+        _, config = two_volume_config(
+            dst_hard_link=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
         )
         vol_s = local_vol_statuses(config)
-        sync_s = {"hl-sync": sync_status(config, vol_s, "hl-sync")}
+        sync_s = {"s1": sync_status(config, vol_s, "s1")}
         sections = build_run_preview_sections(sync_s, config, resolved_endpoints={})
         output = _render_sections(sections)
         # As create_snapshot_dir runs it: an existing snapshot fails the run.
@@ -103,33 +75,18 @@ class TestRunPreviewRsyncCommandDisplay:
         assert "mkdir -p" not in output
 
     def test_hard_link_shows_link_dest_when_previous_exists(self) -> None:
-        src = LocalVolume(slug="src", path="/mnt/src")
-        dst = LocalVolume(slug="dst", path="/mnt/dst")
-        ep_src = SyncEndpoint(slug="ep-src", volume="src")
-        ep_dst = SyncEndpoint(
-            slug="ep-dst",
-            volume="dst",
-            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
-        )
-        sync = SyncConfig(
-            slug="hl-sync",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
-            syncs={"hl-sync": sync},
+        _, config = two_volume_config(
+            dst_hard_link=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
         )
         vol_s = local_vol_statuses(config)
         sync_s = {
-            "hl-sync": sync_status(
+            "s1": sync_status(
                 config,
                 vol_s,
-                "hl-sync",
+                "s1",
                 destination_latest_snapshot=create_snapshot_timestamp(
                     datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC),
-                    dst,
+                    config.volumes["dst"],
                     "linux",
                 ),
             ),
@@ -140,28 +97,15 @@ class TestRunPreviewRsyncCommandDisplay:
         assert "--link-dest" in output
         expected_ts = create_snapshot_timestamp(
             datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC),
-            dst,
+            config.volumes["dst"],
             "linux",
         )
         assert f"../{expected_ts.name}" in output
 
     def test_plain_sync_shows_bare_destination(self) -> None:
-        src = LocalVolume(slug="src", path="/mnt/src")
-        dst = LocalVolume(slug="dst", path="/mnt/dst")
-        ep_src = SyncEndpoint(slug="ep-src", volume="src")
-        ep_dst = SyncEndpoint(slug="ep-dst", volume="dst")
-        sync = SyncConfig(
-            slug="plain-sync",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
-            syncs={"plain-sync": sync},
-        )
+        _, config = two_volume_config()
         vol_s = local_vol_statuses(config)
-        sync_s = {"plain-sync": sync_status(config, vol_s, "plain-sync")}
+        sync_s = {"s1": sync_status(config, vol_s, "s1")}
         sections = build_run_preview_sections(sync_s, config, resolved_endpoints={})
         output = _render_sections(sections)
         assert "/mnt/dst/" in output
