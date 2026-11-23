@@ -497,7 +497,10 @@ class TestLocationExcluded:
 
     def test_disabled_sync_is_not_rendered(self) -> None:
         script = _location_excluded_script(enabled=False)
-        assert "# : disabled — pull-data (location-excluded, not rendered" in script
+        assert (
+            "# : disabled — pull-data (not rendered: volume remote-vol: all SSH"
+            in script
+        )
         assert "remote.example.com" not in script
         _bash_n(script)
 
@@ -832,6 +835,30 @@ class TestEdgeCases:
             check=lambda e: e.volume_slug == "dst",
         ):
             generate_script(mount_managed_config(), _OPTIONS, now=_NOW)
+
+    def test_unused_volume_without_path_is_ignored(self) -> None:
+        config = _local_to_local_config()
+        spare = LocalVolume(
+            slug="spare",
+            mount=MountConfig(device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6"),
+        )
+        config = config.model_copy(
+            update={"volumes": {**config.volumes, "spare": spare}},
+        )
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "sync_my_sync()" in script
+        _bash_n(script)
+
+    def test_disabled_sync_on_volume_without_path_is_not_rendered(self) -> None:
+        config = mount_managed_config()
+        sync = config.syncs["my-sync"].model_copy(update={"enabled": False})
+        config = config.model_copy(update={"syncs": {"my-sync": sync}})
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "# : disabled — my-sync (not rendered: volume dst has no 'path')" in (
+            script
+        )
+        assert "# sync_my_sync  # disabled" in script
+        _bash_n(script)
 
     def test_empty_config(self) -> None:
         config = Config()

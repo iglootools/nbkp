@@ -299,15 +299,15 @@ nbkp_run_sync() {
 
 # --- Sync functions ---
 <% for sync in syncs %>
-<% if sync.excluded_reason and sync.enabled %>
+<% if sync.stub_reason and sync.enabled %>
 
-# : location-excluded — ${{ sync.slug }}: ${{ sync.excluded_reason }}
+# : location-excluded — ${{ sync.slug }}: ${{ sync.stub_reason }}
 ${{ sync.fn_name }}_preflight() {
 ${{ sync.preflight | indent(4, first=true) }}
 }
-<% elif sync.excluded_reason %>
+<% elif sync.stub_reason %>
 
-# : disabled — ${{ sync.slug }} (location-excluded, not rendered: ${{ sync.excluded_reason }})
+# : disabled — ${{ sync.slug }} (not rendered: ${{ sync.stub_reason }})
 <% elif sync.enabled %>
 
 ${{ sync_functions(sync) | trim }}

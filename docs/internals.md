@@ -336,8 +336,9 @@ sudoers). The `disks setup-auth` command generates a single polkit rule at
 generation because credential retrieval depends on Python-specific backends
 (keyring, prompt). Volumes with mount config must be manually mounted/umounted
 before/after running the generated script. They also need a `path`: the script
-cannot discover a mountpoint, so `sh` refuses a volume without one, naming it,
-and exits 1.
+cannot discover a mountpoint, so `sh` refuses a volume without one that an
+enabled sync uses, naming it, and exits 1. A volume no enabled sync uses needs
+none: a disabled sync on it is left as a comment.
 
 For a complete end-to-end setup guide, including the fstab × crypttab
 combinations and worked examples, see

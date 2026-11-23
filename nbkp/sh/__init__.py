@@ -39,7 +39,7 @@ from nbkp.sh.steps import Step, build_steps
 
 class VolumeWithoutPathError(ValueError):
     """
-    A volume the script would use has no ``path``.
+    A volume an enabled sync of the script uses has no ``path``.
 
     The script is static, so it cannot discover a mount-managed volume's
     mountpoint at run time (mount management is left out of ``sh``).
@@ -80,7 +80,8 @@ def generate_script(
     """
     *now* is the generation time written to the header.
 
-    Raises :class:`VolumeWithoutPathError` when a volume has no ``path``.
+    Raises :class:`VolumeWithoutPathError` when a volume an enabled sync uses
+    has no ``path``.
     """
     re = resolved_endpoints or {}
     vol_paths = _build_vol_paths(config, options)
@@ -96,10 +97,11 @@ class _SyncContext:
     preflight: str
     steps: tuple[Step, ...]
     predecessors: tuple[str, ...]
-    # Set when endpoint resolution left out a volume of the sync for its
-    # location: the sync cannot run from there, so only a preflight that
-    # reports it inactive is rendered.
-    excluded_reason: str | None = None  # noqa: DC06 -- read by templates/backup.sh.j2
+    # Set when the sync's body cannot be rendered: a volume left out by
+    # endpoint resolution for its location (the sync is then inactive, and
+    # only a preflight that says so is rendered), or, for a disabled sync, a
+    # volume without a path. A comment-safe text.
+    stub_reason: str | None = None  # noqa: DC06 -- read by templates/backup.sh.j2
 
 
 def _load_template() -> Template:
@@ -125,36 +127,49 @@ def _load_template() -> Template:
 
 
 def _build_vol_paths(config: Config, options: ScriptOptions) -> dict[str, str]:
+    """
+    Map each volume that has a ``path`` to the path baked into the script.
+
+    A volume without one is left out: only an enabled sync using it is an
+    error, raised when that sync is rendered.
+    """
     src_slugs = {config.source_endpoint(s).volume for s in config.syncs.values()}
     dst_slugs = {config.destination_endpoint(s).volume for s in config.syncs.values()}
     return {
-        slug: _resolve_vol_path(slug, vol, src_slugs, dst_slugs, options)
+        slug: _resolve_vol_path(
+            slug,
+            vol,
+            vol.path,
+            options,
+            src_slugs=src_slugs,
+            dst_slugs=dst_slugs,
+        )
         for slug, vol in config.volumes.items()
+        if vol.path is not None
     }
 
 
 def _resolve_vol_path(
     slug: str,
     vol: LocalVolume | RemoteVolume,
+    path: str,
+    options: ScriptOptions,
+    *,
     src_slugs: set[str],
     dst_slugs: set[str],
-    options: ScriptOptions,
 ) -> str:
-    """Raise :class:`VolumeWithoutPathError` for a volume with no ``path``."""
-    if vol.path is None:
-        raise VolumeWithoutPathError(slug)
     match vol:
         case RemoteVolume():
-            return vol.path
+            return path
         case LocalVolume():
             should_relativize = (slug in src_slugs and options.relative_src) or (
                 slug in dst_slugs and options.relative_dst
             )
             if should_relativize and options.output_file:
                 output_dir = Path(options.output_file).parent
-                return f"{SCRIPT_DIR}/{os.path.relpath(vol.path, output_dir)}"
+                return f"{SCRIPT_DIR}/{os.path.relpath(path, output_dir)}"
             else:
-                return vol.path
+                return path
 
 
 def _slug_to_fn(slug: str) -> str:
@@ -175,24 +190,33 @@ def _build_sync_context(
 
     A sync with a location-excluded volume is inactive, as ``nbkp run``
     reports it: its preflight returns ``INACTIVE`` and no sync body is
-    rendered, since no endpoint was resolved to reach the volume.
+    rendered, since no endpoint was resolved to reach the volume. A disabled
+    sync with a volume without a path is left as a comment; an enabled one
+    raises :class:`VolumeWithoutPathError`.
     """
     sync = config.syncs[slug]
-    excluded = _excluded_volumes(sync, config, resolved_endpoints)
+    volumes = _sync_volumes(sync, config)
+    excluded = [
+        v for v in volumes if location_excluded(config.volumes[v], resolved_endpoints)
+    ]
+    without_path = [v for v in volumes if v not in vol_paths]
     if excluded:
         reason = (
             f"volume {', '.join(excluded)}: all SSH endpoints at an excluded"
             " location (applied when the script was generated)"
         )
-        return _SyncContext(
-            slug=slug,
-            fn_name=_slug_to_fn(slug),
-            enabled=sync.enabled,
+        return _stub_context(
+            slug,
+            sync,
+            predecessors,
+            reason,
             preflight=f"nbkp_log {quote(f'INACTIVE: {reason}')}\nreturn {INACTIVE}",
-            steps=(),
-            predecessors=tuple(_slug_to_fn(p) for p in sorted(predecessors)),
-            excluded_reason=comment_text(reason),
         )
+    if without_path and sync.enabled:
+        raise VolumeWithoutPathError(without_path[0])
+    if without_path:
+        reason = f"volume {', '.join(without_path)} has no 'path'"
+        return _stub_context(slug, sync, predecessors, reason, preflight="")
     spec = build_sync_spec(slug, config, vol_paths, resolved_endpoints, platform)
     return _SyncContext(
         slug=slug,
@@ -204,18 +228,35 @@ def _build_sync_context(
     )
 
 
-def _excluded_volumes(
+def _stub_context(
+    slug: str,
     sync: SyncConfig,
-    config: Config,
-    resolved_endpoints: ResolvedEndpoints,
-) -> list[str]:
-    """Slugs of the sync's volumes that endpoint resolution left out (deduplicated)."""
-    slugs = dict.fromkeys(
-        [config.source_endpoint(sync).volume, config.destination_endpoint(sync).volume],
+    predecessors: set[str],
+    reason: str,
+    *,
+    preflight: str,
+) -> _SyncContext:
+    return _SyncContext(
+        slug=slug,
+        fn_name=_slug_to_fn(slug),
+        enabled=sync.enabled,
+        preflight=preflight,
+        steps=(),
+        predecessors=tuple(_slug_to_fn(p) for p in sorted(predecessors)),
+        stub_reason=comment_text(reason),
     )
-    return [
-        v for v in slugs if location_excluded(config.volumes[v], resolved_endpoints)
-    ]
+
+
+def _sync_volumes(sync: SyncConfig, config: Config) -> list[str]:
+    """Slugs of the sync's source and destination volumes, deduplicated."""
+    return list(
+        dict.fromkeys(
+            [
+                config.source_endpoint(sync).volume,
+                config.destination_endpoint(sync).volume,
+            ],
+        ),
+    )
 
 
 def _build_script_context(
