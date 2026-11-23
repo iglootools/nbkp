@@ -110,9 +110,12 @@ use it, so there is no separate compatibility check. Raising it means moving
 `[tools] python` (then `mise lock`), `requires-python`, ruff's `target-version`,
 pyright's `pythonVersion`, and the base image in
 `nbkp/remote/testkit/dockerbuild/Dockerfile.btrfs-local-test` together. That
-Dockerfile pins Python and uv by digest and Renovate's dockerfile manager
-updates them on their own, so between minor bumps their patch versions can
-differ from `mise.toml`'s; the btrfs tests do not need them to match. See the
+Dockerfile's uv pin carries a `# renovate:` comment that makes Renovate track it
+through the same datasource as `mise.toml`'s, so the two move in the same update
+(see `renovate.json`). Its Python base image stays pinned by digest under
+Renovate's dockerfile manager, so its patch release can lag or lead
+`mise.toml`'s by a few days: see the exception in
+[guidelines.md](guidelines.md). See the
 [rationale for targeting the latest stable Python](https://github.com/iglootools/common/blob/main/guidelines/project-setup/python-tooling.md#target-the-latest-stable-python-unless-others-install-the-package-1).
 
 ## Parallel test execution
