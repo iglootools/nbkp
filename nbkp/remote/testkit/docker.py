@@ -18,14 +18,12 @@ lazy from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519Privat
 from nbkp.config import SshConnectionOptions, SshEndpoint
 from nbkp.remote.fabricssh import run_remote_command
 from nbkp.remote.testkit.constants import (
-    BASTION_CONTAINER_NAME,
     LUKS_MAPPER_NAME,
     LUKS_PASSPHRASE,
     NETWORK_NAME,
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_ENCRYPTED_PATH,
     REMOTE_BTRFS_PATH,
-    STORAGE_CONTAINER_NAME,
 )
 from nbkp.remote.testkit.errors import (
     DockerError,
@@ -180,23 +178,91 @@ def build_docker_image() -> None:
         raise DockerError(DockerErrorKind.IMAGE_BUILD_FAILED, str(exc)) from exc
 
 
-@_as_docker_error
-def start_storage_container(
+@dataclass(frozen=True)
+class ContainerSpec:
+    """
+    How a demo or test container runs, apart from its name, ports and network.
+
+    The demo starts its containers through :func:`start_container` and the Docker test
+    fixtures through testcontainers, but both build them from one spec, so a change to
+    a container needs one edit. *binds* maps each host path to its container path and
+    mode (``ro`` or ``rw``).
+    """
+
+    environment: dict[str, str]
+    binds: dict[str, tuple[str, str]]
+    privileged: bool = False
+
+
+def storage_container_spec(
     pub_key: Path,
-    network_name: str | None = None,
-    network_alias: str | None = None,
     *,
+    luks_mapper_name: str = LUKS_MAPPER_NAME,
     luks_enabled: bool = False,
+) -> ContainerSpec:
+    """
+    Spec of the storage container: sshd, rsync, btrfs, udisks and a LUKS volume.
+
+    *luks_enabled* sets up the LUKS volume at startup; otherwise ``/setup-luks.sh``
+    does it on demand. Each concurrent container needs its own *luks_mapper_name*,
+    since privileged containers share the host kernel's device-mapper namespace.
+    """
+    return ContainerSpec(
+        environment={
+            "NBKP_BACKUP_PATH": REMOTE_BACKUP_PATH,
+            "NBKP_BTRFS_PATH": REMOTE_BTRFS_PATH,
+            "NBKP_BTRFS_ENCRYPTED_PATH": REMOTE_BTRFS_ENCRYPTED_PATH,
+            "NBKP_LUKS_PASSPHRASE": LUKS_PASSPHRASE,
+            "NBKP_LUKS_MAPPER_NAME": luks_mapper_name,
+            "NBKP_LUKS_ENABLED": "1" if luks_enabled else "0",
+        },
+        binds={
+            str(pub_key): (SSH_AUTHORIZED_KEYS_PATH, "ro"),
+            # Share the host's /dev and udev runtime.  udisks mounts a device
+            # only once udev has probed its filesystem (it reads the ID_FS_TYPE
+            # udev property).  With a *private* container /dev, the container's
+            # udevd sees a different devtmpfs than the kernel creates dm-crypt
+            # devices on, so after btrfs/loop activity (which shares the kernel
+            # across all containers on Docker Desktop's LinuxKit VM) it
+            # intermittently never probes a freshly-unlocked cleartext device —
+            # udisks then refuses to mount it ("… is not a mountable filesystem")
+            # and the encrypted-volume mount fails.  Sharing /dev lets udevd
+            # operate on the same devtmpfs the kernel uses, and sharing /run/udev
+            # gives udisks the resulting db.  This is the minimal set: --network
+            # host and a shared /run/dbus also work but break the multi-container
+            # bastion topology (port and bus conflicts).
+            "/dev": ("/dev", "rw"),
+            "/run/udev": ("/run/udev", "rw"),
+        },
+        privileged=True,
+    )
+
+
+def bastion_container_spec(pub_key: Path) -> ContainerSpec:
+    """Spec of the bastion: the same image running sshd alone, as a jump proxy."""
+    return ContainerSpec(
+        environment={"NBKP_BASTION_ONLY": "1"},
+        binds={str(pub_key): (SSH_AUTHORIZED_KEYS_PATH, "ro")},
+    )
+
+
+@_as_docker_error
+def start_container(
+    name: str,
+    spec: ContainerSpec,
+    network_name: str,
+    *,
+    network_alias: str | None = None,
 ) -> int:
     """
-    Replace any existing container; return the host port mapped to its SSH.
+    Replace any container named *name*; return the host port mapped to its SSH.
 
     The image must already be built via build_docker_image().
     """
     client = dockerlib.from_env()
 
     try:
-        old = client.containers.get(STORAGE_CONTAINER_NAME)
+        old = client.containers.get(name)
         old.remove(force=True)
     except docker_errors.NotFound:
         pass
@@ -204,82 +270,21 @@ def start_storage_container(
     container = client.containers.run(
         _IMAGE_TAG,
         detach=True,
-        name=STORAGE_CONTAINER_NAME,
-        privileged=True,
+        name=name,
+        privileged=spec.privileged,
         ports=_SSH_PORT_ON_LOOPBACK,
-        environment={
-            "NBKP_BACKUP_PATH": REMOTE_BACKUP_PATH,
-            "NBKP_BTRFS_PATH": REMOTE_BTRFS_PATH,
-            "NBKP_BTRFS_ENCRYPTED_PATH": REMOTE_BTRFS_ENCRYPTED_PATH,
-            "NBKP_LUKS_PASSPHRASE": LUKS_PASSPHRASE,
-            "NBKP_LUKS_MAPPER_NAME": LUKS_MAPPER_NAME,
-            "NBKP_LUKS_ENABLED": "1" if luks_enabled else "0",
-        },
+        environment=spec.environment,
         volumes={
-            str(pub_key): {
-                "bind": SSH_AUTHORIZED_KEYS_PATH,
-                "mode": "ro",
-            },
-            # Share the host's /dev and udev runtime.  udisks mounts a device
-            # only once udev has probed its filesystem (it reads the ID_FS_TYPE
-            # udev property).  With a *private* container /dev, the container's
-            # udevd sees a different devtmpfs than the kernel creates dm-crypt
-            # devices on, so it intermittently never probes a freshly-unlocked
-            # cleartext device — udisks then refuses to mount it ("… is not a
-            # mountable filesystem") and the encrypted-volume mount fails.
-            # Sharing /dev lets udevd operate on the same devtmpfs the kernel
-            # uses, and sharing /run/udev gives udisks the resulting db.  This
-            # mirrors the e2e/integration test container (see
-            # tests/_docker_fixtures).
-            "/dev": {"bind": "/dev", "mode": "rw"},
-            "/run/udev": {"bind": "/run/udev", "mode": "rw"},
-        },
-    )
-
-    if network_name is not None:
-        network = client.networks.get(network_name)
-        aliases = [network_alias] if network_alias else None
-        # docker leaves connect()'s *args and **kwargs unannotated; retire when it
-        # annotates them.
-        network.connect(container, aliases=aliases)  # pyright: ignore[reportUnknownMemberType]
-
-    container.reload()
-    port_info = container.attrs["NetworkSettings"]["Ports"]["22/tcp"]
-    return int(port_info[0]["HostPort"])
-
-
-@_as_docker_error
-def start_bastion_container(
-    pub_key: Path,
-    network_name: str,
-) -> int:
-    """Replace any existing bastion; return the host port mapped to its SSH."""
-    client = dockerlib.from_env()
-
-    try:
-        old = client.containers.get(BASTION_CONTAINER_NAME)
-        old.remove(force=True)
-    except docker_errors.NotFound:
-        pass
-
-    container = client.containers.run(
-        _IMAGE_TAG,
-        detach=True,
-        name=BASTION_CONTAINER_NAME,
-        ports=_SSH_PORT_ON_LOOPBACK,
-        environment={"NBKP_BASTION_ONLY": "1"},
-        volumes={
-            str(pub_key): {
-                "bind": SSH_AUTHORIZED_KEYS_PATH,
-                "mode": "ro",
-            },
+            host: {"bind": path, "mode": mode}
+            for host, (path, mode) in spec.binds.items()
         },
     )
 
     network = client.networks.get(network_name)
+    aliases = [network_alias] if network_alias else None
     # docker leaves connect()'s *args and **kwargs unannotated; retire when it
     # annotates them.
-    network.connect(container)  # pyright: ignore[reportUnknownMemberType]
+    network.connect(container, aliases=aliases)  # pyright: ignore[reportUnknownMemberType]
 
     container.reload()
     port_info = container.attrs["NetworkSettings"]["Ports"]["22/tcp"]
