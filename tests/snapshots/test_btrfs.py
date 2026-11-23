@@ -88,7 +88,7 @@ _THREE = (
 
 
 class TestCreateSnapshot:
-    def test_local(self) -> None:
+    def test_snapshot_taken_read_only_from_staging_when_local(self) -> None:
         config, sync = _local_config()
         runner = FakeCommandRunner()
 
@@ -108,7 +108,7 @@ class TestCreateSnapshot:
         ]
         assert runner.calls[0].volume == config.volumes["dst"]
 
-    def test_failure(self) -> None:
+    def test_raises_create_error_when_btrfs_fails(self) -> None:
         config, sync = _local_config()
         runner = FakeCommandRunner().on("btrfs", returns=_DENIED)
 
@@ -118,7 +118,7 @@ class TestCreateSnapshot:
         ):
             create_snapshot(sync, config, now=_NOW, platform="linux", run=runner)
 
-    def test_remote(self) -> None:
+    def test_snapshot_taken_on_the_volume_when_remote(self) -> None:
         config, sync = _remote_config()
         runner = FakeCommandRunner()
 
@@ -302,7 +302,7 @@ class TestPruneSnapshots:
         assert deleted == []
         assert runner.commands == [["ls", "/backup/data/snapshots"]]
 
-    def test_dry_run(self) -> None:
+    def test_nothing_deleted_when_dry_run(self) -> None:
         config, sync = _remote_config()
         runner = _listing(_THREE)
 

@@ -58,6 +58,6 @@ class TestEchoJson:
 
 
 class TestOutputFormat:
-    def test_values(self) -> None:
+    def test_values_are_the_option_spellings(self) -> None:
         assert OutputFormat.HUMAN.value == "human"
         assert OutputFormat.JSON.value == "json"

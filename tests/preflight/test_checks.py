@@ -207,7 +207,7 @@ def _make_resolved(config: Config) -> ResolvedEndpoints:
 
 
 class TestCheckLocalVolume:
-    def test_active(self, tmp_path: Path) -> None:
+    def test_volume_active_when_sentinel_exists(self, tmp_path: Path) -> None:
         vol = LocalVolume(slug="data", path=str(tmp_path))
         (tmp_path / ".nbkp-vol").touch()
         run = healthy_host()
@@ -222,7 +222,7 @@ class TestCheckLocalVolume:
             ["stat", "-f", "-c", "%T", str(tmp_path)],
         ]
 
-    def test_inactive(self, tmp_path: Path) -> None:
+    def test_volume_inactive_when_sentinel_missing(self, tmp_path: Path) -> None:
         vol = LocalVolume(slug="data", path=str(tmp_path))
         run = healthy_host()
         status = check_volume(vol, {}, run=run, which=local_tools(), platform="linux")
@@ -256,7 +256,7 @@ class TestCheckLocalVolume:
 
 
 class TestCheckRemoteVolume:
-    def test_active(self) -> None:
+    def test_volume_active_when_sentinel_exists(self) -> None:
         vol, config = _remote_config()
         resolved = _make_resolved(config)
         run = healthy_host()
@@ -321,7 +321,7 @@ class TestCheckRemoteVolumeLocationExcluded:
 
 
 class TestProbeFilesystemTypeLocal:
-    def test_btrfs(self) -> None:
+    def test_type_read_with_stat_on_the_volume(self) -> None:
         run = FakeCommandRunner().on("stat", returns=completed(stdout="btrfs\n"))
         vol = LocalVolume(slug="data", path="/mnt/data")
         assert probe_filesystem_type(vol, {}, run=run, platform="linux") == "btrfs"
@@ -393,7 +393,7 @@ class TestProbeFilesystemTypeMacosLocal:
 
 
 class TestProbeFilesystemTypeRemote:
-    def test_btrfs(self) -> None:
+    def test_type_read_with_stat_on_the_endpoint(self) -> None:
         run = FakeCommandRunner().on("stat", returns=completed(stdout="btrfs\n"))
         vol, config = _remote_config()
         resolved = _make_resolved(config)
@@ -405,7 +405,7 @@ class TestProbeFilesystemTypeRemote:
 
 
 class TestFilesystemTypeInterpretation:
-    def test_btrfs(self) -> None:
+    def test_btrfs_supports_snapshots_and_hard_links(self) -> None:
         assert is_btrfs_filesystem("btrfs") is True
         assert supports_hard_links("btrfs") is True
 
@@ -413,7 +413,7 @@ class TestFilesystemTypeInterpretation:
         assert is_btrfs_filesystem("ext2/ext3") is False
         assert supports_hard_links("ext2/ext3") is True
 
-    def test_unknown(self) -> None:
+    def test_capabilities_unknown_when_type_unknown(self) -> None:
         # Unknown, not "not btrfs": a failed probe must not trigger VOL_NOT_BTRFS.
         assert is_btrfs_filesystem(None) is None
         # Unknown too: a failed probe must not let a hard-link sync onto FAT run.
@@ -2645,7 +2645,7 @@ class TestCheckDevnullLatest:
 
 
 class TestCheckRemoteVolumeSpaces:
-    def test_active(self) -> None:
+    def test_volume_active_when_path_has_spaces(self) -> None:
         vol, config = _remote_config(path="/my backup")
         resolved = _make_resolved(config)
         run = healthy_host()
@@ -2674,14 +2674,14 @@ class TestParseRsyncVersion:
         output = "rsync  version 2.6.9  protocol version 29\n"
         assert parse_rsync_version(output) == (2, 6, 9)
 
-    def test_openrsync(self) -> None:
+    def test_version_zero_when_openrsync(self) -> None:
         output = "openrsync: protocol version 29\nrsync version 2.6.9 compatible\n"
         assert parse_rsync_version(output) == (0, 0, 0)
 
-    def test_empty(self) -> None:
+    def test_version_zero_when_output_empty(self) -> None:
         assert parse_rsync_version("") == (0, 0, 0)
 
-    def test_garbage(self) -> None:
+    def test_version_zero_when_output_unrecognised(self) -> None:
         assert parse_rsync_version("not rsync\n") == (0, 0, 0)
 
 
@@ -2705,7 +2705,7 @@ class TestCheckRsyncVersionLocal:
         vol = LocalVolume(slug="data", path="/mnt/data")
         assert check_rsync_version(vol, {}, run=run) is False
 
-    def test_openrsync(self) -> None:
+    def test_version_rejected_when_openrsync(self) -> None:
         run = _rsync_answers(
             "openrsync: protocol version 29\nrsync version 2.6.9 compatible\n",
         )

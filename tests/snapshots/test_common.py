@@ -127,7 +127,7 @@ class TestCreateSnapshotTimestamp:
 
 
 class TestListSnapshotsRemoteSpaces:
-    def test_found(self) -> None:
+    def test_snapshots_listed_when_path_has_spaces(self) -> None:
         runner = FakeCommandRunner().on(
             returns=completed(
                 returncode=0,
@@ -147,7 +147,7 @@ class TestListSnapshotsRemoteSpaces:
 
 
 class TestListSnapshotsLocal:
-    def test_found(self) -> None:
+    def test_snapshots_listed_when_present(self) -> None:
         runner = FakeCommandRunner().on(
             returns=completed(
                 returncode=0,
@@ -162,7 +162,7 @@ class TestListSnapshotsLocal:
             "2024-01-15T12:00:00.000Z",
         ]
 
-    def test_empty(self) -> None:
+    def test_none_listed_when_directory_empty(self) -> None:
         runner = FakeCommandRunner().on(returns=completed(returncode=0, stdout=""))
         config, sync = _local_config()
 
@@ -184,7 +184,7 @@ class TestListSnapshotsLocal:
 
 
 class TestListSnapshotsRemote:
-    def test_found(self) -> None:
+    def test_snapshots_listed_when_present(self) -> None:
         runner = FakeCommandRunner().on(
             returns=completed(
                 returncode=0,
@@ -210,7 +210,7 @@ def _hl_local_config(dst_path: Path) -> tuple[SyncConfig, Config]:
 
 
 class TestReadLatestSymlink:
-    def test_local_exists(self, tmp_path: Path) -> None:
+    def test_snapshot_returned_when_latest_points_to_it(self, tmp_path: Path) -> None:
         sync, config = _hl_local_config(tmp_path)
         latest = tmp_path / "latest"
         latest.symlink_to(f"snapshots/{_TS_LOCAL.name}")
@@ -218,7 +218,7 @@ class TestReadLatestSymlink:
         result = read_latest_symlink(sync, config)
         assert result == _TS_LOCAL
 
-    def test_local_missing(self, tmp_path: Path) -> None:
+    def test_none_when_latest_missing(self, tmp_path: Path) -> None:
         sync, config = _hl_local_config(tmp_path)
 
         result = read_latest_symlink(sync, config)
@@ -253,7 +253,7 @@ class TestReadLatestSymlink:
         )
         assert result is None
 
-    def test_local_devnull(self, tmp_path: Path) -> None:
+    def test_none_when_latest_is_dev_null(self, tmp_path: Path) -> None:
         """Latest -> /dev/null returns None."""
         sync, config = _hl_local_config(tmp_path)
         latest = tmp_path / "latest"
@@ -316,7 +316,7 @@ class TestReadLatestLink:
 
 
 class TestUpdateLatestSymlink:
-    def test_local(self, tmp_path: Path) -> None:
+    def test_latest_points_to_snapshot_when_local(self, tmp_path: Path) -> None:
         sync, config = _hl_local_config(tmp_path)
 
         update_latest_symlink(sync, config, _TS_LOCAL)
@@ -352,7 +352,7 @@ class TestUpdateLatestSymlink:
                 update_latest_symlink(sync, config, _TS_LOCAL)
         assert str(link.readlink()) == "snapshots/previous"
 
-    def test_remote(self) -> None:
+    def test_latest_replaced_with_ln_when_remote(self) -> None:
         runner = FakeCommandRunner().on(returns=completed(returncode=0, stderr=""))
         sync, config, resolved = _hl_remote_config()
 

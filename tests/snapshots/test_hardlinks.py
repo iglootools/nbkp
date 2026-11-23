@@ -57,7 +57,7 @@ def _remote_config() -> tuple[SyncConfig, Config, dict[str, ResolvedEndpoint]]:
 
 
 class TestCreateSnapshotDir:
-    def test_local(self) -> None:
+    def test_directory_created_when_local(self) -> None:
         sync, config = _local_config()
         runner = FakeCommandRunner()
 
@@ -66,7 +66,7 @@ class TestCreateSnapshotDir:
         assert path == f"/dst/snapshots/{_TS_LOCAL.name}"
         assert runner.commands == [["mkdir", "-p", "/dst/snapshots"], ["mkdir", path]]
 
-    def test_remote(self) -> None:
+    def test_directory_created_on_the_volume_when_remote(self) -> None:
         sync, config, resolved = _remote_config()
         runner = FakeCommandRunner()
 
@@ -187,7 +187,7 @@ class TestCleanupOrphanedSnapshots:
 
 
 class TestDeleteSnapshot:
-    def test_local(self, tmp_path: Path) -> None:
+    def test_directory_removed_when_local(self, tmp_path: Path) -> None:
         snap = tmp_path / "snap1"
         snap.mkdir()
         (snap / "file.txt").write_text("data")
@@ -196,7 +196,7 @@ class TestDeleteSnapshot:
         delete_snapshot(str(snap), vol, {})
         assert not snap.exists()
 
-    def test_remote(self) -> None:
+    def test_directory_removed_with_rm_when_remote(self) -> None:
         vol = RemoteVolume(slug="dst", ssh_endpoint="nas", path="/backup")
         runner = FakeCommandRunner()
 
@@ -278,7 +278,7 @@ class TestPruneSnapshots:
         assert deleted == []
         assert sorted(p.name for p in snaps.iterdir()) == [_S1, _S2, _S3]
 
-    def test_dry_run(self, tmp_path: Path) -> None:
+    def test_nothing_deleted_when_dry_run(self, tmp_path: Path) -> None:
         sync, config = two_volume_config(
             src=LocalVolume(slug="src", path="/src"),
             dst=LocalVolume(slug="dst", path=str(tmp_path)),

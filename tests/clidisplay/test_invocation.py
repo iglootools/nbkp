@@ -17,7 +17,7 @@ class TestDisplayPath:
 
 
 class TestCommand:
-    def test_minimal(self) -> None:
+    def test_command_prefixed_with_program_name(self) -> None:
         assert Invocation().command("preflight", "troubleshoot") == (
             "nbkp preflight troubleshoot"
         )

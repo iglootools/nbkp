@@ -36,7 +36,7 @@ _SSH_KEY = str(Path("~/.ssh/key").expanduser())
 
 
 class TestBuildRsyncCommandLocalToLocal:
-    def test_basic(self) -> None:
+    def test_command_copies_between_local_paths(self) -> None:
         sync, config = two_volume_config(src_subdir="photos", dst_subdir="backup")
 
         cmd = build_rsync_command(sync, config)
@@ -53,7 +53,7 @@ class TestBuildRsyncCommandLocalToLocal:
             "/mnt/dst/backup/",
         ]
 
-    def test_dry_run(self) -> None:
+    def test_dry_run_flag_added_when_dry_run(self) -> None:
         sync, config = two_volume_config()
 
         cmd = build_rsync_command(sync, config, dry_run=True)
@@ -71,7 +71,7 @@ class TestBuildRsyncCommandLocalToLocal:
 
 
 class TestBuildRsyncCommandLocalToRemote:
-    def test_basic(self) -> None:
+    def test_command_pushes_over_ssh(self) -> None:
         sync, config = two_volume_config(
             dst=RemoteVolume(
                 slug="dst",
@@ -111,7 +111,7 @@ class TestBuildRsyncCommandLocalToRemote:
 
 
 class TestBuildRsyncCommandRemoteToLocal:
-    def test_basic(self) -> None:
+    def test_command_pulls_over_ssh(self) -> None:
         sync, config = two_volume_config(
             src=RemoteVolume(
                 slug="src",
@@ -179,7 +179,7 @@ class TestBuildRsyncCommandRemoteToRemoteSameServer:
             **sync_fields,
         )
 
-    def test_basic(self) -> None:
+    def test_command_runs_rsync_on_the_server_with_local_paths(self) -> None:
         sync, config = self._simple_config(src_subdir="photos", dst_subdir="backup")
         resolved = resolve_all_endpoints(config)
 
@@ -195,7 +195,7 @@ class TestBuildRsyncCommandRemoteToRemoteSameServer:
         assert "/data/src/photos/" in inner
         assert "/data/dst/backup/" in inner
 
-    def test_dry_run(self) -> None:
+    def test_dry_run_flag_added_when_dry_run(self) -> None:
         sync, config = self._simple_config()
         resolved = resolve_all_endpoints(config)
 
@@ -208,7 +208,7 @@ class TestBuildRsyncCommandRemoteToRemoteSameServer:
         inner = cmd[-1]
         assert "--dry-run" in inner
 
-    def test_with_filters(self) -> None:
+    def test_filters_quoted_when_given(self) -> None:
         sync, config = self._simple_config(
             filters=["+ *.jpg", "- *.tmp"],
             filter_file="/etc/nbkp/filters.rules",
@@ -221,7 +221,7 @@ class TestBuildRsyncCommandRemoteToRemoteSameServer:
         assert "'--filter=- *.tmp'" in inner
         assert "'--filter=merge /etc/nbkp/filters.rules'" in inner
 
-    def test_with_link_dest(self) -> None:
+    def test_link_dest_added_when_given(self) -> None:
         sync, config = self._simple_config()
         resolved = resolve_all_endpoints(config)
 
@@ -234,7 +234,7 @@ class TestBuildRsyncCommandRemoteToRemoteSameServer:
         inner = cmd[-1]
         assert "--link-dest=../../snapshots/2024-01-01T00:00:00.000Z" in inner
 
-    def test_custom_dest_suffix(self) -> None:
+    def test_destination_suffixed_when_suffix_given(self) -> None:
         sync, config = self._simple_config()
         resolved = resolve_all_endpoints(config)
 
@@ -247,7 +247,7 @@ class TestBuildRsyncCommandRemoteToRemoteSameServer:
         inner = cmd[-1]
         assert "/data/dst/snapshots/T1/" in inner
 
-    def test_with_proxy_chain(self) -> None:
+    def test_server_reached_through_proxy_when_proxied(self) -> None:
         bastion = SshEndpoint(
             slug="bastion",
             host="bastion.example.com",
@@ -276,7 +276,7 @@ class TestBuildRsyncCommandRemoteToRemoteSameServer:
         assert "/data/src/" in inner
         assert "/data/dst/" in inner
 
-    def test_progress(self) -> None:
+    def test_progress_flags_added_when_per_file(self) -> None:
         sync, config = self._simple_config()
         resolved = resolve_all_endpoints(config)
 
@@ -675,7 +675,7 @@ class TestBuildRsyncCommandProgress:
     def _simple_config(self) -> tuple[SyncConfig, Config]:
         return two_volume_config()
 
-    def test_no_progress(self) -> None:
+    def test_no_progress_flags_when_progress_omitted(self) -> None:
         sync, config = self._simple_config()
         cmd = build_rsync_command(sync, config)
         assert "-v" not in cmd
@@ -684,7 +684,7 @@ class TestBuildRsyncCommandProgress:
         assert "--stats" not in cmd
         assert "--human-readable" not in cmd
 
-    def test_progress_none(self) -> None:
+    def test_no_progress_flags_when_progress_none(self) -> None:
         sync, config = self._simple_config()
         cmd = build_rsync_command(sync, config, progress=ProgressMode.NONE)
         assert "-v" not in cmd
@@ -884,19 +884,19 @@ class TestBuildRsyncCommandProtectArgs:
 
 
 class TestDestSuffix:
-    def test_default_bare(self) -> None:
+    def test_destination_is_the_endpoint_when_no_suffix(self) -> None:
         sync, config = two_volume_config()
 
         cmd = build_rsync_command(sync, config)
         assert cmd[-1] == "/mnt/dst/"
 
-    def test_default_btrfs(self) -> None:
+    def test_destination_suffixed_with_latest_when_given(self) -> None:
         sync, config = two_volume_config()
 
         cmd = build_rsync_command(sync, config, dest_suffix="latest")
         assert cmd[-1] == "/mnt/dst/latest/"
 
-    def test_custom_suffix(self) -> None:
+    def test_destination_suffixed_with_snapshot_when_given(self) -> None:
         dst = LocalVolume(slug="dst", path="/mnt/dst")
         sync, config = two_volume_config(dst=dst)
 

@@ -42,7 +42,7 @@ class TestKnownLocations:
         )
         assert cfg.known_locations() == ["home", "office"]
 
-    def test_deduplicates(self) -> None:
+    def test_locations_listed_once_when_shared(self) -> None:
         cfg = _minimal_config(
             ssh_endpoints={
                 "a": SshEndpoint(slug="a", host="h1", location="home"),
@@ -141,7 +141,7 @@ class TestOrphanSshEndpoints:
         )
         assert cfg.orphan_ssh_endpoints() == ["a", "b"]
 
-    def test_empty(self) -> None:
+    def test_none_when_config_empty(self) -> None:
         cfg = _minimal_config()
         assert cfg.orphan_ssh_endpoints() == []
 
@@ -164,7 +164,7 @@ class TestOrphanVolumes:
         )
         assert cfg.orphan_volumes() == ["orphan"]
 
-    def test_empty(self) -> None:
+    def test_none_when_config_empty(self) -> None:
         cfg = _minimal_config()
         assert cfg.orphan_volumes() == []
 
@@ -204,6 +204,6 @@ class TestOrphanSyncEndpoints:
         )
         assert cfg.orphan_sync_endpoints() == ["orphan"]
 
-    def test_empty(self) -> None:
+    def test_none_when_config_empty(self) -> None:
         cfg = _minimal_config()
         assert cfg.orphan_sync_endpoints() == []
