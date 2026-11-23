@@ -1000,6 +1000,7 @@ does on their system.
 | `--compress`, `--checksum` | Optional per-sync flags |
 | `--link-dest=<prev-snapshot>` | Hard-link snapshots: reference previous snapshot for deduplication |
 | `-e ssh ...` | SSH transport for remote syncs |
+| `--protect-args` | Remote syncs: send paths through rsync's protocol, so the remote shell does not split or expand them (rsync before 3.2.4); a leading `~/` of a remote path is sent relative to the SSH user's home directory instead |
 
 ### Btrfs snapshot operations
 

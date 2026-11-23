@@ -138,6 +138,29 @@ def hard_link_link_dest(latest_name: str | None) -> str | None:
     return f"../{latest_name}" if latest_name else None
 
 
+# Before rsync 3.2.4 (preflight accepts 3.0.0 and later) the remote shell
+# parses the remote rsync's arguments, so a path with a space or a shell
+# metacharacter is split or expanded there. --protect-args (3.0.0 and later)
+# sends them through rsync's protocol instead. Not needed remote to remote:
+# rsync then runs on the remote host with local paths, quoted for its shell.
+_PROTECT_ARGS = "--protect-args"
+
+
+def _protected_remote_path(path: str) -> str:
+    """
+    Return a remote *path* with a leading ``~`` made relative to the home directory.
+
+    With ``--protect-args`` no shell expands the ``~`` a remote volume path may start
+    with, but the remote rsync starts in the SSH user's home directory, which a relative
+    path resolves against.
+    """
+    match path.partition("/"):
+        case ("~", _, rest):
+            return rest.lstrip("/") or "."
+        case _:
+            return path
+
+
 def _dest_target(base: str, dest_suffix: str | None) -> str:
     return f"{base}/{dest_suffix}/" if dest_suffix else f"{base}/"
 
@@ -186,19 +209,24 @@ def build_rsync_command(
             ]
         case (RemoteVolume() as sv, LocalVolume()):
             src_re = re[sv.slug]
+            remote_src = _protected_remote_path(src_path)
             return [
                 *rsync_args,
+                _PROTECT_ARGS,
                 *build_ssh_e_option(src_re.server, src_re.proxy_chain),
-                format_remote_path(src_re.server, src_path) + "/",
+                format_remote_path(src_re.server, remote_src) + "/",
                 _dest_target(dst_path, dest_suffix),
             ]
         case (LocalVolume(), RemoteVolume() as dv):
             dst_re = re[dv.slug]
+            remote_dst = _protected_remote_path(dst_path)
+            dst_target = format_remote_path(dst_re.server, remote_dst)
             return [
                 *rsync_args,
+                _PROTECT_ARGS,
                 *build_ssh_e_option(dst_re.server, dst_re.proxy_chain),
                 f"{src_path}/",
-                _dest_target(format_remote_path(dst_re.server, dst_path), dest_suffix),
+                _dest_target(dst_target, dest_suffix),
             ]
         case _:
             return [*rsync_args, f"{src_path}/", _dest_target(dst_path, dest_suffix)]

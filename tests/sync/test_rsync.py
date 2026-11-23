@@ -152,6 +152,7 @@ class TestBuildRsyncCommandLocalToRemote:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
+            "--protect-args",
             "-e",
             f"ssh -o ConnectTimeout=10 -o BatchMode=yes -p 5022 -i {_SSH_KEY}",
             "/mnt/src/photos/",
@@ -198,6 +199,7 @@ class TestBuildRsyncCommandRemoteToLocal:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
+            "--protect-args",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes",
             "admin@server.local:/data/",
@@ -788,6 +790,7 @@ class TestBuildRsyncCommandProxyJump:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
+            "--protect-args",
             "-e",
             (
                 "ssh -o ConnectTimeout=10 -o BatchMode=yes"
@@ -851,6 +854,7 @@ class TestBuildRsyncCommandProxyJump:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
+            "--protect-args",
             "-e",
             f"ssh -o ConnectTimeout=10 -o BatchMode=yes -o {quoted}",
             "backup@server.internal:/data/",
@@ -926,6 +930,7 @@ class TestBuildRsyncCommandMultiHopProxy:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
+            "--protect-args",
             "-e",
             (
                 "ssh -o ConnectTimeout=10 -o BatchMode=yes"
@@ -1219,6 +1224,92 @@ class TestSourceSnapshotPath:
         inner = build_rsync_command(sync, config, resolved_endpoints=resolved)[-1]
         assert " ~/src/ ~/dst" in inner
         assert "'~" not in inner
+
+
+def _one_remote_side(
+    src_path: str,
+    dst_path: str,
+    *,
+    remote: str,
+) -> tuple[SyncConfig, Config]:
+    server = SshEndpoint(slug="nas", host="nas.local", user="backup")
+    volumes: dict[str, LocalVolume | RemoteVolume] = {
+        "src": LocalVolume(slug="src", path=src_path),
+        "dst": LocalVolume(slug="dst", path=dst_path),
+    }
+    volumes[remote] = RemoteVolume(
+        slug=remote,
+        ssh_endpoint="nas",
+        path=src_path if remote == "src" else dst_path,
+    )
+    sync = SyncConfig(slug="s1", source="ep-src", destination="ep-dst")
+    config = Config(
+        ssh_endpoints={"nas": server},
+        volumes=volumes,
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+        },
+        syncs={"s1": sync},
+    )
+    return sync, config
+
+
+class TestBuildRsyncCommandProtectArgs:
+    """Remote paths reach the remote rsync unparsed by its shell."""
+
+    def test_remote_destination_path_is_sent_unquoted(self) -> None:
+        """Regression: rsync before 3.2.4 split a remote path on its spaces."""
+        sync, config = _one_remote_side("/mnt/src", "/backup/my photos", remote="dst")
+
+        cmd = build_rsync_command(
+            sync,
+            config,
+            resolved_endpoints=resolve_all_endpoints(config),
+        )
+
+        assert "--protect-args" in cmd
+        assert cmd[-1] == "backup@nas.local:/backup/my photos/"
+
+    def test_remote_source_path_is_sent_unquoted(self) -> None:
+        sync, config = _one_remote_side("/data/a b;c", "/mnt/dst", remote="src")
+
+        cmd = build_rsync_command(
+            sync,
+            config,
+            resolved_endpoints=resolve_all_endpoints(config),
+        )
+
+        assert "--protect-args" in cmd
+        assert cmd[-2] == "backup@nas.local:/data/a b;c/"
+
+    def test_tilde_path_becomes_relative_to_the_home_directory(self) -> None:
+        """No shell expands ``~`` once arguments are protected."""
+        sync, config = _one_remote_side("/mnt/src", "~/backups", remote="dst")
+
+        cmd = build_rsync_command(
+            sync,
+            config,
+            resolved_endpoints=resolve_all_endpoints(config),
+        )
+
+        assert cmd[-1] == "backup@nas.local:backups/"
+
+    def test_bare_tilde_path_becomes_the_home_directory(self) -> None:
+        sync, config = _one_remote_side("~", "/mnt/dst", remote="src")
+
+        cmd = build_rsync_command(
+            sync,
+            config,
+            resolved_endpoints=resolve_all_endpoints(config),
+        )
+
+        assert cmd[-2] == "backup@nas.local:./"
+
+    def test_local_to_local_does_not_protect_args(self) -> None:
+        sync, config = _local_sync()
+
+        assert "--protect-args" not in build_rsync_command(sync, config)
 
 
 class TestDestSuffix:
