@@ -20,11 +20,14 @@ from nbkp.config import (
     SshEndpoint,
 )
 from nbkp.disks import MountToolCapabilities
-from nbkp.preflight.output import (
+from nbkp.preflight import (
     RemediationFacts,
-    TroubleshootContext,
     TroubleshootIssue,
     collect_issues,
+    gather_remediation_facts,
+)
+from nbkp.preflight.output import (
+    TroubleshootContext,
     format_human_troubleshoot,
     troubleshoot_json,
 )
@@ -133,12 +136,15 @@ class TestSuggestedCommands:
             mount=MountConfig(device_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
         )
         config = Config(volumes={"usb": vol})
-        ctx = TroubleshootContext(config=config, local_user="alice")
-        out = _render(
-            {"usb": _volume_status(vol, VolumeErrorKind.POLKIT_RULES_MISSING)},
+        statuses = {"usb": _volume_status(vol, VolumeErrorKind.POLKIT_RULES_MISSING)}
+        facts = gather_remediation_facts(
+            collect_issues({}, statuses, {}),
             config,
-            ctx,
+            {},
+            "alice",
         )
+        ctx = TroubleshootContext(config=config, local_user="alice", facts=facts)
+        out = _render(statuses, config, ctx)
         assert 'subject.user == "alice"' in out
         assert "nbkp disks setup-auth -u alice" in out
 

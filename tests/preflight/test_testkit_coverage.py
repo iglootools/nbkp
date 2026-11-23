@@ -20,17 +20,14 @@ import pytest
 from nbkp.preflight import (
     DestinationEndpointErrorKind,
     DestinationEndpointWarningKind,
+    RemediationFacts,
     SourceEndpointErrorKind,
     SshEndpointErrorKind,
     SyncErrorKind,
     VolumeErrorKind,
-)
-from nbkp.preflight.output import (
-    RemediationFacts,
-    TroubleshootContext,
     collect_issues,
-    troubleshoot_json,
 )
+from nbkp.preflight.output import TroubleshootContext, troubleshoot_json
 from nbkp.preflight.status.ssh import SshEndpointWarningKind
 from nbkp.preflight.testkit import troubleshoot_config, troubleshoot_data
 from nbkp.remote.resolution import resolve_all_endpoints

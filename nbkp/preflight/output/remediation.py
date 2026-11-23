@@ -9,12 +9,11 @@ hardcoded into the strings.
 
 Rendering is pure: facts that take live work to establish — the cleartext
 device udisks created for an unlocked LUKS container, the polkit rule to
-install — are gathered beforehand by :mod:`.troubleshoot` and handed over as
-:class:`RemediationFacts`.
+install — are gathered beforehand by :mod:`nbkp.preflight.troubleshoot` and
+handed over as :class:`~nbkp.preflight.troubleshoot.RemediationFacts`.
 """
 
 import shlex
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from textwrap import dedent
 
@@ -35,7 +34,7 @@ from nbkp.config import (
     passphrase_env_var,
 )
 from nbkp.config.output import endpoint_path, host_label
-from nbkp.disks import AuthRuleBlock, cleartext_mapper_name
+from nbkp.disks import cleartext_mapper_name
 from nbkp.fsprotocol import (
     DESTINATION_SENTINEL,
     DEVNULL_TARGET,
@@ -58,6 +57,7 @@ from nbkp.preflight.status.ssh import (
 )
 from nbkp.preflight.status.sync import SyncErrorKind
 from nbkp.preflight.status.volume import VolumeErrorKind, VolumeStatus
+from nbkp.preflight.troubleshoot import RemediationFacts, polkit_user
 from nbkp.remote.endpoints import ResolvedEndpoint, ResolvedEndpoints
 from nbkp.remote.resolution import resolve_proxy_chain
 from nbkp.remote.ssh import (
@@ -81,28 +81,6 @@ HEADER, ERROR, FIX, STEP, STEP_CMD = range(5)
 
 
 @dataclass(frozen=True)
-class RemediationFacts:
-    """Facts the fixes show that had to be probed or generated first."""
-
-    cleartext_devices: Mapping[str, str] = field(default_factory=dict[str, str])
-    """Volume slug → cleartext device udisks actually created (e.g.
-    ``/dev/mapper/<label>``).  A volume is absent when its container is locked
-    or discovery failed; the fix then shows udisks's default name with a
-    caveat."""
-    polkit_rules: Mapping[str, AuthRuleBlock] = field(
-        default_factory=dict[str, AuthRuleBlock],
-    )
-    """System user → the polkit rule block authorizing that user.  A user is
-    absent when no volume declares a ``mount`` section."""
-    newest_snapshots: Mapping[str, str | None] = field(
-        default_factory=dict[str, str | None],
-    )
-    """Sync endpoint slug → name of its newest snapshot, ``None`` when it has
-    none.  An endpoint is absent when its snapshots could not be listed; the
-    fix then names a placeholder for the user to fill in."""
-
-
-@dataclass(frozen=True)
 class TroubleshootContext:
     """Everything the fixes need besides the error itself."""
 
@@ -115,13 +93,10 @@ class TroubleshootContext:
     local_user: str = "<user>"
     """User the polkit rule authorizes for local volumes (and remote ones
     whose SSH endpoint sets no user).  Supplied by the CLI."""
-    facts: RemediationFacts | None = None
-    """Probed facts; ``None`` until :mod:`.troubleshoot` gathers them."""
-
-    @property
-    def known_facts(self) -> RemediationFacts:
-        """The gathered facts, or none at all when gathering was skipped."""
-        return self.facts if self.facts is not None else RemediationFacts()
+    facts: RemediationFacts = field(default_factory=RemediationFacts)
+    """Probed and generated facts, gathered beforehand by
+    :func:`nbkp.preflight.troubleshoot.gather_remediation_facts`; a fact
+    missing here is rendered as unknown."""
 
 
 def format_line(level: int, *parts: Part) -> Padding:
@@ -225,7 +200,7 @@ def _reset_latest(
     Only when there is none: a hard-link sync deletes every snapshot as a leftover of a
     failed run while ``latest`` points to ``/dev/null``.
     """
-    newest_snapshots = ctx.known_facts.newest_snapshots
+    newest_snapshots = ctx.facts.newest_snapshots
     known = endpoint_slug in newest_snapshots
     newest = newest_snapshots.get(endpoint_slug)
     target = (
@@ -636,7 +611,7 @@ def _fstab_line(
                 ),
             ]
         case MountConfig():
-            device, discovered = cleartext_device(vol, mount, ctx.known_facts)
+            device, discovered = cleartext_device(vol, mount, ctx.facts)
             return [
                 format_command(f"{device}  {path}  {fs_and_options}", STEP),
                 *([] if discovered else _mapper_name_caveat(STEP)),
@@ -880,7 +855,7 @@ def _mount_failed_fix(
         case MountConfig(encryption=None):
             device = f"/dev/disk/by-uuid/{mount.device_uuid}"
         case MountConfig():
-            device, _ = cleartext_device(vol, mount, ctx.known_facts)
+            device, _ = cleartext_device(vol, mount, ctx.facts)
         case None:
             device = "<device>"
     return [
@@ -904,27 +879,12 @@ def _mount_failed_fix(
     ]
 
 
-def polkit_user(vol: LocalVolume | RemoteVolume, ctx: TroubleshootContext) -> str:
-    """
-    Return the system user the polkit rule must authorize to mount *vol*.
-
-    The SSH user of a remote volume's endpoint, or ``ctx.local_user`` for a local
-    volume and for a remote one whose endpoint sets no user.
-    """
-    match vol:
-        case RemoteVolume():
-            ep = ctx.resolved_endpoints.get(vol.slug)
-            return ep.server.user if ep and ep.server.user else ctx.local_user
-        case LocalVolume():
-            return ctx.local_user
-
-
 def _polkit_rules_missing_fix(
     vol: LocalVolume | RemoteVolume,
     ctx: TroubleshootContext,
 ) -> Lines:
-    user = polkit_user(vol, ctx)
-    block = ctx.known_facts.polkit_rules.get(user)
+    user = polkit_user(vol, ctx.resolved_endpoints, ctx.local_user)
+    block = ctx.facts.polkit_rules.get(user)
     return [
         format_line(
             FIX,

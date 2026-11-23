@@ -52,6 +52,13 @@ from nbkp.preflight.status import (
     VolumeStatus,
 )
 from nbkp.preflight.strictness import has_fatal_errors, is_fatal
+from nbkp.preflight.troubleshoot import (
+    Layer,
+    RemediationFacts,
+    TroubleshootIssue,
+    collect_issues,
+    gather_remediation_facts,
+)
 from nbkp.preflight.volume_checks import (
     check_volume_capabilities,
     observe_ssh_endpoint,
@@ -71,10 +78,12 @@ __all__ = [
     "DestinationEndpointWarningKind",
     "HostToolCapabilities",
     "LatestSymlinkState",
+    "Layer",
     "MountCapabilities",
     "MountToolCapabilities",
     "PreflightErrorKind",
     "PreflightResult",
+    "RemediationFacts",
     "SnapshotDirsDiagnostics",
     "SourceEndpointDiagnostics",
     "SourceEndpointErrorKind",
@@ -85,6 +94,7 @@ __all__ = [
     "SshEndpointToolNeeds",
     "SyncErrorKind",
     "SyncStatus",
+    "TroubleshootIssue",
     "VolumeCapabilities",
     "VolumeDiagnostics",
     "VolumeErrorKind",
@@ -93,6 +103,8 @@ __all__ = [
     "check_all_syncs",
     "check_step_count",
     "check_volume_capabilities",
+    "collect_issues",
+    "gather_remediation_facts",
     "has_fatal_errors",
     "is_fatal",
     "list_snapshot_dir",

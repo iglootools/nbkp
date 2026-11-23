@@ -19,16 +19,20 @@ from nbkp.cliwiring.options import (
     UMOUNT_OPTION,
 )
 from nbkp.cliwiring.preflight import check_all_with_progress
-from nbkp.cliwiring.runtime import Runtime, runtime_of
+from nbkp.cliwiring.runtime import runtime_of
 from nbkp.policy import Strictness
 from nbkp.preflight.output import (
     TroubleshootContext,
-    collect_issues,
     format_human_troubleshoot,
     troubleshoot_json,
 )
 from nbkp.preflight.status.result import PreflightResult
 from nbkp.preflight.strictness import has_fatal_errors
+from nbkp.preflight.troubleshoot import (
+    TroubleshootIssue,
+    collect_issues,
+    gather_remediation_facts,
+)
 
 
 def troubleshoot_cmd(
@@ -84,38 +88,44 @@ def troubleshoot_cmd(
             exclude_locations=exclude_location or [],
             runtime=runtime,
         )
+        issues = collect_issues(
+            preflight.ssh_endpoint_statuses,
+            preflight.volume_statuses,
+            preflight.sync_statuses,
+            strictness,
+        )
+        local_user = runtime.local_user()
         context = TroubleshootContext(
             config=cfg,
             resolved_endpoints=resolved,
             invocation=invocation,
-            local_user=runtime.local_user(),
+            local_user=local_user,
+            facts=gather_remediation_facts(
+                issues,
+                cfg,
+                resolved,
+                local_user,
+                run=runtime.run,
+            ),
         )
         fatal = has_fatal_errors(preflight.sync_statuses, strictness=strictness)
-        _report(preflight, context, output, strictness, fatal=fatal, runtime=runtime)
+        _report(preflight, issues, context, output, strictness, fatal=fatal)
         if fatal:
             raise typer.Exit(1)
 
 
 def _report(
     preflight: PreflightResult,
+    issues: list[TroubleshootIssue],
     ctx: TroubleshootContext,
     output: OutputFormat,
     strictness: Strictness,
     *,
     fatal: bool,
-    runtime: Runtime,
 ) -> None:
     match output:
         case OutputFormat.JSON:
-            issues = collect_issues(
-                preflight.ssh_endpoint_statuses,
-                preflight.volume_statuses,
-                preflight.sync_statuses,
-                strictness,
-            )
-            echo_json(
-                troubleshoot_json(issues, ctx, has_fatal_errors=fatal, run=runtime.run),
-            )
+            echo_json(troubleshoot_json(issues, ctx, has_fatal_errors=fatal))
         case OutputFormat.HUMAN:
             Console().print(
                 format_human_troubleshoot(
@@ -125,6 +135,5 @@ def _report(
                     ctx.config,
                     context=ctx,
                     strictness=strictness,
-                    run=runtime.run,
                 ),
             )
