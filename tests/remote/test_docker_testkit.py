@@ -7,10 +7,12 @@ import pytest
 
 from nbkp.remote.testkit.constants import NETWORK_NAME
 from nbkp.remote.testkit.docker import (
+    ContainerSpec,
+    bastion_container_spec,
     create_docker_network,
     generate_ssh_keypair,
-    start_bastion_container,
-    start_storage_container,
+    start_container,
+    storage_container_spec,
 )
 from nbkp.remote.testkit.errors import DockerError, DockerErrorKind
 
@@ -25,35 +27,50 @@ def docker_client() -> MagicMock:
     return client
 
 
-class TestSshPortBinding:
-    def test_storage_container_publishes_ssh_on_loopback_only(
+class TestStartContainer:
+    @pytest.mark.parametrize(
+        "spec",
+        [
+            storage_container_spec(Path("id.pub")),
+            bastion_container_spec(Path("id.pub")),
+        ],
+        ids=["storage", "bastion"],
+    )
+    def test_publishes_ssh_on_loopback_only(
         self,
         docker_client: MagicMock,
-        tmp_path: Path,
+        spec: ContainerSpec,
     ) -> None:
         with patch(
             "nbkp.remote.testkit.docker.dockerlib.from_env",
             return_value=docker_client,
         ):
-            port = start_storage_container(tmp_path / "id.pub")
+            port = start_container("name", spec, "net")
 
         assert port == 32768
         ports = docker_client.containers.run.call_args.kwargs["ports"]
         assert ports == {"22/tcp": ("127.0.0.1", 0)}
 
-    def test_bastion_container_publishes_ssh_on_loopback_only(
-        self,
-        docker_client: MagicMock,
-        tmp_path: Path,
-    ) -> None:
+    def test_runs_the_spec(self, docker_client: MagicMock) -> None:
+        spec = storage_container_spec(Path("id.pub"), luks_enabled=True)
         with patch(
             "nbkp.remote.testkit.docker.dockerlib.from_env",
             return_value=docker_client,
         ):
-            start_bastion_container(tmp_path / "id.pub", "net")
+            start_container("name", spec, "net", network_alias="backup-server")
 
-        ports = docker_client.containers.run.call_args.kwargs["ports"]
-        assert ports == {"22/tcp": ("127.0.0.1", 0)}
+        run = docker_client.containers.run.call_args.kwargs
+        assert run["privileged"] is True
+        assert run["environment"]["NBKP_LUKS_ENABLED"] == "1"
+        assert run["volumes"]["/dev"] == {"bind": "/dev", "mode": "rw"}
+        assert run["volumes"]["id.pub"] == {
+            "bind": "/mnt/ssh-authorized-keys",
+            "mode": "ro",
+        }
+        docker_client.networks.get.return_value.connect.assert_called_once_with(
+            docker_client.containers.run.return_value,
+            aliases=["backup-server"],
+        )
 
 
 class TestNetworkRecreation:

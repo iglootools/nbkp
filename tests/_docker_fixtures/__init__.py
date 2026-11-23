@@ -3,8 +3,8 @@ Shared Docker test fixtures for e2e and integration tests.
 
 Tests share a single session-scoped container and unlock/mount/lock the same
 encrypted volume repeatedly.  This is reliable without any between-test reset
-because the container shares the host ``/dev`` and ``/run/udev`` (see the
-``docker_container`` fixture) — udev keeps the dm-crypt device state in sync,
+because the container shares the host ``/dev`` and ``/run/udev`` (see
+``storage_container_spec``) — udev keeps the dm-crypt device state in sync,
 so a fresh unlock always succeeds after a prior test's lock.
 """
 
@@ -47,13 +47,17 @@ from nbkp.remote.testkit.docker import (
     REMOTE_BACKUP_PATH,
     REMOTE_BTRFS_ENCRYPTED_PATH,
     REMOTE_BTRFS_PATH,
+    ContainerSpec,
     LuksMetadata,
+    bastion_container_spec,
+    check_docker,
     create_sentinels as create_sentinels,
     create_test_ssh_endpoint,
     generate_ssh_keypair,
     read_luks_metadata,
     ssh_exec,
     ssh_run,
+    storage_container_spec,
     wait_for_ssh,
 )
 
@@ -128,22 +132,6 @@ def resolved_endpoints_for(
     return resolve_all_endpoints(config)
 
 
-def _docker_available() -> bool:
-    """Check if Docker is available and running."""
-    try:
-        client = dockerlib.from_env()
-        # docker leaves ping()'s *args and **kwargs unannotated; retire when it
-        # annotates them.
-        client.ping()  # pyright: ignore[reportUnknownMemberType]
-    except docker_errors.DockerException:
-        return False
-    else:
-        return True
-
-
-pytestmark = pytest.mark.skipif(not _docker_available(), reason="Docker not available")
-
-
 @pytest.fixture(scope="session")
 def ssh_key_pair() -> Generator[tuple[Path, Path]]:
     """Generate an ephemeral ed25519 SSH key pair for tests."""
@@ -160,6 +148,12 @@ _TEST_IMAGE_TAG = "nbkp-test-server:latest"
 
 @pytest.fixture(scope="session")
 def docker_image(tmp_path_factory: pytest.TempPathFactory, worker_id: str) -> str:
+    # Every container fixture starts from this image, so this is where a Docker
+    # test first needs the daemon. Without one it fails, never skips: the Docker
+    # suites run through their own mise tasks, where a skip would pass a run
+    # that tested nothing. Probing here, not at import, also spares the unit
+    # suite, which loads this plugin too, a ping of the daemon.
+    check_docker()
     # xdist instantiates session fixtures once per worker, and concurrent builds
     # of one tag race inside the Docker daemon ("already exists, but accessing it
     # also failed"). So the first worker builds, under a lock, and the others wait
@@ -213,6 +207,38 @@ def luks_mapper_name() -> str:
     return f"test-enc-{uuid.uuid4().hex[:12]}"
 
 
+def _start_test_container(
+    image: str,
+    spec: ContainerSpec,
+    network: Network,
+    *,
+    aliases: list[str] | None = None,
+) -> DockerContainer:
+    """Start a container from *spec* on *network*, once its sshd listens."""
+    container = (
+        DockerContainer(image)
+        .with_exposed_ports(22)
+        .with_kwargs(privileged=spec.privileged)
+        # Generous startup timeout: the entrypoint formats a btrfs loop image and
+        # brings up dbus/udevd/udisksd before sshd logs "Server listening".  On a
+        # loaded machine (or when several test containers boot back-to-back) the
+        # default 30s is too tight and trips a spurious startup TimeoutError.
+        .waiting_for(
+            LogMessageWaitStrategy("Server listening").with_startup_timeout(90),
+        )
+    )
+    for host, (path, mode) in spec.binds.items():
+        container = container.with_volume_mapping(host, path, mode)
+    for key, value in spec.environment.items():
+        container = container.with_env(key, value)
+    container.start()
+
+    # docker leaves connect()'s *args and **kwargs unannotated; retire when it
+    # annotates them.
+    network.connect(container.get_wrapped_container(), aliases=aliases)  # pyright: ignore[reportUnknownMemberType]
+    return container
+
+
 @pytest.fixture(scope="session")
 def docker_container(
     ssh_key_pair: tuple[Path, Path],
@@ -222,52 +248,14 @@ def docker_container(
 ) -> Generator[SshEndpoint]:
     """Start Docker container and yield SshEndpoint."""
     private_key, public_key = ssh_key_pair
-
-    # Generous startup timeout: the entrypoint formats a btrfs loop image and
-    # brings up dbus/udevd/udisksd before sshd logs "Server listening".  On a
-    # loaded machine (or when several test containers boot back-to-back) the
-    # default 30s is too tight and trips a spurious startup TimeoutError.
-    wait_strategy = LogMessageWaitStrategy(
-        "Server listening",
-    ).with_startup_timeout(90)
-
-    container = (
-        DockerContainer(docker_image)
-        .with_exposed_ports(22)
-        .with_volume_mapping(
-            str(public_key),
-            "/mnt/ssh-authorized-keys",
-            "ro",
-        )
-        # Share the host's /dev and udev runtime.  udisks mounts a device only
-        # once udev has probed its filesystem (it reads the ID_FS_TYPE udev
-        # property).  With a *private* container /dev, the container's udevd
-        # sees a different devtmpfs than the kernel creates dm-crypt devices on,
-        # so after btrfs/loop activity (which shares the kernel across all
-        # containers on Docker Desktop's LinuxKit VM) it intermittently never
-        # probes a freshly-unlocked cleartext device — udisks then refuses to
-        # mount it ("is not a mountable filesystem") and the encrypted-volume
-        # tests fail.  Sharing /dev lets udevd operate on the same devtmpfs the
-        # kernel uses, and sharing /run/udev gives udisks the resulting db.
-        # This is the minimal set: --network host and a shared /run/dbus also
-        # work but break the multi-container bastion e2e (port + bus conflicts).
-        .with_volume_mapping("/dev", "/dev", "rw")
-        .with_volume_mapping("/run/udev", "/run/udev", "rw")
-        .with_env("NBKP_BACKUP_PATH", REMOTE_BACKUP_PATH)
-        .with_env("NBKP_BTRFS_PATH", REMOTE_BTRFS_PATH)
-        .with_env("NBKP_BTRFS_ENCRYPTED_PATH", REMOTE_BTRFS_ENCRYPTED_PATH)
-        .with_env("NBKP_LUKS_PASSPHRASE", LUKS_PASSPHRASE)
-        .with_env("NBKP_LUKS_MAPPER_NAME", luks_mapper_name)
-        .with_kwargs(privileged=True)
-        .waiting_for(wait_strategy)
+    container = _start_test_container(
+        docker_image,
+        storage_container_spec(public_key, luks_mapper_name=luks_mapper_name),
+        docker_network,
+        # The alias the bastion reaches it by.
+        aliases=["backup-server"],
     )
-    container.start()
-
-    # Connect to network with alias for bastion access
     wrapped = container.get_wrapped_container()
-    # docker leaves connect()'s *args and **kwargs unannotated; retire when it
-    # annotates them.
-    docker_network.connect(wrapped, aliases=["backup-server"])  # pyright: ignore[reportUnknownMemberType]
 
     server = create_test_ssh_endpoint(
         "test-server",
@@ -276,7 +264,7 @@ def docker_container(
         private_key,
     )
 
-    wait_for_ssh(server, timeout=30)
+    wait_for_ssh(server, timeout_seconds=30)
 
     yield server
 
@@ -325,32 +313,11 @@ def bastion_container(
 ) -> Generator[SshEndpoint]:
     """Start a bastion (jump proxy) container."""
     private_key, public_key = ssh_key_pair
-
-    # Generous startup timeout: the entrypoint formats a btrfs loop image and
-    # brings up dbus/udevd/udisksd before sshd logs "Server listening".  On a
-    # loaded machine (or when several test containers boot back-to-back) the
-    # default 30s is too tight and trips a spurious startup TimeoutError.
-    wait_strategy = LogMessageWaitStrategy(
-        "Server listening",
-    ).with_startup_timeout(90)
-
-    container = (
-        DockerContainer(docker_image)
-        .with_exposed_ports(22)
-        .with_volume_mapping(
-            str(public_key),
-            "/mnt/ssh-authorized-keys",
-            "ro",
-        )
-        .with_env("NBKP_BASTION_ONLY", "1")
-        .waiting_for(wait_strategy)
+    container = _start_test_container(
+        docker_image,
+        bastion_container_spec(public_key),
+        docker_network,
     )
-    container.start()
-
-    wrapped = container.get_wrapped_container()
-    # docker leaves connect()'s *args and **kwargs unannotated; retire when it
-    # annotates them.
-    docker_network.connect(wrapped)  # pyright: ignore[reportUnknownMemberType]
 
     server = create_test_ssh_endpoint(
         "bastion",
@@ -359,7 +326,7 @@ def bastion_container(
         private_key,
     )
 
-    wait_for_ssh(server, timeout=30)
+    wait_for_ssh(server, timeout_seconds=30)
     yield server
 
     container.stop()

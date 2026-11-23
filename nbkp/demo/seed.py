@@ -24,7 +24,11 @@ from nbkp.policy import Severity
 from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.remote.resolution import resolve_all_endpoints
-from nbkp.remote.testkit.constants import LUKS_PASSPHRASE
+from nbkp.remote.testkit.constants import (
+    BASTION_CONTAINER_NAME,
+    LUKS_PASSPHRASE,
+    STORAGE_CONTAINER_NAME,
+)
 from nbkp.remote.testkit.errors import DockerError
 from nbkp.sync.testkit.seed import (
     build_chain_config,
@@ -37,6 +41,7 @@ from nbkp.sync.testkit.seed import (
 # _check_docker(has_docker) before anything here resolves these lazy names.
 lazy from nbkp.remote.testkit.docker import (
     DOCKER_DIR,
+    bastion_container_spec,
     build_docker_image,
     check_docker,
     create_docker_network,
@@ -44,8 +49,8 @@ lazy from nbkp.remote.testkit.docker import (
     generate_ssh_keypair,
     read_luks_metadata,
     ssh_run,
-    start_bastion_container,
-    start_storage_container,
+    start_container,
+    storage_container_spec,
     wait_for_ssh,
 )
 
@@ -414,7 +419,11 @@ def _start_containers(base_dir: Path, *, luks: bool, steps: _Steps) -> _Containe
         network_name = create_docker_network()
 
     with steps.run(_START_BASTION):
-        bastion_port = start_bastion_container(pub_key, network_name)
+        bastion_port = start_container(
+            BASTION_CONTAINER_NAME,
+            bastion_container_spec(pub_key),
+            network_name,
+        )
     bastion = create_test_ssh_endpoint(
         "bastion",
         "127.0.0.1",
@@ -425,11 +434,11 @@ def _start_containers(base_dir: Path, *, luks: bool, steps: _Steps) -> _Containe
         wait_for_ssh(bastion)
 
     with steps.run(_START_STORAGE):
-        storage_port = start_storage_container(
-            pub_key,
-            network_name=network_name,
+        storage_port = start_container(
+            STORAGE_CONTAINER_NAME,
+            storage_container_spec(pub_key, luks_enabled=luks),
+            network_name,
             network_alias="backup-server",
-            luks_enabled=luks,
         )
     storage = create_test_ssh_endpoint(
         "storage",
@@ -442,7 +451,7 @@ def _start_containers(base_dir: Path, *, luks: bool, steps: _Steps) -> _Containe
         # and brings up dbus/udevd/udisksd (probing the shared host /dev)
         # before sshd is ready, which can exceed the 30s default on a loaded
         # machine.
-        wait_for_ssh(storage, timeout=90)
+        wait_for_ssh(storage, timeout_seconds=90)
     return _Containers(private_key, bastion, storage, bastion_port, storage_port)
 
 

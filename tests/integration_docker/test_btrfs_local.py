@@ -18,6 +18,7 @@ from pathlib import Path
 
 import docker as dockerlib
 import pytest
+from docker.types import Mount
 
 # Deferred: only the Docker proxy test builds an image.
 lazy from testcontainers.core.image import DockerImage
@@ -29,6 +30,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.remote.testkit.docker import check_docker
 from tests.integration_docker._btrfs_helpers import (
     BtrfsEnv,
     run_test_creates_readonly_snapshot,
@@ -202,35 +204,6 @@ class TestPruneSnapshots:
         run_test_dry_run_preserves_all(btrfs_env_local)
 
 
-_docker_available_cached: bool | None = None
-
-
-def _docker_available() -> bool:
-    """Check if Docker is available and daemon is running."""
-    try:
-        client = dockerlib.from_env()
-        # docker leaves ping()'s *args and **kwargs unannotated; retire when it
-        # annotates them.
-        client.ping()  # pyright: ignore[reportUnknownMemberType]
-    except Exception:  # noqa: BLE001
-        return False
-    else:
-        return True
-
-
-def test_btrfs_local_has_execution_path() -> None:
-    """
-    Fail loudly if neither native btrfs nor Docker is available.
-
-    All other tests would silently skip.
-    """
-    assert _btrfs_available or _docker_available(), (
-        "Cannot run btrfs-local tests: "
-        "btrfs is not available and Docker is not running. "
-        "Install btrfs-progs (Linux) or start Docker."
-    )
-
-
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _DOCKERFILE = "nbkp/remote/testkit/dockerbuild/Dockerfile.btrfs-local-test"
 _IMAGE_TAG = "nbkp-btrfs-test:latest"
@@ -240,18 +213,16 @@ _IMAGE_TAG = "nbkp-btrfs-test:latest"
     _btrfs_available,
     reason="btrfs available locally, running tests directly",
 )
-@pytest.mark.skipif(
-    not _docker_available(),
-    reason="Docker not available",
-)
 class TestBtrfsLocalViaDocker:
     """
     Proxy: re-run the native tests in a privileged Docker container.
 
-    Only when btrfs is not available locally.
+    Only when btrfs is not available locally. Without Docker either, it fails rather
+    than skips, so that a run never passes without the btrfs tests running somewhere.
     """
 
     def test_all_pass_in_docker(self) -> None:
+        check_docker()
         image = DockerImage(
             path=str(_PROJECT_ROOT),
             tag=_IMAGE_TAG,
@@ -263,8 +234,11 @@ class TestBtrfsLocalViaDocker:
         container = client.containers.run(
             _IMAGE_TAG,
             # `uv run` rather than a bare `pytest`, and --frozen so the container cannot
-            # rewrite the host's bind-mounted uv.lock. There is no mise in the image, so
-            # the host-side [deps.uv]/uv_venv_auto machinery does not apply here.
+            # rewrite the host's bind-mounted uv.lock. This is the one place that keeps
+            # an explicit `uv run` and syncs directly (in the entrypoint) rather than
+            # going through `mise deps`: there is no mise in the image, so neither
+            # python.uv_venv_auto nor [deps.uv] exists there. Do not "harmonize" it
+            # with the host-side tasks.
             command=[
                 "uv",
                 "run",
@@ -280,17 +254,15 @@ class TestBtrfsLocalViaDocker:
                     "bind": "/app",
                     "mode": "rw",
                 },
-                # The bind mount above exposes the host's macOS .venv inside the
-                # container.  UV_PROJECT_ENVIRONMENT=/tmp/venv in the image is what
-                # actually keeps the container's sync off it; this volume is defence in
-                # depth — it hides the macOS venv and its __pycache__ from the
-                # container's import machinery entirely, and bounds the blast radius to
-                # an ephemeral container venv if that variable is ever dropped.
-                "nbkp-btrfs-test-venv": {
-                    "bind": "/app/.venv",
-                    "mode": "rw",
-                },
             },
+            # The bind mount above exposes the host's macOS .venv inside the
+            # container.  UV_PROJECT_ENVIRONMENT=/tmp/venv in the image is what
+            # actually keeps the container's sync off it; this anonymous volume is
+            # defence in depth — it hides the macOS venv and its __pycache__ from the
+            # container's import machinery entirely, and bounds the blast radius to
+            # an ephemeral container venv, removed with the container, if that
+            # variable is ever dropped.
+            mounts=[Mount(target="/app/.venv", source=None, type="volume")],
             # The venv environment variables are set in Dockerfile.btrfs-local-test,
             # so they travel with the image.
             working_dir="/app",
@@ -302,6 +274,6 @@ class TestBtrfsLocalViaDocker:
             logs = container.logs().decode()
             exit_code = result["StatusCode"]
         finally:
-            container.remove(force=True)
+            container.remove(force=True, v=True)
 
         assert exit_code == 0, f"Tests failed inside Docker:\n{logs}"
