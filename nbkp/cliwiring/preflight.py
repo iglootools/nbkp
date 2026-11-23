@@ -52,7 +52,7 @@ def check_all_with_progress(
     *,
     use_progress: bool,
     only_syncs: list[str] | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     dry_run: bool = False,
     mount_observations: dict[str, MountObservation] | None = None,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
@@ -66,7 +66,12 @@ def check_all_with_progress(
     show ``✗`` (red), errors that are non-fatal (e.g. inactive volumes under
     ``IGNORE_INACTIVE``) show ``⚠`` (orange). The probes run through *runtime*.
     """
-    total = check_step_count(cfg, only_syncs, resolved_endpoints, exclude_locations)
+    total = check_step_count(
+        cfg,
+        resolved_endpoints=resolved_endpoints,
+        only_syncs=only_syncs,
+        exclude_locations=exclude_locations,
+    )
 
     if not use_progress or total == 0:
         return check_all_syncs(
@@ -76,6 +81,7 @@ def check_all_with_progress(
             dry_run=dry_run,
             mount_observations=mount_observations,
             exclude_locations=exclude_locations,
+            platform=runtime.platform,
             run=runtime.run,
             which=runtime.which,
         )
@@ -95,6 +101,7 @@ def check_all_with_progress(
             dry_run=dry_run,
             mount_observations=mount_observations,
             exclude_locations=exclude_locations,
+            platform=runtime.platform,
             run=runtime.run,
             which=runtime.which,
         )
@@ -105,8 +112,8 @@ def check_and_display(
     output_format: OutputFormat,
     strictness: Strictness,
     only_syncs: list[str] | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
     *,
+    resolved_endpoints: ResolvedEndpoints,
     dry_run: bool = False,
     mount_observations: dict[str, MountObservation] | None = None,
     invocation: Invocation | None = None,

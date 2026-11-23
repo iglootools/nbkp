@@ -1201,13 +1201,19 @@ class TestHardLink:
     def test_rejects_filesystems_without_hard_links(self) -> None:
         config = self._hl_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
-        guard = (
-            """! nbkp_matches "$(stat -f -c %T /mnt/dst 2>/dev/null || true)" """
-            "'vfat|msdos|exfat'"
-            " || { nbkp_log 'ERROR: destination volume /mnt/dst does not support"
-            " hard links'; return 1; }"
-        )
-        assert guard in script
+        checks = dedent("""\
+            NBKP_DST_FS_TYPE="$(stat -f -c %T /mnt/dst 2>/dev/null || true)"
+            [ -n "$NBKP_DST_FS_TYPE" ] || { nbkp_log 'ERROR: could not determine the filesystem type of destination volume /mnt/dst'; return 1; }
+            ! nbkp_matches "$NBKP_DST_FS_TYPE" 'vfat|msdos|exfat' || { nbkp_log 'ERROR: destination volume /mnt/dst does not support hard links'; return 1; }
+        """)  # noqa: E501 -- the generated script, line for line
+        assert indent(checks, "    ") in script
+
+    def test_reads_the_filesystem_type_with_df_and_mount_on_macos(self) -> None:
+        config = self._hl_config()
+        options = ScriptOptions(platform="darwin", config_path=None)
+        script = generate_script(config, options, now=_NOW)
+        assert 'NBKP_DST_FS_TYPE="$(nbkp_macos_fs_type /mnt/dst)"' in script
+        assert "stat -f -c %T" not in script
 
     def test_link_dest_resolution(self) -> None:
         config = self._hl_config()

@@ -13,6 +13,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.policy import Strictness
 from nbkp.preflight import (
     DestinationEndpointDiagnostics,
     DestinationEndpointErrorKind,
@@ -312,7 +313,11 @@ class TestTroubleshootLocationExcluded:
         assert "--exclude-location" in output
 
 
-def _check_output(sync: SyncStatus, config: Config) -> str:
+def _check_output(
+    sync: SyncStatus,
+    config: Config,
+    strictness: Strictness = Strictness.IGNORE_INACTIVE,
+) -> str:
     """``preflight check``'s human output for *sync*, on one line per row."""
     buf = StringIO()
     console = Console(file=buf, highlight=False, markup=False, width=400)
@@ -322,6 +327,7 @@ def _check_output(sync: SyncStatus, config: Config) -> str:
             {},
             {sync.slug: sync},
             config,
+            strictness=strictness,
             wrap_in_panel=False,
         ),
     )
@@ -347,7 +353,11 @@ def _with_destination_diagnostics(
 
 
 class TestCheckLatestColumn:
-    def _output(self, latest: LatestSymlinkState) -> str:
+    def _output(
+        self,
+        latest: LatestSymlinkState,
+        strictness: Strictness = Strictness.IGNORE_INACTIVE,
+    ) -> str:
         config = btrfs_config()
         sync = sync_status(config, local_vol_statuses(config), "btrfs-sync")
         return _check_output(
@@ -358,6 +368,7 @@ class TestCheckLatestColumn:
                 latest=latest,
             ),
             config,
+            strictness,
         )
 
     def test_invalid_target_shown_as_error(self) -> None:
@@ -385,6 +396,22 @@ class TestCheckLatestColumn:
         output = self._output(LatestSymlinkState(exists=False))
         assert "✗latest" in output
         assert "✓latest" not in output
+
+    def test_missing_shown_as_warning_under_ignore_all(self) -> None:
+        output = self._output(LatestSymlinkState(exists=False), Strictness.IGNORE_ALL)
+        assert "⚠latest" in output
+        assert "✗latest" not in output
+
+    def test_invalid_target_shown_as_warning_under_ignore_all(self) -> None:
+        output = self._output(
+            LatestSymlinkState(
+                exists=True,
+                raw_target="snapshots/foo",
+                target_valid=False,
+            ),
+            Strictness.IGNORE_ALL,
+        )
+        assert "⚠latest → snapshots/foo" in output
 
 
 class TestCheckLatestSnapshotWritable:
@@ -419,3 +446,21 @@ class TestCheckDestinationColumn:
 
     def test_writable_shown_when_sentinel_present(self) -> None:
         assert "✗writable" in self._output(sentinel_exists=True)
+
+
+class TestCheckSshEndpointsTable:
+    def test_location_tags_keep_their_brackets(self) -> None:
+        config = Config(
+            ssh_endpoints={
+                "server": SshEndpoint(
+                    slug="server",
+                    host="10.0.0.1",
+                    locations=["home[lan]", "travel"],
+                ),
+            },
+        )
+        buf = StringIO()
+        Console(file=buf, highlight=False, width=400).print(
+            format_human_check({}, {}, {}, config, wrap_in_panel=False),
+        )
+        assert "home[lan], travel" in buf.getvalue()

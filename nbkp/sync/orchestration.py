@@ -155,19 +155,20 @@ class RunOptions:
 
     *clock* names snapshots (read once per snapshot-enabled sync) and
     *platform* (``sys.platform``) decides the macOS-safe snapshot name form.
-    *only_syncs* selects syncs (all when ``None``).  *rsync* and
+    *resolved_endpoints* maps each remote volume to its endpoint (``{}`` for a
+    local-only config).  *only_syncs* selects syncs (all when ``None``).  *rsync* and
     *run_command* run the transfer and the commands on the volume hosts;
     tests replace them with fakes instead of patching the transport.
     """
 
     clock: Callable[[], datetime]
     platform: str
+    resolved_endpoints: ResolvedEndpoints
     strictness: Strictness = Strictness.IGNORE_INACTIVE
     dry_run: bool = False
     only_syncs: list[str] | None = None
     progress: ProgressMode | None = None
     prune: bool = True
-    resolved_endpoints: ResolvedEndpoints | None = None
     rsync: RsyncRunner = run_rsync
     run_command: VolumeCommandRunner = run_on_volume
 
@@ -198,7 +199,7 @@ def run_all_syncs(
         progress=options.progress,
         prune=options.prune,
         on_rsync_output=on_rsync_output,
-        resolved_endpoints=options.resolved_endpoints or {},
+        resolved_endpoints=options.resolved_endpoints,
         clock=options.clock,
         platform=options.platform,
         rsync=options.rsync,

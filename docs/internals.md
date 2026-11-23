@@ -747,7 +747,10 @@ stand-in:
 - **The unlocked cleartext device** by discovering it via `lsblk` (the `crypt`
   child of the LUKS container), not by assuming the `luks-<uuid>` mapper name —
   a LUKS2 label or crypttab entry changes it.
-- **Filesystem type** via `stat -f` on the real filesystem, not a config hint.
+- **Filesystem type** via `stat -f` on the real filesystem (`df -P` and `mount`
+  for a local volume on macOS, whose BSD `stat` cannot print it), not a config
+  hint. A type that cannot be read is reported, never assumed to support hard
+  links.
 
 The deliberate exception is the **fstab-mapping** check
 (`findmnt --fstab --target <path> -P -o SOURCE,TARGET`), which reads
@@ -776,7 +779,8 @@ decisions:
 
 - `rsync_version_ok` requires `has_rsync` — can't run `rsync --version` if rsync
   isn't installed
-- `is_btrfs_filesystem` requires `has_stat` — needs `stat -f -c %T`
+- `is_btrfs_filesystem` and `hardlink_supported` require `has_stat` — need
+  `stat -f -c %T`
 - `btrfs_user_subvol_rm` requires `has_findmnt AND is_btrfs`
 - the cleartext device discovery (`lsblk` of the LUKS container) requires
   `has_udisksctl` and a present LUKS container — can't mount/unmount/lock
@@ -980,7 +984,8 @@ does on their system.
 | `test -e /dev/disk/by-uuid/<UUID>` | Drive detection (mount management) |
 | `which <command>` | Command availability (rsync, btrfs, stat, findmnt, udisksctl, lsblk) |
 | `rsync --version` | Rsync version check (>= 3.0, reject macOS openrsync) |
-| `stat -f -c %T <path>` | Detect btrfs filesystem type |
+| `stat -f -c %T <path>` | Detect the filesystem type (btrfs, FAT/exFAT under hard links) |
+| `df -P <path>`, `mount` | Detect the filesystem type of a local volume on macOS |
 | `stat -c %i <path>` | Check btrfs subvolume (inode == 256) |
 | `btrfs property get <snapshot> ro` | Check that the snapshot `latest` points to is still read-only |
 | `findmnt -T <path> -n -o OPTIONS` | Check btrfs mount options (e.g. `user_subvol_rm_allowed`) |

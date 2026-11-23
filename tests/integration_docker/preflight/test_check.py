@@ -1,5 +1,6 @@
 """Integration tests: volume and sync checks."""
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -51,7 +52,7 @@ class TestLocalVolumeCheck:
         (vol_path / ".nbkp-vol").touch()
 
         vol = LocalVolume(slug="local", path=str(vol_path))
-        status = check_volume(vol)
+        status = check_volume(vol, {}, platform=sys.platform)
         assert status.active is True
 
     def test_local_volume_inactive(self, tmp_path: Path) -> None:
@@ -60,7 +61,7 @@ class TestLocalVolumeCheck:
         # No .nbkp-vol sentinel
 
         vol = LocalVolume(slug="local", path=str(vol_path))
-        status = check_volume(vol)
+        status = check_volume(vol, {}, platform=sys.platform)
         assert status.active is False
 
 
@@ -76,7 +77,7 @@ class TestRemoteVolumeCheck:
             volumes={"test-remote": docker_remote_volume},
         )
         resolved = resolve_all_endpoints(config)
-        status = check_volume(docker_remote_volume, resolved)
+        status = check_volume(docker_remote_volume, resolved, platform=sys.platform)
         assert status.active is True
 
     def test_remote_volume_inactive(
@@ -90,7 +91,7 @@ class TestRemoteVolumeCheck:
             volumes={"test-remote": docker_remote_volume},
         )
         resolved = resolve_all_endpoints(config)
-        status = check_volume(docker_remote_volume, resolved)
+        status = check_volume(docker_remote_volume, resolved, platform=sys.platform)
         assert status.active is False
 
 
@@ -131,6 +132,7 @@ class TestSyncCheck:
             sync,
             config,
             resolved_endpoints=resolved,
+            platform=sys.platform,
         )
         assert status.active is True
         assert status.errors == []
@@ -147,7 +149,10 @@ class TestBtrfsFilesystemCheck:
             volumes={"btrfs": remote_btrfs_volume},
         )
         resolved = resolve_all_endpoints(config)
-        assert probe_filesystem_type(remote_btrfs_volume, resolved) == "btrfs"
+        assert (
+            probe_filesystem_type(remote_btrfs_volume, resolved, platform=sys.platform)
+            == "btrfs"
+        )
 
     def test_non_btrfs_path_detected(
         self,
@@ -159,7 +164,11 @@ class TestBtrfsFilesystemCheck:
             volumes={"data": docker_remote_volume},
         )
         resolved = resolve_all_endpoints(config)
-        assert probe_filesystem_type(docker_remote_volume, resolved) not in (
+        assert probe_filesystem_type(
+            docker_remote_volume,
+            resolved,
+            platform=sys.platform,
+        ) not in (
             "btrfs",
             None,
         )
@@ -285,6 +294,7 @@ class TestSyncCheckBtrfs:
             sync,
             config,
             resolved_endpoints=resolved,
+            platform=sys.platform,
         )
         assert status.active is False
         assert (
@@ -323,6 +333,7 @@ class TestObserveRemoteVolume:
             host_tools=ssh_diag.host_tools,
             mount_tools=ssh_diag.mount_tools,
             resolved_endpoints=resolved,
+            platform=sys.platform,
         )
 
         assert diag.capabilities is not None
@@ -351,6 +362,7 @@ class TestObserveRemoteVolume:
             host_tools=ssh_diag.host_tools,
             mount_tools=ssh_diag.mount_tools,
             resolved_endpoints=resolved,
+            platform=sys.platform,
         )
 
         assert diag.capabilities is not None
@@ -377,6 +389,7 @@ class TestObserveRemoteVolume:
             host_tools=ssh_diag.host_tools,
             mount_tools=ssh_diag.mount_tools,
             resolved_endpoints=resolved,
+            platform=sys.platform,
         )
 
         assert diag.capabilities is not None
@@ -480,6 +493,7 @@ class TestObserveEndpoints:
             host_tools=ssh_diag.host_tools,
             mount_tools=ssh_diag.mount_tools,
             resolved_endpoints=resolved,
+            platform=sys.platform,
         )
         assert vol_diag.capabilities is not None
 
@@ -551,6 +565,7 @@ class TestMountCapabilities:
                 host_tools=ssh_diag.host_tools,
                 mount_tools=ssh_diag.mount_tools,
                 resolved_endpoints=resolved,
+                platform=sys.platform,
             )
 
             assert diag.capabilities is not None
@@ -591,6 +606,7 @@ class TestMountCapabilities:
             host_tools=ssh_diag.host_tools,
             mount_tools=ssh_diag.mount_tools,
             resolved_endpoints=resolved,
+            platform=sys.platform,
         )
 
         # Volume is not mounted, so sentinel won't exist — but mount

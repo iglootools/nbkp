@@ -81,7 +81,7 @@ $ nbkp sh [OPTIONS]
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
 * `--portable / --no-portable`: Generate bash 3.2-compatible script (default: enabled)  [default: portable]
-* `--platform <str>`: Target platform for snapshot timestamp format (e.g. &#x27;darwin&#x27;, &#x27;linux&#x27;). Defaults to the current OS.
+* `--platform <str>`: Target platform for snapshot timestamp format and for how a local volume&#x27;s filesystem type is read (e.g. &#x27;darwin&#x27;, &#x27;linux&#x27;). Defaults to the current OS.
 * `--help`: Show this message and exit.
 
 ## `nbkp config`

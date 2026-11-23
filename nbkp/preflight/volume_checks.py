@@ -205,6 +205,7 @@ def observe_volume(
     resolved_endpoints: ResolvedEndpoints | None = None,
     mount_observation: MountObservation | None = None,
     *,
+    platform: str,
     run: VolumeCommandRunner = run_on_volume,
 ) -> VolumeDiagnostics:
     """
@@ -213,7 +214,8 @@ def observe_volume(
     Called only when the SSH endpoint is active. SSH reachability and location exclusion
     are handled at the SSH endpoint level.
 
-    *host_tools* and *mount_tools* come from the SSH endpoint observation.
+    *host_tools* and *mount_tools* come from the SSH endpoint observation;
+    *platform* is the orchestrator's ``sys.platform``.
     """
     re = resolved_endpoints or {}
     caps = (
@@ -223,6 +225,7 @@ def observe_volume(
             mount_tools,
             re,
             mount_observation,
+            platform=platform,
             run=run,
         )
         if _volume_sentinel_exists(volume, re, run=run)
@@ -276,6 +279,7 @@ def check_volume_capabilities(
     resolved_endpoints: ResolvedEndpoints | None = None,
     mount_observation: MountObservation | None = None,
     *,
+    platform: str,
     run: VolumeCommandRunner = run_on_volume,
 ) -> VolumeCapabilities:
     """
@@ -283,11 +287,15 @@ def check_volume_capabilities(
 
     Host-level tool availability (rsync, btrfs, stat, findmnt) comes
     from *host_tools* (probed at the SSH endpoint level).  This function
-    probes only volume-specific filesystem properties.
+    probes only volume-specific filesystem properties; *platform* (the
+    orchestrator's ``sys.platform``) decides how a local volume's filesystem
+    type is probed.
     """
     re = resolved_endpoints or {}
     fs_type = (
-        probe_filesystem_type(volume, re, run=run) if host_tools.has_stat else None
+        probe_filesystem_type(volume, re, platform=platform, run=run)
+        if host_tools.has_stat
+        else None
     )
     is_btrfs = is_btrfs_filesystem(fs_type) if host_tools.has_stat else False
     hardlink_supported = supports_hard_links(fs_type)

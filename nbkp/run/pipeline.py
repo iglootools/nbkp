@@ -127,6 +127,7 @@ def check_and_run(
         dry_run=options.dry_run,
         mount_observations=mount_observations,
         exclude_locations=exclude_locations,
+        platform=options.platform,
         run=options.run_command,
         which=which,
     )

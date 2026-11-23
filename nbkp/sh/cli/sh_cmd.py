@@ -70,8 +70,9 @@ def sh_cmd(
         typer.Option(
             "--platform",
             help=(
-                "Target platform for snapshot timestamp format"
-                " (e.g. 'darwin', 'linux'). Defaults to the current OS."
+                "Target platform for snapshot timestamp format and for how a"
+                " local volume's filesystem type is read (e.g. 'darwin',"
+                " 'linux'). Defaults to the current OS."
             ),
             # sys.platform varies by OS, so the generated CLI docs would differ
             # between macOS and Linux, breaking CI's lint-clidocs.

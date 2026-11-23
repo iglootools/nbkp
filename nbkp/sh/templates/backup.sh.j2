@@ -173,6 +173,23 @@ nbkp_matches() {
     done
     return 1
 }
+# The type of the filesystem holding $1 on macOS, whose BSD stat cannot print
+# it: the type in `mount`'s line for the mount point `df -P` reports (its last
+# column, which may hold spaces). Empty when it cannot be read.
+nbkp_macos_fs_type() {
+    local mount_point line
+    mount_point="$(df -P "$1" 2>/dev/null \
+        | sed -n '2s/^[^ ]*  *[0-9]*  *[0-9]*  *[0-9]*  *[0-9]*%  *//p')"
+    [ -n "$mount_point" ] || return 0
+    mount 2>/dev/null | while IFS= read -r line; do
+        case "$line" in
+            *" on $mount_point ("*)
+                line="${line#*" on $mount_point ("}"
+                printf '%s\n' "${line%%[,)]*}"
+                break;;
+        esac
+    done
+}
 # Filter stdin to snapshot names, oldest first: exactly the two timestamp forms
 # nbkp writes, as parse_snapshot_name accepts them. Other entries are ignored
 # (never pruned or removed), which also makes the names safe to splice into

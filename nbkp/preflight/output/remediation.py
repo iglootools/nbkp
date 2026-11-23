@@ -1200,8 +1200,8 @@ def _destination_snapshot_backend_fix(
             return [
                 format_line(
                     FIX,
-                    "`stat -f` failed on the volume, so its filesystem type is"
-                    " unknown.",
+                    "The volume's filesystem type could not be read (`stat -f`, or"
+                    " `df -P` and `mount` for a local volume on macOS).",
                 ),
                 format_line(FIX, "Check that the volume path exists and is readable:"),
                 format_command(

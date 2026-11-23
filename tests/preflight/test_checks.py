@@ -211,7 +211,7 @@ class TestCheckLocalVolume:
         vol = LocalVolume(slug="data", path=str(tmp_path))
         (tmp_path / ".nbkp-vol").touch()
         run = healthy_host()
-        status = check_volume(vol, run=run, which=local_tools())
+        status = check_volume(vol, {}, run=run, which=local_tools(), platform="linux")
         assert status.active is True
         assert status.errors == []
         assert status.diagnostics is not None
@@ -225,7 +225,7 @@ class TestCheckLocalVolume:
     def test_inactive(self, tmp_path: Path) -> None:
         vol = LocalVolume(slug="data", path=str(tmp_path))
         run = healthy_host()
-        status = check_volume(vol, run=run, which=local_tools())
+        status = check_volume(vol, {}, run=run, which=local_tools(), platform="linux")
         assert status.active is False
         assert status.errors == [VolumeErrorKind.SENTINEL_NOT_FOUND]
         # Without its sentinel, a volume's filesystem is not probed.
@@ -236,8 +236,10 @@ class TestCheckLocalVolume:
         (tmp_path / ".nbkp-vol").mkdir()
         status = check_volume(
             LocalVolume(slug="data", path=str(tmp_path)),
+            {},
             run=healthy_host(),
             which=local_tools(),
+            platform="linux",
         )
         assert status.errors == [VolumeErrorKind.SENTINEL_NOT_FOUND]
 
@@ -258,7 +260,7 @@ class TestCheckRemoteVolume:
         vol, config = _remote_config()
         resolved = _make_resolved(config)
         run = healthy_host()
-        status = check_volume(vol, resolved, run=run)
+        status = check_volume(vol, resolved, run=run, platform="linux")
         assert status.active is True
         assert status.errors == []
         assert status.diagnostics is not None
@@ -274,7 +276,7 @@ class TestCheckRemoteVolume:
         )
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        status = check_volume(vol, resolved, run=run)
+        status = check_volume(vol, resolved, run=run, platform="linux")
         assert status.active is False
         assert status.errors == [VolumeErrorKind.SENTINEL_NOT_FOUND]
         assert status.ssh_endpoint_status.diagnostics.ssh_reachable is True
@@ -287,7 +289,7 @@ class TestCheckRemoteVolume:
         run = FakeCommandRunner().on("which", returns=TimeoutError("timed out"))
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        status = check_volume(vol, resolved, run=run)
+        status = check_volume(vol, resolved, run=run, platform="linux")
         assert status.active is False
         assert SshEndpointErrorKind.UNREACHABLE in status.ssh_endpoint_status.errors
         assert status.ssh_endpoint_status.diagnostics.ssh_reachable is False
@@ -302,7 +304,7 @@ class TestCheckRemoteVolumeLocationExcluded:
         run = FakeCommandRunner()
         vol, _config = _remote_config()
         # Empty resolved_endpoints means volume was excluded
-        status = check_volume(vol, {}, run=run)
+        status = check_volume(vol, {}, run=run, platform="linux")
         assert status.active is False
         assert (
             SshEndpointErrorKind.LOCATION_EXCLUDED in status.ssh_endpoint_status.errors
@@ -322,14 +324,72 @@ class TestProbeFilesystemTypeLocal:
     def test_btrfs(self) -> None:
         run = FakeCommandRunner().on("stat", returns=completed(stdout="btrfs\n"))
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert probe_filesystem_type(vol, {}, run=run) == "btrfs"
+        assert probe_filesystem_type(vol, {}, run=run, platform="linux") == "btrfs"
         assert run.commands == [["stat", "-f", "-c", "%T", "/mnt/data"]]
         assert run.calls[0].volume == vol
 
     def test_stat_failure(self) -> None:
         run = FakeCommandRunner().on("stat", returns=FAILS)
         vol = LocalVolume(slug="data", path="/mnt/data")
-        assert probe_filesystem_type(vol, {}, run=run) is None
+        assert probe_filesystem_type(vol, {}, run=run, platform="linux") is None
+
+
+_MACOS_DF = (
+    "Filesystem   512-blocks     Used Available Capacity  Mounted on\n"
+    "/dev/disk4s1   62519296 1048576  61470720     2%    /Volumes/My Drive\n"
+)
+_MACOS_MOUNT = (
+    "/dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)\n"
+    "/dev/disk4s1 on /Volumes/My Drive (exfat, local, nodev, nosuid, noowners)\n"
+)
+
+
+class TestProbeFilesystemTypeMacosLocal:
+    def test_type_of_the_mount_point_df_reports(self) -> None:
+        run = (
+            FakeCommandRunner()
+            .on("df", returns=completed(stdout=_MACOS_DF))
+            .on("mount", returns=completed(stdout=_MACOS_MOUNT))
+        )
+        vol = LocalVolume(slug="usb", path="/Volumes/My Drive/backups")
+        assert probe_filesystem_type(vol, {}, run=run, platform="darwin") == "exfat"
+        # BSD stat has no filesystem type format.
+        assert run.commands == [
+            ["df", "-P", "/Volumes/My Drive/backups"],
+            ["mount"],
+        ]
+
+    def test_df_failure(self) -> None:
+        run = FakeCommandRunner().on("df", returns=FAILS)
+        vol = LocalVolume(slug="usb", path="/Volumes/USB")
+        assert probe_filesystem_type(vol, {}, run=run, platform="darwin") is None
+        assert run.commands == [["df", "-P", "/Volumes/USB"]]
+
+    def test_mount_point_not_listed(self) -> None:
+        run = (
+            FakeCommandRunner()
+            .on("df", returns=completed(stdout=_MACOS_DF))
+            .on(
+                "mount",
+                returns=completed(stdout="map auto_home on /System (autofs)\n"),
+            )
+        )
+        vol = LocalVolume(slug="usb", path="/Volumes/My Drive")
+        assert probe_filesystem_type(vol, {}, run=run, platform="darwin") is None
+
+    def test_remote_volume_probed_with_gnu_stat(self) -> None:
+        run = FakeCommandRunner().on("stat", returns=completed(stdout="ext2/ext3\n"))
+        vol, config = _remote_config()
+        assert (
+            probe_filesystem_type(
+                vol,
+                _make_resolved(config),
+                run=run,
+                platform="darwin",
+            )
+            == "ext2/ext3"
+        )
+        assert run.commands == [["stat", "-f", "-c", "%T", "/backup"]]
 
 
 class TestProbeFilesystemTypeRemote:
@@ -337,7 +397,9 @@ class TestProbeFilesystemTypeRemote:
         run = FakeCommandRunner().on("stat", returns=completed(stdout="btrfs\n"))
         vol, config = _remote_config()
         resolved = _make_resolved(config)
-        assert probe_filesystem_type(vol, resolved, run=run) == "btrfs"
+        assert (
+            probe_filesystem_type(vol, resolved, run=run, platform="linux") == "btrfs"
+        )
         assert run.commands == [["stat", "-f", "-c", "%T", "/backup"]]
         assert run.calls[0].endpoint == resolved["nas"]
 
@@ -354,8 +416,8 @@ class TestFilesystemTypeInterpretation:
     def test_unknown(self) -> None:
         # Unknown, not "not btrfs": a failed probe must not trigger VOL_NOT_BTRFS.
         assert is_btrfs_filesystem(None) is None
-        # Cannot determine, so hard links are assumed to work.
-        assert supports_hard_links(None) is True
+        # Unknown too: a failed probe must not let a hard-link sync onto FAT run.
+        assert supports_hard_links(None) is None
 
     @pytest.mark.parametrize("fs_type", ["vfat", "msdos", "exfat"])
     def test_no_hard_links(self, fs_type: str) -> None:
@@ -379,6 +441,7 @@ class TestCheckVolumeCapabilitiesFilesystemProbe:
             tools,
             resolved_endpoints=resolved,
             run=run,
+            platform="linux",
         )
         assert caps.is_btrfs_filesystem is False
         assert caps.hardlink_supported is False
@@ -505,15 +568,17 @@ def _check(
     """
     Preflight *sync* with every host healthy but for *run*'s own answers.
 
-    *missing_tools* are missing from the orchestrator's ``PATH``.
+    *missing_tools* are missing from the orchestrator's ``PATH``. Every remote
+    volume is resolved to its own SSH endpoint unless *resolved* says otherwise.
     """
     return check_sync(
         sync,
         config,
-        resolved,
+        _make_resolved(config) if resolved is None else resolved,
         dry_run=dry_run,
         run=healthy_host(run, fs_type=fs_type),
         which=local_tools(missing=missing_tools),
+        platform="linux",
     )
 
 
@@ -721,8 +786,10 @@ class TestCheckSync:
 
         result = check_all_syncs(
             config,
+            resolved_endpoints={},
             run=healthy_host(),
             which=local_tools(missing={"btrfs"}),
+            platform="linux",
         )
         assert result.ssh_endpoint_statuses["localhost"].errors == []
         assert result.sync_statuses["plain"].active is True
@@ -1212,19 +1279,25 @@ class TestCheckSyncRemoteCommands:
 def _check_all(
     config: Config,
     run: FakeCommandRunner | None = None,
+    resolved_endpoints: ResolvedEndpoints | None = None,
     **kwargs: Any,  # noqa: ANN401 -- forwarded to check_all_syncs
 ) -> PreflightResult:
     """
     Run ``check_all_syncs`` with every host healthy but for *run*'s own answers.
 
-    And no ``~/.ssh/config``.
+    And no ``~/.ssh/config``. Every remote volume is resolved to its own SSH
+    endpoint unless *resolved_endpoints* says otherwise.
     """
     return check_all_syncs(
         config,
+        resolved_endpoints=(
+            _make_resolved(config) if resolved_endpoints is None else resolved_endpoints
+        ),
         run=healthy_host(run),
         which=local_tools(),
         ssh_config=paramiko.SSHConfig(),
         **kwargs,
+        platform="linux",
     )
 
 
@@ -1339,7 +1412,11 @@ class TestCheckAllSyncs:
         )
         started: list[str] = []
         _check_all(config, on_check_start=started.append, only_syncs=only_syncs)
-        assert check_step_count(config, only_syncs) == len(started)
+        assert check_step_count(
+            config,
+            resolved_endpoints=_make_resolved(config),
+            only_syncs=only_syncs,
+        ) == len(started)
 
 
 class TestStandaloneEndpointProbing:
@@ -1628,7 +1705,11 @@ class TestStandaloneEndpointProbing:
         )
         assert set(_standalone_probes(run)) == {"bastion"}
         assert "other-lan" not in result.ssh_endpoint_statuses
-        assert check_step_count(config, None, resolved, ["home"]) == (
+        assert check_step_count(
+            config,
+            resolved_endpoints=resolved,
+            exclude_locations=["home"],
+        ) == (
             len(result.ssh_endpoint_statuses)
             + len(result.volume_statuses)
             + len(result.source_endpoint_statuses)
@@ -1735,7 +1816,7 @@ class TestAlternateEndpointUnderLocationExclusion:
         assert result.ssh_endpoint_statuses["nas-lan"].errors == [
             SshEndpointErrorKind.LOCATION_EXCLUDED,
         ]
-        assert check_step_count(config, None, resolved) == (
+        assert check_step_count(config, resolved_endpoints=resolved) == (
             len(result.ssh_endpoint_statuses)
             + len(result.volume_statuses)
             + len(result.source_endpoint_statuses)
@@ -1819,6 +1900,24 @@ class TestCheckHardLinkDest:
             DestinationEndpointErrorKind.VOL_NO_HARDLINK_SUPPORT
             in status.destination_endpoint_status.errors
         )
+
+    def test_filesystem_type_unknown(self, tmp_path: Path) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        src.mkdir()
+        dst.mkdir()
+        self._setup_active_sentinels(src, dst)
+        (dst / "backup" / "snapshots").mkdir()
+        (dst / "backup" / "latest").symlink_to("/dev/null")
+
+        config, sync = self._make_hl_config(src, dst)
+
+        run = FakeCommandRunner().on("stat", "-f", returns=FAILS)
+        status = _check(sync, config, run=run)
+        assert status.active is False
+        assert status.destination_endpoint_status.errors == [
+            DestinationEndpointErrorKind.VOL_FS_TYPE_UNKNOWN,
+        ]
 
     def test_active_with_ext4(
         self,
@@ -2550,7 +2649,7 @@ class TestCheckRemoteVolumeSpaces:
         vol, config = _remote_config(path="/my backup")
         resolved = _make_resolved(config)
         run = healthy_host()
-        status = check_volume(vol, resolved, run=run)
+        status = check_volume(vol, resolved, run=run, platform="linux")
         assert status.active is True
         assert status.diagnostics is not None
         assert status.diagnostics.capabilities is not None
