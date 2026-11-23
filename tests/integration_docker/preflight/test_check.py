@@ -51,7 +51,7 @@ class TestLocalVolumeCheck:
         (vol_path / ".nbkp-vol").touch()
 
         vol = LocalVolume(slug="local", path=str(vol_path))
-        status = check_volume(vol)
+        status = check_volume(vol, {})
         assert status.active is True
 
     def test_local_volume_inactive(self, tmp_path: Path) -> None:
@@ -60,7 +60,7 @@ class TestLocalVolumeCheck:
         # No .nbkp-vol sentinel
 
         vol = LocalVolume(slug="local", path=str(vol_path))
-        status = check_volume(vol)
+        status = check_volume(vol, {})
         assert status.active is False
 
 

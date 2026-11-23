@@ -468,7 +468,9 @@ class TestGeneratedScriptExecution:
         result = _run_script(config, tmp_path)
         pipeline = check_and_run(
             config,
-            RunOptions(clock=lambda: _NOW, platform=sys.platform),
+            RunOptions(
+                clock=lambda: _NOW, platform=sys.platform, resolved_endpoints={}
+            ),
         )
 
         assert "SKIPPED step-1: disabled" in result.stderr
@@ -495,6 +497,7 @@ class TestGeneratedScriptExecution:
             RunOptions(
                 clock=lambda: _NOW,
                 platform=sys.platform,
+                resolved_endpoints={},
                 strictness=Strictness.IGNORE_NONE,
             ),
         )

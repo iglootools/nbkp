@@ -211,7 +211,7 @@ class TestCheckLocalVolume:
         vol = LocalVolume(slug="data", path=str(tmp_path))
         (tmp_path / ".nbkp-vol").touch()
         run = healthy_host()
-        status = check_volume(vol, run=run, which=local_tools())
+        status = check_volume(vol, {}, run=run, which=local_tools())
         assert status.active is True
         assert status.errors == []
         assert status.diagnostics is not None
@@ -225,7 +225,7 @@ class TestCheckLocalVolume:
     def test_inactive(self, tmp_path: Path) -> None:
         vol = LocalVolume(slug="data", path=str(tmp_path))
         run = healthy_host()
-        status = check_volume(vol, run=run, which=local_tools())
+        status = check_volume(vol, {}, run=run, which=local_tools())
         assert status.active is False
         assert status.errors == [VolumeErrorKind.SENTINEL_NOT_FOUND]
         # Without its sentinel, a volume's filesystem is not probed.
@@ -236,6 +236,7 @@ class TestCheckLocalVolume:
         (tmp_path / ".nbkp-vol").mkdir()
         status = check_volume(
             LocalVolume(slug="data", path=str(tmp_path)),
+            {},
             run=healthy_host(),
             which=local_tools(),
         )
@@ -505,12 +506,13 @@ def _check(
     """
     Preflight *sync* with every host healthy but for *run*'s own answers.
 
-    *missing_tools* are missing from the orchestrator's ``PATH``.
+    *missing_tools* are missing from the orchestrator's ``PATH``. Every remote
+    volume is resolved to its own SSH endpoint unless *resolved* says otherwise.
     """
     return check_sync(
         sync,
         config,
-        resolved,
+        _make_resolved(config) if resolved is None else resolved,
         dry_run=dry_run,
         run=healthy_host(run, fs_type=fs_type),
         which=local_tools(missing=missing_tools),
@@ -721,6 +723,7 @@ class TestCheckSync:
 
         result = check_all_syncs(
             config,
+            resolved_endpoints={},
             run=healthy_host(),
             which=local_tools(missing={"btrfs"}),
         )
@@ -1212,15 +1215,20 @@ class TestCheckSyncRemoteCommands:
 def _check_all(
     config: Config,
     run: FakeCommandRunner | None = None,
+    resolved_endpoints: ResolvedEndpoints | None = None,
     **kwargs: Any,  # noqa: ANN401 -- forwarded to check_all_syncs
 ) -> PreflightResult:
     """
     Run ``check_all_syncs`` with every host healthy but for *run*'s own answers.
 
-    And no ``~/.ssh/config``.
+    And no ``~/.ssh/config``. Every remote volume is resolved to its own SSH
+    endpoint unless *resolved_endpoints* says otherwise.
     """
     return check_all_syncs(
         config,
+        resolved_endpoints=(
+            _make_resolved(config) if resolved_endpoints is None else resolved_endpoints
+        ),
         run=healthy_host(run),
         which=local_tools(),
         ssh_config=paramiko.SSHConfig(),
@@ -1339,7 +1347,11 @@ class TestCheckAllSyncs:
         )
         started: list[str] = []
         _check_all(config, on_check_start=started.append, only_syncs=only_syncs)
-        assert check_step_count(config, only_syncs) == len(started)
+        assert check_step_count(
+            config,
+            resolved_endpoints=_make_resolved(config),
+            only_syncs=only_syncs,
+        ) == len(started)
 
 
 class TestStandaloneEndpointProbing:
@@ -1628,7 +1640,11 @@ class TestStandaloneEndpointProbing:
         )
         assert set(_standalone_probes(run)) == {"bastion"}
         assert "other-lan" not in result.ssh_endpoint_statuses
-        assert check_step_count(config, None, resolved, ["home"]) == (
+        assert check_step_count(
+            config,
+            resolved_endpoints=resolved,
+            exclude_locations=["home"],
+        ) == (
             len(result.ssh_endpoint_statuses)
             + len(result.volume_statuses)
             + len(result.source_endpoint_statuses)
@@ -1735,7 +1751,7 @@ class TestAlternateEndpointUnderLocationExclusion:
         assert result.ssh_endpoint_statuses["nas-lan"].errors == [
             SshEndpointErrorKind.LOCATION_EXCLUDED,
         ]
-        assert check_step_count(config, None, resolved) == (
+        assert check_step_count(config, resolved_endpoints=resolved) == (
             len(result.ssh_endpoint_statuses)
             + len(result.volume_statuses)
             + len(result.source_endpoint_statuses)

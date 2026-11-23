@@ -99,8 +99,8 @@ def check_all_syncs(
     on_check_start: Callable[[str], None] | None = None,
     on_check_end: Callable[[str, Sequence[PreflightErrorKind]], None] | None = None,
     only_syncs: list[str] | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
     *,
+    resolved_endpoints: ResolvedEndpoints,
     dry_run: bool = False,
     mount_observations: dict[str, MountObservation] | None = None,
     exclude_locations: Collection[str] = (),
@@ -121,6 +121,10 @@ def check_all_syncs(
     volumes/endpoints they reference) are checked.  SSH endpoints at
     *exclude_locations* are never contacted.
 
+    *resolved_endpoints* maps each remote volume to its endpoint
+    (:func:`remote.resolution.resolve_all_endpoints`; ``{}`` for a local-only
+    config): a remote volume missing from it is skipped as excluded by location.
+
     Progress callbacks use labels like ``"ssh:localhost"``,
     ``"vol:usb-backup"``, ``"src:photos-local"``, ``"dst:photos-backup"``
     to describe what is being checked.
@@ -130,7 +134,7 @@ def check_all_syncs(
     test injects fakes); standalone endpoints are enriched from *ssh_config*
     (default: ``~/.ssh/config``).
     """
-    re = resolved_endpoints or {}
+    re = resolved_endpoints
     progress = _Progress(on_check_start, on_check_end)
     syncs = _selected_syncs(config, only_syncs)
     needed_volumes = _needed_volumes(config, syncs, only_syncs)
@@ -178,8 +182,9 @@ def check_all_syncs(
 
 def check_step_count(
     config: Config,
+    *,
+    resolved_endpoints: ResolvedEndpoints,
     only_syncs: list[str] | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
     exclude_locations: Collection[str] = (),
 ) -> int:
     """
@@ -188,7 +193,7 @@ def check_step_count(
     One per SSH endpoint, volume, source endpoint and destination endpoint,
     so a progress bar can be sized before the checks start.
     """
-    re = resolved_endpoints or {}
+    re = resolved_endpoints
     syncs = _selected_syncs(config, only_syncs)
     needed_volumes = _needed_volumes(config, syncs, only_syncs)
     volume_endpoints = {

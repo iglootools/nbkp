@@ -18,7 +18,7 @@ from nbkp.remote.endpoints import ResolvedEndpoints
 def check_sync(
     sync: SyncConfig,
     config: Config,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     *,
     dry_run: bool = False,
     run: VolumeCommandRunner = run_on_volume,
@@ -38,7 +38,7 @@ def check_sync(
 
 def check_volume(
     volume: Volume,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     *,
     run: VolumeCommandRunner = run_on_volume,
     which: WhichFn = shutil.which,

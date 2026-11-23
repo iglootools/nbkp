@@ -99,6 +99,7 @@ def _run(
         RunOptions(
             clock=lambda: datetime(2026, 3, 6, tzinfo=UTC),
             platform="linux",
+            resolved_endpoints={},
             strictness=strictness,
             rsync=rsync,
         ),

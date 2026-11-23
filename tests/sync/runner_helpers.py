@@ -31,6 +31,7 @@ from nbkp.preflight import (
     VolumeErrorKind,
     VolumeStatus,
 )
+from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.sync import RunOptions, SyncResult, run_all_syncs
 
 FIXED_NOW = datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC)
@@ -51,10 +52,16 @@ def run_syncs(
     """
     callbacks = {k: v for k, v in kwargs.items() if k in _CALLBACKS}
     options = {k: v for k, v in kwargs.items() if k not in _CALLBACKS}
+    resolved_endpoints: ResolvedEndpoints = options.pop("resolved_endpoints", {})
     return run_all_syncs(
         config,
         sync_statuses,
-        RunOptions(clock=lambda: FIXED_NOW, platform="linux", **options),
+        RunOptions(
+            clock=lambda: FIXED_NOW,
+            platform="linux",
+            resolved_endpoints=resolved_endpoints,
+            **options,
+        ),
         **callbacks,
     )
 

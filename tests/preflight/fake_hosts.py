@@ -10,7 +10,7 @@ answers; a test prepends the one answer its scenario changes::
         FakeCommandRunner().on("stat", "-c", "%i", returns=completed(stdout="5\n")),
         fs_type="btrfs",
     )
-    check_sync(sync, config, run=run, which=local_tools())
+    check_sync(sync, config, {}, run=run, which=local_tools())
 
 Local sentinels, directories and symlinks are read from the real filesystem
 (``tmp_path``); on a remote host, unscripted ``test`` probes succeed.

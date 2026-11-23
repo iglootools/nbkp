@@ -71,6 +71,7 @@ def _run(
         RunOptions(
             clock=lambda: now,
             platform=sys.platform,
+            resolved_endpoints={},
             strictness=Strictness.IGNORE_INACTIVE,
             dry_run=dry_run,
         ),
