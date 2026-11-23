@@ -200,6 +200,21 @@ class TestMount:
         [unlock] = [c for c in run.calls if c.cmd[:2] == ["udisksctl", "unlock"]]
         assert unlock.stdin == "secret"
 
+    def test_an_empty_passphrase_is_never_sent_to_unlock(self) -> None:
+        run = locked_drive_host()
+
+        result = runner.invoke(
+            app,
+            ["disks", "mount", "-c", "config.yaml", "-o", "json"],
+            obj=fake_runtime(run=run, environ={"NBKP_PASSPHRASE_ENC": ""}),
+        )
+
+        assert result.exit_code == 1
+        [entry] = json.loads(result.stdout)
+        assert entry["failure_reason"] == "passphrase-not-available"
+        assert "returned an empty passphrase for id 'enc'" in entry["detail"]
+        assert _udisks_steps(run) == []
+
     def test_failure_is_reported_in_json(self) -> None:
         run = locked_drive_host().on(
             "udisksctl",

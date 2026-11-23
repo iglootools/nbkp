@@ -266,6 +266,34 @@ class TestRetrievePassphraseCommand:
         assert excinfo.value.reason == CredentialErrorKind.COMMAND_MISSING
 
 
+class TestRetrievePassphraseEmpty:
+    def test_empty_env_var_is_rejected(self) -> None:
+        with pytest.raises(CredentialError) as excinfo:
+            retrieve_passphrase(
+                "disk1",
+                CredentialProvider.ENV,
+                environ={"NBKP_PASSPHRASE_DISK1": ""},
+            )
+        assert excinfo.value.reason == CredentialErrorKind.EMPTY
+        assert str(excinfo.value) == (
+            "Credential provider 'env' returned an empty passphrase for id 'disk1'."
+        )
+
+    @pytest.mark.parametrize("stdout", ["", "\n", "\nsecond line\n"])
+    def test_command_printing_no_passphrase_is_rejected(self, stdout: str) -> None:
+        _, run = _command_runner(stdout=stdout)
+
+        with pytest.raises(CredentialError) as excinfo:
+            retrieve_passphrase(
+                "disk1",
+                CredentialProvider.COMMAND,
+                command_template=["pass", "show", "nbkp/{id}"],
+                run=run,
+            )
+        assert excinfo.value.reason == CredentialErrorKind.EMPTY
+        assert "'command'" in str(excinfo.value)
+
+
 class TestPassphraseCache:
     def test_caches_on_first_call(self) -> None:
         cache = PassphraseCache()

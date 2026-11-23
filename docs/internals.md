@@ -300,6 +300,10 @@ net — the option is guaranteed present at run time however it was configured.
   and uses the first line of its output, without the line break, as the
   passphrase.
 
+An empty passphrase (an empty variable, a command printing an empty first line)
+is a retrieval failure naming the provider and the passphrase-id, never sent to
+unlock.
+
 Passphrases are cached in memory during a single run, so the user is only
 prompted once per unique passphrase-id even if multiple volumes share it.
 

@@ -22,6 +22,7 @@ class CredentialErrorKind(StrEnum):
     COMMAND_MISSING = "command-missing"
     COMMAND_FAILED = "command-failed"
     COMMAND_NOT_RUNNABLE = "command-not-runnable"
+    EMPTY = "empty"
 
 
 class CredentialError(Exception):
@@ -30,7 +31,8 @@ class CredentialError(Exception):
 
     The fields that apply to *reason* are set: *passphrase_id* for the keyring,
     *env_var* for the environment, *command* (and *exit_code*) for a credential
-    command, and *detail* for the underlying error or the command's stderr.
+    command, *detail* for the underlying error or the command's stderr, and
+    *provider* and *passphrase_id* for an empty passphrase.
     """
 
     def __init__(
@@ -42,6 +44,7 @@ class CredentialError(Exception):
         command: list[str] | None = None,
         exit_code: int | None = None,
         detail: str | None = None,
+        provider: CredentialProvider | None = None,
     ) -> None:
         """Build the error from its reason and the fields that apply to it."""
         self.reason = reason
@@ -50,6 +53,7 @@ class CredentialError(Exception):
         self.command = command
         self.exit_code = exit_code
         self.detail = detail
+        self.provider = provider
         super().__init__(self._message())
 
     def _message(self) -> str:
@@ -92,6 +96,11 @@ class CredentialError(Exception):
                 return (
                     f"Credential command failed (exit {self.exit_code}):"
                     f" {shlex.join(command)}\nstderr: {self.detail}"
+                )
+            case CredentialErrorKind.EMPTY:
+                return (
+                    f"Credential provider '{self.provider}' returned an empty"
+                    f" passphrase for id '{self.passphrase_id}'."
                 )
 
 
@@ -219,7 +228,7 @@ def retrieve_passphrase(
     run: CommandFn = run_captured,
 ) -> str:
     """
-    Retrieve a passphrase from its configured provider.
+    Retrieve a passphrase from its configured provider; an empty one is an error.
 
     ``environ`` is where the ``env`` provider looks the passphrase up; ``prompt`` is how
     the ``prompt`` provider asks for it; ``run`` is how the ``command`` provider runs
@@ -227,13 +236,22 @@ def retrieve_passphrase(
     """
     match provider:
         case CredentialProvider.KEYRING:
-            return _from_keyring(passphrase_id)
+            passphrase = _from_keyring(passphrase_id)
         case CredentialProvider.PROMPT:
-            return _from_prompt(passphrase_id, prompt)
+            passphrase = _from_prompt(passphrase_id, prompt)
         case CredentialProvider.ENV:
-            return _from_env(passphrase_id, environ)
+            passphrase = _from_env(passphrase_id, environ)
         case CredentialProvider.COMMAND:
-            return _from_command(passphrase_id, command_template, run)
+            passphrase = _from_command(passphrase_id, command_template, run)
+    if not passphrase:
+        # An empty variable or a command printing nothing: no LUKS key is empty, and
+        # unlock would only fail with udisks' generic error, not naming the provider.
+        raise CredentialError(
+            CredentialErrorKind.EMPTY,
+            passphrase_id=passphrase_id,
+            provider=provider,
+        )
+    return passphrase
 
 
 class PassphraseCache:
