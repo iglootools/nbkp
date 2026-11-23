@@ -12,7 +12,8 @@ test drives a whole command against fake hosts by passing its own::
 Only the boundaries a command cannot avoid live here: commands on the hosts
 holding the volumes, tools on the orchestrator's ``PATH``, rsync, the clock
 and platform that name snapshots, where the config file is searched for, and
-where credentials and the local user name come from, and the lock that
+where credentials and the local user name come from (the ``prompt``
+provider's terminal prompt among them), and the lock that
 keeps two commands touching the drives and destinations apart.
 """
 
@@ -28,10 +29,11 @@ from pathlib import Path
 import typer
 from platformdirs import site_config_dir, user_config_dir
 
+from nbkp.cliwiring.credentials import prompt_passphrase
 from nbkp.cliwiring.lock import RunLockFn, hold_run_lock, resolve_run_lock_path
 from nbkp.config import Config, load_config
 from nbkp.config.loader import ConfigDirFn
-from nbkp.credentials import CommandFn, run_captured
+from nbkp.credentials import CommandFn, PromptFn, run_captured
 from nbkp.remote.dispatch import VolumeCommandRunner, WhichFn, run_on_volume
 from nbkp.sync.modes import RsyncRunner
 from nbkp.sync.rsync import run_rsync
@@ -67,6 +69,8 @@ class Runtime:
     """The platform site config directory of an app."""
     run_credential_command: CommandFn = run_captured
     """Runs the ``command`` credential provider's command."""
+    prompt_passphrase: PromptFn = prompt_passphrase
+    """Asks the operator for a passphrase (``prompt`` credential provider)."""
     local_user: Callable[[], str] = getpass.getuser
     """The orchestrator user named in suggested polkit rules."""
     run_lock: RunLockFn = hold_run_lock

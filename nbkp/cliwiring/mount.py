@@ -8,7 +8,6 @@ from rich.console import Console, Group, RenderableType
 from rich.text import Text
 
 from nbkp.clidisplay import OutputFormat
-from nbkp.cliwiring.credentials import prompt_passphrase
 from nbkp.cliwiring.lock import is_run_lock_needed, run_lock_or_exit
 from nbkp.cliwiring.mount_progress import LifecycleProgress, mount_display_names
 from nbkp.cliwiring.runtime import Runtime
@@ -63,7 +62,7 @@ def lifecycle_session(
     passphrase_fn, cache = build_passphrase_fn(
         cfg.credential_provider,
         cfg.credential_command,
-        prompt=prompt_passphrase,
+        prompt=runtime.prompt_passphrase,
         environ=runtime.environ,
         run=runtime.run_credential_command,
     )
