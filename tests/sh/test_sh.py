@@ -18,6 +18,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.remote.endpoints import EndpointFilter
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.sh import ScriptOptions, VolumeWithoutPathError, generate_script
 
@@ -441,6 +442,64 @@ class TestRemoteToLocal:
         )
         assert "admin@remote.example.com:/data/" in script
         assert "/mnt/backup/" in script
+
+
+def _location_excluded_script(*, enabled: bool = True) -> str:
+    """Script for a pull from a volume whose only endpoint is at excluded ``home``."""
+    config = _remote_to_local_config()
+    server = config.ssh_endpoints["remote"].model_copy(update={"location": "home"})
+    sync = config.syncs["pull-data"].model_copy(update={"enabled": enabled})
+    config = config.model_copy(
+        update={"ssh_endpoints": {"remote": server}, "syncs": {"pull-data": sync}},
+    )
+    resolved = resolve_all_endpoints(
+        config,
+        EndpointFilter(exclude_locations=["home"]),
+    )
+    return generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints=resolved)
+
+
+def _run_script(script: str, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["bash", "-s", "--", *args],
+        input=script,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+class TestLocationExcluded:
+    def test_sync_is_rendered_inactive(self) -> None:
+        script = _location_excluded_script()
+        assert "# : location-excluded — pull-data: volume remote-vol:" in script
+        assert "remote.example.com" not in script
+        assert "sync_pull_data()" not in script
+        assert (
+            'nbkp_run_sync pull-data sync_pull_data "$NBKP_PF_sync_pull_data"\n'
+        ) in script
+        _bash_n(script)
+
+    def test_sync_is_skipped_as_inactive(self) -> None:
+        result = _run_script(_location_excluded_script(), "--dry-run")
+        assert result.returncode == 0, result.stderr
+        assert "INACTIVE: volume remote-vol: all SSH endpoints" in result.stderr
+        assert "SKIPPED pull-data: inactive" in result.stderr
+
+    def test_ignore_none_fails_on_it(self) -> None:
+        result = _run_script(
+            _location_excluded_script(),
+            "--dry-run",
+            "--strictness",
+            "ignore-none",
+        )
+        assert result.returncode == 1
+
+    def test_disabled_sync_is_not_rendered(self) -> None:
+        script = _location_excluded_script(enabled=False)
+        assert "# : disabled — pull-data (location-excluded, not rendered" in script
+        assert "remote.example.com" not in script
+        _bash_n(script)
 
 
 class TestDisabledSync:

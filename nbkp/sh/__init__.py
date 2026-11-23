@@ -15,11 +15,24 @@ from pathlib import Path
 
 lazy from jinja2 import Environment, Template
 
-from nbkp.config import Config, LocalVolume, RemoteVolume, sync_predecessors
+from nbkp.config import (
+    Config,
+    LocalVolume,
+    RemoteVolume,
+    SyncConfig,
+    sync_predecessors,
+)
 from nbkp.ordering.graph import sort_syncs
-from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.remote.endpoints import ResolvedEndpoints, location_excluded
+from nbkp.sh.commands import INACTIVE
 from nbkp.sh.preflight import build_preflight_block
-from nbkp.sh.quoting import SCRIPT_DIR, comment_out, comment_text, has_shell_var
+from nbkp.sh.quoting import (
+    SCRIPT_DIR,
+    comment_out,
+    comment_text,
+    has_shell_var,
+    quote,
+)
 from nbkp.sh.spec import build_sync_spec
 from nbkp.sh.steps import Step, build_steps
 
@@ -83,6 +96,10 @@ class _SyncContext:
     preflight: str
     steps: tuple[Step, ...]
     predecessors: tuple[str, ...]
+    # Set when endpoint resolution left out a volume of the sync for its
+    # location: the sync cannot run from there, so only a preflight that
+    # reports it inactive is rendered.
+    excluded_reason: str | None = None  # noqa: DC06 -- read by templates/backup.sh.j2
 
 
 def _load_template() -> Template:
@@ -153,7 +170,29 @@ def _build_sync_context(
     *,
     predecessors: set[str],
 ) -> _SyncContext:
-    """Disabled syncs are rendered too: the template emits them commented out."""
+    """
+    Disabled syncs are rendered too: the template emits them commented out.
+
+    A sync with a location-excluded volume is inactive, as ``nbkp run``
+    reports it: its preflight returns ``INACTIVE`` and no sync body is
+    rendered, since no endpoint was resolved to reach the volume.
+    """
+    sync = config.syncs[slug]
+    excluded = _excluded_volumes(sync, config, resolved_endpoints)
+    if excluded:
+        reason = (
+            f"volume {', '.join(excluded)}: all SSH endpoints at an excluded"
+            " location (applied when the script was generated)"
+        )
+        return _SyncContext(
+            slug=slug,
+            fn_name=_slug_to_fn(slug),
+            enabled=sync.enabled,
+            preflight=f"nbkp_log {quote(f'INACTIVE: {reason}')}\nreturn {INACTIVE}",
+            steps=(),
+            predecessors=tuple(_slug_to_fn(p) for p in sorted(predecessors)),
+            excluded_reason=comment_text(reason),
+        )
     spec = build_sync_spec(slug, config, vol_paths, resolved_endpoints, platform)
     return _SyncContext(
         slug=slug,
@@ -163,6 +202,20 @@ def _build_sync_context(
         steps=build_steps(spec),
         predecessors=tuple(_slug_to_fn(p) for p in sorted(predecessors)),
     )
+
+
+def _excluded_volumes(
+    sync: SyncConfig,
+    config: Config,
+    resolved_endpoints: ResolvedEndpoints,
+) -> list[str]:
+    """Slugs of the sync's volumes that endpoint resolution left out (deduplicated)."""
+    slugs = dict.fromkeys(
+        [config.source_endpoint(sync).volume, config.destination_endpoint(sync).volume],
+    )
+    return [
+        v for v in slugs if location_excluded(config.volumes[v], resolved_endpoints)
+    ]
 
 
 def _build_script_context(

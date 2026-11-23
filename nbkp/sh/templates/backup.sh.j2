@@ -55,7 +55,9 @@ ${{ config_line }}
 #   - Rich console output (spinners, tables, progress bars) → simple log messages
 #   - JSON output mode → not applicable for a shell script
 #   - Python runtime / config parsing → all values hardcoded
-#   - Endpoint selection (--location, --network) → resolved once, at generation time
+#   - Endpoint selection (--location, --exclude-location, --network) → resolved once,
+#     at generation time; a sync with a volume left out by --exclude-location is
+#     always inactive
 #   - Paramiko-only SSH options (channel_timeout, disabled_algorithms) → no ssh CLI equivalent
 #   - Orphan cleanup during --dry-run → a dry-run here never modifies the destination
 #   - The run lock where flock(1) is missing (util-linux; not on stock macOS) →
@@ -297,7 +299,16 @@ nbkp_run_sync() {
 
 # --- Sync functions ---
 <% for sync in syncs %>
-<% if sync.enabled %>
+<% if sync.excluded_reason and sync.enabled %>
+
+# : location-excluded — ${{ sync.slug }}: ${{ sync.excluded_reason }}
+${{ sync.fn_name }}_preflight() {
+${{ sync.preflight | indent(4, first=true) }}
+}
+<% elif sync.excluded_reason %>
+
+# : disabled — ${{ sync.slug }} (location-excluded, not rendered: ${{ sync.excluded_reason }})
+<% elif sync.enabled %>
 
 ${{ sync_functions(sync) | trim }}
 <% else %>

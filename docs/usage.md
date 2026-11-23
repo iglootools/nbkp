@@ -162,8 +162,10 @@ nbkp sh -o /mnt/usb-backup/backup.sh --relative-dst
 `nbkp sh` compiles the config into a bash script with every path and option
 baked in, for hosts without Python or to review the exact commands before
 running them. Endpoints are resolved once, at generation time (`--location`,
-`--exclude-location` and `--network` apply then). Volumes with mount management
-must be mounted beforehand (`nbkp disks mount`).
+`--exclude-location` and `--network` apply then): a sync with a remote volume
+whose SSH endpoints are all at an excluded location is generated as always
+inactive, the way `nbkp run` skips it. Volumes with mount management must be
+mounted beforehand (`nbkp disks mount`).
 
 ```bash
 nbkp sh -o backup.sh                    # write an executable script
