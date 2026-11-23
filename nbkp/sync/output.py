@@ -54,7 +54,9 @@ def _snapshot_preview_commands(
             )
         case "hard-link":
             cmds = [
-                f"mkdir -p {dest_path}/{SNAPSHOTS_DIR}/<timestamp>",
+                # Plain mkdir, as create_snapshot_dir runs it: the run fails
+                # when the snapshot directory already exists.
+                f"mkdir {dest_path}/{SNAPSHOTS_DIR}/<timestamp>",
                 f"ln -sfn {SNAPSHOTS_DIR}/<timestamp> {dest_path}/{LATEST_LINK}",
             ]
             return (
@@ -128,7 +130,7 @@ def _build_snapshot_commands_section(
     table = Table(title=dry_run_table_title("Snapshot commands:", dry_run=True))
     table.add_column("Sync", style="bold")
     table.add_column("Mode")
-    table.add_column("Post-rsync")
+    table.add_column("Commands")
     table.add_column("Retention")
 
     for slug, (mode, cmds, retention) in rows:
