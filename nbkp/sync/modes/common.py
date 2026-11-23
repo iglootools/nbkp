@@ -111,7 +111,8 @@ def _rsync_output(proc: subprocess.CompletedProcess[str]) -> str:
     """
     Return rsync's stdout and stderr.
 
-    Apart when captured, merged into stdout (with an empty stderr) when streamed.
+    :func:`~nbkp.sync.rsync.run_local_process` merges them into stdout (with an empty
+    stderr); another runner may return them apart.
     """
     return proc.stdout + proc.stderr
 

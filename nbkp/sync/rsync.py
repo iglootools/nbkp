@@ -209,7 +209,7 @@ type ProcessRunner = Callable[
     subprocess.CompletedProcess[str],
 ]
 """Runs a command on the orchestrator, forwarding its output to the callback
-when one is given, and capturing it otherwise."""
+when one is given."""
 
 
 def run_local_process(
@@ -217,21 +217,18 @@ def run_local_process(
     on_output: Callable[[str], None] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """
-    Run *cmd*, capturing its output or forwarding it to *on_output*.
+    Run *cmd*, forwarding its merged stdout/stderr to *on_output* when given.
 
-    Its stdout and stderr are captured apart when *on_output* is ``None``, and merged
-    and forwarded to *on_output* as they arrive otherwise.
+    Captured or forwarded, the output is read the same way (see :func:`run_streaming`),
+    so the result keeps only its tail either way: without a callback (JSON output, or
+    no progress) rsync's output is just as long when ``extra-options`` or the progress
+    mode make it verbose.
     """
-    if on_output is None:
-        return subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            errors="replace",
-            check=False,
-        )
-    else:
-        return run_streaming(cmd, on_output)
+    return run_streaming(cmd, on_output or _discard)
+
+
+def _discard(_chunk: str) -> None:
+    pass
 
 
 # os.read returns as soon as any output is available, so progress updates still
@@ -241,9 +238,9 @@ def run_local_process(
 _STREAM_CHUNK_SIZE = 64 * 1024
 
 
-# The output was shown as it streamed, so only its end is kept for the result:
-# with --progress over millions of files the whole of it runs to hundreds of MB
-# per sync, all held until the run ends. rsync's error, when it fails, comes
+# Only the end of the output is kept for the result: with --progress over
+# millions of files the whole of it runs to hundreds of MB per sync, all held
+# until the run ends. rsync's error, when it fails, comes
 # last, so the tail is the part a failure report needs.
 _STREAM_TAIL_SIZE = 64 * 1024
 

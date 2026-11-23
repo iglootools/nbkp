@@ -132,8 +132,7 @@ class SyncResult(BaseModel):
     rsync_exit_code: int = -1
     """``-1`` when rsync did not run to completion."""
     output: str = ""
-    """rsync's output; only its last 65,536 characters when it was streamed
-    (human ``run --progress``), as it was shown whole as it ran."""
+    """rsync's merged stdout and stderr; only their last 65,536 characters."""
     failure: SyncFailureKind | None = None
     cancelled_by: str | None = None
     """For a cancelled sync, the upstream sync whose result caused it."""

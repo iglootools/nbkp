@@ -1396,17 +1396,31 @@ class TestRunRsync:
 
 
 class TestRunLocalProcess:
-    def test_captures_stdout_and_stderr_apart(self) -> None:
+    def test_captures_stdout_and_stderr_merged(self) -> None:
         result = run_local_process(_emit_cmd(b"out\r\n", stderr=b"err\n", exit_code=23))
         assert result.returncode == 23
-        assert result.stdout == "out\n"
-        assert result.stderr == "err\n"
+        assert result.stdout == "out\nerr\n"
+        assert result.stderr == ""
+
+    def test_keeps_only_the_tail_of_captured_output(self) -> None:
+        """
+        Regression: captured output was kept whole.
+
+        Without a callback (JSON output) rsync ran through ``subprocess.run`` and its
+        output, hundreds of MB with ``--progress per-file``, stayed in memory.
+        """
+        tail_size = 64 * 1024
+        code = f"import sys; sys.stdout.write('x' * {tail_size * 4} + 'end')"
+
+        result = run_local_process([sys.executable, "-c", code])
+
+        assert len(result.stdout) == tail_size
+        assert result.stdout.endswith("end")
 
     def test_replaces_undecodable_bytes(self) -> None:
         """Regression: a name not in the locale's encoding aborted the run."""
         result = run_local_process(_emit_cmd(b"caf\xe9\n", stderr=b"\xff\n"))
-        assert result.stdout == "caf\ufffd\n"
-        assert result.stderr == "\ufffd\n"
+        assert result.stdout == "caf\ufffd\n\ufffd\n"
 
     def test_streams_output_to_the_callback(self) -> None:
         chunks: list[str] = []

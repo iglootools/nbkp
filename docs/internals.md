@@ -926,10 +926,10 @@ All commands support both human-readable output (Rich-formatted tables,
 spinners, progress bars) and machine-readable JSON output for scripting and
 automation. The `run` command additionally supports four progress display modes:
 `none`, `overall`, `per-file`, and `full`. In human output with any of them but
-`none`, rsync's output is shown as it streams, and a sync's result keeps only
-its last 65,536 characters: the whole of it can run to hundreds of megabytes
-over millions of files, and rsync's error, when it fails, comes last. JSON
-output does not stream, and keeps rsync's output whole.
+`none`, rsync's output is shown as it streams. Shown or not, a sync's result
+keeps only the last 65,536 characters of it, stdout and stderr merged: the whole
+of it can run to hundreds of megabytes over millions of files (JSON output with
+`--progress per-file` included), and rsync's error, when it fails, comes last.
 
 ### Rsync Defaults
 
