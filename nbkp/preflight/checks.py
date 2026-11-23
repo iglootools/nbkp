@@ -101,6 +101,7 @@ def check_all_syncs(
     only_syncs: list[str] | None = None,
     *,
     resolved_endpoints: ResolvedEndpoints,
+    platform: str,
     dry_run: bool = False,
     mount_observations: dict[str, MountObservation] | None = None,
     exclude_locations: Collection[str] = (),
@@ -124,6 +125,8 @@ def check_all_syncs(
     *resolved_endpoints* maps each remote volume to its endpoint
     (:func:`remote.resolution.resolve_all_endpoints`; ``{}`` for a local-only
     config): a remote volume missing from it is skipped as excluded by location.
+    *platform* (``sys.platform``) is the orchestrator's OS, which decides how a
+    local volume's filesystem type is probed.
 
     Progress callbacks use labels like ``"ssh:localhost"``,
     ``"vol:usb-backup"``, ``"src:photos-local"``, ``"dst:photos-backup"``
@@ -155,6 +158,7 @@ def check_all_syncs(
         re,
         mount_observations or {},
         progress=progress,
+        platform=platform,
         run=run,
     )
     src_ep_statuses, dst_ep_statuses = _check_sync_endpoints(
@@ -515,6 +519,7 @@ def _check_volumes(
     mount_observations: dict[str, MountObservation],
     *,
     progress: _Progress,
+    platform: str,
     run: VolumeCommandRunner,
 ) -> dict[str, VolumeStatus]:
     """Observe and interpret every needed volume (sorted for stable output)."""
@@ -531,6 +536,7 @@ def _check_volumes(
                 ),
                 resolved_endpoints,
                 mount_observations.get(slug),
+                platform=platform,
                 run=run,
             ),
         )
@@ -544,6 +550,7 @@ def _check_volume(
     resolved_endpoints: ResolvedEndpoints,
     mount_observation: MountObservation | None,
     *,
+    platform: str,
     run: VolumeCommandRunner,
 ) -> VolumeStatus:
     """Observe one volume unless its (remote) SSH endpoint is inactive."""
@@ -557,6 +564,7 @@ def _check_volume(
                 mount_tools=ssh_status.diagnostics.mount_tools,
                 resolved_endpoints=resolved_endpoints,
                 mount_observation=mount_observation,
+                platform=platform,
                 run=run,
             )
             if observable and host_tools is not None

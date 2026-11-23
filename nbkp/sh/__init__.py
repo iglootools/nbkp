@@ -59,8 +59,9 @@ class ScriptOptions:
     """
     Options for generating a script.
 
-    ``platform`` (a ``sys.platform`` value) selects the snapshot timestamp format; it is
-    supplied by the CLI so generation stays deterministic.
+    ``platform`` (a ``sys.platform`` value) selects the snapshot timestamp format and
+    how a local volume's filesystem type is read; it is supplied by the CLI so
+    generation stays deterministic.
     """
 
     platform: str

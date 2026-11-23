@@ -9,6 +9,7 @@ checking).
 
 import os
 import subprocess
+import sys
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -200,7 +201,7 @@ class TestHostKeyVerification:
         )
 
         resolved = resolve_all_endpoints(config)
-        status = check_volume(vol, resolved)
+        status = check_volume(vol, resolved, platform=sys.platform)
         assert status.active is True
 
     def test_check_fails_with_wrong_known_hosts(
@@ -235,7 +236,7 @@ class TestHostKeyVerification:
         )
 
         resolved = resolve_all_endpoints(config)
-        status = check_volume(vol, resolved)
+        status = check_volume(vol, resolved, platform=sys.platform)
         assert status.active is False
         # Host key mismatch: the host answered and was refused (not inactive).
         assert status.ssh_endpoint_status.errors == [SshEndpointErrorKind.AUTH_FAILED]
@@ -337,7 +338,7 @@ class TestExplicitKeyOnly:
         )
 
         resolved = resolve_all_endpoints(config)
-        status = check_volume(vol, resolved)
+        status = check_volume(vol, resolved, platform=sys.platform)
         assert status.active is True
 
     def test_rsync_with_explicit_key_only(
@@ -423,7 +424,7 @@ class TestConnectionFailure:
         )
 
         resolved = resolve_all_endpoints(config)
-        status = check_volume(vol, resolved)
+        status = check_volume(vol, resolved, platform=sys.platform)
         assert status.active is False
         assert SshEndpointErrorKind.UNREACHABLE in status.ssh_endpoint_status.errors
 
@@ -460,7 +461,7 @@ class TestConnectionFailure:
         )
 
         resolved = resolve_all_endpoints(config)
-        status = check_volume(vol, resolved)
+        status = check_volume(vol, resolved, platform=sys.platform)
         assert status.active is False
         # Unauthorized key: the host answered and refused (not inactive).
         assert status.ssh_endpoint_status.errors == [SshEndpointErrorKind.AUTH_FAILED]

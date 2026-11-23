@@ -198,7 +198,7 @@ def _destination_snapshot_checks(spec: SyncSpec) -> list[str]:
         case "hard-link":
             return [
                 *_tool_checks(_HARD_LINK_TOOLS, spec),
-                _hardlink_support_check(spec),
+                *_hardlink_support_checks(spec),
                 *_snapshot_dir_checks(spec),
                 *_latest_checks(
                     spec.dst_vol,
@@ -274,19 +274,37 @@ def _latest_readonly_warning(spec: SyncSpec) -> str:
     )
 
 
-def _hardlink_support_check(spec: SyncSpec) -> str:
-    """Reject FAT/exFAT; an undeterminable type is assumed fine (as in run)."""
-    fs_type = output_of(
-        spec.dst_vol,
-        ["stat", "-f", "-c", "%T", spec.dst_vol_path],
-        spec.resolved_endpoints,
+def _hardlink_support_checks(spec: SyncSpec) -> list[str]:
+    """
+    Reject FAT/exFAT, and a filesystem whose type cannot be read (as in run).
+
+    BSD ``stat`` cannot print the type, so a local volume under macOS reads it
+    with ``nbkp_macos_fs_type`` (``df`` and ``mount``), as run's preflight does.
+    """
+    fs_type = (
+        f'"$(nbkp_macos_fs_type {quote(spec.dst_vol_path)})"'
+        if isinstance(spec.dst_vol, LocalVolume) and spec.platform == "darwin"
+        else output_of(
+            spec.dst_vol,
+            ["stat", "-f", "-c", "%T", spec.dst_vol_path],
+            spec.resolved_endpoints,
+        )
     )
     rejected = "|".join(NO_HARDLINK_FILESYSTEMS)
-    return guard(
-        f"! nbkp_matches {fs_type} '{rejected}'",
-        f"destination volume {spec.dst_vol_path} does not support hard links",
-        BROKEN,
-    )
+    return [
+        f"NBKP_DST_FS_TYPE={fs_type}",
+        guard(
+            '[ -n "$NBKP_DST_FS_TYPE" ]',
+            "could not determine the filesystem type of destination volume"
+            f" {spec.dst_vol_path}",
+            BROKEN,
+        ),
+        guard(
+            f"! nbkp_matches \"$NBKP_DST_FS_TYPE\" '{rejected}'",
+            f"destination volume {spec.dst_vol_path} does not support hard links",
+            BROKEN,
+        ),
+    ]
 
 
 def _snapshot_dir_checks(spec: SyncSpec) -> list[str]:

@@ -82,6 +82,7 @@ def check_all_with_progress(
             dry_run=dry_run,
             mount_observations=mount_observations,
             exclude_locations=exclude_locations,
+            platform=runtime.platform,
             run=runtime.run,
             which=runtime.which,
         )
@@ -101,6 +102,7 @@ def check_all_with_progress(
             dry_run=dry_run,
             mount_observations=mount_observations,
             exclude_locations=exclude_locations,
+            platform=runtime.platform,
             run=runtime.run,
             which=runtime.which,
         )

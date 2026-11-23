@@ -59,8 +59,9 @@ class VolumeCapabilities(BaseModel):
 
     sentinel_exists: bool
     is_btrfs_filesystem: bool | None
-    """``None`` when the probe (``stat -f``) failed: type unknown."""
-    hardlink_supported: bool
+    """``None`` when the filesystem type probe failed: type unknown."""
+    hardlink_supported: bool | None
+    """``None`` when the filesystem type probe failed: support unknown."""
     btrfs_user_subvol_rm: bool
     mount: MountCapabilities | None = None
 

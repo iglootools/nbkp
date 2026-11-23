@@ -457,14 +457,19 @@ def _hardlink_destination_ep_errors(
         # stat error handled at SSH endpoint level
         return []
     else:
-        return [
-            *(
-                [DestinationEndpointErrorKind.VOL_NO_HARDLINK_SUPPORT]
-                if not caps.hardlink_supported
-                else []
-            ),
-            *_snapshot_dirs_ep_errors(diag),
-        ]
+        return [*_hardlink_support_ep_errors(caps), *_snapshot_dirs_ep_errors(diag)]
+
+
+def _hardlink_support_ep_errors(
+    caps: VolumeCapabilities,
+) -> list[DestinationEndpointErrorKind]:
+    match caps.hardlink_supported:
+        case None:
+            return [DestinationEndpointErrorKind.VOL_FS_TYPE_UNKNOWN]
+        case False:
+            return [DestinationEndpointErrorKind.VOL_NO_HARDLINK_SUPPORT]
+        case True:
+            return []
 
 
 def _snapshot_dirs_ep_errors(
