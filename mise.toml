@@ -76,21 +76,16 @@ run = "mise deps install uv"
 
 # Task families (guidelines/project-setup/mise.md in iglootools/common, "Name tasks by
 # family"): a task that rewrites files is named for what it writes (fmt, toc, clidocs), anything
-# that fails without writing is a lint-*, and preflight runs every lint and test before a push.
+# that fails without writing is a lint-*, and preflight runs every lint and test before a push,
+# the lints and the tests in parallel.
 
 [tasks.preflight]
 description = "Run every lint and every test, Docker suites included (what CI runs, across its three jobs)"
-run = [
-  { task = "lint" },
-  { task = "test" },
-]
+run = [{ tasks = ["lint", "test"] }]
 
 [tasks.preflight-quick]
 description = "Run every lint and the unit tests"
-run = [
-  { task = "lint" },
-  { task = "test-unit" },
-]
+run = [{ tasks = ["lint", "test-unit"] }]
 
 # CI runs three jobs in parallel, one per ci-* task: the two Docker suites take about a
 # minute each and do not need each other, so running them one after the other only made
