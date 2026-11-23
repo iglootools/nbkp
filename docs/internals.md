@@ -712,8 +712,10 @@ which always run first.
 
 **Aborted runs** — When preflight aborts a run, `run` lists the offending syncs
 and suggests the matching `nbkp preflight troubleshoot` command — same config
-file (relative to the current directory) and endpoint-selection flags — for
-step-by-step fixes. In JSON mode the command is the `hint` field.
+file (relative to the current directory), endpoint-selection flags,
+`--strictness` and `--no-mount` — for step-by-step fixes. It cannot carry
+`--sync`, which `troubleshoot` does not take. In JSON mode the command is the
+`hint` field.
 `snapshots show` / `prune` (when a sync failed preflight) and `disks mount` /
 `umount` (when a volume failed) print the same suggestion, in human output only:
 their JSON output is a bare list, with no object to carry a `hint` field.

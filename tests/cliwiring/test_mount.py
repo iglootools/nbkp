@@ -78,6 +78,30 @@ class TestUmountFailure:
 
         assert results == [LOCK_FAILED]
 
+    def test_body_failure_reports_it_even_when_the_caller_owns_the_list(
+        self,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        results: list[UmountResult] = []
+        runtime = fake_runtime(run=mounted_drive_host(BUSY))
+        with (
+            pytest.raises(BodyError),
+            managed_mount(
+                _CONFIG,
+                {},
+                runtime=runtime,
+                writes=False,
+                output_format=OutputFormat.JSON,
+                umount_results=results,
+            ),
+        ):
+            raise BodyError
+
+        assert results == [LOCK_FAILED]
+        assert "Umount failed: enc: lock failed (exit 1): busy" in (
+            capsys.readouterr().err
+        )
+
     def test_successful_umount_passes(self) -> None:
         run = mounted_drive_host(completed())
         with managed_mount(

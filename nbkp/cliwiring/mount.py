@@ -143,7 +143,8 @@ def managed_mount(
         exits, and the caller reports them (``run`` puts them in its
         output).  Otherwise a failed umount — a drive possibly left mounted
         or unlocked — is reported on stderr and fails a command that would
-        have succeeded (exit 1).
+        have succeeded (exit 1).  When the block raises, the failures are
+        reported on stderr either way, since the caller never gets to.
 
     """
     with run_lock_or_exit(
@@ -191,9 +192,9 @@ def _managed_mount_reporting_umount_failures(
     except BaseException:
         # The body failed (or was interrupted) and exits with its own error,
         # but a drive left mounted or unlocked must still be reported: with
-        # -o json no progress line has shown it.
-        if umount_results is None:
-            _print_umount_failures(collected, mount_display_names(cfg))
+        # -o json no progress line has shown it. A caller that owns the list
+        # reports it only after the block, which the exception skips.
+        _print_umount_failures(collected, mount_display_names(cfg))
         raise
     if umount_results is None:
         _exit_on_umount_failure(collected, mount_display_names(cfg))
