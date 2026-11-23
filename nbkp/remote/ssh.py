@@ -85,21 +85,28 @@ def _ssh_endpoint_args(endpoint: SshEndpoint) -> list[str]:
     return [*o_args, *_port_and_key_args(endpoint)]
 
 
+def _escape_percent(value: str) -> str:
+    """Escape ``%`` so ssh's token expansion of a ProxyCommand leaves it literal."""
+    return value.replace("%", "%%")
+
+
 def _build_proxy_hop(proxy: SshEndpoint, inner_cmd: str | None) -> str:
     """
     Build one ProxyCommand hop through *proxy*.
 
     Ssh runs a ProxyCommand through ``sh -c``, so the hop is shell-quoted
-    (``shlex.join``). Only ``%`` needs ssh-level escaping in a nested command: ``%h:%p``
-    itself contains no shell metacharacters and stays unquoted for ssh to expand.
+    (``shlex.join``). Ssh also expands ``%`` tokens in the whole value first, so
+    everything taken from the endpoint is ``%``-escaped, and a nested command once more
+    for each ssh that expands it. Only the hop's own ``%h:%p`` stays unescaped for ssh
+    to expand; it contains no shell metacharacters and stays unquoted.
     """
     parts = [
         "ssh",
-        *_ssh_endpoint_args(proxy),
-        *(["-o", f"ProxyCommand={inner_cmd.replace('%', '%%')}"] if inner_cmd else []),
+        *map(_escape_percent, _ssh_endpoint_args(proxy)),
+        *(["-o", f"ProxyCommand={_escape_percent(inner_cmd)}"] if inner_cmd else []),
         "-W",
         "%h:%p",
-        proxy.destination,
+        _escape_percent(proxy.destination),
     ]
     return shlex.join(parts)
 

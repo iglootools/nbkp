@@ -1,6 +1,7 @@
 import errno
 import io
 import os
+import re
 import shlex
 from collections.abc import Iterator
 from functools import partial
@@ -28,6 +29,21 @@ _DEFAULT_O_OPTIONS = [
     "-o",
     "BatchMode=yes",
 ]
+
+
+def _expand_proxy_command(option: str, host: str) -> list[str]:
+    """
+    Expand a ``ProxyCommand=`` value's tokens as ssh does, and split it as sh does.
+
+    Covers the tokens nbkp emits: ``%%``, ``%h`` and ``%p`` (port 22).
+    """
+    value = option.removeprefix("ProxyCommand=")
+    expanded = re.sub(
+        r"%(.)",
+        lambda m: {"%": "%", "h": host, "p": "22"}[m.group(1)],
+        value,
+    )
+    return shlex.split(expanded)
 
 
 class TestBuildSshBaseArgs:
@@ -280,6 +296,43 @@ class TestBuildSshBaseArgs:
             f"ProxyCommand={proxy_cmd}",
             "target.example.com",
         ]
+
+    def test_proxy_command_keeps_percent_in_proxy_settings_literal(self) -> None:
+        """
+        Ssh expands ``%`` tokens in a ProxyCommand before running it.
+
+        A ``%`` in a hop's key or user must reach that hop's ``ssh`` unchanged, at
+        every nesting level, while each hop's ``%h:%p`` still names the next host.
+        """
+        server = SshEndpoint(slug="target", host="target.example.com")
+        outer = SshEndpoint(
+            slug="outer",
+            host="outer.example.com",
+            user="u%n",
+            key="/keys/outer%d",
+        )
+        inner = SshEndpoint(
+            slug="inner",
+            host="inner.example.com",
+            user="v%r",
+            key="/keys/inner%h",
+        )
+        args = build_ssh_base_args(server, [outer, inner])
+        top_cmd = _expand_proxy_command(
+            args[args.index("-o", len(_DEFAULT_O_OPTIONS)) + 1],
+            host="target.example.com",
+        )
+
+        assert top_cmd[-1] == "v%r@inner.example.com"
+        assert top_cmd[top_cmd.index("-i") + 1] == "/keys/inner%h"
+        assert top_cmd[top_cmd.index("-W") + 1] == "target.example.com:22"
+        outer_cmd = _expand_proxy_command(
+            next(a for a in top_cmd if a.startswith("ProxyCommand=")),
+            host="inner.example.com",
+        )
+        assert outer_cmd[-1] == "u%n@outer.example.com"
+        assert outer_cmd[outer_cmd.index("-i") + 1] == "/keys/outer%d"
+        assert outer_cmd[outer_cmd.index("-W") + 1] == "inner.example.com:22"
 
     def test_proxy_chain_empty(self) -> None:
         server = SshEndpoint(
