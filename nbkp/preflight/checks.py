@@ -575,7 +575,7 @@ def _disconnected_volume_status(
     """
     Return the status of a remote volume whose host dropped after the first probes.
 
-    Every remote command opens a new connection, so a host can go away
+    Remote commands reuse a pooled connection, but a host can still go away
     (a NAS falling asleep, Wi-Fi dropping) half-way through preflight.  That
     host is then unreachable for this volume — inactive, with the cause
     recorded — rather than a traceback that stops every other sync too.

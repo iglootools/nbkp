@@ -101,7 +101,7 @@ class MountCapabilities(BaseModel):
     # fstab config check (only meaningful when ``volume.path`` is declared —
     # udisks needs an fstab entry mapping the device to that fixed path)
     has_fstab_entry: bool | None = None
-    fstab_target: str | None = None  # noqa: DC06 -- in `nbkp check --json`
+    fstab_target: str | None = None  # noqa: DC06 -- in `nbkp preflight check -o json`
     """The mountpoint of the fstab entry for ``volume.path``, if any."""
     fstab_source: str | None = None
     """The device spec of that fstab entry (``UUID=…``, ``/dev/mapper/…``).
