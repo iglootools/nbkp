@@ -256,8 +256,10 @@ dependencies; the contracts are what reject a new import that breaks a rule:
   lives in `remote/`; config's display code takes the selected endpoints through
   a structural protocol rather than importing them. Transport primitives
   (`run_on_volume`, `check_command_available`) are in `remote/dispatch.py`;
-  preflight-only host probes (sentinels, directories, symlinks, rsync version)
-  are in `preflight/probes.py`.
+  host probes (sentinels, directories, symlinks, rsync version) are in
+  `preflight/probes.py`, which also holds the reads `snapshots/` shares with
+  preflight: listing an endpoint's `snapshots/` and reading a symlink. Each
+  caller wraps them with its own error policy.
 - **Core packages are ordered.** From the top:
 
   ```text

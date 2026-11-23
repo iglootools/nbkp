@@ -27,7 +27,7 @@ from nbkp.config import (
     resolve_endpoint_path,
 )
 from nbkp.disks import DeviceProbeError, discover_cleartext_device, generate_auth_rules
-from nbkp.fsprotocol import SNAPSHOTS_DIR, Snapshot, parse_snapshot_listing
+from nbkp.fsprotocol import SNAPSHOTS_DIR, Snapshot
 from nbkp.policy import Severity, Strictness
 from nbkp.preflight.output.messages import format_problem
 from nbkp.preflight.output.remediation import (
@@ -46,6 +46,7 @@ from nbkp.preflight.output.remediation import (
     format_volume_error_fix,
     polkit_user,
 )
+from nbkp.preflight.probes import VolumeReadError, list_snapshot_dir
 from nbkp.preflight.severity import (
     PreflightErrorKind,
     PreflightWarningKind,
@@ -368,13 +369,8 @@ def _list_endpoint_snapshots(
         return None
     path = f"{resolve_endpoint_path(vol, endpoint.subdir)}/{SNAPSHOTS_DIR}"
     try:
-        listing = run(["ls", path], vol, resolved_endpoints)
-        if listing.returncode == 0:
-            return parse_snapshot_listing(listing.stdout)
-        else:
-            exists = run(["test", "-d", path], vol, resolved_endpoints)
-            return [] if exists.returncode == 1 else None
-    except ssh_connection_errors():
+        return list_snapshot_dir(vol, path, resolved_endpoints, run=run)
+    except (VolumeReadError, *ssh_connection_errors()):
         return None
 
 

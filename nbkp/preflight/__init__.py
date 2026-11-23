@@ -14,6 +14,7 @@ from nbkp.preflight.endpoint_checks import (
     observe_destination_endpoint,
     observe_source_endpoint,
 )
+from nbkp.preflight.probes import VolumeReadError, list_snapshot_dir, read_symlink
 from nbkp.preflight.severity import (
     PreflightErrorKind,
     severity_for_error,
@@ -87,16 +88,19 @@ __all__ = [
     "VolumeCapabilities",
     "VolumeDiagnostics",
     "VolumeErrorKind",
+    "VolumeReadError",
     "VolumeStatus",
     "check_all_syncs",
     "check_step_count",
     "check_volume_capabilities",
     "has_fatal_errors",
     "is_fatal",
+    "list_snapshot_dir",
     "observe_destination_endpoint",
     "observe_source_endpoint",
     "observe_ssh_endpoint",
     "observe_volume",
+    "read_symlink",
     "severity_for_error",
     "severity_for_errors",
 ]

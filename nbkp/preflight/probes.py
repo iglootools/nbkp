@@ -8,8 +8,24 @@ import re as regex
 from pathlib import Path
 
 from nbkp.config import LocalVolume, RemoteVolume, Volume, resolve_endpoint_path
+from nbkp.fsprotocol import Snapshot, parse_snapshot_listing
 from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
+
+
+class VolumeReadError(Exception):
+    """
+    A path on a volume exists but could not be read.
+
+    Raised by the shared reads below; each caller turns it into its own error
+    policy (``snapshots`` raises, troubleshoot shows a placeholder).
+    """
+
+    def __init__(self, path: str, detail: str) -> None:
+        """Build the error from the path and what the failed command said."""
+        self.path = path
+        self.detail = detail
+        super().__init__(f"{path}: {detail}")
 
 
 def check_endpoint_sentinel(
@@ -74,6 +90,72 @@ def check_symlink_exists(
             return run(["test", "-L", path], volume, resolved_endpoints).returncode == 0
 
 
+def list_snapshot_dir(
+    volume: Volume,
+    path: str,
+    resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
+) -> list[Snapshot]:
+    """
+    List the snapshots in the ``snapshots/`` directory *path*, oldest first.
+
+    ``[]`` when the directory is absent. A directory that exists but cannot be
+    listed raises :class:`VolumeReadError`; transport errors propagate.
+    """
+    listing = run(["ls", path], volume, resolved_endpoints)
+    if listing.returncode == 0:
+        return parse_snapshot_listing(listing.stdout)
+    else:
+        exists = run(["test", "-d", path], volume, resolved_endpoints)
+        match exists.returncode:
+            case 1:
+                return []
+            case 0:
+                raise VolumeReadError(path, listing.stderr or "")
+            case _:
+                raise VolumeReadError(path, exists.stderr or "")
+
+
+def _read_remote_symlink(
+    volume: Volume,
+    path: str,
+    resolved_endpoints: ResolvedEndpoints,
+    run: VolumeCommandRunner,
+) -> str | None:
+    """``readlink``; on failure, ``test -L`` tells "absent" from "unreadable"."""
+    result = run(["readlink", path], volume, resolved_endpoints)
+    if result.returncode == 0:
+        return result.stdout.strip()
+    elif run(["test", "-L", path], volume, resolved_endpoints).returncode == 1:
+        return None
+    else:
+        raise VolumeReadError(path, result.stderr or "")
+
+
+def read_symlink(
+    volume: Volume,
+    path: str,
+    resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
+) -> str | None:
+    """
+    Read the raw target of the symlink *path*, or ``None`` if there is none.
+
+    A remote symlink that exists but cannot be read raises
+    :class:`VolumeReadError`, so "unknown" is never mistaken for "absent"; a
+    local filesystem error propagates as :class:`OSError`, and so do transport
+    errors.
+    """
+    match volume:
+        case LocalVolume():
+            p = Path(path)
+            return str(p.readlink()) if p.is_symlink() else None
+        case RemoteVolume():
+            return _read_remote_symlink(volume, path, resolved_endpoints, run)
+
+
 def read_symlink_target(
     volume: Volume,
     path: str,
@@ -81,14 +163,11 @@ def read_symlink_target(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> str | None:
-    """Read a symlink target, returning None if it doesn't exist."""
-    match volume:
-        case LocalVolume():
-            p = Path(path)
-            return str(p.readlink()) if p.is_symlink() else None
-        case RemoteVolume():
-            result = run(["readlink", path], volume, resolved_endpoints)
-            return result.stdout.strip() if result.returncode == 0 else None
+    """Read a symlink target, returning None if it is absent or unreadable."""
+    try:
+        return read_symlink(volume, path, resolved_endpoints, run=run)
+    except VolumeReadError:
+        return None
 
 
 _MIN_RSYNC_VERSION = (3, 0, 0)

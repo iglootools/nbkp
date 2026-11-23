@@ -20,17 +20,17 @@ from nbkp.fsprotocol import (
     LATEST_LINK,
     SNAPSHOTS_DIR,
     Snapshot,
-    parse_snapshot_listing,
 )
+from nbkp.preflight import VolumeReadError, list_snapshot_dir, read_symlink
 from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.remote.errors import ssh_connection_errors
 from nbkp.snapshots.errors import (
     SnapshotOp,
     SnapshotOperationError,
     SnapshotPruneError,
     local_fs_op,
     run_checked,
-    run_snapshot_command,
 )
 
 
@@ -99,30 +99,6 @@ def ensure_after_latest(
         raise SnapshotOperationError(op, path, msg)
 
 
-def _snapshots_dir_exists(
-    path: str,
-    volume: Volume,
-    resolved_endpoints: ResolvedEndpoints,
-    run: VolumeCommandRunner,
-) -> bool:
-    """Whether *path* is a directory; raises when that cannot be determined."""
-    result = run_snapshot_command(
-        SnapshotOp.LIST,
-        path,
-        ["test", "-d", path],
-        volume,
-        resolved_endpoints,
-        run=run,
-    )
-    match result.returncode:
-        case 0:
-            return True
-        case 1:
-            return False
-        case _:
-            raise SnapshotOperationError(SnapshotOp.LIST, path, result.stderr or "")
-
-
 def list_snapshots(
     sync: SyncConfig,
     config: Config,
@@ -138,65 +114,18 @@ def list_snapshots(
     :class:`~nbkp.snapshots.errors.SnapshotOperationError`, so pruning
     never acts on a listing it could not read.
     """
-    re = resolved_endpoints or {}
     path = snapshots_dir(sync, config)
-    dst_vol = destination_volume(sync, config)
-    result = run_snapshot_command(
-        SnapshotOp.LIST,
-        path,
-        ["ls", path],
-        dst_vol,
-        re,
-        run=run,
-    )
-    if result.returncode == 0:
-        return parse_snapshot_listing(result.stdout)
-    elif not _snapshots_dir_exists(path, dst_vol, re, run):
-        return []
-    else:
-        raise SnapshotOperationError(SnapshotOp.LIST, path, result.stderr or "")
-
-
-def _read_local_symlink_target(latest_path: str) -> str | None:
-    p = Path(latest_path)
-    if not local_fs_op(SnapshotOp.READ_LATEST, latest_path, p.is_symlink):
-        return None
-    else:
-        return str(local_fs_op(SnapshotOp.READ_LATEST, latest_path, p.readlink))
-
-
-def _read_remote_symlink_target(
-    volume: Volume,
-    latest_path: str,
-    resolved_endpoints: ResolvedEndpoints,
-    run: VolumeCommandRunner,
-) -> str | None:
-    """``readlink``; on failure, ``test -L`` tells "absent" from "broken"."""
-    op = SnapshotOp.READ_LATEST
-    result = run_snapshot_command(
-        op,
-        latest_path,
-        ["readlink", latest_path],
-        volume,
-        resolved_endpoints,
-        run=run,
-    )
-    if result.returncode == 0:
-        return result.stdout.strip()
-    else:
-        probe = run_snapshot_command(
-            op,
-            latest_path,
-            ["test", "-L", latest_path],
-            volume,
-            resolved_endpoints,
+    try:
+        return list_snapshot_dir(
+            destination_volume(sync, config),
+            path,
+            resolved_endpoints or {},
             run=run,
         )
-        match probe.returncode:
-            case 1:
-                return None
-            case _:
-                raise SnapshotOperationError(op, latest_path, result.stderr or "")
+    except VolumeReadError as e:
+        raise SnapshotOperationError(SnapshotOp.LIST, path, e.detail) from e
+    except ssh_connection_errors() as e:
+        raise SnapshotOperationError(SnapshotOp.LIST, path, str(e)) from e
 
 
 def _read_raw_symlink_target(
@@ -212,16 +141,14 @@ def _read_raw_symlink_target(
     ``None``: callers use the target to protect the latest snapshot from
     pruning, so "unknown" must never be mistaken for "absent".
     """
-    match volume:
-        case LocalVolume():
-            return _read_local_symlink_target(latest_path)
-        case RemoteVolume():
-            return _read_remote_symlink_target(
-                volume,
-                latest_path,
-                resolved_endpoints,
-                run,
-            )
+    op = SnapshotOp.READ_LATEST
+    try:
+        return read_symlink(volume, latest_path, resolved_endpoints, run=run)
+    except VolumeReadError as e:
+        raise SnapshotOperationError(op, latest_path, e.detail) from e
+    except ssh_connection_errors() as e:
+        # Transport errors and local filesystem errors, both OSError.
+        raise SnapshotOperationError(op, latest_path, str(e)) from e
 
 
 class NoLatestSnapshot(enum.Enum):
