@@ -119,7 +119,7 @@ target-version = "py315"
 # tests/test_startup_imports.py; this catches the per-statement mistake.
 #
 # TID251: tests inject fakes through parameters instead of patching (docs/guidelines.md,
-# Testing). unittest.mock is banned, and so is pytest.MonkeyPatch: tests/conftest.py
+# Tests). unittest.mock is banned, and so is pytest.MonkeyPatch: tests/conftest.py
 # replaces the monkeypatch fixture with one that fails, so the class is the only way
 # left to patch. Each documented exception carries `# noqa: TID251` on its import, and RUF100
 # reports a noqa that is no longer needed.
@@ -170,8 +170,8 @@ max-statements = 30
 ban-relative-imports = "all"
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
-"unittest.mock".msg = "Inject a fake through a parameter instead of patching (docs/guidelines.md, Testing)."
-"pytest.MonkeyPatch".msg = "Inject a fake through a parameter instead of patching (docs/guidelines.md, Testing)."
+"unittest.mock".msg = "Inject a fake through a parameter instead of patching (docs/guidelines.md, Tests)."
+"pytest.MonkeyPatch".msg = "Inject a fake through a parameter instead of patching (docs/guidelines.md, Tests)."
 
 [tool.ruff.lint.isort]
 # Keep aliased re-imports in the same `from x import (a, b as c)` block instead of

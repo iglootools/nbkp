@@ -9,7 +9,7 @@ among them
 [Build serialized test data from the models](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#build-serialized-test-data-from-the-models)
 and choosing a backend such as the keyring's through the library's own API
 (`keyring.set_keyring`). The patches nbkp allows are listed in
-[docs/guidelines.md › Testing](../guidelines.md#testing); the test suites and
+[docs/guidelines.md › Tests](../guidelines.md#tests); the test suites and
 the testing strategy are in
 [building-and-testing.md](../building-and-testing.md#testing-strategy).
 
