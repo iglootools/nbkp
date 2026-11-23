@@ -8,6 +8,7 @@ an injected runtime, with a fake rsync.
 
 import json
 import subprocess
+import threading
 from collections.abc import Callable
 from io import StringIO
 from pathlib import Path
@@ -29,6 +30,7 @@ from nbkp.run.cli.run_cmd import abort_message, run_json
 from nbkp.run.pipeline import PipelineResult
 from nbkp.sync import ProgressMode, SyncFailureKind, SyncResult
 from tests.fakes import (
+    BodyError,
     FakeCommandRunner,
     FakeRsync,
     FakeRunLock,
@@ -272,6 +274,27 @@ class TestRunCommand:
         assert output.index("Volumes:") < output.index("Sync Results")
         # Without --progress a spinner stands in for rsync's own output.
         assert rsync.last_kwargs["on_output"] is None
+
+    def test_an_exception_during_a_sync_stops_the_spinner(
+        self,
+        nas_config_file: str,
+    ) -> None:
+        rsync = FakeRsync([BodyError()])
+        threads_before = set(threading.enumerate())
+
+        result = runner.invoke(
+            app,
+            ["run", "-c", nas_config_file, "-s", "photos"],
+            obj=fake_runtime(run=healthy_nas(), rsync=rsync),
+        )
+
+        assert isinstance(result.exception, BodyError)
+        # A running spinner keeps a refresh thread redrawing over the traceback;
+        # a stopped one's thread exits on its next tick.
+        left = set(threading.enumerate()) - threads_before
+        for thread in left:
+            thread.join(timeout=1)
+        assert not [t for t in left if t.is_alive()]
 
     def test_failed_rsync_fails_the_run(self, nas_config_file: str) -> None:
         rsync = FakeRsync([completed(23, stderr="partial transfer")])

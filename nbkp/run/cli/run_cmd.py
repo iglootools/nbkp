@@ -1,7 +1,9 @@
 """The ``nbkp run`` command: preflight, then every active sync, with progress."""
 
 from collections.abc import Sequence
-from typing import Annotated
+from contextlib import nullcontext
+from types import TracebackType
+from typing import Annotated, Self
 
 import typer
 from rich.console import Console, Group, RenderableType
@@ -119,18 +121,19 @@ def run_cmd(
     # Filled when the volumes are unmounted, so the outcome is printed after
     # the block: a drive left mounted or unlocked is part of the outcome.
     umount_results: list[UmountResult] = []
-    with managed_mount(
-        cfg,
-        resolved,
-        runtime=runtime,
-        writes=not dry_run,
-        mount=mount,
-        umount=umount,
-        output_format=output,
-        strictness=strictness,
-        umount_results=umount_results,
-    ) as (cfg, mount_observations):
-        display = (
+    with (
+        managed_mount(
+            cfg,
+            resolved,
+            runtime=runtime,
+            writes=not dry_run,
+            mount=mount,
+            umount=umount,
+            output_format=output,
+            strictness=strictness,
+            umount_results=umount_results,
+        ) as (cfg, mount_observations),
+        (
             _HumanProgress(
                 cfg,
                 resolved,
@@ -141,8 +144,9 @@ def run_cmd(
                 invocation=invocation,
             )
             if output is OutputFormat.HUMAN
-            else None
-        )
+            else nullcontext()
+        ) as display,
+    ):
         options = RunOptions(
             clock=runtime.clock,
             platform=runtime.platform,
@@ -210,7 +214,8 @@ class _HumanProgress:
     Live progress display of a human-format run.
 
     Mutable by necessity: it owns the check progress bar and the sync
-    spinner, which callbacks start and stop as the pipeline advances.
+    spinner, which callbacks start and stop as the pipeline advances. Used as a
+    context manager, which stops both however the pipeline ends.
     """
 
     def __init__(
@@ -233,6 +238,26 @@ class _HumanProgress:
         self._use_spinner = progress in (None, ProgressMode.NONE)
         self._console = Console()
         self._spinner: Status | None = None
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        # A check or sync that raised leaves its bar or spinner running, and
+        # its refresh thread would keep redrawing over the traceback.
+        if self._check_bar is not None:
+            self._check_bar.stop()
+        self._stop_spinner()
+
+    def _stop_spinner(self) -> None:
+        if self._spinner is not None:
+            self._spinner.stop()
+            self._spinner = None
 
     def on_check_start(self, label: str) -> None:
         if self._check_bar is not None:
@@ -274,9 +299,7 @@ class _HumanProgress:
             self._console.print(Text(f"Syncing {slug}..."))
 
     def _on_sync_end(self, slug: str, result: SyncResult) -> None:
-        if self._spinner is not None:
-            self._spinner.stop()
-            self._spinner = None
+        self._stop_spinner()
         severity = result_severity(result, self._strictness)
         self._console.print(
             Text.assemble(
