@@ -27,6 +27,7 @@ from nbkp.demo.seed import (
     seed_plan,
     seed_steps,
 )
+from nbkp.disks import MountResult, UmountFailureKind, UmountResult
 from nbkp.remote.testkit.constants import LUKS_PASSPHRASE
 from tests.fakes import FakeCommandRunner, completed
 from tests.fixtures.disks import UUID, encrypted_volume
@@ -36,8 +37,18 @@ class TestDryRun:
     def test_plan_lists_docker_steps(self) -> None:
         steps = seed_plan(Path("/tmp/x"), docker=True, luks=True)  # noqa: S108 -- a plan only, never written
         assert steps[0] == "create seed directory /tmp/x"
-        assert "start the bastion and storage containers" in steps
-        assert "mount, seed and umount the encrypted volume" in steps
+        assert "start the storage container" in steps
+        assert steps.index("mount the encrypted volume") < steps.index(
+            "create sentinels and seed test data",
+        )
+        assert steps[-2:] == ["umount the encrypted volume", "write config.yaml"]
+
+    def test_local_plan_has_no_docker_step(self) -> None:
+        assert seed_plan(None, docker=False, luks=True) == [
+            "create seed directory a new temp dir (nbkp-demo-*)",
+            "create sentinels and seed test data",
+            "write config.yaml",
+        ]
 
     def test_cli_dry_run_creates_nothing(self, tmp_path: Path) -> None:
         target = tmp_path / "seed"
@@ -148,7 +159,9 @@ class TestUmountFailure:
         ):
             pass
         assert exc.value.kind == SeedErrorKind.UMOUNT_FAILED
-        assert exc.value.detail == "umount failed (exit 1): busy"
+        assert isinstance(exc.value.result, UmountResult)
+        assert exc.value.result.failure_reason == UmountFailureKind.UNMOUNT_FAILED
+        assert "umount failed (exit 1): busy" in format_seed_error(exc.value)
         assert ends[-1] == ("umount encrypted volume", "error")
 
     def test_failed_mount_still_locks(self) -> None:
@@ -165,7 +178,8 @@ class TestUmountFailure:
         ):
             pass
         assert exc.value.kind == SeedErrorKind.MOUNT_FAILED
-        assert "no fs" in exc.value.detail
+        assert isinstance(exc.value.result, MountResult)
+        assert "mount failed (exit 1): no fs" in format_seed_error(exc.value)
         assert [c[1] for c in run.commands_starting_with("udisksctl")] == [
             "unlock",
             "mount",
@@ -193,14 +207,14 @@ class TestStepFailure:
         assert ends[0] == (
             "mount encrypted volume",
             "error",
-            "mount failed (exit 1): no fs",
+            "no fs",
         )
 
     def test_a_raising_step_is_reported_failed(self, tmp_path: Path) -> None:
         # A file where the seeding creates the source volume's directory.
         (tmp_path / "src-local-bare").write_text("")
         ends: list[tuple[str, str, str | None]] = []
-        with pytest.raises(FileExistsError) as exc:
+        with pytest.raises(SeedError) as exc:
             seed_demo(
                 tmp_path,
                 docker=False,
@@ -209,7 +223,37 @@ class TestStepFailure:
                     (step, severity, detail),
                 ),
             )
-        assert ends == [("seed volumes", "error", str(exc.value))]
+        assert ends == [("seed volumes", "error", exc.value.detail)]
+
+    def test_a_file_error_is_a_seed_error(self, tmp_path: Path) -> None:
+        """Regression: an OSError escaped seed_demo as a traceback."""
+        base_dir = tmp_path / "seed"
+        base_dir.write_text("")  # A file where the seed directory goes.
+        with pytest.raises(SeedError) as exc:
+            seed_demo(base_dir, docker=False, big_file_size=0)
+        assert exc.value.kind == SeedErrorKind.FILE_OPERATION_FAILED
+        assert str(base_dir) in format_seed_error(exc.value)
+
+    def test_cli_reports_a_file_error_without_a_traceback(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        # A file where the seeding creates the source volume's directory.
+        (tmp_path / "src-local-bare").write_text("")
+        result = CliRunner().invoke(
+            app,
+            [
+                "seed",
+                "--no-docker",
+                "--big-file-size",
+                "0",
+                "--base-dir",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 1, result.output
+        assert not isinstance(result.exception, OSError)
+        assert "Writing the demo files failed" in result.output
 
 
 class TestSeedErrorRendering:

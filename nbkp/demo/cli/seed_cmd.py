@@ -13,6 +13,8 @@ from rich.text import Text
 
 from nbkp.clidisplay import StepProgressBar, dry_run_labeled
 from nbkp.config import CredentialProvider
+from nbkp.disks import MountResult, UmountResult
+from nbkp.disks.output import mount_failure_detail, umount_failure_detail
 lazy from nbkp.demo.seed import (
     SeedError,
     SeedErrorKind,
@@ -167,12 +169,26 @@ def format_seed_error(e: SeedError) -> str:
                 " Use --no-luks to skip encrypted volume setup."
             )
         case SeedErrorKind.MOUNT_FAILED:
-            return f"Mount failed: {e.detail}"
+            return f"Mount failed: {_lifecycle_failure(e)}"
         case SeedErrorKind.UMOUNT_FAILED:
             return (
-                f"Umount failed: {e.detail}. The encrypted volume may still be"
-                " mounted; run nbkp disks umount on the seeded config."
+                f"Umount failed: {_lifecycle_failure(e)}. The encrypted volume"
+                " may still be mounted; run nbkp disks umount on the seeded config."
             )
+        case SeedErrorKind.FILE_OPERATION_FAILED:
+            return f"Writing the demo files failed: {e.detail}"
+
+
+def _lifecycle_failure(e: SeedError) -> str:
+    """Render the failed mount or umount *e* carries, else its detail."""
+    match e.result:
+        case MountResult():
+            detail = mount_failure_detail(e.result)
+        case UmountResult():
+            detail = umount_failure_detail(e.result)
+        case None:
+            detail = None
+    return detail or e.detail or "unknown error"
 
 
 def _print_seed_error(e: SeedError, *, docker: bool) -> None:

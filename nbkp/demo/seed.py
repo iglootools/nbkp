@@ -19,8 +19,7 @@ from pydantic import BaseModel, ConfigDict
 
 from nbkp.config import Config, CredentialProvider, RsyncOptions, SshEndpoint
 from nbkp.config.testkit import write_config
-from nbkp.disks import mount_phase, umount_volumes
-from nbkp.disks.output import mount_failure_detail, umount_failure_detail
+from nbkp.disks import MountResult, UmountResult, mount_phase, umount_volumes
 from nbkp.policy import Severity
 from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
@@ -74,6 +73,7 @@ class SeedErrorKind(StrEnum):
     LUKS_UNAVAILABLE = "luks-unavailable"
     MOUNT_FAILED = "mount-failed"
     UMOUNT_FAILED = "umount-failed"
+    FILE_OPERATION_FAILED = "file-operation-failed"
 
 
 # Raised before any container starts.
@@ -87,13 +87,25 @@ _PREREQUISITE_KINDS = frozenset(
 
 
 class SeedError(Exception):
-    """*detail* is the failing tool's message, or the missing path."""
+    """
+    *detail* is the failing tool's message, or the missing path.
 
-    def __init__(self, kind: SeedErrorKind, detail: str = "") -> None:
+    *result* is the failed mount or umount, for the ``mount-failed`` and
+    ``umount-failed`` kinds: the CLI renders the message from it.
+    """
+
+    def __init__(
+        self,
+        kind: SeedErrorKind,
+        detail: str = "",
+        *,
+        result: MountResult | UmountResult | None = None,
+    ) -> None:
         """Build the error from its kind and the detail that explains it."""
         super().__init__(f"{kind}: {detail}" if detail else kind)
         self.kind = kind
         self.detail = detail
+        self.result = result
 
     @property
     def may_leave_containers(self) -> bool:
@@ -119,22 +131,67 @@ class SeedResult(BaseModel):
 
 @dataclass(frozen=True)
 class SeedStep:
-    """*running* is shown while the step runs, *done* is its result line."""
+    """
+    *running* is shown while the step runs, *done* is its result line.
+
+    *planned* is what ``--dry-run`` says the step would do.
+    """
 
     running: str
     done: str
+    planned: str
 
 
-_BUILD_IMAGE = SeedStep("Building Docker image...", "build Docker image")
-_CREATE_NETWORK = SeedStep("Creating Docker network...", "create Docker network")
-_START_BASTION = SeedStep("Starting bastion container...", "start bastion container")
-_WAIT_BASTION = SeedStep("Waiting for bastion SSH...", "bastion SSH")
-_START_STORAGE = SeedStep("Starting storage container...", "start storage container")
-_WAIT_STORAGE = SeedStep("Waiting for storage SSH...", "storage SSH")
-_READ_LUKS = SeedStep("Reading LUKS metadata...", "read LUKS metadata")
-_MOUNT = SeedStep("Mounting encrypted volume...", "mount encrypted volume")
-_UMOUNT = SeedStep("Unmounting encrypted volume...", "umount encrypted volume")
-_SEED_VOLUMES = SeedStep("Seeding volumes...", "seed volumes")
+_BUILD_IMAGE = SeedStep(
+    "Building Docker image...",
+    "build Docker image",
+    "build the Docker image",
+)
+_CREATE_NETWORK = SeedStep(
+    "Creating Docker network...",
+    "create Docker network",
+    "create the Docker network",
+)
+_START_BASTION = SeedStep(
+    "Starting bastion container...",
+    "start bastion container",
+    "start the bastion container",
+)
+_WAIT_BASTION = SeedStep(
+    "Waiting for bastion SSH...",
+    "bastion SSH",
+    "wait for the bastion's SSH",
+)
+_START_STORAGE = SeedStep(
+    "Starting storage container...",
+    "start storage container",
+    "start the storage container",
+)
+_WAIT_STORAGE = SeedStep(
+    "Waiting for storage SSH...",
+    "storage SSH",
+    "wait for the storage container's SSH",
+)
+_READ_LUKS = SeedStep(
+    "Reading LUKS metadata...",
+    "read LUKS metadata",
+    "read LUKS metadata",
+)
+_MOUNT = SeedStep(
+    "Mounting encrypted volume...",
+    "mount encrypted volume",
+    "mount the encrypted volume",
+)
+_UMOUNT = SeedStep(
+    "Unmounting encrypted volume...",
+    "umount encrypted volume",
+    "umount the encrypted volume",
+)
+_SEED_VOLUMES = SeedStep(
+    "Seeding volumes...",
+    "seed volumes",
+    "create sentinels and seed test data",
+)
 
 
 def seed_steps(*, docker: bool, luks: bool) -> list[SeedStep]:
@@ -221,25 +278,16 @@ def seed_plan(
     docker: bool = True,
     luks: bool = True,
 ) -> list[str]:
-    """Return the steps :func:`seed_demo` would perform, for ``--dry-run``."""
+    """
+    Return the steps :func:`seed_demo` would perform, for ``--dry-run``.
+
+    Those of :func:`seed_steps`, between creating the seed directory and
+    writing the config.
+    """
     target = str(base_dir) if base_dir is not None else "a new temp dir (nbkp-demo-*)"
     return [
         f"create seed directory {target}",
-        *(
-            [
-                "build the Docker image",
-                "create the Docker network",
-                "start the bastion and storage containers",
-            ]
-            if docker
-            else []
-        ),
-        *(
-            ["read LUKS metadata", "mount, seed and umount the encrypted volume"]
-            if docker and luks
-            else []
-        ),
-        "create sentinels and seed test data",
+        *(step.planned for step in seed_steps(docker=docker, luks=luks)),
         "write config.yaml",
     ]
 
@@ -293,6 +341,9 @@ def seed_demo(
             SeedErrorKind.REMOTE_COMMAND_FAILED,
             _called_process_detail(e),
         ) from e
+    # After TimeoutError, which is an OSError too.
+    except OSError as e:
+        raise SeedError(SeedErrorKind.FILE_OPERATION_FAILED, str(e)) from e
 
 
 def _called_process_detail(e: subprocess.CalledProcessError) -> str:
@@ -483,13 +534,18 @@ def encrypted_volume_mounted(
             if failed_mount is not None:
                 raise SeedError(
                     SeedErrorKind.MOUNT_FAILED,
-                    mount_failure_detail(failed_mount) or "unknown error",
+                    _failure_message(failed_mount),
+                    result=failed_mount,
                 )
         yield
     finally:
         failed_umount = _umount_encrypted(config, resolved, steps, run=run)
     if failed_umount is not None:
-        raise SeedError(SeedErrorKind.UMOUNT_FAILED, failed_umount)
+        raise SeedError(
+            SeedErrorKind.UMOUNT_FAILED,
+            _failure_message(failed_umount),
+            result=failed_umount,
+        )
 
 
 def _umount_encrypted(
@@ -498,20 +554,30 @@ def _umount_encrypted(
     steps: _Steps,
     *,
     run: VolumeCommandRunner,
-) -> str | None:
-    """Umount + lock; returns the failure detail, if any."""
+) -> UmountResult | None:
+    """Umount + lock; returns the failed result, if any."""
     steps.start(_UMOUNT)
     failed = next(
         (r for r in umount_volumes(config, resolved, run=run) if not r.success),
         None,
     )
-    detail = (
-        (umount_failure_detail(failed) or "unknown error")
-        if failed is not None
-        else None
+    steps.end(
+        _UMOUNT,
+        success=failed is None,
+        detail=_failure_message(failed) if failed is not None else None,
     )
-    steps.end(_UMOUNT, success=failed is None, detail=detail)
-    return detail
+    return failed
+
+
+def _failure_message(result: MountResult | UmountResult) -> str:
+    """
+    Return the failed command's own message, or else the failure kind.
+
+    Data for the step line, not the rendered message: the CLI renders that
+    from :attr:`SeedError.result`.
+    """
+    failure_message = result.failure.message if result.failure is not None else None
+    return failure_message or str(result.failure_reason or "unknown error")
 
 
 def _seed_data(
