@@ -270,6 +270,10 @@ dependencies; the contracts are what reject a new import that breaks a rule:
   subpackages sit above all of it (they are constrained by the rules above
   instead). A new core package needs a place in this order, in the `layers`
   contract.
+- **`disks/` and `preflight/` are imported through the package.** Their
+  `__init__` re-exports what other packages use; their other submodules are
+  implementation details, which no other package imports directly. Only their
+  `output`, `cli/` and testkit packages are imported by path.
 - **`clidisplay/` is a presentation leaf.** It imports nothing from nbkp but
   `policy`, and not Typer, since every `output` module imports it.
 - **Test and demo fixtures (`testkit`) follow the same rules as core code.**

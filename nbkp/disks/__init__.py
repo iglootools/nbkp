@@ -36,6 +36,7 @@ from nbkp.disks.lifecycle import (
     refused_by_polkit,
     umount_volume,
     umount_volumes,
+    unknown_volume_names,
 )
 from nbkp.disks.models import (
     LifecycleFailure,
@@ -55,11 +56,18 @@ from nbkp.disks.observation import (
     apply_effective_paths,
     build_mount_observations,
 )
+from nbkp.disks.plan import VolumePlan, plan_incomplete, plan_json
 from nbkp.disks.severity import (
     device_fail_severity,
     luks_fail_severity,
     mount_result_severity,
     mounted_fail_severity,
+)
+from nbkp.disks.status import (
+    ProbeEndFn,
+    VolumeStatus,
+    managed_volumes,
+    probe_volume_statuses,
 )
 from nbkp.disks.udisks import (
     build_lock_command,
@@ -81,8 +89,11 @@ __all__ = [
     "MountObservation",
     "MountResult",
     "MountToolCapabilities",
+    "ProbeEndFn",
     "UmountFailureKind",
     "UmountResult",
+    "VolumePlan",
+    "VolumeStatus",
     "any_failed",
     "apply_effective_paths",
     "build_lock_command",
@@ -102,16 +113,21 @@ __all__ = [
     "generate_polkit_rules",
     "luks_fail_severity",
     "managed_mount",
+    "managed_volumes",
     "mount_count",
     "mount_phase",
     "mount_result_severity",
     "mount_volume",
     "mount_volumes",
     "mounted_fail_severity",
+    "plan_incomplete",
+    "plan_json",
     "probe_mount_tools",
+    "probe_volume_statuses",
     "refused_by_polkit",
     "resolve_effective_path",
     "resolve_target_device",
     "umount_volume",
     "umount_volumes",
+    "unknown_volume_names",
 ]

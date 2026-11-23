@@ -335,6 +335,70 @@ ignore_imports = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "Other packages import nbkp.disks only through the package"
+type = "forbidden"
+# Its __init__ is its interface; its submodules are implementation details,
+# except its output, cli and testkit packages. Every other nbkp package: a new package
+# belongs on this list.
+source_modules = [
+  "nbkp.cli",
+  "nbkp.clidisplay",
+  "nbkp.cliwiring",
+  "nbkp.config",
+  "nbkp.credentials",
+  "nbkp.demo",
+  "nbkp.fsprotocol",
+  "nbkp.ordering",
+  "nbkp.policy",
+  "nbkp.preflight",
+  "nbkp.remote",
+  "nbkp.run",
+  "nbkp.sh",
+  "nbkp.snapshots",
+  "nbkp.sync",
+]
+forbidden_modules = ["nbkp.disks.**"]
+# Importing nbkp.disks reaches its submodules through its __init__.
+allow_indirect_imports = true
+ignore_imports = [
+  "** -> nbkp.disks.output",
+  "nbkp.cli.app -> nbkp.disks.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "Other packages import nbkp.preflight only through the package"
+type = "forbidden"
+# Its __init__ is its interface; its submodules are implementation details,
+# except its output, cli and testkit packages. Every other nbkp package: a new package
+# belongs on this list.
+source_modules = [
+  "nbkp.cli",
+  "nbkp.clidisplay",
+  "nbkp.cliwiring",
+  "nbkp.config",
+  "nbkp.credentials",
+  "nbkp.demo",
+  "nbkp.disks",
+  "nbkp.fsprotocol",
+  "nbkp.ordering",
+  "nbkp.policy",
+  "nbkp.remote",
+  "nbkp.run",
+  "nbkp.sh",
+  "nbkp.snapshots",
+  "nbkp.sync",
+]
+forbidden_modules = ["nbkp.preflight.**"]
+# Importing nbkp.preflight reaches its submodules through its __init__.
+allow_indirect_imports = true
+ignore_imports = [
+  "** -> nbkp.preflight.output",
+  "** -> nbkp.preflight.output.**",
+  "** -> nbkp.preflight.testkit",
+  "nbkp.cli.app -> nbkp.preflight.cli",
+]
+
+[[tool.importlinter.contracts]]
 name = "clidisplay is a presentation leaf"
 type = "forbidden"
 source_modules = ["nbkp.clidisplay"]

@@ -12,21 +12,24 @@ from rich.console import Console
 from nbkp.clidisplay import OutputFormat, StepProgressBar, dry_run_labeled, echo_json
 from nbkp.cliwiring.config import require_known
 from nbkp.config import Config, Volume
-from nbkp.disks.lifecycle import UmountResult, unknown_volume_names
-from nbkp.disks.models import display_name
+from nbkp.disks import (
+    ProbeEndFn,
+    UmountResult,
+    VolumePlan,
+    VolumeStatus,
+    display_name,
+    managed_volumes,
+    plan_incomplete,
+    plan_json,
+    probe_volume_statuses,
+    unknown_volume_names,
+)
 from nbkp.disks.output import (
     build_volume_status_table,
     format_plan_line,
     umount_result_json,
     volume_status_detail,
     volume_status_json,
-)
-from nbkp.disks.plan import VolumePlan, plan_incomplete, plan_json
-from nbkp.disks.status import (
-    ProbeEndFn,
-    VolumeStatus,
-    managed_volumes,
-    probe_volume_statuses,
 )
 from nbkp.policy import Severity
 from nbkp.remote.dispatch import VolumeCommandRunner
