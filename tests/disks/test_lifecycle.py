@@ -87,7 +87,14 @@ def _mount(
     passphrase: str = "secret",
 ) -> MountResult:
     assert vol.mount is not None
-    return mount_volume(vol, vol.mount, {}, lambda _: passphrase, run=run)
+    return mount_volume(
+        vol,
+        vol.mount,
+        {},
+        lambda _: passphrase,
+        run=run,
+        sleep=lambda _: None,
+    )
 
 
 def _udisks_steps(run: FakeCommandRunner) -> list[str]:
@@ -140,7 +147,9 @@ class TestRunUdisks:
         attempts = len(run.commands_starting_with("udisksctl"))
         assert result.returncode == 1
         assert attempts == len(sleeps) + 1
-        assert 1 < attempts < 20
+        assert 1 < attempts <= 20
+        assert result.stderr.startswith(_LOOKUP_ERROR)
+        assert f"after {attempts} attempts over {sum(sleeps):g} s" in result.stderr
 
     def test_wrong_passphrase_is_not_retried(self) -> None:
         sleeps: list[float] = []
@@ -304,10 +313,13 @@ class TestMountVolume:
         )
         result = _mount(_encrypted_vol(), run)
         assert result.failure_reason == MountFailureKind.UNLOCK_FAILED
-        assert result.failure == LifecycleFailure(
-            step=LifecycleStep.UNLOCK,
-            exit_code=1,
-            message=message,
+        assert result.failure is not None
+        assert (result.failure.step, result.failure.exit_code) == (
+            LifecycleStep.UNLOCK,
+            1,
+        )
+        assert (result.failure.message or "").startswith(
+            f"{message} (still failing after ",
         )
 
     def test_mount_failure(self) -> None:

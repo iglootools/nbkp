@@ -55,6 +55,7 @@ from tests._docker_fixtures import (
     LUKS_PASSPHRASE,
     resolved_endpoints_for,
     ssh_exec,
+    udisks_diagnostics,
 )
 from tests.fakes import BodyError
 
@@ -182,7 +183,11 @@ class TestLuksLifecycle:
             resolved,
             lambda _: LUKS_PASSPHRASE,
         )
-        assert result.success, result.failure
+        assert result.success, udisks_diagnostics(
+            docker_ssh_endpoint,
+            remote_encrypted_volume,
+            result.failure,
+        )
         assert result.luks_unlocked is True
         assert result.mounted is True
 
@@ -231,7 +236,11 @@ class TestLuksLifecycle:
                 resolved,
                 lambda _: LUKS_PASSPHRASE,
             )
-            assert result.success, result.failure
+            assert result.success, udisks_diagnostics(
+                docker_ssh_endpoint,
+                remote_encrypted_volume,
+                result.failure,
+            )
 
             ssh_exec(
                 docker_ssh_endpoint,
@@ -245,7 +254,11 @@ class TestLuksLifecycle:
                 resolved,
                 lambda _: LUKS_PASSPHRASE,
             )
-            assert result.success, result.failure
+            assert result.success, udisks_diagnostics(
+                docker_ssh_endpoint,
+                remote_encrypted_volume,
+                result.failure,
+            )
 
             read_result = ssh_exec(
                 docker_ssh_endpoint,
@@ -302,7 +315,11 @@ class TestFindMountpoint:
             resolved,
             lambda _: LUKS_PASSPHRASE,
         )
-        assert result.success, result.failure
+        assert result.success, udisks_diagnostics(
+            docker_ssh_endpoint,
+            remote_encrypted_volume,
+            result.failure,
+        )
         try:
             device = resolve_target_device(
                 remote_encrypted_volume,
@@ -335,7 +352,11 @@ class TestMountVolumeIdempotency:
             resolved,
             lambda _: LUKS_PASSPHRASE,
         )
-        assert result1.success, mount_failure_detail(result1)
+        assert result1.success, udisks_diagnostics(
+            docker_ssh_endpoint,
+            remote_encrypted_volume,
+            mount_failure_detail(result1),
+        )
         try:
             result2 = mount_volume(
                 remote_encrypted_volume,
@@ -343,7 +364,11 @@ class TestMountVolumeIdempotency:
                 resolved,
                 lambda _: LUKS_PASSPHRASE,
             )
-            assert result2.success, mount_failure_detail(result2)
+            assert result2.success, udisks_diagnostics(
+                docker_ssh_endpoint,
+                remote_encrypted_volume,
+                mount_failure_detail(result2),
+            )
         finally:
             _cleanup(remote_encrypted_volume, resolved, luks_uuid)
 
@@ -406,7 +431,11 @@ class TestMountObservations:
         )
         try:
             assert len(mount_results) == 1
-            assert mount_results[0].success
+            assert mount_results[0].success, udisks_diagnostics(
+                docker_ssh_endpoint,
+                remote_encrypted_volume,
+                mount_failure_detail(mount_results[0]),
+            )
 
             observations = build_mount_observations(mount_results)
             slug = remote_encrypted_volume.slug

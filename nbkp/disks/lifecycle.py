@@ -65,7 +65,10 @@ _TRANSIENT_UDISKS_SIGNATURES = (
     "no such interface",
 )
 
-_UDISKS_RETRY_ATTEMPTS = 8
+# About 10 s. A loaded host or a re-probe after a lock has kept udisks without an
+# object for more than 4 s, the previous budget. It costs nothing when a disk is
+# missing: detection reports that before any udisksctl command runs.
+_UDISKS_RETRY_ATTEMPTS = 20
 _UDISKS_RETRY_DELAY_S = 0.5
 
 
@@ -78,19 +81,39 @@ def run_udisks(
     sleep: Callable[[float], None] = time.sleep,
     run: VolumeCommandRunner = run_on_volume,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a ``udisksctl`` command, retrying while udisks catches up with udev."""
+    """
+    Run a ``udisksctl`` command, retrying while udisks catches up with udev.
+
+    When the retries run out on a transient error, its stderr says so, with the
+    number of attempts and how long they spanned, so a timeout reads differently
+    from an immediate refusal.
+    """
     result = run(command, volume, resolved_endpoints, stdin=stdin)
     attempts = 1
-    while (
-        result.returncode != 0
-        and attempts < _UDISKS_RETRY_ATTEMPTS
-        and any(sig in result.stderr.lower() for sig in _TRANSIENT_UDISKS_SIGNATURES)
-    ):
+    while _is_transient(result) and attempts < _UDISKS_RETRY_ATTEMPTS:
         settle_udev(volume, resolved_endpoints, run=run)
         sleep(_UDISKS_RETRY_DELAY_S)
         result = run(command, volume, resolved_endpoints, stdin=stdin)
         attempts += 1
-    return result
+    if _is_transient(result) and attempts > 1:
+        waited = (attempts - 1) * _UDISKS_RETRY_DELAY_S
+        note = f"(still failing after {attempts} attempts over {waited:g} s)"
+        return subprocess.CompletedProcess(
+            result.args,
+            result.returncode,
+            result.stdout,
+            f"{result.stderr.rstrip()} {note}\n",
+        )
+    else:
+        return result
+
+
+def _is_transient(result: subprocess.CompletedProcess[str]) -> bool:
+    """Tell whether *result* failed with one of udisks' transient errors."""
+    stderr = result.stderr.lower()
+    return result.returncode != 0 and any(
+        sig in stderr for sig in _TRANSIENT_UDISKS_SIGNATURES
+    )
 
 
 # Partition of MountFailureKind by lifecycle stage.  Consumed by
@@ -285,9 +308,13 @@ def mount_volume(
     passphrase_fn: Callable[[str], str],
     *,
     run: VolumeCommandRunner = run_on_volume,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> MountResult:
     """
     Mount a single volume via udisks. Idempotent: skips already mounted.
+
+    *sleep* paces the retries while udisks catches up with udev (see
+    :func:`run_udisks`).
 
     Connection failures (timeout, DNS, SSH errors) yield a failed
     ``MountResult`` with ``UNREACHABLE`` rather than crashing, and a failed
@@ -301,6 +328,7 @@ def mount_volume(
             resolved_endpoints,
             passphrase_fn,
             run=run,
+            sleep=sleep,
         )
     except DeviceProbeError as e:
         return MountResult(
@@ -331,6 +359,7 @@ def _mount_volume_inner(
     passphrase_fn: Callable[[str], str],
     *,
     run: VolumeCommandRunner,
+    sleep: Callable[[float], None],
 ) -> MountResult:
     """Core mount logic, separated for exception boundary in ``mount_volume``."""
     settle_udev(volume, resolved_endpoints, run=run)
@@ -353,6 +382,7 @@ def _mount_volume_inner(
         resolved_endpoints,
         passphrase_fn,
         run=run,
+        sleep=sleep,
     ):
         case MountResult() as failure:
             return failure
@@ -363,6 +393,7 @@ def _mount_volume_inner(
                 device,
                 resolved_endpoints,
                 run=run,
+                sleep=sleep,
             )
 
 
@@ -373,6 +404,7 @@ def _resolve_device_to_mount(
     passphrase_fn: Callable[[str], str],
     *,
     run: VolumeCommandRunner,
+    sleep: Callable[[float], None],
 ) -> str | MountResult:
     """
     Return the block device to mount, unlocking the LUKS container first if needed.
@@ -396,6 +428,7 @@ def _resolve_device_to_mount(
                 resolved_endpoints,
                 passphrase_fn,
                 run=run,
+                sleep=sleep,
             )
 
 
@@ -423,6 +456,7 @@ def _unlock(
     passphrase_fn: Callable[[str], str],
     *,
     run: VolumeCommandRunner,
+    sleep: Callable[[float], None],
 ) -> str | MountResult:
     """
     Unlock a LUKS container and return its cleartext device.
@@ -445,6 +479,7 @@ def _unlock(
         volume,
         resolved_endpoints,
         stdin=passphrase,
+        sleep=sleep,
         run=run,
     )
     if result.returncode != 0:
@@ -482,6 +517,7 @@ def _mount_device(
     resolved_endpoints: ResolvedEndpoints,
     *,
     run: VolumeCommandRunner,
+    sleep: Callable[[float], None],
 ) -> MountResult:
     encrypted = mount_config.encryption is not None
     result_for = partial(
@@ -498,6 +534,7 @@ def _mount_device(
         build_mount_command(device),
         volume,
         resolved_endpoints,
+        sleep=sleep,
         run=run,
     )
     if result.returncode != 0:

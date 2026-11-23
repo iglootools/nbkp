@@ -10,6 +10,7 @@ so a fresh unlock always succeeds after a prior test's lock.
 
 import contextlib
 import fcntl
+import shlex
 import shutil
 import tempfile
 import uuid
@@ -462,6 +463,48 @@ def remote_encrypted_volume(luks_uuid: str) -> RemoteVolume:
             ),
         ),
     )
+
+
+def udisks_diagnostics(
+    endpoint: SshEndpoint,
+    volume: RemoteVolume,
+    failure: object = None,
+) -> str:
+    """
+    Return *failure* with what udev and udisks know of *volume*'s device.
+
+    Pass it as a failed assertion's message, which pytest evaluates only when the
+    assertion fails, so a passing run pays nothing. It tells apart the two ways
+    udisks can lack an object for the by-uuid path nbkp unlocks: the device not
+    enumerated yet (no object at all), or a re-probe after a lock that left its
+    ``Symlinks`` without the by-uuid link. It also shows when the link itself is
+    gone from ``/dev``, which detection then reports as a device not present.
+    """
+    if volume.mount is None:
+        return f"{failure}\n(no udisks state: {volume.slug} has no mount config)"
+    link = shlex.quote(f"/dev/disk/by-uuid/{volume.mount.device_uuid}")
+    script = f"""
+        date +%T.%N
+        echo "$(ls /dev/disk/by-uuid | wc -l) links in /dev/disk/by-uuid"
+        if [ -e {link} ]; then
+            dev=$(readlink -f {link}); echo "{link} resolves to $dev"
+        else
+            echo "{link} does not exist"
+            dev=$(udisksctl info -b {link} 2>/dev/null \
+                | awk '$1 == "Device:" {{print $2}}')
+            echo "udisks has it as ${{dev:-nothing}}"
+        fi
+        [ -n "$dev" ] && udevadm info --query=property --name="$dev" \
+            | grep -E 'DEVLINKS|ID_FS_(TYPE|UUID)='
+        echo '--- udisksctl info -b {link}'; udisksctl info -b {link}
+        [ -n "$dev" ] && echo "--- udisksctl info -b $dev" \
+            && udisksctl info -b "$dev" \
+            | grep -E 'Device:|Symlinks|IdType|IdUUID|CleartextDevice'
+        losetup -l | grep -E '^NAME|encrypted'; ls -l /dev/mapper/
+        pgrep -a udisksd || echo 'udisksd is not running'
+    """
+    state = ssh_exec(endpoint, script, check=False)
+    return f"{failure}\n--- udisks state ---\n{state.stdout}{state.stderr}"
 
 
 @pytest.fixture(scope="session")
