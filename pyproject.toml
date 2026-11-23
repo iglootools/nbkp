@@ -199,6 +199,9 @@ ban-relative-imports = "all"
 combine-as-imports = true
 
 [tool.pytest.ini_options]
+# build-scripts/ holds scripts, not a package: this lets tests/build_scripts/ import them.
+# pyright's extraPaths below does the same for type checking.
+pythonpath = ["build-scripts"]
 markers = [
   "e2e_docker: End-to-end tests requiring Docker",
   "integration_docker: Component integration tests requiring Docker",
@@ -207,6 +210,7 @@ markers = [
 
 [tool.pyright]
 include = ["nbkp", "tests", "build-scripts"]
+extraPaths = ["build-scripts"]
 pythonVersion = "3.15"
 typeCheckingMode = "strict"
 reportUnnecessaryTypeIgnoreComment = "error"
