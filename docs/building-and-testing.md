@@ -30,7 +30,6 @@ mise run test-e2e-docker           # End-to-end sync tests (Docker only)
 
 mise run test-integration   # All integration tests (Docker + filesystem)
 mise run test-integration-docker  # Docker integration tests (tests/integration_docker/; not e2e)
-mise run test-integration-docker-btrfs   # Local btrfs tests inside Docker (privileged)
 mise run test-integration-fs     # Filesystem integration tests
 
 mise run fmt                # ruff, dprint and rumdl format every file (fmt-ruff, fmt-dprint, fmt-rumdl)
@@ -128,7 +127,7 @@ per-suite worker counts chosen for what each suite can safely parallelize:
 | Unit | `test-unit` | `-n auto` | Fully isolated (`tmp_path`, injected fakes); no external state. |
 | Filesystem integration | `test-integration-fs` | `-n auto` | Each test isolates real-rsync work under a unique `tmp_path`. |
 | Docker integration | `test-integration-docker` | `-n auto` | One privileged container per worker; testkit isolates shared kernel resources — see below. |
-| Local btrfs (privileged) | `test-integration-docker-btrfs` | serial | Single privileged container; real btrfs ops share one loopback mount. |
+| Local btrfs (privileged) | part of `test-integration-docker` | serial | `test_btrfs_local.py` re-runs itself in a single privileged container when btrfs is missing locally; real btrfs ops share one loopback mount. |
 | End-to-end | `test-e2e` | `-n 3` | One worker per test, each with its own multi-container topology (UUID-named network); halves the suite. Raise the count with the number of tests. |
 
 **How Docker integration parallelizes safely:** session-scoped container
@@ -233,8 +232,9 @@ infrastructure they require:
    tests against real infrastructure in Docker. Tests individual module
    functions (preflight observations, btrfs snapshot operations, hard-link
    snapshots, mount lifecycle, SSH connectivity, subdir endpoint mapping) via
-   SSH. Includes local btrfs tests that run inside a privileged Docker container
-   (`mise run test-integration-docker-btrfs`).
+   SSH. Includes the local btrfs tests (`test_btrfs_local.py`), which run
+   natively on Linux with btrfs-progs and otherwise re-run themselves inside a
+   privileged Docker container.
 
 4. **Integration (filesystem)** (`tests/integration_fs/`) — Component-level
    tests using real local filesystem operations (local-to-local syncs with real

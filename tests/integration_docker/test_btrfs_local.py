@@ -18,6 +18,7 @@ from pathlib import Path
 
 import docker as dockerlib
 import pytest
+from docker.types import Mount
 
 # Deferred: only the Docker proxy test builds an image.
 lazy from testcontainers.core.image import DockerImage
@@ -233,8 +234,11 @@ class TestBtrfsLocalViaDocker:
         container = client.containers.run(
             _IMAGE_TAG,
             # `uv run` rather than a bare `pytest`, and --frozen so the container cannot
-            # rewrite the host's bind-mounted uv.lock. There is no mise in the image, so
-            # the host-side [deps.uv]/uv_venv_auto machinery does not apply here.
+            # rewrite the host's bind-mounted uv.lock. This is the one place that keeps
+            # an explicit `uv run` and syncs directly (in the entrypoint) rather than
+            # going through `mise deps`: there is no mise in the image, so neither
+            # python.uv_venv_auto nor [deps.uv] exists there. Do not "harmonize" it
+            # with the host-side tasks.
             command=[
                 "uv",
                 "run",
@@ -250,17 +254,15 @@ class TestBtrfsLocalViaDocker:
                     "bind": "/app",
                     "mode": "rw",
                 },
-                # The bind mount above exposes the host's macOS .venv inside the
-                # container.  UV_PROJECT_ENVIRONMENT=/tmp/venv in the image is what
-                # actually keeps the container's sync off it; this volume is defence in
-                # depth — it hides the macOS venv and its __pycache__ from the
-                # container's import machinery entirely, and bounds the blast radius to
-                # an ephemeral container venv if that variable is ever dropped.
-                "nbkp-btrfs-test-venv": {
-                    "bind": "/app/.venv",
-                    "mode": "rw",
-                },
             },
+            # The bind mount above exposes the host's macOS .venv inside the
+            # container.  UV_PROJECT_ENVIRONMENT=/tmp/venv in the image is what
+            # actually keeps the container's sync off it; this anonymous volume is
+            # defence in depth — it hides the macOS venv and its __pycache__ from the
+            # container's import machinery entirely, and bounds the blast radius to
+            # an ephemeral container venv, removed with the container, if that
+            # variable is ever dropped.
+            mounts=[Mount(target="/app/.venv", source=None, type="volume")],
             # The venv environment variables are set in Dockerfile.btrfs-local-test,
             # so they travel with the image.
             working_dir="/app",
@@ -272,6 +274,6 @@ class TestBtrfsLocalViaDocker:
             logs = container.logs().decode()
             exit_code = result["StatusCode"]
         finally:
-            container.remove(force=True)
+            container.remove(force=True, v=True)
 
         assert exit_code == 0, f"Tests failed inside Docker:\n{logs}"

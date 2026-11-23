@@ -202,9 +202,6 @@ description = "Run all integration tests (Docker + filesystem)"
 run = [
   { task = "test-integration-fs" },
   { task = "test-integration-docker" },
-  # test-integration-docker-btrfs is left out on purpose: it needs privileged Docker, which
-  # does not work on CI and can cause issues on local machines. Run it by hand when
-  # debugging btrfs-related code changes.
 ]
 
 [tasks.test-integration-docker]
