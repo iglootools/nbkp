@@ -152,6 +152,7 @@ class TestBuildRsyncCommandLocalToRemote:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
+            "--protect-args",
             "-e",
             f"ssh -o ConnectTimeout=10 -o BatchMode=yes -p 5022 -i {_SSH_KEY}",
             "/mnt/src/photos/",
@@ -198,6 +199,7 @@ class TestBuildRsyncCommandRemoteToLocal:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
+            "--protect-args",
             "-e",
             "ssh -o ConnectTimeout=10 -o BatchMode=yes",
             "admin@server.local:/data/",
@@ -788,6 +790,7 @@ class TestBuildRsyncCommandProxyJump:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
+            "--protect-args",
             "-e",
             (
                 "ssh -o ConnectTimeout=10 -o BatchMode=yes"
@@ -851,6 +854,7 @@ class TestBuildRsyncCommandProxyJump:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
+            "--protect-args",
             "-e",
             f"ssh -o ConnectTimeout=10 -o BatchMode=yes -o {quoted}",
             "backup@server.internal:/data/",
@@ -926,6 +930,7 @@ class TestBuildRsyncCommandMultiHopProxy:
             "--safe-links",
             "--filter=H .nbkp-*",
             "--filter=P .nbkp-*",
+            "--protect-args",
             "-e",
             (
                 "ssh -o ConnectTimeout=10 -o BatchMode=yes"
@@ -1221,6 +1226,92 @@ class TestSourceSnapshotPath:
         assert "'~" not in inner
 
 
+def _one_remote_side(
+    src_path: str,
+    dst_path: str,
+    *,
+    remote: str,
+) -> tuple[SyncConfig, Config]:
+    server = SshEndpoint(slug="nas", host="nas.local", user="backup")
+    volumes: dict[str, LocalVolume | RemoteVolume] = {
+        "src": LocalVolume(slug="src", path=src_path),
+        "dst": LocalVolume(slug="dst", path=dst_path),
+    }
+    volumes[remote] = RemoteVolume(
+        slug=remote,
+        ssh_endpoint="nas",
+        path=src_path if remote == "src" else dst_path,
+    )
+    sync = SyncConfig(slug="s1", source="ep-src", destination="ep-dst")
+    config = Config(
+        ssh_endpoints={"nas": server},
+        volumes=volumes,
+        sync_endpoints={
+            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+            "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst"),
+        },
+        syncs={"s1": sync},
+    )
+    return sync, config
+
+
+class TestBuildRsyncCommandProtectArgs:
+    """Remote paths reach the remote rsync unparsed by its shell."""
+
+    def test_remote_destination_path_is_sent_unquoted(self) -> None:
+        """Regression: rsync before 3.2.4 split a remote path on its spaces."""
+        sync, config = _one_remote_side("/mnt/src", "/backup/my photos", remote="dst")
+
+        cmd = build_rsync_command(
+            sync,
+            config,
+            resolved_endpoints=resolve_all_endpoints(config),
+        )
+
+        assert "--protect-args" in cmd
+        assert cmd[-1] == "backup@nas.local:/backup/my photos/"
+
+    def test_remote_source_path_is_sent_unquoted(self) -> None:
+        sync, config = _one_remote_side("/data/a b;c", "/mnt/dst", remote="src")
+
+        cmd = build_rsync_command(
+            sync,
+            config,
+            resolved_endpoints=resolve_all_endpoints(config),
+        )
+
+        assert "--protect-args" in cmd
+        assert cmd[-2] == "backup@nas.local:/data/a b;c/"
+
+    def test_tilde_path_becomes_relative_to_the_home_directory(self) -> None:
+        """No shell expands ``~`` once arguments are protected."""
+        sync, config = _one_remote_side("/mnt/src", "~/backups", remote="dst")
+
+        cmd = build_rsync_command(
+            sync,
+            config,
+            resolved_endpoints=resolve_all_endpoints(config),
+        )
+
+        assert cmd[-1] == "backup@nas.local:backups/"
+
+    def test_bare_tilde_path_becomes_the_home_directory(self) -> None:
+        sync, config = _one_remote_side("~", "/mnt/dst", remote="src")
+
+        cmd = build_rsync_command(
+            sync,
+            config,
+            resolved_endpoints=resolve_all_endpoints(config),
+        )
+
+        assert cmd[-2] == "backup@nas.local:./"
+
+    def test_local_to_local_does_not_protect_args(self) -> None:
+        sync, config = _local_sync()
+
+        assert "--protect-args" not in build_rsync_command(sync, config)
+
+
 class TestDestSuffix:
     def test_default_bare(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/src")
@@ -1396,11 +1487,31 @@ class TestRunRsync:
 
 
 class TestRunLocalProcess:
-    def test_captures_stdout_and_stderr_apart(self) -> None:
+    def test_captures_stdout_and_stderr_merged(self) -> None:
         result = run_local_process(_emit_cmd(b"out\r\n", stderr=b"err\n", exit_code=23))
         assert result.returncode == 23
-        assert result.stdout == "out\n"
-        assert result.stderr == "err\n"
+        assert result.stdout == "out\nerr\n"
+        assert result.stderr == ""
+
+    def test_keeps_only_the_tail_of_captured_output(self) -> None:
+        """
+        Regression: captured output was kept whole.
+
+        Without a callback (JSON output) rsync ran through ``subprocess.run`` and its
+        output, hundreds of MB with ``--progress per-file``, stayed in memory.
+        """
+        tail_size = 64 * 1024
+        code = f"import sys; sys.stdout.write('x' * {tail_size * 4} + 'end')"
+
+        result = run_local_process([sys.executable, "-c", code])
+
+        assert len(result.stdout) == tail_size
+        assert result.stdout.endswith("end")
+
+    def test_replaces_undecodable_bytes(self) -> None:
+        """Regression: a name not in the locale's encoding aborted the run."""
+        result = run_local_process(_emit_cmd(b"caf\xe9\n", stderr=b"\xff\n"))
+        assert result.stdout == "caf\ufffd\n\ufffd\n"
 
     def test_streams_output_to_the_callback(self) -> None:
         chunks: list[str] = []
@@ -1444,6 +1555,13 @@ class TestRunStreaming:
         # One byte per read: the halves of "é" and of "\r\n" are joined.
         assert chunks == ["é", "\n", "€"]
         assert "" not in chunks
+
+    def test_replaces_undecodable_bytes(self) -> None:
+        """Regression: a name not in the locale's encoding aborted the run."""
+        chunks: list[str] = []
+        result = run_streaming(_emit_cmd(b"caf\xe9\n"), chunks.append)
+        assert result.stdout == "caf\ufffd\n"
+        assert "".join(chunks) == result.stdout
 
     def test_merges_stderr_and_keeps_exit_code(self) -> None:
         result = run_streaming(

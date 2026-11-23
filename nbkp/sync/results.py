@@ -98,15 +98,21 @@ _INACTIVE_FAILURES: frozenset[SyncFailureKind] = frozenset(
 
 
 class SyncWarningKind(StrEnum):
-    """A best-effort step that failed without failing the sync."""
+    """What went wrong without failing the sync."""
 
     ORPHAN_CLEANUP = "orphan-cleanup"
+    """Best-effort: orphaned hard-link snapshots could not be removed."""
     PRUNE = "prune"
+    """Best-effort: old snapshots could not be pruned."""
     SNAPSHOT_DIR_CLEANUP = "snapshot-dir-cleanup"
+    """Best-effort: a failed sync's snapshot directory could not be removed."""
+    VANISHED_FILES = "vanished-files"
+    """Files vanished from the source during the transfer, which the sync's
+    ``vanished-files: warn`` accepts."""
 
 
 class SyncWarning(BaseModel):
-    """A best-effort step of a sync that failed, and the message saying how."""
+    """What went wrong without failing a sync, and the message saying how."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -132,8 +138,7 @@ class SyncResult(BaseModel):
     rsync_exit_code: int = -1
     """``-1`` when rsync did not run to completion."""
     output: str = ""
-    """rsync's output; only its last 65,536 characters when it was streamed
-    (human ``run --progress``), as it was shown whole as it ran."""
+    """rsync's merged stdout and stderr; only their last 65,536 characters."""
     failure: SyncFailureKind | None = None
     cancelled_by: str | None = None
     """For a cancelled sync, the upstream sync whose result caused it."""
@@ -175,13 +180,17 @@ class SyncResult(BaseModel):
         pruned_paths: tuple[str, ...] | None = None,
         warnings: tuple[SyncWarning, ...] = (),
     ) -> SyncResult:
-        """Return the result of a sync whose rsync run *proc* succeeded."""
+        """
+        Return the result of a sync whose rsync run *proc* succeeded.
+
+        Its output keeps stderr too: rsync writes its warnings there.
+        """
         return SyncResult(
             sync_slug=slug,
             outcome=SyncOutcome.SUCCESS,
             dry_run=dry_run,
             rsync_exit_code=proc.returncode,
-            output=proc.stdout,
+            output=proc.stdout + proc.stderr,
             snapshot_path=snapshot_path,
             pruned_paths=pruned_paths,
             warnings=warnings,

@@ -29,6 +29,9 @@ from nbkp.remote import (
 )
 from nbkp.remote.endpoints import ResolvedEndpoints
 
+RSYNC_VANISHED_FILES_EXIT = 24
+"""rsync's exit code when source files vanished before it could transfer them."""
+
 
 class ProgressMode(StrEnum):
     """
@@ -138,6 +141,29 @@ def hard_link_link_dest(latest_name: str | None) -> str | None:
     return f"../{latest_name}" if latest_name else None
 
 
+# Before rsync 3.2.4 (preflight accepts 3.0.0 and later) the remote shell
+# parses the remote rsync's arguments, so a path with a space or a shell
+# metacharacter is split or expanded there. --protect-args (3.0.0 and later)
+# sends them through rsync's protocol instead. Not needed remote to remote:
+# rsync then runs on the remote host with local paths, quoted for its shell.
+_PROTECT_ARGS = "--protect-args"
+
+
+def _protected_remote_path(path: str) -> str:
+    """
+    Return a remote *path* with a leading ``~`` made relative to the home directory.
+
+    With ``--protect-args`` no shell expands the ``~`` a remote volume path may start
+    with, but the remote rsync starts in the SSH user's home directory, which a relative
+    path resolves against.
+    """
+    match path.partition("/"):
+        case ("~", _, rest):
+            return rest.lstrip("/") or "."
+        case _:
+            return path
+
+
 def _dest_target(base: str, dest_suffix: str | None) -> str:
     return f"{base}/{dest_suffix}/" if dest_suffix else f"{base}/"
 
@@ -186,19 +212,24 @@ def build_rsync_command(
             ]
         case (RemoteVolume() as sv, LocalVolume()):
             src_re = re[sv.slug]
+            remote_src = _protected_remote_path(src_path)
             return [
                 *rsync_args,
+                _PROTECT_ARGS,
                 *build_ssh_e_option(src_re.server, src_re.proxy_chain),
-                format_remote_path(src_re.server, src_path) + "/",
+                format_remote_path(src_re.server, remote_src) + "/",
                 _dest_target(dst_path, dest_suffix),
             ]
         case (LocalVolume(), RemoteVolume() as dv):
             dst_re = re[dv.slug]
+            remote_dst = _protected_remote_path(dst_path)
+            dst_target = format_remote_path(dst_re.server, remote_dst)
             return [
                 *rsync_args,
+                _PROTECT_ARGS,
                 *build_ssh_e_option(dst_re.server, dst_re.proxy_chain),
                 f"{src_path}/",
-                _dest_target(format_remote_path(dst_re.server, dst_path), dest_suffix),
+                _dest_target(dst_target, dest_suffix),
             ]
         case _:
             return [*rsync_args, f"{src_path}/", _dest_target(dst_path, dest_suffix)]
@@ -209,7 +240,7 @@ type ProcessRunner = Callable[
     subprocess.CompletedProcess[str],
 ]
 """Runs a command on the orchestrator, forwarding its output to the callback
-when one is given, and capturing it otherwise."""
+when one is given."""
 
 
 def run_local_process(
@@ -217,15 +248,18 @@ def run_local_process(
     on_output: Callable[[str], None] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """
-    Run *cmd*, capturing its output or forwarding it to *on_output*.
+    Run *cmd*, forwarding its merged stdout/stderr to *on_output* when given.
 
-    Its stdout and stderr are captured apart when *on_output* is ``None``, and merged
-    and forwarded to *on_output* as they arrive otherwise.
+    Captured or forwarded, the output is read the same way (see :func:`run_streaming`),
+    so the result keeps only its tail either way: without a callback (JSON output, or
+    no progress) rsync's output is just as long when ``extra-options`` or the progress
+    mode make it verbose.
     """
-    if on_output is None:
-        return subprocess.run(cmd, capture_output=True, text=True, check=False)
-    else:
-        return run_streaming(cmd, on_output)
+    return run_streaming(cmd, on_output or _discard)
+
+
+def _discard(_chunk: str) -> None:
+    pass
 
 
 # os.read returns as soon as any output is available, so progress updates still
@@ -235,9 +269,9 @@ def run_local_process(
 _STREAM_CHUNK_SIZE = 64 * 1024
 
 
-# The output was shown as it streamed, so only its end is kept for the result:
-# with --progress over millions of files the whole of it runs to hundreds of MB
-# per sync, all held until the run ends. rsync's error, when it fails, comes
+# Only the end of the output is kept for the result: with --progress over
+# millions of files the whole of it runs to hundreds of MB per sync, all held
+# until the run ends. rsync's error, when it fails, comes
 # last, so the tail is the part a failure report needs.
 _STREAM_TAIL_SIZE = 64 * 1024
 
@@ -310,15 +344,19 @@ class _OutputTail:
 
 def _text_decoder() -> io.IncrementalNewlineDecoder:
     r"""
-    Decode bytes exactly as a ``text=True`` pipe would.
+    Decode bytes as a ``text=True, errors="replace"`` pipe would.
 
-    Same encoding and strictness as ``io.TextIOWrapper``'s defaults, and the
-    same universal-newline translation (``\r\n`` and ``\r`` become ``\n``),
+    Same encoding as ``io.TextIOWrapper``'s default, and the same
+    universal-newline translation (``\r\n`` and ``\r`` become ``\n``),
     including a multi-byte character or a ``\r\n`` split across two reads.
+    Undecodable bytes become U+FFFD: rsync prints file names as they are on
+    disk, which need not be in the locale's encoding, and the output is only
+    displayed and kept for the result, so a strict decoder would abort the
+    whole run over a name it only had to show.
     """
     encoding = locale.getpreferredencoding(do_setlocale=False)
     return io.IncrementalNewlineDecoder(
-        codecs.getincrementaldecoder(encoding)(),
+        codecs.getincrementaldecoder(encoding)(errors="replace"),
         translate=True,
     )
 

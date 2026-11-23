@@ -708,7 +708,8 @@ which always run first.
 `mkdir`, `snapshot`, `symlink` (a step failed), `inactive`, `dry-run-pending`,
 `preflight`, `disabled` (not attempted), `upstream-failed`, `upstream-skipped`,
 `upstream-disabled` (cancelled). `run -o json` exposes them, along with
-`warnings` for best-effort steps.
+`warnings` for best-effort steps and, under `vanished-files: warn`, for files
+that vanished from the source during the transfer (`vanished-files`).
 
 **Aborted runs** — When preflight aborts a run, `run` lists the offending syncs
 and suggests the matching `nbkp preflight troubleshoot` command — same config
@@ -930,10 +931,10 @@ All commands support both human-readable output (Rich-formatted tables,
 spinners, progress bars) and machine-readable JSON output for scripting and
 automation. The `run` command additionally supports four progress display modes:
 `none`, `overall`, `per-file`, and `full`. In human output with any of them but
-`none`, rsync's output is shown as it streams, and a sync's result keeps only
-its last 65,536 characters: the whole of it can run to hundreds of megabytes
-over millions of files, and rsync's error, when it fails, comes last. JSON
-output does not stream, and keeps rsync's output whole.
+`none`, rsync's output is shown as it streams. Shown or not, a sync's result
+keeps only the last 65,536 characters of it, stdout and stderr merged: the whole
+of it can run to hundreds of megabytes over millions of files (JSON output with
+`--progress per-file` included), and rsync's error, when it fails, comes last.
 
 ### Rsync Defaults
 
@@ -1005,6 +1006,7 @@ does on their system.
 | `--compress`, `--checksum` | Optional per-sync flags |
 | `--link-dest=<prev-snapshot>` | Hard-link snapshots: reference previous snapshot for deduplication |
 | `-e ssh ...` | SSH transport for remote syncs |
+| `--protect-args` | Remote syncs: send paths through rsync's protocol, so the remote shell does not split or expand them (rsync before 3.2.4); a leading `~/` of a remote path is sent relative to the SSH user's home directory instead |
 
 ### Btrfs snapshot operations
 

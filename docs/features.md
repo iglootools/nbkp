@@ -42,7 +42,8 @@ behavior.
   output is labeled `[dry-run]`, and its JSON carries `"dry_run": true`
 - **Real-time progress**: four display modes (none, overall, per-file, full)
 - **Per-sync rsync options**: checksum, compression, custom flags, default
-  overrides, extra options
+  overrides, extra options, and whether files that vanish from a busy source
+  during the transfer fail the sync or only warn (`vanished-files`)
 - **Rsync filters**: structured include/exclude rules, `merge`/`dir-merge`
   directives (per-directory filter files), raw rsync filter strings, and
   external filter files

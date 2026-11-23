@@ -124,8 +124,17 @@ class TestSyncConfig:
         assert sc.rsync_options.extra_options == []
         assert sc.rsync_options.checksum is False
         assert sc.rsync_options.compress is False
+        assert sc.rsync_options.vanished_files == "fail"
         assert sc.filters == []
         assert sc.filter_file is None
+
+    def test_vanished_files_reads_its_kebab_case_key(self) -> None:
+        options = RsyncOptions.model_validate({"vanished-files": "warn"})
+        assert options.vanished_files == "warn"
+
+    def test_vanished_files_rejects_an_unknown_value(self) -> None:
+        with pytest.raises(pydantic.ValidationError):
+            RsyncOptions.model_validate({"vanished-files": "ignore"})
 
     def test_construction_full(self) -> None:
         sc = SyncConfig(

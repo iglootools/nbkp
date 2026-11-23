@@ -1,6 +1,7 @@
 """Tests for nbkp.sync.results.SyncResult."""
 
 from nbkp.sync import SyncFailureKind, SyncOutcome, SyncResult
+from tests.fakes import completed
 
 
 class TestSyncResult:
@@ -27,3 +28,11 @@ class TestSyncResult:
         )
         assert sr.detail == "failed"
         assert sr.success is False
+
+    def test_succeeded_keeps_stderr(self) -> None:
+        """Regression: a succeeded result kept only stdout, losing rsync's warnings."""
+        proc = completed(0, stdout="sent 1 file\n", stderr="skipped special file\n")
+
+        sr = SyncResult.succeeded("s1", dry_run=False, proc=proc)
+
+        assert sr.output == "sent 1 file\nskipped special file\n"

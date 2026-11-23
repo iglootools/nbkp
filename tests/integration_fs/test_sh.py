@@ -206,6 +206,32 @@ def _write_rm_refusing(bin_dir: Path, name: str) -> None:
     fake_rm.chmod(0o755)
 
 
+def _write_rsync_vanishing_from_src(bin_dir: Path) -> None:
+    """
+    Write an ``rsync`` on *bin_dir* that exits 24 after copying from the source.
+
+    As rsync does when source files vanish during the transfer; the other syncs,
+    and ``rsync --version``, run the real rsync unchanged.
+    """
+    fake_rsync = bin_dir / "rsync"
+    fake_rsync.write_text(
+        dedent(f"""\
+            #!/bin/sh
+            {shutil.which("rsync")} "$@" || exit $?
+            for arg; do case "$arg" in *'/{_SRC_DIR}/') exit 24 ;; esac; done
+        """),
+        encoding="utf-8",
+    )
+    fake_rsync.chmod(0o755)
+
+
+def _env_with_rsync_vanishing_from_src(tmp_path: Path) -> dict[str, str]:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_rsync_vanishing_from_src(bin_dir)
+    return {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+
+
 class TestGeneratedScriptSyntax:
     @_requires_bash4
     def test_chain_config_valid_bash_no_portable(self, tmp_path: Path) -> None:
@@ -385,6 +411,35 @@ class TestGeneratedScriptExecution:
         assert str(Path(_stage(tmp_path) / LATEST_LINK).readlink()) == "/dev/null"
         assert _snapshot_names(tmp_path) == []  # new snapshot dir removed
         assert not (tmp_path / _DST_DIR / "sample.txt").exists()
+
+    def test_vanished_files_fail_the_sync_by_default(self, tmp_path: Path) -> None:
+        config = _seeded_chain(tmp_path)
+        env = _env_with_rsync_vanishing_from_src(tmp_path)
+
+        result = _run_script(config, tmp_path, env=env)
+
+        assert result.returncode != 0
+        assert "ERROR: rsync exited with code 24" in result.stderr
+        assert "FAILED step-1" in result.stderr
+        assert _snapshot_names(tmp_path) == []  # new snapshot dir removed
+
+    def test_vanished_files_warn_publishes_the_snapshot(self, tmp_path: Path) -> None:
+        """Like `nbkp run`: exit code 24 only warns under `vanished-files: warn`."""
+        config = _seeded_chain(
+            tmp_path,
+            step_1_options=RsyncOptions(vanished_files="warn"),
+        )
+        env = _env_with_rsync_vanishing_from_src(tmp_path)
+
+        result = _run_script(config, tmp_path, env=env)
+
+        assert result.returncode == 0, result.stderr
+        assert "WARN: some files vanished from the source" in result.stderr
+        assert "Completed sync: step-1" in result.stderr
+        [snapshot] = _snapshot_names(tmp_path)
+        latest = Path(_stage(tmp_path) / LATEST_LINK).readlink()
+        assert str(latest) == f"{SNAPSHOTS_DIR}/{snapshot}"
+        assert (tmp_path / _DST_DIR / "sample.txt").exists()
 
     def test_failure_after_rsync_stops_sync(self, tmp_path: Path) -> None:
         """

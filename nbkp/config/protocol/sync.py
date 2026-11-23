@@ -1,7 +1,7 @@
 """The config models of a sync and its rsync options and filter rules."""
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 from pydantic_core import PydanticCustomError
@@ -9,9 +9,17 @@ from pydantic_core import PydanticCustomError
 from nbkp.config.protocol.base import ConfigModel, Slug, is_raw_mapping, is_raw_sequence
 from nbkp.config.protocol.errors import ConfigValidationErrorKind, config_error
 
+VanishedFiles = Literal["fail", "warn"]
+"""What a sync does when files vanish from its source while rsync transfers it."""
+
 
 class RsyncOptions(ConfigModel):
-    """The rsync flags a sync adds to, or uses instead of, nbkp's defaults."""
+    """
+    How a sync runs rsync.
+
+    The flags it adds to, or uses instead of, nbkp's defaults, and how it treats files
+    that vanish during the transfer.
+    """
 
     compress: bool = Field(default=False, description="Enable rsync `--compress`")
     checksum: bool = Field(default=False, description="Enable rsync `--checksum`")
@@ -22,6 +30,18 @@ class RsyncOptions(ConfigModel):
     extra_options: list[str] = Field(
         default_factory=list,
         description="Additional flags appended after defaults",
+    )
+    vanished_files: VanishedFiles = Field(
+        default="fail",
+        description=(
+            "What the sync does when files vanish from the source between rsync's"
+            " scan and their transfer (rsync exit code 24)."
+            " `fail`: the sync fails, and a new hard-link snapshot is discarded."
+            " `warn`: the sync succeeds with a `vanished-files` warning, its snapshot"
+            " is kept and `latest` moves to it."
+            " Choose `warn` for a source in use while it is backed up, such as a"
+            " home directory, where files often disappear mid-run"
+        ),
     )
 
 
