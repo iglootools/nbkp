@@ -10,7 +10,9 @@ among them
 and choosing a backend such as the keyring's through the library's own API
 (`keyring.set_keyring`). The patches nbkp allows are listed in
 [docs/guidelines.md › Tests](../guidelines.md#tests); the test suites and
-the testing strategy are in
+the testing strategy, which assigns each new behaviour's test to a suite as
+[general.md › Give every new behaviour a test](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#give-every-new-behaviour-a-test)
+asks, are in
 [building-and-testing.md](../building-and-testing.md#testing-strategy).
 
 ## Rules
@@ -23,18 +25,11 @@ integration tests cover the real interactions.
 **Why:** the unit suite then runs anywhere, with no external dependencies, and
 fast enough for every commit.
 
-### Cover new functionality as the testing strategy describes
-
-Each new feature gets tests in the suites the
-[testing strategy](../building-and-testing.md#testing-strategy) assigns to what
-it touches.
-
-**Why:** the suites split what they need by infrastructure, so a feature tested
-only in the wrong one is left uncovered where it can break.
-
 ## Building blocks
 
-Test without patching, with the first of these that fits:
+Test without patching, with the first that fits, in the order
+[general.md › Control what a test needs with a decider, a fake or a cheap real resource](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#control-what-a-test-needs-with-a-decider-a-fake-or-a-cheap-real-resource)
+sets. nbkp's are:
 
 - **Deciders**: the preflight `*Status.from_diagnostics` interpretation, and the
   CLI deciders over `PreflightResult` / `SyncResult` / mount results.
