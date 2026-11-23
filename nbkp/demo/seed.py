@@ -19,8 +19,7 @@ from pydantic import BaseModel, ConfigDict
 
 from nbkp.config import Config, CredentialProvider, RsyncOptions, SshEndpoint
 from nbkp.config.testkit import write_config
-from nbkp.disks import mount_phase, umount_volumes
-from nbkp.disks.output import mount_failure_detail, umount_failure_detail
+from nbkp.disks import MountResult, UmountResult, mount_phase, umount_volumes
 from nbkp.policy import Severity
 from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
@@ -88,13 +87,25 @@ _PREREQUISITE_KINDS = frozenset(
 
 
 class SeedError(Exception):
-    """*detail* is the failing tool's message, or the missing path."""
+    """
+    *detail* is the failing tool's message, or the missing path.
 
-    def __init__(self, kind: SeedErrorKind, detail: str = "") -> None:
+    *result* is the failed mount or umount, for the ``mount-failed`` and
+    ``umount-failed`` kinds: the CLI renders the message from it.
+    """
+
+    def __init__(
+        self,
+        kind: SeedErrorKind,
+        detail: str = "",
+        *,
+        result: MountResult | UmountResult | None = None,
+    ) -> None:
         """Build the error from its kind and the detail that explains it."""
         super().__init__(f"{kind}: {detail}" if detail else kind)
         self.kind = kind
         self.detail = detail
+        self.result = result
 
     @property
     def may_leave_containers(self) -> bool:
@@ -487,13 +498,18 @@ def encrypted_volume_mounted(
             if failed_mount is not None:
                 raise SeedError(
                     SeedErrorKind.MOUNT_FAILED,
-                    mount_failure_detail(failed_mount) or "unknown error",
+                    _failure_message(failed_mount),
+                    result=failed_mount,
                 )
         yield
     finally:
         failed_umount = _umount_encrypted(config, resolved, steps, run=run)
     if failed_umount is not None:
-        raise SeedError(SeedErrorKind.UMOUNT_FAILED, failed_umount)
+        raise SeedError(
+            SeedErrorKind.UMOUNT_FAILED,
+            _failure_message(failed_umount),
+            result=failed_umount,
+        )
 
 
 def _umount_encrypted(
@@ -502,20 +518,30 @@ def _umount_encrypted(
     steps: _Steps,
     *,
     run: VolumeCommandRunner,
-) -> str | None:
-    """Umount + lock; returns the failure detail, if any."""
+) -> UmountResult | None:
+    """Umount + lock; returns the failed result, if any."""
     steps.start(_UMOUNT)
     failed = next(
         (r for r in umount_volumes(config, resolved, run=run) if not r.success),
         None,
     )
-    detail = (
-        (umount_failure_detail(failed) or "unknown error")
-        if failed is not None
-        else None
+    steps.end(
+        _UMOUNT,
+        success=failed is None,
+        detail=_failure_message(failed) if failed is not None else None,
     )
-    steps.end(_UMOUNT, success=failed is None, detail=detail)
-    return detail
+    return failed
+
+
+def _failure_message(result: MountResult | UmountResult) -> str:
+    """
+    Return the failed command's own message, or else the failure kind.
+
+    Data for the step line, not the rendered message: the CLI renders that
+    from :attr:`SeedError.result`.
+    """
+    failure_message = result.failure.message if result.failure is not None else None
+    return failure_message or str(result.failure_reason or "unknown error")
 
 
 def _seed_data(

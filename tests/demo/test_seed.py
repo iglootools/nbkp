@@ -27,6 +27,7 @@ from nbkp.demo.seed import (
     seed_plan,
     seed_steps,
 )
+from nbkp.disks import MountResult, UmountFailureKind, UmountResult
 from nbkp.remote.testkit.constants import LUKS_PASSPHRASE
 from tests.fakes import FakeCommandRunner, completed
 from tests.fixtures.disks import UUID, encrypted_volume
@@ -148,7 +149,9 @@ class TestUmountFailure:
         ):
             pass
         assert exc.value.kind == SeedErrorKind.UMOUNT_FAILED
-        assert exc.value.detail == "umount failed (exit 1): busy"
+        assert isinstance(exc.value.result, UmountResult)
+        assert exc.value.result.failure_reason == UmountFailureKind.UNMOUNT_FAILED
+        assert "umount failed (exit 1): busy" in format_seed_error(exc.value)
         assert ends[-1] == ("umount encrypted volume", "error")
 
     def test_failed_mount_still_locks(self) -> None:
@@ -165,7 +168,8 @@ class TestUmountFailure:
         ):
             pass
         assert exc.value.kind == SeedErrorKind.MOUNT_FAILED
-        assert "no fs" in exc.value.detail
+        assert isinstance(exc.value.result, MountResult)
+        assert "mount failed (exit 1): no fs" in format_seed_error(exc.value)
         assert [c[1] for c in run.commands_starting_with("udisksctl")] == [
             "unlock",
             "mount",
@@ -193,7 +197,7 @@ class TestStepFailure:
         assert ends[0] == (
             "mount encrypted volume",
             "error",
-            "mount failed (exit 1): no fs",
+            "no fs",
         )
 
     def test_a_raising_step_is_reported_failed(self, tmp_path: Path) -> None:
