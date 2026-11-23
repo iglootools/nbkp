@@ -218,6 +218,35 @@ class TestToolGating:
         assert result.mounted is None
         assert result.effective_path is None
 
+    def test_failed_fstab_probe_is_unknown_not_missing(self) -> None:
+        run = FakeCommandRunner().on(
+            "findmnt",
+            "--fstab",
+            returns=completed(1, stderr="findmnt: can't read /etc/fstab"),
+        )
+        result = check_mount_capabilities(
+            _unencrypted_vol(),
+            _unencrypted_mount(),
+            _MOUNT_TOOLS,
+            {},
+            None,
+            run=run,
+        )
+        # Unknown, not False: no false FSTAB_MOUNTPOINT_MISMATCH.
+        assert result.has_fstab_entry is None
+
+    def test_no_fstab_entry_is_missing(self) -> None:
+        run = FakeCommandRunner().on("findmnt", "--fstab", returns=completed(1))
+        result = check_mount_capabilities(
+            _unencrypted_vol(),
+            _unencrypted_mount(),
+            _MOUNT_TOOLS,
+            {},
+            None,
+            run=run,
+        )
+        assert result.has_fstab_entry is False
+
     def test_check_mount_status_does_not_probe_tools(self) -> None:
         run = FakeCommandRunner().on("test", "-e", returns=completed(1))
         check_mount_status(_unencrypted_vol(), _unencrypted_mount(), {}, run=run)

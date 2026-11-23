@@ -101,6 +101,9 @@ def _check_fstab_entry(
 
     Confirms udisks will mount the device at the declared *path* (rather than
     at ``/run/media/...``).  Only meaningful when ``volume.path`` is declared.
+    Raises :class:`DeviceProbeError` when ``findmnt`` itself fails (an
+    unreadable fstab, for one), so that a failed probe is not mistaken for a
+    missing entry.
     """
     # udisks2 could answer this via the Block.Configuration property (the
     # device's tracked fstab/crypttab entries, ``udisksctl info -b <device>``),
@@ -113,11 +116,23 @@ def _check_fstab_entry(
         volume,
         resolved_endpoints,
     )
-    return (
-        _parse_fstab_pairs(result.stdout.splitlines()[0])
-        if result.returncode == 0 and result.stdout.strip()
-        else None
-    )
+    match result.returncode:
+        case 0:
+            return (
+                _parse_fstab_pairs(result.stdout.splitlines()[0])
+                if result.stdout.strip()
+                else None
+            )
+        case 1 if not result.stderr.strip():
+            # findmnt exits 1, silently, when nothing matches; it also exits 1
+            # on errors, but those print a message.
+            return None
+        case _:
+            raise DeviceProbeError(
+                command="findmnt",
+                returncode=result.returncode,
+                stderr=result.stderr.strip(),
+            )
 
 
 def _parse_fstab_pairs(line: str) -> FstabEntry | None:
@@ -345,13 +360,17 @@ def _fstab_check(
 
     ``None`` when not applicable (no declared path) or not checkable (findmnt
     missing — reported at the SSH endpoint level instead of as a false
-    mismatch).  An entry whose SOURCE names another device counts as no
-    matching entry: udisks would not mount *this* device there.
+    mismatch — or failed, which leaves it unknown like the runtime probes).
+    An entry whose SOURCE names another device counts as no matching entry:
+    udisks would not mount *this* device there.
     """
     if volume.path is None or (mount_tools is not None and not mount_tools.has_findmnt):
         return None, None
     else:
-        entry = _check_fstab_entry(volume, volume.path, resolved_endpoints, run=run)
+        try:
+            entry = _check_fstab_entry(volume, volume.path, resolved_endpoints, run=run)
+        except DeviceProbeError:
+            return None, None
         return (
             entry is not None
             and fstab_source_matches(entry.source, mount, state.cleartext_device),
