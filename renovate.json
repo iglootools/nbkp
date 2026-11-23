@@ -9,6 +9,19 @@
     "github>iglootools/common//renovate/python#v2.1.0"
   ],
   "separateMajorMinor": false,
+  "customManagers": [
+    {
+      "description": "A Dockerfile pin that copies a mise.toml [tools] pin carries a `# renovate: datasource=… depName=…` comment naming the datasource Renovate's mise manager uses for that tool, and this manager reads it, so both copies become eligible on the same day and land in the same update (guidelines/project-setup/dependency-automation.md, Give every copy of a pin the same datasource). The version is the first X.Y.Z after the image name's colon; extractVersionTemplate drops a leading v.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/(^|/)Dockerfile[^/]*$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n(?:FROM|COPY --from=)\\s*[^:\\s]+:(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "extractVersionTemplate": "^v?(?<version>.+)$"
+    }
+  ],
   "packageRules": [
     {
       "groupName": "all dependencies",
@@ -19,6 +32,16 @@
         "at any time"
       ],
       "automerge": false
+    },
+    {
+      "description": "Dockerfile.btrfs-local-test copies mise.toml's uv pin, and the custom manager above tracks that copy through the mise manager's datasource (github-releases astral-sh/uv). The dockerfile manager is off for it: a ghcr.io tag has no release date, so under timestamp-optional its updates skipped the 14-day hold and drifted ahead of mise.toml's uv.",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchDepNames": [
+        "ghcr.io/astral-sh/uv"
+      ],
+      "enabled": false
     }
   ],
   "dependencyDashboard": {

@@ -57,19 +57,36 @@ def _end_marker(name: str) -> str:
     return f"<!-- END {name} -->"
 
 
-def _splice_section(file_content: str, name: str, body: str) -> str:
-    """Replace content between BEGIN/END markers for the given section name."""
+def _marker_problem(file_content: str, begin: str, end: str) -> str | None:
+    """Say what is wrong with a section's markers, or None when they are usable."""
+    if begin not in file_content or end not in file_content:
+        return "not found"
+    if file_content.count(begin) > 1 or file_content.count(end) > 1:
+        return "repeated"
+    if file_content.find(end) < file_content.find(begin):
+        return "out of order (END before BEGIN)"
+    return None
+
+
+def splice_section(file_content: str, name: str, body: str) -> str:
+    """
+    Replace content between BEGIN/END markers for the given section name.
+
+    Exits when either marker is missing or repeated, or END comes before BEGIN:
+    splicing would then rewrite the wrong span of the file without a word.
+    """
     begin = _begin_marker(name)
     end = _end_marker(name)
-    begin_idx = file_content.find(begin)
-    end_idx = file_content.find(end)
-    if begin_idx == -1 or end_idx == -1:
+    problem = _marker_problem(file_content, begin, end)
+    if problem is not None:
         _stderr.print(
-            f"Error: markers for {name} not found in {CONFIG_REFERENCE_MD}.\n"
-            f"Expected:\n  {begin}\n  {end}",
+            f"Error: markers for {name} {problem} in {CONFIG_REFERENCE_MD}.\n"
+            f"Expected, once each and in this order:\n  {begin}\n  {end}",
             markup=False,
         )
         sys.exit(1)
+    begin_idx = file_content.find(begin)
+    end_idx = file_content.find(end)
     return (
         file_content[:begin_idx]
         + begin
@@ -325,6 +342,16 @@ def _default_str(info: FieldInfo) -> str:
     return str(default)
 
 
+def table_cell(text: str) -> str:
+    r"""
+    Escape `|` so free text cannot split a Markdown table cell.
+
+    GitHub splits a row on every unescaped `|`, inside a code span too, and
+    renders `\|` as `|` in both.
+    """
+    return text.replace("|", "\\|")
+
+
 def _generate_table(model: type[BaseModel]) -> str:
     """Generate a markdown table from a Pydantic model's fields."""
     rows = ["| Field | Type | Default | Description |", "|---|---|---|---|"]
@@ -337,12 +364,12 @@ def _generate_table(model: type[BaseModel]) -> str:
             field_type = _type_str(info)
             rows.append(
                 f"| {field_name} | {field_type} | {override_default}"
-                f" | {override_desc} |",
+                f" | {table_cell(override_desc)} |",
             )
         else:
             field_type = _type_str(info)
             field_default = _default_str(info)
-            field_desc = info.description or ""
+            field_desc = table_cell(info.description or "")
             rows.append(
                 f"| {field_name} | {field_type} | {field_default} | {field_desc} |",
             )
@@ -471,7 +498,7 @@ def main(
     )
     expected = current
     for name, body in sections.items():
-        expected = _splice_section(expected, name, body)
+        expected = splice_section(expected, name, body)
 
     if check:
         if current == expected:

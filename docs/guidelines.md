@@ -12,6 +12,7 @@ before any change; it overrides the shared guidelines where they disagree.
 - [Area conventions](#area-conventions)
 - [Exceptions](#exceptions)
   - [Keep the SSH timeout keys in plain seconds](#keep-the-ssh-timeout-keys-in-plain-seconds)
+  - [Keep the btrfs test image's Python on the dockerfile manager](#keep-the-btrfs-test-images-python-on-the-dockerfile-manager)
 - [Rules](#rules)
   - [Wrap text nbkp did not author in `rich.text.Text`](#wrap-text-nbkp-did-not-author-in-richtexttext)
   - [Mirror a change to `run` or the sync logic in `sh`](#mirror-a-change-to-run-or-the-sync-logic-in-sh)
@@ -47,6 +48,24 @@ description and the config reference.
 
 - **Retire it** in a major release that accepts durations with a unit (`10s`),
   keeping a bare number as seconds.
+
+### Keep the btrfs test image's Python on the dockerfile manager
+
+The Python base image of
+`nbkp/remote/testkit/dockerbuild/Dockerfile.btrfs-local-test` copies
+`mise.toml`'s `[tools] python` pin, but Renovate tracks it through its
+dockerfile manager, against
+[dependency-automation.md › Give every copy of a pin the same datasource](https://github.com/iglootools/common/blob/main/guidelines/project-setup/dependency-automation.md#give-every-copy-of-a-pin-the-same-datasource).
+The image's uv pin follows the rule.
+
+**Why:** the regex manager the rule calls for cannot refresh a digest, and the
+base image is pinned by digest so that a repointed tag cannot change what the
+btrfs tests run on. Docker Hub dates its tags, so the 14-day hold still applies;
+the two copies only become eligible a few days apart, and the btrfs suite does
+not need the same Python patch release as local development.
+
+- **Retire it** if Renovate can update a digest-pinned image through the
+  datasource of its `mise.toml` twin.
 
 ## Rules
 
