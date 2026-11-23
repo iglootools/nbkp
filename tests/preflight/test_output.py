@@ -446,3 +446,21 @@ class TestCheckDestinationColumn:
 
     def test_writable_shown_when_sentinel_present(self) -> None:
         assert "✗writable" in self._output(sentinel_exists=True)
+
+
+class TestCheckSshEndpointsTable:
+    def test_location_tags_keep_their_brackets(self) -> None:
+        config = Config(
+            ssh_endpoints={
+                "server": SshEndpoint(
+                    slug="server",
+                    host="10.0.0.1",
+                    locations=["home[lan]", "travel"],
+                ),
+            },
+        )
+        buf = StringIO()
+        Console(file=buf, highlight=False, width=400).print(
+            format_human_check({}, {}, {}, config, wrap_in_panel=False),
+        )
+        assert "home[lan], travel" in buf.getvalue()

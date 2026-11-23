@@ -306,7 +306,7 @@ def _build_ssh_endpoints_section(
             Text(server.user or ""),
             Text(server.key or ""),
             ", ".join(server.proxy_jump_chain) or "",
-            ", ".join(server.location_list),
+            Text(", ".join(server.location_list)),
             _ssh_status_text(ssh_endpoint_statuses.get(server.slug), strictness),
         )
 
