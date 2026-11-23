@@ -120,9 +120,9 @@ def _observe_ssh_endpoint_remote(
     Observe a remote volume's SSH endpoint.
 
     SSH reachability is tested implicitly via the first host tool probe (``which
-    rsync``). A connection failure (then or during a later probe, each of which connects
-    anew) marks the host unreachable (or auth-failed) and records the cause; any other
-    exception is a bug and propagates.
+    rsync``). A connection failure (then, or during a later probe if the host drops
+    after the first one) marks the host unreachable (or auth-failed) and records the
+    cause; any other exception is a bug and propagates.
     """
     if volume.slug not in resolved_endpoints:
         return SshEndpointDiagnostics(location_excluded=True)

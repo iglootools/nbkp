@@ -7,8 +7,8 @@
 https://www\.reddit\.com/.*
 
 # asciinema.org times out from GitHub-hosted runners (it answers in under a second from a
-# normal connection). Raising --timeout to 30 and --max-retries to 3 in check-links.yml did
-# not help, so this is an environment quirk rather than a slow host. Six recording URLs were
+# normal connection). Raising lychee's --timeout to 30 and --max-retries to 3 did not
+# help, so this is an environment quirk rather than a slow host. Six recording URLs were
 # timing out per run, costing CI time and burying the real errors in the weekly report.
 # Re-test by dropping this entry and watching one scheduled run.
 https://asciinema\.org/.*

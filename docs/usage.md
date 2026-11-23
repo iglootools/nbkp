@@ -412,7 +412,8 @@ volumes:
 
 udisks unlocks the container, mounts it at `/mnt/seagate8tb`, and preflight
 verifies the fstab entry maps the device to that path (a mismatch yields
-`FSTAB_MOUNTPOINT_MISMATCH`).
+`no fstab entry maps the device to the configured path`, or
+`fstab-mountpoint-mismatch` in JSON output).
 
 > To keep a friendly device name like `/dev/mapper/seagate8tb`, add an optional
 > crypttab entry `seagate8tb UUID=5941f273-... none luks,noauto` and point the

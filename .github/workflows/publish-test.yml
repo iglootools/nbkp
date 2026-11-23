@@ -13,8 +13,8 @@ name: publish-test
 # so the code essentially needs to be duplicated in the `publish.yml` and `publish-test.yml` workflows.
 
 on:
-  # The workflow is usually triggered when the release workflow completes, but it can also be re-triggered manually if needed using
-  # gh workflow run publish-test.yml --ref <tag>
+  # Triggered manually using
+  # gh workflow run publish-test.yml --ref <branch-or-tag>
   # gh run list --workflow publish-test.yml
   workflow_dispatch:
   repository_dispatch:
