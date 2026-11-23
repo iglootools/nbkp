@@ -15,7 +15,7 @@ them, so a new preflight error is one new :class:`Scenario` added to
 from nbkp.config import Config, SyncEndpoint
 from nbkp.config.testkit import base_ssh_endpoints, base_volumes
 from nbkp.preflight.status.result import PreflightResult
-from nbkp.preflight.testkit.common import demo_ssh_statuses
+from nbkp.preflight.testkit.common import assemble_preflight_result, demo_ssh_statuses
 from nbkp.preflight.testkit.troubleshoot.host_tools import (
     BTRFS_NOT_DETECTED,
     HOST_TOOL_ERRORS,
@@ -139,19 +139,13 @@ def troubleshoot_data(config: Config) -> PreflightResult:
         for vs in (*shared.reported_volumes, *(v for r in results for v in r.volumes))
     }
     sync_statuses = {ss.slug: ss for r in results for ss in r.syncs}
-    return PreflightResult(
+    return assemble_preflight_result(
+        vol_statuses,
+        sync_statuses,
         # The troubleshoot output collects the other SSH statuses from the
         # statuses embedding them.
         ssh_endpoint_statuses={
             **{ssh.slug: ssh for r in results for ssh in r.standalone_ssh_endpoints},
             **demo_ssh_statuses(vol_statuses, sync_statuses),
         },
-        volume_statuses=vol_statuses,
-        source_endpoint_statuses={
-            slug: ss.source_endpoint_status for slug, ss in sync_statuses.items()
-        },
-        destination_endpoint_statuses={
-            slug: ss.destination_endpoint_status for slug, ss in sync_statuses.items()
-        },
-        sync_statuses=sync_statuses,
     )
