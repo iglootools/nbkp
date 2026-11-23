@@ -60,7 +60,7 @@ from nbkp.run.pipeline import (
     run_failed,
 )
 from nbkp.sync import ProgressMode, RunOptions, SyncResult, result_severity
-from nbkp.sync.output import build_human_results_sections
+from nbkp.sync.output import build_human_results_sections, build_run_preview_sections
 
 _ABORT_DETAIL_INDENT = 2
 
@@ -417,6 +417,13 @@ def _results_panel(
     }
     sections = [
         *build_rich_tree_sections(cfg, sync_severities),
+        # The commands a real run would execute. The script sh generates has no
+        # such preview: the script is itself the list of commands it runs.
+        *(
+            build_run_preview_sections(pipeline.preflight.sync_statuses, cfg, resolved)
+            if dry_run
+            else []
+        ),
         Text(""),
         *build_human_results_sections(
             pipeline.results,
