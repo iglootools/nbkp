@@ -18,10 +18,19 @@ from rich.console import Console
 
 from nbkp.cli import app
 from nbkp.clidisplay import OutputFormat
+from nbkp.cliwiring.credentials import prompt_passphrase
 from nbkp.cliwiring.disks import show_plan
 from nbkp.cliwiring.lock import hold_run_lock
-from nbkp.config import Config, CredentialProvider
+from nbkp.config import (
+    Config,
+    CredentialProvider,
+    LocalVolume,
+    LuksEncryptionConfig,
+    MountConfig,
+    Volume,
+)
 from nbkp.config.testkit import write_config
+from nbkp.credentials import PromptFn
 from nbkp.disks import MountResult, UmountResult, any_failed, refused_by_polkit
 from nbkp.disks.models import (
     LifecycleFailure,
@@ -32,11 +41,10 @@ from nbkp.disks.output import format_plan_line
 from nbkp.disks.plan import MountAction, VolumePlan, plan_incomplete
 from tests.fakes import FakeCommandRunner, FakeRunLock, completed, fake_runtime
 from tests.fixtures.cli import runner
-from tests.fixtures.disks import UUID, encrypted_volume
+from tests.fixtures.disks import UUID, encrypted_volume, locked_drive_host
 from tests.preflight.fake_hosts import FAILS
 
 _CLEARTEXT = f"/dev/mapper/luks-{UUID}"
-_LOCKED = completed(stdout="sdb part\n")
 _UNLOCKED = completed(stdout=f"sdb part\nluks-{UUID} crypt\n")
 _MOUNTED = completed(stdout="/mnt/enc\n")
 _NOT_MOUNTED = completed(1)
@@ -59,15 +67,6 @@ def run_from_config_dir(tmp_path: Path, chdir: Callable[[Path], None]) -> None:
     """
     chdir(tmp_path)
     write_config(tmp_path, _config())
-
-
-def _locked_drive() -> FakeCommandRunner:
-    """``enc`` plugged in and locked; unlocking and mounting succeed."""
-    return (
-        FakeCommandRunner()
-        .on("lsblk", returns=[_LOCKED, _UNLOCKED])
-        .on("findmnt", "--source", returns=[_NOT_MOUNTED, _MOUNTED])
-    )
 
 
 def _mounted_drive(**udisks: subprocess.CompletedProcess[str]) -> FakeCommandRunner:
@@ -190,7 +189,7 @@ class TestUnknownNames:
 
 class TestMount:
     def test_unlocks_and_mounts(self) -> None:
-        run = _locked_drive()
+        run = locked_drive_host()
 
         exit_code, output = _invoke(run, "mount", "-o", "json")
 
@@ -202,7 +201,7 @@ class TestMount:
         assert unlock.stdin == "secret"
 
     def test_failure_is_reported_in_json(self) -> None:
-        run = _locked_drive().on(
+        run = locked_drive_host().on(
             "udisksctl",
             "unlock",
             returns=completed(1, stderr="bad key"),
@@ -224,7 +223,7 @@ class TestMount:
         }
 
     def test_polkit_refusal_suggests_setup_auth(self) -> None:
-        run = _locked_drive().on(
+        run = locked_drive_host().on(
             "udisksctl",
             "unlock",
             returns=completed(1, stderr="Not Authorized to perform operation"),
@@ -236,7 +235,7 @@ class TestMount:
         assert "nbkp disks setup-auth -c config.yaml" in output
 
     def test_failure_suggests_troubleshoot(self) -> None:
-        run = _locked_drive().on(
+        run = locked_drive_host().on(
             "udisksctl",
             "mount",
             returns=completed(1, stderr="mount failed"),
@@ -278,6 +277,126 @@ class TestUmount:
         assert "nbkp preflight troubleshoot -c config.yaml -N private" in output
 
 
+_OTHER_UUID = "0c6f4a52-3b1e-4d7a-9f0e-2b8c5d1e7a90"
+
+
+def _invoke_prompting(
+    tmp_path: Path,
+    run: FakeCommandRunner,
+    prompt: PromptFn | None = None,
+    *,
+    volumes: dict[str, Volume] | None = None,
+    stdin: str | None = None,
+) -> tuple[int, str]:
+    """
+    Run ``disks mount`` with ``credential-provider: prompt``.
+
+    *prompt* asks for the passphrases; by default, being asked fails the test.
+    """
+    write_config(
+        tmp_path,
+        Config(
+            credential_provider=CredentialProvider.PROMPT,
+            volumes=volumes or {"enc": encrypted_volume()},
+        ),
+    )
+    result = runner.invoke(
+        app,
+        ["disks", "mount", "-c", "config.yaml"],
+        obj=fake_runtime(run=run, prompt_passphrase=prompt),
+        input=stdin,
+    )
+    return result.exit_code, result.output
+
+
+def _recording_prompt() -> tuple[list[str], PromptFn]:
+    """Return a prompt answering ``typed-secret``, and the ids it was asked for."""
+    asked: list[str] = []
+
+    def prompt(passphrase_id: str) -> str:
+        asked.append(passphrase_id)
+        return "typed-secret"
+
+    return asked, prompt
+
+
+def _shared_passphrase_drive(slug: str, uuid: str) -> LocalVolume:
+    return LocalVolume(
+        slug=slug,
+        path=f"/mnt/{slug}",
+        mount=MountConfig(
+            device_uuid=uuid,
+            encryption=LuksEncryptionConfig(passphrase_id="shared"),
+        ),
+    )
+
+
+class TestPromptProvider:
+    def test_asks_at_unlock_with_hidden_input(self, tmp_path: Path) -> None:
+        run = locked_drive_host()
+
+        exit_code, output = _invoke_prompting(
+            tmp_path,
+            run,
+            prompt_passphrase,
+            stdin="typed-secret\n",
+        )
+
+        assert exit_code == 0, output
+        assert "LUKS passphrase for enc: " in output
+        assert "typed-secret" not in output
+        [unlock] = [c for c in run.calls if c.cmd[:2] == ["udisksctl", "unlock"]]
+        assert unlock.stdin == "typed-secret"
+
+    def test_an_absent_drive_is_never_asked_for(self, tmp_path: Path) -> None:
+        asked, prompt = _recording_prompt()
+
+        _exit_code, output = _invoke_prompting(
+            tmp_path,
+            FakeCommandRunner().on("test", "-e", returns=FAILS),
+            prompt,
+        )
+
+        assert "device not plugged in" in output
+        assert asked == []
+
+    def test_a_passphrase_shared_by_two_drives_is_asked_once(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        asked, prompt = _recording_prompt()
+        run = FakeCommandRunner()
+        for slug, uuid in (("one", UUID), ("two", _OTHER_UUID)):
+            run.on(
+                "lsblk",
+                volume=slug,
+                returns=[
+                    completed(stdout="sdb part\n"),
+                    completed(stdout=f"sdb part\nluks-{uuid} crypt\n"),
+                ],
+            ).on(
+                "findmnt",
+                "--source",
+                volume=slug,
+                returns=[_NOT_MOUNTED, completed(stdout=f"/mnt/{slug}\n")],
+            )
+
+        exit_code, output = _invoke_prompting(
+            tmp_path,
+            run,
+            prompt,
+            volumes={
+                "one": _shared_passphrase_drive("one", UUID),
+                "two": _shared_passphrase_drive("two", _OTHER_UUID),
+            },
+        )
+
+        assert exit_code == 0, output
+        assert asked == ["shared"]
+        unlocks = [c for c in run.calls if c.cmd[:2] == ["udisksctl", "unlock"]]
+        assert [c.stdin for c in unlocks] == ["typed-secret", "typed-secret"]
+
+
 class TestRunLock:
     """Mounting or umounting waits for no one: a held lock fails it at once."""
 
@@ -289,7 +408,7 @@ class TestRunLock:
     ) -> None:
         state_home = tmp_path / "state"
         lock_path = state_home / "nbkp" / "run.lock"
-        run = _locked_drive() if command == "mount" else _mounted_drive()
+        run = locked_drive_host() if command == "mount" else _mounted_drive()
         runtime = fake_runtime(
             run=run,
             environ={
@@ -316,7 +435,7 @@ class TestRunLock:
     def test_a_dry_run_takes_no_lock(self, command: str) -> None:
         lock = FakeRunLock()
         runtime = fake_runtime(
-            run=_locked_drive(),
+            run=locked_drive_host(),
             environ={"NBKP_PASSPHRASE_ENC": "secret"},
             run_lock=lock,
         )
@@ -333,7 +452,7 @@ class TestRunLock:
 
 class TestDryRun:
     def test_mount_dry_run_plans_without_mounting(self) -> None:
-        run = _locked_drive()
+        run = locked_drive_host()
 
         exit_code, output = _invoke(run, "mount", "--dry-run", "-o", "json")
 

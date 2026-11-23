@@ -28,6 +28,25 @@ def encrypted_volume(path: str = "/mnt/enc") -> LocalVolume:
     )
 
 
+def locked_drive_host() -> FakeCommandRunner:
+    """Script a host where ``enc`` is plugged in and locked; unlocking it succeeds."""
+    return (
+        FakeCommandRunner()
+        .on(
+            "lsblk",
+            returns=[
+                completed(stdout="sdb part\n"),
+                completed(stdout=f"sdb part\nluks-{UUID} crypt\n"),
+            ],
+        )
+        .on(
+            "findmnt",
+            "--source",
+            returns=[completed(1), completed(stdout="/mnt/enc\n")],
+        )
+    )
+
+
 def mounted_drive_host(
     lock: subprocess.CompletedProcess[str],
     *,

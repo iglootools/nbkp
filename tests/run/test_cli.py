@@ -18,8 +18,9 @@ from rich.console import Console
 
 from nbkp.cli import app
 from nbkp.clidisplay import echo_json
+from nbkp.cliwiring.credentials import prompt_passphrase
 from nbkp.cliwiring.lock import hold_run_lock
-from nbkp.config import Config
+from nbkp.config import Config, CredentialProvider
 from nbkp.config.testkit import write_config
 from nbkp.disks import UmountResult
 from nbkp.policy import Strictness
@@ -35,7 +36,13 @@ from tests.fakes import (
     fake_runtime,
 )
 from tests.fixtures.cli import runner
-from tests.fixtures.disks import BUSY, LOCK_FAILED, encrypted_volume, mounted_drive_host
+from tests.fixtures.disks import (
+    BUSY,
+    LOCK_FAILED,
+    encrypted_volume,
+    locked_drive_host,
+    mounted_drive_host,
+)
 from tests.fixtures.preflight import (
     preflight,
     sample_all_active_sync_statuses,
@@ -537,3 +544,29 @@ class TestUmountFailure:
         assert umount["success"] is False
         assert umount["failure_reason"] == "lock-failed"
         assert umount["warning"] == "LUKS container still unlocked, manual lock needed"
+
+
+class TestPromptProvider:
+    def test_asks_for_the_passphrase_at_unlock(self, tmp_path: Path) -> None:
+        config = nas_config()
+        config = config.model_copy(
+            update={
+                "credential_provider": CredentialProvider.PROMPT,
+                "volumes": {**config.volumes, "enc": encrypted_volume()},
+            },
+        )
+        config_path = write_config(tmp_path, config)
+        run = healthy_nas(locked_drive_host())
+
+        result = runner.invoke(
+            app,
+            ["run", "-c", str(config_path)],
+            obj=fake_runtime(run=run, prompt_passphrase=prompt_passphrase),
+            input="typed-secret\n",
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "LUKS passphrase for enc: " in result.output
+        assert "typed-secret" not in result.output
+        [unlock] = [c for c in run.calls if c.cmd[:2] == ["udisksctl", "unlock"]]
+        assert unlock.stdin == "typed-secret"
