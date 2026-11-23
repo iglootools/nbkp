@@ -55,7 +55,8 @@ def collect_ssh_endpoint_statuses(
     """
     Extract the SSH endpoint statuses embedded in volume statuses.
 
-    They feed the SSH Endpoints table. First-seen wins for duplicate slugs.
+    They feed the SSH Endpoints table, in order of first appearance; the
+    first status seen for a slug wins over later ones.
     """
     all_ssh = [
         *[vs.ssh_endpoint_status for vs in vol_statuses.values()],
@@ -65,8 +66,10 @@ def collect_ssh_endpoint_statuses(
             for ep in [ss.source_endpoint_status, ss.destination_endpoint_status]
         ],
     ]
-    # dict.fromkeys-style: first occurrence wins
-    return {s.slug: s for s in reversed(all_ssh)}
+    # Iterating in reverse lets earlier statuses overwrite later ones, but
+    # leaves the keys in reverse order, so the order comes from fromkeys.
+    first_seen = {s.slug: s for s in reversed(all_ssh)}
+    return {slug: first_seen[slug] for slug in dict.fromkeys(s.slug for s in all_ssh)}
 
 
 LOCALHOST_SSH_STATUS = SshEndpointStatus.from_diagnostics(
