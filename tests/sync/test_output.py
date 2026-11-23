@@ -16,6 +16,7 @@ from nbkp.config import (
 from nbkp.preflight import (
     SyncErrorKind,
 )
+from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.snapshots import SnapshotOp
 from nbkp.snapshots.common import create_snapshot_timestamp
 from nbkp.sync.output import (
@@ -30,6 +31,7 @@ from nbkp.sync.results import (
     SyncWarningKind,
 )
 from tests.fixtures.preflight import btrfs_config, local_vol_statuses, sync_status
+from tests.sync.runner_helpers import make_local_config, make_snapshot_config
 
 
 def _render_sections(sections: list[RenderableType]) -> str:
@@ -329,3 +331,72 @@ class TestRunResultsWarnings:
                 ),
             },
         ]
+
+
+class TestRunResultsSnapshot:
+    SNAPSHOT = "/dst/snapshots/2026-03-06T14:30:00.000Z"
+
+    def _render(self, config: Config, result: SyncResult) -> str:
+        return _render_sections(
+            build_human_results_sections(
+                [result],
+                dry_run=False,
+                config=config,
+                resolved_endpoints=resolve_all_endpoints(config),
+            ),
+        )
+
+    def _succeeded(
+        self,
+        *,
+        snapshot_path: str | None = None,
+        pruned_paths: tuple[str, ...] | None = None,
+    ) -> SyncResult:
+        return SyncResult.succeeded(
+            "s1",
+            dry_run=False,
+            proc=subprocess.CompletedProcess(
+                args=[],
+                returncode=0,
+                stdout="",
+                stderr="",
+            ),
+            snapshot_path=snapshot_path,
+            pruned_paths=pruned_paths,
+        )
+
+    def test_snapshot_path_shown_bare_when_destination_is_local(self) -> None:
+        text = self._render(
+            make_local_config(),
+            self._succeeded(snapshot_path=self.SNAPSHOT),
+        )
+        assert f"Snapshot: {self.SNAPSHOT}" in text
+        assert "nas.local" not in text
+
+    def test_snapshot_path_prefixed_with_host_when_destination_is_remote(
+        self,
+    ) -> None:
+        text = self._render(
+            make_snapshot_config(),
+            self._succeeded(snapshot_path=self.SNAPSHOT),
+        )
+        assert f"Snapshot: nas.local:{self.SNAPSHOT}" in text
+
+    def test_pruned_count_shown_when_destination_is_local(self) -> None:
+        result = self._succeeded(
+            snapshot_path=self.SNAPSHOT,
+            pruned_paths=("/dst/snapshots/a", "/dst/snapshots/b"),
+        )
+        assert "Pruned: 2 snapshot(s)" in self._render(make_local_config(), result)
+
+    def test_pruned_count_shown_when_destination_is_remote(self) -> None:
+        result = self._succeeded(
+            snapshot_path=self.SNAPSHOT,
+            pruned_paths=("/dst/snapshots/a",),
+        )
+        assert "Pruned: 1 snapshot(s)" in self._render(make_snapshot_config(), result)
+
+    def test_snapshot_and_pruned_lines_absent_when_result_has_neither(self) -> None:
+        text = self._render(make_snapshot_config(), self._succeeded())
+        assert "Snapshot:" not in text
+        assert "Pruned:" not in text
