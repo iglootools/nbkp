@@ -17,6 +17,9 @@ dependencies = [
   "paramiko>=5.0,<6.0",
   "jinja2>=3.0,<4.0",
   "pydantic>=2.14.1,<3.0.0",
+  # Imported directly (PydanticCustomError, ErrorDetails, which pydantic does not
+  # re-export), so its major is bounded here. pydantic pins the exact release it needs.
+  "pydantic-core>=2.50,<3.0",
   "pyyaml>=6.0,<7.0",
   "typer>=0.27.0,<1.0.0",
   # Imported directly for all output, not only through typer, which may leave it unbounded
