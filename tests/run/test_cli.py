@@ -399,7 +399,28 @@ class TestPreflightAbort:
         assert data["results"] == []
         # Location flags are covered by TestTroubleshootCommand: this config
         # defines no locations, so the CLI rejects them here.
-        assert data["hint"] == _HINT
+        assert data["hint"] == (
+            "nbkp preflight troubleshoot -S ignore-none -c conf/nbkp.yaml -N private"
+        )
+
+    def test_json_hint_leaves_the_drives_alone_when_the_run_did(
+        self,
+        nas_config_file: str,
+    ) -> None:
+        exit_code, output = _invoke(
+            nas_config_file,
+            "--no-mount",
+            "-S",
+            "ignore-none",
+            "-o",
+            "json",
+            run=_source_sentinel_missing(),
+        )
+
+        assert exit_code == 1
+        assert json.loads(output)["hint"] == (
+            "nbkp preflight troubleshoot -S ignore-none --no-mount -c conf/nbkp.yaml"
+        )
 
 
 class TestUnknownSyncFilter:
