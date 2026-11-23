@@ -174,13 +174,17 @@ class SyncResult(BaseModel):
         pruned_paths: tuple[str, ...] | None = None,
         warnings: tuple[SyncWarning, ...] = (),
     ) -> SyncResult:
-        """Return the result of a sync whose rsync run *proc* succeeded."""
+        """
+        Return the result of a sync whose rsync run *proc* succeeded.
+
+        Its output keeps stderr too: rsync writes its warnings there.
+        """
         return SyncResult(
             sync_slug=slug,
             outcome=SyncOutcome.SUCCESS,
             dry_run=dry_run,
             rsync_exit_code=proc.returncode,
-            output=proc.stdout,
+            output=proc.stdout + proc.stderr,
             snapshot_path=snapshot_path,
             pruned_paths=pruned_paths,
             warnings=warnings,
