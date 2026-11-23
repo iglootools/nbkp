@@ -202,11 +202,6 @@ combine-as-imports = true
 # build-scripts/ holds scripts, not a package: this lets tests/build_scripts/ import them.
 # pyright's extraPaths below does the same for type checking.
 pythonpath = ["build-scripts"]
-markers = [
-  "e2e_docker: End-to-end tests requiring Docker",
-  "integration_docker: Component integration tests requiring Docker",
-  "integration_fs: Component integration tests using local filesystem",
-]
 
 [tool.pyright]
 include = ["nbkp", "tests", "build-scripts"]
