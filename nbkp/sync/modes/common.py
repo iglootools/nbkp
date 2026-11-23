@@ -129,11 +129,7 @@ def _rsync_warnings(proc: subprocess.CompletedProcess[str]) -> tuple[SyncWarning
         return (
             SyncWarning(
                 kind=SyncWarningKind.VANISHED_FILES,
-                message=(
-                    "Some files vanished from the source during the transfer"
-                    f" (rsync exit code {RSYNC_VANISHED_FILES_EXIT}); everything"
-                    " else was copied"
-                ),
+                exit_code=proc.returncode,
             ),
         )
     else:
@@ -222,7 +218,7 @@ def _prune(
         )
         return (tuple(pruned), ())
     except SnapshotOperationError as e:
-        warning = SyncWarning(kind=SyncWarningKind.PRUNE, message=f"Prune failed: {e}")
+        warning = SyncWarning.snapshot_failed(SyncWarningKind.PRUNE, e)
         deleted = e.deleted if isinstance(e, SnapshotPruneError) else None
         return (deleted, (warning,))
 

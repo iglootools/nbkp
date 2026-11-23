@@ -4,6 +4,7 @@ from io import StringIO
 import pytest
 from rich.console import Console, RenderableType
 
+from nbkp.credentials import CredentialError, CredentialErrorKind
 from nbkp.disks import MountCapabilities
 from nbkp.disks.lifecycle import MountFailureKind, MountResult, UmountResult
 from nbkp.disks.models import LifecycleFailure, LifecycleStep, UmountFailureKind
@@ -13,6 +14,7 @@ from nbkp.disks.output import (
     error_label,
     format_volume_status_label,
     mount_failure_detail,
+    mount_result_json,
     mount_state_icon,
     umount_failure_detail,
     umount_failure_warning,
@@ -270,8 +272,18 @@ class TestMountFailureDetail:
             ),
             (
                 MountFailureKind.PASSPHRASE_NOT_AVAILABLE,
-                LifecycleFailure(passphrase_id="usb", message="not in keyring"),
-                "passphrase 'usb' not available: not in keyring",
+                LifecycleFailure(
+                    passphrase_id="usb",
+                    credential_error=CredentialError(
+                        CredentialErrorKind.ENV_UNSET,
+                        env_var="NBKP_PASSPHRASE_USB",
+                    ),
+                ),
+                (
+                    "passphrase 'usb' not available: Environment variable"
+                    " 'NBKP_PASSPHRASE_USB' not set. Export it with:"
+                    " export NBKP_PASSPHRASE_USB=..."
+                ),
             ),
             (
                 MountFailureKind.NOT_AUTHORIZED,
@@ -325,6 +337,29 @@ class TestMountFailureDetail:
 
     def test_success_has_no_detail(self) -> None:
         assert mount_failure_detail(MountResult("v", success=True)) is None
+
+    def test_credential_error_json_keeps_message_and_adds_kind(self) -> None:
+        """The JSON names the credential error's kind next to its first line."""
+        failure = LifecycleFailure(
+            passphrase_id="usb",
+            credential_error=CredentialError(
+                CredentialErrorKind.COMMAND_FAILED,
+                command=["pass", "show", "usb"],
+                exit_code=1,
+                detail="no such entry",
+            ),
+        )
+        result = MountResult(
+            "v",
+            success=False,
+            failure_reason=MountFailureKind.PASSPHRASE_NOT_AVAILABLE,
+            failure=failure,
+        )
+        assert mount_result_json(result)["failure"] == {
+            "passphrase_id": "usb",
+            "message": "Credential command failed (exit 1): pass show usb",
+            "credential_error": "command-failed",
+        }
 
 
 class TestUmountFailureDetail:

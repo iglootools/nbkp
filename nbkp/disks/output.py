@@ -1,7 +1,7 @@
 """Render ``disks`` status, mount, umount and plan results as tables, text and JSON."""
 
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict
+from dataclasses import fields
 
 from rich.table import Table
 from rich.text import Text
@@ -12,6 +12,7 @@ from nbkp.clidisplay import (
     severity_style,
     severity_symbol,
 )
+from nbkp.credentials.output import credential_error_message
 from nbkp.disks.lifecycle import MountResult, UmountResult
 from nbkp.disks.models import (
     LifecycleFailure,
@@ -226,7 +227,8 @@ def _mount_failure_detail(reason: MountFailureKind, failure: LifecycleFailure) -
             return f"device not plugged in (UUID: {failure.device_uuid})"
         case MountFailureKind.PASSPHRASE_NOT_AVAILABLE, _:
             return (
-                f"passphrase '{failure.passphrase_id}' not available: {failure.message}"
+                f"passphrase '{failure.passphrase_id}' not available:"
+                f" {_credential_error_line(failure)}"
             )
         case MountFailureKind.NOT_AUTHORIZED, _:
             return f"{_step(failure)} not authorized — polkit rule not configured"
@@ -281,12 +283,33 @@ def umount_failure_warning(result: UmountResult) -> str | None:
             return "volume may still be mounted, manual umount needed"
 
 
+def _credential_error_line(failure: LifecycleFailure) -> str | None:
+    """Return the first line of the credential error's message: a detail is one line."""
+    error = failure.credential_error
+    return (
+        credential_error_message(error).splitlines()[0]
+        if error is not None
+        else failure.message
+    )
+
+
 def _failure_json(failure: LifecycleFailure) -> dict[str, object]:
-    return {
-        key: value.value if isinstance(value, LifecycleStep) else value
-        for key, value in asdict(failure).items()
-        if value is not None
+    facts: dict[str, object] = {
+        f.name: value.value if isinstance(value, LifecycleStep) else value
+        for f in fields(failure)
+        if f.name != "credential_error"
+        and (value := getattr(failure, f.name)) is not None
     }
+    error = failure.credential_error
+    return (
+        facts
+        if error is None
+        else {
+            **facts,
+            "message": _credential_error_line(failure),
+            "credential_error": error.kind.value,
+        }
+    )
 
 
 def mount_result_json(result: MountResult) -> dict[str, object]:

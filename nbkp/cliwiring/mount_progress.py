@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from nbkp.clidisplay import StepProgressBar
 from nbkp.config import Config
 from nbkp.credentials import PassphrasePrefetch, prefetch_count
+from nbkp.credentials.output import credential_error_message
 from nbkp.disks import (
     MountResult,
     UmountResult,
@@ -98,7 +99,11 @@ class LifecycleProgress:
                 # reports that.  Prefetch failures are therefore warnings
                 # regardless of strictness.
                 Severity.OK if result.success else Severity.WARNING,
-                result.detail,
+                (
+                    credential_error_message(result.error)
+                    if result.error is not None
+                    else None
+                ),
             )
 
     def on_mount_start(self, slug: str) -> None:

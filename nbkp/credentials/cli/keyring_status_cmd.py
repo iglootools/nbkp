@@ -13,12 +13,14 @@ from nbkp.cliwiring.options import CONFIG_OPTION, OUTPUT_OPTION
 from nbkp.cliwiring.runtime import runtime_of
 from nbkp.config import Config
 from nbkp.credentials import (
+    CredentialError,
     PassphrasePrefetch,
     collect_passphrase_ids,
     is_prefetchable,
     prefetch_passphrases,
     retrieve_passphrase,
 )
+from nbkp.credentials.output import credential_error_message
 from nbkp.policy import Severity
 
 
@@ -83,10 +85,14 @@ def keyring_status_json(
 
 
 def _result_json(result: PassphrasePrefetch) -> dict[str, Any]:
+    error = result.error
     return {
         "available": result.success,
-        **({"error": result.detail} if result.detail else {}),
-        **({"reason": result.reason.value} if result.reason else {}),
+        **(
+            {"error": credential_error_message(error), "reason": error.kind.value}
+            if error is not None
+            else {}
+        ),
     }
 
 
@@ -127,7 +133,7 @@ def _status(result: PassphrasePrefetch) -> tuple[Severity, str]:
     match result:
         case PassphrasePrefetch(success=True):
             return Severity.OK, "available"
-        case PassphrasePrefetch(detail=str() as detail) if detail:
-            return Severity.ERROR, f"missing ({detail})"
+        case PassphrasePrefetch(error=CredentialError() as error):
+            return Severity.ERROR, f"missing ({credential_error_message(error)})"
         case _:
             return Severity.ERROR, "missing"

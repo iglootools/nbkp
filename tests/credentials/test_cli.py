@@ -22,7 +22,12 @@ from nbkp.config import (
     MountConfig,
 )
 from nbkp.config.testkit import write_config
-from nbkp.credentials import CommandFn, CredentialErrorKind, PassphrasePrefetch
+from nbkp.credentials import (
+    CommandFn,
+    CredentialError,
+    CredentialErrorKind,
+    PassphrasePrefetch,
+)
 from nbkp.credentials.cli.keyring_status_cmd import keyring_status_json
 from tests.fakes import completed, fake_runtime
 from tests.fixtures.cli import runner
@@ -71,8 +76,10 @@ class TestKeyringStatusJson:
             "disk[1]",
             ("usb",),
             success=False,
-            detail="missing",
-            reason=CredentialErrorKind.NOT_FOUND,
+            error=CredentialError(
+                CredentialErrorKind.NOT_FOUND,
+                passphrase_id="disk[1]",
+            ),
         )
 
         assert keyring_status_json(_config(CredentialProvider.KEYRING), [missing]) == {
@@ -82,7 +89,10 @@ class TestKeyringStatusJson:
                 "disk[1]": {
                     "volumes": ["usb"],
                     "available": False,
-                    "error": "missing",
+                    "error": (
+                        "No passphrase found in keyring for id 'disk[1]'."
+                        " Store it with: keyring set nbkp disk[1]"
+                    ),
                     "reason": "not-found",
                 },
             },

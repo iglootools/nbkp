@@ -61,12 +61,7 @@ def _cleanup_orphans(sync: SyncConfig, ctx: RunContext) -> tuple[SyncWarning, ..
             run=ctx.run_command,
         )
     except SnapshotOperationError as e:
-        return (
-            SyncWarning(
-                kind=SyncWarningKind.ORPHAN_CLEANUP,
-                message=f"Orphaned snapshot cleanup failed: {e}",
-            ),
-        )
+        return (SyncWarning.snapshot_failed(SyncWarningKind.ORPHAN_CLEANUP, e),)
     else:
         return ()
 
@@ -160,11 +155,6 @@ def _discard_snapshot_dir(
             run=ctx.run_command,
         )
     except SnapshotOperationError as e:
-        return (
-            SyncWarning(
-                kind=SyncWarningKind.SNAPSHOT_DIR_CLEANUP,
-                message=f"Failed to remove snapshot dir after rsync failure: {e}",
-            ),
-        )
+        return (SyncWarning.snapshot_failed(SyncWarningKind.SNAPSHOT_DIR_CLEANUP, e),)
     else:
         return ()

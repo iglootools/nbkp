@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, computed_field, model_validator
 
 from nbkp.policy import Severity, Strictness, classify_severity
 from nbkp.preflight import SyncErrorKind
+from nbkp.snapshots import SnapshotOp, SnapshotOperationError
 
 
 class SyncOutcome(StrEnum):
@@ -112,12 +113,30 @@ class SyncWarningKind(StrEnum):
 
 
 class SyncWarning(BaseModel):
-    """What went wrong without failing a sync, and the message saying how."""
+    """
+    What went wrong without failing a sync, and the facts that explain it.
+
+    A best-effort snapshot step sets *op*, *path* and *stderr* from the
+    :class:`SnapshotOperationError` it caught; ``VANISHED_FILES`` sets *exit_code*,
+    rsync's. The message users see is rendered by ``nbkp.sync.output``.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     kind: SyncWarningKind
-    message: str
+    op: SnapshotOp | None = None
+    path: str | None = None
+    stderr: str | None = None
+    exit_code: int | None = None
+
+    @classmethod
+    def snapshot_failed(
+        cls,
+        kind: SyncWarningKind,
+        error: SnapshotOperationError,
+    ) -> SyncWarning:
+        """Return the warning of a best-effort snapshot step that raised *error*."""
+        return cls(kind=kind, op=error.op, path=error.path, stderr=error.stderr.strip())
 
 
 class SyncResult(BaseModel):

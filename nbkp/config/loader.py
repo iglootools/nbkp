@@ -17,16 +17,10 @@ _FILENAME = "config.yaml"
 type ConfigDirFn = Callable[[str], str]
 """Where the platform keeps an app's config directory, given the app name
 (``platformdirs.user_config_dir`` / ``site_config_dir``)."""
-_CONFIG_REFERENCE_URL = (
-    "https://github.com/iglootools/nbkp/blob/main/docs/config-reference.md"
-)
-_CONFIG_EXAMPLES_URL = (
-    "https://github.com/iglootools/nbkp/tree/main/docs/config-examples"
-)
 
 
 class ConfigErrorKind(StrEnum):
-    """Why the config could not be loaded: the ``reason`` of a :class:`ConfigError`."""
+    """Why the config could not be loaded: the ``kind`` of a :class:`ConfigError`."""
 
     FILE_NOT_FOUND = "file-not-found"
     UNREADABLE = "unreadable"
@@ -39,50 +33,30 @@ class ConfigErrorKind(StrEnum):
 
 class ConfigError(Exception):
     """
-    The config could not be loaded; *reason* says why.
+    The config could not be loaded; *kind* says why.
 
     *path* is the file at fault (the SSH config for ``INVALID_SSH_CONFIG``),
     *searched* the paths looked through when no file was found, and *detail*
-    the underlying error.
+    the underlying error. The message users see is rendered by
+    ``nbkp.config.output`` from these fields.
     """
 
     def __init__(
         self,
-        reason: ConfigErrorKind,
+        kind: ConfigErrorKind,
         *,
         path: str | Path | None = None,
         searched: tuple[Path, ...] = (),
         detail: str | None = None,
     ) -> None:
-        """Build the error from its reason and the context that explains it."""
-        self.reason = reason
+        """Build the error from its kind and the context that explains it."""
+        self.kind = kind
         self.path = path
         self.searched = searched
         self.detail = detail
-        super().__init__(self._message())
-
-    def _message(self) -> str:
-        match self.reason:
-            case ConfigErrorKind.FILE_NOT_FOUND:
-                return f"Config file not found: {self.path}"
-            case ConfigErrorKind.UNREADABLE:
-                return f"Cannot read config file {self.path}: {self.detail}"
-            case ConfigErrorKind.NO_CONFIG_FOUND:
-                searched = ", ".join(str(p) for p in self.searched)
-                return (
-                    f"No config file found. Searched: {searched}."
-                    f" Create one at {self.searched[0]} or pass --config PATH"
-                    f" (format: {_CONFIG_REFERENCE_URL}). Example configs to start"
-                    f" from: {_CONFIG_EXAMPLES_URL}."
-                )
-            case ConfigErrorKind.INVALID_YAML:
-                return f"Invalid YAML in {self.path}: {self.detail}"
-            case ConfigErrorKind.NOT_A_MAPPING:
-                return f"Config file {self.path} must be a YAML mapping"
-            case ConfigErrorKind.VALIDATION:
-                return f"Invalid config {self.path}: {self.detail}"
-            case ConfigErrorKind.INVALID_SSH_CONFIG:
-                return f"Invalid SSH config {self.path}: {self.detail}"
+        super().__init__(
+            ": ".join(str(part) for part in (kind, path, detail) if part is not None),
+        )
 
 
 def _xdg_config_home(environ: Mapping[str, str], home: Path) -> Path:
@@ -167,7 +141,7 @@ def load_config(
     Load and validate the config file.
 
     Raises ``ConfigError`` when the file is missing or unreadable, is not a YAML
-    mapping, or fails validation; ``reason`` says which.
+    mapping, or fails validation; ``kind`` says which.
     """
     path = find_config_file(
         config_path,

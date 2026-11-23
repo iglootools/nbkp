@@ -14,7 +14,7 @@ from nbkp.preflight import SyncStatus
 from nbkp.preflight.output import format_problems
 from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.snapshots.output import retention_display as _retention_display
-from nbkp.sync.results import SyncOutcome, SyncResult
+from nbkp.sync.results import SyncOutcome, SyncResult, SyncWarning, SyncWarningKind
 from nbkp.sync.rsync import (
     build_rsync_command,
     hard_link_dest_suffix,
@@ -215,7 +215,7 @@ def _result_details(
             else []
         ),
         *([f"Pruned: {len(r.pruned_paths)} snapshot(s)"] if r.pruned_paths else []),
-        *(f"Warning: {w.message}" for w in r.warnings),
+        *(f"Warning: {sync_warning_message(w)}" for w in r.warnings),
         *(
             r.output.strip().split("\n")[-_FAILED_OUTPUT_LINES:]
             if r.output and not r.success
@@ -255,3 +255,44 @@ def build_human_results_sections(
         )
 
     return [table]
+
+
+def sync_warning_message(warning: SyncWarning) -> str:
+    """Render the sentence that says what went wrong without failing the sync."""
+    match warning.kind:
+        case SyncWarningKind.ORPHAN_CLEANUP:
+            return f"Orphaned snapshot cleanup failed: {_snapshot_failure(warning)}"
+        case SyncWarningKind.PRUNE:
+            return f"Prune failed: {_snapshot_failure(warning)}"
+        case SyncWarningKind.SNAPSHOT_DIR_CLEANUP:
+            return (
+                "Failed to remove snapshot dir after rsync failure:"
+                f" {_snapshot_failure(warning)}"
+            )
+        case SyncWarningKind.VANISHED_FILES:
+            return (
+                "Some files vanished from the source during the transfer"
+                f" (rsync exit code {warning.exit_code}); everything else was copied"
+            )
+
+
+def _snapshot_failure(warning: SyncWarning) -> str:
+    return f"{warning.op} failed for {warning.path}: {warning.stderr}"
+
+
+def sync_result_json(result: SyncResult) -> dict[str, object]:
+    """
+    Return a sync result for ``-o json``.
+
+    Each warning keeps its kind and facts, and gains its rendered ``message``.
+    """
+    return {
+        **result.model_dump(mode="json"),
+        "warnings": [
+            {
+                **w.model_dump(mode="json", exclude_none=True),
+                "message": sync_warning_message(w),
+            }
+            for w in result.warnings
+        ],
+    }

@@ -32,4 +32,4 @@ def test_keyring_provider_reports_no_backend() -> None:
     with pytest.raises(CredentialError) as exc_info:
         retrieve_passphrase("any-id", CredentialProvider.KEYRING)
 
-    assert exc_info.value.reason == CredentialErrorKind.BACKEND_UNAVAILABLE
+    assert exc_info.value.kind == CredentialErrorKind.BACKEND_UNAVAILABLE

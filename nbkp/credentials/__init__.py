@@ -1,7 +1,6 @@
 """Credential retrieval for LUKS passphrases."""
 
 import os
-import shlex
 import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -27,17 +26,18 @@ class CredentialErrorKind(StrEnum):
 
 class CredentialError(Exception):
     """
-    A passphrase could not be retrieved; *reason* says why.
+    A passphrase could not be retrieved; *kind* says why.
 
-    The fields that apply to *reason* are set: *passphrase_id* for the keyring,
+    The fields that apply to *kind* are set: *passphrase_id* for the keyring,
     *env_var* for the environment, *command* (and *exit_code*) for a credential
     command, *detail* for the underlying error or the command's stderr, and
-    *provider* and *passphrase_id* for an empty passphrase.
+    *provider* and *passphrase_id* for an empty passphrase. The message users
+    see is rendered by ``nbkp.credentials.output`` from these fields.
     """
 
     def __init__(
         self,
-        reason: CredentialErrorKind,
+        kind: CredentialErrorKind,
         *,
         passphrase_id: str | None = None,
         env_var: str | None = None,
@@ -46,62 +46,21 @@ class CredentialError(Exception):
         detail: str | None = None,
         provider: CredentialProvider | None = None,
     ) -> None:
-        """Build the error from its reason and the fields that apply to it."""
-        self.reason = reason
+        """Build the error from its kind and the fields that apply to it."""
+        self.kind = kind
         self.passphrase_id = passphrase_id
         self.env_var = env_var
         self.command = command
         self.exit_code = exit_code
         self.detail = detail
         self.provider = provider
-        super().__init__(self._message())
-
-    def _message(self) -> str:
-        command = self.command or []
-        match self.reason:
-            case CredentialErrorKind.NOT_INSTALLED:
-                return (
-                    "keyring package not installed."
-                    " Install with: uv tool install 'nbkp[keyring]'"
-                    " (quotes required — the shell would glob the extra otherwise),"
-                    " or switch to another credential-provider."
-                )
-            case CredentialErrorKind.BACKEND_UNAVAILABLE:
-                return (
-                    f"Keyring backend unavailable for id '{self.passphrase_id}':"
-                    f" {self.detail}. Unlock the keyring, configure a backend,"
-                    " or switch to another credential-provider."
-                )
-            case CredentialErrorKind.NOT_FOUND:
-                return (
-                    f"No passphrase found in keyring for id '{self.passphrase_id}'."
-                    f" Store it with: keyring set nbkp {self.passphrase_id}"
-                )
-            case CredentialErrorKind.ENV_UNSET:
-                return (
-                    f"Environment variable '{self.env_var}' not set."
-                    f" Export it with: export {self.env_var}=..."
-                )
-            case CredentialErrorKind.COMMAND_MISSING:
-                return (
-                    "credential-command is required when credential-provider is"
-                    " 'command'"
-                )
-            case CredentialErrorKind.COMMAND_NOT_RUNNABLE:
-                return (
-                    f"Credential command could not be started ({command[0]}):"
-                    f" {self.detail}"
-                )
-            case CredentialErrorKind.COMMAND_FAILED:
-                return (
-                    f"Credential command failed (exit {self.exit_code}):"
-                    f" {shlex.join(command)}\nstderr: {self.detail}"
-                )
-            case CredentialErrorKind.EMPTY:
-                return (
-                    f"Credential provider '{self.provider}' returned an empty"
-                    f" passphrase for id '{self.passphrase_id}'."
-                )
+        super().__init__(
+            ": ".join(
+                str(part)
+                for part in (kind, passphrase_id, env_var, provider, exit_code, detail)
+                if part is not None
+            ),
+        )
 
 
 class PromptNotSuppliedError(ValueError):
@@ -358,14 +317,13 @@ class PassphrasePrefetch:
     """
     The outcome of prefetching one passphrase-id, and the volumes that use it.
 
-    On failure, *detail* holds the error message and *reason* its kind.
+    On failure, *error* says why the passphrase could not be retrieved.
     """
 
     passphrase_id: str
     volumes: tuple[str, ...]
     success: bool
-    detail: str | None = None
-    reason: CredentialErrorKind | None = None
+    error: CredentialError | None = None
 
 
 def prefetch_passphrases(
@@ -430,8 +388,7 @@ def _prefetch_one(
             pid,
             volumes,
             success=False,
-            detail=str(e),
-            reason=e.reason,
+            error=e,
         )
     if on_prefetch_end is not None:
         on_prefetch_end(pid, result)
