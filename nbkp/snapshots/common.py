@@ -20,7 +20,6 @@ from nbkp.fsprotocol import (
     SNAPSHOTS_DIR,
     Snapshot,
     parse_snapshot_listing,
-    parse_snapshot_name,
 )
 from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
@@ -90,7 +89,7 @@ def ensure_after_latest(
         destination_volume(sync, config),
         platform,
     )
-    if latest is not None and parse_snapshot_name(snapshot.name) <= latest.timestamp:
+    if latest is not None and snapshot.timestamp <= latest.timestamp:
         path = f"{snapshots_dir(sync, config)}/{snapshot.name}"
         msg = (
             f"new snapshot {snapshot.name} would not be after the latest "
