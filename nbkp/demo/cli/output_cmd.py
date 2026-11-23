@@ -2,6 +2,7 @@
 
 import contextlib
 import tempfile
+from dataclasses import replace
 from io import StringIO
 from pathlib import Path
 
@@ -19,7 +20,12 @@ from nbkp.ordering.output import (
     format_mermaid_ascii_graph,
     format_rich_tree_graph,
 )
-from nbkp.preflight.output import format_human_check, format_human_troubleshoot
+from nbkp.preflight import collect_issues, gather_remediation_facts
+from nbkp.preflight.output import (
+    TroubleshootContext,
+    format_human_check,
+    format_human_troubleshoot,
+)
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.snapshots.output import format_human_prune_results
 from nbkp.sync.output import format_human_results, format_run_preview
@@ -158,6 +164,22 @@ def _show_prune() -> None:
 def _show_troubleshoot(runtime: Runtime) -> None:
     config = troubleshoot_config()
     preflight = troubleshoot_data(config)
+    issues = collect_issues(
+        preflight.ssh_endpoint_statuses,
+        preflight.volume_statuses,
+        preflight.sync_statuses,
+    )
+    ctx = TroubleshootContext(
+        config=config,
+        resolved_endpoints=resolve_all_endpoints(config),
+    )
+    facts = gather_remediation_facts(
+        issues,
+        config,
+        ctx.resolved_endpoints,
+        ctx.local_user,
+        run=runtime.run,
+    )
     _show(
         "format_human_troubleshoot",
         format_human_troubleshoot(
@@ -165,8 +187,7 @@ def _show_troubleshoot(runtime: Runtime) -> None:
             preflight.volume_statuses,
             preflight.sync_statuses,
             config,
-            resolved_endpoints=resolve_all_endpoints(config),
-            run=runtime.run,
+            context=replace(ctx, facts=facts),
         ),
     )
 

@@ -18,8 +18,7 @@ own case renders an empty or generic fix and nothing else fails.
   in the per-layer fix printer, with actionable remediation text. Fix printers
   are pure rendering: a fix that needs a probed or generated fact (like the
   discovered cleartext mapper or the polkit rule) gets it from
-  `RemediationFacts`, gathered up front in
-  `nbkp/preflight/output/troubleshoot.py`.
+  `RemediationFacts`, gathered up front in `nbkp/preflight/troubleshoot.py`.
 - **Seed / demo test data** (`nbkp/preflight/testkit/troubleshoot/`): add a
   `Scenario` that exercises the new error — its config entries and its statuses
   — to the module for its area, and list it in `SCENARIOS`, so

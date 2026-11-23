@@ -256,8 +256,10 @@ dependencies; the contracts are what reject a new import that breaks a rule:
   lives in `remote/`; config's display code takes the selected endpoints through
   a structural protocol rather than importing them. Transport primitives
   (`run_on_volume`, `check_command_available`) are in `remote/dispatch.py`;
-  preflight-only host probes (sentinels, directories, symlinks, rsync version)
-  are in `preflight/probes.py`.
+  host probes (sentinels, directories, symlinks, rsync version) are in
+  `preflight/probes.py`, which also holds the reads `snapshots/` shares with
+  preflight: listing an endpoint's `snapshots/` and reading a symlink. Each
+  caller wraps them with its own error policy.
 - **Core packages are ordered.** From the top:
 
   ```text
@@ -308,9 +310,11 @@ Domain cores:
   [Preflight Conditional Probing](./internals.md#preflight-conditional-probing):
   observation (`probes.py`, `volume_checks.py`, `endpoint_checks.py`,
   `ssh_checks.py`, `snapshot_checks.py`) and interpretation (`status/`, one
-  module per layer). `output/` renders `check` and `troubleshoot`, including
-  remediation text, and holds the sentence each problem kind is shown as
-  (`messages.py`).
+  module per layer). `troubleshoot.py` collects the issues `troubleshoot`
+  explains and gathers the facts their fixes need (cleartext devices, newest
+  snapshots, polkit rules), probing hosts. `output/` renders `check` and
+  `troubleshoot`, including remediation text, without I/O, and holds the
+  sentence each problem kind is shown as (`messages.py`).
 - **`snapshots/`** — listing, creation and pruning for both backends
   (`btrfs.py`, `hardlinks.py`, shared code in `common.py`), and the
   `snapshots show` / `prune` decisions: which syncs are read, skipped or pruned

@@ -7,8 +7,8 @@ line built from the container UUID therefore never matches on such a host, so
 the fix prefers the device udisks actually created.
 
 Discovery is a live probe (``lsblk``), done while *gathering* facts
-(:func:`gather_remediation_facts`, on a fake host here); rendering only reads
-the gathered :class:`RemediationFacts`.
+(:func:`nbkp.preflight.gather_remediation_facts`, on a fake host here);
+rendering only reads the gathered :class:`RemediationFacts`.
 """
 
 from io import StringIO
@@ -18,6 +18,12 @@ import pytest
 from rich.console import Console
 
 from nbkp.config import Config, LocalVolume, LuksEncryptionConfig, MountConfig
+from nbkp.preflight import (
+    RemediationFacts,
+    TroubleshootIssue,
+    collect_issues,
+    gather_remediation_facts,
+)
 from nbkp.preflight.output import remediation as rem, troubleshoot as ts
 from nbkp.preflight.status.ssh import SshEndpointDiagnostics, SshEndpointStatus
 from nbkp.preflight.status.volume import (
@@ -47,7 +53,7 @@ def _mount(vol: LocalVolume) -> MountConfig:
     return vol.mount
 
 
-def _issues(vol: LocalVolume, error: VolumeErrorKind) -> list[ts.TroubleshootIssue]:
+def _issues(vol: LocalVolume, error: VolumeErrorKind) -> list[TroubleshootIssue]:
     status = VolumeStatus(
         slug=vol.slug,
         config=vol,
@@ -59,18 +65,18 @@ def _issues(vol: LocalVolume, error: VolumeErrorKind) -> list[ts.TroubleshootIss
         diagnostics=VolumeDiagnostics(),
         errors=[error],
     )
-    return ts.collect_issues({}, {vol.slug: status}, {})
+    return collect_issues({}, {vol.slug: status}, {})
 
 
-def _ctx(vol: LocalVolume) -> rem.TroubleshootContext:
-    return rem.TroubleshootContext(config=Config(volumes={vol.slug: vol}))
+def _config(vol: LocalVolume) -> Config:
+    return Config(volumes={vol.slug: vol})
 
 
 class TestCleartextDeviceRendering:
     def test_prefers_the_discovered_mapper(self) -> None:
         """A LUKS2-labelled container unlocks as /dev/mapper/<label>."""
         vol = _volume()
-        facts = rem.RemediationFacts(cleartext_devices={vol.slug: _LABELLED})
+        facts = RemediationFacts(cleartext_devices={vol.slug: _LABELLED})
         device, discovered = rem.cleartext_device(vol, _mount(vol), facts)
         assert device == _LABELLED
         assert discovered is True
@@ -81,7 +87,7 @@ class TestCleartextDeviceRendering:
         device, discovered = rem.cleartext_device(
             vol,
             _mount(vol),
-            rem.RemediationFacts(),
+            RemediationFacts(),
         )
         assert device == f"/dev/mapper/luks-{_UUID}"
         assert discovered is False
@@ -95,7 +101,7 @@ class TestCleartextDeviceRendering:
         silently never matches, so udisks mounts at /run/media instead.
         """
         vol = _volume()
-        facts = rem.RemediationFacts(cleartext_devices={vol.slug: _LABELLED})
+        facts = RemediationFacts(cleartext_devices={vol.slug: _LABELLED})
         device, _ = rem.cleartext_device(vol, _mount(vol), facts)
         assert _UUID not in device
 
@@ -103,7 +109,7 @@ class TestCleartextDeviceRendering:
         vol = _volume()
         ctx = rem.TroubleshootContext(
             config=Config(volumes={vol.slug: vol}),
-            facts=rem.RemediationFacts(cleartext_devices={vol.slug: _LABELLED}),
+            facts=RemediationFacts(cleartext_devices={vol.slug: _LABELLED}),
         )
         buf = StringIO()
         Console(file=buf, width=200, color_system=None).print(
@@ -124,9 +130,11 @@ class TestCleartextDeviceGathering:
             "lsblk",
             returns=completed(stdout="sdb1 part\nseagate8tb-luks crypt\n"),
         )
-        facts = ts.gather_remediation_facts(
+        facts = gather_remediation_facts(
             _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH),
-            _ctx(vol),
+            _config(vol),
+            {},
+            "alice",
             run=run,
         )
         assert facts.cleartext_devices == {vol.slug: _LABELLED}
@@ -138,9 +146,11 @@ class TestCleartextDeviceGathering:
         vol = _volume()
         # A locked container has no crypt child.
         run = FakeCommandRunner().on("lsblk", returns=completed(stdout="sdb1 part\n"))
-        facts = ts.gather_remediation_facts(
+        facts = gather_remediation_facts(
             _issues(vol, VolumeErrorKind.MOUNT_FAILED),
-            _ctx(vol),
+            _config(vol),
+            {},
+            "alice",
             run=run,
         )
         assert facts.cleartext_devices == {}
@@ -149,9 +159,11 @@ class TestCleartextDeviceGathering:
     def test_only_probes_for_fixes_that_print_a_device(self) -> None:
         vol = _volume()
         run = FakeCommandRunner()
-        facts = ts.gather_remediation_facts(
+        facts = gather_remediation_facts(
             _issues(vol, VolumeErrorKind.UNLOCK_FAILED),
-            _ctx(vol),
+            _config(vol),
+            {},
+            "alice",
             run=run,
         )
         assert facts.cleartext_devices == {}
@@ -170,9 +182,11 @@ class TestCleartextDeviceGathering:
             "lsblk",
             returns=FileNotFoundError(2, "No such file or directory", "lsblk"),
         )
-        facts = ts.gather_remediation_facts(
+        facts = gather_remediation_facts(
             _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH),
-            _ctx(vol),
+            _config(vol),
+            {},
+            "alice",
             run=run,
         )
         assert facts.cleartext_devices == {}
@@ -184,9 +198,11 @@ class TestCleartextDeviceGathering:
     def test_survives_a_failed_connection(self, error: Exception) -> None:
         vol = _volume()
         run = FakeCommandRunner().on("lsblk", returns=error)
-        facts = ts.gather_remediation_facts(
+        facts = gather_remediation_facts(
             _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH),
-            _ctx(vol),
+            _config(vol),
+            {},
+            "alice",
             run=run,
         )
         assert facts.cleartext_devices == {}
@@ -197,9 +213,11 @@ class TestCleartextDeviceGathering:
             "lsblk",
             returns=completed(1, stderr="permission denied"),
         )
-        facts = ts.gather_remediation_facts(
+        facts = gather_remediation_facts(
             _issues(vol, VolumeErrorKind.FSTAB_MOUNTPOINT_MISMATCH),
-            _ctx(vol),
+            _config(vol),
+            {},
+            "alice",
             run=run,
         )
         assert facts.cleartext_devices == {}
@@ -208,21 +226,21 @@ class TestCleartextDeviceGathering:
 class TestPolkitRuleGathering:
     def test_gathers_the_rule_for_the_volume_user(self) -> None:
         vol = _volume()
-        ctx = rem.TroubleshootContext(
-            config=Config(volumes={vol.slug: vol}),
-            local_user="alice",
-        )
-        facts = ts.gather_remediation_facts(
+        facts = gather_remediation_facts(
             _issues(vol, VolumeErrorKind.POLKIT_RULES_MISSING),
-            ctx,
+            _config(vol),
+            {},
+            "alice",
         )
         assert set(facts.polkit_rules) == {"alice"}
         assert 'subject.user == "alice"' in facts.polkit_rules["alice"].content
 
     def test_no_rule_without_a_polkit_issue(self) -> None:
         vol = _volume()
-        facts = ts.gather_remediation_facts(
+        facts = gather_remediation_facts(
             _issues(vol, VolumeErrorKind.UNLOCK_FAILED),
-            _ctx(vol),
+            _config(vol),
+            {},
+            "alice",
         )
         assert facts.polkit_rules == {}

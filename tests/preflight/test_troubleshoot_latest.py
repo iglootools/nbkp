@@ -11,7 +11,14 @@ snapshot is listed while *gathering* facts (on a fake host here).
 
 import paramiko
 
-from nbkp.preflight import DestinationEndpointErrorKind, SourceEndpointErrorKind
+from nbkp.preflight import (
+    DestinationEndpointErrorKind,
+    RemediationFacts,
+    SourceEndpointErrorKind,
+    TroubleshootIssue,
+    collect_issues,
+    gather_remediation_facts,
+)
 from nbkp.preflight.output import remediation as rem, troubleshoot as ts
 from tests.fakes import FakeCommandRunner, completed
 from tests.fixtures.preflight import btrfs_config, local_vol_statuses, sync_status
@@ -25,7 +32,7 @@ def _issues(
     *,
     dst_ep_errors: list[DestinationEndpointErrorKind] | None = None,
     src_ep_errors: list[SourceEndpointErrorKind] | None = None,
-) -> list[ts.TroubleshootIssue]:
+) -> list[TroubleshootIssue]:
     config = btrfs_config()
     status = sync_status(
         config,
@@ -34,7 +41,7 @@ def _issues(
         dst_ep_errors=dst_ep_errors,
         src_ep_errors=src_ep_errors,
     )
-    return ts.collect_issues({}, {}, {status.slug: status})
+    return collect_issues({}, {}, {status.slug: status})
 
 
 _INVALID_DST = _issues(
@@ -43,8 +50,8 @@ _INVALID_DST = _issues(
 
 
 def _remediation(
-    issues: list[ts.TroubleshootIssue],
-    facts: rem.RemediationFacts,
+    issues: list[TroubleshootIssue],
+    facts: RemediationFacts,
 ) -> str:
     ctx = rem.TroubleshootContext(config=btrfs_config(), facts=facts)
     data = ts.troubleshoot_json(issues, ctx, has_fatal_errors=True)
@@ -57,18 +64,18 @@ def _remediation(
 
 class TestLatestFixRendering:
     def test_points_latest_at_the_newest_snapshot(self) -> None:
-        facts = rem.RemediationFacts(newest_snapshots={"ep-dst": _NEW})
+        facts = RemediationFacts(newest_snapshots={"ep-dst": _NEW})
         out = _remediation(_INVALID_DST, facts)
         assert f"ln -sfn snapshots/{_NEW} /mnt/dst/latest" in out
         assert "/dev/null" not in out
 
     def test_keeps_dev_null_when_there_is_no_snapshot(self) -> None:
-        facts = rem.RemediationFacts(newest_snapshots={"ep-dst": None})
+        facts = RemediationFacts(newest_snapshots={"ep-dst": None})
         out = _remediation(_INVALID_DST, facts)
         assert "ln -sfn /dev/null /mnt/dst/latest" in out
 
     def test_warns_against_dev_null_when_the_snapshots_are_unknown(self) -> None:
-        out = _remediation(_INVALID_DST, rem.RemediationFacts())
+        out = _remediation(_INVALID_DST, RemediationFacts())
         assert "ln -sfn 'snapshots/<newest-snapshot>' /mnt/dst/latest" in out
         assert "deletes every snapshot" in " ".join(out.split())
 
@@ -76,7 +83,7 @@ class TestLatestFixRendering:
         issues = _issues(
             src_ep_errors=[SourceEndpointErrorKind.LATEST_SYMLINK_NOT_FOUND],
         )
-        facts = rem.RemediationFacts(newest_snapshots={"ep-src": _NEW})
+        facts = RemediationFacts(newest_snapshots={"ep-src": _NEW})
         out = _remediation(issues, facts)
         assert f"ln -sfn snapshots/{_NEW} /mnt/src/latest" in out
 
@@ -87,9 +94,11 @@ class TestNewestSnapshotGathering:
         mac_newest = "2026-01-03T00-00-00.000Z"
         listing = f"{_OLD}\n{mac_newest}\n{_NEW}\nlost+found\n"
         run = FakeCommandRunner().on("ls", returns=completed(stdout=listing))
-        facts = ts.gather_remediation_facts(
+        facts = gather_remediation_facts(
             _INVALID_DST,
-            rem.TroubleshootContext(config=btrfs_config()),
+            btrfs_config(),
+            {},
+            "alice",
             run=run,
         )
         assert facts.newest_snapshots == {"ep-dst": mac_newest}
@@ -101,9 +110,11 @@ class TestNewestSnapshotGathering:
             .on("ls", returns=completed(2, stderr="No such file or directory"))
             .on("test", returns=completed(1))
         )
-        facts = ts.gather_remediation_facts(
+        facts = gather_remediation_facts(
             _INVALID_DST,
-            rem.TroubleshootContext(config=btrfs_config()),
+            btrfs_config(),
+            {},
+            "alice",
             run=run,
         )
         assert facts.newest_snapshots == {"ep-dst": None}
@@ -113,18 +124,22 @@ class TestNewestSnapshotGathering:
             "ls",
             returns=completed(2, stderr="permission denied"),
         )
-        facts = ts.gather_remediation_facts(
+        facts = gather_remediation_facts(
             _INVALID_DST,
-            rem.TroubleshootContext(config=btrfs_config()),
+            btrfs_config(),
+            {},
+            "alice",
             run=run,
         )
         assert facts.newest_snapshots == {}
 
     def test_unknown_when_the_connection_fails(self) -> None:
         run = FakeCommandRunner().on("ls", returns=paramiko.SSHException("closed"))
-        facts = ts.gather_remediation_facts(
+        facts = gather_remediation_facts(
             _INVALID_DST,
-            rem.TroubleshootContext(config=btrfs_config()),
+            btrfs_config(),
+            {},
+            "alice",
             run=run,
         )
         assert facts.newest_snapshots == {}
@@ -132,9 +147,11 @@ class TestNewestSnapshotGathering:
     def test_only_lists_for_a_latest_fix(self) -> None:
         run = FakeCommandRunner()
         issues = _issues(dst_ep_errors=[DestinationEndpointErrorKind.NOT_WRITABLE])
-        facts = ts.gather_remediation_facts(
+        facts = gather_remediation_facts(
             issues,
-            rem.TroubleshootContext(config=btrfs_config()),
+            btrfs_config(),
+            {},
+            "alice",
             run=run,
         )
         assert facts.newest_snapshots == {}
