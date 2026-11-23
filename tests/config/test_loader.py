@@ -1431,6 +1431,25 @@ class TestLoadConfig:
         endpoint = load_config(str(p)).ssh_endpoints["a"]
         assert (endpoint.slug, endpoint.host) == ("a", "h.example.com")
 
+    @pytest.mark.parametrize("extends", [["base"], {"x": 1}])
+    def test_extends_not_a_string(self, tmp_path: Path, extends: object) -> None:
+        p = tmp_path / "extends_list.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "ssh-endpoints": {
+                        "base": {"host": "h.example.com"},
+                        "a": {"host": "a.example.com", "extends": extends},
+                    },
+                },
+            ),
+        )
+        [error] = _validation_errors(p)
+        assert (error["loc"], error["type"]) == (
+            ("ssh-endpoints", "a", "extends"),
+            "string_type",
+        )
+
     def test_extends_unknown_endpoint(self, tmp_path: Path) -> None:
         p = tmp_path / "unknown_extends.yaml"
         p.write_text(

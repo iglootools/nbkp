@@ -110,11 +110,12 @@ def _resolve_endpoint(
     Resolve one raw endpoint's ``extends`` chain into a flat mapping.
 
     ``chain`` holds the slugs visited so far, ending with ``slug``, for cycle
-    detection. Non-mapping entries are returned as-is for pydantic to reject.
+    detection. Non-mapping entries, and entries whose ``extends`` is not a
+    string, are returned as-is for pydantic to reject.
     """
     ep = endpoints[slug]
     parent_slug = ep.get("extends") if is_raw_mapping(ep) else None
-    if parent_slug is None:
+    if not isinstance(parent_slug, str):
         return ep
     elif parent_slug in chain:
         raise config_error(
