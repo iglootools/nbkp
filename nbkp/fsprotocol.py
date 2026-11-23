@@ -117,11 +117,14 @@ class Snapshot(BaseModel):
 
     @staticmethod
     def create(now: datetime, *, macos_local: bool = False) -> Snapshot:
-        """Create a Snapshot from a UTC timestamp."""
-        return Snapshot(
-            name=format_snapshot_name(now, macos_local=macos_local),
-            timestamp=now,
-        )
+        """
+        Create a Snapshot from a UTC timestamp.
+
+        Its timestamp is the one its name holds, truncated to the
+        millisecond, so it equals the timestamp of the same snapshot listed
+        back from disk.
+        """
+        return Snapshot.from_name(format_snapshot_name(now, macos_local=macos_local))
 
     @staticmethod
     def from_name(name: str) -> Snapshot:
