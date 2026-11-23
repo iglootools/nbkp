@@ -1808,6 +1808,10 @@ class TestSyncSteps:
         assert rsync_check < snapshot
         assert "|| NBKP_RSYNC_RC=$?" in script
 
+    def test_vanished_files_fail_by_default(self) -> None:
+        script = generate_script(_btrfs_config(), _OPTIONS, now=_NOW)
+        assert '"$NBKP_RSYNC_RC" -eq 24' not in script
+
     def test_hard_link_failure_removes_new_snapshot(self) -> None:
         script = _remote_script("hard-link")
         assert "\"rm -rf '/srv/back ups/hl/snapshots/${NBKP_TS}'\" || true" in script

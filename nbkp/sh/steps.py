@@ -6,7 +6,8 @@ Each step is a block of shell code at indent 0.  Sync functions run in a
 failing command aborts the sync; steps only handle failures explicitly
 where ``nbkp run`` does something other than stopping (best-effort
 orphan cleanup, pruning, and removal of the new snapshot after a failed
-hard-link rsync, each of which only logs a warning).
+hard-link rsync, each of which only logs a warning, and files that vanished
+during the transfer under ``vanished-files: warn``).
 """
 
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from nbkp.sh.commands import snapshot_date_format, vol_cmd
 from nbkp.sh.quoting import INDENT, SNAP, SNAPSHOT_TS, format_command, quote
 from nbkp.sh.spec import SyncSpec
 from nbkp.sync.rsync import (
+    RSYNC_VANISHED_FILES_EXIT,
     build_rsync_command,
     hard_link_dest_suffix,
     hard_link_link_dest,
@@ -252,11 +254,31 @@ def _rsync_block(spec: SyncSpec, dest_suffix: str | None) -> str:
         [
             "NBKP_RSYNC_RC=0",
             f"{command}{sep}{sep.join(runtime_args)} || NBKP_RSYNC_RC=$?",
+            *_vanished_files_check(spec),
             'if [ "$NBKP_RSYNC_RC" -ne 0 ]; then',
             _indent(on_failure, 1),
             "fi",
         ],
     )
+
+
+def _vanished_files_check(spec: SyncSpec) -> list[str]:
+    """``vanished-files: warn``: exit code 24 only logs a warning (as in run)."""
+    match spec.sync.rsync_options.vanished_files:
+        case "warn":
+            code = RSYNC_VANISHED_FILES_EXIT
+            message = (
+                "WARN: some files vanished from the source during the transfer"
+                f" (rsync exit code {code}); everything else was copied"
+            )
+            return [
+                f'if [ "$NBKP_RSYNC_RC" -eq {code} ]; then',
+                _indent(f"nbkp_log {quote(message)}", 1),
+                _indent("NBKP_RSYNC_RC=0", 1),
+                "fi",
+            ]
+        case "fail":
+            return []
 
 
 def _rsync_failure_cleanup(spec: SyncSpec) -> list[str]:

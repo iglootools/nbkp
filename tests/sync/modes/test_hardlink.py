@@ -1,6 +1,6 @@
 """Tests for nbkp.sync.modes.hardlink: snapshot dirs, --link-dest, cleanup."""
 
-from nbkp.config import Config, HardLinkSnapshotConfig
+from nbkp.config import Config, HardLinkSnapshotConfig, RsyncOptions
 from nbkp.fsprotocol import Snapshot
 from nbkp.sync.results import SyncFailureKind, SyncOutcome, SyncWarningKind
 from tests.fakes import FakeCommandRunner, FakeRsync, completed
@@ -18,7 +18,16 @@ def _make_hard_link_config(max_snapshots: int | None = None) -> Config:
     )
 
 
+def _with_vanished_files_warn(config: Config) -> Config:
+    sync = config.syncs["s1"]
+    options = RsyncOptions(vanished_files="warn")
+    return config.model_copy(
+        update={"syncs": {"s1": sync.model_copy(update={"rsync_options": options})}},
+    )
+
+
 _NEW_SNAPSHOT = f"/dst/snapshots/{NEW_SNAPSHOT_NAME}"
+_VANISHED = completed(24, stderr="file has vanished: /src/cache/tmp1\n")
 _PREVIOUS = Snapshot.from_name("2026-03-05T10:00:00.000Z")
 _ORPHAN = "2026-03-05T12:00:00.000Z"
 _DENIED = completed(1, stderr="Permission denied")
@@ -192,6 +201,59 @@ class TestHardLinkSync:
         assert results[0].rsync_exit_code == 23
         assert runner.commands_starting_with("rm") == [["rm", "-rf", _NEW_SNAPSHOT]]
         assert runner.commands_starting_with("ln") == []
+
+    def test_vanished_files_fail_the_sync_by_default(self) -> None:
+        config = _make_hard_link_config()
+        _, statuses = active_statuses(config)
+        runner = _fresh_destination()
+
+        results = run_syncs(
+            config,
+            statuses,
+            rsync=FakeRsync([_VANISHED]),
+            run_command=runner,
+        )
+
+        assert results[0].failure == SyncFailureKind.RSYNC
+        assert runner.commands_starting_with("rm") == [["rm", "-rf", _NEW_SNAPSHOT]]
+
+    def test_vanished_files_warn_publishes_the_snapshot(self) -> None:
+        """Regression: a busy source failed every run, discarding its snapshot."""
+        config = _with_vanished_files_warn(_make_hard_link_config())
+        _, statuses = active_statuses(config)
+        runner = _fresh_destination()
+
+        results = run_syncs(
+            config,
+            statuses,
+            rsync=FakeRsync([_VANISHED]),
+            run_command=runner,
+        )
+
+        assert results[0].outcome == SyncOutcome.SUCCESS
+        assert results[0].rsync_exit_code == 24
+        assert results[0].snapshot_path == _NEW_SNAPSHOT
+        assert "file has vanished" in results[0].output
+        assert [w.kind for w in results[0].warnings] == [
+            SyncWarningKind.VANISHED_FILES,
+        ]
+        assert runner.commands_starting_with("rm") == []
+        assert runner.commands_starting_with("ln") == [
+            ["ln", "-sfn", f"snapshots/{NEW_SNAPSHOT_NAME}", "/dst/latest"],
+        ]
+
+    def test_vanished_files_warn_keeps_failing_other_exit_codes(self) -> None:
+        config = _with_vanished_files_warn(_make_hard_link_config())
+        _, statuses = active_statuses(config)
+
+        results = run_syncs(
+            config,
+            statuses,
+            rsync=FakeRsync([completed(23, stderr="err")]),
+            run_command=_fresh_destination(),
+        )
+
+        assert results[0].failure == SyncFailureKind.RSYNC
 
     def test_snapshot_dir_removal_failure_is_a_warning(self) -> None:
         config = _make_hard_link_config()

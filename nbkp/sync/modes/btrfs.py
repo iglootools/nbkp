@@ -16,6 +16,7 @@ from nbkp.sync.modes.common import (
     failed_after_rsync,
     publish_snapshot,
     rsync_step,
+    rsync_succeeded,
 )
 from nbkp.sync.results import SyncFailureKind, SyncResult
 
@@ -36,7 +37,7 @@ def run_btrfs_sync(
         case SyncResult() as failure:
             return failure
         case proc if ctx.dry_run:
-            return SyncResult.succeeded(sync.slug, dry_run=ctx.dry_run, proc=proc)
+            return rsync_succeeded(sync, proc, ctx)
         case proc:
             latest = status.destination_latest_snapshot
             return _btrfs_post_rsync(sync, dst, latest, proc, ctx)

@@ -708,7 +708,8 @@ which always run first.
 `mkdir`, `snapshot`, `symlink` (a step failed), `inactive`, `dry-run-pending`,
 `preflight`, `disabled` (not attempted), `upstream-failed`, `upstream-skipped`,
 `upstream-disabled` (cancelled). `run -o json` exposes them, along with
-`warnings` for best-effort steps.
+`warnings` for best-effort steps and, under `vanished-files: warn`, for files
+that vanished from the source during the transfer (`vanished-files`).
 
 **Aborted runs** — When preflight aborts a run, `run` lists the offending syncs
 and suggests the matching `nbkp preflight troubleshoot` command — same config

@@ -29,6 +29,9 @@ from nbkp.remote import (
 )
 from nbkp.remote.endpoints import ResolvedEndpoints
 
+RSYNC_VANISHED_FILES_EXIT = 24
+"""rsync's exit code when source files vanished before it could transfer them."""
+
 
 class ProgressMode(StrEnum):
     """

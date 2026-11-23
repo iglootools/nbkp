@@ -14,7 +14,7 @@ from nbkp.remote.errors import ssh_connection_errors
 from nbkp.snapshots.common import update_latest_symlink
 from nbkp.snapshots.errors import SnapshotOperationError, SnapshotPruneError
 from nbkp.sync.results import SyncFailureKind, SyncResult, SyncWarning, SyncWarningKind
-from nbkp.sync.rsync import ProgressMode, run_rsync
+from nbkp.sync.rsync import RSYNC_VANISHED_FILES_EXIT, ProgressMode, run_rsync
 
 
 class RsyncRunner(Protocol):
@@ -72,7 +72,12 @@ def rsync_step(
     dest_suffix: str | None,
     link_dest: str | None = None,
 ) -> subprocess.CompletedProcess[str] | SyncResult:
-    """Run rsync; a failed :class:`SyncResult` when it does not succeed."""
+    """
+    Run rsync; a failed :class:`SyncResult` when it does not succeed.
+
+    Exit code 24 (files vanished during the transfer) succeeds when the sync's
+    ``vanished-files`` is ``warn``; :func:`_rsync_warnings` then reports it.
+    """
     try:
         proc = ctx.rsync(
             sync,
@@ -94,7 +99,7 @@ def rsync_step(
             failure=SyncFailureKind.RSYNC,
             detail=str(e),
         )
-    if proc.returncode != 0:
+    if not _rsync_accepted(sync, proc.returncode):
         return SyncResult.failed(
             sync.slug,
             dry_run=ctx.dry_run,
@@ -105,6 +110,58 @@ def rsync_step(
         )
     else:
         return proc
+
+
+def _rsync_accepted(sync: SyncConfig, returncode: int) -> bool:
+    """Return whether rsync's *returncode* lets the sync carry on."""
+    match returncode:
+        case 0:
+            return True
+        case code if code == RSYNC_VANISHED_FILES_EXIT:
+            return sync.rsync_options.vanished_files == "warn"
+        case _:
+            return False
+
+
+def _rsync_warnings(proc: subprocess.CompletedProcess[str]) -> tuple[SyncWarning, ...]:
+    """Return the warnings of an rsync run :func:`rsync_step` accepted."""
+    if proc.returncode == RSYNC_VANISHED_FILES_EXIT:
+        return (
+            SyncWarning(
+                kind=SyncWarningKind.VANISHED_FILES,
+                message=(
+                    "Some files vanished from the source during the transfer"
+                    f" (rsync exit code {RSYNC_VANISHED_FILES_EXIT}); everything"
+                    " else was copied"
+                ),
+            ),
+        )
+    else:
+        return ()
+
+
+def rsync_succeeded(
+    sync: SyncConfig,
+    proc: subprocess.CompletedProcess[str],
+    ctx: RunContext,
+    *,
+    snapshot_path: str | None = None,
+    pruned_paths: tuple[str, ...] | None = None,
+    warnings: tuple[SyncWarning, ...] = (),
+) -> SyncResult:
+    """
+    Return the result of a sync whose rsync run *proc* succeeded.
+
+    It carries the warnings of *proc* (see :func:`_rsync_warnings`) before *warnings*.
+    """
+    return SyncResult.succeeded(
+        sync.slug,
+        dry_run=ctx.dry_run,
+        proc=proc,
+        snapshot_path=snapshot_path,
+        pruned_paths=pruned_paths,
+        warnings=(*_rsync_warnings(proc), *warnings),
+    )
 
 
 def _rsync_output(proc: subprocess.CompletedProcess[str]) -> str:
@@ -136,6 +193,7 @@ def failed_after_rsync(
         detail=detail,
         rsync_exit_code=proc.returncode,
         output=_rsync_output(proc),
+        warnings=_rsync_warnings(proc),
     )
 
 
@@ -202,10 +260,10 @@ def publish_snapshot(
             f"Symlink update failed: {e}",
         )
     pruned, warnings = _prune(sync, max_snapshots, prune_fn, ctx)
-    return SyncResult.succeeded(
-        sync.slug,
-        dry_run=ctx.dry_run,
-        proc=proc,
+    return rsync_succeeded(
+        sync,
+        proc,
+        ctx,
         snapshot_path=snapshot_path,
         pruned_paths=pruned,
         warnings=warnings,

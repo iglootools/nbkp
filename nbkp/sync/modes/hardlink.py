@@ -12,7 +12,12 @@ from nbkp.snapshots.hardlinks import (
     prune_snapshots as hl_prune_snapshots,
     snapshot_path_for,
 )
-from nbkp.sync.modes.common import RunContext, publish_snapshot, rsync_step
+from nbkp.sync.modes.common import (
+    RunContext,
+    publish_snapshot,
+    rsync_step,
+    rsync_succeeded,
+)
 from nbkp.sync.results import SyncFailureKind, SyncResult, SyncWarning, SyncWarningKind
 from nbkp.sync.rsync import hard_link_dest_suffix, hard_link_link_dest
 
@@ -121,12 +126,7 @@ def _rsync_into_snapshot(
             discard = _discard_snapshot_dir(snapshot_path, sync, ctx)
             return failure.with_warnings((*warnings, *discard))
         case proc if ctx.dry_run:
-            return SyncResult.succeeded(
-                sync.slug,
-                dry_run=ctx.dry_run,
-                proc=proc,
-                warnings=warnings,
-            )
+            return rsync_succeeded(sync, proc, ctx, warnings=warnings)
         case proc:
             result = publish_snapshot(
                 sync,

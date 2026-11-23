@@ -4,6 +4,7 @@ from nbkp.config import (
     BtrfsSnapshotConfig,
     Config,
     LocalVolume,
+    RsyncOptions,
     SyncConfig,
     SyncEndpoint,
     Volume,
@@ -71,6 +72,23 @@ class TestRunAllSyncs:
         results = run_syncs(config, sync_statuses, rsync=rsync)
         assert results[0].success is False
         assert results[0].rsync_exit_code == 23
+
+    def test_vanished_files_warn_succeeds_with_a_warning(self) -> None:
+        config = make_local_config()
+        sync = config.syncs["s1"].model_copy(
+            update={"rsync_options": RsyncOptions(vanished_files="warn")},
+        )
+        config = config.model_copy(update={"syncs": {"s1": sync}})
+        _, sync_statuses = active_statuses(config)
+
+        [result] = run_syncs(
+            config,
+            sync_statuses,
+            rsync=FakeRsync([completed(24)]),
+        )
+
+        assert result.outcome == SyncOutcome.SUCCESS
+        assert [w.kind for w in result.warnings] == [SyncWarningKind.VANISHED_FILES]
 
     def test_filter_by_sync_slug(self) -> None:
         config = make_local_config()
