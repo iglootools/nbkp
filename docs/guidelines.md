@@ -111,10 +111,10 @@ sets up. Each patch nbkp has:
 |---|---|---|---|---|
 | `tests/remote/test_ssh.py` | Fabric's `Connection` class (`patch`, `MagicMock` connections) | (a) | `run_remote_command` is the wrapper under test: argument mapping, hop closing, connection reuse and retry. A real connection needs an SSH server that authenticates and runs commands. | the in-process SSH server gains public-key auth and an exec channel, or `run_remote_command` takes a connection factory |
 | `tests/remote/test_docker_testkit.py` | `docker.from_env` (`patch`, `MagicMock` client) | (a) | Checks the port binding handed to the Docker SDK, and how a failed network cleanup is reported, without a Docker daemon. | the container starters take the client as a parameter |
-| `tests/snapshots/test_common.py` | `Path.symlink_to` raising | (b) | The failure must strike after nothing has been removed and before the new `latest` exists. A read-only directory would also block the removal, so it could not catch an update that deletes `latest` before creating the new link, which this test does. | |
-| `tests/credentials/test_credentials.py` | `sys.modules["keyring"] = None` | (b) | The test environment installs every extra, so the missing `keyring` package can only be simulated. | |
+| `tests/snapshots/test_common.py` | `Path.symlink_to` raising | (b) | The failure must strike after nothing has been removed and before the new `latest` exists. A read-only directory would also block the removal, so it could not catch an update that deletes `latest` before creating the new link, which this test does. | `update_latest_symlink` takes the link-creating operation as a parameter |
+| `tests/credentials/test_credentials.py` | `sys.modules["keyring"] = None` | (b) | The test environment installs every extra, so the missing `keyring` package can only be simulated. | the keyring backend is loaded through a parameter that the test can give a failing loader |
 | `tests/conftest.py` | `nbkp.remote.resolution.default_ssh_config_path` | (c) | Endpoint resolution falls back to `~/.ssh/config` when no SSH config is passed, so every test would otherwise read the developer's. | every caller passes its SSH config explicitly |
-| `tests/remote/test_host_key_verification.py` | `HOME` | (c) | Paramiko reads `~/.ssh/known_hosts` from the home directory, below any seam of nbkp's. | |
+| `tests/remote/test_host_key_verification.py` | `HOME` | (c) | Paramiko reads `~/.ssh/known_hosts` from the home directory, below any seam of nbkp's. | the connection setup takes the `known_hosts` path as a parameter instead of letting Paramiko read the home directory |
 
 ## Documentation
 
