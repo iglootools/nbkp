@@ -17,6 +17,7 @@ from nbkp.preflight import (
     VolumeCapabilities,
     VolumeStatus,
 )
+from nbkp.preflight.status.result import PreflightResult
 
 
 def demo_ssh_statuses(
@@ -70,6 +71,39 @@ def collect_ssh_endpoint_statuses(
     # leaves the keys in reverse order, so the order comes from fromkeys.
     first_seen = {s.slug: s for s in reversed(all_ssh)}
     return {slug: first_seen[slug] for slug in dict.fromkeys(s.slug for s in all_ssh)}
+
+
+def assemble_preflight_result(
+    vol_statuses: dict[str, VolumeStatus],
+    sync_statuses: dict[str, SyncStatus],
+    *,
+    ssh_endpoint_statuses: dict[str, SshEndpointStatus] | None = None,
+) -> PreflightResult:
+    """
+    Return the result of a preflight that observed these statuses.
+
+    The endpoint statuses are the ones the sync statuses embed, keyed by endpoint
+    slug as a real preflight keys them. *ssh_endpoint_statuses* defaults to the
+    ones the volume and sync statuses embed, by
+    :func:`collect_ssh_endpoint_statuses`.
+    """
+    return PreflightResult(
+        ssh_endpoint_statuses=(
+            collect_ssh_endpoint_statuses(vol_statuses, sync_statuses)
+            if ssh_endpoint_statuses is None
+            else ssh_endpoint_statuses
+        ),
+        volume_statuses=vol_statuses,
+        source_endpoint_statuses={
+            ss.source_endpoint_status.endpoint_slug: ss.source_endpoint_status
+            for ss in sync_statuses.values()
+        },
+        destination_endpoint_statuses={
+            ss.destination_endpoint_status.endpoint_slug: ss.destination_endpoint_status
+            for ss in sync_statuses.values()
+        },
+        sync_statuses=sync_statuses,
+    )
 
 
 LOCALHOST_SSH_STATUS = SshEndpointStatus.from_diagnostics(

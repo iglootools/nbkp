@@ -25,7 +25,7 @@ from nbkp.policy import Severity
 
 
 class TestMountStateIcon:
-    def test_true(self) -> None:
+    def test_icon_is_green_check_when_true(self) -> None:
         assert mount_state_icon(value=True) == "[green]✓[/green]"
 
     def test_false_default_is_error(self) -> None:
@@ -37,7 +37,7 @@ class TestMountStateIcon:
             == "[dark_orange]⚠[/dark_orange]"
         )
 
-    def test_none(self) -> None:
+    def test_icon_is_dash_when_unknown(self) -> None:
         assert mount_state_icon(value=None) == "—"
 
 
@@ -126,7 +126,7 @@ class TestMountStatusTableSeverity:
 
 
 class TestBuildMountStatusTable:
-    def test_columns(self) -> None:
+    def test_table_has_one_row_per_volume_and_four_columns(self) -> None:
         obs = MountObservation(
             device_present=True,
             luks_unlocked=True,
@@ -157,7 +157,7 @@ class TestBuildMountStatusTable:
         table = build_mount_status_table([("v", obs)], title="Custom:")
         assert table.title == "Custom:"
 
-    def test_empty(self) -> None:
+    def test_table_has_no_rows_when_no_volumes(self) -> None:
         table = build_mount_status_table([])
         assert len(table.rows) == 0
 
@@ -234,7 +234,11 @@ class TestFormatVolumeStatusLabel:
             ),
         ],
     )
-    def test_label(self, status: VolumeStatus, expected: str) -> None:
+    def test_label_describes_the_volume_status(
+        self,
+        status: VolumeStatus,
+        expected: str,
+    ) -> None:
         assert format_volume_status_label("nas:v", status).plain == expected
 
 

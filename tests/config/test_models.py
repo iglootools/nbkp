@@ -27,12 +27,12 @@ def _error_types(error: pydantic.ValidationError) -> set[str]:
 
 
 class TestLocalVolume:
-    def test_construction(self) -> None:
+    def test_fields_keep_the_given_values(self) -> None:
         vol = LocalVolume(slug="data", path="/mnt/data")
         assert vol.slug == "data"
         assert vol.path == "/mnt/data"
 
-    def test_frozen(self) -> None:
+    def test_assignment_rejected(self) -> None:
         vol = LocalVolume(slug="data", path="/mnt/data")
         with pytest.raises((AttributeError, pydantic.ValidationError)):
             vol.slug = "other"
@@ -77,7 +77,7 @@ class TestSshEndpoint:
 
 
 class TestRemoteVolume:
-    def test_construction(self) -> None:
+    def test_fields_keep_the_given_values(self) -> None:
         vol = RemoteVolume(
             slug="nas",
             ssh_endpoint="nas-server",
@@ -87,7 +87,7 @@ class TestRemoteVolume:
         assert vol.ssh_endpoint == "nas-server"
         assert vol.path == "/backup"
 
-    def test_frozen(self) -> None:
+    def test_assignment_rejected(self) -> None:
         vol = RemoteVolume(
             slug="nas",
             ssh_endpoint="nas-server",
@@ -163,7 +163,7 @@ class TestSyncConfig:
 
 
 class TestConfig:
-    def test_empty(self) -> None:
+    def test_collections_empty_when_nothing_given(self) -> None:
         cfg = Config()
         assert cfg.volumes == {}
         assert cfg.syncs == {}
@@ -379,7 +379,7 @@ class TestSlugValidation:
             ("a" * 51, "string_too_long"),
         ],
     )
-    def test_invalid(self, slug: str, error_type: str) -> None:
+    def test_slug_rejected_when_invalid(self, slug: str, error_type: str) -> None:
         with pytest.raises(pydantic.ValidationError) as excinfo:
             LocalVolume(slug=slug, path="/mnt")
         assert [(e["loc"], e["type"]) for e in excinfo.value.errors()] == [

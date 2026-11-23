@@ -9,7 +9,6 @@ from nbkp.config import (
     RemoteVolume,
     SshEndpoint,
     SyncConfig,
-    SyncEndpoint,
 )
 from nbkp.snapshots.btrfs import (
     create_snapshot,
@@ -19,120 +18,64 @@ from nbkp.snapshots.btrfs import (
 from nbkp.snapshots.common import create_snapshot_timestamp
 from nbkp.snapshots.errors import SnapshotOp, SnapshotOperationError
 from tests.fakes import FakeCommandRunner, completed
+from tests.fixtures.config import two_volume_config
 
 
 def _local_config() -> tuple[Config, SyncConfig]:
-    src = LocalVolume(slug="src", path="/mnt/src")
-    dst = LocalVolume(slug="dst", path="/mnt/dst")
-    sync = SyncConfig(
-        slug="s1",
-        source="ep-src",
-        destination="ep-dst",
-    )
-    config = Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
-        },
-        syncs={"s1": sync},
+    sync, config = two_volume_config(
+        dst_subdir="backup",
+        dst_btrfs=BtrfsSnapshotConfig(enabled=True),
     )
     return config, sync
 
 
 def _remote_config() -> tuple[Config, SyncConfig]:
-    src = LocalVolume(slug="src", path="/mnt/src")
-    dst_server = SshEndpoint(
-        slug="nas-server",
-        host="nas.local",
-        user="admin",
-    )
-    dst = RemoteVolume(
-        slug="dst",
-        ssh_endpoint="nas-server",
-        path="/backup",
-    )
-    sync = SyncConfig(
-        slug="s1",
-        source="ep-src",
-        destination="ep-dst",
-    )
-    config = Config(
-        ssh_endpoints={"nas-server": dst_server},
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                subdir="data",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+    sync, config = two_volume_config(
+        dst=RemoteVolume(
+            slug="dst",
+            ssh_endpoint="nas-server",
+            path="/backup",
+        ),
+        ssh_endpoints=[
+            SshEndpoint(
+                slug="nas-server",
+                host="nas.local",
+                user="admin",
             ),
-        },
-        syncs={"s1": sync},
+        ],
+        dst_subdir="data",
+        dst_btrfs=BtrfsSnapshotConfig(enabled=True),
     )
     return config, sync
 
 
 def _local_config_spaces() -> tuple[Config, SyncConfig]:
-    src = LocalVolume(slug="src", path="/mnt/my src")
-    dst = LocalVolume(slug="dst", path="/mnt/my dst")
-    sync = SyncConfig(
-        slug="s1",
-        source="ep-src",
-        destination="ep-dst",
-    )
-    config = Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                subdir="my backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
-        },
-        syncs={"s1": sync},
+    sync, config = two_volume_config(
+        src=LocalVolume(slug="src", path="/mnt/my src"),
+        dst=LocalVolume(slug="dst", path="/mnt/my dst"),
+        dst_subdir="my backup",
+        dst_btrfs=BtrfsSnapshotConfig(enabled=True),
     )
     return config, sync
 
 
 def _remote_config_spaces() -> tuple[Config, SyncConfig]:
-    src = LocalVolume(slug="src", path="/mnt/my src")
-    dst_server = SshEndpoint(
-        slug="nas-server",
-        host="nas.local",
-        user="admin",
-    )
-    dst = RemoteVolume(
-        slug="dst",
-        ssh_endpoint="nas-server",
-        path="/my backup",
-    )
-    sync = SyncConfig(
-        slug="s1",
-        source="ep-src",
-        destination="ep-dst",
-    )
-    config = Config(
-        ssh_endpoints={"nas-server": dst_server},
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                subdir="my data",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+    sync, config = two_volume_config(
+        src=LocalVolume(slug="src", path="/mnt/my src"),
+        dst=RemoteVolume(
+            slug="dst",
+            ssh_endpoint="nas-server",
+            path="/my backup",
+        ),
+        ssh_endpoints=[
+            SshEndpoint(
+                slug="nas-server",
+                host="nas.local",
+                user="admin",
             ),
-        },
-        syncs={"s1": sync},
+        ],
+        dst_subdir="my data",
+        dst_btrfs=BtrfsSnapshotConfig(enabled=True),
     )
     return config, sync
 
@@ -145,7 +88,7 @@ _THREE = (
 
 
 class TestCreateSnapshot:
-    def test_local(self) -> None:
+    def test_snapshot_taken_read_only_from_staging_when_local(self) -> None:
         config, sync = _local_config()
         runner = FakeCommandRunner()
 
@@ -165,7 +108,7 @@ class TestCreateSnapshot:
         ]
         assert runner.calls[0].volume == config.volumes["dst"]
 
-    def test_failure(self) -> None:
+    def test_raises_create_error_when_btrfs_fails(self) -> None:
         config, sync = _local_config()
         runner = FakeCommandRunner().on("btrfs", returns=_DENIED)
 
@@ -175,7 +118,7 @@ class TestCreateSnapshot:
         ):
             create_snapshot(sync, config, now=_NOW, platform="linux", run=runner)
 
-    def test_remote(self) -> None:
+    def test_snapshot_taken_on_the_volume_when_remote(self) -> None:
         config, sync = _remote_config()
         runner = FakeCommandRunner()
 
@@ -359,7 +302,7 @@ class TestPruneSnapshots:
         assert deleted == []
         assert runner.commands == [["ls", "/backup/data/snapshots"]]
 
-    def test_dry_run(self) -> None:
+    def test_nothing_deleted_when_dry_run(self) -> None:
         config, sync = _remote_config()
         runner = _listing(_THREE)
 

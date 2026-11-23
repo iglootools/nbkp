@@ -19,7 +19,7 @@ class TestCleartextMapperName:
 
 
 class TestBuildUnlockCommand:
-    def test_command(self) -> None:
+    def test_command_reads_the_key_from_stdin(self) -> None:
         assert build_unlock_command(_UUID_LOWER) == [
             "udisksctl",
             "unlock",
@@ -42,7 +42,7 @@ class TestBuildUnlockCommand:
 
 
 class TestBuildLockCommand:
-    def test_command(self) -> None:
+    def test_command_locks_the_device_by_uuid(self) -> None:
         assert build_lock_command(_UUID_LOWER) == [
             "udisksctl",
             "lock",
@@ -73,7 +73,7 @@ class TestBuildMountCommand:
 
 
 class TestBuildUnmountCommand:
-    def test_command(self) -> None:
+    def test_command_unmounts_the_given_device(self) -> None:
         assert build_unmount_command(f"/dev/mapper/luks-{_UUID_LOWER}") == [
             "udisksctl",
             "unmount",

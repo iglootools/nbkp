@@ -142,7 +142,7 @@ def _line(plan: VolumePlan) -> str:
 
 
 class TestPlanDecisions:
-    def test_lines(self) -> None:
+    def test_line_words_each_kind_of_plan(self) -> None:
         assert (
             _line(VolumePlan("enc", (MountAction.UNMOUNT, MountAction.LOCK)))
             == "[dry-run] ✓ Would unmount, lock enc"
@@ -526,7 +526,7 @@ class TestDryRun:
 
 
 class TestSetupAuth:
-    def test_json(self) -> None:
+    def test_json_output_holds_the_polkit_rule(self) -> None:
         result = runner.invoke(
             app,
             ["disks", "setup-auth", "-c", "config.yaml", "-u", "backup", "-o", "json"],

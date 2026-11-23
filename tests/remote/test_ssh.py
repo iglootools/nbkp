@@ -47,7 +47,10 @@ def _expand_proxy_command(option: str, host: str) -> list[str]:
 
 
 class TestBuildSshBaseArgs:
-    def test_minimal(self, ssh_endpoint_minimal: SshEndpoint) -> None:
+    def test_args_hold_only_defaults_and_host_when_minimal(
+        self,
+        ssh_endpoint_minimal: SshEndpoint,
+    ) -> None:
         args = build_ssh_base_args(ssh_endpoint_minimal)
         assert args == [
             "ssh",
@@ -55,7 +58,10 @@ class TestBuildSshBaseArgs:
             "nas2.example.com",
         ]
 
-    def test_full(self, ssh_endpoint: SshEndpoint) -> None:
+    def test_args_hold_port_key_and_user_when_set(
+        self,
+        ssh_endpoint: SshEndpoint,
+    ) -> None:
         args = build_ssh_base_args(ssh_endpoint)
         assert args == [
             "ssh",
@@ -142,7 +148,7 @@ class TestBuildSshBaseArgs:
             "slow.example.com",
         ]
 
-    def test_compress(self) -> None:
+    def test_args_enable_compression_when_set(self) -> None:
         server = SshEndpoint(
             slug="compressed",
             host="host.example.com",
@@ -351,11 +357,17 @@ _DEFAULT_E_PREFIX = "ssh -o ConnectTimeout=10 -o BatchMode=yes"
 
 
 class TestBuildSshEOption:
-    def test_minimal(self, ssh_endpoint_minimal: SshEndpoint) -> None:
+    def test_option_holds_only_defaults_when_minimal(
+        self,
+        ssh_endpoint_minimal: SshEndpoint,
+    ) -> None:
         result = build_ssh_e_option(ssh_endpoint_minimal)
         assert result == ["-e", _DEFAULT_E_PREFIX]
 
-    def test_full(self, ssh_endpoint: SshEndpoint) -> None:
+    def test_option_holds_port_and_key_when_set(
+        self,
+        ssh_endpoint: SshEndpoint,
+    ) -> None:
         result = build_ssh_e_option(ssh_endpoint)
         assert result == [
             "-e",

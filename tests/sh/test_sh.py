@@ -324,7 +324,7 @@ def _proxy_jumps_config() -> Config:
 
 
 class TestHeader:
-    def test_shebang(self) -> None:
+    def test_script_starts_with_bash_shebang(self) -> None:
         config = _local_to_local_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert script.startswith("#!/bin/bash\n")
@@ -509,7 +509,7 @@ class TestArguments:
     """The generated script's own options and exit codes match ``nbkp run``'s."""
 
     @pytest.mark.parametrize("flag", ["-h", "--help"])
-    def test_help(self, flag: str) -> None:
+    def test_help_flag_prints_usage(self, flag: str) -> None:
         result = _run_script(generate_script(Config(), _OPTIONS, now=_NOW), flag)
         assert result.returncode == 0, result.stderr
         assert "Usage: " in result.stdout

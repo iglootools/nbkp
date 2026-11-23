@@ -9,13 +9,11 @@ from rich.console import Console, RenderableType
 from nbkp.config import (
     Config,
     HardLinkSnapshotConfig,
-    LocalVolume,
-    SyncConfig,
-    SyncEndpoint,
 )
 from nbkp.preflight import (
     SyncErrorKind,
 )
+from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.snapshots import SnapshotOp
 from nbkp.snapshots.common import create_snapshot_timestamp
 from nbkp.sync.output import (
@@ -29,7 +27,9 @@ from nbkp.sync.results import (
     SyncWarning,
     SyncWarningKind,
 )
+from tests.fixtures.config import two_volume_config
 from tests.fixtures.preflight import btrfs_config, local_vol_statuses, sync_status
+from tests.sync.runner_helpers import make_local_config, make_snapshot_config
 
 
 def _render_sections(sections: list[RenderableType]) -> str:
@@ -51,26 +51,11 @@ class TestRunPreviewRsyncCommandDisplay:
         assert "--link-dest" not in output
 
     def test_hard_link_shows_snapshots_timestamp_suffix(self) -> None:
-        src = LocalVolume(slug="src", path="/mnt/src")
-        dst = LocalVolume(slug="dst", path="/mnt/dst")
-        ep_src = SyncEndpoint(slug="ep-src", volume="src")
-        ep_dst = SyncEndpoint(
-            slug="ep-dst",
-            volume="dst",
-            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
-        )
-        sync = SyncConfig(
-            slug="hl-sync",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
-            syncs={"hl-sync": sync},
+        _, config = two_volume_config(
+            dst_hard_link=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
         )
         vol_s = local_vol_statuses(config)
-        sync_s = {"hl-sync": sync_status(config, vol_s, "hl-sync")}
+        sync_s = {"s1": sync_status(config, vol_s, "s1")}
         sections = build_run_preview_sections(sync_s, config, resolved_endpoints={})
         output = _render_sections(sections)
         assert "/mnt/dst/snapshots/<timestamp>/" in output
@@ -78,22 +63,11 @@ class TestRunPreviewRsyncCommandDisplay:
         assert "--link-dest" not in output
 
     def test_hard_link_creates_the_snapshot_directory_without_p(self) -> None:
-        src = LocalVolume(slug="src", path="/mnt/src")
-        dst = LocalVolume(slug="dst", path="/mnt/dst")
-        ep_src = SyncEndpoint(slug="ep-src", volume="src")
-        ep_dst = SyncEndpoint(
-            slug="ep-dst",
-            volume="dst",
-            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
-        )
-        sync = SyncConfig(slug="hl-sync", source="ep-src", destination="ep-dst")
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
-            syncs={"hl-sync": sync},
+        _, config = two_volume_config(
+            dst_hard_link=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
         )
         vol_s = local_vol_statuses(config)
-        sync_s = {"hl-sync": sync_status(config, vol_s, "hl-sync")}
+        sync_s = {"s1": sync_status(config, vol_s, "s1")}
         sections = build_run_preview_sections(sync_s, config, resolved_endpoints={})
         output = _render_sections(sections)
         # As create_snapshot_dir runs it: an existing snapshot fails the run.
@@ -101,33 +75,18 @@ class TestRunPreviewRsyncCommandDisplay:
         assert "mkdir -p" not in output
 
     def test_hard_link_shows_link_dest_when_previous_exists(self) -> None:
-        src = LocalVolume(slug="src", path="/mnt/src")
-        dst = LocalVolume(slug="dst", path="/mnt/dst")
-        ep_src = SyncEndpoint(slug="ep-src", volume="src")
-        ep_dst = SyncEndpoint(
-            slug="ep-dst",
-            volume="dst",
-            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
-        )
-        sync = SyncConfig(
-            slug="hl-sync",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
-            syncs={"hl-sync": sync},
+        _, config = two_volume_config(
+            dst_hard_link=HardLinkSnapshotConfig(enabled=True, max_snapshots=10),
         )
         vol_s = local_vol_statuses(config)
         sync_s = {
-            "hl-sync": sync_status(
+            "s1": sync_status(
                 config,
                 vol_s,
-                "hl-sync",
+                "s1",
                 destination_latest_snapshot=create_snapshot_timestamp(
                     datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC),
-                    dst,
+                    config.volumes["dst"],
                     "linux",
                 ),
             ),
@@ -138,28 +97,15 @@ class TestRunPreviewRsyncCommandDisplay:
         assert "--link-dest" in output
         expected_ts = create_snapshot_timestamp(
             datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC),
-            dst,
+            config.volumes["dst"],
             "linux",
         )
         assert f"../{expected_ts.name}" in output
 
     def test_plain_sync_shows_bare_destination(self) -> None:
-        src = LocalVolume(slug="src", path="/mnt/src")
-        dst = LocalVolume(slug="dst", path="/mnt/dst")
-        ep_src = SyncEndpoint(slug="ep-src", volume="src")
-        ep_dst = SyncEndpoint(slug="ep-dst", volume="dst")
-        sync = SyncConfig(
-            slug="plain-sync",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={"ep-src": ep_src, "ep-dst": ep_dst},
-            syncs={"plain-sync": sync},
-        )
+        _, config = two_volume_config()
         vol_s = local_vol_statuses(config)
-        sync_s = {"plain-sync": sync_status(config, vol_s, "plain-sync")}
+        sync_s = {"s1": sync_status(config, vol_s, "s1")}
         sections = build_run_preview_sections(sync_s, config, resolved_endpoints={})
         output = _render_sections(sections)
         assert "/mnt/dst/" in output
@@ -329,3 +275,72 @@ class TestRunResultsWarnings:
                 ),
             },
         ]
+
+
+class TestRunResultsSnapshot:
+    SNAPSHOT = "/dst/snapshots/2026-03-06T14:30:00.000Z"
+
+    def _render(self, config: Config, result: SyncResult) -> str:
+        return _render_sections(
+            build_human_results_sections(
+                [result],
+                dry_run=False,
+                config=config,
+                resolved_endpoints=resolve_all_endpoints(config),
+            ),
+        )
+
+    def _succeeded(
+        self,
+        *,
+        snapshot_path: str | None = None,
+        pruned_paths: tuple[str, ...] | None = None,
+    ) -> SyncResult:
+        return SyncResult.succeeded(
+            "s1",
+            dry_run=False,
+            proc=subprocess.CompletedProcess(
+                args=[],
+                returncode=0,
+                stdout="",
+                stderr="",
+            ),
+            snapshot_path=snapshot_path,
+            pruned_paths=pruned_paths,
+        )
+
+    def test_snapshot_path_shown_bare_when_destination_is_local(self) -> None:
+        text = self._render(
+            make_local_config(),
+            self._succeeded(snapshot_path=self.SNAPSHOT),
+        )
+        assert f"Snapshot: {self.SNAPSHOT}" in text
+        assert "nas.local" not in text
+
+    def test_snapshot_path_prefixed_with_host_when_destination_is_remote(
+        self,
+    ) -> None:
+        text = self._render(
+            make_snapshot_config(),
+            self._succeeded(snapshot_path=self.SNAPSHOT),
+        )
+        assert f"Snapshot: nas.local:{self.SNAPSHOT}" in text
+
+    def test_pruned_count_shown_when_destination_is_local(self) -> None:
+        result = self._succeeded(
+            snapshot_path=self.SNAPSHOT,
+            pruned_paths=("/dst/snapshots/a", "/dst/snapshots/b"),
+        )
+        assert "Pruned: 2 snapshot(s)" in self._render(make_local_config(), result)
+
+    def test_pruned_count_shown_when_destination_is_remote(self) -> None:
+        result = self._succeeded(
+            snapshot_path=self.SNAPSHOT,
+            pruned_paths=("/dst/snapshots/a",),
+        )
+        assert "Pruned: 1 snapshot(s)" in self._render(make_snapshot_config(), result)
+
+    def test_snapshot_and_pruned_lines_absent_when_result_has_neither(self) -> None:
+        text = self._render(make_snapshot_config(), self._succeeded())
+        assert "Snapshot:" not in text
+        assert "Pruned:" not in text

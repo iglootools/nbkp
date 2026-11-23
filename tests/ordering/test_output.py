@@ -262,7 +262,7 @@ class TestFormatRichTreeGraph:
 
 
 class TestBuildGraphJson:
-    def test_structure(self) -> None:
+    def test_json_has_nodes_and_edges(self) -> None:
         cfg = _chain_config()
         result = build_graph_json(cfg)
         assert "nodes" in result

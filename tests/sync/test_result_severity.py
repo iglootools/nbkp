@@ -161,7 +161,7 @@ class TestSyncResultModel:
                 failure=SyncFailureKind.UPSTREAM_FAILED,
             )
 
-    def test_frozen(self) -> None:
+    def test_assignment_rejected(self) -> None:
         result = _success()
         with pytest.raises(ValueError, match="frozen"):
             result.detail = "x"

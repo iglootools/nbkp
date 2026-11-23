@@ -60,7 +60,7 @@ class TestSettleUdev:
 
 
 class TestDetectDevicePresent:
-    def test_present(self) -> None:
+    def test_device_present_when_test_succeeds(self) -> None:
         run = FakeCommandRunner().on("test", returns=completed(0))
         assert detect_device_present(_local_vol(), _UUID, {}, run=run)
 

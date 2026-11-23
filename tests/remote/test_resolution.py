@@ -82,7 +82,7 @@ class TestResolveHost:
         lookup = _fixed_lookup({"192.168.1.100": {"192.168.1.100"}})
         assert resolve_host("mynas", cfg, lookup) == {"192.168.1.100"}
 
-    def test_unresolvable(self) -> None:
+    def test_none_when_host_unresolvable(self) -> None:
         assert (
             resolve_host("nonexistent.invalid", _NO_SSH_CONFIG, _unresolvable) is None
         )
@@ -110,13 +110,13 @@ class TestIsPrivateHost:
         lookup = _fixed_lookup({"dual": {"192.168.1.1", "8.8.8.8"}})
         assert is_private_host("dual", _NO_SSH_CONFIG, lookup) is False
 
-    def test_unresolvable(self) -> None:
+    def test_unknown_when_host_unresolvable(self) -> None:
         assert (
             is_private_host("nonexistent.invalid", _NO_SSH_CONFIG, _unresolvable)
             is None
         )
 
-    def test_localhost(self) -> None:
+    def test_private_when_host_is_localhost(self) -> None:
         lookup = _fixed_lookup({"localhost": {"127.0.0.1", "::1"}})
         assert is_private_host("localhost", _NO_SSH_CONFIG, lookup) is True
 

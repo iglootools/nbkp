@@ -75,7 +75,7 @@ def _invoke(run: FakeCommandRunner, *args: str) -> tuple[int, str]:
 
 
 class TestShowCommand:
-    def test_json(self, tmp_path: Path) -> None:
+    def test_json_lists_snapshots_and_latest(self, tmp_path: Path) -> None:
         _write(tmp_path)
 
         exit_code, output = _invoke(_nas((OLD, NEW)), "show", "-o", "json")
@@ -97,7 +97,7 @@ class TestShowCommand:
 
 
 class TestPruneCommand:
-    def test_json(self, tmp_path: Path) -> None:
+    def test_json_lists_deleted_snapshots(self, tmp_path: Path) -> None:
         _write(tmp_path)
         run = _nas((OLD, MID, NEW), (MID, NEW))
 
@@ -117,7 +117,7 @@ class TestPruneCommand:
         ]
         assert ["btrfs", "subvolume", "delete", f"{SNAPSHOTS}/{OLD}"] in run.commands
 
-    def test_dry_run(self, tmp_path: Path) -> None:
+    def test_nothing_deleted_when_dry_run(self, tmp_path: Path) -> None:
         _write(tmp_path)
         run = _nas((OLD, MID, NEW))
 

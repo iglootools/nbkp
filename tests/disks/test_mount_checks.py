@@ -274,7 +274,12 @@ class TestFstabSourceMatches:
             ("/dev/sdb1", True),
         ],
     )
-    def test_unencrypted(self, source: str, *, expected: bool) -> None:
+    def test_source_compared_with_the_device_when_unencrypted(
+        self,
+        source: str,
+        *,
+        expected: bool,
+    ) -> None:
         assert fstab_source_matches(source, _unencrypted_mount(), None) is expected
 
     @pytest.mark.parametrize(
@@ -295,7 +300,7 @@ class TestFstabSourceMatches:
             ("UUID=99999999-8888-7777-6666-555555555555", None, True),
         ],
     )
-    def test_encrypted(
+    def test_source_compared_with_the_cleartext_when_encrypted(
         self,
         source: str,
         cleartext: str | None,

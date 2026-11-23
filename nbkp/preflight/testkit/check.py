@@ -38,6 +38,7 @@ from nbkp.preflight.testkit.common import (
     SENTINEL_MISSING_CAPS,
     active_dst_ep_status,
     active_src_ep_status,
+    assemble_preflight_result,
     collect_ssh_endpoint_statuses,
     inactive_dst_ep_status,
     inactive_src_ep_status,
@@ -341,24 +342,15 @@ def check_data(
         ),
     }
 
-    ssh_statuses = {
-        # Standalone endpoints: SSH reachable, no tool probing
-        "bastion": standalone_ssh_status("bastion"),
-        "bastion2": standalone_ssh_status("bastion2"),
-        "nas-public": standalone_ssh_status("nas-public"),
-        "orphan-server": standalone_ssh_status("orphan-server"),
-        **collect_ssh_endpoint_statuses(vol_statuses, sync_statuses),
-    }
-    src_ep_statuses = {
-        slug: ss.source_endpoint_status for slug, ss in sync_statuses.items()
-    }
-    dst_ep_statuses = {
-        slug: ss.destination_endpoint_status for slug, ss in sync_statuses.items()
-    }
-    return PreflightResult(
-        ssh_endpoint_statuses=ssh_statuses,
-        volume_statuses=vol_statuses,
-        source_endpoint_statuses=src_ep_statuses,
-        destination_endpoint_statuses=dst_ep_statuses,
-        sync_statuses=sync_statuses,
+    return assemble_preflight_result(
+        vol_statuses,
+        sync_statuses,
+        ssh_endpoint_statuses={
+            # Standalone endpoints: SSH reachable, no tool probing
+            "bastion": standalone_ssh_status("bastion"),
+            "bastion2": standalone_ssh_status("bastion2"),
+            "nas-public": standalone_ssh_status("nas-public"),
+            "orphan-server": standalone_ssh_status("orphan-server"),
+            **collect_ssh_endpoint_statuses(vol_statuses, sync_statuses),
+        },
     )

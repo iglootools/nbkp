@@ -18,7 +18,6 @@ from nbkp.config import (
     RemoteVolume,
     SshEndpoint,
     SyncConfig,
-    SyncEndpoint,
 )
 from nbkp.remote.endpoints import ResolvedEndpoint
 from nbkp.remote.resolution import resolve_all_endpoints
@@ -36,124 +35,68 @@ from nbkp.snapshots.hardlinks import (
     prune_snapshots as hl_prune_snapshots,
 )
 from tests.fakes import FakeCommandRunner, completed
+from tests.fixtures.config import two_volume_config
 
 
 def _local_config() -> tuple[Config, SyncConfig]:
-    src = LocalVolume(slug="src", path="/mnt/src")
-    dst = LocalVolume(slug="dst", path="/mnt/dst")
-    sync = SyncConfig(
-        slug="s1",
-        source="ep-src",
-        destination="ep-dst",
-    )
-    config = Config(
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                subdir="backup",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
-            ),
-        },
-        syncs={"s1": sync},
+    sync, config = two_volume_config(
+        dst_subdir="backup",
+        dst_btrfs=BtrfsSnapshotConfig(enabled=True),
     )
     return config, sync
 
 
 def _remote_config() -> tuple[Config, SyncConfig]:
-    src = LocalVolume(slug="src", path="/mnt/src")
-    dst_server = SshEndpoint(
-        slug="nas-server",
-        host="nas.local",
-        user="admin",
-    )
-    dst = RemoteVolume(
-        slug="dst",
-        ssh_endpoint="nas-server",
-        path="/backup",
-    )
-    sync = SyncConfig(
-        slug="s1",
-        source="ep-src",
-        destination="ep-dst",
-    )
-    config = Config(
-        ssh_endpoints={"nas-server": dst_server},
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                subdir="data",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+    sync, config = two_volume_config(
+        dst=RemoteVolume(
+            slug="dst",
+            ssh_endpoint="nas-server",
+            path="/backup",
+        ),
+        ssh_endpoints=[
+            SshEndpoint(
+                slug="nas-server",
+                host="nas.local",
+                user="admin",
             ),
-        },
-        syncs={"s1": sync},
+        ],
+        dst_subdir="data",
+        dst_btrfs=BtrfsSnapshotConfig(enabled=True),
     )
     return config, sync
 
 
 def _remote_config_spaces() -> tuple[Config, SyncConfig]:
-    src = LocalVolume(slug="src", path="/mnt/my src")
-    dst_server = SshEndpoint(
-        slug="nas-server",
-        host="nas.local",
-        user="admin",
-    )
-    dst = RemoteVolume(
-        slug="dst",
-        ssh_endpoint="nas-server",
-        path="/my backup",
-    )
-    sync = SyncConfig(
-        slug="s1",
-        source="ep-src",
-        destination="ep-dst",
-    )
-    config = Config(
-        ssh_endpoints={"nas-server": dst_server},
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                subdir="my data",
-                btrfs_snapshots=BtrfsSnapshotConfig(enabled=True),
+    sync, config = two_volume_config(
+        src=LocalVolume(slug="src", path="/mnt/my src"),
+        dst=RemoteVolume(
+            slug="dst",
+            ssh_endpoint="nas-server",
+            path="/my backup",
+        ),
+        ssh_endpoints=[
+            SshEndpoint(
+                slug="nas-server",
+                host="nas.local",
+                user="admin",
             ),
-        },
-        syncs={"s1": sync},
+        ],
+        dst_subdir="my data",
+        dst_btrfs=BtrfsSnapshotConfig(enabled=True),
     )
     return config, sync
 
 
 def _hl_remote_config() -> tuple[SyncConfig, Config, dict[str, ResolvedEndpoint]]:
     server = SshEndpoint(slug="nas", host="nas.local", user="backup")
-    src = LocalVolume(slug="src", path="/src")
-    dst = RemoteVolume(slug="dst", ssh_endpoint="nas", path="/backup")
-    sync = SyncConfig(
-        slug="s1",
-        source="ep-src",
-        destination="ep-dst",
-    )
-    config = Config(
-        ssh_endpoints={"nas": server},
-        volumes={"src": src, "dst": dst},
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                hard_link_snapshots=HardLinkSnapshotConfig(
-                    enabled=True,
-                    max_snapshots=3,
-                ),
-            ),
-        },
-        syncs={"s1": sync},
+    sync, config = two_volume_config(
+        src=LocalVolume(slug="src", path="/src"),
+        dst=RemoteVolume(slug="dst", ssh_endpoint="nas", path="/backup"),
+        ssh_endpoints=[server],
+        dst_hard_link=HardLinkSnapshotConfig(
+            enabled=True,
+            max_snapshots=3,
+        ),
     )
     resolved = {"dst": ResolvedEndpoint(server=server)}
     return sync, config, resolved
@@ -184,7 +127,7 @@ class TestCreateSnapshotTimestamp:
 
 
 class TestListSnapshotsRemoteSpaces:
-    def test_found(self) -> None:
+    def test_snapshots_listed_when_path_has_spaces(self) -> None:
         runner = FakeCommandRunner().on(
             returns=completed(
                 returncode=0,
@@ -204,7 +147,7 @@ class TestListSnapshotsRemoteSpaces:
 
 
 class TestListSnapshotsLocal:
-    def test_found(self) -> None:
+    def test_snapshots_listed_when_present(self) -> None:
         runner = FakeCommandRunner().on(
             returns=completed(
                 returncode=0,
@@ -219,7 +162,7 @@ class TestListSnapshotsLocal:
             "2024-01-15T12:00:00.000Z",
         ]
 
-    def test_empty(self) -> None:
+    def test_none_listed_when_directory_empty(self) -> None:
         runner = FakeCommandRunner().on(returns=completed(returncode=0, stdout=""))
         config, sync = _local_config()
 
@@ -241,7 +184,7 @@ class TestListSnapshotsLocal:
 
 
 class TestListSnapshotsRemote:
-    def test_found(self) -> None:
+    def test_snapshots_listed_when_present(self) -> None:
         runner = FakeCommandRunner().on(
             returns=completed(
                 returncode=0,
@@ -259,71 +202,24 @@ class TestListSnapshotsRemote:
 
 
 def _hl_local_config(dst_path: Path) -> tuple[SyncConfig, Config]:
-    config = Config(
-        volumes={
-            "src": LocalVolume(slug="src", path="/src"),
-            "dst": LocalVolume(slug="dst", path=str(dst_path)),
-        },
-        sync_endpoints={
-            "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-            "ep-dst": SyncEndpoint(
-                slug="ep-dst",
-                volume="dst",
-                hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-            ),
-        },
-        syncs={"s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst")},
+    return two_volume_config(
+        src=LocalVolume(slug="src", path="/src"),
+        dst=LocalVolume(slug="dst", path=str(dst_path)),
+        dst_hard_link=HardLinkSnapshotConfig(enabled=True),
     )
-    return config.syncs["s1"], config
 
 
 class TestReadLatestSymlink:
-    def test_local_exists(self, tmp_path: Path) -> None:
-        dst = LocalVolume(slug="dst", path=str(tmp_path))
-        src = LocalVolume(slug="src", path="/src")
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
-        )
+    def test_snapshot_returned_when_latest_points_to_it(self, tmp_path: Path) -> None:
+        sync, config = _hl_local_config(tmp_path)
         latest = tmp_path / "latest"
         latest.symlink_to(f"snapshots/{_TS_LOCAL.name}")
 
         result = read_latest_symlink(sync, config)
         assert result == _TS_LOCAL
 
-    def test_local_missing(self, tmp_path: Path) -> None:
-        dst = LocalVolume(slug="dst", path=str(tmp_path))
-        src = LocalVolume(slug="src", path="/src")
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
-        )
+    def test_none_when_latest_missing(self, tmp_path: Path) -> None:
+        sync, config = _hl_local_config(tmp_path)
 
         result = read_latest_symlink(sync, config)
         assert result is None
@@ -357,27 +253,9 @@ class TestReadLatestSymlink:
         )
         assert result is None
 
-    def test_local_devnull(self, tmp_path: Path) -> None:
+    def test_none_when_latest_is_dev_null(self, tmp_path: Path) -> None:
         """Latest -> /dev/null returns None."""
-        dst = LocalVolume(slug="dst", path=str(tmp_path))
-        src = LocalVolume(slug="src", path="/src")
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
-        )
+        sync, config = _hl_local_config(tmp_path)
         latest = tmp_path / "latest"
         latest.symlink_to("/dev/null")
 
@@ -438,26 +316,8 @@ class TestReadLatestLink:
 
 
 class TestUpdateLatestSymlink:
-    def test_local(self, tmp_path: Path) -> None:
-        dst = LocalVolume(slug="dst", path=str(tmp_path))
-        src = LocalVolume(slug="src", path="/src")
-        sync = SyncConfig(
-            slug="s1",
-            source="ep-src",
-            destination="ep-dst",
-        )
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": sync},
-        )
+    def test_latest_points_to_snapshot_when_local(self, tmp_path: Path) -> None:
+        sync, config = _hl_local_config(tmp_path)
 
         update_latest_symlink(sync, config, _TS_LOCAL)
         link = tmp_path / "latest"
@@ -492,7 +352,7 @@ class TestUpdateLatestSymlink:
                 update_latest_symlink(sync, config, _TS_LOCAL)
         assert str(link.readlink()) == "snapshots/previous"
 
-    def test_remote(self) -> None:
+    def test_latest_replaced_with_ln_when_remote(self) -> None:
         runner = FakeCommandRunner().on(returns=completed(returncode=0, stderr=""))
         sync, config, resolved = _hl_remote_config()
 
@@ -696,21 +556,7 @@ class TestReadLatestSymlinkFailures:
 
 class TestLocalOSErrorTranslation:
     def test_update_latest_symlink_missing_dir(self, tmp_path: Path) -> None:
-        dst = LocalVolume(slug="dst", path=str(tmp_path / "absent"))
-        src = LocalVolume(slug="src", path="/src")
-        config = Config(
-            volumes={"src": src, "dst": dst},
-            sync_endpoints={
-                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
-                "ep-dst": SyncEndpoint(
-                    slug="ep-dst",
-                    volume="dst",
-                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
-                ),
-            },
-            syncs={"s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst")},
-        )
-        sync = config.syncs["s1"]
+        sync, config = _hl_local_config(tmp_path / "absent")
 
         with pytest.raises(
             SnapshotOperationError,

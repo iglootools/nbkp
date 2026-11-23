@@ -355,7 +355,7 @@ class TestLatestSymlinkTarget:
         assert state.target_valid is False
         assert state.snapshot is None
 
-    def test_devnull(self, tmp_path: Path) -> None:
+    def test_validity_unknown_when_target_is_dev_null(self, tmp_path: Path) -> None:
         state = self._state(tmp_path, "/dev/null")
         assert state.raw_target == "/dev/null"
         assert state.target_valid is None
