@@ -162,8 +162,10 @@ nbkp sh -o /mnt/usb-backup/backup.sh --relative-dst
 `nbkp sh` compiles the config into a bash script with every path and option
 baked in, for hosts without Python or to review the exact commands before
 running them. Endpoints are resolved once, at generation time (`--location`,
-`--exclude-location` and `--network` apply then). Volumes with mount management
-must be mounted beforehand (`nbkp disks mount`).
+`--exclude-location` and `--network` apply then): a sync with a remote volume
+whose SSH endpoints are all at an excluded location is generated as always
+inactive, the way `nbkp run` skips it. Volumes with mount management must be
+mounted beforehand (`nbkp disks mount`).
 
 ```bash
 nbkp sh -o backup.sh                    # write an executable script
@@ -172,21 +174,24 @@ nbkp sh -o /mnt/usb/backup.sh --relative-dst   # paths relative to the script
 ./backup.sh                             # run all syncs
 ./backup.sh --dry-run --progress overall
 ./backup.sh --strictness ignore-none    # any inactive sync aborts the run
+./backup.sh --help                      # the script's options and exit codes
 ```
 
 The script behaves like `nbkp run`: it checks every sync first (sentinels,
 tools, snapshot layout), skips inactive syncs without failing
 (`--strictness ignore-inactive`, the default), aborts on infrastructure errors
 before syncing anything, runs the syncs in dependency order, and cancels syncs
-downstream of a failed or skipped one. It exits non-zero when a sync fails or is
-cancelled because of a failure; a cancellation caused by an inactive (skipped)
-upstream sync is no more an error than that skip, unless
-`--strictness ignore-none`. With `--strictness ignore-all`, syncs with
-infrastructure errors are attempted once their sentinels are present. Pruning
-failures are logged as warnings, as in `nbkp run`. It also takes the lock
-`nbkp run` holds, so the script never runs at the same time as a run or another
-command that mounts drives or modifies destinations; without `flock`
-(util-linux, missing on stock macOS) it warns and runs unlocked.
+downstream of a failed or skipped one. Its exit codes are those of `nbkp run`: 1
+when a sync fails or is cancelled because of a failure, or when preflight aborts
+the run, 2 on a usage error (an unknown option or value), 0 otherwise; a
+cancellation caused by an inactive (skipped) upstream sync is no more an error
+than that skip, unless `--strictness ignore-none`. With
+`--strictness ignore-all`, syncs with infrastructure errors are attempted once
+their sentinels are present. Pruning failures are logged as warnings, as in
+`nbkp run`. It also takes the lock `nbkp run` holds, so the script never runs at
+the same time as a run or another command that mounts drives or modifies
+destinations; without `flock` (util-linux, missing on stock macOS) it warns and
+runs unlocked.
 
 ### Example 2: Multi-hop chained backups
 

@@ -18,6 +18,7 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.remote.endpoints import EndpointFilter
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.sh import ScriptOptions, VolumeWithoutPathError, generate_script
 
@@ -443,6 +444,94 @@ class TestRemoteToLocal:
         assert "/mnt/backup/" in script
 
 
+def _location_excluded_script(*, enabled: bool = True) -> str:
+    """Script for a pull from a volume whose only endpoint is at excluded ``home``."""
+    config = _remote_to_local_config()
+    server = config.ssh_endpoints["remote"].model_copy(update={"location": "home"})
+    sync = config.syncs["pull-data"].model_copy(update={"enabled": enabled})
+    config = config.model_copy(
+        update={"ssh_endpoints": {"remote": server}, "syncs": {"pull-data": sync}},
+    )
+    resolved = resolve_all_endpoints(
+        config,
+        EndpointFilter(exclude_locations=["home"]),
+    )
+    return generate_script(config, _OPTIONS, now=_NOW, resolved_endpoints=resolved)
+
+
+def _run_script(script: str, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["bash", "-s", "--", *args],
+        input=script,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+class TestLocationExcluded:
+    def test_sync_is_rendered_inactive(self) -> None:
+        script = _location_excluded_script()
+        assert "# : location-excluded — pull-data: volume remote-vol:" in script
+        assert "remote.example.com" not in script
+        assert "sync_pull_data()" not in script
+        assert (
+            'nbkp_run_sync pull-data sync_pull_data "$NBKP_PF_sync_pull_data"\n'
+        ) in script
+        _bash_n(script)
+
+    def test_sync_is_skipped_as_inactive(self) -> None:
+        result = _run_script(_location_excluded_script(), "--dry-run")
+        assert result.returncode == 0, result.stderr
+        assert "INACTIVE: volume remote-vol: all SSH endpoints" in result.stderr
+        assert "SKIPPED pull-data: inactive" in result.stderr
+
+    def test_ignore_none_fails_on_it(self) -> None:
+        result = _run_script(
+            _location_excluded_script(),
+            "--dry-run",
+            "--strictness",
+            "ignore-none",
+        )
+        assert result.returncode == 1
+
+    def test_disabled_sync_is_not_rendered(self) -> None:
+        script = _location_excluded_script(enabled=False)
+        assert (
+            "# : disabled — pull-data (not rendered: volume remote-vol: all SSH"
+            in script
+        )
+        assert "remote.example.com" not in script
+        _bash_n(script)
+
+
+class TestArguments:
+    """The generated script's own options and exit codes match ``nbkp run``'s."""
+
+    @pytest.mark.parametrize("flag", ["-h", "--help"])
+    def test_help(self, flag: str) -> None:
+        result = _run_script(generate_script(Config(), _OPTIONS, now=_NOW), flag)
+        assert result.returncode == 0, result.stderr
+        assert "Usage: " in result.stdout
+        assert "--strictness LEVEL" in result.stdout
+
+    @pytest.mark.parametrize(
+        ("args", "message"),
+        [
+            (["--nope"], "unknown option: --nope"),
+            (["--strictness", "strict"], "unknown strictness: strict"),
+            (["--progress=bars"], "unknown progress mode: bars"),
+            (["--progress"], "option --progress requires a value"),
+            (["-n", "-S"], "option -S requires a value"),
+        ],
+    )
+    def test_usage_error_exits_2(self, args: list[str], message: str) -> None:
+        result = _run_script(generate_script(Config(), _OPTIONS, now=_NOW), *args)
+        assert result.returncode == 2
+        assert f"Error: {message}" in result.stderr
+        assert "--help" in result.stderr
+
+
 class TestDisabledSync:
     def test_commented_out(self) -> None:
         config = _disabled_config()
@@ -797,6 +886,30 @@ class TestEdgeCases:
             check=lambda e: e.volume_slug == "dst",
         ):
             generate_script(mount_managed_config(), _OPTIONS, now=_NOW)
+
+    def test_unused_volume_without_path_is_ignored(self) -> None:
+        config = _local_to_local_config()
+        spare = LocalVolume(
+            slug="spare",
+            mount=MountConfig(device_uuid="5941f273-f73c-44c5-a3ef-fae7248db1b6"),
+        )
+        config = config.model_copy(
+            update={"volumes": {**config.volumes, "spare": spare}},
+        )
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "sync_my_sync()" in script
+        _bash_n(script)
+
+    def test_disabled_sync_on_volume_without_path_is_not_rendered(self) -> None:
+        config = mount_managed_config()
+        sync = config.syncs["my-sync"].model_copy(update={"enabled": False})
+        config = config.model_copy(update={"syncs": {"my-sync": sync}})
+        script = generate_script(config, _OPTIONS, now=_NOW)
+        assert "# : disabled — my-sync (not rendered: volume dst has no 'path')" in (
+            script
+        )
+        assert "# sync_my_sync  # disabled" in script
+        _bash_n(script)
 
     def test_empty_config(self) -> None:
         config = Config()
