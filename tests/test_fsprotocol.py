@@ -6,6 +6,7 @@ import pytest
 
 from nbkp.fsprotocol import (
     InvalidSnapshotNameError,
+    Snapshot,
     format_snapshot_name,
     parse_snapshot_name,
 )
@@ -57,3 +58,15 @@ class TestFormatSnapshotName:
         """Its name would lack the Z, so parse_snapshot_name would not see it."""
         with pytest.raises(ValueError, match="UTC-aware"):
             format_snapshot_name(now)
+
+
+class TestSnapshotCreate:
+    @pytest.mark.parametrize("macos_local", [False, True])
+    def test_timestamp_matches_the_name(self, *, macos_local: bool) -> None:
+        """A sub-millisecond time is truncated, as the name truncates it."""
+        now = _TS + timedelta(microseconds=456)
+
+        snapshot = Snapshot.create(now, macos_local=macos_local)
+
+        assert snapshot.timestamp == _TS
+        assert snapshot == Snapshot.from_name(snapshot.name)

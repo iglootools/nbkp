@@ -229,12 +229,20 @@ class TestCleanupOrphanedSnapshots:
         assert deleted == [f"{tmp_path}/snapshots/2024-01-01T00:00:00.000Z"]
         assert list((tmp_path / "snapshots").iterdir()) == []
 
-    def test_deletes_every_snapshot_when_latest_is_absent(self, tmp_path: Path) -> None:
+    def test_keeps_every_snapshot_when_latest_is_absent(self, tmp_path: Path) -> None:
+        """
+        An absent ``latest`` is outside damage, not "no sync yet": nothing is deleted.
+
+        nbkp never removes the link, so the snapshots may be complete.
+        """
         sync, config = self._leftover_config(tmp_path)
 
-        deleted = cleanup_orphaned_snapshots(sync, config)
+        with pytest.raises(SnapshotOperationError) as info:
+            cleanup_orphaned_snapshots(sync, config)
 
-        assert deleted == [f"{tmp_path}/snapshots/2024-01-01T00:00:00.000Z"]
+        assert info.value.op == SnapshotOp.READ_LATEST
+        assert info.value.path == f"{tmp_path}/latest"
+        assert (tmp_path / "snapshots" / "2024-01-01T00:00:00.000Z").is_dir()
 
     def test_nothing_to_delete_without_snapshots_dir(self, tmp_path: Path) -> None:
         sync, config = self._leftover_config(tmp_path)
@@ -331,16 +339,49 @@ class TestPruneSnapshots:
 
         snaps = tmp_path / "snapshots"
         snaps.mkdir()
-        for name in [_S1, _S2]:
+        for name in [_S1, _S2, _S3]:
             (snaps / name).mkdir()
         latest = tmp_path / "latest"
-        latest.symlink_to(f"snapshots/{_S1}")
+        latest.symlink_to(f"snapshots/{_S2}")
 
-        # max_snapshots=1, but _S1 is latest so only _S2 pruned
+        # _S3, newer than latest, is a failed sync's leftover: neither counted
+        # nor pruned, so _S1 goes and _S2 (latest) stays.
         deleted = prune_snapshots(sync, config, 1)
-        assert len(deleted) == 1
-        assert _S2 in deleted[0]
-        assert (snaps / _S1).exists()
+        assert deleted == [f"{tmp_path}/snapshots/{_S1}"]
+        assert sorted(p.name for p in snaps.iterdir()) == [_S2, _S3]
+
+    def test_does_not_count_snapshots_newer_than_latest(self, tmp_path: Path) -> None:
+        """
+        A failed sync's leftover never costs a complete snapshot its place.
+
+        Counted, the half-written _S3 would make _S1 the excess, and the next
+        orphan cleanup would then remove _S3 too, leaving one snapshot short.
+        """
+        dst = LocalVolume(slug="dst", path=str(tmp_path))
+        src = LocalVolume(slug="src", path="/src")
+        sync = SyncConfig(slug="s1", source="ep-src", destination="ep-dst")
+        config = Config(
+            volumes={"src": src, "dst": dst},
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(
+                    slug="ep-dst",
+                    volume="dst",
+                    hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+                ),
+            },
+            syncs={"s1": sync},
+        )
+        snaps = tmp_path / "snapshots"
+        snaps.mkdir()
+        for name in [_S1, _S2, _S3]:
+            (snaps / name).mkdir()
+        (tmp_path / "latest").symlink_to(f"snapshots/{_S2}")
+
+        deleted = prune_snapshots(sync, config, 2)
+
+        assert deleted == []
+        assert sorted(p.name for p in snaps.iterdir()) == [_S1, _S2, _S3]
 
     def test_dry_run(self, tmp_path: Path) -> None:
         dst = LocalVolume(slug="dst", path=str(tmp_path))

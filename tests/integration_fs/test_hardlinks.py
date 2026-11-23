@@ -189,11 +189,12 @@ class TestCleanupOrphanedSnapshots:
         snap_dir = Path(str(dst)) / "snapshots" / snap_name
         assert snap_dir.exists()
 
-    def test_noop_when_no_latest(self, tmp_path: Path) -> None:
+    def test_noop_when_no_sync_completed_yet(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         dst = tmp_path / "dst"
         src.mkdir()
         dst.mkdir()
+        (dst / "latest").symlink_to("/dev/null")
 
         sync, config = _make_config(str(src), str(dst))
 

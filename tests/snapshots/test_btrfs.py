@@ -378,23 +378,26 @@ class TestPruneSnapshots:
         assert runner.commands_starting_with("btrfs") == []
 
     def test_protects_latest_snapshot(self) -> None:
-        """The snapshot that latest points to must not be pruned."""
+        """
+        The snapshot that latest points to must not be pruned.
+
+        Nor the one newer than it, left by a failed sync, which is not counted.
+        """
         config, sync = _remote_config()
         runner = _listing(_THREE, latest="2024-01-02T00:00:00.000Z")
 
         deleted = prune_snapshots(sync, config, max_snapshots=1, run=runner)
 
-        # excess=2: 20240102 (latest) is skipped, so the two others go.
-        assert deleted == [
-            "/backup/data/snapshots/2024-01-01T00:00:00.000Z",
-            "/backup/data/snapshots/2024-01-03T00:00:00.000Z",
-        ]
+        # Counted: 20240101 and 20240102 (latest), so excess=1.
+        assert deleted == ["/backup/data/snapshots/2024-01-01T00:00:00.000Z"]
         assert _deleted(runner) == deleted
 
-    def test_protects_latest_when_oldest(self) -> None:
+    def test_does_not_count_snapshots_newer_than_latest(self) -> None:
+        """Counted, they would each cost a complete snapshot its place."""
         config, sync = _remote_config()
-        runner = _listing(_THREE, latest="2024-01-01T00:00:00.000Z")
+        runner = _listing(_THREE, latest="2024-01-02T00:00:00.000Z")
 
         deleted = prune_snapshots(sync, config, max_snapshots=2, run=runner)
 
-        assert deleted == ["/backup/data/snapshots/2024-01-02T00:00:00.000Z"]
+        assert deleted == []
+        assert _deleted(runner) == []

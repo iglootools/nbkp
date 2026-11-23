@@ -106,9 +106,8 @@ def _orphan_cleanup_block(spec: SyncSpec) -> str:
     And all of them while ``latest`` points to ``/dev/null``, as in ``nbkp run``.
 
     Best-effort, as in ``nbkp run``: a failed removal is only a warning.
-    Unlike ``nbkp run``, an unreadable ``latest`` skips the cleanup instead
-    of counting as absent: the script cannot tell a missing link from a
-    failed ``readlink``, and preflight has already required the link.
+    A ``latest`` that cannot be read, absent or not, skips the cleanup, as
+    ``nbkp run`` skips it when the link is absent.
     """
     rm = _rm_snapshot(spec, SNAP)
     warn = 'nbkp_log "WARN: failed to remove orphaned snapshot: $snap"'
@@ -325,29 +324,42 @@ def _delete_snapshot_cmds(spec: SyncSpec) -> list[str]:
             return [_on_dst(spec, ["rm", "-rf", path])]
 
 
+# Whether $snap is newer than the snapshot `latest` designates (never while
+# `latest` points to /dev/null), read by _prune_block.
+_AFTER_LATEST = (
+    '{ [ -n "$NBKP_LATEST_NAME" ] && nbkp_snapshot_after "$snap" "$NBKP_LATEST_NAME"; }'
+)
+
+
 def _prune_block(spec: SyncSpec, max_snapshots: int) -> str:
     """
     Delete the oldest snapshots beyond *max_snapshots*, never ``latest``.
 
-    Same selection as ``prune_snapshots``: drop the latest target from the
-    candidates first, then take the oldest ``excess`` of the rest. As there,
-    a ``latest`` that cannot be read, or a listing that fails, stops the
-    pruning (a warning) rather than pruning without that protection.
+    Same selection as ``prune_snapshots``: leave out the snapshots newer
+    than ``latest`` (failed syncs' leftovers, possibly incomplete) from both
+    the count and the candidates, drop the latest target from the candidates,
+    then take the oldest ``excess`` of the rest. As there, a ``latest`` that
+    cannot be read, or a listing that fails, stops the pruning (a warning)
+    rather than pruning without that protection.
     """
     selection = dedent(f"""\
         NBKP_SNAPS={_list_snapshots(spec)}
-        NBKP_COUNT=$(printf '%s\\n' "$NBKP_SNAPS" | grep -c . || true)
-        NBKP_EXCESS=$((NBKP_COUNT - {max_snapshots}))
         NBKP_LATEST_LINK={_readlink_latest(spec, strict=True)}
         if [ "$NBKP_LATEST_LINK" = "/dev/null" ]; then
             NBKP_LATEST_NAME=""
         else
             NBKP_LATEST_NAME="${{NBKP_LATEST_LINK##*/}}"
         fi
+        NBKP_COUNT=0
+        for snap in $NBKP_SNAPS; do
+            {_AFTER_LATEST} || NBKP_COUNT=$((NBKP_COUNT + 1))
+        done
+        NBKP_EXCESS=$((NBKP_COUNT - {max_snapshots}))
         NBKP_PRUNED=0""")
     loop_body = "\n".join(
         [
             '[ "$NBKP_PRUNED" -lt "$NBKP_EXCESS" ] || break',
+            f"! {_AFTER_LATEST} || continue",
             '[ "$snap" != "$NBKP_LATEST_NAME" ] || continue',
             'nbkp_log "Pruning snapshot: $snap"',
             *_delete_snapshot_cmds(spec),
