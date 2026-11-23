@@ -78,9 +78,9 @@ class ConfigError(Exception):
             case ConfigErrorKind.INVALID_YAML:
                 return f"Invalid YAML in {self.path}: {self.detail}"
             case ConfigErrorKind.NOT_A_MAPPING:
-                return "Config file must be a YAML mapping"
+                return f"Config file {self.path} must be a YAML mapping"
             case ConfigErrorKind.VALIDATION:
-                return self.detail or "Config validation failed"
+                return f"Invalid config {self.path}: {self.detail}"
             case ConfigErrorKind.INVALID_SSH_CONFIG:
                 return f"Invalid SSH config {self.path}: {self.detail}"
 

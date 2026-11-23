@@ -266,7 +266,13 @@ def _format_validation_error(err: ErrorDetails) -> str:
 def _config_error_body(e: ConfigError) -> str:
     match e.__cause__:
         case ValidationError() as cause:
-            return "\n".join(_format_validation_error(err) for err in cause.errors())
+            # The heading names the file: the search covers several locations.
+            return "\n".join(
+                [
+                    f"Invalid config {e.path}:",
+                    *(_format_validation_error(err) for err in cause.errors()),
+                ],
+            )
         case _:
             return str(e)
 

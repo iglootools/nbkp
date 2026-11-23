@@ -36,6 +36,10 @@ class TestFormatConfigError:
         e = _validation_error()
         assert "retention_count: Input should be a valid integer" in _render(e)
 
+    def test_validation_error_names_config_file(self) -> None:
+        """The search covers several locations: the panel says which file failed."""
+        assert "Invalid config /etc/nbkp/config.yaml:" in _render(_validation_error())
+
     def test_validation_error_details_in_json(self) -> None:
         [error] = config_error_json(_validation_error())["error"]["errors"]
         assert error["loc"] == ["retention_count"]
@@ -48,6 +52,10 @@ def _validation_error() -> ConfigError:
 
     with pytest.raises(ValidationError) as exc:
         M.model_validate({"retention_count": "x"})
-    e = ConfigError(ConfigErrorKind.VALIDATION, detail="bad config")
+    e = ConfigError(
+        ConfigErrorKind.VALIDATION,
+        path="/etc/nbkp/config.yaml",
+        detail="bad config",
+    )
     e.__cause__ = exc.value
     return e

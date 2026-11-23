@@ -187,6 +187,13 @@ class TestLoadConfig:
             load_config(str(p))
         assert excinfo.value.reason == ConfigErrorKind.NOT_A_MAPPING
 
+    def test_empty_file_names_config_file(self, tmp_path: Path) -> None:
+        p = tmp_path / "empty.yaml"
+        p.write_text("")
+        with pytest.raises(ConfigError) as excinfo:
+            load_config(str(p))
+        assert str(excinfo.value) == f"Config file {p} must be a YAML mapping"
+
     def test_invalid_volume_type(self, tmp_path: Path) -> None:
         p = tmp_path / "bad_type.yaml"
         p.write_text(
