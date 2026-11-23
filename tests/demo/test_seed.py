@@ -37,8 +37,18 @@ class TestDryRun:
     def test_plan_lists_docker_steps(self) -> None:
         steps = seed_plan(Path("/tmp/x"), docker=True, luks=True)  # noqa: S108 -- a plan only, never written
         assert steps[0] == "create seed directory /tmp/x"
-        assert "start the bastion and storage containers" in steps
-        assert "mount, seed and umount the encrypted volume" in steps
+        assert "start the storage container" in steps
+        assert steps.index("mount the encrypted volume") < steps.index(
+            "create sentinels and seed test data",
+        )
+        assert steps[-2:] == ["umount the encrypted volume", "write config.yaml"]
+
+    def test_local_plan_has_no_docker_step(self) -> None:
+        assert seed_plan(None, docker=False, luks=True) == [
+            "create seed directory a new temp dir (nbkp-demo-*)",
+            "create sentinels and seed test data",
+            "write config.yaml",
+        ]
 
     def test_cli_dry_run_creates_nothing(self, tmp_path: Path) -> None:
         target = tmp_path / "seed"

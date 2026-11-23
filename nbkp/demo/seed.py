@@ -131,22 +131,67 @@ class SeedResult(BaseModel):
 
 @dataclass(frozen=True)
 class SeedStep:
-    """*running* is shown while the step runs, *done* is its result line."""
+    """
+    *running* is shown while the step runs, *done* is its result line.
+
+    *planned* is what ``--dry-run`` says the step would do.
+    """
 
     running: str
     done: str
+    planned: str
 
 
-_BUILD_IMAGE = SeedStep("Building Docker image...", "build Docker image")
-_CREATE_NETWORK = SeedStep("Creating Docker network...", "create Docker network")
-_START_BASTION = SeedStep("Starting bastion container...", "start bastion container")
-_WAIT_BASTION = SeedStep("Waiting for bastion SSH...", "bastion SSH")
-_START_STORAGE = SeedStep("Starting storage container...", "start storage container")
-_WAIT_STORAGE = SeedStep("Waiting for storage SSH...", "storage SSH")
-_READ_LUKS = SeedStep("Reading LUKS metadata...", "read LUKS metadata")
-_MOUNT = SeedStep("Mounting encrypted volume...", "mount encrypted volume")
-_UMOUNT = SeedStep("Unmounting encrypted volume...", "umount encrypted volume")
-_SEED_VOLUMES = SeedStep("Seeding volumes...", "seed volumes")
+_BUILD_IMAGE = SeedStep(
+    "Building Docker image...",
+    "build Docker image",
+    "build the Docker image",
+)
+_CREATE_NETWORK = SeedStep(
+    "Creating Docker network...",
+    "create Docker network",
+    "create the Docker network",
+)
+_START_BASTION = SeedStep(
+    "Starting bastion container...",
+    "start bastion container",
+    "start the bastion container",
+)
+_WAIT_BASTION = SeedStep(
+    "Waiting for bastion SSH...",
+    "bastion SSH",
+    "wait for the bastion's SSH",
+)
+_START_STORAGE = SeedStep(
+    "Starting storage container...",
+    "start storage container",
+    "start the storage container",
+)
+_WAIT_STORAGE = SeedStep(
+    "Waiting for storage SSH...",
+    "storage SSH",
+    "wait for the storage container's SSH",
+)
+_READ_LUKS = SeedStep(
+    "Reading LUKS metadata...",
+    "read LUKS metadata",
+    "read LUKS metadata",
+)
+_MOUNT = SeedStep(
+    "Mounting encrypted volume...",
+    "mount encrypted volume",
+    "mount the encrypted volume",
+)
+_UMOUNT = SeedStep(
+    "Unmounting encrypted volume...",
+    "umount encrypted volume",
+    "umount the encrypted volume",
+)
+_SEED_VOLUMES = SeedStep(
+    "Seeding volumes...",
+    "seed volumes",
+    "create sentinels and seed test data",
+)
 
 
 def seed_steps(*, docker: bool, luks: bool) -> list[SeedStep]:
@@ -233,25 +278,16 @@ def seed_plan(
     docker: bool = True,
     luks: bool = True,
 ) -> list[str]:
-    """Return the steps :func:`seed_demo` would perform, for ``--dry-run``."""
+    """
+    Return the steps :func:`seed_demo` would perform, for ``--dry-run``.
+
+    Those of :func:`seed_steps`, between creating the seed directory and
+    writing the config.
+    """
     target = str(base_dir) if base_dir is not None else "a new temp dir (nbkp-demo-*)"
     return [
         f"create seed directory {target}",
-        *(
-            [
-                "build the Docker image",
-                "create the Docker network",
-                "start the bastion and storage containers",
-            ]
-            if docker
-            else []
-        ),
-        *(
-            ["read LUKS metadata", "mount, seed and umount the encrypted volume"]
-            if docker and luks
-            else []
-        ),
-        "create sentinels and seed test data",
+        *(step.planned for step in seed_steps(docker=docker, luks=luks)),
         "write config.yaml",
     ]
 
