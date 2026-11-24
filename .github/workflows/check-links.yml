@@ -33,7 +33,7 @@ jobs:
     # because checkout there resolves to the calling repository. Pinned to a commit SHA for the
     # reason guidelines/project-setup/workflows.md in iglootools/common gives for actions, with
     # the version in the trailing comment so Renovate can raise the update.
-    uses: iglootools/common/.github/workflows/reusable-check-links.yml@df682fe3be4f149c39d60e04b7795f08966da0c7 # v2.2.1
+    uses: iglootools/common/.github/workflows/reusable-check-links.yml@590264fe0a6e3fa4fbb5ef5eb685c9e581432205 # v2.2.2
     with:
       # Pinned here, matching the version mise.lock was generated with; the custom manager in
       # the shared iglootools/common renovate/base preset keeps it current.
