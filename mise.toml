@@ -12,68 +12,29 @@ dprint = "0.64.3"
 rumdl = "0.3.4"
 # Renovate, for lint-renovate and renovate-dry-run (guidelines/project-setup/dependency-automation.md
 # in iglootools/common, which explains both options). trust_policy_excludes exempts one reviewed
-# release, published by hand without provenance; allow_builds lets re2 build its native module,
-# so the validator checks regexes with RE2, the engine Renovate runs.
+# release, published by hand without provenance. Drop the exclusion once Renovate no longer
+# resolves to @yarnpkg/libzip@3.2.2; reviewed in iglootools/common's mise.toml. allow_builds lets
+# re2 build its native module, so the validator checks regexes with RE2, the engine Renovate runs.
 "npm:renovate" = { version = "44.239.1", trust_policy_excludes = ["@yarnpkg/libzip@3.2.2"], allow_builds = ["re2"] }
 node = "26.13.0"
 jq = "1.8.2"
 
 [env]
-# Pin uv to the interpreter mise installed, by absolute path. mise's own docs are explicit
-# that a bare version number is not enough: it "does not guarantee that uv uses the
-# specific interpreter managed by mise — uv may fall back to a system or self-managed
-# Python of the same version". This is also what makes a raised [tools] python pin actually
-# recreate .venv, instead of uv reusing a venv built on the previous patch release because
-# it still satisfies requires-python.
+# Pin uv to mise's interpreter by absolute path (guidelines/project-setup/python-tooling.md in
+# iglootools/common, "Pin uv to mise's interpreter by absolute path").
 UV_PYTHON = { value = "{{ tools.python.path }}", tools = true }
 UV_PYTHON_DOWNLOADS = "never"
 UV_PYTHON_PREFERENCE = "only-system"
 
 [settings]
 lockfile = true
-
-# `mise deps` is experimental. Set here rather than relying on MISE_EXPERIMENTAL in each
-# developer's shell, so a fresh clone behaves the same as CI — otherwise the difference
-# shows up as "dependencies mysteriously not installing".
+# [deps.uv] installs the environment and mise only sources it (python-tooling.md, "Let
+# `[deps.uv]` install the environment, and mise only source it").
 experimental = true
-
-# For uv projects mise documents python.uv_venv_auto ([settings]) rather than
-# _.python.venv ([env]), which is "for projects that don't use uv". They are separate code
-# paths, so this is a replacement and not an addition. mise locates the uv project by
-# walking up for uv.lock, which means this no-ops until that file exists — if uv.lock is
-# ever deleted or gitignored, activation silently stops rather than erroring.
-#
-# "source", not "create|source": with [deps.uv] enabled, creating the venv is the deps
-# provider's job. The cookbook says so outright ("if you prefer mise deps to create the venv,
-# keep it at source"), and the two do fight in practice. Measured on a fresh clone with
-# "create|source", `mise install` announced the creation and then failed on its own result:
-#   mise creating venv with uv at: <path>/.venv
-#   error: Failed to create virtual environment
-#     Caused by: A virtual environment already exists at: .venv
-#   mise WARN  uv venv creation failed at: <path>/.venv
-# With "source" the same clone installs silently, and the first `mise run` lets [deps.uv]'s
-# `uv sync` create and populate .venv.
-#
-# The consequence is that .venv does not exist until that first `mise run` — so there is no
-# .venv/bin to be on PATH for it. That is the second reason the tasks below use `uv run`
-# rather than bare commands.
 python.uv_venv_auto = "source"
 
-# Runs `uv sync` before every `mise run`/`mise x`, but only when uv.lock or pyproject.toml
-# changed or .venv went missing (blake3 source hashing) — so freshness costs one check per
-# change instead of a sync per command. Use `mise run --no-deps <task>` to skip it.
-#
-# Only install_command() reads `run` — sources(), optional_outputs() and applicability() are
-# unconditional — so overriding it for --all-extras keeps the built-in uv.lock hashing and
-# .venv tracking. CI adds strictness through UV_LOCKED in the job env rather than a
-# different command here, so local and CI runs stay identical.
-#
-# Tasks still invoke tools through `uv run --no-sync` rather than bare. mise activates this
-# project's .venv but does not remove a *foreign* .venv/bin already on PATH, so in a shell
-# where another project's venv is active, a bare `ruff` silently runs that project's copy
-# (measured: this project's venv landed at PATH position 16, the foreign one at 1). `uv run`
-# resolves the environment from the project root and ignores PATH, so it is immune. It is
-# also not slower here, and --no-sync keeps installation the deps provider's job alone.
+# Runs `uv sync` before every `mise run`, only when uv.lock or pyproject.toml changed or .venv is
+# missing; `--all-extras` because the tests cover the docker and keyring extras.
 [deps.uv]
 auto = true
 run = "uv sync --all-extras"
@@ -108,40 +69,34 @@ run = "uv run --no-sync iglootools common check-pins"
 description = "Check that mise.lock is up to date with mise.toml"
 run = "uv run --no-sync iglootools mise lock-check"
 
+# python-tooling.md, "Keep `install` and `reinstall` as tasks over `mise deps`".
 [tasks.install]
 description = "Install dependencies"
-# Delegates to the [deps.uv] provider rather than calling `uv sync` directly, so there is
-# one definition of how dependencies get installed. Kept as a named task so that if the
-# experimental deps engine has to be abandoned, this is the single place to change.
 run = "mise deps install uv"
 
 # Task families (guidelines/project-setup/mise.md in iglootools/common, "Name tasks by
 # family"): a task that rewrites files is named for what it writes (fmt, toc, clidocs), anything
-# that fails without writing is a lint-*, and preflight runs every lint and test before a push.
+# that fails without writing is a lint-*, and preflight runs every lint and test before a push,
+# the lints and the tests in parallel.
 
 [tasks.preflight]
 description = "Run every lint and every test, Docker suites included (what CI runs, across its three jobs)"
-run = [
-  { task = "lint" },
-  { task = "test-all" },
-]
+run = [{ tasks = ["lint", "test"] }]
 
 [tasks.preflight-quick]
-description = "Run every lint and the tests that need no Docker (unit and filesystem)"
-run = [
-  { task = "lint" },
-  { tasks = ["test-unit", "test-integration-fs"] },
-]
+description = "Run every lint and the unit tests"
+run = [{ tasks = ["lint", "test-unit"] }]
 
 # CI runs three jobs in parallel, one per ci-* task: the two Docker suites take about a
 # minute each and do not need each other, so running them one after the other only made
-# CI wait. Together the three cover preflight.
+# CI wait. Together the three cover preflight; the first adds the filesystem suite, which
+# needs no Docker, to preflight-quick.
 [tasks.ci-preflight-quick]
-description = "Build, then run every lint and the unit and filesystem tests (CI job 1/3)"
+description = "Install, then run every lint and the unit and filesystem tests (CI job 1/3)"
 run = [
   { task = "install" },
-  { task = "build" },
   { task = "preflight-quick" },
+  { task = "test-integration-fs" },
 ]
 
 [tasks.ci-test-docker]
@@ -159,7 +114,7 @@ run = [
 ]
 
 [tasks.ci-build]
-description = "Install, build the package and verify its version (what the publish workflows run)"
+description = "Install, build the package and verify its version (the preflight build job and the publish workflows)"
 run = [
   { task = "install" },
   { task = "build" },
@@ -221,7 +176,7 @@ description = "Run filesystem integration tests"
 # don't contend for shared filesystem state.
 run = "uv run --no-sync pytest tests/integration_fs/ -n auto -v"
 
-[tasks.test-all]
+[tasks.test]
 description = "Run all tests"
 run = [
   { task = "test-unit" },
@@ -272,12 +227,8 @@ run = [
   { task = "lint-common-pins" },
 ]
 
-# Why the formatters need a lint of their own: `ruff format` rewrites files and exits 0 whether
-# or not it changed anything, so as a gate it cannot fail. On CI it reformatted inside the
-# runner, threw the result away with the workspace, and reported success, leaving formatting
-# the one check that was never actually enforced. `--check` reports the same diff but writes
-# nothing and exits non-zero. dprint has the same split. rumdl has no lint-fmt-* of its own:
-# lint-markdown reports what `rumdl fmt` would change along with what it cannot fix.
+# The formatters exit 0 whether or not they changed anything, so only their check form can gate
+# (guidelines/project-setup/formatting.md, "Gate formatting with `lint-fmt` and `lint-markdown`").
 [tasks.lint-fmt]
 description = "Check that every file is formatted (fix with `mise run fmt`)"
 run = [
@@ -299,15 +250,13 @@ run = "rumdl check ."
 
 [tasks.lint-ruff]
 description = "Lint the Python with ruff"
-run = "uv run --no-sync ruff check nbkp/ tests/ build-scripts/"
+run = "uv run --no-sync ruff check ."
 
 [tasks.lint-types]
 description = "Type-check with pyright"
 run = "uv run --no-sync pyright"
 
-# The uv.lock counterpart of lock-check, and the replacement for `poetry check --lock`:
-# asserts uv.lock is consistent with pyproject.toml. Distinct from UV_LOCKED in CI, which
-# asserts a sync would not *change* the lock. --check does not write.
+# python-tooling.md, "Assert the lock in CI with `UV_LOCKED=1` and in `lint` with `uv lock --check`".
 [tasks.lint-lock-uv]
 description = "Check that uv.lock is up to date with pyproject.toml"
 run = "uv lock --check"

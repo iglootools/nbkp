@@ -18,10 +18,10 @@ fail without writing, and `lint` runs every one of them.
 ```bash
 # mise tasks
 mise run preflight          # every lint and every test, Docker suites included (what CI runs)
-mise run preflight-quick    # every lint, and the unit and filesystem tests (no Docker)
+mise run preflight-quick    # every lint and the unit tests
 mise run lint               # every lint below
 
-mise run test-all           # All tests
+mise run test               # All tests
 
 mise run test-unit               # Unit tests only (no Docker, no external dependencies)
 
@@ -66,18 +66,16 @@ uv run --no-sync pytest tests/integration_fs/ -n auto -v             # Filesyste
 uv run --no-sync pytest tests/integration_docker/ -n auto -v         # Docker integration tests
 uv run --no-sync pytest tests/ -v                                    # All tests
 uv run --no-sync ruff format .                                       # formatting
-uv run --no-sync ruff check nbkp/ tests/ build-scripts/              # linting
+uv run --no-sync ruff check .                                        # linting
 uv run --no-sync pyright                                             # type-checking (strict; paths in [tool.pyright])
 uv run --no-sync pytest tests/remote/test_ssh.py::TestBuildSshBaseArgs::test_full -v  # run a single test
 ```
 
-`uv run --no-sync` is the prefix to use rather than a bare `pytest`/`ruff`, as
-the mise tasks above do. `uv run` resolves the environment from the project
-root, so it is correct regardless of what is on `PATH` — a bare command in a
-shell that has *another* project's `.venv` active silently runs that project's
-copy of the tool. `--no-sync` stops it from syncing `.venv` on every call,
-leaving installation to `[deps.uv]` (below). From a shell where mise is not
-activated, run a tool with `mise exec -- <tool>` instead.
+Run a tool in the project's environment with `uv run --no-sync <tool>`, as the
+mise tasks above do, and a tool mise installs (dprint, rumdl) with
+`mise exec -- <tool>`, never bare, as
+[python-tooling.md › Invoke tools through `uv run --no-sync <tool>`](https://github.com/iglootools/common/blob/main/guidelines/project-setup/python-tooling.md#invoke-tools-through-uv-run---no-sync-tool-in-mise-tasks-not-bare)
+explains.
 
 Dependencies install themselves: `[deps.uv]` in `mise.toml` runs
 `uv sync --all-extras` before any `mise run` whenever `uv.lock` or

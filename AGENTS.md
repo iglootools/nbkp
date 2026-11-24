@@ -6,17 +6,19 @@ uv, Typer; tasks run through mise.
 
 ## Commands
 
-- `mise run preflight-quick`: every lint and the fast tests (no Docker suites),
-  before each commit.
+- `mise run preflight-quick`: every lint and the unit tests, before each
+  commit.
 - `mise run preflight`: every lint and test CI runs, every few commits and
   before review.
+- `mise run fmt` after editing any file.
 - `mise tasks` lists the rest.
-- Run a mise task when one does the job, and `uv run --no-sync <tool>`
-  otherwise, never a bare tool.
-- Generated documents are regenerated, never edited by hand:
-  `mise run reference-doc` rewrites the CLI reference, the config tables and the
-  Module Overview, and `mise run toc` the tables of contents. `lint` fails when
-  one is stale.
+- An agent has no mise-activated shell, so run a mise task when one does the
+  job, `uv run --no-sync <tool>` for a tool in the project's environment, and
+  `mise exec -- <tool>` for one mise installs
+  ([why](https://github.com/iglootools/common/blob/main/guidelines/project-setup/python-tooling.md#invoke-tools-through-uv-run---no-sync-tool-in-mise-tasks-not-bare)).
+- `mise run reference-doc` regenerates the generated references (the CLI
+  reference, the config tables and the Module Overview), and `mise run toc` the
+  tables of contents.
 
 ## Guidelines
 
