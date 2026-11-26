@@ -1,4 +1,4 @@
-{    
+{
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "description": [
     "The shared rules (digest pinning, the 14-day minimumReleaseAge with timestamp-optional, and the managers for the mise version in workflows and for [tool.uv] build-constraint-dependencies) come from the iglootools presets, pinned to a release tag: see guidelines/project-setup/dependency-automation.md in iglootools/common. What is here is nbkp's own."
