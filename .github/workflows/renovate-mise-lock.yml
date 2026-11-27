@@ -18,7 +18,7 @@ jobs:
       # caller allowed, not a grant of its own, so without this the job regenerates mise.lock
       # and then cannot push it.
       contents: write
-    uses: iglootools/common/.github/workflows/reusable-renovate-mise-lock.yml@d4fc272ba8ba19ac1e9493d61ab7dabcb0dffc94 # v2.4.1
+    uses: iglootools/common/.github/workflows/reusable-renovate-mise-lock.yml@e066ee8ebf5c067045afec10a1a3d1b1b13fa086 # v2.5.0
     # The iglootools GitHub App the lock is pushed as, so the preflight it triggers starts
     # without waiting for approval (guidelines/project-setup/shared-workflows.md in
     # iglootools/common). Named rather than `secrets: inherit`, which would hand the called
