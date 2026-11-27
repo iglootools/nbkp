@@ -8,6 +8,7 @@ github-cli = "2.103.3"
 # current pv binaries, and it has none for Windows, where the demo does not run anyway.
 "conda:pv" = { version = "1.12.7", os = ["linux", "macos"] }
 shellcheck = "0.11.0"
+actionlint = "1.7.12"
 dprint = "0.64.3"
 rumdl = "0.3.4"
 # Renovate, for lint-renovate and renovate-dry-run (guidelines/project-setup/dependency-automation.md
@@ -58,6 +59,10 @@ run = "uv run --no-sync iglootools python reinstall"
 [tasks.lint-shell]
 description = "Lint the tracked shell scripts with shellcheck"
 run = "uv run --no-sync iglootools shell lint"
+
+[tasks.lint-github-actions]
+description = "Lint the tracked GitHub Actions workflows with actionlint"
+run = "uv run --no-sync iglootools github lint"
 
 # Every pin on iglootools/common names the same release, and `iglootools common adopt` would
 # move each one (guidelines/project-setup/iglootools-cli.md in iglootools/common).
@@ -213,6 +218,7 @@ run = [
   { task = "lint-fmt" },
   { task = "lint-ruff" },
   { task = "lint-shell" },
+  { task = "lint-github-actions" },
   { task = "lint-markdown" },
   { task = "lint-types" },
   { task = "lint-lock-mise" },
