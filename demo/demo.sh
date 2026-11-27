@@ -24,14 +24,14 @@ NO_WAIT=true
 TYPE_SPEED=40
 DEMO_COMMENT_COLOR=$CYAN
 
-DEMO_DIR="/tmp/nbkp-demo"
+# A fresh private directory, never a fixed path under the shared /tmp: another local user
+# could create that path first, or plant a symlink there, before the demo seeds into it.
+DEMO_DIR="$(mktemp -d "${TMPDIR:-/tmp}/nbkp-demo.XXXXXX")"
 CFG="$DEMO_DIR/config.yaml"
 SH="$DEMO_DIR/backup.sh"
 
 # Pause between commands so the viewer can read the output
 pause() { sleep "${1:-2}"; }
-
-rm -rf "$DEMO_DIR"
 
 p "# Display nbkp version"
 pe "nbkp --version"
