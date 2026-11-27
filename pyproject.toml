@@ -278,6 +278,16 @@ allowed_importers = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "Only the demo and other testkits import a testkit"
+type = "protected"
+# Testkits ship in the wheel for `nbkp demo`, and some import optional extras
+# (remote/testkit/docker.py needs the `docker` extra): an import from runtime
+# code would fail on a plain install. The layers contract cannot see it, since a
+# testkit sits in its package's layer.
+protected_modules = ["nbkp.**.testkit"]
+allowed_importers = ["nbkp.demo", "nbkp.**.testkit"]
+
+[[tool.importlinter.contracts]]
 name = "Command wiring sits below the CLI sub-apps"
 type = "forbidden"
 source_modules = ["nbkp.cliwiring"]

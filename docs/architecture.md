@@ -282,7 +282,9 @@ dependencies; the contracts are what reject a new import that breaks a rule:
   They build scenarios for the tests and ship in the wheel for `nbkp demo`,
   which imports them at runtime, so they sit in their package's layer and import
   neither Rich nor Typer: a Docker failure is a `DockerError` the demo CLI
-  renders.
+  renders. Only `demo/` and other testkits import them (the "Only the demo and
+  other testkits import a testkit" contract): some need an optional extra, such
+  as `docker`, so an import from runtime code would fail on a plain install.
 
 ### Package Map
 
