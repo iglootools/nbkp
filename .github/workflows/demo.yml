@@ -58,5 +58,6 @@ jobs:
       version: 2026.11.12
       # The release to record; empty for a workflow_run or a tag push, which carry their own.
       tag: ${{ inputs.tag || github.event.client_payload.tag }}
-      # pv: demo-magic's simulated typing.
-      apt-packages: pv
+      # None: mise.toml pins pv (conda:pv), locked in mise.lock, and the input's default
+      # would apt-install a second, unlocked copy that PATH order could pick instead.
+      apt-packages: ""
