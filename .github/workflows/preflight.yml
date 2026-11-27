@@ -54,8 +54,11 @@ jobs:
     # unless others install the package".
     steps: &steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      # graphviz not available on mise
+      # graphviz is not available on mise. The Docker jobs below run these same steps
+      # (`steps: *steps`), but only lint-depgraph, in preflight-quick, needs graphviz's `dot`:
+      # the condition spares them the apt round-trip, and a failure when an apt mirror is down.
       - name: Install system dependencies
+        if: github.job == 'preflight-quick'
         run: sudo apt-get update && sudo apt-get install -y graphviz
       # Locked install of the committed pins: every tool is on a backend that `mise lock` can
       # record per-platform URLs and checksums for, so the action's default
