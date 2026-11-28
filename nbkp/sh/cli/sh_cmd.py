@@ -15,6 +15,7 @@ from nbkp.cliwiring.options import (
     EXCLUDE_LOCATION_OPTION,
     LOCATION_OPTION,
     NETWORK_OPTION,
+    expand_user_path,
 )
 from nbkp.cliwiring.runtime import runtime_of
 from nbkp.sh import ScriptOptions, VolumeWithoutPathError, generate_script
@@ -31,7 +32,7 @@ def sh_cmd(
             help="Write script to file (made executable)",
             file_okay=True,
             dir_okay=False,
-            resolve_path=True,
+            callback=expand_user_path,
         ),
     ] = None,
     *,

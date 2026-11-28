@@ -11,6 +11,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
+from nbkp.cliwiring.options import expand_user_path
 from nbkp.cliwiring.progress import StepProgressBar
 from nbkp.config import CredentialProvider
 from nbkp.disks import MountResult, UmountResult
@@ -110,7 +111,7 @@ def seed_cmd(
             " temp folder. Created if it does not exist.",
             file_okay=False,
             dir_okay=True,
-            resolve_path=True,
+            callback=expand_user_path,
         ),
     ] = None,
     dry_run: Annotated[
