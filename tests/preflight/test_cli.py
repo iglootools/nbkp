@@ -17,6 +17,7 @@ from nbkp.cliwiring.lock import hold_run_lock
 from nbkp.cliwiring.output_format import echo_json
 from nbkp.config.testkit import write_config
 from nbkp.preflight.cli.check_cmd import check_json
+from nbkp.remote.dispatch import build_tool_lookup_args
 from tests.fakes import FakeCommandRunner, FakeRunLock, fake_runtime
 from tests.fixtures.cli import runner
 from tests.fixtures.preflight import (
@@ -142,7 +143,7 @@ class TestCheckCommand:
 
     def test_infrastructure_error_exits_1(self, tmp_path: Path) -> None:
         rsync_missing = healthy_nas(
-            FakeCommandRunner().on("which", "rsync", returns=FAILS),
+            FakeCommandRunner().on(*build_tool_lookup_args("rsync"), returns=FAILS),
         )
 
         exit_code, _ = _check(write_config(tmp_path, nas_config()), run=rsync_missing)

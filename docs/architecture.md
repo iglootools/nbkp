@@ -81,7 +81,7 @@ to each for the hard parts:
   guard, not an external tool: a sync runs only when all its sentinels are
   present, so an unmounted or wrong drive is skipped rather than written to:
   [Sentinels](./domain.md#sentinels-presence-is-proven).
-- **util-linux / coreutils** (`findmnt`, `lsblk`, `stat`, `which`, `test`, …) —
+- **util-linux / coreutils** (`findmnt`, `lsblk`, `stat`, `test`, …) —
   the small probes behind preflight and mount discovery: `findmnt` (where a
   device is mounted + live mount options), `lsblk` (the unlocked cleartext
   device), `stat` (btrfs detection). Their availability is itself checked:

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from nbkp.cli import app
 from nbkp.config.testkit import write_config
+from nbkp.remote.dispatch import build_tool_lookup_args
 from tests.fakes import FakeCommandRunner, FakeRunLock, fake_runtime
 from tests.fixtures.cli import runner
 from tests.nas import healthy_nas, nas_config
@@ -34,7 +35,7 @@ def _troubleshoot(
 class TestTroubleshootCommand:
     def test_json_lists_issues_and_exits_1_on_fatal(self, tmp_path: Path) -> None:
         rsync_missing = healthy_nas(
-            FakeCommandRunner().on("which", "rsync", returns=FAILS),
+            FakeCommandRunner().on(*build_tool_lookup_args("rsync"), returns=FAILS),
         )
 
         exit_code, output = _troubleshoot(tmp_path, rsync_missing, "-o", "json")

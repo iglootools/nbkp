@@ -18,9 +18,11 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.remote.dispatch import build_tool_lookup_args
 from nbkp.remote.endpoints import EndpointFilter
 from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.sh import ScriptOptions, VolumeWithoutPathError, generate_script
+from nbkp.sh.quoting import quote, remote_command
 
 _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
 _OPTIONS = ScriptOptions(platform="linux", config_path="/etc/nbkp/config.yaml")
@@ -666,6 +668,18 @@ class TestPreflightChecks:
         )
         assert "ssh" in script
         assert ".nbkp-dst" in script
+
+    def test_remote_tool_check_asks_the_remote_shell_builtin(self) -> None:
+        config = _local_to_remote_config()
+        resolved = resolve_all_endpoints(config)
+        script = generate_script(
+            config,
+            _OPTIONS,
+            now=_NOW,
+            resolved_endpoints=resolved,
+        )
+        lookup = quote(remote_command(build_tool_lookup_args("rsync")))
+        assert lookup in script
 
 
 class TestDryRunAndProgress:

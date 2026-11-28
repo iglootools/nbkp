@@ -54,6 +54,7 @@ from nbkp.preflight.status.volume import (
 )
 from nbkp.preflight.testkit import check_sync, check_volume
 from nbkp.preflight.volume_checks import check_volume_capabilities, observe_ssh_endpoint
+from nbkp.remote.dispatch import build_tool_lookup_args
 from nbkp.remote.endpoints import EndpointFilter, ResolvedEndpoint, ResolvedEndpoints
 from nbkp.remote.resolution import resolve_all_endpoints, resolve_proxy_chain
 from nbkp.snapshots.common import create_snapshot_timestamp
@@ -286,7 +287,7 @@ class TestCheckRemoteVolume:
 
     def test_ssh_unreachable(self) -> None:
         """SSH connection fails entirely."""
-        run = FakeCommandRunner().on("which", returns=TimeoutError("timed out"))
+        run = FakeCommandRunner().on("sh", "-c", returns=TimeoutError("timed out"))
         vol, config = _remote_config()
         resolved = _make_resolved(config)
         status = check_volume(vol, resolved, run=run, platform="linux")
@@ -295,7 +296,7 @@ class TestCheckRemoteVolume:
         assert status.ssh_endpoint_status.diagnostics.ssh_reachable is False
         assert status.diagnostics is None
         # The first failed probe settles it: nothing else is tried.
-        assert run.commands == [["which", "rsync"]]
+        assert run.commands == [build_tool_lookup_args("rsync")]
 
 
 class TestCheckRemoteVolumeLocationExcluded:
@@ -1063,7 +1064,11 @@ class TestCheckSyncRemoteCommands:
 
     def test_rsync_not_found_on_remote_source(self, tmp_path: Path) -> None:
         config, sync = _sync_with_remote(tmp_path, "src")
-        run = FakeCommandRunner().on("which", "rsync", returns=FAILS, volume="src")
+        run = FakeCommandRunner().on(
+            *build_tool_lookup_args("rsync"),
+            returns=FAILS,
+            volume="src",
+        )
 
         status = _check(sync, config, resolved=_make_resolved(config), run=run)
         assert status.active is False
@@ -1074,7 +1079,11 @@ class TestCheckSyncRemoteCommands:
 
     def test_rsync_not_found_on_remote_destination(self, tmp_path: Path) -> None:
         config, sync = _sync_with_remote(tmp_path, "dst")
-        run = FakeCommandRunner().on("which", "rsync", returns=FAILS, volume="dst")
+        run = FakeCommandRunner().on(
+            *build_tool_lookup_args("rsync"),
+            returns=FAILS,
+            volume="dst",
+        )
 
         status = _check(sync, config, resolved=_make_resolved(config), run=run)
         assert status.active is False
@@ -1085,7 +1094,11 @@ class TestCheckSyncRemoteCommands:
 
     def test_btrfs_not_found_on_remote_destination(self, tmp_path: Path) -> None:
         config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
-        run = FakeCommandRunner().on("which", "btrfs", returns=FAILS, volume="dst")
+        run = FakeCommandRunner().on(
+            *build_tool_lookup_args("btrfs"),
+            returns=FAILS,
+            volume="dst",
+        )
 
         status = _check(
             sync,
@@ -1175,7 +1188,11 @@ class TestCheckSyncRemoteCommands:
     def test_stat_not_found_on_remote_destination(self, tmp_path: Path) -> None:
         config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
         # Were stat probed, ext4 would report VOL_NOT_BTRFS.
-        run = FakeCommandRunner().on("which", "stat", returns=FAILS, volume="dst")
+        run = FakeCommandRunner().on(
+            *build_tool_lookup_args("stat"),
+            returns=FAILS,
+            volume="dst",
+        )
 
         status = _check(
             sync,
@@ -1198,7 +1215,7 @@ class TestCheckSyncRemoteCommands:
         config, sync = _sync_with_remote(tmp_path, "dst", dst_btrfs=True)
         run = (
             FakeCommandRunner()
-            .on("which", "findmnt", returns=FAILS, volume="dst")
+            .on(*build_tool_lookup_args("findmnt"), returns=FAILS, volume="dst")
             # Were findmnt probed, its options would lack user_subvol_rm_allowed.
             .on("findmnt", "-T", "/backup", returns=completed(stdout="rw\n"))
         )
@@ -2881,8 +2898,7 @@ class TestConnectionLostDuringPreflight:
         # The host tools answer; the connection drops at the mount tools.
         run = healthy_host(
             FakeCommandRunner().on(
-                "which",
-                "udisksctl",
+                *build_tool_lookup_args("udisksctl"),
                 returns=EOFError("connection closed by peer"),
             ),
         )
@@ -2896,4 +2912,4 @@ class TestConnectionLostDuringPreflight:
 
         assert diag.ssh_reachable is False
         assert diag.ssh_error == "connection closed by peer"
-        assert ["which", "rsync"] in run.commands
+        assert build_tool_lookup_args("rsync") in run.commands

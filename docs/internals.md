@@ -994,7 +994,7 @@ does on their system.
 | `test -w <path>` | Directory writability |
 | `test -L <path>` | Symlink existence (`latest`) |
 | `test -e /dev/disk/by-uuid/<UUID>` | Drive detection (mount management) |
-| `which <command>` | Command availability (rsync, btrfs, stat, findmnt, udisksctl, lsblk) |
+| `sh -c 'command -v "$1"' sh <command>` | Command availability on a remote host (rsync, btrfs, stat, findmnt, udisksctl, lsblk): the shell builtin, since minimal hosts ship no `which`. A local host is looked up in-process |
 | `rsync --version` | Rsync version check (>= 3.0, reject macOS openrsync) |
 | `stat -f -c %T <path>` | Detect the filesystem type (btrfs, FAT/exFAT under hard links) |
 | `df -P <path>`, `mount` | Detect the filesystem type of a local volume on macOS |

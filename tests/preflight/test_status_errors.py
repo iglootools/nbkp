@@ -236,7 +236,7 @@ def _remote_volume() -> tuple[RemoteVolume, dict[str, ResolvedEndpoint]]:
 
 def _host_raising(error: Exception) -> FakeCommandRunner:
     """Script a host whose first probe (``which rsync``) fails with *error*."""
-    return FakeCommandRunner().on("which", returns=error)
+    return FakeCommandRunner().on("sh", "-c", returns=error)
 
 
 class TestObservationExceptions:

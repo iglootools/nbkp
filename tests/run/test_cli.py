@@ -26,6 +26,7 @@ from nbkp.config.testkit import write_config
 from nbkp.disks import UmountResult
 from nbkp.policy import Strictness
 from nbkp.preflight import SyncErrorKind, SyncStatus
+from nbkp.remote.dispatch import build_tool_lookup_args
 from nbkp.run.cli.run_cmd import abort_message, run_json
 from nbkp.run.pipeline import PipelineResult
 from nbkp.sync import ProgressMode, SyncFailureKind, SyncResult
@@ -380,7 +381,7 @@ class TestPreflightAbort:
     ) -> None:
         rsync = FakeRsync()
         rsync_missing = healthy_nas(
-            FakeCommandRunner().on("which", "rsync", returns=FAILS),
+            FakeCommandRunner().on(*build_tool_lookup_args("rsync"), returns=FAILS),
         )
 
         exit_code, output = _invoke(nas_config_file, run=rsync_missing, rsync=rsync)

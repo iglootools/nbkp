@@ -102,6 +102,18 @@ type WhichFn = Callable[[str], str | None]
 production, a fake in tests."""
 
 
+def build_tool_lookup_args(command: str) -> list[str]:
+    """
+    Return the argument list asking a remote host's shell whether *command* exists.
+
+    ``command -v`` is a POSIX shell builtin, so it answers on hosts that ship no
+    ``which`` binary (Arch's ``base``, many container and minimal images), where
+    ``which`` would exit 127 and every tool would read as missing. *command* is
+    passed as ``$1``, never spliced into the script.
+    """
+    return ["sh", "-c", 'command -v "$1" >/dev/null 2>&1', "sh", command]
+
+
 def check_command_available(
     volume: Volume,
     command: str,
@@ -113,12 +125,13 @@ def check_command_available(
     """
     Whether *command* is on the ``PATH`` of the host holding *volume*.
 
-    A remote host is asked over SSH (``which``); the orchestrator looks it up
-    in-process with *which*, so a local host needs no ``which`` binary (some
-    minimal distributions ship none).
+    A remote host is asked over SSH (:func:`build_tool_lookup_args`); the
+    orchestrator looks it up in-process with *which*. Neither needs a ``which``
+    binary, which some minimal distributions do not ship.
     """
     match volume:
         case LocalVolume():
             return which(command) is not None
         case RemoteVolume():
-            return run(["which", command], volume, resolved_endpoints).returncode == 0
+            lookup = build_tool_lookup_args(command)
+            return run(lookup, volume, resolved_endpoints).returncode == 0
