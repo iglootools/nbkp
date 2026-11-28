@@ -249,6 +249,27 @@ class TestStepFailure:
         assert exc.value.kind == SeedErrorKind.FILE_OPERATION_FAILED
         assert str(base_dir) in format_seed_error(exc.value)
 
+    def test_cli_prints_the_summary_and_commands_after_a_successful_seed(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        result = CliRunner().invoke(
+            app,
+            [
+                "seed",
+                "--no-docker",
+                "--big-file-size",
+                "0",
+                "--base-dir",
+                str(tmp_path),
+            ],
+            env={"COLUMNS": "400"},
+        )
+
+        assert result.exit_code == 0, result.output
+        assert str(tmp_path / "config.yaml") in result.stdout
+        assert "CFG=" in result.stdout
+
     def test_cli_reports_a_file_error_without_a_traceback(
         self,
         tmp_path: Path,
