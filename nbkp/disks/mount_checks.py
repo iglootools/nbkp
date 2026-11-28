@@ -331,7 +331,9 @@ def check_mount_capabilities(
         cleartext_device=state.cleartext_device,
         effective_path=state.effective_path,
         mount_failure_reason=(
-            mount_observation.failure_reason if mount_observation is not None else None
+            mount_observation.mount_failure_reason
+            if mount_observation is not None
+            else None
         ),
     )
 

@@ -95,7 +95,7 @@ class TestBuildMountObservations:
         assert obs["enc"].device_present is False
         assert obs["enc"].luks_unlocked is None
         assert obs["enc"].mounted is None
-        assert obs["enc"].failure_reason == MountFailureKind.DEVICE_NOT_PRESENT
+        assert obs["enc"].mount_failure_reason == MountFailureKind.DEVICE_NOT_PRESENT
 
     def test_unlock_failed_propagates_failure_reason(self) -> None:
         results = [
@@ -110,7 +110,7 @@ class TestBuildMountObservations:
         obs = build_mount_observations(results)
         assert obs["enc"].device_present is True
         assert obs["enc"].luks_unlocked is False
-        assert obs["enc"].failure_reason == MountFailureKind.UNLOCK_FAILED
+        assert obs["enc"].mount_failure_reason == MountFailureKind.UNLOCK_FAILED
 
     def test_not_authorized_propagated(self) -> None:
         results = [
@@ -123,8 +123,7 @@ class TestBuildMountObservations:
             ),
         ]
         obs = build_mount_observations(results)
-        assert obs["enc"].failure_reason == MountFailureKind.NOT_AUTHORIZED
-        assert obs["enc"].mount_failure_reason == "not-authorized"
+        assert obs["enc"].mount_failure_reason == MountFailureKind.NOT_AUTHORIZED
 
     def test_mount_failed(self) -> None:
         results = [
@@ -139,7 +138,7 @@ class TestBuildMountObservations:
         obs = build_mount_observations(results)
         assert obs["plain"].device_present is True
         assert obs["plain"].mounted is False
-        assert obs["plain"].failure_reason == MountFailureKind.MOUNT_FAILED
+        assert obs["plain"].mount_failure_reason == MountFailureKind.MOUNT_FAILED
 
     def test_unreachable_skipped(self) -> None:
         results = [

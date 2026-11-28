@@ -89,7 +89,7 @@ class TestMountStatusTableSeverity:
             device_present=True,
             luks_unlocked=False,
             mounted=None,
-            failure_reason=MountFailureKind.UNLOCK_FAILED,
+            mount_failure_reason=MountFailureKind.UNLOCK_FAILED,
         )
         rendered = _render(build_mount_status_table([("vol", obs)]))
         assert "✗" in rendered
@@ -99,7 +99,7 @@ class TestMountStatusTableSeverity:
             device_present=True,
             luks_unlocked=False,
             mounted=None,
-            failure_reason=MountFailureKind.NOT_AUTHORIZED,
+            mount_failure_reason=MountFailureKind.NOT_AUTHORIZED,
         )
         rendered = _render(build_mount_status_table([("vol", obs)]))
         assert "✗" in rendered
@@ -109,7 +109,7 @@ class TestMountStatusTableSeverity:
             device_present=True,
             luks_unlocked=True,
             mounted=False,
-            failure_reason=MountFailureKind.MOUNT_FAILED,
+            mount_failure_reason=MountFailureKind.MOUNT_FAILED,
         )
         rendered = _render(build_mount_status_table([("vol", obs)]))
         assert "✗" in rendered
@@ -119,7 +119,7 @@ class TestMountStatusTableSeverity:
             device_present=True,
             luks_unlocked=True,
             mounted=False,
-            failure_reason=MountFailureKind.NOT_AUTHORIZED,
+            mount_failure_reason=MountFailureKind.NOT_AUTHORIZED,
         )
         rendered = _render(build_mount_status_table([("vol", obs)]))
         assert "✗" in rendered
