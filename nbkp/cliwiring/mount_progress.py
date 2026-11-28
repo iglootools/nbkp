@@ -10,7 +10,7 @@ from collections.abc import Generator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 
-from nbkp.clidisplay import StepProgressBar
+from nbkp.cliwiring.progress import StepProgressBar
 from nbkp.config import Config
 from nbkp.credentials import PassphrasePrefetch, prefetch_count
 from nbkp.credentials.output import credential_error_message

@@ -8,9 +8,9 @@ umount succeeds and the lock answers what each test scripts.
 import pytest
 import typer
 
-from nbkp.clidisplay import OutputFormat
 from nbkp.cliwiring.mount import lifecycle_session, managed_mount
 from nbkp.cliwiring.mount_progress import LifecycleProgress
+from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.config import Config, CredentialProvider
 from nbkp.disks import UmountResult
 from tests.fakes import BodyError, completed, fake_runtime

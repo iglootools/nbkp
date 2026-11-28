@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from nbkp.clidisplay import OutputFormat, echo_json
+from nbkp.cliwiring.output_format import OutputFormat, echo_json
 from nbkp.fsprotocol import Snapshot
 
 

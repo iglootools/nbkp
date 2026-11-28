@@ -17,6 +17,7 @@ from typing import Any, cast
 
 import pytest
 
+from nbkp.cliwiring.invocation import Invocation
 from nbkp.preflight import (
     DestinationEndpointErrorKind,
     DestinationEndpointWarningKind,
@@ -54,6 +55,7 @@ def _remediations() -> dict[enum.Enum, tuple[str, ...]]:
     )
     # Facts given up front: gathering them would probe hosts for a mapper name.
     ctx = TroubleshootContext(
+        invocation=Invocation(),
         config=config,
         resolved_endpoints=resolve_all_endpoints(config),
         facts=RemediationFacts(),

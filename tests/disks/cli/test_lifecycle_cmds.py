@@ -17,10 +17,10 @@ import pytest
 from rich.console import Console
 
 from nbkp.cli import app
-from nbkp.clidisplay import OutputFormat
 from nbkp.cliwiring.credentials import prompt_passphrase
 from nbkp.cliwiring.disks import show_plan
 from nbkp.cliwiring.lock import hold_run_lock
+from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.config import (
     Config,
     CredentialProvider,

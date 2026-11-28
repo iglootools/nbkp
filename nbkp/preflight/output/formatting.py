@@ -4,7 +4,6 @@ from collections.abc import Iterable
 
 from rich.text import Text
 
-from nbkp.clidisplay import OK_SYMBOL, severity_style, severity_symbol
 from nbkp.config import MountConfig
 from nbkp.disks import (
     MountCapabilities,
@@ -29,6 +28,7 @@ from nbkp.preflight.status.volume import (
     VolumeCapabilities,
     VolumeErrorKind,
 )
+from nbkp.theme import OK_SYMBOL, severity_style, severity_symbol
 
 
 def join_text(items: Iterable[Text], separator: str = ", ") -> Text:

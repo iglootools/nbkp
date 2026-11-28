@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from nbkp.clidisplay.invocation import Invocation, display_path
+from nbkp.cliwiring.invocation import Invocation, display_path
 
 
 class TestDisplayPath:

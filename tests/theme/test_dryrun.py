@@ -3,7 +3,7 @@
 from rich.console import Console
 from rich.text import Text
 
-from nbkp.clidisplay import DRY_RUN_LABEL, dry_run_labeled, dry_run_table_title
+from nbkp.theme import DRY_RUN_LABEL, dry_run_labeled, dry_run_table_title
 
 
 def _render(text: Text) -> str:

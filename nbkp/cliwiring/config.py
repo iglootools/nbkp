@@ -7,7 +7,7 @@ from typing import NoReturn
 import typer
 from rich.console import Console
 
-from nbkp.clidisplay import OutputFormat, echo_json
+from nbkp.cliwiring.output_format import OutputFormat, echo_json
 from nbkp.cliwiring.runtime import Runtime
 from nbkp.config import Config, ConfigError, ConfigErrorKind
 from nbkp.config.output import config_error_json, format_config_error

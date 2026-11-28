@@ -29,7 +29,7 @@ Read the linked document in full before changing files under these paths.
 
 | Paths | Conventions |
 |-------|-------------|
-| `nbkp/cli/`, `nbkp/*/cli/`, `nbkp/cliwiring/`, `nbkp/clidisplay/` — and adding a command or option anywhere | [cli.md](guidelines/cli.md) — the rules nbkp adds to the shared CLI rules, the helper modules, and the exceptions |
+| `nbkp/cli/`, `nbkp/*/cli/`, `nbkp/cliwiring/`, `nbkp/theme/` — and adding a command or option anywhere | [cli.md](guidelines/cli.md) — the rules nbkp adds to the shared CLI rules, the helper modules, and the exceptions |
 | `tests/`, `nbkp/*/testkit/` | [testing.md](guidelines/testing.md) — what unit tests may call, the deciders, fakes and resources to test with |
 
 [nbkp/preflight/guidelines.md](../nbkp/preflight/guidelines.md) holds the

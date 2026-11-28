@@ -2,9 +2,11 @@
 Command wiring shared by several CLI commands.
 
 Each domain module owns its own ``cli`` sub-app; what more than one of those
-sub-apps needs — loading the config, resolving endpoints, the managed mount
-lifecycle and the run lock, preflight checks with progress, and the
-:class:`~.runtime.Runtime` holding the host I/O of a command — lives here
+sub-apps needs — the ``--output`` formats and JSON printing, the step
+progress bar, the flags echoed in suggested commands, loading the config,
+resolving endpoints, the managed mount lifecycle and the run lock, preflight
+checks with progress, and the :class:`~.runtime.Runtime` holding the host
+I/O of a command — lives here
 instead, so that no module reaches into another module's ``cli`` package.
 
 Only ``cli`` sub-apps and the root app import this package; core and

@@ -12,19 +12,12 @@ from rich.panel import Panel
 from rich.status import Status
 from rich.text import Text
 
-from nbkp.clidisplay import (
-    OutputFormat,
-    StepProgressBar,
-    echo_json,
-    severity_style,
-    severity_symbol,
-)
-from nbkp.clidisplay.invocation import Invocation
 from nbkp.cliwiring.config import (
     load_config_or_exit,
     require_known_syncs,
     resolve_endpoints,
 )
+from nbkp.cliwiring.invocation import Invocation
 from nbkp.cliwiring.mount import format_umount_failures, managed_mount
 from nbkp.cliwiring.mount_progress import mount_display_names
 from nbkp.cliwiring.options import (
@@ -38,7 +31,9 @@ from nbkp.cliwiring.options import (
     SYNC_OPTION,
     UMOUNT_OPTION,
 )
+from nbkp.cliwiring.output_format import OutputFormat, echo_json
 from nbkp.cliwiring.preflight import end_check_step, start_check_step
+from nbkp.cliwiring.progress import StepProgressBar
 from nbkp.cliwiring.runtime import runtime_of
 from nbkp.config import Config
 from nbkp.disks import UmountResult
@@ -65,6 +60,7 @@ from nbkp.sync.output import (
     build_run_preview_sections,
     sync_result_json,
 )
+from nbkp.theme import severity_style, severity_symbol
 
 _ABORT_DETAIL_INDENT = 2
 

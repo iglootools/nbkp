@@ -28,7 +28,7 @@ import nbkp
 PRESENTATION_MODULES = ["rich", "typer"]
 
 # Everything else directly under nbkp is core.
-NON_CORE_PACKAGES = {"cli", "clidisplay", "cliwiring"}
+NON_CORE_PACKAGES = {"cli", "theme", "cliwiring"}
 
 # Subpackages and modules of a core package that are not core code.
 NON_CORE_PARTS = {"cli", "output"}

@@ -3,9 +3,9 @@
 import typer
 from rich.console import Console
 
-from nbkp.clidisplay import OutputFormat, echo_json
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
 from nbkp.cliwiring.options import CONFIG_OPTION, OUTPUT_OPTION
+from nbkp.cliwiring.output_format import OutputFormat, echo_json
 from nbkp.cliwiring.runtime import runtime_of
 from nbkp.config.output import format_human_config
 

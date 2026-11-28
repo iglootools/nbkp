@@ -7,9 +7,9 @@ import typer
 from rich.console import Console, Group, RenderableType
 from rich.text import Text
 
-from nbkp.clidisplay import OutputFormat
 from nbkp.cliwiring.lock import is_run_lock_needed, run_lock_or_exit
 from nbkp.cliwiring.mount_progress import LifecycleProgress, mount_display_names
+from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.cliwiring.runtime import Runtime
 from nbkp.config import Config
 from nbkp.credentials import build_passphrase_fn

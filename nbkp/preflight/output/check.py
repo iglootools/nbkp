@@ -5,8 +5,6 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from nbkp.clidisplay import severity_style, severity_symbol
-from nbkp.clidisplay.invocation import Invocation
 from nbkp.config import Config, LocalVolume, RemoteVolume
 from nbkp.config.output import (
     format_mount_summary,
@@ -16,6 +14,7 @@ from nbkp.config.output import (
 )
 from nbkp.fsprotocol import DEVNULL_TARGET
 from nbkp.policy import Severity, Strictness
+from nbkp.preflight.output.commands import SuggestedCommands
 from nbkp.preflight.output.formatting import (
     check,
     format_capabilities,
@@ -35,6 +34,7 @@ from nbkp.preflight.status.ssh import INACTIVE_SSH_ERRORS, SshEndpointStatus
 from nbkp.preflight.status.sync import SyncStatus
 from nbkp.preflight.status.volume import VolumeStatus
 from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.theme import severity_style, severity_symbol
 
 
 def _format_latest(
@@ -439,7 +439,7 @@ def format_human_check(
     resolved_endpoints: ResolvedEndpoints | None = None,
     wrap_in_panel: bool = True,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
-    invocation: Invocation | None = None,
+    invocation: SuggestedCommands,
 ) -> RenderableType:
     """
     Format the human-readable check report.
@@ -456,7 +456,7 @@ def format_human_check(
             resolved_endpoints or {},
             strictness=strictness,
         ),
-        *_troubleshoot_hint(ssh_statuses, sync_statuses, invocation or Invocation()),
+        *_troubleshoot_hint(ssh_statuses, sync_statuses, invocation),
     )
     return (
         Panel(
@@ -473,7 +473,7 @@ def format_human_check(
 def _troubleshoot_hint(
     ssh_statuses: dict[str, SshEndpointStatus],
     sync_statuses: dict[str, SyncStatus],
-    invocation: Invocation,
+    invocation: SuggestedCommands,
 ) -> list[RenderableType]:
     needs_attention = (
         any(not s.active for s in sync_statuses.values())

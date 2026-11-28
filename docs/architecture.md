@@ -105,7 +105,6 @@ Dependencies between top-level modules (auto-generated via `mise run depgraph`):
 ```mermaid
 graph TD
     cli["cli/"]
-    clidisplay["clidisplay/"]
     cliwiring["cliwiring/"]
     config["config/"]
     credentials["credentials/"]
@@ -120,6 +119,7 @@ graph TD
     sh["sh/"]
     snapshots["snapshots/"]
     sync["sync/"]
+    theme["theme/"]
 
     cli --> cliwiring
     cli --> config
@@ -132,8 +132,6 @@ graph TD
     cli --> run
     cli --> sh
     cli --> snapshots
-    clidisplay --> policy
-    cliwiring --> clidisplay
     cliwiring --> config
     cliwiring --> credentials
     cliwiring --> disks
@@ -141,13 +139,12 @@ graph TD
     cliwiring --> preflight
     cliwiring --> remote
     cliwiring --> sync
-    config --> clidisplay
+    cliwiring --> theme
     config --> cliwiring
-    credentials --> clidisplay
     credentials --> cliwiring
     credentials --> config
     credentials --> policy
-    demo --> clidisplay
+    credentials --> theme
     demo --> cliwiring
     demo --> config
     demo --> disks
@@ -157,25 +154,25 @@ graph TD
     demo --> remote
     demo --> snapshots
     demo --> sync
-    disks --> clidisplay
+    demo --> theme
     disks --> cliwiring
     disks --> config
     disks --> credentials
     disks --> policy
     disks --> remote
-    ordering --> clidisplay
+    disks --> theme
     ordering --> cliwiring
     ordering --> config
     ordering --> policy
-    preflight --> clidisplay
+    ordering --> theme
     preflight --> cliwiring
     preflight --> config
     preflight --> disks
     preflight --> fsprotocol
     preflight --> policy
     preflight --> remote
+    preflight --> theme
     remote --> config
-    run --> clidisplay
     run --> cliwiring
     run --> config
     run --> disks
@@ -184,21 +181,20 @@ graph TD
     run --> preflight
     run --> remote
     run --> sync
-    sh --> clidisplay
+    run --> theme
     sh --> cliwiring
     sh --> config
     sh --> fsprotocol
     sh --> ordering
     sh --> remote
     sh --> sync
-    snapshots --> clidisplay
     snapshots --> cliwiring
     snapshots --> config
     snapshots --> fsprotocol
     snapshots --> policy
     snapshots --> preflight
     snapshots --> remote
-    sync --> clidisplay
+    snapshots --> theme
     sync --> config
     sync --> fsprotocol
     sync --> ordering
@@ -206,6 +202,8 @@ graph TD
     sync --> preflight
     sync --> remote
     sync --> snapshots
+    sync --> theme
+    theme --> policy
 ```
 <!-- END MODULE OVERVIEW -->
 <!-- rumdl-enable -->
@@ -228,23 +226,23 @@ dependencies; the contracts are what reject a new import that breaks a rule:
   which only `cli/` sub-apps and the root `cli/` app import. Only the root
   `cli/` app imports the sub-apps, and nothing in nbkp imports the root app: the
   `nbkp` entry point is its only caller.
-- **Decisions live in core, display in `clidisplay/`.** `policy` holds
+- **Decisions live in core, display in `output` modules.** `policy` holds
   `Strictness`, `Severity` and `classify_severity` — whether a finding is fatal
   — and is what core modules (`sync/`, `run/`, `preflight/`, `disks/`) import.
-  `clidisplay/` is presentation only (output format, JSON, severity symbols and
-  styles, progress bars, and the `Invocation` that echoes the current flags in
-  suggested follow-up commands); core modules import neither it nor `rich` /
-  `typer`. The `prompt` credential provider gets its terminal prompt injected as
-  a `Runtime` port, whose real one is in `cliwiring/credentials.py`. The two-way
-  edges between `cliwiring/` and the modules in the graph above are between a
-  module's `cli/` subpackage and `cliwiring/`, never with the module's core: the
-  sub-apps sit above `cliwiring/`, the module cores below it. Importing a core
-  package (`nbkp.disks`, `nbkp.preflight`, `nbkp.sync`, …) loads neither Rich
-  nor Typer: presentation is imported explicitly from `output` modules. Those
-  may import Rich and `clidisplay/` but not Typer, `cliwiring/` or any `cli/`
-  package. Core code never imports an `output` module, its own included: the
-  "Only presentation code imports output modules" contract allows only `cli/`
-  packages, `cliwiring/`, `clidisplay/` and other `output` modules to. Likewise
+  `theme/` holds the visual vocabulary those modules share (severity symbols
+  and styles, and the dry-run labels); core modules import neither it nor
+  `rich` / `typer`. The `prompt` credential
+  provider gets its terminal prompt injected as a `Runtime` port, whose real one
+  is in `cliwiring/credentials.py`. The two-way edges between `cliwiring/` and
+  the modules in the graph above are between a module's `cli/` subpackage and
+  `cliwiring/`, never with the module's core: the sub-apps sit above
+  `cliwiring/`, the module cores below it. Importing a core package
+  (`nbkp.disks`, `nbkp.preflight`, `nbkp.sync`, …) loads neither Rich nor Typer:
+  presentation is imported explicitly from `output` modules. Those may import
+  Rich and `theme/` but not Typer, `cliwiring/` or any `cli/` package. Core
+  code never imports an `output` module, its own included: the "Only
+  presentation code imports output modules" contract allows only `cli/`
+  packages, `cliwiring/`, `theme/` and other `output` modules to. Likewise
   "Only the root app imports a CLI sub-app" keeps a core module off its own
   `cli/` package, an edge the forbidden contract skips because source and target
   overlap. `tests/test_core_imports.py` asserts the outcome as well, by
@@ -276,7 +274,7 @@ dependencies; the contracts are what reject a new import that breaks a rule:
   `__init__` re-exports what other packages use; their other submodules are
   implementation details, which no other package imports directly. Only their
   `output`, `cli/` and testkit packages are imported by path.
-- **`clidisplay/` is a presentation leaf.** It imports nothing from nbkp but
+- **`theme/` is a presentation leaf.** It imports nothing from nbkp but
   `policy`, and not Typer, since every `output` module imports it.
 - **Test and demo fixtures (`testkit`) follow the same rules as core code.**
   They build scenarios for the tests and ship in the wheel for `nbkp demo`,
@@ -296,8 +294,8 @@ Where each concern lives, ordered by the layers above, from the base up:
 | Shared leaves | `policy.py`, `fsprotocol.py` | `policy`: strictness and severity classification. `fsprotocol`: sentinel names, directory layout, snapshot types |
 | Transport | `remote/` | Endpoint models and selection (`endpoints.py`, `resolution.py`), SSH argument building (`ssh.py`), Fabric/Paramiko (`fabricssh.py`) and per-command connection reuse (`pool.py`), transport primitives (`dispatch.py`) |
 | Domain cores | `credentials/`, `ordering/`, `disks/`, `preflight/`, `snapshots/`, `sync/`, `run/`, `sh/` (from the base up) | The behavior of each command, described below |
-| CLI wiring | `cliwiring/` | Wiring shared by sub-apps: shared command-line options, config loading, credential prompting, the mount lifecycle and its progress bars, the run lock that every command mounting drives or modifying destinations holds (`lock.py`), preflight with progress, and the `Runtime` ports (`runtime.py`: host commands, local tools, rsync, clock, credential sources, and the environment, home and platform directories the config search reads) that the root callback installs and tests replace |
-| Presentation | `clidisplay/` | Output format, JSON, severity display, progress bars, `Invocation` |
+| CLI wiring | `cliwiring/` | Wiring shared by sub-apps: shared command-line options, the `--output` formats and JSON printing (`output_format.py`), the step progress bar (`progress.py`), the `Invocation` that echoes the current flags in suggested follow-up commands (`invocation.py`; preflight's reports take it through the `SuggestedCommands` protocol in `preflight/output/commands.py`), config loading, credential prompting, the mount lifecycle and its progress bars, the run lock that every command mounting drives or modifying destinations holds (`lock.py`), preflight with progress, and the `Runtime` ports (`runtime.py`: host commands, local tools, rsync, clock, credential sources, and the environment, home and platform directories the config search reads) that the root callback installs and tests replace |
+| Presentation | `theme/` | Severity display, dry-run labels |
 | Root app | `cli/` | The top-level Typer app (`app.py`), which mounts every sub-app |
 
 Domain cores:

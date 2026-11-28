@@ -6,7 +6,6 @@ from rich.console import RenderableType
 from rich.table import Table
 from rich.text import Text
 
-from nbkp.clidisplay import dry_run_table_title
 from nbkp.config import Config, LocalVolume, RemoteVolume
 from nbkp.config.output import endpoint_path
 from nbkp.fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
@@ -20,6 +19,7 @@ from nbkp.sync.rsync import (
     hard_link_dest_suffix,
     hard_link_link_dest,
 )
+from nbkp.theme import dry_run_table_title
 
 
 def _resolve_dest_display_path(

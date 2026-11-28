@@ -11,6 +11,7 @@ snapshot is listed while *gathering* facts (on a fake host here).
 
 import paramiko
 
+from nbkp.cliwiring.invocation import Invocation
 from nbkp.preflight import (
     DestinationEndpointErrorKind,
     RemediationFacts,
@@ -53,7 +54,11 @@ def _remediation(
     issues: list[TroubleshootIssue],
     facts: RemediationFacts,
 ) -> str:
-    ctx = rem.TroubleshootContext(config=btrfs_config(), facts=facts)
+    ctx = rem.TroubleshootContext(
+        invocation=Invocation(),
+        config=btrfs_config(),
+        facts=facts,
+    )
     data = ts.troubleshoot_json(issues, ctx, has_fatal_errors=True)
     match data["issues"]:
         case [{"remediation": str() as remediation}]:
