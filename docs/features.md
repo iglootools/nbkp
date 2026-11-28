@@ -252,5 +252,5 @@ preview all output formats without a real backup config.
 
 ## Supported Commands
 
-See [Usage](./usage.md) for detailed command descriptions and examples. Every
-command and its options are listed in the [CLI Reference](cli-reference.md).
+Look up every command and its options in the [CLI Reference](cli-reference.md),
+and follow the worked examples by task in [Usage](./usage.md).
