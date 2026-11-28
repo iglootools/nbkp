@@ -24,6 +24,8 @@ from nbkp.remote.resolution import resolve_all_endpoints
 from nbkp.runlock import resolve_run_lock_path
 from nbkp.sh import ScriptOptions, VolumeWithoutPathError, generate_script
 from nbkp.sh.quoting import quote, remote_command
+from nbkp.sh.spec import build_sync_spec
+from nbkp.sh.steps import Step, build_steps
 
 _NOW = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
 _OPTIONS = ScriptOptions(platform="linux", config_path="/etc/nbkp/config.yaml")
@@ -1809,7 +1811,6 @@ class TestPreflightParity:
     def test_source_devnull_with_upstream_is_pending_in_dry_run(self) -> None:
         script = generate_script(_btrfs_chain_config(), _OPTIONS, now=_NOW)
         assert "source snapshot not yet available (dry-run" in script
-        assert "with no upstream sync" not in script
 
     def test_source_devnull_without_upstream_is_broken(self) -> None:
         config = _btrfs_chain_config()
@@ -1827,21 +1828,34 @@ class TestPreflightParity:
         assert "--strictness|-S)" in script
 
 
+def _btrfs_steps() -> tuple[Step, ...]:
+    config = _btrfs_config()
+    vol_paths = {"src": "/mnt/src", "dst": "/mnt/dst"}
+    return build_steps(build_sync_spec("btrfs-sync", config, vol_paths, {}, "linux"))
+
+
 class TestSyncSteps:
-    def test_btrfs_has_no_link_dest_step(self) -> None:
-        script = generate_script(_btrfs_config(), _OPTIONS, now=_NOW)
-        assert "Link-dest resolution" not in script
+    """
+    The steps' structure; what the script does is run in integration_fs/test_sh.py.
 
-    def test_rsync_failure_returns_before_snapshot(self) -> None:
-        script = generate_script(_btrfs_config(), _OPTIONS, now=_NOW)
-        rsync_check = script.index('if [ "$NBKP_RSYNC_RC" -ne 0 ]; then')
-        snapshot = script.index("# Btrfs snapshot")
-        assert rsync_check < snapshot
-        assert "|| NBKP_RSYNC_RC=$?" in script
+    Asserted on ``build_steps`` rather than on text absent from the rendered
+    script, which rewording a step would make pass whatever the script does.
+    """
 
-    def test_vanished_files_fail_by_default(self) -> None:
-        script = generate_script(_btrfs_config(), _OPTIONS, now=_NOW)
-        assert '"$NBKP_RSYNC_RC" -eq 24' not in script
+    def test_btrfs_steps_have_no_link_dest_resolution(self) -> None:
+        assert [step.title for step in _btrfs_steps()] == [
+            "Rsync",
+            "Btrfs snapshot (skip if dry-run)",
+            "Update latest symlink (skip if dry-run)",
+            "Prune old snapshots (max: 5)",
+        ]
+
+    def test_rsync_step_returns_on_failure_before_the_snapshot_step(self) -> None:
+        rsync, snapshot, *_ = _btrfs_steps()
+        assert rsync.title == "Rsync"
+        assert "|| NBKP_RSYNC_RC=$?" in rsync.body
+        assert 'if [ "$NBKP_RSYNC_RC" -ne 0 ]; then' in rsync.body
+        assert snapshot.title.startswith("Btrfs snapshot")
 
     def test_hard_link_failure_removes_new_snapshot(self) -> None:
         script = _remote_script("hard-link")
