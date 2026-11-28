@@ -12,9 +12,9 @@ from functools import partial
 
 from rich.console import Console
 
-from nbkp.clidisplay import StepProgressBar
 from nbkp.clidisplay.invocation import Invocation
 from nbkp.cliwiring.output_format import OutputFormat
+from nbkp.cliwiring.progress import StepProgressBar
 from nbkp.cliwiring.runtime import Runtime
 from nbkp.config import Config
 from nbkp.disks import MountObservation

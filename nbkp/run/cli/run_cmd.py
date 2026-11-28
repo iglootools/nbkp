@@ -12,7 +12,7 @@ from rich.panel import Panel
 from rich.status import Status
 from rich.text import Text
 
-from nbkp.clidisplay import StepProgressBar, severity_style, severity_symbol
+from nbkp.clidisplay import severity_style, severity_symbol
 from nbkp.clidisplay.invocation import Invocation
 from nbkp.cliwiring.config import (
     load_config_or_exit,
@@ -34,6 +34,7 @@ from nbkp.cliwiring.options import (
 )
 from nbkp.cliwiring.output_format import OutputFormat, echo_json
 from nbkp.cliwiring.preflight import end_check_step, start_check_step
+from nbkp.cliwiring.progress import StepProgressBar
 from nbkp.cliwiring.runtime import runtime_of
 from nbkp.config import Config
 from nbkp.disks import UmountResult

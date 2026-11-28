@@ -230,14 +230,14 @@ dependencies; the contracts are what reject a new import that breaks a rule:
 - **Decisions live in core, display in `clidisplay/`.** `policy` holds
   `Strictness`, `Severity` and `classify_severity` — whether a finding is fatal
   — and is what core modules (`sync/`, `run/`, `preflight/`, `disks/`) import.
-  `clidisplay/` is presentation only (severity symbols and styles, progress
-  bars, and the `Invocation` that echoes the current flags in suggested
-  follow-up commands); core modules import neither it nor `rich` / `typer`. The
-  `prompt` credential provider gets its terminal prompt injected as a `Runtime`
-  port, whose real one is in `cliwiring/credentials.py`. The two-way edges
-  between `cliwiring/` and the modules in the graph above are between a module's
-  `cli/` subpackage and `cliwiring/`, never with the module's core: the sub-apps
-  sit above `cliwiring/`, the module cores below it. Importing a core package
+  `clidisplay/` is presentation only (severity symbols and styles, and the
+  `Invocation` that echoes the current flags in suggested follow-up commands);
+  core modules import neither it nor `rich` / `typer`. The `prompt` credential
+  provider gets its terminal prompt injected as a `Runtime` port, whose real one
+  is in `cliwiring/credentials.py`. The two-way edges between `cliwiring/` and
+  the modules in the graph above are between a module's `cli/` subpackage and
+  `cliwiring/`, never with the module's core: the sub-apps sit above
+  `cliwiring/`, the module cores below it. Importing a core package
   (`nbkp.disks`, `nbkp.preflight`, `nbkp.sync`, …) loads neither Rich nor Typer:
   presentation is imported explicitly from `output` modules. Those may import
   Rich and `clidisplay/` but not Typer, `cliwiring/` or any `cli/` package. Core
@@ -295,8 +295,8 @@ Where each concern lives, ordered by the layers above, from the base up:
 | Shared leaves | `policy.py`, `fsprotocol.py` | `policy`: strictness and severity classification. `fsprotocol`: sentinel names, directory layout, snapshot types |
 | Transport | `remote/` | Endpoint models and selection (`endpoints.py`, `resolution.py`), SSH argument building (`ssh.py`), Fabric/Paramiko (`fabricssh.py`) and per-command connection reuse (`pool.py`), transport primitives (`dispatch.py`) |
 | Domain cores | `credentials/`, `ordering/`, `disks/`, `preflight/`, `snapshots/`, `sync/`, `run/`, `sh/` (from the base up) | The behavior of each command, described below |
-| CLI wiring | `cliwiring/` | Wiring shared by sub-apps: shared command-line options, the `--output` formats and JSON printing (`output_format.py`), config loading, credential prompting, the mount lifecycle and its progress bars, the run lock that every command mounting drives or modifying destinations holds (`lock.py`), preflight with progress, and the `Runtime` ports (`runtime.py`: host commands, local tools, rsync, clock, credential sources, and the environment, home and platform directories the config search reads) that the root callback installs and tests replace |
-| Presentation | `clidisplay/` | Severity display, progress bars, `Invocation` |
+| CLI wiring | `cliwiring/` | Wiring shared by sub-apps: shared command-line options, the `--output` formats and JSON printing (`output_format.py`), the step progress bar (`progress.py`), config loading, credential prompting, the mount lifecycle and its progress bars, the run lock that every command mounting drives or modifying destinations holds (`lock.py`), preflight with progress, and the `Runtime` ports (`runtime.py`: host commands, local tools, rsync, clock, credential sources, and the environment, home and platform directories the config search reads) that the root callback installs and tests replace |
+| Presentation | `clidisplay/` | Severity display, `Invocation` |
 | Root app | `cli/` | The top-level Typer app (`app.py`), which mounts every sub-app |
 
 Domain cores:

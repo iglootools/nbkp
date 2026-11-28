@@ -2,7 +2,7 @@
 
 import pytest
 
-from nbkp.clidisplay import StepProgressBar
+from nbkp.cliwiring.progress import StepProgressBar
 from nbkp.policy import Severity
 
 # An error message with square brackets in it.  Rich parses "[...]" in a
