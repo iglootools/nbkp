@@ -111,10 +111,10 @@ every command.
 
 Overrides
 [Declare each shared option once](#declare-each-shared-option-once):
-`--strictness` in `run`, `preflight check` and `preflight troubleshoot`, and the
-long-only `--dry-run` of `disks mount` and `disks umount` and the one of
-`demo seed`, are written inline in each command rather than as a shared
-`<NAME>_OPTION` constant.
+`--strictness` in `run` (`preflight check` and `preflight troubleshoot` share
+one `STRICTNESS_OPTION`), and the long-only `--dry-run` of `disks mount` and
+`disks umount` and the one of `demo seed`, are written inline in each command
+rather than as a shared `<NAME>_OPTION` constant.
 
 **Why:** the flag is shared but what it does is not: each help text says what
 that command does at each strictness level, or what a dry run skips there, and

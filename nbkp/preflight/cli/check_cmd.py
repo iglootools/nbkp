@@ -1,7 +1,5 @@
 """The ``nbkp preflight check`` command and its JSON output."""
 
-from typing import Annotated
-
 import typer
 
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
@@ -20,6 +18,7 @@ from nbkp.cliwiring.output_format import OutputFormat, echo_json
 from nbkp.cliwiring.preflight import check_and_display
 from nbkp.cliwiring.runtime import runtime_of
 from nbkp.policy import Strictness
+from nbkp.preflight.cli.options import STRICTNESS_OPTION
 from nbkp.preflight.status.result import PreflightResult
 
 
@@ -27,19 +26,7 @@ def check_cmd(
     ctx: typer.Context,
     config: CONFIG_OPTION = None,
     output: OUTPUT_OPTION = OutputFormat.HUMAN,
-    strictness: Annotated[
-        Strictness,
-        typer.Option(
-            "--strictness",
-            "-S",
-            help=(
-                "Which sync problems make the command exit non-zero:"
-                " ignore-none (any), ignore-inactive (all but expected-inactive,"
-                " default), ignore-all (none). Problems on SSH endpoints or"
-                " volumes no sync uses are shown but never fatal"
-            ),
-        ),
-    ] = Strictness.IGNORE_INACTIVE,
+    strictness: STRICTNESS_OPTION = Strictness.IGNORE_INACTIVE,
     location: LOCATION_OPTION = None,
     *,
     exclude_location: EXCLUDE_LOCATION_OPTION = None,
