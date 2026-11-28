@@ -179,21 +179,40 @@ def _sync_errors(
     *,
     dry_run: bool,
 ) -> list[SyncErrorKind]:
-    if not src_ep_status.active:
-        return []
-    if src_endpoint.snapshot_mode == "none":
-        return []
+    """
+    Return the errors of a sync whose active snapshot source has no snapshot yet.
+
+    That is a source ``latest`` pointing to ``/dev/null``: fine only while an
+    upstream sync of this run will replace it, and even then not in a dry run.
+    """
+    match (
+        _source_has_no_snapshot(src_endpoint, src_ep_status),
+        _has_upstream_sync(sync, selected_syncs),
+        dry_run,
+    ):
+        case (False, _, _):
+            return []
+        case (True, False, _):
+            return [SyncErrorKind.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM]
+        case (True, True, True):
+            return [SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING]
+        case (True, True, False):
+            return []
+
+
+def _source_has_no_snapshot(
+    src_endpoint: SyncEndpoint,
+    src_ep_status: SourceEndpointStatus,
+) -> bool:
+    """Return whether the active snapshot source's ``latest`` is ``/dev/null``."""
     diag = src_ep_status.diagnostics
-    if diag is None or diag.latest is None:
-        return []
-    if diag.latest.raw_target != DEVNULL_TARGET:
-        return []
-    if not _has_upstream_sync(sync, selected_syncs):
-        return [SyncErrorKind.SRC_EP_LATEST_DEVNULL_NO_UPSTREAM]
-    elif dry_run:
-        return [SyncErrorKind.DRY_RUN_SRC_EP_SNAPSHOT_PENDING]
-    else:
-        return []
+    return (
+        src_ep_status.active
+        and src_endpoint.snapshot_mode != "none"
+        and diag is not None
+        and diag.latest is not None
+        and diag.latest.raw_target == DEVNULL_TARGET
+    )
 
 
 def _has_upstream_sync(
