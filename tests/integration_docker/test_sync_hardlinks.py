@@ -1,8 +1,7 @@
 """Integration tests: hard-link snapshots via remote Docker container."""
 
 import sys
-import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from nbkp.config import (
@@ -31,6 +30,15 @@ from nbkp.snapshots.hardlinks import (
 from nbkp.sync.rsync import run_rsync
 from nbkp.sync.testkit.seed import create_seed_sentinels
 from tests._docker_fixtures import assert_sentinels_after_sync, ssh_exec, ssh_run
+
+_T0 = datetime(2026, 3, 6, 14, 30, tzinfo=UTC)
+"""The clock snapshots are named from, rather than the wall clock, which could step
+backwards between two snapshots and reverse their order."""
+
+
+def _at(seconds: int) -> datetime:
+    """Return the clock *seconds* after :data:`_T0`, for a test's later snapshots."""
+    return _T0 + timedelta(seconds=seconds)
 
 
 def _make_hl_config(
@@ -80,9 +88,10 @@ def _do_sync(
     docker_ssh_endpoint: SshEndpoint,
     remote_hl_volume: RemoteVolume,
     max_snapshots: int | None = 5,
+    now: datetime = _T0,
 ) -> tuple[SyncConfig, Config, ResolvedEndpoints, str]:
     """
-    Rsync, create the snapshot dir and update the symlink.
+    Rsync, create the snapshot dir named from *now* and update the symlink.
 
     Returns the config tuple and the snapshot name.
     """
@@ -95,7 +104,7 @@ def _do_sync(
     snapshot_path = create_snapshot_dir(
         sync,
         config,
-        now=datetime.now(UTC),
+        now=now,
         platform=sys.platform,
         resolved_endpoints=resolved,
     )
@@ -140,7 +149,7 @@ class TestHardLinkSnapshots:
         snapshot_path = create_snapshot_dir(
             sync,
             config,
-            now=datetime.now(UTC),
+            now=_T0,
             platform=sys.platform,
             resolved_endpoints=resolved,
         )
@@ -166,7 +175,7 @@ class TestHardLinkSnapshots:
         snapshot_path = create_snapshot_dir(
             sync,
             config,
-            now=datetime.now(UTC),
+            now=_T0,
             platform=sys.platform,
             resolved_endpoints=resolved,
         )
@@ -237,12 +246,10 @@ class TestHardLinkSnapshots:
             remote_hardlink_volume,
         )
 
-        time.sleep(0.1)  # distinct timestamp
-
         snapshot_path = create_snapshot_dir(
             sync,
             config,
-            now=datetime.now(UTC),
+            now=_at(1),
             platform=sys.platform,
             resolved_endpoints=resolved,
         )
@@ -288,14 +295,12 @@ class TestHardLinkSnapshots:
             remote_hardlink_volume,
         )
 
-        time.sleep(0.1)
-
         (src / "changed.txt").write_text("v2 is different")
 
         snapshot_path = create_snapshot_dir(
             sync,
             config,
-            now=datetime.now(UTC),
+            now=_at(1),
             platform=sys.platform,
             resolved_endpoints=resolved,
         )
@@ -343,7 +348,7 @@ class TestHardLinkSnapshots:
         snapshot_path = create_snapshot_dir(
             sync,
             config,
-            now=datetime.now(UTC),
+            now=_T0,
             platform=sys.platform,
             resolved_endpoints=resolved,
         )
@@ -379,8 +384,6 @@ class TestHardLinkOrphanCleanup:
             docker_ssh_endpoint,
             remote_hardlink_volume,
         )
-
-        time.sleep(0.1)
 
         # Simulate a failed sync: create a snapshot dir newer than
         # latest but don't update the symlink
@@ -448,15 +451,15 @@ class TestHardLinkPrune:
         config: Config | None = None
         resolved: ResolvedEndpoints | None = None
 
-        for _ in range(count):
+        for i in range(count):
             sync, config, resolved, snap_name = _do_sync(
                 src,
                 docker_ssh_endpoint,
                 remote_hl_volume,
                 max_snapshots=max_snapshots,
+                now=_at(i),
             )
             names.append(snap_name)
-            time.sleep(0.1)  # distinct timestamps
 
         assert sync is not None
         assert config is not None
