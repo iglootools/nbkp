@@ -178,6 +178,11 @@ def format_seed_error(e: SeedError) -> str:
             )
         case SeedErrorKind.FILE_OPERATION_FAILED:
             return f"Writing the demo files failed: {e.detail}"
+        case SeedErrorKind.SEED_DIR_REUSED:
+            return (
+                f"{e.detail} is left from an earlier seed. Tear that demo down,"
+                " then seed into a new or empty --base-dir."
+            )
 
 
 def _lifecycle_failure(e: SeedError) -> str:

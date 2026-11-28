@@ -38,9 +38,10 @@ from nbkp.sync.testkit.seed import (
 )
 
 # The 'docker' extra is optional; seed_demo(docker=True) reports it through
-# _check_docker(has_docker) before anything here resolves these lazy names.
+# _check_docker(base_dir, has_docker) before anything here resolves these lazy names.
 lazy from nbkp.remote.testkit.docker import (
     DOCKER_DIR,
+    SEED_SSH_DIR,
     bastion_container_spec,
     build_docker_image,
     check_docker,
@@ -79,6 +80,7 @@ class SeedErrorKind(StrEnum):
     MOUNT_FAILED = "mount-failed"
     UMOUNT_FAILED = "umount-failed"
     FILE_OPERATION_FAILED = "file-operation-failed"
+    SEED_DIR_REUSED = "seed-dir-reused"
 
 
 # Raised before any container starts.
@@ -87,6 +89,7 @@ _PREREQUISITE_KINDS = frozenset(
         SeedErrorKind.DOCKER_EXTRA_MISSING,
         SeedErrorKind.DOCKER_UNAVAILABLE,
         SeedErrorKind.DOCKER_DIR_MISSING,
+        SeedErrorKind.SEED_DIR_REUSED,
     },
 )
 
@@ -257,16 +260,30 @@ class _Containers:
     storage_port: int
 
 
-def _check_docker(*, has_docker: bool) -> None:
+def _check_docker(base_dir: Path | None, *, has_docker: bool) -> None:
     """Fail before anything is created when the demo cannot use Docker."""
     if not has_docker:
         raise SeedError(SeedErrorKind.DOCKER_EXTRA_MISSING)
+    _require_fresh_seed_dir(base_dir)
     try:
         check_docker()
     except DockerError as e:
         raise SeedError(SeedErrorKind.DOCKER_UNAVAILABLE, e.detail) from e
     if not DOCKER_DIR.is_dir():
         raise SeedError(SeedErrorKind.DOCKER_DIR_MISSING, str(DOCKER_DIR))
+
+
+def _require_fresh_seed_dir(base_dir: Path | None) -> None:
+    """
+    Fail before anything is created when *base_dir* holds an earlier seed's key.
+
+    The demo key is written exclusively, never over an existing one, since it logs
+    into a privileged container: an earlier Docker seed's ``ssh/`` would make the
+    seed fail halfway, after it had looked like the containers were starting.
+    """
+    ssh_dir = base_dir / SEED_SSH_DIR if base_dir is not None else None
+    if ssh_dir is not None and ssh_dir.exists():
+        raise SeedError(SeedErrorKind.SEED_DIR_REUSED, str(ssh_dir))
 
 
 def _seed_dir(base_dir: Path | None) -> Path:
@@ -326,7 +343,7 @@ def seed_demo(
         else RsyncOptions()
     )
     if docker:
-        _check_docker(has_docker=has_docker)
+        _check_docker(base_dir, has_docker=has_docker)
     try:
         return _seed(
             _seed_dir(base_dir),

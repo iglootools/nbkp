@@ -108,6 +108,18 @@ class TestDockerExtra:
         assert not exc.value.may_leave_containers
         assert "nbkp[docker]" in format_seed_error(exc.value)
 
+    def test_reseeding_a_docker_seed_dir_fails_before_any_container(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Regression: the key's exclusive mkdir failed after the checks passed."""
+        (tmp_path / "ssh").mkdir()
+        with pytest.raises(SeedError) as exc:
+            seed_demo(tmp_path, docker=True, has_docker=True)
+        assert exc.value.kind == SeedErrorKind.SEED_DIR_REUSED
+        assert exc.value.detail == str(tmp_path / "ssh")
+        assert not exc.value.may_leave_containers
+
 
 _ENC = Config(volumes={"enc": encrypted_volume()})
 

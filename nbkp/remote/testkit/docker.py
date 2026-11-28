@@ -108,6 +108,10 @@ def check_docker() -> None:
         raise DockerError(DockerErrorKind.UNAVAILABLE, str(exc)) from exc
 
 
+SEED_SSH_DIR = "ssh"
+"""The directory under a seed dir that holds the demo key pair."""
+
+
 def generate_ssh_keypair(
     seed_dir: Path,
 ) -> tuple[Path, Path]:
@@ -118,7 +122,7 @@ def generate_ssh_keypair(
     be a predictable path under /tmp, so the key is never readable by other users, not
     even until a chmod.
     """
-    ssh_dir = seed_dir / "ssh"
+    ssh_dir = seed_dir / SEED_SSH_DIR
     ssh_dir.mkdir(mode=0o700)
     private_key_path = ssh_dir / "id_ed25519"
     public_key_path = ssh_dir / "id_ed25519.pub"
