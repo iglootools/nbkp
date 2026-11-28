@@ -225,6 +225,50 @@ class TestPrune:
             message="Permission denied; the snapshot was made read-only again",
         )
 
+    def test_count_failing_after_prune_keeps_the_deleted_snapshots(self) -> None:
+        """A re-listing that fails must not report the deletions as none."""
+        run = (
+            FakeCommandRunner()
+            .on(
+                "ls",
+                returns=[_listing(OLD, MID, NEW), OSError("connection failed")],
+            )
+            .on("readlink", returns=completed(stdout=f"snapshots/{NEW}\n"))
+        )
+
+        [result] = _prune(run)
+
+        assert result.deleted == (f"{SNAPSHOTS}/{OLD}",)
+        assert result.kept is None
+        assert result.error == SnapshotResultError(
+            kind=SnapshotErrorKind.OPERATION_FAILED,
+            operation=SnapshotOp.LIST,
+            path=SNAPSHOTS,
+            message="connection failed",
+        )
+
+    def test_count_failing_after_failed_delete_is_unknown_not_zero(self) -> None:
+        run = (
+            FakeCommandRunner()
+            .on(
+                "ls",
+                returns=[_listing(OLD, MID, NEW), OSError("connection failed")],
+            )
+            .on("readlink", returns=completed(stdout=f"snapshots/{NEW}\n"))
+            .on(
+                "btrfs",
+                "subvolume",
+                "delete",
+                returns=completed(1, stderr="Permission denied"),
+            )
+        )
+
+        [result] = _prune(run)
+
+        assert result.kept is None
+        assert result.error is not None
+        assert result.error.operation is SnapshotOp.DELETE
+
     def test_infra_errors_fail_by_default(self) -> None:
         run = FakeCommandRunner()
 

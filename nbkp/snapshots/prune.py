@@ -40,12 +40,12 @@ def _count_snapshots(
     config: Config,
     resolved: ResolvedEndpoints,
     run: VolumeCommandRunner,
-) -> tuple[int, SnapshotResultError | None]:
-    """``(count, None)``, or ``(0, error)`` when the listing fails."""
+) -> tuple[int | None, SnapshotResultError | None]:
+    """``(count, None)``, or ``(None, error)`` when the listing fails."""
     try:
         return (len(list_snapshots(sync, config, resolved, run=run)), None)
     except SnapshotOperationError as e:
-        return (0, SnapshotResultError.from_operation(e))
+        return (None, SnapshotResultError.from_operation(e))
 
 
 def _skipped(
@@ -97,25 +97,26 @@ def _execute_prune(
     dry_run: bool,
     run: VolumeCommandRunner,
 ) -> PruneResult:
+    """
+    Prune *sync*, then count the snapshots left.
+
+    The count runs apart from the deletion, so a count that fails never hides the
+    snapshots already deleted: it becomes the result's error, with ``kept`` unknown.
+    A deletion that fails partway reports the snapshots it removed, and its own
+    error, which outranks a failed count.
+    """
     try:
-        deleted = prune_fn(
-            sync,
-            config,
-            limit,
-            dry_run=dry_run,
-            resolved_endpoints=resolved,
-            run=run,
-        )
-        remaining = list_snapshots(sync, config, resolved, run=run)
-        return PruneResult(
-            sync_slug=slug,
-            deleted=tuple(deleted),
-            kept=len(remaining),
-            dry_run=dry_run,
+        deleted = tuple(
+            prune_fn(
+                sync,
+                config,
+                limit,
+                dry_run=dry_run,
+                resolved_endpoints=resolved,
+                run=run,
+            ),
         )
     except SnapshotOperationError as e:
-        # A deletion that fails partway has already removed some snapshots:
-        # report them, and count what is left afresh (0 if that fails too).
         kept, _ = _count_snapshots(sync, config, resolved, run)
         return PruneResult(
             sync_slug=slug,
@@ -123,6 +124,15 @@ def _execute_prune(
             kept=kept,
             dry_run=dry_run,
             error=SnapshotResultError.from_operation(e),
+        )
+    else:
+        kept, count_error = _count_snapshots(sync, config, resolved, run)
+        return PruneResult(
+            sync_slug=slug,
+            deleted=deleted,
+            kept=kept,
+            dry_run=dry_run,
+            error=count_error,
         )
 
 

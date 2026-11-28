@@ -77,7 +77,9 @@ failed syncs, possibly incomplete, and counting them would cost complete
 snapshots their place; orphan cleanup removes the hard-link ones. When a
 deletion fails partway, the snapshots
 already deleted are still reported (`pruned_paths` in `run`, `deleted` in
-`snapshots prune`, whose `kept` is then counted afresh). Pruning can also be
+`snapshots prune`, whose `kept` is then counted afresh). A count that fails
+after the deletions is the result's error, with `kept` unknown (`null` in JSON,
+`?` in the table), never 0. Pruning can also be
 triggered manually with the `snapshots prune` command. Deleting a btrfs snapshot
 first clears its read-only flag, which `user_subvol_rm_allowed` requires. When
 the delete then fails, nbkp sets the flag again, so a snapshot that stays is

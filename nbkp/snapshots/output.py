@@ -100,7 +100,7 @@ def format_human_prune_results(results: list[PruneResult], *, dry_run: bool) -> 
         table.add_row(
             r.sync_slug,
             str(len(r.deleted)),
-            str(r.kept),
+            "?" if r.kept is None else str(r.kept),
             status,
         )
 

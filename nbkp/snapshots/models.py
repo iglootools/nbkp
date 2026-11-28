@@ -75,14 +75,14 @@ class PruneResult(BaseModel):
 
     ``deleted`` names the snapshots removed (or that would be, on a dry
     run), including those removed before a failure; ``kept`` counts the
-    snapshots left afterwards.
+    snapshots left afterwards, ``None`` when they could not be counted.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     sync_slug: str
     deleted: tuple[str, ...]
-    kept: int
+    kept: int | None
     dry_run: bool
     skip_reason: SnapshotSkipReason | None = None
     error: SnapshotResultError | None = None

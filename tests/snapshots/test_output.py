@@ -128,6 +128,25 @@ class TestPruneOutput:
         assert "SKIPPED (inactive)" in _row(output, "off-sync")
         assert _FAILED in _row(output, "bad-sync")
 
+    def test_uncounted_kept_shows_as_unknown(self) -> None:
+        output = _render(
+            format_human_prune_results,
+            [
+                PruneResult(
+                    sync_slug="bad-sync",
+                    deleted=("/dst/snapshots/a",),
+                    kept=None,
+                    dry_run=False,
+                    error=_ERROR,
+                ),
+            ],
+            dry_run=False,
+        )
+
+        row = _row(output, "bad-sync")
+        assert " ? " in row
+        assert " 0 " not in row
+
 
 @pytest.mark.parametrize(
     ("error", "expected"),
