@@ -99,7 +99,13 @@ def sh_cmd(
 
     runtime = runtime_of(ctx)
     cfg = load_config_or_exit(runtime, config)
-    resolved = resolve_endpoints(cfg, location, exclude_location, network)
+    resolved = resolve_endpoints(
+        cfg,
+        location,
+        exclude_location,
+        network,
+        ssh_config_path=runtime.ssh_config_path(),
+    )
     try:
         script = generate_script(
             cfg,

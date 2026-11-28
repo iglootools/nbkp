@@ -21,10 +21,17 @@ def show_cmd(
     Useful for verifying that inheritance, filters, and cross-references resolve
     correctly.
     """
-    cfg = load_config_or_exit(runtime_of(ctx), config, output)
+    runtime = runtime_of(ctx)
+    cfg = load_config_or_exit(runtime, config, output)
     match output:
         case OutputFormat.JSON:
             echo_json(cfg.model_dump(by_alias=True, mode="json"))
         case OutputFormat.HUMAN:
-            resolved = resolve_endpoints(cfg, None, None, None)
+            resolved = resolve_endpoints(
+                cfg,
+                None,
+                None,
+                None,
+                ssh_config_path=runtime.ssh_config_path(),
+            )
             Console().print(format_human_config(cfg, resolved_endpoints=resolved))

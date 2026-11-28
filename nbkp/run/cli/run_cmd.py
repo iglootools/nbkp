@@ -114,7 +114,14 @@ def run_cmd(
     runtime = runtime_of(ctx)
     cfg = load_config_or_exit(runtime, config, output)
     require_known_syncs(cfg, sync, output)
-    resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
+    resolved = resolve_endpoints(
+        cfg,
+        location,
+        exclude_location,
+        network,
+        output,
+        ssh_config_path=runtime.ssh_config_path(),
+    )
     invocation = Invocation.of(
         config,
         location,

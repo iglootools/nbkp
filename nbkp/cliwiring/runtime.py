@@ -82,6 +82,10 @@ class Runtime:
         """Return the run lock under this runtime's ``XDG_STATE_HOME`` or home."""
         return resolve_run_lock_path(self.environ, self.home())
 
+    def ssh_config_path(self) -> Path:
+        """Return the OpenSSH client config under this runtime's home."""
+        return self.home() / ".ssh" / "config"
+
     def load_config(self, config_path: str | Path | None) -> Config:
         """
         Load *config_path*, or search for the config.

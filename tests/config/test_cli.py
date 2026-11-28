@@ -1,12 +1,15 @@
 import json
 from pathlib import Path
 
+import yaml
+
 from nbkp.cli import app
 from nbkp.config import ConfigErrorKind, ConfigValidationErrorKind
 from nbkp.config.testkit import write_config
 from tests.fakes import fake_runtime
 from tests.fixtures.cli import runner, strip_panel
 from tests.fixtures.preflight import sample_config
+from tests.nas import nas_config
 
 _MISSING = "/nonexistent/nbkp/config.yaml"
 """A config path no test machine has: the real file lookup fails on it."""
@@ -61,6 +64,59 @@ class TestConfigSearch:
         error = json.loads(result.output)["error"]
         assert error["reason"] == ConfigErrorKind.NO_CONFIG_FOUND
         assert "/nonexistent-nbkp-test/home/.config/nbkp" in error["message"]
+
+
+class TestInvalidSshConfig:
+    """An SSH config value nbkp cannot use is a configuration error (exit 2)."""
+
+    @staticmethod
+    def _write_config_without_port(tmp_path: Path) -> Path:
+        # The SSH config's Port applies only when the endpoint sets none, and
+        # write_config writes every field, the default port included.
+        data = nas_config().model_dump(by_alias=True, mode="json")
+        del data["ssh-endpoints"]["nas"]["port"]
+        path = tmp_path / "config.yaml"
+        path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+        return path
+
+    @staticmethod
+    def _home_with_bad_port(tmp_path: Path) -> Path:
+        home = tmp_path / "home"
+        (home / ".ssh").mkdir(parents=True)
+        (home / ".ssh" / "config").write_text("Host *\n  Port abc\n", encoding="utf-8")
+        return home
+
+    def test_non_numeric_port_exits_2(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        config_path = self._write_config_without_port(tmp_path)
+        home = self._home_with_bad_port(tmp_path)
+
+        result = runner.invoke(
+            app,
+            ["sh", "--config", str(config_path)],
+            obj=fake_runtime(home=home),
+        )
+
+        assert result.exit_code == 2, result.output
+        assert "invalid-ssh-config" in result.stderr
+
+    def test_json_error_names_the_runtime_ssh_config(self, tmp_path: Path) -> None:
+        config_path = self._write_config_without_port(tmp_path)
+        home = self._home_with_bad_port(tmp_path)
+
+        result = runner.invoke(
+            app,
+            ["preflight", "check", "--config", str(config_path), "-o", "json"],
+            obj=fake_runtime(home=home),
+        )
+
+        assert result.exit_code == 2, result.output
+        error = json.loads(result.stdout)["error"]
+        assert error["reason"] == ConfigErrorKind.INVALID_SSH_CONFIG
+        assert str(home / ".ssh" / "config") in error["message"]
+        assert "'abc'" in error["message"]
 
 
 class TestConfigShowCommand:

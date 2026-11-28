@@ -78,6 +78,7 @@ def run_snapshot_operation_or_exit[R: ShowResult | PruneResult](
         options.exclude_location,
         options.network,
         output,
+        ssh_config_path=runtime.ssh_config_path(),
     )
     with managed_mount_or_exit(
         cfg,

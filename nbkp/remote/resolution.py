@@ -309,6 +309,7 @@ def resolve_all_endpoints(
     endpoint_filter: EndpointFilter | None = None,
     *,
     ssh_config: paramiko.SSHConfig | None = None,
+    ssh_config_path: Path | None = None,
     lookup: AddressLookupFn = dns_lookup,
 ) -> ResolvedEndpoints:
     """
@@ -317,9 +318,10 @@ def resolve_all_endpoints(
     Volumes whose endpoints are all at excluded locations are omitted, so
     nothing attempts to reach them over SSH.
 
-    ``ssh_config`` (default: the user's ``~/.ssh/config``, read once here,
-    and only when some volume is remote) enriches endpoints and resolves
-    aliases; ``lookup`` resolves hostnames for the DNS and network filters.
+    ``ssh_config`` (default: the file at ``ssh_config_path``, else the user's
+    ``~/.ssh/config``, read once here, and only when some volume is remote)
+    enriches endpoints and resolves aliases; ``lookup`` resolves hostnames for
+    the DNS and network filters.
     """
     remote_volumes = [
         vol
@@ -333,7 +335,7 @@ def resolve_all_endpoints(
             config,
             remote_volumes,
             endpoint_filter,
-            _or_default(ssh_config),
+            ssh_config if ssh_config is not None else load_ssh_config(ssh_config_path),
             lookup,
         )
         if remote_volumes
