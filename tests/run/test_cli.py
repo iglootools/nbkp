@@ -26,7 +26,7 @@ from nbkp.disks import UmountResult
 from nbkp.policy import Strictness
 from nbkp.preflight import SyncErrorKind, SyncStatus
 from nbkp.remote.dispatch import build_tool_lookup_args
-from nbkp.run.cli.run_cmd import abort_message, run_json
+from nbkp.run.output import abort_message, run_json
 from nbkp.run.pipeline import PipelineResult
 from nbkp.runlock import hold_run_lock
 from nbkp.sync import ProgressMode, SyncFailureKind, SyncResult
