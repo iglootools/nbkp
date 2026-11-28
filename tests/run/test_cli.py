@@ -19,7 +19,6 @@ from rich.console import Console
 
 from nbkp.cli import app
 from nbkp.cliwiring.credentials import prompt_passphrase
-from nbkp.cliwiring.lock import hold_run_lock
 from nbkp.cliwiring.output_format import echo_json
 from nbkp.config import Config, CredentialProvider
 from nbkp.config.testkit import write_config
@@ -29,6 +28,7 @@ from nbkp.preflight import SyncErrorKind, SyncStatus
 from nbkp.remote.dispatch import build_tool_lookup_args
 from nbkp.run.cli.run_cmd import abort_message, run_json
 from nbkp.run.pipeline import PipelineResult
+from nbkp.runlock import hold_run_lock
 from nbkp.sync import ProgressMode, SyncFailureKind, SyncResult
 from tests.fakes import (
     BodyError,

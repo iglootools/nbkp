@@ -19,7 +19,6 @@ from rich.console import Console
 from nbkp.cli import app
 from nbkp.cliwiring.credentials import prompt_passphrase
 from nbkp.cliwiring.disks import show_plan
-from nbkp.cliwiring.lock import hold_run_lock
 from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.config import (
     Config,
@@ -40,6 +39,7 @@ from nbkp.disks.models import (
 )
 from nbkp.disks.output import format_plan_line
 from nbkp.disks.plan import MountAction, VolumePlan, plan_incomplete
+from nbkp.runlock import hold_run_lock
 from tests.fakes import FakeCommandRunner, FakeRunLock, completed, fake_runtime
 from tests.fixtures.cli import runner
 from tests.fixtures.disks import UUID, encrypted_volume, locked_drive_host

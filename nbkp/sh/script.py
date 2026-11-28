@@ -25,6 +25,7 @@ from nbkp.config import (
 )
 from nbkp.ordering.graph import sort_syncs
 from nbkp.remote.endpoints import ResolvedEndpoints, location_excluded
+from nbkp.runlock import RUN_LOCK_STATE_SUBPATH
 from nbkp.sh.commands import INACTIVE
 from nbkp.sh.preflight import build_preflight_block
 from nbkp.sh.quoting import (
@@ -287,6 +288,9 @@ def _build_script_context(
         ),
         "has_script_dir": any(has_shell_var(p) for p in vol_paths.values()),
         "portable": options.portable,
+        # Rendered from the module nbkp's own commands lock through, so the
+        # script and `nbkp run` always lock the same file.
+        "run_lock_state_subpath": RUN_LOCK_STATE_SUBPATH,
         "syncs": syncs,
         "enabled_syncs": [s for s in syncs if s.enabled],
     }

@@ -30,11 +30,11 @@ import typer
 from platformdirs import site_config_dir, user_config_dir
 
 from nbkp.cliwiring.credentials import prompt_passphrase
-from nbkp.cliwiring.lock import RunLockFn, hold_run_lock, resolve_run_lock_path
 from nbkp.config import Config, load_config
 from nbkp.config.loader import ConfigDirFn
 from nbkp.credentials import CommandFn, PromptFn, run_captured
 from nbkp.remote.dispatch import VolumeCommandRunner, WhichFn, run_on_volume
+from nbkp.runlock import RunLockFn, hold_run_lock, resolve_run_lock_path
 from nbkp.sync.modes import RsyncRunner
 from nbkp.sync.rsync import run_rsync
 

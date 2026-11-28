@@ -7,7 +7,7 @@ import typer
 from rich.console import Console, Group, RenderableType
 from rich.text import Text
 
-from nbkp.cliwiring.lock import is_run_lock_needed, run_lock_or_exit
+from nbkp.cliwiring.lock import run_lock_or_exit
 from nbkp.cliwiring.mount_progress import LifecycleProgress, mount_display_names
 from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.cliwiring.runtime import Runtime
@@ -26,6 +26,7 @@ from nbkp.disks.output import (
 )
 from nbkp.policy import Strictness
 from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.runlock import is_run_lock_needed
 
 
 def _format_mount_status(

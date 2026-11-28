@@ -13,9 +13,9 @@ from pathlib import Path
 import pytest
 
 from nbkp.cli import app
-from nbkp.cliwiring.lock import hold_run_lock
 from nbkp.config import Config
 from nbkp.config.testkit import write_config
+from nbkp.runlock import hold_run_lock
 from tests.fakes import FakeCommandRunner, FakeRunLock, completed, fake_runtime
 from tests.fixtures.cli import runner
 from tests.fixtures.disks import encrypted_volume

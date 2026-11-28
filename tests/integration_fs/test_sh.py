@@ -12,7 +12,6 @@ from textwrap import dedent
 
 import pytest
 
-from nbkp.cliwiring.lock import hold_run_lock, resolve_run_lock_path
 from nbkp.config import (
     Config,
     HardLinkSnapshotConfig,
@@ -25,6 +24,7 @@ from nbkp.config import (
 from nbkp.fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, VOLUME_SENTINEL
 from nbkp.policy import Strictness
 from nbkp.run.pipeline import check_and_run
+from nbkp.runlock import hold_run_lock, resolve_run_lock_path
 from nbkp.sh import ScriptOptions, generate_script
 from nbkp.sync import RunOptions, SyncFailureKind
 from nbkp.sync.testkit.seed import (

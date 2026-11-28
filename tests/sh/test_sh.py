@@ -21,6 +21,7 @@ from nbkp.config import (
 from nbkp.remote.dispatch import build_tool_lookup_args
 from nbkp.remote.endpoints import EndpointFilter
 from nbkp.remote.resolution import resolve_all_endpoints
+from nbkp.runlock import resolve_run_lock_path
 from nbkp.sh import ScriptOptions, VolumeWithoutPathError, generate_script
 from nbkp.sh.quoting import quote, remote_command
 
@@ -1858,3 +1859,38 @@ def test_config_path_cannot_inject_shell_lines() -> None:
     script = generate_script(_local_to_local_config(), options, now=_NOW)
     assert "# Config: /tmp/x\\nrm -rf ~\\n.yaml\n" in script
     assert "\nrm -rf ~" not in script
+
+
+class TestRunLockPath:
+    """The script locks the same file as ``nbkp run`` (``resolve_run_lock_path``)."""
+
+    def _script_lock_path(self, environ: dict[str, str]) -> str:
+        lines = generate_script(
+            _local_to_local_config(),
+            _OPTIONS,
+            now=_NOW,
+        ).splitlines()
+        start = next(i for i, line in enumerate(lines) if '"${XDG_STATE_HOME' in line)
+        end = next(i for i in range(start, len(lines)) if lines[i].strip() == "esac")
+        block = "\n".join([*lines[start : end + 1], 'printf %s "$NBKP_RUN_LOCK"'])
+        result = subprocess.run(
+            ["bash", "-c", block],
+            env=environ,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout
+
+    @pytest.mark.parametrize(
+        "environ",
+        [
+            {"HOME": "/home/alice", "XDG_STATE_HOME": "/var/state"},
+            {"HOME": "/home/alice"},
+            {"HOME": "/home/alice", "XDG_STATE_HOME": ""},
+            {"HOME": "/home/alice", "XDG_STATE_HOME": "relative/state"},
+        ],
+    )
+    def test_lock_path_matches_nbkp_run(self, environ: dict[str, str]) -> None:
+        expected = resolve_run_lock_path(environ, Path(environ["HOME"]))
+        assert self._script_lock_path(environ) == str(expected)

@@ -370,8 +370,8 @@ ${{ sync_functions(sync) | trim | comment_out }}
 # --- Run lock (the one nbkp run holds), for the rest of the script ---
 if [ "$NBKP_DRY_RUN" = false ]; then
     case "${XDG_STATE_HOME:-}" in
-        /*) NBKP_RUN_LOCK="$XDG_STATE_HOME/nbkp/run.lock";;
-        *) NBKP_RUN_LOCK="$HOME/.local/state/nbkp/run.lock";;
+        /*) NBKP_RUN_LOCK="$XDG_STATE_HOME/${{ run_lock_state_subpath }}";;
+        *) NBKP_RUN_LOCK="$HOME/.local/state/${{ run_lock_state_subpath }}";;
     esac
     if command -v flock >/dev/null 2>&1; then
         mkdir -p "$(dirname "$NBKP_RUN_LOCK")"

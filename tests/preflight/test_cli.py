@@ -13,11 +13,11 @@ from typing import Any
 import pytest
 
 from nbkp.cli import app
-from nbkp.cliwiring.lock import hold_run_lock
 from nbkp.cliwiring.output_format import echo_json
 from nbkp.config.testkit import write_config
 from nbkp.preflight.cli.check_cmd import check_json
 from nbkp.remote.dispatch import build_tool_lookup_args
+from nbkp.runlock import hold_run_lock
 from tests.fakes import FakeCommandRunner, FakeRunLock, fake_runtime
 from tests.fixtures.cli import runner
 from tests.fixtures.preflight import (

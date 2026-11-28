@@ -15,12 +15,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from nbkp.cliwiring.lock import RunLockFn
 from nbkp.cliwiring.runtime import Runtime
 from nbkp.config import Config, SyncConfig, Volume
 from nbkp.credentials import CommandFn, PromptFn
 from nbkp.remote.dispatch import VolumeCommandRunner, WhichFn
 from nbkp.remote.endpoints import ResolvedEndpoint, ResolvedEndpoints
+from nbkp.runlock import RunLockFn
 from nbkp.sync.modes import RsyncRunner
 
 type Response = subprocess.CompletedProcess[str] | Exception
@@ -189,7 +189,7 @@ class FakeRunLock:
     """
     A run lock that is always free, recording the path of each lock taken.
 
-    A :data:`~nbkp.cliwiring.lock.RunLockFn`.
+    A :data:`~nbkp.runlock.RunLockFn`.
     """
 
     paths: list[Path] = field(default_factory=list[Path])
