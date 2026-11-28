@@ -4,6 +4,7 @@ import shlex
 import subprocess
 from pathlib import Path
 
+import paramiko
 import pytest
 from typer.testing import CliRunner
 
@@ -21,6 +22,7 @@ from nbkp.demo.seed import (
     SeedError,
     SeedErrorKind,
     SeedResult,
+    as_seed_errors,
     docker_demo_config,
     encrypted_volume_mounted,
     seed_demo,
@@ -28,6 +30,7 @@ from nbkp.demo.seed import (
     seed_steps,
 )
 from nbkp.disks import MountResult, UmountFailureKind, UmountResult
+from nbkp.remote.resolution import SshConfigError, SshConfigErrorKind
 from nbkp.remote.testkit.constants import LUKS_PASSPHRASE
 from tests.fakes import FakeCommandRunner, completed
 from tests.fixtures.disks import UUID, encrypted_volume
@@ -266,6 +269,32 @@ class TestStepFailure:
         assert result.exit_code == 1, result.output
         assert not isinstance(result.exception, OSError)
         assert "Writing the demo files failed" in result.output
+
+
+class TestAsSeedErrors:
+    @pytest.mark.parametrize(
+        ("error", "kind"),
+        [
+            (paramiko.SSHException("No existing session"), SeedErrorKind.SSH_FAILED),
+            (EOFError(), SeedErrorKind.SSH_FAILED),
+            (
+                SshConfigError(SshConfigErrorKind.INVALID_PORT, "nas", "abc"),
+                SeedErrorKind.SSH_CONFIG_INVALID,
+            ),
+            (TimeoutError("no banner"), SeedErrorKind.SSH_NOT_READY),
+            (PermissionError("denied"), SeedErrorKind.FILE_OPERATION_FAILED),
+        ],
+    )
+    def test_step_failure_becomes_a_seed_error(
+        self,
+        error: Exception,
+        kind: SeedErrorKind,
+    ) -> None:
+        """Regression: SSH and SSH-config errors escaped as tracebacks."""
+        with pytest.raises(SeedError) as exc, as_seed_errors():
+            raise error
+        assert exc.value.kind == kind
+        assert exc.value.__cause__ is error
 
 
 class TestSeedErrorRendering:

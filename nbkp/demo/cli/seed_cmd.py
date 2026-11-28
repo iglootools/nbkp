@@ -178,6 +178,10 @@ def format_seed_error(e: SeedError) -> str:
             )
         case SeedErrorKind.FILE_OPERATION_FAILED:
             return f"Writing the demo files failed: {e.detail}"
+        case SeedErrorKind.SSH_FAILED:
+            return f"SSH to a demo container failed: {e.detail}"
+        case SeedErrorKind.SSH_CONFIG_INVALID:
+            return f"Your SSH config has a value nbkp cannot use: {e.detail}"
         case SeedErrorKind.SEED_DIR_REUSED:
             return (
                 f"{e.detail} is left from an earlier seed. Tear that demo down,"

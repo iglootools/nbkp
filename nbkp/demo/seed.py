@@ -23,7 +23,8 @@ from nbkp.disks import MountResult, UmountResult, mount_phase, umount_volumes
 from nbkp.policy import Severity
 from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
-from nbkp.remote.resolution import resolve_all_endpoints
+from nbkp.remote.errors import describe_error, ssh_connection_errors
+from nbkp.remote.resolution import SshConfigError, resolve_all_endpoints
 from nbkp.remote.testkit.constants import (
     BASTION_CONTAINER_NAME,
     LUKS_PASSPHRASE,
@@ -81,6 +82,8 @@ class SeedErrorKind(StrEnum):
     UMOUNT_FAILED = "umount-failed"
     FILE_OPERATION_FAILED = "file-operation-failed"
     SEED_DIR_REUSED = "seed-dir-reused"
+    SSH_FAILED = "ssh-failed"
+    SSH_CONFIG_INVALID = "ssh-config-invalid"
 
 
 # Raised before any container starts.
@@ -361,8 +364,8 @@ def as_seed_errors() -> Generator[None]:
     """
     Raise what a seeding step fails with as a :class:`SeedError` of its kind.
 
-    Covers the failures the steps report: Docker, SSH not coming up, a command in
-    a container, the files.
+    Covers every failure the steps report: Docker, SSH (a dropped connection, a
+    refused key), the user's SSH config, a command in a container, the files.
     """
     try:
         yield
@@ -375,9 +378,15 @@ def as_seed_errors() -> Generator[None]:
             SeedErrorKind.REMOTE_COMMAND_FAILED,
             _called_process_detail(e),
         ) from e
+    except SshConfigError as e:
+        raise SeedError(SeedErrorKind.SSH_CONFIG_INVALID, str(e)) from e
     # After TimeoutError, which is an OSError too.
     except OSError as e:
         raise SeedError(SeedErrorKind.FILE_OPERATION_FAILED, str(e)) from e
+    # Past OSError, what is left of these is the SSH failures that are not
+    # OSErrors: a protocol error, a refused key, a connection lost mid-command.
+    except ssh_connection_errors() as e:
+        raise SeedError(SeedErrorKind.SSH_FAILED, describe_error(e)) from e
 
 
 def _called_process_detail(e: subprocess.CalledProcessError) -> str:
