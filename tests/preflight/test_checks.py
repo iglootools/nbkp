@@ -1841,6 +1841,61 @@ class TestAlternateEndpointUnderLocationExclusion:
         )
 
 
+class TestExcludedVolumeEndpoints:
+    def _config(self, laptop: Path) -> Config:
+        return Config(
+            ssh_endpoints={
+                "home": SshEndpoint(slug="home", host="nas.example.com"),
+                "a": SshEndpoint(slug="a", host="a.lan", location="away"),
+                "b": SshEndpoint(slug="b", host="b.lan", location="away"),
+            },
+            volumes={
+                "laptop": LocalVolume(slug="laptop", path=str(laptop)),
+                "nas": RemoteVolume(
+                    slug="nas",
+                    ssh_endpoint="home",
+                    ssh_endpoints=["a", "b"],
+                    path="/nas",
+                ),
+            },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="laptop"),
+                "ep-nas": SyncEndpoint(slug="ep-nas", volume="nas"),
+            },
+            syncs={
+                "s1": SyncConfig(slug="s1", source="ep-src", destination="ep-nas"),
+            },
+        )
+
+    def test_candidates_reported_excluded_and_non_candidate_primary_probed(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        config = self._config(tmp_path)
+        resolved = resolve_all_endpoints(
+            config,
+            EndpointFilter(exclude_locations=["away"]),
+            ssh_config=paramiko.SSHConfig(),
+            lookup=lambda _host: {"203.0.113.7"},
+        )
+        run = FakeCommandRunner()
+
+        result = _check_all(config, run, resolved_endpoints=resolved)
+
+        statuses = result.ssh_endpoint_statuses
+        assert statuses["a"].errors == [SshEndpointErrorKind.LOCATION_EXCLUDED]
+        assert statuses["b"].errors == [SshEndpointErrorKind.LOCATION_EXCLUDED]
+        assert SshEndpointErrorKind.LOCATION_EXCLUDED not in statuses["home"].errors
+        assert set(_standalone_probes(run)) == {"home"}
+        assert result.volume_statuses["nas"].ssh_endpoint_status.slug == "a"
+        assert check_step_count(config, resolved_endpoints=resolved) == (
+            len(statuses)
+            + len(result.volume_statuses)
+            + len(result.source_endpoint_statuses)
+            + len(result.destination_endpoint_statuses)
+        )
+
+
 class TestCheckHardLinkDest:
     def _make_hl_config(
         self,

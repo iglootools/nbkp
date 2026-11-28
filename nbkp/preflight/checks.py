@@ -390,12 +390,21 @@ def _excluded_endpoints(
     needed_volumes: set[str],
     resolved_endpoints: ResolvedEndpoints,
 ) -> list[str]:
-    """Primary endpoints of the needed volumes excluded by location (sorted)."""
+    """
+    Candidate endpoints of the needed volumes excluded by location (sorted).
+
+    Resolution excludes a volume only when every candidate is at an excluded
+    location, so each of them is reported as excluded. A primary
+    ``ssh-endpoint`` that ``ssh-endpoints`` leaves out is not a candidate: it
+    stays free for the standalone reachability probe.
+    """
     return sorted(
         {
-            _ssh_endpoint_slug(vol, resolved_endpoints)
+            slug
             for vol in (config.volumes[v] for v in needed_volumes)
-            if location_excluded(vol, resolved_endpoints)
+            if isinstance(vol, RemoteVolume)
+            and location_excluded(vol, resolved_endpoints)
+            for slug in vol.endpoint_candidates
         },
     )
 
@@ -415,15 +424,15 @@ def _volume_ssh_status(
     """
     Return the status of the endpoint *volume* is reached through.
 
-    An excluded volume gets its own excluded status even when another volume
-    reached its primary endpoint, since nothing may reach this one.
+    An excluded volume gets its own excluded status, under its first candidate,
+    even when another volume reached that endpoint, since nothing may reach
+    this one.
     """
-    slug = _ssh_endpoint_slug(volume, resolved_endpoints)
-    return (
-        _excluded_ssh_status(slug)
-        if location_excluded(volume, resolved_endpoints)
-        else ssh_statuses[slug]
-    )
+    match volume:
+        case RemoteVolume() if location_excluded(volume, resolved_endpoints):
+            return _excluded_ssh_status(volume.endpoint_candidates[0])
+        case _:
+            return ssh_statuses[_ssh_endpoint_slug(volume, resolved_endpoints)]
 
 
 def _check_volume_ssh_endpoint(
