@@ -22,7 +22,7 @@ def create_snapshot(
     *,
     now: datetime,
     platform: str,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     run: VolumeCommandRunner = run_on_volume,
 ) -> str:
     """
@@ -32,7 +32,7 @@ def create_snapshot(
     macOS-safe name form; both come from the caller so this stays
     deterministic.  Returns the snapshot path.
     """
-    resolved = resolved_endpoints or {}
+    resolved = resolved_endpoints
     dst_vol = destination_volume(sync, config)
     snapshot = create_snapshot_timestamp(now, dst_vol, platform)
     snapshot_path = f"{snapshots_dir(sync, config)}/{snapshot.name}"
@@ -138,7 +138,7 @@ def prune_snapshots(
     max_snapshots: int,
     *,
     dry_run: bool = False,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     run: VolumeCommandRunner = run_on_volume,
 ) -> list[str]:
     """See :func:`.common.prune_oldest_snapshots`."""

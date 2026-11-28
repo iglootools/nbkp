@@ -156,7 +156,7 @@ class TestListSnapshotsLocal:
         )
         config, sync = _local_config()
 
-        result = list_snapshots(sync, config, run=runner)
+        result = list_snapshots(sync, config, run=runner, resolved_endpoints={})
         assert [s.name for s in result] == [
             "2024-01-01T00:00:00.000Z",
             "2024-01-15T12:00:00.000Z",
@@ -166,7 +166,7 @@ class TestListSnapshotsLocal:
         runner = FakeCommandRunner().on(returns=completed(returncode=0, stdout=""))
         config, sync = _local_config()
 
-        result = list_snapshots(sync, config, run=runner)
+        result = list_snapshots(sync, config, run=runner, resolved_endpoints={})
         assert result == []
 
     def test_dir_missing(self) -> None:
@@ -179,7 +179,7 @@ class TestListSnapshotsLocal:
         )
         config, sync = _local_config()
 
-        result = list_snapshots(sync, config, run=runner)
+        result = list_snapshots(sync, config, run=runner, resolved_endpoints={})
         assert result == []
 
 
@@ -215,13 +215,13 @@ class TestReadLatestSymlink:
         latest = tmp_path / "latest"
         latest.symlink_to(f"snapshots/{_TS_LOCAL.name}")
 
-        result = read_latest_symlink(sync, config)
+        result = read_latest_symlink(sync, config, resolved_endpoints={})
         assert result == _TS_LOCAL
 
     def test_none_when_latest_missing(self, tmp_path: Path) -> None:
         sync, config = _hl_local_config(tmp_path)
 
-        result = read_latest_symlink(sync, config)
+        result = read_latest_symlink(sync, config, resolved_endpoints={})
         assert result is None
 
     def test_remote_exists(self) -> None:
@@ -259,7 +259,7 @@ class TestReadLatestSymlink:
         latest = tmp_path / "latest"
         latest.symlink_to("/dev/null")
 
-        result = read_latest_symlink(sync, config)
+        result = read_latest_symlink(sync, config, resolved_endpoints={})
         assert result is None
 
     def test_remote_devnull(self) -> None:
@@ -319,7 +319,7 @@ class TestUpdateLatestSymlink:
     def test_latest_points_to_snapshot_when_local(self, tmp_path: Path) -> None:
         sync, config = _hl_local_config(tmp_path)
 
-        update_latest_symlink(sync, config, _TS_LOCAL)
+        update_latest_symlink(sync, config, _TS_LOCAL, resolved_endpoints={})
         link = tmp_path / "latest"
         assert link.is_symlink()
         assert str(link.readlink()) == f"snapshots/{_TS_LOCAL.name}"
@@ -329,7 +329,7 @@ class TestUpdateLatestSymlink:
         link = tmp_path / "latest"
         link.symlink_to("/dev/null")
 
-        update_latest_symlink(sync, config, _TS_LOCAL)
+        update_latest_symlink(sync, config, _TS_LOCAL, resolved_endpoints={})
 
         assert str(link.readlink()) == f"snapshots/{_TS_LOCAL.name}"
         assert sorted(p.name for p in tmp_path.iterdir()) == ["latest"]
@@ -349,7 +349,7 @@ class TestUpdateLatestSymlink:
                 SnapshotOperationError,
                 check=_is_op(SnapshotOp.UPDATE_LATEST),
             ):
-                update_latest_symlink(sync, config, _TS_LOCAL)
+                update_latest_symlink(sync, config, _TS_LOCAL, resolved_endpoints={})
         assert str(link.readlink()) == "snapshots/previous"
 
     def test_latest_replaced_with_ln_when_remote(self) -> None:
@@ -391,7 +391,7 @@ class TestListSnapshotsFailures:
                 and e.stderr == "Permission denied"
             ),
         ):
-            list_snapshots(sync, config, run=runner)
+            list_snapshots(sync, config, run=runner, resolved_endpoints={})
 
     def test_ignores_non_snapshot_entries(self) -> None:
         runner = FakeCommandRunner().on(
@@ -402,7 +402,7 @@ class TestListSnapshotsFailures:
         )
         config, sync = _local_config()
 
-        result = list_snapshots(sync, config, run=runner)
+        result = list_snapshots(sync, config, run=runner, resolved_endpoints={})
         assert [s.name for s in result] == ["2026-03-01T10:00:00.000Z"]
 
     def test_mixed_name_forms_are_sorted_by_time(self) -> None:
@@ -415,7 +415,7 @@ class TestListSnapshotsFailures:
         )
         config, sync = _local_config()
 
-        result = list_snapshots(sync, config, run=runner)
+        result = list_snapshots(sync, config, run=runner, resolved_endpoints={})
         assert [s.name for s in result] == [
             "2026-03-01T10:15:00.000Z",
             "2026-03-01T10-30-00.000Z",
@@ -562,7 +562,7 @@ class TestLocalOSErrorTranslation:
             SnapshotOperationError,
             check=_is_op(SnapshotOp.UPDATE_LATEST),
         ):
-            update_latest_symlink(sync, config, _TS_LOCAL)
+            update_latest_symlink(sync, config, _TS_LOCAL, resolved_endpoints={})
 
     def test_hard_link_delete_missing_dir(self, tmp_path: Path) -> None:
         vol = LocalVolume(slug="dst", path=str(tmp_path))

@@ -184,7 +184,7 @@ def prune_all_syncs(
     *,
     dry_run: bool = False,
     only_syncs: list[str] | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     strictness: Strictness = Strictness.IGNORE_INACTIVE,
     run: VolumeCommandRunner = run_on_volume,
 ) -> list[PruneResult]:
@@ -193,7 +193,7 @@ def prune_all_syncs(
 
     Every listing and deletion runs through *run*.
     """
-    resolved = resolved_endpoints or {}
+    resolved = resolved_endpoints
     return [
         _process_candidate(
             slug,

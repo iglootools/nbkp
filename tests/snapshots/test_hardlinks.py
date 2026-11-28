@@ -63,7 +63,14 @@ class TestCreateSnapshotDir:
         sync, config = _local_config()
         runner = FakeCommandRunner()
 
-        path = create_snapshot_dir(sync, config, now=_NOW, platform="linux", run=runner)
+        path = create_snapshot_dir(
+            sync,
+            config,
+            now=_NOW,
+            platform="linux",
+            run=runner,
+            resolved_endpoints={},
+        )
 
         assert path == f"/dst/snapshots/{_TS_LOCAL.name}"
         assert runner.commands == [["mkdir", "-p", "/dst/snapshots"], ["mkdir", path]]
@@ -101,7 +108,14 @@ class TestCreateSnapshotDir:
                 e.op is SnapshotOp.MKDIR and e.stderr == "permission denied"
             ),
         ):
-            create_snapshot_dir(sync, config, now=_NOW, platform="linux", run=runner)
+            create_snapshot_dir(
+                sync,
+                config,
+                now=_NOW,
+                platform="linux",
+                run=runner,
+                resolved_endpoints={},
+            )
 
 
 class TestCleanupOrphanedSnapshots:
@@ -119,7 +133,7 @@ class TestCleanupOrphanedSnapshots:
         latest = tmp_path / "latest"
         latest.symlink_to("snapshots/2024-01-01T00:00:00.000Z")
 
-        deleted = cleanup_orphaned_snapshots(sync, config)
+        deleted = cleanup_orphaned_snapshots(sync, config, resolved_endpoints={})
         assert len(deleted) == 1
         assert "2024-01-02T00:00:00.000Z" in deleted[0]
         assert not (snaps / "2024-01-02T00:00:00.000Z").exists()
@@ -133,7 +147,7 @@ class TestCleanupOrphanedSnapshots:
         latest = tmp_path / "latest"
         latest.symlink_to("snapshots/2024-01-02T00:00:00.000Z")
 
-        deleted = cleanup_orphaned_snapshots(sync, config)
+        deleted = cleanup_orphaned_snapshots(sync, config, resolved_endpoints={})
         assert deleted == []
 
     @staticmethod
@@ -159,7 +173,7 @@ class TestCleanupOrphanedSnapshots:
         sync, config = self._leftover_config(tmp_path)
         (tmp_path / "latest").symlink_to("/dev/null")
 
-        deleted = cleanup_orphaned_snapshots(sync, config)
+        deleted = cleanup_orphaned_snapshots(sync, config, resolved_endpoints={})
 
         assert deleted == [f"{tmp_path}/snapshots/2024-01-01T00:00:00.000Z"]
         assert list((tmp_path / "snapshots").iterdir()) == []
@@ -173,7 +187,7 @@ class TestCleanupOrphanedSnapshots:
         sync, config = self._leftover_config(tmp_path)
 
         with pytest.raises(SnapshotOperationError) as info:
-            cleanup_orphaned_snapshots(sync, config)
+            cleanup_orphaned_snapshots(sync, config, resolved_endpoints={})
 
         assert info.value.op == SnapshotOp.READ_LATEST
         assert info.value.path == f"{tmp_path}/latest"
@@ -185,7 +199,7 @@ class TestCleanupOrphanedSnapshots:
         (tmp_path / "snapshots").rmdir()
         (tmp_path / "latest").symlink_to("/dev/null")
 
-        assert cleanup_orphaned_snapshots(sync, config) == []
+        assert cleanup_orphaned_snapshots(sync, config, resolved_endpoints={}) == []
 
 
 class TestDeleteSnapshot:
@@ -292,7 +306,7 @@ class TestPruneSnapshots:
         latest = tmp_path / "latest"
         latest.symlink_to(f"snapshots/{_S3}")
 
-        deleted = prune_snapshots(sync, config, 2)
+        deleted = prune_snapshots(sync, config, 2, resolved_endpoints={})
         assert len(deleted) == 1
         assert _S1 in deleted[0]
 
@@ -315,7 +329,7 @@ class TestPruneSnapshots:
 
         # _S3, newer than latest, is a failed sync's leftover: neither counted
         # nor pruned, so _S1 goes and _S2 (latest) stays.
-        deleted = prune_snapshots(sync, config, 1)
+        deleted = prune_snapshots(sync, config, 1, resolved_endpoints={})
         assert deleted == [f"{tmp_path}/snapshots/{_S1}"]
         assert sorted(p.name for p in snaps.iterdir()) == [_S2, _S3]
 
@@ -337,7 +351,7 @@ class TestPruneSnapshots:
             (snaps / name).mkdir()
         (tmp_path / "latest").symlink_to(f"snapshots/{_S2}")
 
-        deleted = prune_snapshots(sync, config, 2)
+        deleted = prune_snapshots(sync, config, 2, resolved_endpoints={})
 
         assert deleted == []
         assert sorted(p.name for p in snaps.iterdir()) == [_S1, _S2, _S3]
@@ -356,7 +370,7 @@ class TestPruneSnapshots:
         latest = tmp_path / "latest"
         latest.symlink_to(f"snapshots/{_S3}")
 
-        deleted = prune_snapshots(sync, config, 1, dry_run=True)
+        deleted = prune_snapshots(sync, config, 1, dry_run=True, resolved_endpoints={})
         assert len(deleted) == 2
         assert (snaps / _S1).exists()
         assert (snaps / _S2).exists()
@@ -369,5 +383,5 @@ class TestPruneSnapshots:
         )
         (tmp_path / "snapshots" / _S1).mkdir(parents=True)
 
-        deleted = prune_snapshots(sync, config, 5)
+        deleted = prune_snapshots(sync, config, 5, resolved_endpoints={})
         assert deleted == []

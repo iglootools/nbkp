@@ -187,7 +187,7 @@ def build_rsync_command(
     dry_run: bool = False,
     link_dest: str | None = None,
     progress: ProgressMode | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     dest_suffix: str | None = None,
 ) -> list[str]:
     """
@@ -212,7 +212,7 @@ def build_rsync_command(
     Raises :class:`KeyError` when a remote volume is missing from
     *resolved_endpoints*: the caller resolves every endpoint the sync touches.
     """
-    resolved = resolved_endpoints or {}
+    resolved = resolved_endpoints
     src_ep = config.source_endpoint(sync)
     dst_ep = config.destination_endpoint(sync)
     src_vol = config.volumes[src_ep.volume]
@@ -407,7 +407,7 @@ def run_rsync(
     link_dest: str | None = None,
     progress: ProgressMode | None = None,
     on_output: Callable[[str], None] | None = None,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     dest_suffix: str | None = None,
     run_process: ProcessRunner = run_local_process,
 ) -> subprocess.CompletedProcess[str]:

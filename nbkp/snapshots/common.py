@@ -102,7 +102,7 @@ def ensure_after_latest(
 def list_snapshots(
     sync: SyncConfig,
     config: Config,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> list[Snapshot]:
@@ -119,7 +119,7 @@ def list_snapshots(
         return list_snapshot_dir(
             destination_volume(sync, config),
             path,
-            resolved_endpoints or {},
+            resolved_endpoints,
             run=run,
         )
     except VolumeReadError as e:
@@ -164,7 +164,7 @@ def read_latest_link(
     sync: SyncConfig,
     config: Config,
     *,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     run: VolumeCommandRunner = run_on_volume,
 ) -> Snapshot | NoLatestSnapshot:
     """
@@ -177,7 +177,7 @@ def read_latest_link(
     :class:`~nbkp.snapshots.errors.SnapshotOperationError`: callers use it to
     protect the latest snapshot, so it must not be guessed at.
     """
-    resolved = resolved_endpoints or {}
+    resolved = resolved_endpoints
     latest_path = f"{resolve_dest_path(sync, config)}/{LATEST_LINK}"
     target = _read_raw_symlink_target(
         destination_volume(sync, config),
@@ -206,7 +206,7 @@ def read_latest_symlink(
     sync: SyncConfig,
     config: Config,
     *,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     run: VolumeCommandRunner = run_on_volume,
 ) -> Snapshot | None:
     """
@@ -262,7 +262,7 @@ def update_latest_symlink(
     config: Config,
     snapshot: Snapshot,
     *,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     run: VolumeCommandRunner = run_on_volume,
 ) -> None:
     """
@@ -272,7 +272,7 @@ def update_latest_symlink(
     replaced atomically; on a remote volume ``ln -sfn`` replaces it.
     Raises :class:`SnapshotOperationError` when the update fails.
     """
-    resolved = resolved_endpoints or {}
+    resolved = resolved_endpoints
     latest_path = f"{resolve_dest_path(sync, config)}/{LATEST_LINK}"
     target = f"{SNAPSHOTS_DIR}/{snapshot.name}"
     op = SnapshotOp.UPDATE_LATEST
@@ -324,7 +324,7 @@ class PruneSnapshotsFn(Protocol):
         max_snapshots: int,
         *,
         dry_run: bool = ...,
-        resolved_endpoints: ResolvedEndpoints | None = ...,
+        resolved_endpoints: ResolvedEndpoints,
         run: VolumeCommandRunner = ...,
     ) -> list[str]:
         """Delete the oldest snapshots of *sync* beyond *max_snapshots*."""
@@ -338,7 +338,7 @@ def prune_oldest_snapshots(
     delete_snapshot: DeleteSnapshotFn,
     *,
     dry_run: bool = False,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     run: VolumeCommandRunner = run_on_volume,
 ) -> list[str]:
     """
@@ -354,7 +354,7 @@ def prune_oldest_snapshots(
     raises :class:`~nbkp.snapshots.errors.SnapshotPruneError`, which names
     the snapshots deleted before it.
     """
-    resolved = resolved_endpoints or {}
+    resolved = resolved_endpoints
     snapshots = list_snapshots(sync, config, resolved, run=run)
     if len(snapshots) <= max_snapshots:
         return []

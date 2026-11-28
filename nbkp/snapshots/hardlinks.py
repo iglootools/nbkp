@@ -34,7 +34,7 @@ def create_snapshot_dir(
     *,
     now: datetime,
     platform: str,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     run: VolumeCommandRunner = run_on_volume,
 ) -> str:
     """
@@ -48,7 +48,7 @@ def create_snapshot_dir(
     possibly the one ``latest`` points to, and a failed rsync would then
     delete it.  Only ``snapshots/`` itself is created when missing.
     """
-    resolved = resolved_endpoints or {}
+    resolved = resolved_endpoints
     dst_vol = destination_volume(sync, config)
     snapshot_path = snapshot_path_for(sync, config, now=now, platform=platform)
     parent = snapshots_dir(sync, config)
@@ -102,7 +102,7 @@ def cleanup_orphaned_snapshots(
     sync: SyncConfig,
     config: Config,
     *,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     run: VolumeCommandRunner = run_on_volume,
 ) -> list[str]:
     """
@@ -120,7 +120,7 @@ def cleanup_orphaned_snapshots(
     (init points it at ``/dev/null``), so its absence is outside damage, and
     the snapshots may well be complete.
     """
-    resolved = resolved_endpoints or {}
+    resolved = resolved_endpoints
     latest = _last_complete_snapshot(sync, config, resolved, run)
     base = snapshots_dir(sync, config)
     orphans = [
@@ -266,7 +266,7 @@ def prune_snapshots(
     max_snapshots: int,
     *,
     dry_run: bool = False,
-    resolved_endpoints: ResolvedEndpoints | None = None,
+    resolved_endpoints: ResolvedEndpoints,
     run: VolumeCommandRunner = run_on_volume,
 ) -> list[str]:
     """See :func:`.common.prune_oldest_snapshots`."""
