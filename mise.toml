@@ -349,7 +349,7 @@ run = "uv run --no-sync lint-imports"
 
 [tasks.lint-dead-code]
 description = "Check for unused code (deadcode, configured in pyproject.toml)"
-run = "uv run --no-sync deadcode nbkp tests"
+run = "uv run --no-sync deadcode nbkp tests build-scripts"
 
 [tasks.depgraph-ascii]
 description = "Generate module dependency graph (ASCII art)"
