@@ -32,6 +32,7 @@ from nbkp.preflight import (
 )
 from nbkp.remote.endpoints import ResolvedEndpoints
 from nbkp.sync import RunOptions, SyncResult, run_all_syncs
+from tests.fakes import refuse_rsync, refuse_volume_command
 from tests.fixtures.config import two_volume_config
 
 FIXED_NOW = datetime(2026, 3, 6, 14, 30, 0, tzinfo=UTC)
@@ -48,10 +49,15 @@ def run_syncs(
     run_all_syncs with a fixed clock and platform.
 
     Pass ``rsync=`` and ``run_command=`` fakes (``tests.fakes``) for any sync
-    that is attempted: the defaults are the real rsync and transport.
+    that is attempted: the defaults fail the test on the first rsync or command,
+    so a sync that was meant to be skipped can never reach the real ones.
     """
     callbacks = {k: v for k, v in kwargs.items() if k in _CALLBACKS}
-    options = {k: v for k, v in kwargs.items() if k not in _CALLBACKS}
+    options: dict[str, Any] = {
+        "rsync": refuse_rsync,
+        "run_command": refuse_volume_command,
+        **{k: v for k, v in kwargs.items() if k not in _CALLBACKS},
+    }
     resolved_endpoints: ResolvedEndpoints = options.pop("resolved_endpoints", {})
     return run_all_syncs(
         config,
