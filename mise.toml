@@ -76,7 +76,7 @@ run = "uv run --no-sync iglootools mise lock-check"
 
 # python-tooling.md, "Keep `install` and `reinstall` as tasks over `mise deps`".
 [tasks.install]
-description = "Install dependencies"
+description = "Sync .venv with uv.lock (rarely needed by hand: the other tasks install dependencies themselves)"
 run = "mise deps install uv"
 
 # Task families (guidelines/project-setup/mise.md in iglootools/common, "Name tasks by
@@ -226,6 +226,7 @@ run = [
   { task = "lint-toc" },
   { task = "lint-clidocs" },
   { task = "lint-configdocs" },
+  { task = "lint-taskdocs" },
   { task = "lint-depgraph" },
   { task = "lint-boundaries" },
   { task = "lint-dead-code" },
@@ -312,10 +313,11 @@ description = "Check that every Markdown document has an up-to-date table of con
 run = "uv run --no-sync iglootools docs toc --check --exclude 'marketing/**'"
 
 [tasks.reference-doc]
-description = "Regenerate the reference documentation"
+description = "Regenerate every generated reference: the CLI reference, the config tables, the Module Overview and the task reference"
 run = [
   { task = "clidocs" },
   { task = "configdocs" },
+  { task = "taskdocs" },
   { task = "depgraph" },
 ]
 
@@ -334,6 +336,14 @@ run = "uv run --no-sync python build-scripts/configdocs.py"
 [tasks.lint-configdocs]
 description = "Check that the config reference tables in docs/config-reference.md are up to date (fix with `mise run configdocs`)"
 run = "uv run --no-sync python build-scripts/configdocs.py --check"
+
+[tasks.taskdocs]
+description = "Regenerate the task reference in docs/building-and-testing.md from these descriptions"
+run = "uv run --no-sync python build-scripts/taskdocs.py"
+
+[tasks.lint-taskdocs]
+description = "Check that the task reference in docs/building-and-testing.md is up to date (fix with `mise run taskdocs`)"
+run = "uv run --no-sync python build-scripts/taskdocs.py --check"
 
 [tasks.depgraph]
 description = "Regenerate Module Overview in docs/architecture.md"
