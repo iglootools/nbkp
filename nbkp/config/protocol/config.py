@@ -246,7 +246,8 @@ class Config(ConfigModel):
         default=None,
         description=(
             "Command template for the ``command`` credential provider."
-            " ``{id}`` is replaced with the passphrase-id."
+            " ``{id}`` is replaced with the passphrase-id, and a leading ``~`` in"
+            " the program (the first item) is expanded."
             ' Example: ``["pass", "show", "nbkp/{id}"]``.'
         ),
     )

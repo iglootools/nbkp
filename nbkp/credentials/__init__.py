@@ -5,6 +5,7 @@ import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 from pydantic import SecretStr
 
@@ -146,7 +147,11 @@ def _from_command(
 ) -> str:
     if command_template is None:
         raise CredentialError(CredentialErrorKind.COMMAND_MISSING)
-    command = [arg.replace("{id}", passphrase_id) for arg in command_template]
+    program, *args = (arg.replace("{id}", passphrase_id) for arg in command_template)
+    # No shell runs the command, so nothing else expands a `~/bin/get-pass` the
+    # user wrote. Only the program is a path for certain; the arguments may be
+    # anything, a `~` inside a vault reference included.
+    command = [str(Path(program).expanduser()), *args]
     try:
         result = run(command)
     except OSError as e:

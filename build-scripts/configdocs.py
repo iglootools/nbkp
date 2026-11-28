@@ -153,7 +153,7 @@ Top-level config fields for credential retrieval:
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `credential-provider` | `"keyring"` \\| `"prompt"` \\| `"env"` \\| `"command"` | `"keyring"` | How LUKS passphrases are retrieved |
-| `credential-command` | list of strings | `null` | Command template for `command` provider. Must contain `{id}` placeholder (e.g. `["pass", "show", "nbkp/{id}"]`) |
+| `credential-command` | list of strings | `null` | Command template for `command` provider. Must contain `{id}` placeholder (e.g. `["pass", "show", "nbkp/{id}"]`). A leading `~` in the program (the first item) is expanded |
 
 Providers:
 - **keyring**: `keyring.get_password("nbkp", passphrase_id)` — uses macOS Keychain or
