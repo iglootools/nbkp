@@ -26,3 +26,7 @@ class SuggestedCommands(Protocol):
         selection.
         """
         ...
+
+    def troubleshoot_command(self) -> str:
+        """Shell-quoted ``nbkp preflight troubleshoot`` for the same setup."""
+        ...

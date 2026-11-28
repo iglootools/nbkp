@@ -738,8 +738,9 @@ file (relative to the current directory), endpoint-selection flags,
 `--strictness` and `--no-mount` — for step-by-step fixes. It cannot carry
 `--sync`, which `troubleshoot` does not take. In JSON mode the command is the
 `hint` field.
-`snapshots show` / `prune` (when a sync failed preflight) and `disks mount` /
-`umount` (when a volume failed) print the same suggestion, in human output only:
+`preflight check`, `snapshots show` / `prune` (when a sync failed preflight)
+and `disks mount` / `umount` (when a volume failed) print the same suggestion,
+carrying the flags each of them takes; the last three in human output only:
 their JSON output is a bare list, with no object to carry a `hint` field.
 
 **`snapshots show` / `snapshots prune`** — accept the same `--strictness`. A

@@ -115,8 +115,17 @@ def run_cmd(
     cfg = load_config_or_exit(runtime, config, output)
     require_known_syncs(cfg, sync, output)
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
-    invocation = Invocation.of(config, location, exclude_location, network)
-    hint = _troubleshoot_hint(invocation, strictness, mount=mount)
+    invocation = Invocation.of(
+        config,
+        location,
+        exclude_location,
+        network,
+        strictness=strictness,
+        mount=mount,
+    )
+    # It cannot narrow to the run's --sync selection, which troubleshoot
+    # does not take.
+    hint = invocation.troubleshoot_command()
     # Filled when the volumes are unmounted, so the outcome is printed after
     # the block: a drive left mounted or unlocked is part of the outcome.
     umount_results: list[UmountResult] = []
@@ -181,31 +190,6 @@ def run_cmd(
     )
     if run_failed(pipeline, umount_results):
         raise typer.Exit(1)
-
-
-def _troubleshoot_hint(
-    invocation: Invocation,
-    strictness: Strictness,
-    *,
-    mount: bool,
-) -> str:
-    """
-    Build the ``preflight troubleshoot`` command that explains an aborted run.
-
-    It judges problems at the run's strictness, and leaves the drives alone when the
-    run did. It cannot narrow to the run's ``--sync`` selection, which ``troubleshoot``
-    does not take.
-    """
-    return invocation.command(
-        "preflight",
-        "troubleshoot",
-        *(
-            ["-S", strictness.value]
-            if strictness is not Strictness.IGNORE_INACTIVE
-            else []
-        ),
-        *([] if mount else ["--no-mount"]),
-    )
 
 
 class _HumanProgress:

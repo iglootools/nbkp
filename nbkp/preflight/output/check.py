@@ -498,7 +498,7 @@ def _troubleshoot_hint(
             Text(""),
             Text.assemble(
                 "Run ",
-                (invocation.command("preflight", "troubleshoot"), "bold"),
+                (invocation.troubleshoot_command(), "bold"),
                 " for detailed remediation steps.",
             ),
         ]

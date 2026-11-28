@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from nbkp.cliwiring.invocation import Invocation, display_path
+from nbkp.policy import Strictness
 
 
 class TestDisplayPath:
@@ -42,4 +43,19 @@ class TestCommand:
         )
         assert inv.command("disks", "setup-auth", endpoint_flags=False) == (
             "nbkp disks setup-auth -c c.yaml"
+        )
+
+
+class TestTroubleshootCommand:
+    def test_default_strictness_and_mount_add_no_flags(self) -> None:
+        assert Invocation().troubleshoot_command() == "nbkp preflight troubleshoot"
+
+    def test_keeps_the_strictness_and_no_mount(self) -> None:
+        inv = Invocation.of(
+            Path("/w/c.yaml"),
+            strictness=Strictness.IGNORE_NONE,
+            mount=False,
+        )
+        assert inv.troubleshoot_command() == (
+            "nbkp preflight troubleshoot -S ignore-none --no-mount -c /w/c.yaml"
         )

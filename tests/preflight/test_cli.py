@@ -173,6 +173,30 @@ class TestCheckCommand:
         )
         assert "nbkp preflight troubleshoot -c config.yaml -N private" in flat
 
+    def test_hint_keeps_the_strictness_and_no_mount(
+        self,
+        tmp_path: Path,
+        chdir: Callable[[Path], None],
+    ) -> None:
+        chdir(tmp_path)
+        write_config(tmp_path, nas_config())
+
+        _, output = _check(
+            Path("config.yaml"),
+            "-S",
+            "ignore-none",
+            "--no-mount",
+            run=_destination_sentinel_missing(),
+        )
+
+        flat = " ".join(
+            line.strip(" │") for line in output.splitlines() if line.strip()
+        )
+        assert (
+            "nbkp preflight troubleshoot -S ignore-none --no-mount -c config.yaml"
+            in flat
+        )
+
 
 class TestRunLock:
     """

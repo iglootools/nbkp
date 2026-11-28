@@ -421,7 +421,7 @@ class TestPreflightAbort:
         assert exit_code == 1
         assert "found errors in 1 sync:" in output
         assert "photos: source endpoint inactive" in output
-        assert "nbkp preflight troubleshoot -c conf/nbkp.yaml" in output
+        assert "nbkp preflight troubleshoot -S ignore-none -c conf/nbkp.yaml" in output
         assert rsync.calls == []
 
     def test_json_hint_carries_config_and_network_flags(

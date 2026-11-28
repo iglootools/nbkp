@@ -118,6 +118,8 @@ def _print_troubleshoot_hint(options: SnapshotCommandOptions) -> None:
                 options.location,
                 options.exclude_location,
                 options.network,
+                strictness=options.strictness,
+                mount=options.mount,
             ),
         ),
         soft_wrap=True,
