@@ -75,6 +75,15 @@ class TestSshEndpoint:
         server = SshEndpoint(slug="nas-server", host="nas.local")
         assert server.proxy_jump is None
 
+    def test_slug_rejected_when_it_names_the_local_host(self) -> None:
+        with pytest.raises(pydantic.ValidationError) as excinfo:
+            SshEndpoint(slug="localhost", host="nas.local")
+        assert _error_types(excinfo.value) == {ConfigValidationErrorKind.RESERVED_SLUG}
+
+    def test_host_may_be_localhost(self) -> None:
+        server = SshEndpoint(slug="loopback", host="localhost")
+        assert server.host == "localhost"
+
 
 class TestRemoteVolume:
     def test_fields_keep_the_given_values(self) -> None:

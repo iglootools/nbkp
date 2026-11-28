@@ -28,6 +28,7 @@ from functools import partial
 lazy import paramiko
 
 from nbkp.config import (
+    LOCAL_HOST_SLUG,
     Config,
     LocalVolume,
     RemoteVolume,
@@ -466,7 +467,7 @@ def _ssh_endpoint_slug(volume: Volume, resolved_endpoints: ResolvedEndpoints) ->
     """Return the endpoint resolution chose for *volume*, else its primary."""
     match volume:
         case LocalVolume():
-            return "localhost"
+            return LOCAL_HOST_SLUG
         case RemoteVolume() if volume.slug in resolved_endpoints:
             return resolved_endpoints[volume.slug].server.slug
         case RemoteVolume():

@@ -404,6 +404,10 @@ Checked when the config is loaded, before anything runs:
 - An entry's slug is the key it is declared under. An entry may also write
   `slug`, but only with that same value: a different one is rejected
   (`slug-mismatch`), since some lookups go by key and others by slug.
+- No SSH endpoint may be named `localhost` (`reserved-slug`): preflight reports
+  the machine nbkp runs on under that name, and an endpoint sharing it would be
+  checked as the same host as the local volumes. The endpoint's `host` may
+  still be `localhost`.
 - Every key must be one this page documents: an unknown key, such as a misspelt
   `max-snapshot` or `hard-link-snapshot`, is rejected (`extra_forbidden`) with
   its location, rather than ignored while its section falls back to the

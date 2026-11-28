@@ -5,7 +5,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from nbkp.config import Config, LocalVolume, RemoteVolume
+from nbkp.config import LOCAL_HOST_SLUG, Config, LocalVolume, RemoteVolume
 from nbkp.config.output import (
     format_mount_summary,
     format_volume_display,
@@ -261,7 +261,7 @@ def _localhost_row(
     return (
         [
             (
-                "localhost",
+                LOCAL_HOST_SLUG,
                 Text("this machine", style="dim"),
                 "",
                 "",
@@ -281,7 +281,7 @@ def _build_ssh_endpoints_section(
     ssh_endpoint_statuses: dict[str, SshEndpointStatus],
     strictness: Strictness,
 ) -> list[RenderableType]:
-    localhost = _localhost_row(ssh_endpoint_statuses.get("localhost"), strictness)
+    localhost = _localhost_row(ssh_endpoint_statuses.get(LOCAL_HOST_SLUG), strictness)
     if not config.ssh_endpoints and not localhost:
         return []
     table = Table(title="SSH Endpoints:")

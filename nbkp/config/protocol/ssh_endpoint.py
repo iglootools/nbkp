@@ -9,6 +9,15 @@ from nbkp.config.protocol.errors import ConfigValidationErrorKind, config_error
 
 DEFAULT_SSH_PORT = 22
 
+LOCAL_HOST_SLUG = "localhost"
+"""
+Slug under which preflight reports the machine nbkp runs on.
+
+Local volumes run their tools there, so preflight keys its status next to the
+configured endpoints' statuses; an endpoint may not take the slug, or its
+volumes and the local ones would be checked as one host.
+"""
+
 
 def _expand_user(v: object) -> object:
     """
@@ -125,6 +134,19 @@ class SshEndpoint(ConfigModel):
     port: int = Field(default=DEFAULT_SSH_PORT, ge=1, le=65535, description="SSH port")
     user: str | None = Field(default=None, description="SSH username")
     key: str | None = Field(default=None, description="Path to private key file")
+
+    @field_validator("slug")
+    @classmethod
+    def validate_slug_not_reserved(cls, v: str) -> str:
+        """Raise a ``reserved-slug`` error for the slug of the local host."""
+        if v == LOCAL_HOST_SLUG:
+            raise config_error(
+                ConfigValidationErrorKind.RESERVED_SLUG,
+                f"SSH endpoint slug '{LOCAL_HOST_SLUG}' is reserved for the machine"
+                " nbkp runs on: rename the endpoint (its host may stay"
+                f" '{LOCAL_HOST_SLUG}')",
+            )
+        return v
 
     @field_validator("key", mode="before")
     @classmethod
