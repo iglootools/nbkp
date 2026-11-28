@@ -18,6 +18,7 @@ from nbkp.disks import (
     UmountResult,
     any_failed,
     managed_mount,
+    managed_volumes,
 )
 from nbkp.disks.output import (
     build_mount_status_table,
@@ -124,8 +125,9 @@ def managed_mount_or_exit(
     writes:
         Whether the block modifies a destination (a sync, a prune).  The run
         lock is held from before the first mount to after the last umount
-        when the block writes, mounts or umounts; when another command holds
-        it, the command exits 1 before mounting anything.
+        when the block writes, or mounts a drive (*mount* is on and a
+        mount-managed volume is in scope); when another command holds it,
+        the command exits 1 before mounting anything.
     mount:
         When ``False`` (or no volumes have mount config), mounting and
         umounting are both skipped.
@@ -152,7 +154,13 @@ def managed_mount_or_exit(
         runtime.run_lock,
         runtime.run_lock_path(),
         output_format,
-        needed=is_run_lock_needed(writes=writes, mount=mount, umount=umount),
+        needed=is_run_lock_needed(
+            writes=writes,
+            # As the core lifecycle does: without --mount nothing is umounted
+            # either, and with no mount-managed volume in scope nothing is
+            # mounted.
+            mounts_drives=mount and bool(managed_volumes(cfg, resolved)),
+        ),
     ):
         yield from _managed_mount_reporting_umount_failures(
             cfg,

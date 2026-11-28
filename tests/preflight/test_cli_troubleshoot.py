@@ -9,11 +9,14 @@ exit code.
 import json
 from pathlib import Path
 
+import pytest
+
 from nbkp.cli import app
 from nbkp.config.testkit import write_config
 from nbkp.remote.dispatch import build_tool_lookup_args
-from tests.fakes import FakeCommandRunner, FakeRunLock, fake_runtime
+from tests.fakes import FakeCommandRunner, FakeRunLock, completed, fake_runtime
 from tests.fixtures.cli import runner
+from tests.fixtures.disks import mounted_drive_host, with_encrypted_volume
 from tests.nas import healthy_nas, nas_config
 from tests.preflight.fake_hosts import FAILS
 
@@ -73,15 +76,26 @@ class TestTroubleshootCommand:
 
 
 class TestRunLock:
-    def test_troubleshoot_takes_the_lock_when_it_mounts(self, tmp_path: Path) -> None:
-        config_path = write_config(tmp_path, nas_config())
+    @pytest.mark.parametrize(("drive", "locked"), [(True, True), (False, False)])
+    def test_troubleshoot_takes_the_lock_only_when_it_mounts_a_drive(
+        self,
+        *,
+        drive: bool,
+        locked: bool,
+        tmp_path: Path,
+    ) -> None:
+        config = with_encrypted_volume(nas_config()) if drive else nas_config()
+        config_path = write_config(tmp_path, config)
         lock = FakeRunLock()
 
         result = runner.invoke(
             app,
             ["preflight", "troubleshoot", "--config", str(config_path)],
-            obj=fake_runtime(run=healthy_nas(), run_lock=lock),
+            obj=fake_runtime(
+                run=healthy_nas(mounted_drive_host(completed())),
+                run_lock=lock,
+            ),
         )
 
         assert result.exit_code == 0, result.output
-        assert len(lock.paths) == 1
+        assert len(lock.paths) == (1 if locked else 0)

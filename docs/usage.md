@@ -111,9 +111,9 @@ is still going exits 1 at once, before mounting anything, with
 work. The other commands that mount or umount drives or delete snapshots
 (`disks mount` and `umount`, `snapshots show` and `prune`, `preflight check` and
 `troubleshoot`) take the same lock and fail the same way while a run is going,
-and a run fails while one of them is; dry runs and checks with
-`--no-mount --no-umount` run alongside anything. A generated script shares the
-same lock where `flock` is installed. See
+and a run fails while one of them is; dry runs and checks that mount no drive
+(no mount-managed volume in scope, or `--no-mount`) run alongside anything. A
+generated script shares the same lock where `flock` is installed. See
 [The Run Lock](./internals.md#the-run-lock).
 
 ## Config

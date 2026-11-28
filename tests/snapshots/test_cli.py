@@ -18,7 +18,11 @@ from nbkp.config.testkit import write_config
 from nbkp.runlock import hold_run_lock
 from tests.fakes import FakeCommandRunner, FakeRunLock, completed, fake_runtime
 from tests.fixtures.cli import runner
-from tests.fixtures.disks import encrypted_volume
+from tests.fixtures.disks import (
+    encrypted_volume,
+    mounted_drive_host,
+    with_encrypted_volume,
+)
 from tests.nas import healthy_nas, nas_config
 from tests.preflight.fake_hosts import FAILS
 
@@ -44,14 +48,17 @@ def _write(tmp_path: Path, config: Config | None = None) -> None:
     write_config(tmp_path, config or nas_config(snapshots="btrfs", max_snapshots=2))
 
 
-def _nas(*listings: tuple[str, ...]) -> FakeCommandRunner:
+def _nas(
+    *listings: tuple[str, ...],
+    host: FakeCommandRunner | None = None,
+) -> FakeCommandRunner:
     """
     Script a healthy NAS whose snapshot listing answers each of *listings* in turn.
 
-    ``latest`` is on the newest snapshot.
+    ``latest`` is on the newest snapshot. *host* adds what else the host answers.
     """
     return healthy_nas(
-        FakeCommandRunner()
+        (host or FakeCommandRunner())
         .on(
             "ls",
             SNAPSHOTS,
@@ -184,25 +191,33 @@ class TestRunLock:
         assert run.commands == []
 
     @pytest.mark.parametrize(
-        ("args", "locked"),
+        ("args", "drive", "locked"),
         [
-            (["prune", "--no-mount", "--no-umount"], True),
-            (["prune", "--dry-run"], True),
-            (["prune", "--dry-run", "--no-mount", "--no-umount"], False),
-            (["show"], True),
-            (["show", "--no-mount", "--no-umount"], False),
+            (["prune", "--no-mount", "--no-umount"], True, True),
+            (["prune", "--dry-run"], True, True),
+            (["prune", "--dry-run"], False, False),
+            (["prune", "--dry-run", "--no-mount", "--no-umount"], True, False),
+            (["show"], True, True),
+            (["show"], False, False),
+            (["show", "--no-mount", "--no-umount"], True, False),
         ],
     )
-    def test_the_lock_is_taken_unless_nothing_is_mounted_umounted_or_deleted(
+    def test_the_lock_is_taken_only_when_a_drive_is_mounted_or_snapshots_deleted(
         self,
         args: list[str],
         *,
+        drive: bool,
         locked: bool,
         tmp_path: Path,
     ) -> None:
-        _write(tmp_path)
+        config = nas_config(snapshots="btrfs", max_snapshots=2)
+        _write(tmp_path, with_encrypted_volume(config) if drive else config)
         lock = FakeRunLock()
-        runtime = fake_runtime(run=_nas((OLD, MID, NEW), (MID, NEW)), run_lock=lock)
+        drive_host = mounted_drive_host(completed())
+        runtime = fake_runtime(
+            run=_nas((OLD, MID, NEW), (MID, NEW), host=drive_host),
+            run_lock=lock,
+        )
 
         result = runner.invoke(
             app,

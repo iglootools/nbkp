@@ -2,7 +2,7 @@
 
 import subprocess
 
-from nbkp.config import LocalVolume, LuksEncryptionConfig, MountConfig
+from nbkp.config import Config, LocalVolume, LuksEncryptionConfig, MountConfig
 from nbkp.disks import UmountResult
 from nbkp.disks.models import LifecycleFailure, LifecycleStep, UmountFailureKind
 from tests.fakes import FakeCommandRunner, completed
@@ -25,6 +25,13 @@ def encrypted_volume(path: str = "/mnt/enc") -> LocalVolume:
             device_uuid=UUID,
             encryption=LuksEncryptionConfig(passphrase_id="enc"),
         ),
+    )
+
+
+def with_encrypted_volume(config: Config) -> Config:
+    """Return *config* with ``enc``, a mount-managed volume no sync uses, added."""
+    return config.model_copy(
+        update={"volumes": {**config.volumes, "enc": encrypted_volume()}},
     )
 
 

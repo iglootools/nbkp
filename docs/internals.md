@@ -187,23 +187,23 @@ way to get there. Other commands do the same damage from the side: a
 from under a run, and a run's umount pulls it from under a `snapshots prune`
 that is deleting snapshots on it.
 
-Every command that mounts or umounts a drive, or modifies a destination,
-therefore holds an exclusive, non-blocking `flock(2)` on
+Every command that mounts (and so later umounts) a drive, or modifies a
+destination, therefore holds an exclusive, non-blocking `flock(2)` on
 `$XDG_STATE_HOME/nbkp/run.lock` (`~/.local/state/nbkp/run.lock` when
 `XDG_STATE_HOME` is unset, empty or relative):
 
 | Command | Holds the lock |
 |---|---|
-| `run` | from before the first mount to after the last umount |
-| `snapshots prune` | the same, and also with `--no-mount --no-umount`, since it deletes snapshots |
-| `snapshots show`, `preflight check`, `preflight troubleshoot` | from before the first mount to after the last umount |
+| `run` (not `--dry-run`) | from before the first mount to after the last umount, always, since it writes destinations |
+| `snapshots prune` (not `--dry-run`) | the same, always, since it deletes snapshots |
+| `run --dry-run`, `snapshots prune --dry-run`, `snapshots show`, `preflight check`, `preflight troubleshoot` | from before the first mount to after the last umount, when they mount: `--mount` is on (the default) and a mount-managed volume is in scope |
 | `disks mount`, `disks umount` | while they unlock and mount, or umount and lock; drives `disks mount` mounted stay mounted after it exits, unlocked |
 
-A command that neither mounts, umounts nor writes runs without it, alongside
-anything else: a dry run (`run --dry-run`, `snapshots prune --dry-run`) or a
-check with `--no-mount --no-umount`, and `disks mount --dry-run` /
-`disks umount --dry-run`, `disks status`, `config show`. A dry run that mounts
-or umounts still takes it.
+A command that neither mounts nor writes runs without it, alongside anything
+else: a dry run or a check whose config has no mount-managed volume in scope, or
+that runs with `--no-mount` (which skips the umount too), and
+`disks mount --dry-run` / `disks umount --dry-run`, `disks status`,
+`config show`. A dry run or check that mounts a drive still takes it.
 
 When another command holds the lock, the command stops before mounting,
 prompting for a passphrase or checking anything and exits 1 with

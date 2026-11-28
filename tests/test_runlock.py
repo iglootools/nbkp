@@ -76,21 +76,19 @@ class TestHoldRunLock:
 
 class TestIsRunLockNeeded:
     @pytest.mark.parametrize(
-        ("writes", "mount", "umount", "needed"),
+        ("writes", "mounts_drives", "needed"),
         [
-            (True, False, False, True),
-            (False, True, True, True),
-            (False, True, False, True),
-            (False, False, True, True),
-            (False, False, False, False),
+            (True, False, True),
+            (False, True, True),
+            (True, True, True),
+            (False, False, False),
         ],
     )
-    def test_only_a_command_that_neither_writes_mounts_nor_umounts_skips_it(
+    def test_only_a_command_that_neither_writes_nor_mounts_skips_it(
         self,
         *,
         writes: bool,
-        mount: bool,
-        umount: bool,
+        mounts_drives: bool,
         needed: bool,
     ) -> None:
-        assert is_run_lock_needed(writes=writes, mount=mount, umount=umount) is needed
+        assert is_run_lock_needed(writes=writes, mounts_drives=mounts_drives) is needed

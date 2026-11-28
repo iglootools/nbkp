@@ -40,14 +40,16 @@ def resolve_run_lock_path(environ: Mapping[str, str], home: Path) -> Path:
     return state_home / RUN_LOCK_STATE_SUBPATH
 
 
-def is_run_lock_needed(*, writes: bool, mount: bool, umount: bool) -> bool:
+def is_run_lock_needed(*, writes: bool, mounts_drives: bool) -> bool:
     """
     Return whether a command must take the run lock.
 
-    A command that neither writes to a destination, mounts nor umounts touches nothing
-    another command depends on, so it may run alongside one; any other takes the lock.
+    *mounts_drives* is whether the command will mount (and so later umount) a drive:
+    mounting is on and a mount-managed volume is in scope. A command that neither
+    writes to a destination nor mounts touches nothing another command depends on,
+    so it may run alongside one, even with ``--mount`` on; any other takes the lock.
     """
-    return writes or mount or umount
+    return writes or mounts_drives
 
 
 class RunLockErrorKind(enum.StrEnum):

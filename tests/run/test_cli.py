@@ -45,6 +45,7 @@ from tests.fixtures.disks import (
     encrypted_volume,
     locked_drive_host,
     mounted_drive_host,
+    with_encrypted_volume,
 )
 from tests.fixtures.preflight import (
     preflight,
@@ -562,13 +563,38 @@ class TestRunLock:
         assert result.exit_code == 0, result.output
         assert lock.paths == [tmp_path / "state" / "nbkp" / "run.lock"]
 
-    def test_a_dry_run_that_mounts_takes_the_lock(self, nas_config_file: str) -> None:
+    def test_a_dry_run_that_mounts_takes_the_lock(self, tmp_path: Path) -> None:
+        config_path = write_config(tmp_path, with_encrypted_volume(nas_config()))
+        lock = FakeRunLock()
+        runtime = fake_runtime(
+            run=healthy_nas(mounted_drive_host(completed())),
+            run_lock=lock,
+        )
+
+        result = runner.invoke(
+            app,
+            ["run", "-c", str(config_path), "--dry-run"],
+            obj=runtime,
+        )
+
+        assert result.exit_code == 0, result.output
+        assert len(lock.paths) == 1
+
+    def test_a_dry_run_with_no_mount_managed_volume_does_not(
+        self,
+        nas_config_file: str,
+    ) -> None:
         lock = FakeRunLock()
         runtime = fake_runtime(run=healthy_nas(), run_lock=lock)
 
-        runner.invoke(app, ["run", "-c", nas_config_file, "--dry-run"], obj=runtime)
+        result = runner.invoke(
+            app,
+            ["run", "-c", nas_config_file, "--dry-run"],
+            obj=runtime,
+        )
 
-        assert len(lock.paths) == 1
+        assert result.exit_code == 0, result.output
+        assert lock.paths == []
 
     def test_a_dry_run_without_mount_or_umount_does_not(
         self,
