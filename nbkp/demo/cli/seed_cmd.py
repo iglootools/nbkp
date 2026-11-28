@@ -33,6 +33,7 @@ lazy from nbkp.remote.testkit.constants import (
 )
 
 _console = Console()
+_err_console = Console(stderr=True)
 
 
 def _luks_setup_instructions(provider: CredentialProvider) -> list[str]:
@@ -203,12 +204,12 @@ def _lifecycle_failure(e: SeedError) -> str:
 
 
 def _print_seed_error(e: SeedError, *, docker: bool) -> None:
-    _console.print(Text(format_seed_error(e), style="red"), highlight=False)
+    _err_console.print(Text(format_seed_error(e), style="red"), highlight=False)
     if docker and e.may_leave_containers:
-        _console.print(
+        _err_console.print(
             Text("The demo containers may still be running. To remove them:"),
         )
-        _console.print(Text(_docker_teardown()), highlight=False)
+        _err_console.print(Text(_docker_teardown()), highlight=False)
 
 
 def _print_plan(steps: list[str]) -> None:

@@ -268,7 +268,8 @@ class TestStepFailure:
         )
         assert result.exit_code == 1, result.output
         assert not isinstance(result.exception, OSError)
-        assert "Writing the demo files failed" in result.output
+        assert "Writing the demo files failed" in result.stderr
+        assert "Writing the demo files failed" not in result.stdout
 
 
 class TestAsSeedErrors:
