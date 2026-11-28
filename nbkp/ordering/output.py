@@ -6,7 +6,7 @@ from rich.console import Group, RenderableType
 from rich.text import Text
 from rich.tree import Tree
 
-# Only `ordering graph --format ascii` and `demo output` draw ASCII art.
+# Only `ordering graph -o mermaid-ascii` and `demo output` draw ASCII art.
 # mermaid-ascii-diagrams leaves render_ascii's parameter unannotated; retire the
 # pyright ignore when it annotates it.
 lazy from mermaid_ascii import parse_mermaid, render_ascii  # pyright: ignore[reportUnknownVariableType]

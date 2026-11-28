@@ -293,8 +293,7 @@ $ nbkp ordering graph [OPTIONS]
 **Options**:
 
 * `-c, --config <file>`: Path to config file. Default: the first config.yaml found in $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform&#x27;s user and site config directories for nbkp
-* `-o, --output <human|json>`: Output format  [default: human]
-* `-f, --format <rich-tree|mermaid-ascii|mermaid>`: Graph format (human output only)  [default: rich-tree]
+* `-o, --output <human|json|mermaid|mermaid-ascii>`: Output format: human (a tree), json, mermaid (Mermaid syntax) or mermaid-ascii (the Mermaid graph drawn as ASCII art)  [default: human]
 * `--help`: Show this message and exit.
 
 ## `nbkp preflight`

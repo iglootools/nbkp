@@ -4,6 +4,7 @@ import json
 from io import StringIO
 from pathlib import Path
 
+import pytest
 from rich.console import Console, RenderableType
 
 from nbkp.cli import app
@@ -196,12 +197,36 @@ class TestFormatMermaidGraph:
         config_path = write_config(tmp_path, cfg)
         result = runner.invoke(
             app,
-            ["ordering", "graph", "-c", str(config_path), "-f", "mermaid"],
+            ["ordering", "graph", "-c", str(config_path), "-o", "mermaid"],
             obj=fake_runtime(),
             env={"COLUMNS": "20"},
         )
         assert result.exit_code == 0, result.output
         assert result.output == build_mermaid_graph(cfg) + "\n"
+
+    @pytest.mark.parametrize(
+        ("output", "expected"),
+        [
+            ("human", "laptop-to-server"),
+            ("json", '"edges"'),
+            ("mermaid-ascii", "laptop-docs"),
+        ],
+    )
+    def test_each_output_format_draws_the_graph(
+        self,
+        tmp_path: Path,
+        output: str,
+        expected: str,
+    ) -> None:
+        """``-o`` selects the drawing too: there is no separate format flag."""
+        config_path = write_config(tmp_path, _chain_config())
+        result = runner.invoke(
+            app,
+            ["ordering", "graph", "-c", str(config_path), "-o", output],
+            obj=fake_runtime(),
+        )
+        assert result.exit_code == 0, result.output
+        assert expected in result.output
 
 
 class TestFormatMermaidAsciiGraph:

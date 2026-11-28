@@ -45,22 +45,6 @@ break existing invocations and cron entries for no gain in function.
 `-f/--file`, leaving `-o/--output` to select a format if `sh` gains a
 structured report (such as the list of generated syncs).
 
-#### Exception — `ordering graph` picks its drawing with `-f/--format`
-
-Overrides
-[general.md › Select the output format with `-o/--output`, and write a file with `-f/--file`](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#select-the-output-format-with--o--output-and-write-a-file-with--f--file):
-`ordering graph` takes `-o/--output human|json` like every command, and a
-second selector, `-f/--format rich-tree|mermaid-ascii|mermaid`, for how human
-output draws the graph, so its `-f` is not `--file`.
-
-**Why:** existing invocations and scripts pass `-f mermaid`; renaming the flag,
-or folding the drawings into `-o`, would break them, and no nbkp command writes
-a file through `-f/--file` yet, so nothing clashes with it today.
-
-**Retires when:** nbkp's next major release folds the drawings into
-`-o/--output` (`human|json|mermaid|mermaid-ascii`), or any nbkp command gains
-`-f/--file`.
-
 ### Accept a config file on every command
 
 Every command takes `--config`.

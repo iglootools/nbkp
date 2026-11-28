@@ -207,8 +207,9 @@ time with detailed error messages.
   configurations
 - **Pydantic validation**: structured errors with context for invalid configs
 - **Config display**: `config show` renders parsed config as tables or JSON
-- **Graph visualization**: `ordering graph` displays the backup chain as a Rich
-  tree, ASCII art (mermaid-ascii), raw mermaid syntax, or JSON
+- **Graph visualization**: `ordering graph -o` displays the backup chain as a
+  Rich tree (`human`), JSON, raw Mermaid syntax (`mermaid`), or Mermaid drawn
+  as ASCII art (`mermaid-ascii`)
 - **Cross-reference validation**: circular `extends` and `proxy-jump` chains,
   unique (volume, subdir) per endpoint, unique destination per sync — all
   detected at load time
