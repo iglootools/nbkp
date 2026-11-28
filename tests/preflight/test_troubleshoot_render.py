@@ -54,10 +54,8 @@ def _render(
     buf = StringIO()
     Console(file=buf, width=200, color_system=None).print(
         format_human_troubleshoot(
-            ssh or {},
-            vol_statuses,
-            {},
-            context=ctx or TroubleshootContext(config=config, invocation=Invocation()),
+            collect_issues(ssh or {}, vol_statuses, {}),
+            ctx or TroubleshootContext(config=config, invocation=Invocation()),
         ),
     )
     return buf.getvalue()

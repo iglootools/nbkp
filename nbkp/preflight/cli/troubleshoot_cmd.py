@@ -26,7 +26,6 @@ from nbkp.preflight.output import (
     format_human_troubleshoot,
     troubleshoot_json,
 )
-from nbkp.preflight.status.result import PreflightResult
 from nbkp.preflight.strictness import has_fatal_errors
 from nbkp.preflight.troubleshoot import (
     TroubleshootIssue,
@@ -109,17 +108,15 @@ def troubleshoot_cmd(
             ),
         )
         fatal = has_fatal_errors(preflight.sync_statuses, strictness=strictness)
-        _report(preflight, issues, context, output, strictness, fatal=fatal)
+        _report(issues, context, output, fatal=fatal)
         if fatal:
             raise typer.Exit(1)
 
 
 def _report(
-    preflight: PreflightResult,
     issues: list[TroubleshootIssue],
     ctx: TroubleshootContext,
     output: OutputFormat,
-    strictness: Strictness,
     *,
     fatal: bool,
 ) -> None:
@@ -127,12 +124,4 @@ def _report(
         case OutputFormat.JSON:
             echo_json(troubleshoot_json(issues, ctx, has_fatal_errors=fatal))
         case OutputFormat.HUMAN:
-            Console().print(
-                format_human_troubleshoot(
-                    preflight.ssh_endpoint_statuses,
-                    preflight.volume_statuses,
-                    preflight.sync_statuses,
-                    context=ctx,
-                    strictness=strictness,
-                ),
-            )
+            Console().print(format_human_troubleshoot(issues, ctx))

@@ -190,12 +190,7 @@ def _show_troubleshoot(runtime: Runtime) -> None:
     )
     _show(
         "format_human_troubleshoot",
-        format_human_troubleshoot(
-            preflight.ssh_endpoint_statuses,
-            preflight.volume_statuses,
-            preflight.sync_statuses,
-            context=replace(ctx, facts=facts),
-        ),
+        format_human_troubleshoot(issues, replace(ctx, facts=facts)),
     )
 
 

@@ -17,7 +17,6 @@ from rich.text import Text
 from nbkp.config import (
     SyncConfig,
 )
-from nbkp.policy import Strictness
 from nbkp.preflight.output.messages import format_problem
 from nbkp.preflight.output.remediation import (
     ERROR,
@@ -47,9 +46,9 @@ from nbkp.preflight.status.ssh import (
     SshEndpointStatus,
     SshEndpointWarningKind,
 )
-from nbkp.preflight.status.sync import SyncErrorKind, SyncStatus
+from nbkp.preflight.status.sync import SyncErrorKind
 from nbkp.preflight.status.volume import VolumeErrorKind, VolumeStatus
-from nbkp.preflight.troubleshoot import Layer, TroubleshootIssue, collect_issues
+from nbkp.preflight.troubleshoot import Layer, TroubleshootIssue
 
 _HEADERS: dict[Layer, str] = {
     Layer.SSH_ENDPOINT: "SSH Endpoint",
@@ -163,20 +162,16 @@ def format_issues(issues: list[TroubleshootIssue], ctx: TroubleshootContext) -> 
 
 
 def format_human_troubleshoot(
-    ssh_statuses: dict[str, SshEndpointStatus],
-    vol_statuses: dict[str, VolumeStatus],
-    sync_statuses: dict[str, SyncStatus],
-    *,
+    issues: list[TroubleshootIssue],
     context: TroubleshootContext,
-    strictness: Strictness = Strictness.IGNORE_INACTIVE,
 ) -> RenderableType:
     """
-    Format the human-readable troubleshoot report.
+    Format the human-readable troubleshoot report of *issues*.
 
-    *context* carries the invocation flags and local user used in suggested commands,
-    and the facts gathered for the fixes.
+    The same collected issues feed the JSON output and the facts in *context*
+    (the invocation flags and local user of suggested commands, and the facts
+    gathered for the fixes), so the two outputs never disagree.
     """
-    issues = collect_issues(ssh_statuses, vol_statuses, sync_statuses, strictness)
     return (
         format_issues(issues, context)
         if issues

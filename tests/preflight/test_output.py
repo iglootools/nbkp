@@ -2,7 +2,7 @@
 
 from io import StringIO
 
-from rich.console import Console
+from rich.console import Console, RenderableType
 
 from nbkp.cliwiring.invocation import Invocation
 from nbkp.config import (
@@ -25,6 +25,7 @@ from nbkp.preflight import (
     SyncStatus,
     VolumeDiagnostics,
     VolumeStatus,
+    collect_issues,
 )
 from nbkp.preflight.output import TroubleshootContext, format_human_troubleshoot
 from nbkp.preflight.output.check import format_human_check
@@ -36,6 +37,22 @@ from tests.fixtures.preflight import (
     localhost_ssh_status,
     sync_status,
 )
+
+
+def _format_troubleshoot(
+    ssh_statuses: dict[str, SshEndpointStatus],
+    vol_statuses: dict[str, VolumeStatus],
+    sync_statuses: dict[str, SyncStatus],
+    config: Config,
+) -> RenderableType:
+    return format_human_troubleshoot(
+        collect_issues(ssh_statuses, vol_statuses, sync_statuses),
+        TroubleshootContext(
+            config=config,
+            invocation=Invocation(),
+            resolved_endpoints={},
+        ),
+    )
 
 
 def _make_console() -> tuple[Console, StringIO]:
@@ -67,11 +84,11 @@ class TestTroubleshootBtrfsStagingNotFound:
         }
         console, buf = _make_console()
         console.print(
-            format_human_troubleshoot(
+            _format_troubleshoot(
                 _ssh_statuses_from(vol_statuses),
                 vol_statuses,
                 sync_statuses,
-                context=TroubleshootContext(config=config, invocation=Invocation()),
+                config,
             ),
         )
         output = buf.getvalue()
@@ -93,11 +110,11 @@ class TestTroubleshootBtrfsStagingNotFound:
         }
         console, buf = _make_console()
         console.print(
-            format_human_troubleshoot(
+            _format_troubleshoot(
                 _ssh_statuses_from(vol_statuses),
                 vol_statuses,
                 sync_statuses,
-                context=TroubleshootContext(config=config, invocation=Invocation()),
+                config,
             ),
         )
         output = buf.getvalue()
@@ -116,11 +133,11 @@ class TestTroubleshootBtrfsStagingNotFound:
         }
         console, buf = _make_console()
         console.print(
-            format_human_troubleshoot(
+            _format_troubleshoot(
                 _ssh_statuses_from(vol_statuses),
                 vol_statuses,
                 sync_statuses,
-                context=TroubleshootContext(config=config, invocation=Invocation()),
+                config,
             ),
         )
         output = buf.getvalue()
@@ -132,11 +149,11 @@ class TestTroubleshootBtrfsStagingNotFound:
         sync_statuses = {"btrfs-sync": sync_status(config, vol_statuses, "btrfs-sync")}
         console, buf = _make_console()
         console.print(
-            format_human_troubleshoot(
+            _format_troubleshoot(
                 _ssh_statuses_from(vol_statuses),
                 vol_statuses,
                 sync_statuses,
-                context=TroubleshootContext(config=config, invocation=Invocation()),
+                config,
             ),
         )
         output = buf.getvalue()
@@ -189,11 +206,11 @@ class TestTroubleshootBtrfsStagingNotFound:
         }
         console, buf = _make_console()
         console.print(
-            format_human_troubleshoot(
+            _format_troubleshoot(
                 _ssh_statuses_from(vol_statuses),
                 vol_statuses,
                 sync_statuses,
-                context=TroubleshootContext(config=config, invocation=Invocation()),
+                config,
             ),
         )
         output = buf.getvalue()
@@ -224,11 +241,11 @@ class TestTroubleshootStagingNotBtrfsSubvolume:
         }
         console, buf = _make_console()
         console.print(
-            format_human_troubleshoot(
+            _format_troubleshoot(
                 _ssh_statuses_from(vol_statuses),
                 vol_statuses,
                 sync_statuses,
-                context=TroubleshootContext(config=config, invocation=Invocation()),
+                config,
             ),
         )
         output = buf.getvalue()
@@ -252,11 +269,11 @@ class TestTroubleshootDryRunPendingSnapshot:
         }
         console, buf = _make_console()
         console.print(
-            format_human_troubleshoot(
+            _format_troubleshoot(
                 _ssh_statuses_from(vol_statuses),
                 vol_statuses,
                 sync_statuses,
-                context=TroubleshootContext(config=config, invocation=Invocation()),
+                config,
             ),
         )
         output = buf.getvalue()
@@ -302,11 +319,11 @@ class TestTroubleshootLocationExcluded:
         }
         console, buf = _make_console()
         console.print(
-            format_human_troubleshoot(
+            _format_troubleshoot(
                 _ssh_statuses_from(vol_statuses),
                 vol_statuses,
                 {},
-                context=TroubleshootContext(config=config, invocation=Invocation()),
+                config,
             ),
         )
         output = buf.getvalue()
