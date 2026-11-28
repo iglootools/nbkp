@@ -6,6 +6,7 @@ import pytest
 from configdocs import generate_table, splice_section, table_cell
 from pydantic import Field
 
+from nbkp.config import LocalVolume, LuksEncryptionConfig
 from nbkp.config.protocol.base import ConfigModel
 
 _BEGIN = (
@@ -53,7 +54,19 @@ class TestGenerateTable:
         assert generate_table(_Documented).splitlines() == [
             "| Field | Type | Default | Description |",
             "|---|---|---|---|",
-            '| `type` | `"local"` | **required** | Volume type discriminator |',
+            '| `type` | `"local"` | **required** |  |',
             "| `max-count` | integer (>= 1) | `3` | How \\| many |",
             "| `explicit-key` | string | **required** | Aliased |",
         ]
+
+
+class TestDiscriminatorRows:
+    def test_volume_type_is_required(self) -> None:
+        rows = generate_table(LocalVolume).splitlines()
+        assert (
+            '| `type` | `"local"` | **required** | Volume type discriminator |' in rows
+        )
+
+    def test_encryption_type_keeps_its_own_default_and_description(self) -> None:
+        row = generate_table(LuksEncryptionConfig).splitlines()[2]
+        assert row.startswith('| `type` | `"luks"` | `"luks"` | Encryption backend')

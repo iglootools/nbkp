@@ -17,7 +17,10 @@ class LuksEncryptionConfig(ConfigModel):
     VeraCrypt, BitLocker).
     """
 
-    type: Literal["luks"] = "luks"
+    type: Literal["luks"] = Field(
+        default="luks",
+        description="Encryption backend. Only `luks` is supported",
+    )
     passphrase_id: str = Field(
         ...,
         min_length=1,

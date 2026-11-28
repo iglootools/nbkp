@@ -130,7 +130,7 @@ For encrypted volumes, `device-uuid` is the LUKS container UUID (from `crypttab`
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `type` | `"luks"` | **required** | Volume type discriminator |
+| `type` | `"luks"` | `"luks"` | Encryption backend. Only `luks` is supported |
 | `passphrase-id` | string | **required** | Credential lookup key for the passphrase |
 
 The `type: luks` field is a discriminator for future encryption backend extensibility.
