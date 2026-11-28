@@ -3,7 +3,6 @@
 from rich.table import Table
 from rich.text import Text
 
-from nbkp.clidisplay import dry_run_table_title
 from nbkp.preflight.output import format_problems
 from nbkp.snapshots.errors import SnapshotOp
 from nbkp.snapshots.models import (
@@ -13,6 +12,7 @@ from nbkp.snapshots.models import (
     SnapshotResultError,
     SnapshotSkipReason,
 )
+from nbkp.theme import dry_run_table_title
 
 
 def retention_display(max_snapshots: int | None) -> str:

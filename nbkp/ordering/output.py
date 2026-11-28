@@ -11,10 +11,10 @@ from rich.tree import Tree
 # pyright ignore when it annotates it.
 lazy from mermaid_ascii import parse_mermaid, render_ascii  # pyright: ignore[reportUnknownVariableType]
 
-from nbkp.clidisplay import severity_icon
 from nbkp.config import Config, SyncConfig, SyncEndpoint
 from nbkp.ordering.graph import build_adjacency
 from nbkp.policy import Severity
+from nbkp.theme import severity_icon
 
 
 def _endpoint_annotation(ep: SyncEndpoint) -> str:

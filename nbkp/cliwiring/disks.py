@@ -9,7 +9,6 @@ from collections.abc import Mapping, Sequence
 import typer
 from rich.console import Console
 
-from nbkp.clidisplay import dry_run_labeled
 from nbkp.cliwiring.config import require_known
 from nbkp.cliwiring.output_format import OutputFormat, echo_json
 from nbkp.cliwiring.progress import StepProgressBar
@@ -36,6 +35,7 @@ from nbkp.disks.output import (
 from nbkp.policy import Severity
 from nbkp.remote.dispatch import VolumeCommandRunner
 from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.theme import dry_run_labeled
 
 
 def show_volume_statuses(

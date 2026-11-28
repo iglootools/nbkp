@@ -5,7 +5,6 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from nbkp.clidisplay import severity_style, severity_symbol
 from nbkp.config import Config, LocalVolume, RemoteVolume
 from nbkp.config.output import (
     format_mount_summary,
@@ -35,6 +34,7 @@ from nbkp.preflight.status.ssh import INACTIVE_SSH_ERRORS, SshEndpointStatus
 from nbkp.preflight.status.sync import SyncStatus
 from nbkp.preflight.status.volume import VolumeStatus
 from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.theme import severity_style, severity_symbol
 
 
 def _format_latest(

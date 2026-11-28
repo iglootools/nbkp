@@ -12,7 +12,6 @@ from rich.panel import Panel
 from rich.status import Status
 from rich.text import Text
 
-from nbkp.clidisplay import severity_style, severity_symbol
 from nbkp.cliwiring.config import (
     load_config_or_exit,
     require_known_syncs,
@@ -61,6 +60,7 @@ from nbkp.sync.output import (
     build_run_preview_sections,
     sync_result_json,
 )
+from nbkp.theme import severity_style, severity_symbol
 
 _ABORT_DETAIL_INDENT = 2
 

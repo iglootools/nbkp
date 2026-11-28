@@ -223,7 +223,7 @@ source_modules = [
 forbidden_modules = [
   "rich",
   "typer",
-  "nbkp.clidisplay",
+  "nbkp.theme",
   "nbkp.cliwiring",
   "nbkp.cli",
   "nbkp.*.cli",
@@ -238,8 +238,8 @@ ignore_imports = [
   # by tests/test_core_imports.py: an ignored edge cannot be checked here.
   "nbkp.**.output.** -> rich",
   "nbkp.**.output -> rich",
-  "nbkp.**.output.** -> nbkp.clidisplay",
-  "nbkp.**.output -> nbkp.clidisplay",
+  "nbkp.**.output.** -> nbkp.theme",
+  "nbkp.**.output -> nbkp.theme",
 ]
 
 [[tool.importlinter.contracts]]
@@ -271,7 +271,6 @@ protected_modules = ["nbkp.**.output"]
 allowed_importers = [
   "nbkp.cli",
   "nbkp.*.cli",
-  "nbkp.clidisplay",
   "nbkp.cliwiring",
   "nbkp.**.output",
 ]
@@ -326,7 +325,6 @@ type = "forbidden"
 # belongs on this list.
 source_modules = [
   "nbkp.cli",
-  "nbkp.clidisplay",
   "nbkp.cliwiring",
   "nbkp.config",
   "nbkp.credentials",
@@ -340,6 +338,7 @@ source_modules = [
   "nbkp.sh",
   "nbkp.snapshots",
   "nbkp.sync",
+  "nbkp.theme",
 ]
 forbidden_modules = ["nbkp.disks.**"]
 # Importing nbkp.disks reaches its submodules through its __init__.
@@ -359,7 +358,6 @@ type = "forbidden"
 # belongs on this list.
 source_modules = [
   "nbkp.cli",
-  "nbkp.clidisplay",
   "nbkp.cliwiring",
   "nbkp.config",
   "nbkp.credentials",
@@ -373,6 +371,7 @@ source_modules = [
   "nbkp.sh",
   "nbkp.snapshots",
   "nbkp.sync",
+  "nbkp.theme",
 ]
 forbidden_modules = ["nbkp.preflight.**"]
 # Importing nbkp.preflight reaches its submodules through its __init__.
@@ -389,11 +388,11 @@ ignore_imports = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "clidisplay is a presentation leaf"
+name = "theme is a presentation leaf"
 type = "forbidden"
-source_modules = ["nbkp.clidisplay"]
+source_modules = ["nbkp.theme"]
 # Every nbkp package except policy: a new package belongs on this list.
-# Typer too: every output module imports clidisplay, and output modules do
+# Typer too: every output module imports theme, and output modules do
 # not load Typer.
 forbidden_modules = [
   "typer",

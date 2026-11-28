@@ -11,11 +11,11 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
-from nbkp.clidisplay import dry_run_labeled
 from nbkp.cliwiring.progress import StepProgressBar
 from nbkp.config import CredentialProvider
 from nbkp.disks import MountResult, UmountResult
 from nbkp.disks.output import mount_failure_detail, umount_failure_detail
+from nbkp.theme import dry_run_labeled
 lazy from nbkp.demo.seed import (
     SeedError,
     SeedErrorKind,

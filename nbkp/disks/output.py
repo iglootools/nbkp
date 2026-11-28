@@ -6,12 +6,6 @@ from dataclasses import fields
 from rich.table import Table
 from rich.text import Text
 
-from nbkp.clidisplay import (
-    dry_run_labeled,
-    severity_icon,
-    severity_style,
-    severity_symbol,
-)
 from nbkp.credentials.output import credential_error_message
 from nbkp.disks.lifecycle import MountResult, UmountResult
 from nbkp.disks.models import (
@@ -28,6 +22,7 @@ from nbkp.disks.severity import (
 )
 from nbkp.disks.status import MountStatusData, VolumeStatus, VolumeStatusKind
 from nbkp.policy import Severity, Strictness
+from nbkp.theme import dry_run_labeled, severity_icon, severity_style, severity_symbol
 
 # A row's display label.  ``Text`` when the label carries styling *and*
 # caller-supplied text (an error detail, a "not managed" marker): Rich parses

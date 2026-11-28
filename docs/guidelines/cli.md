@@ -4,8 +4,8 @@ What nbkp's commands and options must respect beyond the shared
 [general.md › Command Line](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#command-line)
 rules, the helper modules that implement them, and the commands that are
 exceptions. Read it before changing `nbkp/cli/`, any `nbkp/*/cli/`,
-`nbkp/cliwiring/` or `nbkp/clidisplay/`, and before adding a command or an
-option anywhere. The Typer layout and names are
+`nbkp/cliwiring/` or `nbkp/theme/`, and before adding a command or an option
+anywhere. The Typer layout and names are
 [python.md › Naming](https://github.com/iglootools/common/blob/main/guidelines/coding/python.md#naming)'s.
 
 <!-- toc -->
@@ -14,7 +14,7 @@ option anywhere. The Typer layout and names are
 - [Options](#options)
   - [Give every command JSON output](#give-every-command-json-output)
   - [Accept a config file on every command](#accept-a-config-file-on-every-command)
-  - [Label a dry run through `nbkp/clidisplay/dryrun.py`](#label-a-dry-run-through-nbkpclidisplaydryrunpy)
+  - [Label a dry run through `nbkp/theme/dryrun.py`](#label-a-dry-run-through-nbkpthemedryrunpy)
   - [Declare each shared option once](#declare-each-shared-option-once)
 - [Commands that are exceptions](#commands-that-are-exceptions)
   - [Exception — `demo` takes neither `--output` nor `--config`](#exception--demo-takes-neither---output-nor---config)
@@ -52,12 +52,12 @@ Every command takes `--config`.
 **Why:** a user keeps more than one configuration, and a test points a command
 at its own.
 
-### Label a dry run through `nbkp/clidisplay/dryrun.py`
+### Label a dry run through `nbkp/theme/dryrun.py`
 
 Every command that changes data or runs long takes the `--dry-run`/`-n` that
 [general.md › Offer `--dry-run` on every command that changes data or runs long](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#offer---dry-run-on-every-command-that-changes-data-or-runs-long)
 describes, and prints its `[dry-run]` label through `dry_run_labeled` and
-`dry_run_table_title` in `nbkp/clidisplay/dryrun.py`. They build the label as
+`dry_run_table_title` in `nbkp/theme/dryrun.py`. They build the label as
 `rich.text.Text`, as
 [Wrap text nbkp did not author in `rich.text.Text`](../guidelines.md#wrap-text-nbkp-did-not-author-in-richtexttext)
 explains.
