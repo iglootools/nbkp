@@ -361,6 +361,19 @@ class TestLatestSymlinkTarget:
         assert state.raw_target == "/dev/null"
         assert state.target_valid is None
 
+    def test_remote_latest_is_read_in_one_round_trip(self) -> None:
+        vol, resolved = _remote_volume()
+        endpoint = SyncEndpoint(
+            slug="ep",
+            volume="data",
+            hard_link_snapshots=HardLinkSnapshotConfig(enabled=True),
+        )
+        run = FakeCommandRunner().on("readlink", returns=completed(0, "/dev/null\n"))
+        diag = observe_source_endpoint(endpoint, vol, resolved, run=run)
+        assert diag.latest == LatestSymlinkState(exists=True, raw_target="/dev/null")
+        latest = "/data/latest"
+        assert [c for c in run.commands if latest in c] == [["readlink", latest]]
+
     def test_unreadable_symlink_is_not_absent(self) -> None:
         vol, resolved = _remote_volume()
         endpoint = SyncEndpoint(

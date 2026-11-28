@@ -138,21 +138,6 @@ def check_directory_exists(
             return run(["test", "-d", path], volume, resolved_endpoints).returncode == 0
 
 
-def check_symlink_exists(
-    volume: Volume,
-    path: str,
-    resolved_endpoints: ResolvedEndpoints,
-    *,
-    run: VolumeCommandRunner = run_on_volume,
-) -> bool:
-    """Return whether *path* on *volume* is a symlink, dangling or not."""
-    match volume:
-        case LocalVolume():
-            return Path(path).is_symlink()
-        case RemoteVolume():
-            return run(["test", "-L", path], volume, resolved_endpoints).returncode == 0
-
-
 def list_snapshot_dir(
     volume: Volume,
     path: str,

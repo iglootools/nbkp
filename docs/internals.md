@@ -1002,7 +1002,7 @@ does on their system.
 | `sh -c <script> sh <path>` | After a failed `test -f`, tell a missing sentinel from one behind an unsearchable directory (`NEAREST_DIR_SEARCHABLE_SCRIPT`) |
 | `test -d <path>` | Directory existence |
 | `test -w <path>` | Directory writability |
-| `test -L <path>` | Symlink existence (`latest`) |
+| `test -L <path>` | Tell an absent `latest` from an unreadable one, once `readlink` failed |
 | `test -e /dev/disk/by-uuid/<UUID>` | Drive detection (mount management) |
 | `sh -c 'command -v "$1"' sh <command>` | Command availability on a remote host (rsync, btrfs, stat, findmnt, udisksctl, lsblk): the shell builtin, since minimal hosts ship no `which`. A local host is looked up in-process |
 | `rsync --version` | Rsync version check (>= 3.0, reject macOS openrsync) |

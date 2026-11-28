@@ -24,7 +24,6 @@ from nbkp.preflight.probes import (
     check_directory_exists,
     check_directory_writable,
     check_endpoint_sentinel,
-    check_symlink_exists,
     read_symlink,
 )
 from nbkp.preflight.snapshot_checks import check_btrfs_subvolume, probe_btrfs_readonly
@@ -235,10 +234,9 @@ def _read_latest_state(
     *,
     run: VolumeCommandRunner,
 ) -> LatestSymlinkState:
+    # read_symlink alone tells absent from present: on a remote volume that
+    # is one ``readlink`` round-trip, two only when it fails.
     latest_path = f"{endpoint_path}/{LATEST_LINK}"
-    if not check_symlink_exists(volume, latest_path, resolved_endpoints, run=run):
-        return LatestSymlinkState(exists=False)
-
     try:
         raw_target = read_symlink(volume, latest_path, resolved_endpoints, run=run)
     except VolumeReadError as e:
