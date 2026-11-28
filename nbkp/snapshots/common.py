@@ -247,6 +247,16 @@ def _replace_local_symlink(latest_path: str, target: str) -> None:
         raise
 
 
+def build_update_latest_args(target: str, latest_path: str) -> list[str]:
+    """
+    Return the command pointing the ``latest`` link at *latest_path* to *target*.
+
+    Run on a remote volume; a local ``latest`` is replaced atomically instead
+    (see :func:`update_latest_symlink`), to the same effect.
+    """
+    return ["ln", "-sfn", target, latest_path]
+
+
 def update_latest_symlink(
     sync: SyncConfig,
     config: Config,
@@ -278,7 +288,7 @@ def update_latest_symlink(
             run_checked(
                 op,
                 latest_path,
-                ["ln", "-sfn", target, latest_path],
+                build_update_latest_args(target, latest_path),
                 dst_vol,
                 resolved,
                 run=run,

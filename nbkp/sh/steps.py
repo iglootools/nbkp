@@ -27,7 +27,13 @@ from nbkp.sh.quoting import (
     quote_args,
 )
 from nbkp.sh.spec import SyncSpec
-from nbkp.snapshots.hardlinks import build_owner_rwx_dirs_args, build_rm_tree_args
+from nbkp.snapshots.btrfs import build_create_snapshot_args
+from nbkp.snapshots.common import build_update_latest_args
+from nbkp.snapshots.hardlinks import (
+    build_mkdir_snapshot_args,
+    build_owner_rwx_dirs_args,
+    build_rm_tree_args,
+)
 from nbkp.sync.rsync import (
     RSYNC_VANISHED_FILES_EXIT,
     build_rsync_command,
@@ -204,7 +210,10 @@ def _mkdir_block(spec: SyncSpec) -> str:
     then remove it.
     """
     mkdir_parent = _on_dst(spec, ["mkdir", "-p", spec.snapshots_dir])
-    mkdir = _on_dst(spec, ["mkdir", f"{spec.snapshots_dir}/{SNAPSHOT_TS}"])
+    mkdir = _on_dst(
+        spec,
+        build_mkdir_snapshot_args(f"{spec.snapshots_dir}/{SNAPSHOT_TS}"),
+    )
     return "\n".join(
         [
             _timestamp_line(spec),
@@ -319,14 +328,10 @@ def _rsync_failure_cleanup(spec: SyncSpec) -> list[str]:
 def _btrfs_snapshot_block(spec: SyncSpec) -> str:
     snap = _on_dst(
         spec,
-        [
-            "btrfs",
-            "subvolume",
-            "snapshot",
-            "-r",
+        build_create_snapshot_args(
             spec.staging_dir,
             f"{spec.snapshots_dir}/{SNAPSHOT_TS}",
-        ],
+        ),
     )
     return "\n".join(
         [
@@ -369,7 +374,7 @@ def _update_latest_cmds(spec: SyncSpec) -> list[str]:
                 f"{mv} || {{ {rm_tmp}; false; }}",
             ]
         case RemoteVolume():
-            return [_on_dst(spec, ["ln", "-sfn", target, spec.dst_latest])]
+            return [_on_dst(spec, build_update_latest_args(target, spec.dst_latest))]
 
 
 def _delete_snapshot_cmds(spec: SyncSpec) -> list[str]:

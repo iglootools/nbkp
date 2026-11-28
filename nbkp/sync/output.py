@@ -12,6 +12,9 @@ from nbkp.fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
 from nbkp.preflight import SyncStatus
 from nbkp.preflight.output import format_problems
 from nbkp.remote.endpoints import ResolvedEndpoints
+from nbkp.snapshots.btrfs import build_create_snapshot_args
+from nbkp.snapshots.common import build_update_latest_args
+from nbkp.snapshots.hardlinks import build_mkdir_snapshot_args
 from nbkp.snapshots.output import retention_display as _retention_display
 from nbkp.sync.results import SyncOutcome, SyncResult, SyncWarning, SyncWarningKind
 from nbkp.sync.rsync import (
@@ -31,37 +34,43 @@ def _resolve_dest_display_path(
     return endpoint_path(vol, dst_ep.subdir)
 
 
+_PREVIEW_SNAPSHOT = f"{SNAPSHOTS_DIR}/<timestamp>"
+
+
 def _snapshot_preview_commands(
     sync_status: SyncStatus,
     config: Config,
 ) -> tuple[str, list[str], str] | None:
-    """``(mode, command_lines, retention)``, or ``None`` without snapshots."""
+    """
+    ``(mode, command_lines, retention)``, or ``None`` without snapshots.
+
+    Built with the backends' own command builders, so the preview cannot drift
+    from what the run executes, and joined with ``shlex.join`` so a path with a
+    space copies as one word.
+    """
     dst_ep = config.destination_endpoint(sync_status.config)
     dest_path = _resolve_dest_display_path(sync_status, config)
+    snapshot_path = f"{dest_path}/{_PREVIEW_SNAPSHOT}"
+    update_latest = build_update_latest_args(
+        _PREVIEW_SNAPSHOT,
+        f"{dest_path}/{LATEST_LINK}",
+    )
     match dst_ep.snapshot_mode:
         case "btrfs":
-            cmds = [
-                (
-                    f"btrfs subvolume snapshot -r {dest_path}/{STAGING_DIR}/"
-                    f" {dest_path}/{SNAPSHOTS_DIR}/<timestamp>"
-                ),
-                f"ln -sfn {SNAPSHOTS_DIR}/<timestamp> {dest_path}/{LATEST_LINK}",
-            ]
+            create = build_create_snapshot_args(
+                f"{dest_path}/{STAGING_DIR}",
+                snapshot_path,
+            )
             return (
                 "btrfs",
-                cmds,
+                [shlex.join(create), shlex.join(update_latest)],
                 _retention_display(dst_ep.max_snapshots),
             )
         case "hard-link":
-            cmds = [
-                # Plain mkdir, as create_snapshot_dir runs it: the run fails
-                # when the snapshot directory already exists.
-                f"mkdir {dest_path}/{SNAPSHOTS_DIR}/<timestamp>",
-                f"ln -sfn {SNAPSHOTS_DIR}/<timestamp> {dest_path}/{LATEST_LINK}",
-            ]
+            mkdir = build_mkdir_snapshot_args(snapshot_path)
             return (
                 "hard-link",
-                cmds,
+                [shlex.join(mkdir), shlex.join(update_latest)],
                 _retention_display(dst_ep.max_snapshots),
             )
         case "none":

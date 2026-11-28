@@ -40,12 +40,17 @@ def create_snapshot(
     run_checked(
         SnapshotOp.CREATE,
         snapshot_path,
-        ["btrfs", "subvolume", "snapshot", "-r", staging_path, snapshot_path],
+        build_create_snapshot_args(staging_path, snapshot_path),
         dst_vol,
         resolved,
         run=run,
     )
     return snapshot_path
+
+
+def build_create_snapshot_args(staging_path: str, snapshot_path: str) -> list[str]:
+    """Return the command snapshotting *staging_path* read-only at *snapshot_path*."""
+    return ["btrfs", "subvolume", "snapshot", "-r", staging_path, snapshot_path]
 
 
 def _readonly_cmd(path: str, *, readonly: bool) -> list[str]:

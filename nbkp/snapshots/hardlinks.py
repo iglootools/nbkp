@@ -63,12 +63,22 @@ def create_snapshot_dir(
     run_checked(
         SnapshotOp.MKDIR,
         snapshot_path,
-        ["mkdir", snapshot_path],
+        build_mkdir_snapshot_args(snapshot_path),
         dst_vol,
         resolved,
         run=run,
     )
     return snapshot_path
+
+
+def build_mkdir_snapshot_args(snapshot_path: str) -> list[str]:
+    """
+    Return the command creating the snapshot directory *snapshot_path*.
+
+    Plain ``mkdir``: it fails when the directory exists, so a name collision fails
+    the run rather than have rsync write into an existing snapshot.
+    """
+    return ["mkdir", snapshot_path]
 
 
 def snapshot_path_for(
