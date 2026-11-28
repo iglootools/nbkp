@@ -144,6 +144,35 @@ class TestFindConfigFile:
             tmp_path / "home" / ".config" / "nbkp" / "config.yaml"
         )
 
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root traverses any directory")
+    def test_untraversable_explicit_path_is_unreadable(self, tmp_path: Path) -> None:
+        cfg = _place_config(tmp_path / "locked")
+        cfg.parent.chmod(0)
+        try:
+            with pytest.raises(ConfigError) as excinfo:
+                find_config_file(cfg)
+        finally:
+            cfg.parent.chmod(0o700)
+        assert excinfo.value.kind == ConfigErrorKind.UNREADABLE
+        assert excinfo.value.path == cfg
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root traverses any directory")
+    def test_untraversable_candidate_stops_search(self, tmp_path: Path) -> None:
+        xdg = tmp_path / "xdg"
+        cfg = _place_config(xdg / "nbkp")
+        _place_config(tmp_path / "site-config" / "nbkp")
+        cfg.parent.chmod(0)
+        try:
+            with pytest.raises(ConfigError) as excinfo:
+                find_config_file(
+                    environ={"XDG_CONFIG_HOME": str(xdg)},
+                    **_search_in(tmp_path),
+                )
+        finally:
+            cfg.parent.chmod(0o700)
+        assert excinfo.value.kind == ConfigErrorKind.UNREADABLE
+        assert excinfo.value.path == cfg
+
 
 class TestLoadConfig:
     def test_full_config(self, sample_config: Config, sample_config_file: Path) -> None:

@@ -1,6 +1,7 @@
 """Finding the config file on disk and loading it into a validated :class:`Config`."""
 
 import os
+import stat
 from collections.abc import Callable, Mapping
 from enum import StrEnum
 from pathlib import Path
@@ -93,6 +94,30 @@ def _config_search_paths(
     return list(dict.fromkeys(candidates))
 
 
+def _is_config_file(path: Path) -> bool:
+    """
+    Return whether *path* is a regular file, raising when that cannot be told.
+
+    Only a path that does not exist is absent: ``Path.is_file`` also answers
+    False on a ``PermissionError``, which would report an unreadable config as
+    missing, or silently fall through to a lower-priority one.
+
+    Raises ``ConfigError(UNREADABLE)`` when the path cannot be stat'ed.
+    """
+    try:
+        mode = path.stat().st_mode
+    except FileNotFoundError, NotADirectoryError:
+        return False
+    except OSError as e:
+        raise ConfigError(
+            ConfigErrorKind.UNREADABLE,
+            path=path,
+            detail=e.strerror or str(e),
+        ) from e
+    else:
+        return stat.S_ISREG(mode)
+
+
 def find_config_file(
     config_path: str | Path | None = None,
     environ: Mapping[str, str] = os.environ,
@@ -108,10 +133,14 @@ def find_config_file(
     The search reads *environ*, *home* (the user's home directory, by
     default the process's) and the platform directories, so a caller can
     keep it off the real ones.
+
+    Raises ``ConfigError``: ``FILE_NOT_FOUND`` or ``NO_CONFIG_FOUND`` when
+    no file exists, ``UNREADABLE`` when a candidate exists but cannot be
+    stat'ed (the search stops there rather than loading another config).
     """
     if config_path is not None:
         p = Path(config_path)
-        if not p.is_file():
+        if not _is_config_file(p):
             raise ConfigError(ConfigErrorKind.FILE_NOT_FOUND, path=config_path)
         else:
             return p
@@ -122,7 +151,7 @@ def find_config_file(
             user_dir,
             site_dir,
         )
-        found = next((p for p in search if p.is_file()), None)
+        found = next((p for p in search if _is_config_file(p)), None)
         if found is not None:
             return found
         else:
