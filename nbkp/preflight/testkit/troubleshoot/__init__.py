@@ -45,6 +45,7 @@ from nbkp.preflight.testkit.troubleshoot.reachability import (
     MISSING_SENTINELS,
     STANDALONE_ENDPOINTS,
     UNAVAILABLE_VOLUMES,
+    UNREADABLE_SENTINELS,
 )
 from nbkp.preflight.testkit.troubleshoot.scenario import (
     LAPTOP_SRC,
@@ -71,6 +72,7 @@ SCENARIOS: tuple[Scenario, ...] = (
     DISABLED_SYNC,
     UNAVAILABLE_VOLUMES,
     MISSING_SENTINELS,
+    UNREADABLE_SENTINELS,
     RSYNC_MISSING,
     BTRFS_NOT_DETECTED,
     BTRFS_MOUNT_ISSUES,

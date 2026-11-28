@@ -21,7 +21,6 @@ fakes.
 """
 
 import shutil
-from pathlib import Path
 
 from nbkp.config import LocalVolume, RemoteVolume, Volume
 from nbkp.disks import (
@@ -31,7 +30,11 @@ from nbkp.disks import (
     probe_mount_tools as _probe_mount_tools,
 )
 from nbkp.fsprotocol import VOLUME_SENTINEL
-from nbkp.preflight.probes import check_rsync_version
+from nbkp.preflight.probes import (
+    VolumeReadError,
+    check_file_exists,
+    check_rsync_version,
+)
 from nbkp.preflight.snapshot_checks import (
     check_btrfs_mount_option,
     is_btrfs_filesystem,
@@ -218,6 +221,11 @@ def observe_volume(
     *platform* is the orchestrator's ``sys.platform``.
     """
     resolved = resolved_endpoints or {}
+    sentinel_exists, sentinel_unreadable = _probe_volume_sentinel(
+        volume,
+        resolved,
+        run=run,
+    )
     caps = (
         check_volume_capabilities(
             volume,
@@ -228,7 +236,7 @@ def observe_volume(
             platform=platform,
             run=run,
         )
-        if _volume_sentinel_exists(volume, resolved, run=run)
+        if sentinel_exists
         else _sentinel_only_capabilities(
             volume,
             mount_tools,
@@ -237,7 +245,20 @@ def observe_volume(
             run=run,
         )
     )
-    return VolumeDiagnostics(capabilities=caps)
+    return VolumeDiagnostics(capabilities=caps, sentinel_unreadable=sentinel_unreadable)
+
+
+def _probe_volume_sentinel(
+    volume: Volume,
+    resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner,
+) -> tuple[bool, str | None]:
+    """Return whether the volume sentinel exists, and why that is unknown if it is."""
+    try:
+        return (_volume_sentinel_exists(volume, resolved_endpoints, run=run), None)
+    except VolumeReadError as e:
+        return (False, e.detail)
 
 
 def _volume_sentinel_exists(
@@ -253,23 +274,15 @@ def _volume_sentinel_exists(
     location: treated as sentinel-missing (inactive).
 
     For a remote volume, SSH reachability has already been verified at the
-    SSH endpoint level.
+    SSH endpoint level. Raises :class:`VolumeReadError` when the sentinel's
+    presence cannot be told (see :func:`check_file_exists`).
     """
-    if volume.path is None:
-        return False
-    sentinel_path = f"{volume.path}/{VOLUME_SENTINEL}"
-    match volume:
-        case LocalVolume():
-            return Path(sentinel_path).is_file()
-        case RemoteVolume():
-            return (
-                run(
-                    ["test", "-f", sentinel_path],
-                    volume,
-                    resolved_endpoints,
-                ).returncode
-                == 0
-            )
+    return volume.path is not None and check_file_exists(
+        volume,
+        f"{volume.path}/{VOLUME_SENTINEL}",
+        resolved_endpoints,
+        run=run,
+    )
 
 
 def check_volume_capabilities(

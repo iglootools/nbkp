@@ -1,4 +1,7 @@
-from collections.abc import Collection
+import os
+import subprocess
+from collections.abc import Collection, Generator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -16,15 +19,19 @@ from nbkp.config import (
     SyncConfig,
     SyncEndpoint,
 )
+from nbkp.fsprotocol import NEAREST_DIR_SEARCHABLE_SCRIPT
+from nbkp.policy import Severity, Strictness
 from nbkp.preflight.checks import (
     check_all_syncs,
     check_step_count,
 )
 from nbkp.preflight.probes import (
+    VolumeReadError,
     check_endpoint_sentinel,
     check_rsync_version,
     parse_rsync_version,
 )
+from nbkp.preflight.severity import severity_for_error
 from nbkp.preflight.snapshot_checks import (
     check_btrfs_mount_option,
     check_btrfs_subvolume,
@@ -52,6 +59,7 @@ from nbkp.preflight.status.volume import (
     VolumeErrorKind,
     VolumeStatus,
 )
+from nbkp.preflight.strictness import has_fatal_errors
 from nbkp.preflight.testkit import check_sync, check_volume
 from nbkp.preflight.troubleshoot import Layer, collect_issues
 from nbkp.preflight.volume_checks import check_volume_capabilities, observe_ssh_endpoint
@@ -255,6 +263,162 @@ class TestCheckLocalVolume:
         (tmp_path / "photos" / ".nbkp-src").rmdir()
         (tmp_path / "photos" / ".nbkp-src").touch()
         assert check_endpoint_sentinel(vol, "photos", ".nbkp-src", {}) is True
+
+
+_NOT_ROOT = pytest.mark.skipif(
+    os.geteuid() == 0,
+    reason="root searches every directory",
+)
+
+
+@contextmanager
+def _unsearchable(directory: Path) -> Generator[None]:
+    """Make *directory* unsearchable until the end of the block."""
+    directory.chmod(0o600)
+    try:
+        yield
+    finally:
+        directory.chmod(0o700)
+
+
+class TestUnreadableSentinel:
+    """A sentinel behind an unsearchable directory is unknown, never absent."""
+
+    @_NOT_ROOT
+    def test_local_endpoint_sentinel_raises(self, tmp_path: Path) -> None:
+        (tmp_path / "photos").mkdir()
+        (tmp_path / "photos" / ".nbkp-src").touch()
+        vol = LocalVolume(slug="data", path=str(tmp_path))
+        with (
+            _unsearchable(tmp_path / "photos"),
+            pytest.raises(VolumeReadError) as excinfo,
+        ):
+            check_endpoint_sentinel(vol, "photos", ".nbkp-src", {})
+        assert excinfo.value.path == f"{tmp_path}/photos/.nbkp-src"
+
+    def test_local_sentinel_under_missing_directory_is_absent(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        vol = LocalVolume(slug="data", path=str(tmp_path))
+        assert check_endpoint_sentinel(vol, "missing/dir", ".nbkp-src", {}) is False
+
+    def test_remote_sentinel_raises_when_nearest_directory_unsearchable(self) -> None:
+        vol, config = _remote_config()
+        run = (
+            FakeCommandRunner()
+            .on("test", "-f", returns=FAILS)
+            .on(
+                "sh",
+                "-c",
+                NEAREST_DIR_SEARCHABLE_SCRIPT,
+                returns=completed(returncode=3, stderr="/backup/photos\n"),
+            )
+        )
+        with pytest.raises(VolumeReadError) as excinfo:
+            check_endpoint_sentinel(
+                vol,
+                "photos",
+                ".nbkp-src",
+                _make_resolved(config),
+                run=run,
+            )
+        assert excinfo.value.detail == "/backup/photos is not searchable"
+
+    def test_remote_sentinel_absent_when_nearest_directory_searchable(self) -> None:
+        vol, config = _remote_config()
+        run = FakeCommandRunner().on("test", "-f", returns=FAILS)
+        assert (
+            check_endpoint_sentinel(
+                vol,
+                "photos",
+                ".nbkp-src",
+                _make_resolved(config),
+                run=run,
+            )
+            is False
+        )
+        assert run.commands[-1] == [
+            "sh",
+            "-c",
+            NEAREST_DIR_SEARCHABLE_SCRIPT,
+            "sh",
+            "/backup/photos/.nbkp-src",
+        ]
+
+    def test_nearest_directory_script_tells_absent_from_unknown(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        (tmp_path / "a").mkdir()
+
+        def probe(path: Path) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                ["/bin/sh", "-c", NEAREST_DIR_SEARCHABLE_SCRIPT, "sh", str(path)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        assert probe(tmp_path / "a" / "missing" / "f").returncode == 0
+        if os.geteuid() != 0:
+            with _unsearchable(tmp_path / "a"):
+                hidden = probe(tmp_path / "a" / "b" / "f")
+            assert (hidden.returncode, hidden.stderr) == (3, f"{tmp_path}/a\n")
+
+    @_NOT_ROOT
+    def test_unreadable_destination_is_fatal_not_inactive(self, tmp_path: Path) -> None:
+        src = tmp_path / "src"
+        dst = tmp_path / "dst"
+        for vol_dir in (src, dst):
+            vol_dir.mkdir()
+            (vol_dir / ".nbkp-vol").touch()
+        (src / ".nbkp-src").touch()
+        (dst / "backup").mkdir()
+        (dst / "backup" / ".nbkp-dst").touch()
+        config = Config(
+            volumes={
+                "src": LocalVolume(slug="src", path=str(src)),
+                "dst": LocalVolume(slug="dst", path=str(dst)),
+            },
+            sync_endpoints={
+                "ep-src": SyncEndpoint(slug="ep-src", volume="src"),
+                "ep-dst": SyncEndpoint(slug="ep-dst", volume="dst", subdir="backup"),
+            },
+            syncs={
+                "s1": SyncConfig(slug="s1", source="ep-src", destination="ep-dst"),
+            },
+        )
+
+        with _unsearchable(dst / "backup"):
+            result = _check_all(config, healthy_host(), resolved_endpoints={})
+
+        dst_status = result.destination_endpoint_statuses["ep-dst"]
+        assert dst_status.errors == [DestinationEndpointErrorKind.SENTINEL_UNREADABLE]
+        assert dst_status.diagnostics is not None
+        assert dst_status.diagnostics.sentinel_unreadable == "Permission denied"
+        assert has_fatal_errors(result.sync_statuses)
+
+    @_NOT_ROOT
+    def test_unreadable_volume_sentinel_is_fatal(self, tmp_path: Path) -> None:
+        (tmp_path / "vol").mkdir()
+        (tmp_path / "vol" / ".nbkp-vol").touch()
+        with _unsearchable(tmp_path / "vol"):
+            status = check_volume(
+                LocalVolume(slug="data", path=str(tmp_path / "vol")),
+                {},
+                run=healthy_host(),
+                which=local_tools(),
+                platform="linux",
+            )
+        assert status.errors == [VolumeErrorKind.SENTINEL_UNREADABLE]
+        assert (
+            severity_for_error(
+                VolumeErrorKind.SENTINEL_UNREADABLE,
+                Strictness.IGNORE_INACTIVE,
+            )
+            is Severity.ERROR
+        )
 
 
 class TestCheckRemoteVolume:

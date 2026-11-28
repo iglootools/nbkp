@@ -20,6 +20,9 @@ class VolumeErrorKind(enum.StrEnum):
     VOLUME_NOT_MOUNTED = "volume-not-mounted"
 
     SENTINEL_NOT_FOUND = "sentinel-not-found"
+    # The sentinel may exist behind a directory nbkp cannot search: an
+    # infrastructure error, never an expected-inactive skip.
+    SENTINEL_UNREADABLE = "sentinel-unreadable"
 
     DEVICE_NOT_PRESENT = "device-not-present"
     UNLOCK_FAILED = "unlock-failed"
@@ -81,6 +84,9 @@ class VolumeDiagnostics(BaseModel):
     capabilities: VolumeCapabilities | None = None
     """``None`` when the volume sentinel is missing and no mount config
     to probe (rare — usually at least sentinel_exists is set)."""
+    sentinel_unreadable: str | None = None
+    """Why the probe could not tell whether the volume sentinel exists (a
+    directory on its path is not searchable), or ``None`` when it could."""
 
 
 class VolumeStatus(BaseModel):
@@ -136,6 +142,8 @@ def _volume_errors(
     mount: MountConfig | None = None,
 ) -> list[VolumeErrorKind]:
     match (diag.capabilities, mount):
+        case _ if diag.sentinel_unreadable is not None:
+            return [VolumeErrorKind.SENTINEL_UNREADABLE]
         case (None | VolumeCapabilities(sentinel_exists=True), _):
             return []
         case (VolumeCapabilities(mount=MountCapabilities() as caps), MountConfig()):

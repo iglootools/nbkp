@@ -5,10 +5,15 @@ Each takes the command runner as *run*, so tests can inject a fake one.
 """
 
 import re
+import stat
 from pathlib import Path
 
 from nbkp.config import LocalVolume, RemoteVolume, Volume, resolve_endpoint_path
-from nbkp.fsprotocol import Snapshot, parse_snapshot_listing
+from nbkp.fsprotocol import (
+    NEAREST_DIR_SEARCHABLE_SCRIPT,
+    Snapshot,
+    parse_snapshot_listing,
+)
 from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
 
@@ -28,6 +33,62 @@ class VolumeReadError(Exception):
         super().__init__(f"{path}: {detail}")
 
 
+def check_file_exists(
+    volume: Volume,
+    path: str,
+    resolved_endpoints: ResolvedEndpoints,
+    *,
+    run: VolumeCommandRunner = run_on_volume,
+) -> bool:
+    """
+    Return whether the regular file *path* exists on *volume*.
+
+    A file behind a directory the user cannot search may or may not exist:
+    that raises :class:`VolumeReadError`, so "cannot tell" is never mistaken
+    for "absent". Transport errors propagate.
+    """
+    match volume:
+        case LocalVolume():
+            return _local_file_exists(path)
+        case RemoteVolume():
+            return _remote_file_exists(volume, path, resolved_endpoints, run)
+
+
+def _remote_file_exists(
+    volume: Volume,
+    path: str,
+    resolved_endpoints: ResolvedEndpoints,
+    run: VolumeCommandRunner,
+) -> bool:
+    if run(["test", "-f", path], volume, resolved_endpoints).returncode == 0:
+        return True
+    else:
+        nearest_dir = run(
+            ["sh", "-c", NEAREST_DIR_SEARCHABLE_SCRIPT, "sh", path],
+            volume,
+            resolved_endpoints,
+        )
+        match nearest_dir.returncode:
+            case 0:
+                return False
+            case _:
+                raise VolumeReadError(path, _unsearchable_detail(nearest_dir.stderr))
+
+
+def _local_file_exists(path: str) -> bool:
+    try:
+        return stat.S_ISREG(Path(path).stat().st_mode)
+    except FileNotFoundError, NotADirectoryError:
+        return False
+    except OSError as e:
+        raise VolumeReadError(path, e.strerror or str(e)) from e
+
+
+def _unsearchable_detail(stderr: str | None) -> str:
+    directory = (stderr or "").strip()
+    return f"{directory} is not searchable" if directory else "cannot tell"
+
+
 def check_endpoint_sentinel(
     volume: Volume,
     subdir: str | None,
@@ -36,17 +97,19 @@ def check_endpoint_sentinel(
     *,
     run: VolumeCommandRunner = run_on_volume,
 ) -> bool:
-    """Return whether the file *sentinel_name* exists in the endpoint's directory."""
+    """
+    Return whether the file *sentinel_name* exists in the endpoint's directory.
+
+    Raises :class:`VolumeReadError` when that cannot be told (see
+    :func:`check_file_exists`).
+    """
     base = resolve_endpoint_path(volume, subdir)
-    rel_path = f"{base}/{sentinel_name}"
-    match volume:
-        case LocalVolume():
-            return Path(rel_path).is_file()
-        case RemoteVolume():
-            return (
-                run(["test", "-f", rel_path], volume, resolved_endpoints).returncode
-                == 0
-            )
+    return check_file_exists(
+        volume,
+        f"{base}/{sentinel_name}",
+        resolved_endpoints,
+        run=run,
+    )
 
 
 def check_directory_writable(

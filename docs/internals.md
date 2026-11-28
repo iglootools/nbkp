@@ -587,7 +587,14 @@ place. The `preflight check` command runs these validations independently; the
 Checks include:
 
 - **Sentinel files** — `.nbkp-vol`, `.nbkp-src`, `.nbkp-dst` must exist at the
-  expected paths
+  expected paths. A missing sentinel makes the volume or endpoint inactive (an
+  absent drive); a sentinel behind a directory the user cannot search
+  (`SENTINEL_UNREADABLE`) may well be there, so it is an infrastructure error
+  instead. `test -f` cannot tell the two apart, so on a remote host a failed
+  `test -f` is followed by a probe of the nearest existing directory on the
+  sentinel's path (`NEAREST_DIR_SEARCHABLE_SCRIPT`, shared with the `sh`
+  script): absent only when that directory is searchable. When an endpoint's
+  sentinel cannot be read, nothing else in its directory is probed.
 - **SSH connectivity** — Remote endpoints must be reachable; DNS resolution must
   succeed. A connection failure is `UNREACHABLE` (inactive) and records its
   cause; a host that answers but refuses our key, or whose host key is unknown
@@ -992,6 +999,7 @@ does on their system.
 | Command | Purpose |
 |---|---|
 | `test -f <path>` | Sentinel file existence (`.nbkp-vol`, `.nbkp-src`, `.nbkp-dst`) |
+| `sh -c <script> sh <path>` | After a failed `test -f`, tell a missing sentinel from one behind an unsearchable directory (`NEAREST_DIR_SEARCHABLE_SCRIPT`) |
 | `test -d <path>` | Directory existence |
 | `test -w <path>` | Directory writability |
 | `test -L <path>` | Symlink existence (`latest`) |

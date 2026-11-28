@@ -19,6 +19,8 @@ class SourceEndpointErrorKind(enum.StrEnum):
     """Why a source endpoint cannot be read from."""
 
     SENTINEL_NOT_FOUND = "sentinel-not-found"
+    # The sentinel may exist behind a directory nbkp cannot search.
+    SENTINEL_UNREADABLE = "sentinel-unreadable"
     SNAPSHOTS_DIR_NOT_FOUND = "snapshots-dir-not-found"
     LATEST_SYMLINK_NOT_FOUND = "latest-symlink-not-found"
     LATEST_SYMLINK_INVALID = "latest-symlink-invalid"
@@ -46,6 +48,8 @@ class DestinationEndpointErrorKind(enum.StrEnum):
     """
 
     SENTINEL_NOT_FOUND = "sentinel-not-found"
+    # The sentinel may exist behind a directory nbkp cannot search.
+    SENTINEL_UNREADABLE = "sentinel-unreadable"
     NOT_WRITABLE = "not-writable"
     SNAPSHOTS_DIR_NOT_FOUND = "snapshots-dir-not-found"
     SNAPSHOTS_DIR_NOT_WRITABLE = "snapshots-dir-not-writable"
@@ -154,6 +158,10 @@ class SourceEndpointDiagnostics(BaseModel):
 
     endpoint_slug: str
     sentinel_exists: bool
+    sentinel_unreadable: str | None = None
+    """Why the probe could not tell whether the sentinel exists (a directory on
+    its path is not searchable), or ``None`` when it could. When set, nothing
+    else was probed: every other field keeps its default."""
     snapshot_dirs: SnapshotDirsDiagnostics | None = None
     latest: LatestSymlinkState | None = None
 
@@ -171,6 +179,10 @@ class DestinationEndpointDiagnostics(BaseModel):
 
     endpoint_slug: str
     sentinel_exists: bool
+    sentinel_unreadable: str | None = None
+    """Why the probe could not tell whether the sentinel exists (a directory on
+    its path is not searchable), or ``None`` when it could. When set, nothing
+    else was probed: every other field keeps its default."""
     endpoint_writable: bool
     btrfs: BtrfsStagingSubvolumeDiagnostics | None = None
     snapshot_dirs: SnapshotDirsDiagnostics | None = None
@@ -290,6 +302,17 @@ def _source_endpoint_errors(
     diag: SourceEndpointDiagnostics,
     endpoint: SyncEndpoint,
 ) -> list[SourceEndpointErrorKind]:
+    return (
+        [SourceEndpointErrorKind.SENTINEL_UNREADABLE]
+        if diag.sentinel_unreadable is not None
+        else _observed_source_endpoint_errors(diag, endpoint)
+    )
+
+
+def _observed_source_endpoint_errors(
+    diag: SourceEndpointDiagnostics,
+    endpoint: SyncEndpoint,
+) -> list[SourceEndpointErrorKind]:
     return [
         *(
             [SourceEndpointErrorKind.SENTINEL_NOT_FOUND]
@@ -345,8 +368,23 @@ def _destination_endpoint_errors(
     approximated via ``sentinel_exists`` (the sentinel lives inside the endpoint dir, so
     its presence proves the dir exists). When the sentinel is missing we suppress
     NOT_WRITABLE because the ``test -w`` probe also fails on non-existent paths, and the
-    SENTINEL_NOT_FOUND fix already covers the "create the dir" case.
+    SENTINEL_NOT_FOUND fix already covers the "create the dir" case. A sentinel
+    nobody can tell the presence of gives ``SENTINEL_UNREADABLE`` alone, since
+    nothing else was probed.
     """
+    return (
+        [DestinationEndpointErrorKind.SENTINEL_UNREADABLE]
+        if diag.sentinel_unreadable is not None
+        else _observed_destination_endpoint_errors(diag, caps, host_tools, endpoint)
+    )
+
+
+def _observed_destination_endpoint_errors(
+    diag: DestinationEndpointDiagnostics,
+    caps: VolumeCapabilities | None,
+    host_tools: HostToolCapabilities | None,
+    endpoint: SyncEndpoint,
+) -> list[DestinationEndpointErrorKind]:
     return [
         *(
             [DestinationEndpointErrorKind.SENTINEL_NOT_FOUND]

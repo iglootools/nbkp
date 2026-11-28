@@ -5,7 +5,8 @@ Each sync gets a ``<fn>_preflight`` shell function returning:
 
 - ``0`` — active;
 - ``INACTIVE`` (2) — an expected, transient condition (missing volume or
-  endpoint sentinel, unreachable host);
+  endpoint sentinel, unreachable host), never a sentinel behind a directory
+  the user cannot search, which is ``BROKEN``;
 - ``DRY_RUN_PENDING`` (3) — the source snapshot will only exist once the
   upstream sync has really run (dry-run only); skipped without cascading;
 - ``BROKEN`` (1) — an infrastructure problem.
@@ -19,10 +20,12 @@ from nbkp.config import LocalVolume, RemoteVolume
 from nbkp.fsprotocol import (
     DESTINATION_SENTINEL,
     LATEST_LINK,
+    NEAREST_DIR_SEARCHABLE_SCRIPT,
     NO_HARDLINK_FILESYSTEMS,
     SNAPSHOTS_DIR,
     SOURCE_SENTINEL,
     STAGING_DIR,
+    UNSEARCHABLE_EXIT,
     VOLUME_SENTINEL,
 )
 from nbkp.sh.commands import (
@@ -65,7 +68,15 @@ def _test(vol: LocalVolume | RemoteVolume, args: list[str], spec: SyncSpec) -> s
 
 
 def _sentinel_checks(spec: SyncSpec) -> list[str]:
-    """Volume and endpoint sentinels: missing means inactive, not broken."""
+    """
+    Volume and endpoint sentinels: missing means inactive, unknown means broken.
+
+    ``test -f`` fails alike for a missing sentinel and for one behind a
+    directory the user cannot search; the second guard alone would skip the
+    sync as inactive, so the first one tells them apart, as ``nbkp preflight``
+    does. A failed ssh (255) passes the first guard, so an unreachable host
+    stays inactive.
+    """
     checks = [
         (spec.src_vol, f"{spec.src_vol_path}/{VOLUME_SENTINEL}", "source volume"),
         (spec.dst_vol, f"{spec.dst_vol_path}/{VOLUME_SENTINEL}", "destination volume"),
@@ -73,13 +84,36 @@ def _sentinel_checks(spec: SyncSpec) -> list[str]:
         (spec.dst_vol, f"{spec.dst_path}/{DESTINATION_SENTINEL}", "destination"),
     ]
     return [
-        guard(
-            _test(vol, ["-f", sentinel_path], spec),
-            f"{role} sentinel {sentinel_path} not found (or host unreachable)",
-            INACTIVE,
-        )
+        line
         for vol, sentinel_path, role in checks
+        for line in (
+            guard(
+                f"{_test(vol, ['-f', sentinel_path], spec)}"
+                f" || {_nearest_dir_searchable(vol, sentinel_path, spec)}"
+                f" || [ $? -ne {UNSEARCHABLE_EXIT} ]",
+                f"cannot tell whether {role} sentinel {sentinel_path} exists:"
+                " a directory on its path is not searchable",
+                BROKEN,
+            ),
+            guard(
+                _test(vol, ["-f", sentinel_path], spec),
+                f"{role} sentinel {sentinel_path} not found (or host unreachable)",
+                INACTIVE,
+            ),
+        )
     ]
+
+
+def _nearest_dir_searchable(
+    vol: LocalVolume | RemoteVolume,
+    path: str,
+    spec: SyncSpec,
+) -> str:
+    return vol_cmd(
+        vol,
+        ["sh", "-c", NEAREST_DIR_SEARCHABLE_SCRIPT, "sh", path],
+        spec.resolved_endpoints,
+    )
 
 
 def _rsync_checks(

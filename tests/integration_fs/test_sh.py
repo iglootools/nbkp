@@ -476,6 +476,21 @@ class TestGeneratedScriptExecution:
         assert "Completed sync: step-1" in result.stderr
         assert not (tmp_path / _DST_DIR / "sample.txt").exists()
 
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root searches every directory")
+    def test_unsearchable_destination_breaks_sync(self, tmp_path: Path) -> None:
+        """Like `nbkp run`: a sentinel nobody can tell about is not inactive."""
+        config = _seeded_chain(tmp_path)
+        dst = tmp_path / _DST_DIR
+        dst.chmod(0o600)
+        try:
+            result = _run_script(config, tmp_path)
+        finally:
+            dst.chmod(0o700)
+
+        assert result.returncode != 0
+        assert "cannot tell whether destination volume sentinel" in result.stderr
+        assert "SKIPPED step-2: inactive" not in result.stderr
+
     def test_inactive_upstream_cancels_downstream(self, tmp_path: Path) -> None:
         config = _seeded_chain(tmp_path)
         (tmp_path / _SRC_DIR / VOLUME_SENTINEL).unlink()
