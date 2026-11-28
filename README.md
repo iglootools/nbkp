@@ -135,6 +135,11 @@ If you need server-to-server replication:
 - No Windows support -- Haven't used it for decades, so no idea whether Cygwin
   is still a thing, if WSL could work, or if there is a completely different
   rsync-like ecosystem that's the preferred way of performing backups.
+- Snapshot destinations on a remote macOS host are not supported -- nbkp
+  expects a remote host to run GNU coreutils, and BSD `stat` cannot name the
+  filesystem type, so preflight rejects btrfs and hard-link destinations there
+  (`vol-fs-type-unknown`). Syncs without snapshots, and snapshots on a local
+  macOS volume, are unaffected.
 - No cloud backends -- local and SSH only. Might explore
   [rclone](https://rclone.org/) integration down the road.
 - No bidirectional sync -- one-way rsync, on purpose. It could be interesting to
