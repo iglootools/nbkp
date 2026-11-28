@@ -18,7 +18,11 @@ CONFIG_OPTION = Annotated[
     typer.Option(
         "--config",
         "-c",
-        help="Path to config file",
+        help=(
+            "Path to config file. Default: the first config.yaml found in"
+            " $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform's user"
+            " and site config directories for nbkp"
+        ),
         file_okay=True,
         dir_okay=False,
         resolve_path=True,
