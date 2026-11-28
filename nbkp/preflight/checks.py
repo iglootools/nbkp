@@ -676,25 +676,14 @@ def _check_source_endpoint(
     *,
     run: VolumeCommandRunner,
 ) -> SourceEndpointStatus:
-    try:
-        diagnostics = (
-            observe_source_endpoint(ep, probe.volume, resolved_endpoints, run=run)
-            if probe is not None
-            else None
-        )
-    except ssh_connection_errors() as e:
-        return SourceEndpointStatus.from_diagnostics(
-            endpoint=ep,
-            volume_status=_disconnected_volume_status(
-                volume_status.config,
-                volume_status.ssh_endpoint_status,
-                e,
-            ),
-            diagnostics=None,
-        )
+    diagnostics, observed_volume_status = _observe_endpoint(
+        volume_status,
+        lambda p: observe_source_endpoint(ep, p.volume, resolved_endpoints, run=run),
+        probe,
+    )
     return SourceEndpointStatus.from_diagnostics(
         endpoint=ep,
-        volume_status=volume_status,
+        volume_status=observed_volume_status,
         diagnostics=diagnostics,
     )
 
@@ -707,34 +696,48 @@ def _check_destination_endpoint(
     *,
     run: VolumeCommandRunner,
 ) -> DestinationEndpointStatus:
+    diagnostics, observed_volume_status = _observe_endpoint(
+        volume_status,
+        lambda p: observe_destination_endpoint(
+            ep,
+            p.volume,
+            p.capabilities,
+            resolved_endpoints,
+            host_tools=p.host_tools,
+            run=run,
+        ),
+        probe,
+    )
+    return DestinationEndpointStatus.from_diagnostics(
+        endpoint=ep,
+        volume_status=observed_volume_status,
+        diagnostics=diagnostics,
+    )
+
+
+def _observe_endpoint[D](
+    volume_status: VolumeStatus,
+    observe: Callable[[_EndpointProbe], D],
+    probe: _EndpointProbe | None,
+) -> tuple[D | None, VolumeStatus]:
+    """
+    Observe a sync endpoint, and return its diagnostics and its volume's status.
+
+    No diagnostics when there is nothing to probe (*probe* is ``None``), or when
+    the host drops during the observation: the volume's status is then the
+    disconnected one (see :func:`_disconnected_volume_status`).
+    """
     try:
-        diagnostics = (
-            observe_destination_endpoint(
-                ep,
-                probe.volume,
-                probe.capabilities,
-                resolved_endpoints,
-                host_tools=probe.host_tools,
-                run=run,
-            )
-            if probe is not None
-            else None
-        )
+        return (observe(probe) if probe is not None else None, volume_status)
     except ssh_connection_errors() as e:
-        return DestinationEndpointStatus.from_diagnostics(
-            endpoint=ep,
-            volume_status=_disconnected_volume_status(
+        return (
+            None,
+            _disconnected_volume_status(
                 volume_status.config,
                 volume_status.ssh_endpoint_status,
                 e,
             ),
-            diagnostics=None,
         )
-    return DestinationEndpointStatus.from_diagnostics(
-        endpoint=ep,
-        volume_status=volume_status,
-        diagnostics=diagnostics,
-    )
 
 
 @dataclass(frozen=True)
