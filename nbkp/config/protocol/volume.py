@@ -165,10 +165,25 @@ class RemoteVolume(ConfigModel):
     @classmethod
     def normalize_path(cls, v: object) -> object:
         """Return the path with trailing slashes stripped, keeping ``/`` itself."""
-        if not isinstance(v, str):
-            return v
-        stripped = v.rstrip("/")
-        return stripped or "/"
+        # An empty string stays empty for min_length to reject: collapsing it
+        # to "/" would point an unfilled template value at the remote root.
+        match v:
+            case str() if v:
+                return v.rstrip("/") or "/"
+            case _:
+                return v
+
+    @field_validator("path", mode="after")
+    @classmethod
+    def _require_absolute_path(cls, v: str | None) -> str | None:
+        # ``~`` is the remote user's home, resolved by SSH and rsync; any other
+        # relative path silently depends on where the remote shell starts.
+        if v is not None and not v.startswith(("/", "~")):
+            raise config_error(
+                ConfigValidationErrorKind.RELATIVE_PATH,
+                f"path must be absolute (or start with ~), got {v!r}",
+            )
+        return v
 
     @property
     def endpoint_candidates(self) -> list[str]:

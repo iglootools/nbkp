@@ -96,6 +96,28 @@ class TestRemoteVolume:
         with pytest.raises((AttributeError, pydantic.ValidationError)):
             vol.path = "other"
 
+    def test_empty_path_rejected_not_turned_into_root(self) -> None:
+        with pytest.raises(pydantic.ValidationError) as excinfo:
+            RemoteVolume.model_validate(
+                {"slug": "nas", "ssh-endpoint": "nas-server", "path": ""},
+            )
+        assert {err["type"] for err in excinfo.value.errors()} == {"string_too_short"}
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [("/", "/"), ("//", "/"), ("/backup/", "/backup"), ("~/backup", "~/backup")],
+    )
+    def test_path_normalized(self, raw: str, expected: str) -> None:
+        vol = RemoteVolume(slug="nas", ssh_endpoint="nas-server", path=raw)
+        assert vol.path == expected
+
+    def test_relative_path_rejected(self) -> None:
+        with pytest.raises(pydantic.ValidationError) as excinfo:
+            RemoteVolume(slug="nas", ssh_endpoint="nas-server", path="relative/dir")
+        assert {err["type"] for err in excinfo.value.errors()} == {
+            ConfigValidationErrorKind.RELATIVE_PATH,
+        }
+
 
 class TestSyncEndpoint:
     def test_construction_defaults(self) -> None:
