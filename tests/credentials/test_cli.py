@@ -28,7 +28,7 @@ from nbkp.credentials import (
     CredentialErrorKind,
     PassphrasePrefetch,
 )
-from nbkp.credentials.cli.keyring_status_cmd import keyring_status_json
+from nbkp.credentials.output import keyring_status_json
 from tests.fakes import completed, fake_runtime
 from tests.fixtures.cli import runner
 
