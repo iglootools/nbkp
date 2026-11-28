@@ -37,11 +37,13 @@ _IMAGE_TAG = "nbkp-demo-server:latest"
 
 SSH_AUTHORIZED_KEYS_PATH = "/mnt/ssh-authorized-keys"
 
-# Publish sshd on loopback only, on a random port (Docker picks one for host
-# port 0): the storage container is privileged with the host's /dev mounted,
-# and the demo connects through 127.0.0.1 anyway, so nothing on the LAN
-# should reach it.
-_SSH_PORT_ON_LOOPBACK = {"22/tcp": ("127.0.0.1", 0)}
+SSH_PORT = "22/tcp"
+SSH_PORT_ON_LOOPBACK = ("127.0.0.1", 0)
+"""Where the containers publish sshd: on loopback only, on a random port.
+
+Docker picks the port for host port 0. The storage container is privileged with
+the host's /dev mounted, and the demo and the tests connect through 127.0.0.1
+anyway, so nothing on the LAN should reach it."""
 
 
 def _as_docker_error[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
@@ -276,7 +278,7 @@ def start_container(
         detach=True,
         name=name,
         privileged=spec.privileged,
-        ports=_SSH_PORT_ON_LOOPBACK,
+        ports={SSH_PORT: SSH_PORT_ON_LOOPBACK},
         environment=spec.environment,
         volumes={
             host: {"bind": path, "mode": mode}
@@ -291,7 +293,7 @@ def start_container(
     network.connect(container, aliases=aliases)  # pyright: ignore[reportUnknownMemberType]
 
     container.reload()
-    port_info = container.attrs["NetworkSettings"]["Ports"]["22/tcp"]
+    port_info = container.attrs["NetworkSettings"]["Ports"][SSH_PORT]
     return int(port_info[0]["HostPort"])
 
 
