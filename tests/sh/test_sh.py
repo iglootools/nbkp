@@ -551,9 +551,10 @@ class TestDisabledSync:
 _SYMLINK_STEP = dedent("""\
     # Update latest symlink (skip if dry-run)
     if [ "$NBKP_DRY_RUN" = false ]; then
-        ln -sfn "snapshots/${NBKP_TS}" /mnt/dst/latest
+        ln -sfn "snapshots/${NBKP_TS}" "/mnt/dst/.latest.nbkp-tmp-${$}"
+        mv -f -T "/mnt/dst/.latest.nbkp-tmp-${$}" /mnt/dst/latest || { rm -f "/mnt/dst/.latest.nbkp-tmp-${$}"; false; }
     fi
-""")
+""")  # noqa: E501 -- the generated script, line for line
 """The whole step: ``snapshots/${NBKP_TS}`` and the dry-run guard also
 appear in other steps, so matching them alone could not fail."""
 
@@ -1255,6 +1256,12 @@ class TestHardLink:
         config = self._hl_config()
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert indent(_SYMLINK_STEP, "    ") in script
+
+    def test_symlink_rename_does_not_follow_latest_on_darwin(self) -> None:
+        """BSD mv spells GNU's -T as -h: never move the link into the snapshot."""
+        options = ScriptOptions(platform="darwin", config_path="c.yaml")
+        script = generate_script(self._hl_config(), options, now=_NOW)
+        assert 'mv -f -h "/mnt/dst/.latest.nbkp-tmp-${$}" /mnt/dst/latest' in script
 
     def test_prune_with_max_snapshots(self) -> None:
         config = self._hl_config()

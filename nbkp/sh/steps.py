@@ -10,13 +10,22 @@ hard-link rsync, each of which only logs a warning, and files that vanished
 during the transfer under ``vanished-files: warn``).
 """
 
+import posixpath
 from dataclasses import dataclass
 from textwrap import dedent
 
 from nbkp.config import LocalVolume, RemoteVolume
-from nbkp.fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
+from nbkp.fsprotocol import LATEST_LINK, SNAPSHOTS_DIR, STAGING_DIR
 from nbkp.sh.commands import snapshot_date_format, vol_cmd
-from nbkp.sh.quoting import INDENT, SNAP, SNAPSHOT_TS, format_command, quote
+from nbkp.sh.quoting import (
+    INDENT,
+    PID,
+    SNAP,
+    SNAPSHOT_TS,
+    format_command,
+    quote,
+    quote_args,
+)
 from nbkp.sh.spec import SyncSpec
 from nbkp.snapshots.hardlinks import build_owner_rwx_dirs_args, build_rm_tree_args
 from nbkp.sync.rsync import (
@@ -330,14 +339,36 @@ def _btrfs_snapshot_block(spec: SyncSpec) -> str:
 
 
 def _symlink_block(spec: SyncSpec) -> str:
-    ln = _on_dst(
-        spec,
-        ["ln", "-sfn", f"{SNAPSHOTS_DIR}/{SNAPSHOT_TS}", spec.dst_latest],
+    update = "\n".join(_update_latest_cmds(spec))
+    return "\n".join(
+        ['if [ "$NBKP_DRY_RUN" = false ]; then', _indent(update, 1), "fi"],
     )
-    return dedent(f"""\
-        if [ "$NBKP_DRY_RUN" = false ]; then
-            {ln}
-        fi""")
+
+
+def _update_latest_cmds(spec: SyncSpec) -> list[str]:
+    """
+    Point ``latest`` at the new snapshot, as ``update_latest_symlink`` does.
+
+    A local ``latest`` is replaced atomically: the link is made under a temporary
+    name and renamed over it, so an interruption leaves the old link or the new
+    one, never none. ``mv`` is told not to follow ``latest`` into the snapshot it
+    points to (``-T`` in GNU mv, ``-h`` in BSD mv). Two lines rather than an
+    ``&&`` list, so that ``set -e`` stops on a failed ``ln`` too. A remote
+    ``latest`` is replaced with ``ln -sfn``, as in ``nbkp run``.
+    """
+    target = f"{SNAPSHOTS_DIR}/{SNAPSHOT_TS}"
+    match spec.dst_vol:
+        case LocalVolume():
+            tmp = f"{posixpath.dirname(spec.dst_latest)}/.{LATEST_LINK}.nbkp-tmp-{PID}"
+            no_follow = "-T" if spec.platform.startswith("linux") else "-h"
+            mv = quote_args(["mv", "-f", no_follow, tmp, spec.dst_latest])
+            rm_tmp = quote_args(["rm", "-f", tmp])
+            return [
+                quote_args(["ln", "-sfn", target, tmp]),
+                f"{mv} || {{ {rm_tmp}; false; }}",
+            ]
+        case RemoteVolume():
+            return [_on_dst(spec, ["ln", "-sfn", target, spec.dst_latest])]
 
 
 def _delete_snapshot_cmds(spec: SyncSpec) -> list[str]:

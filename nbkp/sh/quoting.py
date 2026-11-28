@@ -31,6 +31,7 @@ def shell_var(name: str) -> str:
 SCRIPT_DIR = shell_var("NBKP_SCRIPT_DIR")
 SNAPSHOT_TS = shell_var("NBKP_TS")
 SNAP = shell_var("snap")
+PID = shell_var("$")
 
 
 def has_shell_var(s: str) -> bool:
