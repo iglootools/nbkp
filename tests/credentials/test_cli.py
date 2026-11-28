@@ -91,7 +91,9 @@ class TestKeyringStatusJson:
                     "available": False,
                     "error": (
                         "No passphrase found in keyring for id 'disk[1]'."
-                        " Store it with: keyring set nbkp disk[1]"
+                        " Store it with: keyring set nbkp 'disk[1]'"
+                        " (the keyring command is not part of nbkp's install:"
+                        " uv tool install keyring)"
                     ),
                     "reason": "not-found",
                 },

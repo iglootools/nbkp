@@ -25,7 +25,9 @@ def credential_error_message(e: CredentialError) -> str:
         case CredentialErrorKind.NOT_FOUND:
             return (
                 f"No passphrase found in keyring for id '{e.passphrase_id}'."
-                f" Store it with: keyring set nbkp {e.passphrase_id}"
+                f" Store it with: keyring set nbkp {shlex.quote(e.passphrase_id or '')}"
+                " (the keyring command is not part of nbkp's install:"
+                " uv tool install keyring)"
             )
         case CredentialErrorKind.ENV_UNSET:
             return (
