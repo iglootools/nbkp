@@ -487,6 +487,34 @@ class TestLoadConfig:
             "- .rsync-filter",
         ]
 
+    @pytest.mark.parametrize(
+        "opts",
+        [
+            {"path": None},
+            {"path": ""},
+            {"path": 3},
+            {"path": ".rsync-filter", "exclude-self": "false"},
+            {"exclude-self": True},
+        ],
+    )
+    def test_filter_dir_merge_ill_typed_options_rejected(
+        self,
+        opts: dict[str, object],
+    ) -> None:
+        """A bad option must fail validation, not become a bogus rsync rule."""
+        with pytest.raises(ValidationError) as excinfo:
+            SyncConfig.model_validate(
+                {
+                    "slug": "s",
+                    "source": "a",
+                    "destination": "b",
+                    "filters": [{"dir-merge": opts}],
+                },
+            )
+        assert {err["type"] for err in excinfo.value.errors()} == {
+            ConfigValidationErrorKind.INVALID_FILTER,
+        }
+
     def test_rsync_options_override(self, tmp_path: Path) -> None:
         config = Config(
             volumes={

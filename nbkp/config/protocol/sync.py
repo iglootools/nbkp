@@ -58,6 +58,22 @@ def _validate_dir_merge_opts(opts: dict[str, Any]) -> None:
         )
 
 
+def _dir_merge_rules(item: object, opts: dict[str, Any]) -> list[str]:
+    """
+    Translate structured ``dir-merge`` options into their rsync filter rules.
+
+    ``path`` must be a non-empty string and ``exclude-self`` a boolean:
+    anything else would render as a bogus rule (``dir-merge None``) or a
+    truthy string (``"false"``), silently missing the intended filter.
+    """
+    exclude_self = opts.get("exclude-self", False)
+    match opts:
+        case {"path": str() as path} if path and isinstance(exclude_self, bool):
+            return [f"dir-merge {path}", *([f"- {path}"] if exclude_self else [])]
+        case _:
+            raise _invalid_filter(item)
+
+
 def _filter_rules(item: object) -> list[str]:
     """
     Translate one ``filters`` entry into its rsync filter rule(s).
@@ -81,12 +97,9 @@ def _filter_rules(item: object) -> list[str]:
             return [f"merge {Path(path).expanduser()}"]
         case {"dir-merge": str() as path}:
             return [f"dir-merge {path}"]
-        case {"dir-merge": object() as opts} if is_raw_mapping(opts) and "path" in opts:
+        case {"dir-merge": object() as opts} if is_raw_mapping(opts):
             _validate_dir_merge_opts(opts)
-            return [
-                f"dir-merge {opts['path']}",
-                *([f"- {opts['path']}"] if opts.get("exclude-self") else []),
-            ]
+            return _dir_merge_rules(item, opts)
         case _:
             raise _invalid_filter(item)
 
