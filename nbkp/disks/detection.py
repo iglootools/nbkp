@@ -6,6 +6,8 @@ runs before any preflight checks in the lifecycle, so these functions are separa
 and have no dependencies on preflight code.
 """
 
+import subprocess
+
 from nbkp.config import MountConfig, Volume
 from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
@@ -196,13 +198,23 @@ def find_mountpoint(
         volume,
         resolved_endpoints,
     )
+    stdout = findmnt_stdout(result)
+    target = stdout.strip().splitlines() if stdout is not None else []
+    return target[0].strip() if target and target[0].strip() else None
+
+
+def findmnt_stdout(result: subprocess.CompletedProcess[str]) -> str | None:
+    """
+    Return a findmnt query's stdout, or ``None`` when nothing matched.
+
+    findmnt exits 1, silently, when nothing matches; it also exits 1 on errors,
+    but those print a message. Any failure raises :class:`DeviceProbeError`, so
+    that a failed probe is never mistaken for "no match".
+    """
     match result.returncode:
         case 0:
-            target = result.stdout.strip().splitlines()
-            return target[0].strip() if target and target[0].strip() else None
+            return result.stdout
         case 1 if not result.stderr.strip():
-            # findmnt exits 1, silently, when nothing matches; it also exits 1
-            # on errors, but those print a message.
             return None
         case _:
             raise DeviceProbeError(
