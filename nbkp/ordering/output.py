@@ -109,15 +109,18 @@ def build_rich_tree_sections(
             sync = branch.sync
             annotation = _endpoint_annotation(config.sync_endpoints[sync.destination])
             severity = severities.get(sync.slug)
-            icon_prefix = f"{severity_icon(severity)} " if severity is not None else ""
-            label = " ".join(
-                part
-                for part in [
-                    f"{icon_prefix}[bold]{sync.slug}[/bold] -> {sync.destination}",
-                    f"({annotation})" if annotation else "",
-                    "(disabled)" if not sync.enabled else "",
-                ]
-                if part
+            # Text, not markup: the slugs are the user's. Slug validation forbids
+            # `[` today, but that is no reason to rely on it here.
+            label = Text.assemble(
+                *(
+                    [Text.from_markup(severity_icon(severity)), " "]
+                    if severity is not None
+                    else []
+                ),
+                (sync.slug, "bold"),
+                f" -> {sync.destination}",
+                *([f" ({annotation})"] if annotation else []),
+                *([" (disabled)"] if not sync.enabled else []),
             )
             _add_branches(
                 tree.add(label, style="dim" if not sync.enabled else ""),
@@ -125,7 +128,7 @@ def build_rich_tree_sections(
             )
 
     def _tree(root: str, branches: tuple[_Branch, ...]) -> Tree:
-        tree = Tree(f"[bold]{root}[/bold]")
+        tree = Tree(Text(root, style="bold"))
         _add_branches(tree, branches)
         return tree
 
