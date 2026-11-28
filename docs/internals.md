@@ -1026,7 +1026,7 @@ does on their system.
 | Command | Purpose |
 |---|---|
 | `rsync -a --delete --delete-excluded --partial-dir=.rsync-partial --safe-links ...` | Data sync with default flags |
-| `--filter=H .nbkp-*` / `--filter=P .nbkp-*` | Hide/protect sentinel files during transfer |
+| `--filter=H .nbkp-*` / `--filter=P .nbkp-*` | Hide/protect sentinel files during transfer; always emitted, even with `default-options-override` |
 | `--compress`, `--checksum` | Optional per-sync flags |
 | `--link-dest=<prev-snapshot>` | Hard-link snapshots: reference previous snapshot for deduplication |
 | `-e ssh ...` | SSH transport for remote syncs |

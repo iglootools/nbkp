@@ -1016,6 +1016,9 @@ class TestEdgeCases:
         script = generate_script(config, _OPTIONS, now=_NOW)
         assert "--bwlimit=1000" in script
         assert "--progress" in script
+        # The override replaces the transfer flags, never the sentinel filters.
+        assert "--filter=H .nbkp-*" in script
+        assert "--filter=P .nbkp-*" in script
 
     def test_mixed_enabled_disabled(self) -> None:
         src = LocalVolume(slug="src", path="/mnt/src")

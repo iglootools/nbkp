@@ -185,7 +185,11 @@ Default rsync flags (when `default-options-override` is not set):
 
 ```
 -a --delete --delete-excluded --partial-dir=.rsync-partial --safe-links
-```"""
+```
+
+The sentinel filters `--filter=H .nbkp-*` and `--filter=P .nbkp-*` follow them
+in every sync, with or without `default-options-override`: they keep rsync from
+copying the source's sentinels or deleting the destination's."""
 
 _FILTERS_SECTION = """\
 #### Filters

@@ -395,7 +395,7 @@ class TestBuildRsyncCommandOptions:
     def _simple_config(self) -> tuple[SyncConfig, Config]:
         return two_volume_config()
 
-    def test_override_default_options(self) -> None:
+    def test_override_replaces_flags_but_keeps_sentinel_filters(self) -> None:
         sync, config = two_volume_config(
             rsync_options=RsyncOptions(
                 default_options_override=["-a"],
@@ -407,6 +407,8 @@ class TestBuildRsyncCommandOptions:
         assert cmd == [
             "rsync",
             "-a",
+            "--filter=H .nbkp-*",
+            "--filter=P .nbkp-*",
             "/mnt/src/",
             "/mnt/dst/",
         ]
@@ -448,6 +450,8 @@ class TestBuildRsyncCommandOptions:
             "rsync",
             "-a",
             "--delete",
+            "--filter=H .nbkp-*",
+            "--filter=P .nbkp-*",
             "--bwlimit=1000",
             "/mnt/src/",
             "/mnt/dst/",

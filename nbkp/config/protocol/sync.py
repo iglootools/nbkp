@@ -25,7 +25,10 @@ class RsyncOptions(ConfigModel):
     checksum: bool = Field(default=False, description="Enable rsync `--checksum`")
     default_options_override: list[str] | None = Field(
         default=None,
-        description="Replace default rsync flags entirely",
+        description=(
+            "Replace the default rsync flags; the sentinel filters"
+            " (`--filter=H .nbkp-*`, `--filter=P .nbkp-*`) are always kept"
+        ),
     )
     extra_options: list[str] = Field(
         default_factory=list,

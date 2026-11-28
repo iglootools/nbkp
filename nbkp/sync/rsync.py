@@ -52,9 +52,20 @@ _DEFAULT_RSYNC_OPTIONS: list[str] = [
     "--delete-excluded",
     "--partial-dir=.rsync-partial",
     "--safe-links",
+]
+
+_SENTINEL_FILTERS: list[str] = [
     "--filter=H .nbkp-*",  # hide sentinels from transfer
     "--filter=P .nbkp-*",  # protect sentinels from deletion
 ]
+"""
+Always emitted, whatever ``default-options-override`` says.
+
+Without them rsync copies the source's sentinels into the destination and, with
+``--delete``, deletes the destination's own: the next preflight then reads the
+destination as unmounted and skips the sync silently. They come before every user
+filter, so that rsync's first-match rule lets no user rule override them.
+"""
 
 
 def resolve_source_path(
@@ -110,6 +121,7 @@ def _base_rsync_args(
     return [
         "rsync",
         *options,
+        *_SENTINEL_FILTERS,
         *(["--checksum"] if rsync_opts.checksum else []),
         *(["--compress"] if rsync_opts.compress else []),
         *rsync_opts.extra_options,

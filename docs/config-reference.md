@@ -298,7 +298,8 @@ activates snapshot creation after each successful sync.
 ## Syncs
 
 **Rsync options** — `compress` and `checksum` are opt-in flags.
-`default-options-override` replaces the default flags entirely; `extra-options`
+`default-options-override` replaces the default flags, but never the sentinel
+filters; `extra-options`
 appends flags after them. Why `--hard-links` is not a default:
 [Rsync Defaults](./internals.md#rsync-defaults).
 
@@ -336,7 +337,7 @@ Each destination endpoint can only be used by one sync (no two syncs may share t
 |---|---|---|---|
 | `compress` | boolean | `false` | Enable rsync `--compress` |
 | `checksum` | boolean | `false` | Enable rsync `--checksum` |
-| `default-options-override` | list of strings | `null` | Replace default rsync flags entirely |
+| `default-options-override` | list of strings | `null` | Replace the default rsync flags; the sentinel filters (`--filter=H .nbkp-*`, `--filter=P .nbkp-*`) are always kept |
 | `extra-options` | list of strings | `[]` | Additional flags appended after defaults |
 | `vanished-files` | `"fail"` \| `"warn"` | `"fail"` | What the sync does when files vanish from the source between rsync's scan and their transfer (rsync exit code 24). `fail`: the sync fails, and a new hard-link snapshot is discarded. `warn`: the sync succeeds with a `vanished-files` warning, its snapshot is kept and `latest` moves to it. Choose `warn` for a source in use while it is backed up, such as a home directory, where files often disappear mid-run |
 
@@ -345,6 +346,10 @@ Default rsync flags (when `default-options-override` is not set):
 ```
 -a --delete --delete-excluded --partial-dir=.rsync-partial --safe-links
 ```
+
+The sentinel filters `--filter=H .nbkp-*` and `--filter=P .nbkp-*` follow them
+in every sync, with or without `default-options-override`: they keep rsync from
+copying the source's sentinels or deleting the destination's.
 
 ---
 
