@@ -1,7 +1,7 @@
 """
 Wiring the ``disks`` commands ``mount``, ``umount`` and ``status`` share.
 
-Shared: the status table, the dry-run plan and the ``--name`` check.
+Shared: the status table, the dry-run plan and the ``--volume`` check.
 """
 
 from collections.abc import Mapping, Sequence
@@ -146,7 +146,7 @@ def require_known_names(
     names: list[str] | None,
     output_format: OutputFormat,
 ) -> None:
-    """Exit 2 when a ``--name`` matches no volume."""
+    """Exit 2 when a ``--volume`` matches no volume."""
     require_known(
         "volume",
         unknown_volume_names(cfg, names),

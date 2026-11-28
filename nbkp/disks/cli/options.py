@@ -4,9 +4,7 @@ from typing import Annotated
 
 import typer
 
-# -n is --name here, not --dry-run: see the "-n in disks" exception in
-# docs/guidelines/cli.md.
-NAME_OPTION = Annotated[
+VOLUME_OPTION = Annotated[
     list[str] | None,
-    typer.Option("--name", "-n", help="Volume name(s) to include"),
+    typer.Option("--volume", "-v", help="Volume name(s) to include"),
 ]

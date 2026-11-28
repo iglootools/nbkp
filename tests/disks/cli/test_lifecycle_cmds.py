@@ -171,7 +171,7 @@ class TestUnknownNames:
     def test_mount_rejects_unknown_name(self) -> None:
         run = FakeCommandRunner()
 
-        exit_code, output = _invoke(run, "mount", "-n", "typo")
+        exit_code, output = _invoke(run, "mount", "-v", "typo")
 
         assert exit_code == 2
         assert "unknown volume name(s): typo" in output
@@ -180,7 +180,7 @@ class TestUnknownNames:
     def test_umount_rejects_unknown_name_as_json(self) -> None:
         run = FakeCommandRunner()
 
-        exit_code, output = _invoke(run, "umount", "-n", "typo", "-o", "json")
+        exit_code, output = _invoke(run, "umount", "-v", "typo", "-o", "json")
 
         assert exit_code == 2
         error = json.loads(output)["error"]
@@ -502,6 +502,24 @@ class TestDryRun:
 
         assert exit_code == 0, output
         assert output.splitlines() == ["[dry-run] ✓ Would unmount, lock enc"]
+        assert _udisks_steps(run) == []
+
+    @pytest.mark.parametrize(
+        ("command", "host"),
+        [("mount", locked_drive_host), ("umount", _mounted_drive)],
+    )
+    def test_short_flag_is_a_dry_run(
+        self,
+        command: str,
+        host: Callable[[], FakeCommandRunner],
+    ) -> None:
+        """``-n`` is ``--dry-run`` here as in every other command."""
+        run = host()
+
+        exit_code, output = _invoke(run, command, "-n", "-v", "enc")
+
+        assert exit_code == 0, output
+        assert output.startswith("[dry-run]")
         assert _udisks_steps(run) == []
 
     def test_absent_drive_needs_nothing(self) -> None:

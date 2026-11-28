@@ -328,7 +328,7 @@ prompted once per unique passphrase-id even if multiple volumes share it.
 
 **Passphrase prefetching** — Before the first device is touched, nbkp retrieves
 *every* passphrase-id the config declares — including the ones this run has no
-use for, because their drive is not plugged in or `--name` excluded them. All
+use for, because their drive is not plugged in or `--volume` excluded them. All
 credential-store access therefore happens up front, in one burst. See
 [Why prefetch every passphrase](#why-prefetch-every-passphrase).
 
@@ -549,7 +549,7 @@ deliberately including the ones it does not need:
   subsequent runs are unattended.
 - **It happens before device probing and mounting**, so the approval prompts
   arrive together at the start rather than interleaved with mount output.
-- **It is not filtered by `--name`.** Narrowing the mount set would defeat the
+- **It is not filtered by `--volume`.** Narrowing the mount set would defeat the
   purpose.
 - **It is best-effort.** A passphrase that cannot be retrieved is reported as a
   warning and skipped, not fatal. Missing credentials only matter for a drive

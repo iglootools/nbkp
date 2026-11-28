@@ -464,7 +464,7 @@ instead of the human-readable panel, and exits with code 2:
 ```
 
 A `--location` or `--exclude-location` value that no SSH endpoint declares, a
-`--sync` that names no sync, and a `disks --name` that names no volume are
+`--sync` that names no sync, and a `disks --volume` that names no volume are
 rejected the same way, once the config has loaded: exit code 2, and with
 `--output json` the error object
 `{"error": {"reason": "unknown-location", "message": ..., "names": [...]}}` (or

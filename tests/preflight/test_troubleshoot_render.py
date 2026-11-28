@@ -124,7 +124,7 @@ class TestSuggestedCommands:
             config,
             ctx,
         )
-        assert "nbkp disks mount -n usb -c nbkp/config.yaml -l home" in out
+        assert "nbkp disks mount -v usb -c nbkp/config.yaml -l home" in out
 
     def test_polkit_fix_uses_supplied_local_user(self) -> None:
         vol = LocalVolume(

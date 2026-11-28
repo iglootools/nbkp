@@ -291,7 +291,7 @@ def lifecycle_volumes(
 
 def unknown_volume_names(config: Config, names: list[str] | None) -> list[str]:
     """
-    Names passed via ``--name`` that match no volume in *config*.
+    Names passed via ``--volume`` that match no volume in *config*.
 
     Validated up front so that a typo fails loudly instead of silently
     matching nothing and reporting success.

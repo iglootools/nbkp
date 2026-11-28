@@ -22,7 +22,7 @@ from nbkp.cliwiring.runtime import Runtime, runtime_of
 from nbkp.config import Config
 from nbkp.disks.cli.common import probe_and_show_status, require_known_names, show_plan
 from nbkp.disks.cli.hints import print_auth_hint
-from nbkp.disks.cli.options import NAME_OPTION
+from nbkp.disks.cli.options import VOLUME_OPTION
 from nbkp.disks.lifecycle import UmountResult, any_failed, umount_volumes
 from nbkp.disks.mount_checks import check_mount_status
 from nbkp.disks.plan import plan_lifecycle
@@ -33,7 +33,7 @@ def umount_cmd(
     ctx: typer.Context,
     config: CONFIG_OPTION = None,
     output: OUTPUT_OPTION = OutputFormat.HUMAN,
-    name: NAME_OPTION = None,
+    volume: VOLUME_OPTION = None,
     location: LOCATION_OPTION = None,
     *,
     exclude_location: EXCLUDE_LOCATION_OPTION = None,
@@ -42,10 +42,10 @@ def umount_cmd(
         bool,
         typer.Option(
             "--dry-run",
+            "-n",
             help=(
                 "Report what would be unmounted and locked without changing"
                 " anything (no udisksctl unmount/lock)."
-                " Long form only: -n is --name here."
             ),
         ),
     ] = False,
@@ -53,11 +53,11 @@ def umount_cmd(
     """
     Umount volumes and lock LUKS.
 
-    Umounts all volumes with mount config, or specific ones via --name.
+    Umounts all volumes with mount config, or specific ones via --volume.
     """
     runtime = runtime_of(ctx)
     cfg = load_config_or_exit(runtime, config, output)
-    require_known_names(cfg, name, output)
+    require_known_names(cfg, volume, output)
     resolved = resolve_endpoints(
         cfg,
         location,
@@ -73,7 +73,7 @@ def umount_cmd(
                 cfg,
                 resolved,
                 mounting=False,
-                names=name,
+                names=volume,
                 probe=partial(check_mount_status, run=runtime.run),
             ),
             mount_display_names(cfg),
@@ -81,12 +81,12 @@ def umount_cmd(
         )
         return
 
-    results = _umount_with_progress(cfg, resolved, name, output, runtime)
+    results = _umount_with_progress(cfg, resolved, volume, output, runtime)
     probe_and_show_status(
         cfg,
         resolved,
         output,
-        name,
+        volume,
         umount_results=results,
         run=runtime.run,
     )

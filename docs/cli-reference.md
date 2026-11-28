@@ -183,7 +183,7 @@ $ nbkp disks [OPTIONS] COMMAND [ARGS]...
 
 Unlock LUKS and mount volumes.
 
-Mounts all volumes with mount config, or specific ones via --name.
+Mounts all volumes with mount config, or specific ones via --volume.
 
 **Usage**:
 
@@ -195,18 +195,18 @@ $ nbkp disks mount [OPTIONS]
 
 * `-c, --config <file>`: Path to config file. Default: the first config.yaml found in $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform&#x27;s user and site config directories for nbkp
 * `-o, --output <human|json>`: Output format  [default: human]
-* `-n, --name <str>`: Volume name(s) to include
+* `-v, --volume <str>`: Volume name(s) to include
 * `-l, --location <str>`: Prefer endpoints at these locations
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
-* `--dry-run`: Report what would be unlocked and mounted without changing anything (no passphrase retrieval, no udisksctl unlock/mount). Long form only: -n is --name here.
+* `-n, --dry-run`: Report what would be unlocked and mounted without changing anything (no passphrase retrieval, no udisksctl unlock/mount).
 * `--help`: Show this message and exit.
 
 ### `nbkp disks umount`
 
 Umount volumes and lock LUKS.
 
-Umounts all volumes with mount config, or specific ones via --name.
+Umounts all volumes with mount config, or specific ones via --volume.
 
 **Usage**:
 
@@ -218,11 +218,11 @@ $ nbkp disks umount [OPTIONS]
 
 * `-c, --config <file>`: Path to config file. Default: the first config.yaml found in $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform&#x27;s user and site config directories for nbkp
 * `-o, --output <human|json>`: Output format  [default: human]
-* `-n, --name <str>`: Volume name(s) to include
+* `-v, --volume <str>`: Volume name(s) to include
 * `-l, --location <str>`: Prefer endpoints at these locations
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints
-* `--dry-run`: Report what would be unmounted and locked without changing anything (no udisksctl unmount/lock). Long form only: -n is --name here.
+* `-n, --dry-run`: Report what would be unmounted and locked without changing anything (no udisksctl unmount/lock).
 * `--help`: Show this message and exit.
 
 ### `nbkp disks status`
@@ -239,7 +239,7 @@ $ nbkp disks status [OPTIONS]
 
 * `-c, --config <file>`: Path to config file. Default: the first config.yaml found in $XDG_CONFIG_HOME/nbkp (~/.config/nbkp), then the platform&#x27;s user and site config directories for nbkp
 * `-o, --output <human|json>`: Output format  [default: human]
-* `-n, --name <str>`: Volume name(s) to include
+* `-v, --volume <str>`: Volume name(s) to include
 * `-l, --location <str>`: Prefer endpoints at these locations
 * `-L, --exclude-location <str>`: Exclude endpoints at these locations
 * `-N, --network <private|public>`: Prefer private (LAN) or public (WAN) endpoints

@@ -592,7 +592,7 @@ def format_volume_error_fix(
             return [
                 format_line(FIX, "Volume is not mounted. Mount it with:"),
                 format_command(
-                    ctx.invocation.command("disks", "mount", "-n", vol_status.slug),
+                    ctx.invocation.command("disks", "mount", "-v", vol_status.slug),
                     STEP,
                 ),
             ]

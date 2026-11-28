@@ -286,8 +286,8 @@ nbkp run
 nbkp run --no-mount --no-umount
 
 # Manually mount/umount specific volumes
-nbkp disks mount --name seagate8tb
-nbkp disks umount --name seagate8tb
+nbkp disks mount --volume seagate8tb
+nbkp disks umount --volume seagate8tb
 
 # Diagnose mount issues
 nbkp preflight troubleshoot
@@ -478,8 +478,8 @@ nbkp run
 nbkp run --no-mount --no-umount
 
 # Manually mount/umount specific volumes
-nbkp disks mount --name seagate8tb
-nbkp disks umount --name seagate8tb
+nbkp disks mount --volume seagate8tb
+nbkp disks umount --volume seagate8tb
 
 # Diagnose mount issues (udisksd down, missing polkit rule, fstab mismatch, …)
 nbkp preflight troubleshoot
@@ -506,12 +506,12 @@ nbkp preflight troubleshoot
   provider configuration.
 - **All passphrases are read up front, even for absent drives.** Before probing
   any device, nbkp retrieves every passphrase-id in the config — including
-  drives that are not plugged in and volumes `--name` excluded. OS secret stores
-  re-prompt for approval after the accessing binary changes (a Python or nbkp
-  upgrade), so reading them all means one interactive run grants approval for
-  every drive and later runs stay unattended. Failures are warnings, not errors:
-  a missing passphrase only breaks a drive that is actually present, and the
-  mount step reports that. The `prompt` provider is not prefetched. Run
+  drives that are not plugged in and volumes `--volume` excluded. OS secret
+  stores re-prompt for approval after the accessing binary changes (a Python or
+  nbkp upgrade), so reading them all means one interactive run grants approval
+  for every drive and later runs stay unattended. Failures are warnings, not
+  errors: a missing passphrase only breaks a drive that is actually present, and
+  the mount step reports that. The `prompt` provider is not prefetched. Run
   `nbkp credentials keyring-status` to trigger the approval pass on demand,
   without mounting anything. See
   [Why prefetch every passphrase](./internals.md#why-prefetch-every-passphrase).

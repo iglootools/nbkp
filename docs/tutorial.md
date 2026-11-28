@@ -735,8 +735,8 @@ nbkp run
 nbkp run --location home            # prefer the home-LAN endpoint
 nbkp run --exclude-location home    # on the road: skip anything only reachable at home
 nbkp run --no-mount --no-umount     # volumes are already mounted; skip mount management
-nbkp disks mount   --name seagate8tb    # mount one drive by hand
-nbkp disks umount  --name seagate8tb
+nbkp disks mount   --volume seagate8tb  # mount one drive by hand
+nbkp disks umount  --volume seagate8tb
 ```
 
 Inactive syncs (a drive that isn't plugged in, a hub that's unreachable) are

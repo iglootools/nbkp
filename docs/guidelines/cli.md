@@ -84,19 +84,6 @@ match on it.
 
 **Retires when:** the script drops its `[nbkp]` prefix.
 
-#### Exception — `-n` in `disks`
-
-Overrides
-[general.md › Offer `--dry-run` on every command that changes data or runs long](https://github.com/iglootools/common/blob/main/guidelines/coding/general.md#offer---dry-run-on-every-command-that-changes-data-or-runs-long):
-in `disks mount|umount|status`, `-n` is `--name`, so their `--dry-run` is
-long-only.
-
-**Why:** `-n` meant `--name` there first; swapping it would turn existing
-`disks mount -n <volume>` invocations into silent dry runs.
-
-**Retires when:** nbkp's next major release moves `--name` to a long-only flag
-(or `-V`) and gives `-n` to `--dry-run` everywhere.
-
 ### Declare each shared option once
 
 An option several commands share is the `<NAME>_OPTION` constant

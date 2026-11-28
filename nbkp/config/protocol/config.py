@@ -152,7 +152,7 @@ def _resolve_endpoint(
 def _inject_slug(slug: str, data: object) -> object:
     match data:
         case {"slug": object() as declared} if declared != slug:
-            # Sync endpoints and ``--name`` look entries up by key, endpoint
+            # Sync endpoints and ``--volume`` look entries up by key, endpoint
             # resolution and mount results by ``slug``: if they differed,
             # commands for one volume could reach another volume's host.
             raise config_error(
