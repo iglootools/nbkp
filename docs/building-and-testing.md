@@ -10,6 +10,23 @@ testing/QA. The `seed --docker` command requires the `docker` extra:
 `uv tool install 'nbkp[docker]'`. In dev, run it from the project environment:
 `uv run --no-sync nbkp demo seed` (or `uv run --no-sync nbkp demo output`).
 
+<!-- toc -->
+**On this page**
+
+- [Tasks](#tasks)
+- [Python versions](#python-versions)
+- [Parallel test execution](#parallel-test-execution)
+- [Testing Strategy](#testing-strategy)
+  - [Manual Testing](#manual-testing)
+  - [Automated tests](#automated-tests)
+  - [Known Gaps in Test Coverage](#known-gaps-in-test-coverage)
+- [Release Process](#release-process)
+- [GitHub Config](#github-config)
+- [Renovate](#renovate)
+<!-- tocstop -->
+
+## Tasks
+
 Tasks come in families, as
 [mise.md › Name tasks by family](https://github.com/iglootools/common/blob/main/guidelines/project-setup/mise.md#name-tasks-by-family)
 describes: `fmt*`, `toc` and the reference generators rewrite files, `lint*`
@@ -84,20 +101,6 @@ is seldom needed explicitly, and `mise run reinstall` is for the case that
 automatic check cannot see — a `.venv` that is *dirty* rather than *stale*, e.g.
 after a manual `uv pip install`. Add or remove dependencies with `uv add` /
 `uv remove`.
-
-<!-- toc -->
-**On this page**
-
-- [Python versions](#python-versions)
-- [Parallel test execution](#parallel-test-execution)
-- [Testing Strategy](#testing-strategy)
-  - [Manual Testing](#manual-testing)
-  - [Automated tests](#automated-tests)
-  - [Known Gaps in Test Coverage](#known-gaps-in-test-coverage)
-- [Release Process](#release-process)
-- [GitHub Config](#github-config)
-- [Renovate](#renovate)
-<!-- tocstop -->
 
 ## Python versions
 
