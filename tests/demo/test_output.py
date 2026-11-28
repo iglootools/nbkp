@@ -26,6 +26,10 @@ def test_demo_output_renders_all_sections() -> None:
     # Sanity: the command renders panels named after the output functions.
     assert "format_human_config" in result.output
     assert "format_human_troubleshoot" in result.output
+    # run's own panel, as `nbkp run` prints it, real and dry.
+    assert "build_results_panel (run)" in result.output
+    assert "[dry-run] Sync Results" in result.output
+    assert "abort_message" in result.output
     # The config errors come from load_config itself, one per kind shown.
     for kind in ("file-not-found", "invalid-yaml", "validation"):
         assert f"Config error [{kind}]" in result.output

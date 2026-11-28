@@ -8,7 +8,7 @@ from pathlib import Path
 
 import typer
 import yaml
-from rich.console import Console, Group, RenderableType
+from rich.console import Console, RenderableType
 from rich.panel import Panel
 from rich.text import Text
 
@@ -21,6 +21,7 @@ from nbkp.ordering.output import (
     format_mermaid_ascii_graph,
     format_rich_tree_graph,
 )
+from nbkp.policy import Strictness
 from nbkp.preflight import collect_issues, gather_remediation_facts
 from nbkp.preflight.output import (
     TroubleshootContext,
@@ -28,8 +29,10 @@ from nbkp.preflight.output import (
     format_human_troubleshoot,
 )
 from nbkp.remote.resolution import resolve_all_endpoints
+from nbkp.run.output import abort_message, build_results_panel
+from nbkp.run.pipeline import PipelineResult
 from nbkp.snapshots.output import format_human_prune_results
-from nbkp.sync.output import build_human_results_sections, build_run_preview_sections
+from nbkp.sync import SyncOutcome
 lazy from nbkp.config.testkit import config_show_config
 lazy from nbkp.preflight.testkit import (
     check_config,
@@ -70,8 +73,7 @@ def output_cmd(ctx: typer.Context) -> None:
     _show_config_show()
     _show_config_graph()
     _show_check()
-    _show_run_preview()
-    _show_results()
+    _show_run()
     _show_prune()
     _show_troubleshoot(runtime_of(ctx))
     _show_config_errors()
@@ -114,44 +116,43 @@ def _show_check() -> None:
     )
 
 
-def _show_run_preview() -> None:
+def _show_run() -> None:
+    """Show ``nbkp run``'s output: its results panel, real and dry, and its abort."""
     config = check_config()
     preflight = check_data(config)
-    _show(
-        "build_run_preview_sections",
-        Group(
-            *build_run_preview_sections(
-                {slug: s for slug, s in preflight.sync_statuses.items() if s.active},
-                config,
-                resolve_all_endpoints(config),
-            ),
-        ),
-    )
-
-
-def _show_results() -> None:
-    config = config_show_config()
     resolved = resolve_all_endpoints(config)
-    _show(
-        "build_human_results_sections (run)",
-        Group(
-            *build_human_results_sections(
-                run_results(config),
-                dry_run=False,
-                config=config,
-                resolved_endpoints=resolved,
+    for results, dry_run in (
+        (run_results(config), False),
+        (dry_run_results(config), True),
+    ):
+        pipeline = PipelineResult(
+            preflight=preflight,
+            results=results,
+            has_preflight_errors=False,
+            has_sync_failures=any(r.outcome is SyncOutcome.FAILED for r in results),
+        )
+        _show(
+            f"build_results_panel ({'--dry-run' if dry_run else 'run'})",
+            build_results_panel(
+                pipeline,
+                config,
+                resolved,
+                Strictness.IGNORE_INACTIVE,
+                dry_run=dry_run,
             ),
-        ),
+        )
+    aborted = PipelineResult(
+        preflight=preflight,
+        results=[],
+        has_preflight_errors=True,
+        has_sync_failures=False,
     )
     _show(
-        "build_human_results_sections (--dry-run)",
-        Group(
-            *build_human_results_sections(
-                dry_run_results(config),
-                dry_run=True,
-                config=config,
-                resolved_endpoints=resolved,
-            ),
+        "abort_message",
+        abort_message(
+            aborted,
+            Strictness.IGNORE_NONE,
+            "nbkp preflight troubleshoot -S ignore-none",
         ),
     )
 

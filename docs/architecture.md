@@ -155,6 +155,7 @@ graph TD
     demo --> policy
     demo --> preflight
     demo --> remote
+    demo --> run
     demo --> snapshots
     demo --> sync
     demo --> theme
