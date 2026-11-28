@@ -92,6 +92,11 @@ class TestResolveHost:
         assert addrs is not None
         assert len(addrs) > 0
 
+    @pytest.mark.parametrize("hostname", ["nas..lan", f"{'a' * 64}.lan"])
+    def test_dns_lookup_malformed_name_is_unresolvable(self, hostname: str) -> None:
+        """Regression: the IDNA UnicodeError escaped as a traceback."""
+        assert dns_lookup(hostname) is None
+
 
 class TestIsPrivateHost:
     """Tests for is_private_host (SSH config + DNS + IP)."""

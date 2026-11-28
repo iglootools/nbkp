@@ -59,10 +59,16 @@ def load_ssh_config(path: Path | None = None) -> paramiko.SSHConfig:
 
 
 def dns_lookup(hostname: str) -> set[str] | None:
-    """Return the IP addresses *hostname* resolves to, or ``None`` if it does not."""
+    """
+    Return the IP addresses *hostname* resolves to, or ``None`` if it does not.
+
+    A malformed name (``nas..lan``, a label over 63 characters) fails IDNA
+    encoding with a ``UnicodeError`` before any lookup: it resolves no more than
+    an unknown name does, so it is ``None`` too, not a traceback.
+    """
     try:
         return {str(r[4][0]) for r in socket.getaddrinfo(hostname, None)}
-    except socket.gaierror:
+    except socket.gaierror, UnicodeError:
         return None
 
 
