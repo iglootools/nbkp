@@ -323,8 +323,9 @@ Domain cores:
   (`orchestration.py`, `results.py`), and one module per snapshot mode in
   `modes/` (`plain`, `btrfs`, `hardlink`).
 - **`ordering/`** — the backup graph and its topological order (`graph.py`).
-- **`run/`** — the `nbkp run` pipeline (`pipeline.py`): prefetch, mount,
-  preflight, sync, unmount.
+- **`run/`** — the `nbkp run` pipeline (`pipeline.py`): preflight, then the
+  syncs. Credential prefetch, mount and unmount wrap it from
+  `cliwiring/mount.py` (`managed_mount`).
 - **`sh/`** — standalone script generation: per-sync facts (`spec.py`),
   preflight and sync steps (`preflight.py`, `steps.py`), shell quoting
   (`quoting.py`), and the `backup.sh.j2` template.
