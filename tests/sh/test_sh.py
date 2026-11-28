@@ -1208,7 +1208,7 @@ class TestHardLink:
                         if [ "$NBKP_LATEST_LINK" = "/dev/null" ] \\
                             || nbkp_snapshot_after "$snap" "$NBKP_LATEST_NAME"; then
                             nbkp_log "Removing orphaned snapshot: $snap"
-                            rm -rf "/mnt/dst/snapshots/${snap}" || nbkp_log "WARN: failed to remove orphaned snapshot: $snap"
+                            { rm -rf "/mnt/dst/snapshots/${snap}" || { find "/mnt/dst/snapshots/${snap}" -type d '!' -perm -0700 -exec chmod u+rwx '{}' ';' && rm -rf "/mnt/dst/snapshots/${snap}"; }; } || nbkp_log "WARN: failed to remove orphaned snapshot: $snap"
                         fi
                     done
                 fi
@@ -1838,7 +1838,11 @@ class TestSyncSteps:
 
     def test_hard_link_failure_removes_new_snapshot(self) -> None:
         script = _remote_script("hard-link")
-        assert "\"rm -rf '/srv/back ups/hl/snapshots/${NBKP_TS}'\" || true" in script
+        removal = next(
+            line for line in script.splitlines() if "snapshots/${NBKP_TS}'\" ||" in line
+        )
+        assert "\"rm -rf '/srv/back ups/hl/snapshots/${NBKP_TS}'\"" in removal
+        assert removal.endswith("|| true")
 
     def test_sync_runs_in_errexit_subshell(self) -> None:
         script = generate_script(_local_to_local_config(), _OPTIONS, now=_NOW)

@@ -1,3 +1,5 @@
+import os
+import stat
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -203,6 +205,68 @@ class TestDeleteSnapshot:
         delete_snapshot("/backup/snapshots/T1", vol, {}, run=runner)
 
         assert runner.commands == [["rm", "-rf", "/backup/snapshots/T1"]]
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+    def test_read_only_directories_removed_when_local(self, tmp_path: Path) -> None:
+        snap = tmp_path / "snap1"
+        (snap / "ro" / "unlistable").mkdir(parents=True)
+        (snap / "ro" / "f").write_text("x")
+        (snap / "ro" / "unlistable").chmod(0o000)
+        (snap / "ro").chmod(0o555)
+        vol = LocalVolume(slug="dst", path=str(tmp_path))
+
+        delete_snapshot(str(snap), vol, {})
+
+        assert not snap.exists()
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+    def test_files_modes_left_alone_when_local(self, tmp_path: Path) -> None:
+        """Files are hard-linked to other snapshots: their modes must not change."""
+        shared = tmp_path / "shared.txt"
+        shared.write_text("x")
+        shared.chmod(0o444)
+        snap = tmp_path / "snap1"
+        (snap / "ro").mkdir(parents=True)
+        (snap / "ro" / "f").hardlink_to(shared)
+        (snap / "ro").chmod(0o555)
+        vol = LocalVolume(slug="dst", path=str(tmp_path))
+
+        delete_snapshot(str(snap), vol, {})
+
+        assert not snap.exists()
+        assert stat.S_IMODE(shared.stat().st_mode) == 0o444
+
+    def test_directories_opened_and_retried_when_remote_rm_fails(self) -> None:
+        vol = RemoteVolume(slug="dst", ssh_endpoint="nas", path="/backup")
+        path = "/backup/snapshots/T1"
+        runner = FakeCommandRunner().on(
+            "rm",
+            returns=[completed(returncode=1, stderr="Permission denied"), completed()],
+        )
+
+        delete_snapshot(path, vol, {}, run=runner)
+
+        assert runner.commands == [
+            ["rm", "-rf", path],
+            [
+                *("find", path, "-type", "d", "!", "-perm", "-0700"),
+                *("-exec", "chmod", "u+rwx", "{}", ";"),
+            ],
+            ["rm", "-rf", path],
+        ]
+
+    def test_error_raised_when_remote_retry_fails(self) -> None:
+        vol = RemoteVolume(slug="dst", ssh_endpoint="nas", path="/backup")
+        runner = FakeCommandRunner().on(
+            "rm",
+            returns=completed(returncode=1, stderr="Operation not permitted"),
+        )
+
+        with pytest.raises(SnapshotOperationError) as excinfo:
+            delete_snapshot("/backup/snapshots/T1", vol, {}, run=runner)
+
+        assert excinfo.value.op == SnapshotOp.DELETE
+        assert "Operation not permitted" in excinfo.value.stderr
 
 
 _S1 = "2024-01-01T00:00:00.000Z"

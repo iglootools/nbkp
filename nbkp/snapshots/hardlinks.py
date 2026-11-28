@@ -1,7 +1,9 @@
 """Hard-link snapshots: plain directories that rsync fills using ``--link-dest``."""
 
 import shutil
+import stat
 from datetime import datetime
+from pathlib import Path
 
 from nbkp.config import Config, LocalVolume, RemoteVolume, SyncConfig, Volume
 from nbkp.fsprotocol import LATEST_LINK, Snapshot
@@ -22,6 +24,7 @@ from nbkp.snapshots.errors import (
     SnapshotOperationError,
     local_fs_op,
     run_checked,
+    run_snapshot_command,
 )
 
 
@@ -156,20 +159,95 @@ def delete_snapshot(
     """
     Delete the hard-link snapshot directory at *path* with its contents.
 
+    ``rsync -a`` preserves directory modes, so a snapshot of a read-only tree (a Go
+    module cache, a Nix store) holds directories its owner cannot delete from. When
+    the plain deletion fails, the snapshot's directories are given their owner's
+    read, write and search bits and the deletion is retried. Only directories are
+    changed: files are hard-linked to other snapshots, and a mode change on one would
+    show in every snapshot sharing it.
+
     Raises :class:`SnapshotOperationError` when the deletion fails.
     """
     match volume:
         case RemoteVolume():
-            run_checked(
+            first = run_snapshot_command(
                 SnapshotOp.DELETE,
                 path,
-                ["rm", "-rf", path],
+                build_rm_tree_args(path),
                 volume,
                 resolved_endpoints,
                 run=run,
             )
+            if first.returncode != 0:
+                for args in (build_owner_rwx_dirs_args(path), build_rm_tree_args(path)):
+                    run_checked(
+                        SnapshotOp.DELETE,
+                        path,
+                        args,
+                        volume,
+                        resolved_endpoints,
+                        run=run,
+                    )
         case LocalVolume():
-            local_fs_op(SnapshotOp.DELETE, path, lambda: shutil.rmtree(path))
+            local_fs_op(SnapshotOp.DELETE, path, lambda: _rmtree_local(path))
+
+
+def build_rm_tree_args(path: str) -> list[str]:
+    """Return the command deleting the directory tree at *path*."""
+    return ["rm", "-rf", path]
+
+
+def build_owner_rwx_dirs_args(path: str) -> list[str]:
+    """
+    Return the command giving the owner ``rwx`` on every directory of *path*.
+
+    ``-exec ... ;`` runs ``chmod`` on each directory as ``find`` reaches it, before
+    ``find`` lists it, so a directory nobody could list is opened before it is
+    walked. ``find`` does not follow symlinks, and ``-type d`` leaves files, which
+    other snapshots share through hard links, untouched.
+    """
+    return [
+        "find",
+        path,
+        "-type",
+        "d",
+        "!",
+        "-perm",
+        "-0700",
+        "-exec",
+        "chmod",
+        "u+rwx",
+        "{}",
+        ";",
+    ]
+
+
+def _rmtree_local(path: str) -> None:
+    try:
+        shutil.rmtree(path)
+    except PermissionError:
+        _give_owner_rwx_to_dirs(path)
+        shutil.rmtree(path)
+
+
+def _give_owner_rwx_to_dirs(top: str) -> None:
+    """
+    Add the owner's ``rwx`` bits to *top* and every directory below it.
+
+    Top-down, each directory before its children are listed, so that a directory
+    its owner could not even list is opened up before it is walked. Symlinks are
+    left alone: ``chmod`` would follow them out of the snapshot.
+    """
+    _add_owner_rwx(Path(top))
+    for dirpath, dirnames, _ in Path(top).walk():
+        for name in dirnames:
+            _add_owner_rwx(dirpath / name)
+
+
+def _add_owner_rwx(path: Path) -> None:
+    mode = path.lstat().st_mode
+    if stat.S_ISDIR(mode) and mode & stat.S_IRWXU != stat.S_IRWXU:
+        path.chmod(stat.S_IMODE(mode) | stat.S_IRWXU)
 
 
 def prune_snapshots(

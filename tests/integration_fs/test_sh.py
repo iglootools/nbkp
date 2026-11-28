@@ -604,24 +604,43 @@ class TestGeneratedScriptExecution:
         assert "preflight errors ignored (ignore-all), attempting" in result.stderr
         assert len(_snapshot_names(tmp_path)) == 1
 
-    @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
     def test_prune_failure_is_a_warning(self, tmp_path: Path) -> None:
         """As in `nbkp run`: the new snapshot stands when pruning fails."""
         config = _seeded_chain(tmp_path, max_snapshots=1)
-        old = _stage(tmp_path) / SNAPSHOTS_DIR / "2020-01-01T00-00-00.000Z"
-        (old / "sub").mkdir(parents=True)
-        (old / "sub" / "f").write_text("x")
-        (old / "sub").chmod(0o555)
-        try:
-            result = _run_script(config, tmp_path)
-        finally:
-            (old / "sub").chmod(0o755)
+        name = "2020-01-01T00-00-00.000Z"
+        old = _stage(tmp_path) / SNAPSHOTS_DIR / name
+        old.mkdir(parents=True)
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        _write_rm_refusing(bin_dir, name)
+        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+
+        result = _run_script(config, tmp_path, env=env)
 
         assert result.returncode == 0, result.stderr
         assert "WARN: pruning failed" in result.stderr
         assert "Completed sync: step-1" in result.stderr
         assert old.exists()
         assert (tmp_path / _DST_DIR / "sample.txt").exists()
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+    def test_prune_deletes_snapshot_with_read_only_directories(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """As in `nbkp run`: `rsync -a` keeps read-only modes, which prune overrides."""
+        config = _seeded_chain(tmp_path, max_snapshots=1)
+        old = _stage(tmp_path) / SNAPSHOTS_DIR / "2020-01-01T00-00-00.000Z"
+        (old / "ro" / "unlistable").mkdir(parents=True)
+        (old / "ro" / "f").write_text("x")
+        (old / "ro" / "unlistable").chmod(0o000)
+        (old / "ro").chmod(0o555)
+
+        result = _run_script(config, tmp_path)
+
+        assert result.returncode == 0, result.stderr
+        assert "pruning failed" not in result.stderr
+        assert not old.exists()
 
     def test_prune_keeps_snapshots_when_latest_cannot_be_read(
         self,

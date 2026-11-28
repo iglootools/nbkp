@@ -192,6 +192,7 @@ graph TD
     sh --> ordering
     sh --> remote
     sh --> runlock
+    sh --> snapshots
     sh --> sync
     snapshots --> cliwiring
     snapshots --> config

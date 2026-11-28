@@ -18,6 +18,7 @@ from nbkp.fsprotocol import SNAPSHOTS_DIR, STAGING_DIR
 from nbkp.sh.commands import snapshot_date_format, vol_cmd
 from nbkp.sh.quoting import INDENT, SNAP, SNAPSHOT_TS, format_command, quote
 from nbkp.sh.spec import SyncSpec
+from nbkp.snapshots.hardlinks import build_owner_rwx_dirs_args, build_rm_tree_args
 from nbkp.sync.rsync import (
     RSYNC_VANISHED_FILES_EXIT,
     build_rsync_command,
@@ -93,7 +94,17 @@ def _list_snapshots(spec: SyncSpec, *, quiet: bool = False) -> str:
 
 
 def _rm_snapshot(spec: SyncSpec, name: str) -> str:
-    return _on_dst(spec, ["rm", "-rf", f"{spec.snapshots_dir}/{name}"])
+    """
+    Delete a hard-link snapshot, as ``delete_snapshot`` does.
+
+    When the plain deletion fails (read-only directories that ``rsync -a``
+    preserved), its directories get their owner's ``rwx`` and the deletion is
+    retried.
+    """
+    path = f"{spec.snapshots_dir}/{name}"
+    rm = _on_dst(spec, build_rm_tree_args(path))
+    open_dirs = _on_dst(spec, build_owner_rwx_dirs_args(path))
+    return f"{{ {rm} || {{ {open_dirs} && {rm}; }}; }}"
 
 
 def _indent(text: str, levels: int) -> str:
@@ -343,7 +354,7 @@ def _delete_snapshot_cmds(spec: SyncSpec) -> list[str]:
                 f"{delete} || {{ {restore} || {left_writable}; false; }}",
             ]
         case _:
-            return [_on_dst(spec, ["rm", "-rf", path])]
+            return [_rm_snapshot(spec, SNAP)]
 
 
 # Whether $snap is newer than the snapshot `latest` designates (never while
