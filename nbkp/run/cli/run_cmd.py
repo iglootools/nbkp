@@ -18,7 +18,7 @@ from nbkp.cliwiring.config import (
     resolve_endpoints,
 )
 from nbkp.cliwiring.invocation import Invocation
-from nbkp.cliwiring.mount import format_umount_failures, managed_mount
+from nbkp.cliwiring.mount import format_umount_failures, managed_mount_or_exit
 from nbkp.cliwiring.mount_progress import mount_display_names
 from nbkp.cliwiring.options import (
     CONFIG_OPTION,
@@ -121,7 +121,7 @@ def run_cmd(
     # the block: a drive left mounted or unlocked is part of the outcome.
     umount_results: list[UmountResult] = []
     with (
-        managed_mount(
+        managed_mount_or_exit(
             cfg,
             resolved,
             runtime=runtime,

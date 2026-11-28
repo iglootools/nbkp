@@ -20,7 +20,7 @@ from nbkp.cliwiring.config import (
     resolve_endpoints,
 )
 from nbkp.cliwiring.invocation import Invocation, format_troubleshoot_hint
-from nbkp.cliwiring.mount import managed_mount
+from nbkp.cliwiring.mount import managed_mount_or_exit
 from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.cliwiring.preflight import check_all_with_progress
 from nbkp.cliwiring.runtime import runtime_of
@@ -79,7 +79,7 @@ def run_snapshot_operation_or_exit[R: ShowResult | PruneResult](
         options.network,
         output,
     )
-    with managed_mount(
+    with managed_mount_or_exit(
         cfg,
         resolved,
         runtime=runtime,

@@ -5,7 +5,7 @@ from rich.console import Console
 
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
 from nbkp.cliwiring.invocation import Invocation
-from nbkp.cliwiring.mount import managed_mount
+from nbkp.cliwiring.mount import managed_mount_or_exit
 from nbkp.cliwiring.options import (
     CONFIG_OPTION,
     EXCLUDE_LOCATION_OPTION,
@@ -55,7 +55,7 @@ def troubleshoot_cmd(
     resolved = resolve_endpoints(cfg, location, exclude_location, network, output)
     invocation = Invocation.of(config, location, exclude_location, network)
 
-    with managed_mount(
+    with managed_mount_or_exit(
         cfg,
         resolved,
         runtime=runtime,

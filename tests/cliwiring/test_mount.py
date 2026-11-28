@@ -1,5 +1,5 @@
 """
-Tests for nbkp.cliwiring.mount (managed_mount with CLI reporting).
+Tests for nbkp.cliwiring.mount (managed_mount_or_exit with CLI reporting).
 
 The volume ``enc`` is a LUKS drive found unlocked and mounted; on exit the
 umount succeeds and the lock answers what each test scripts.
@@ -8,7 +8,7 @@ umount succeeds and the lock answers what each test scripts.
 import pytest
 import typer
 
-from nbkp.cliwiring.mount import lifecycle_session, managed_mount
+from nbkp.cliwiring.mount import lifecycle_session, managed_mount_or_exit
 from nbkp.cliwiring.mount_progress import LifecycleProgress
 from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.config import Config, CredentialProvider
@@ -27,7 +27,7 @@ class TestUmountFailure:
         runtime = fake_runtime(run=mounted_drive_host(BUSY))
         with (
             pytest.raises(typer.Exit) as excinfo,
-            managed_mount(
+            managed_mount_or_exit(
                 _CONFIG,
                 {},
                 runtime=runtime,
@@ -49,7 +49,7 @@ class TestUmountFailure:
         runtime = fake_runtime(run=mounted_drive_host(BUSY))
         with (
             pytest.raises(BodyError),
-            managed_mount(
+            managed_mount_or_exit(
                 _CONFIG,
                 {},
                 runtime=runtime,
@@ -66,7 +66,7 @@ class TestUmountFailure:
     def test_handed_to_a_caller_that_reports_it(self) -> None:
         results: list[UmountResult] = []
         runtime = fake_runtime(run=mounted_drive_host(BUSY))
-        with managed_mount(
+        with managed_mount_or_exit(
             _CONFIG,
             {},
             runtime=runtime,
@@ -86,7 +86,7 @@ class TestUmountFailure:
         runtime = fake_runtime(run=mounted_drive_host(BUSY))
         with (
             pytest.raises(BodyError),
-            managed_mount(
+            managed_mount_or_exit(
                 _CONFIG,
                 {},
                 runtime=runtime,
@@ -104,7 +104,7 @@ class TestUmountFailure:
 
     def test_successful_umount_passes(self) -> None:
         run = mounted_drive_host(completed())
-        with managed_mount(
+        with managed_mount_or_exit(
             _CONFIG,
             {},
             runtime=fake_runtime(run=run),

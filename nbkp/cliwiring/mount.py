@@ -17,7 +17,7 @@ from nbkp.disks import (
     MountObservation,
     UmountResult,
     any_failed,
-    managed_mount as _disks_managed_mount,
+    managed_mount,
 )
 from nbkp.disks.output import (
     build_mount_status_table,
@@ -89,7 +89,7 @@ def lifecycle_session(
 
 
 @contextmanager
-def managed_mount(
+def managed_mount_or_exit(
     cfg: Config,
     resolved: ResolvedEndpoints,
     *,
@@ -224,7 +224,7 @@ def _managed_mount_with_progress(
             collected.append(result)
             progress.on_umount_end(slug, result)
 
-        with _disks_managed_mount(
+        with managed_mount(
             cfg,
             resolved,
             passphrase_fn,
