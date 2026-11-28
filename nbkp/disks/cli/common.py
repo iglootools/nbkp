@@ -1,5 +1,5 @@
 """
-Wire the ``disks`` commands ``mount``, ``umount`` and ``status`` share.
+Wiring the ``disks`` commands ``mount``, ``umount`` and ``status`` share.
 
 Shared: the status table, the dry-run plan and the ``--name`` check.
 """

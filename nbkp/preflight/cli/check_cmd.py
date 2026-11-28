@@ -1,6 +1,9 @@
 """The ``nbkp preflight check`` command and its JSON output."""
 
+from collections.abc import Collection
+
 import typer
+from rich.console import Console
 
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
 from nbkp.cliwiring.invocation import Invocation
@@ -15,11 +18,16 @@ from nbkp.cliwiring.options import (
     UMOUNT_OPTION,
 )
 from nbkp.cliwiring.output_format import OutputFormat, echo_json
-from nbkp.cliwiring.preflight import check_and_display
-from nbkp.cliwiring.runtime import runtime_of
+from nbkp.cliwiring.preflight import check_all_with_progress
+from nbkp.cliwiring.runtime import Runtime, runtime_of
+from nbkp.config import Config
+from nbkp.disks import MountObservation
 from nbkp.policy import Strictness
+from nbkp.preflight import has_fatal_errors
 from nbkp.preflight.cli.options import STRICTNESS_OPTION
+from nbkp.preflight.output import format_human_check
 from nbkp.preflight.status.result import PreflightResult
+from nbkp.remote.endpoints import ResolvedEndpoints
 
 
 def check_cmd(
@@ -55,7 +63,7 @@ def check_cmd(
         output_format=output,
         strictness=strictness,
     ) as (cfg, mount_observations):
-        preflight, has_errors = check_and_display(
+        preflight, has_errors = _check_and_display(
             cfg,
             output,
             strictness,
@@ -83,3 +91,51 @@ def check_json(preflight: PreflightResult) -> dict[str, object]:
         "volumes": list(preflight.volume_statuses.values()),
         "syncs": list(preflight.sync_statuses.values()),
     }
+
+
+def _check_and_display(
+    cfg: Config,
+    output_format: OutputFormat,
+    strictness: Strictness,
+    only_syncs: list[str] | None = None,
+    *,
+    resolved_endpoints: ResolvedEndpoints,
+    dry_run: bool = False,
+    mount_observations: dict[str, MountObservation] | None = None,
+    invocation: Invocation,
+    exclude_locations: Collection[str] = (),
+    runtime: Runtime,
+) -> tuple[PreflightResult, bool]:
+    """
+    Compute statuses, display human output, and check for errors.
+
+    Returns the preflight result and whether there are fatal errors.
+    When *only_syncs* is given, only those syncs (and the volumes
+    they reference) are checked.
+    """
+    preflight = check_all_with_progress(
+        cfg,
+        use_progress=output_format is OutputFormat.HUMAN,
+        only_syncs=only_syncs,
+        resolved_endpoints=resolved_endpoints,
+        dry_run=dry_run,
+        mount_observations=mount_observations,
+        strictness=strictness,
+        exclude_locations=exclude_locations,
+        runtime=runtime,
+    )
+
+    if output_format is OutputFormat.HUMAN:
+        Console().print(
+            format_human_check(
+                preflight.ssh_endpoint_statuses,
+                preflight.volume_statuses,
+                preflight.sync_statuses,
+                cfg,
+                resolved_endpoints=resolved_endpoints,
+                strictness=strictness,
+                invocation=invocation,
+            ),
+        )
+
+    return preflight, has_fatal_errors(preflight.sync_statuses, strictness=strictness)

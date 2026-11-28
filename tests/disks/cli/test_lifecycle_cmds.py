@@ -18,7 +18,6 @@ from rich.console import Console
 
 from nbkp.cli import app
 from nbkp.cliwiring.credentials import prompt_passphrase
-from nbkp.cliwiring.disks import show_plan
 from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.config import (
     Config,
@@ -32,6 +31,7 @@ from nbkp.config.testkit import write_config
 from nbkp.credentials import PromptFn
 from nbkp.disks import MountResult, UmountResult, any_failed, refused_by_polkit
 from nbkp.disks.auth import generate_polkit_rules
+from nbkp.disks.cli.common import show_plan
 from nbkp.disks.models import (
     LifecycleFailure,
     LifecycleStep,

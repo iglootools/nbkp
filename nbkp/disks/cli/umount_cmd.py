@@ -7,7 +7,6 @@ import typer
 from rich.console import Console
 
 from nbkp.cliwiring.config import load_config_or_exit, resolve_endpoints
-from nbkp.cliwiring.disks import probe_and_show_status, require_known_names, show_plan
 from nbkp.cliwiring.invocation import Invocation, format_troubleshoot_hint
 from nbkp.cliwiring.lock import run_lock_or_exit
 from nbkp.cliwiring.mount_progress import LifecycleProgress, mount_display_names
@@ -21,6 +20,7 @@ from nbkp.cliwiring.options import (
 from nbkp.cliwiring.output_format import OutputFormat
 from nbkp.cliwiring.runtime import Runtime, runtime_of
 from nbkp.config import Config
+from nbkp.disks.cli.common import probe_and_show_status, require_known_names, show_plan
 from nbkp.disks.cli.hints import print_auth_hint
 from nbkp.disks.cli.options import NAME_OPTION
 from nbkp.disks.lifecycle import UmountResult, any_failed, umount_volumes
