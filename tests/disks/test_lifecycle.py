@@ -476,6 +476,26 @@ class TestMountVolume:
         assert result.failure_reason == MountFailureKind.UDISKS_NOT_AVAILABLE
         assert result.failure == LifecycleFailure(command="lsblk")
 
+    def test_missing_local_udevadm_fails_the_mount(self) -> None:
+        """Settling is not skipped silently: without udevadm the race stays open."""
+        run = FakeCommandRunner().on(
+            "udevadm",
+            returns=FileNotFoundError(2, "No such file", "udevadm"),
+        )
+        result = _mount(_encrypted_vol(), run)
+        assert result.failure_reason == MountFailureKind.UDISKS_NOT_AVAILABLE
+        assert result.failure == LifecycleFailure(command="udevadm")
+        assert _udisks_steps(run) == []
+
+    def test_remote_udevadm_not_found_is_a_probe_failure(self) -> None:
+        run = FakeCommandRunner().on(
+            "udevadm",
+            returns=completed(127, stderr="udevadm: command not found"),
+        )
+        result = _mount(_encrypted_vol(), run)
+        assert result.failure_reason == MountFailureKind.PROBE_FAILED
+        assert _udisks_steps(run) == []
+
 
 def _umount(
     vol: LocalVolume,

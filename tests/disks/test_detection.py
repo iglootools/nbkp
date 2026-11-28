@@ -50,13 +50,27 @@ class TestSettleUdev:
         assert cmd[:2] == ["udevadm", "settle"]
         assert any(arg.startswith("--timeout=") for arg in cmd)
 
-    def test_timeout_or_refusal_is_ignored(self) -> None:
+    def test_a_timeout_is_ignored(self) -> None:
+        """The probe after it decides: a busy udev queue must not fail the mount."""
         run = FakeCommandRunner().on("udevadm", returns=completed(1))
         settle_udev(_local_vol(), {}, run=run)
 
-    def test_missing_udevadm_is_ignored(self) -> None:
+    @pytest.mark.parametrize("returncode", [126, 127])
+    def test_a_udevadm_the_shell_cannot_run_is_a_probe_failure(
+        self,
+        returncode: int,
+    ) -> None:
+        run = FakeCommandRunner().on(
+            "udevadm",
+            returns=completed(returncode, stderr="udevadm: command not found"),
+        )
+        with pytest.raises(DeviceProbeError, match="udevadm settle"):
+            settle_udev(_local_vol(), {}, run=run)
+
+    def test_a_missing_local_udevadm_propagates(self) -> None:
         run = FakeCommandRunner().on("udevadm", returns=FileNotFoundError("udevadm"))
-        settle_udev(_local_vol(), {}, run=run)
+        with pytest.raises(FileNotFoundError):
+            settle_udev(_local_vol(), {}, run=run)
 
 
 class TestDetectDevicePresent:

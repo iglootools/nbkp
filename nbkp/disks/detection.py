@@ -6,8 +6,6 @@ runs before any preflight checks in the lifecycle, so these functions are separa
 and have no dependencies on preflight code.
 """
 
-import contextlib
-
 from nbkp.config import MountConfig, Volume
 from nbkp.remote.dispatch import VolumeCommandRunner, run_on_volume
 from nbkp.remote.endpoints import ResolvedEndpoints
@@ -35,6 +33,11 @@ class DeviceProbeError(Exception):
 _UDEV_SETTLE_TIMEOUT_S = 10
 
 
+# The shell's exit statuses for a command it could not run: not executable (126)
+# or not found (127).
+_COMMAND_NOT_RUN = frozenset({126, 127})
+
+
 def settle_udev(
     volume: Volume,
     resolved_endpoints: ResolvedEndpoints,
@@ -42,23 +45,35 @@ def settle_udev(
     run: VolumeCommandRunner = run_on_volume,
 ) -> None:
     """
-    Wait until udev has processed the pending device events, best effort.
+    Wait until udev has processed the pending device events.
 
     A lock, an unlock or a newly plugged drive makes udev remove and re-create the
     ``/dev/disk/by-uuid`` links, so a check right after one can miss a device that
     is there. Settling first closes that window, and costs nothing when the queue
     is already empty, as it is for a drive that is genuinely absent.
 
-    A missing ``udevadm``, a timeout or a refusal is ignored: the caller's own
-    checks still run and report what they find. An SSH failure that is not an
-    ``OSError`` (a protocol error, a connection lost mid-command) propagates, for
-    the caller to report the host as unreachable.
+    A non-zero exit from ``udevadm settle`` is not an error here. It exits non-zero
+    when its timeout expires with events still queued, which a burst of events for
+    other devices causes. Settling only narrows a race: the probe that follows reads
+    the device state itself and reports what it finds, so a busy queue must not fail
+    the mount or the umount.
+
+    A ``udevadm`` that cannot be run is an error, though: settling would be skipped
+    every time and the race left open. Raises :class:`DeviceProbeError` when the
+    host's shell cannot run it (exit 126 or 127). A local ``FileNotFoundError``
+    propagates, as an SSH failure does, for the caller to report the missing tool
+    or the unreachable host.
     """
-    with contextlib.suppress(OSError):
-        run(
-            ["udevadm", "settle", f"--timeout={_UDEV_SETTLE_TIMEOUT_S}"],
-            volume,
-            resolved_endpoints,
+    result = run(
+        ["udevadm", "settle", f"--timeout={_UDEV_SETTLE_TIMEOUT_S}"],
+        volume,
+        resolved_endpoints,
+    )
+    if result.returncode in _COMMAND_NOT_RUN:
+        raise DeviceProbeError(
+            command="udevadm settle",
+            returncode=result.returncode,
+            stderr=result.stderr.strip(),
         )
 
 
