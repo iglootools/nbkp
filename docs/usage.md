@@ -265,9 +265,9 @@ keyring set nbkp backup-drives
 # at /run/media/<user>/<label> and nbkp discovers the path at runtime.
 
 # 4. Generate and install the polkit authorization rule
-nbkp disks setup-auth -c config.yaml
-# Review output, then install the single block to:
-#   /etc/polkit-1/rules.d/50-nbkp.rules
+nbkp disks setup-auth -c config.yaml > 50-nbkp.rules
+# Review the file, then install it:
+sudo install -m 0644 50-nbkp.rules /etc/polkit-1/rules.d/50-nbkp.rules
 
 # 5. Create sentinel files
 touch /mnt/seagate8tb/.nbkp-vol /mnt/iomega1tb/.nbkp-vol /mnt/usb-plain/.nbkp-vol
@@ -345,9 +345,9 @@ udisks2 installed and running.
    unconditionally so the unattended path works. Generate and install it with:
 
    ```bash
-   nbkp disks setup-auth -c config.yaml
-   # Review the output, then install the single block to:
-   #   /etc/polkit-1/rules.d/50-nbkp.rules
+   nbkp disks setup-auth -c config.yaml > 50-nbkp.rules
+   # Review the file, then install it:
+   sudo install -m 0644 50-nbkp.rules /etc/polkit-1/rules.d/50-nbkp.rules
    ```
 
    `--user` is the user nbkp runs as on the host (the SSH user for remote

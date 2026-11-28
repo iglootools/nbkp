@@ -45,10 +45,11 @@ def _block_json(block: AuthRuleBlock) -> dict[str, str]:
 
 
 def _print_blocks(blocks: list[AuthRuleBlock]) -> None:
+    # Only the rule goes to stdout, so `setup-auth > 50-nbkp.rules` saves a file
+    # polkit can parse: a `#` header line is not valid JavaScript.
     if not blocks:
         typer.echo("No volumes with mount config found.", err=True)
     for block in blocks:
-        typer.echo(f"# {block.name}")
-        typer.echo(f"# {block.install_hint}")
-        typer.echo()
+        typer.echo(f"# {block.name}", err=True)
+        typer.echo(f"# {block.install_hint}", err=True)
         typer.echo(block.content)

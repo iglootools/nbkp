@@ -32,6 +32,7 @@ from nbkp.config import (
 from nbkp.config.testkit import write_config
 from nbkp.credentials import PromptFn
 from nbkp.disks import MountResult, UmountResult, any_failed, refused_by_polkit
+from nbkp.disks.auth import generate_polkit_rules
 from nbkp.disks.models import (
     LifecycleFailure,
     LifecycleStep,
@@ -553,3 +554,15 @@ class TestSetupAuth:
             obj=fake_runtime(local_user="alice"),
         )
         assert 'subject.user == "alice"' in result.output
+
+    def test_stdout_holds_only_the_rule_file(self) -> None:
+        """Regression: `#` header lines on stdout made a redirected file invalid."""
+        result = runner.invoke(
+            app,
+            ["disks", "setup-auth", "-c", "config.yaml", "-u", "backup"],
+        )
+        assert result.exit_code == 0, result.output
+        assert result.stdout.rstrip("\n") == generate_polkit_rules("backup").rstrip(
+            "\n",
+        )
+        assert "Install to: /etc/polkit-1/rules.d/50-nbkp.rules" in result.stderr
