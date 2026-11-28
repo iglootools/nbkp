@@ -840,6 +840,36 @@ class TestLoadConfig:
         assert chain[0].host == "bastion2.example.com"
         assert chain[1].host == "bastion3.example.com"
 
+    def test_extends_child_python_field_name_overrides_parent(self) -> None:
+        """The Python field name and the kebab key are one key when merging."""
+        cfg = Config.model_validate(
+            {
+                "ssh-endpoints": {
+                    "jump1": {"host": "jump1.example.com"},
+                    "jump2": {"host": "jump2.example.com"},
+                    "parent": {
+                        "host": "parent.internal",
+                        "proxy-jump": "jump1",
+                        "location": "home",
+                        "connection-options": {"connect-timeout": 30},
+                    },
+                    "child": {
+                        "extends": "parent",
+                        "proxy_jumps": ["jump2"],
+                        "locations": ["away"],
+                        "connection_options": {"compress": True},
+                    },
+                },
+            },
+        )
+        child = cfg.ssh_endpoints["child"]
+        assert [ep.host for ep in resolve_proxy_chain(cfg, child)] == [
+            "jump2.example.com",
+        ]
+        assert child.location_list == ["away"]
+        assert child.connection_options.connect_timeout == 30
+        assert child.connection_options.compress is True
+
     def test_extends_merges_connection_options(self, tmp_path: Path) -> None:
         p = tmp_path / "extends_options.yaml"
         p.write_text(
