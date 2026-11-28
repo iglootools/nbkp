@@ -185,6 +185,7 @@ graph TD
     run --> remote
     run --> sync
     run --> theme
+    runlock --> config
     sh --> cliwiring
     sh --> config
     sh --> fsprotocol

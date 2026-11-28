@@ -12,6 +12,7 @@ from platformdirs import site_config_dir, user_config_dir
 from pydantic import ValidationError
 
 from nbkp.config.protocol import Config
+from nbkp.config.xdg import resolve_xdg_dir
 
 _APP = "nbkp"
 _FILENAME = "config.yaml"
@@ -114,17 +115,6 @@ class _UniqueKeyLoader(yaml.SafeLoader):
                 return super().construct_mapping(node, deep=deep)
 
 
-def _xdg_config_home(environ: Mapping[str, str], home: Path) -> Path:
-    """
-    Return ``$XDG_CONFIG_HOME`` when valid, else the default under *home*.
-
-    The XDG spec says an empty or relative ``$XDG_CONFIG_HOME`` is invalid and must be
-    ignored: honouring it would search the working directory.
-    """
-    xdg = Path(environ.get("XDG_CONFIG_HOME", ""))
-    return xdg if xdg.is_absolute() else home / ".config"
-
-
 def _config_search_paths(
     environ: Mapping[str, str],
     home: Path,
@@ -141,7 +131,9 @@ def _config_search_paths(
     (for which user_config_dir(_APP) defaults to ~/Library/Application Support/nbkp).
     """
     candidates = [
-        _xdg_config_home(environ, home) / _APP / _FILENAME,
+        resolve_xdg_dir(environ, "XDG_CONFIG_HOME", home / ".config")
+        / _APP
+        / _FILENAME,
         Path(user_dir(_APP)) / _FILENAME,
         Path(site_dir(_APP)) / _FILENAME,
     ]

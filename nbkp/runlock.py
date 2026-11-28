@@ -23,6 +23,8 @@ from collections.abc import Callable, Generator, Mapping
 from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 
+from nbkp.config.xdg import resolve_xdg_dir
+
 #: The lock file, relative to the XDG state directory (``$XDG_STATE_HOME``, else
 #: ``~/.local/state``). The generated script renders the same path.
 RUN_LOCK_STATE_SUBPATH = "nbkp/run.lock"
@@ -32,11 +34,9 @@ def resolve_run_lock_path(environ: Mapping[str, str], home: Path) -> Path:
     """
     Return ``$XDG_STATE_HOME/nbkp/run.lock``, else ``~/.local/state/nbkp/run.lock``.
 
-    As for ``$XDG_CONFIG_HOME``, the XDG spec says an empty or relative
-    ``$XDG_STATE_HOME`` is invalid and must be ignored.
+    An empty or relative ``$XDG_STATE_HOME`` is ignored, as the XDG spec asks.
     """
-    xdg = Path(environ.get("XDG_STATE_HOME", ""))
-    state_home = xdg if xdg.is_absolute() else home / ".local" / "state"
+    state_home = resolve_xdg_dir(environ, "XDG_STATE_HOME", home / ".local" / "state")
     return state_home / RUN_LOCK_STATE_SUBPATH
 
 
