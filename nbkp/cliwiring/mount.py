@@ -161,6 +161,7 @@ def managed_mount_or_exit(
             # mounted.
             mounts_drives=mount and bool(managed_volumes(cfg, resolved)),
         ),
+        only_mounting=not writes,
     ):
         yield from _managed_mount_reporting_umount_failures(
             cfg,

@@ -22,11 +22,14 @@ def run_lock_or_exit(
     output: OutputFormat,
     *,
     needed: bool = True,
+    only_mounting: bool = False,
 ) -> Generator[None]:
     """
     Hold *lock* at *path*, when *needed*, for the block.
 
-    Exit 1 before the block starts when another command holds it.
+    Exit 1 before the block starts when another command holds it. *only_mounting*
+    says the command needs the lock only to mount, so the message also says that
+    ``--no-mount`` lets it run alongside the other command.
 
     *lock* and *path* are the runtime's :attr:`~.runtime.Runtime.run_lock`
     and :meth:`~.runtime.Runtime.run_lock_path`; they are passed in because
@@ -37,13 +40,18 @@ def run_lock_or_exit(
             try:
                 stack.enter_context(lock(path))
             except RunLockError as e:
-                _print_run_lock_error(e, output)
+                _print_run_lock_error(e, output, only_mounting=only_mounting)
                 raise typer.Exit(1) from None
         yield
 
 
-def _print_run_lock_error(e: RunLockError, output: OutputFormat) -> None:
-    message = _format_run_lock_error(e)
+def _print_run_lock_error(
+    e: RunLockError,
+    output: OutputFormat,
+    *,
+    only_mounting: bool,
+) -> None:
+    message = _format_run_lock_error(e, only_mounting=only_mounting)
     match output:
         case OutputFormat.JSON:
             echo_json(
@@ -59,13 +67,19 @@ def _print_run_lock_error(e: RunLockError, output: OutputFormat) -> None:
             typer.echo(f"Error: {message}", err=True)
 
 
-def _format_run_lock_error(e: RunLockError) -> str:
+def _format_run_lock_error(e: RunLockError, *, only_mounting: bool) -> str:
     match e.kind:
         case RunLockErrorKind.RUN_IN_PROGRESS:
+            alongside = (
+                " Or run it with --no-mount, which leaves the drives as they are"
+                " and runs alongside the other command."
+                if only_mounting
+                else ""
+            )
             return (
                 "another nbkp command (a run, a mount, a prune, …) is in"
                 f" progress (it holds {e.path}). Wait for it to finish,"
-                " then try again."
+                f" then try again.{alongside}"
             )
         case RunLockErrorKind.LOCK_UNAVAILABLE:
             return (

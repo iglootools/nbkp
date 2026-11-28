@@ -209,7 +209,9 @@ When another command holds the lock, the command stops before mounting,
 prompting for a passphrase or checking anything and exits 1 with
 `another nbkp command (a run, a mount, a prune, …) is in progress` on stderr, or
 a JSON `{"error": ...}` object (reason `run-in-progress`, with `lock_path`)
-under `-o json`: wait for the other command to finish. A lock file that cannot
+under `-o json`: wait for the other command to finish. A command that holds
+the lock only to mount (a dry run, a check, `snapshots show`) also says that
+`--no-mount` lets it run alongside. A lock file that cannot
 be created or locked fails the same way (reason `run-lock-unavailable`) rather
 than running unprotected. The lock goes with the process, so a command that is
 killed releases it; there is no stale lock to remove. The lock is per user and
