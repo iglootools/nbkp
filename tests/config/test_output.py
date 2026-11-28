@@ -7,8 +7,12 @@ import pytest
 from pydantic import BaseModel, ValidationError
 from rich.console import Console
 
-from nbkp.config import ConfigError, ConfigErrorKind
-from nbkp.config.output import config_error_json, format_config_error
+from nbkp.config import ConfigError, ConfigErrorKind, MountConfig, RemoteVolume
+from nbkp.config.output import (
+    config_error_json,
+    format_config_error,
+    format_volume_display,
+)
 
 
 def _render(e: ConfigError) -> str:
@@ -74,3 +78,18 @@ def _validation_error() -> ConfigError:
     )
     e.__cause__ = exc.value
     return e
+
+
+class TestFormatVolumeDisplay:
+    def test_remote_volume_without_path_shows_discovery(self) -> None:
+        """A mount-managed remote volume may omit ``path``: never print ``None``."""
+        vol = RemoteVolume(
+            slug="nas-drive",
+            ssh_endpoint="nas",
+            mount=MountConfig(device_uuid="12345678-1234-1234-1234-123456789abc"),
+        )
+        assert format_volume_display(vol, {}) == "nas:(discovered at runtime)"
+
+    def test_remote_volume_with_path(self) -> None:
+        vol = RemoteVolume(slug="nas-drive", ssh_endpoint="nas", path="/backup")
+        assert format_volume_display(vol, {}) == "nas:/backup"

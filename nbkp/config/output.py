@@ -63,9 +63,9 @@ def format_volume_display(
         case RemoteVolume():
             ep = resolved_endpoints.get(vol.slug)
             if ep is None:
-                return f"{vol.ssh_endpoint}:{vol.path}"
+                return f"{vol.ssh_endpoint}:{_display_path(vol)}"
             else:
-                return f"{ep.server.host_label}:{vol.path}"
+                return f"{ep.server.host_label}:{_display_path(vol)}"
         case LocalVolume():
             return _display_path(vol)
 
