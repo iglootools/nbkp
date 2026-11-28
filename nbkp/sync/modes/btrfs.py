@@ -29,18 +29,47 @@ def run_btrfs_sync(
     """
     Rsync into ``staging/``, snapshot it read-only, and return the sync's result.
 
-    A dry run stops after rsync. The snapshot is not taken when it would not
-    come after the destination's latest one (a ``SNAPSHOT`` failure).
+    The snapshot is not taken when it would not come after the destination's
+    latest one (a ``SNAPSHOT`` failure). A dry run stops after rsync and that
+    check, which only reads, so it does not report success for a run that will
+    be refused.
     """
     sync = status.config
+    latest = status.destination_latest_snapshot
     match rsync_step(sync, ctx, dest_suffix=STAGING_DIR):
         case SyncResult() as failure:
             return failure
         case proc if ctx.dry_run:
-            return rsync_succeeded(sync, proc, ctx)
+            return _btrfs_dry_run_check(sync, latest, proc, ctx)
         case proc:
-            latest = status.destination_latest_snapshot
             return _btrfs_post_rsync(sync, dst, latest, proc, ctx)
+
+
+def _btrfs_dry_run_check(
+    sync: SyncConfig,
+    latest: Snapshot | None,
+    proc: subprocess.CompletedProcess[str],
+    ctx: RunContext,
+) -> SyncResult:
+    try:
+        ensure_after_latest(
+            sync,
+            ctx.config,
+            now=ctx.clock(),
+            platform=ctx.platform,
+            latest=latest,
+            op=SnapshotOp.CREATE,
+        )
+    except SnapshotOperationError as e:
+        return failed_after_rsync(
+            sync,
+            proc,
+            ctx,
+            SyncFailureKind.SNAPSHOT,
+            f"Snapshot failed: {e}",
+        )
+    else:
+        return rsync_succeeded(sync, proc, ctx)
 
 
 def _btrfs_post_rsync(

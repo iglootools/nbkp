@@ -580,16 +580,16 @@ class TestBtrfs:
         script = generate_script(config, _OPTIONS, now=_NOW)
         step = dedent("""\
             # Btrfs snapshot (skip if dry-run)
-            if [ "$NBKP_DRY_RUN" = false ]; then
-                NBKP_TS=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
-                NBKP_LATEST_LINK=$(readlink /mnt/dst/latest 2>/dev/null || true)
-                if [ -n "$NBKP_LATEST_LINK" ] && [ "$NBKP_LATEST_LINK" != "/dev/null" ]; then
-                    NBKP_LATEST_NAME="${NBKP_LATEST_LINK##*/}"
-                    if ! nbkp_snapshot_after "$NBKP_TS" "$NBKP_LATEST_NAME"; then
-                        nbkp_log "ERROR: new snapshot $NBKP_TS would not be after the latest snapshot $NBKP_LATEST_NAME; is the clock behind?"
-                        return 1
-                    fi
+            NBKP_TS=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+            NBKP_LATEST_LINK=$(readlink /mnt/dst/latest 2>/dev/null || true)
+            if [ -n "$NBKP_LATEST_LINK" ] && [ "$NBKP_LATEST_LINK" != "/dev/null" ]; then
+                NBKP_LATEST_NAME="${NBKP_LATEST_LINK##*/}"
+                if ! nbkp_snapshot_after "$NBKP_TS" "$NBKP_LATEST_NAME"; then
+                    nbkp_log "ERROR: new snapshot $NBKP_TS would not be after the latest snapshot $NBKP_LATEST_NAME; is the clock behind?"
+                    return 1
                 fi
+            fi
+            if [ "$NBKP_DRY_RUN" = false ]; then
                 btrfs subvolume snapshot -r /mnt/dst/staging "/mnt/dst/snapshots/${NBKP_TS}"
             fi
         """)  # noqa: E501 -- the generated script, line for line

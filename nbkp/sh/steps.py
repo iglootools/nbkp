@@ -177,7 +177,8 @@ def _after_latest_guard(spec: SyncSpec) -> str:
     clock behind would move ``latest`` back in time, and the next orphan
     cleanup would remove every complete snapshot after it; an equal name
     would reuse the latest snapshot.  ``nbkp_snapshot_after`` compares the
-    names by time, whichever name form each uses.
+    names by time, whichever name form each uses. Run in dry runs too, as in
+    ``nbkp run``: it only reads ``latest``.
     """
     error = (
         "ERROR: new snapshot $NBKP_TS would not be after the latest"
@@ -207,8 +208,8 @@ def _mkdir_block(spec: SyncSpec) -> str:
     return "\n".join(
         [
             _timestamp_line(spec),
+            _after_latest_guard(spec),
             'if [ "$NBKP_DRY_RUN" = false ]; then',
-            _indent(_after_latest_guard(spec), 1),
             _indent(mkdir_parent, 1),
             _indent(mkdir, 1),
             "fi",
@@ -329,9 +330,9 @@ def _btrfs_snapshot_block(spec: SyncSpec) -> str:
     )
     return "\n".join(
         [
+            _timestamp_line(spec),
+            _after_latest_guard(spec),
             'if [ "$NBKP_DRY_RUN" = false ]; then',
-            _indent(_timestamp_line(spec), 1),
-            _indent(_after_latest_guard(spec), 1),
             _indent(snap, 1),
             "fi",
         ],

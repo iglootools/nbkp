@@ -174,6 +174,31 @@ class TestHardLinkSync:
         assert results[0].failure == SyncFailureKind.MKDIR
         assert rsync.calls == []
 
+    def test_dry_run_reports_snapshot_not_after_latest(self) -> None:
+        """A dry run must not report success for a run that will be refused."""
+        config = _make_hard_link_config()
+        _, statuses = active_statuses(config)
+        same = Snapshot.from_name(NEW_SNAPSHOT_NAME)  # what the clock would name
+        statuses = {
+            k: v.model_copy(update={"destination_latest_snapshot": same})
+            for k, v in statuses.items()
+        }
+        rsync = FakeRsync()
+        runner = FakeCommandRunner()
+
+        results = run_syncs(
+            config,
+            statuses,
+            dry_run=True,
+            rsync=rsync,
+            run_command=runner,
+        )
+
+        assert results[0].failure == SyncFailureKind.MKDIR
+        assert "is the clock behind?" in (results[0].detail or "")
+        assert rsync.calls == []
+        assert runner.commands == []
+
     def test_refuses_snapshot_not_after_latest(self) -> None:
         """Same name as latest, or a clock behind it: no snapshot, no rsync."""
         config = _make_hard_link_config()

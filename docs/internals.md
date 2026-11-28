@@ -115,7 +115,9 @@ set by NTP, a manual change) or the name would equal it (two runs within the
 same name resolution), the sync fails before writing — `failure`: `mkdir` for
 hard-link, `snapshot` for btrfs — and `latest` stays where it was. Otherwise
 `latest` would move back in time, and the next orphan cleanup would remove every
-complete snapshot newer than it. The generated script applies the same rule.
+complete snapshot newer than it. A dry run applies the check too, since it only
+reads `latest`, so it fails where the real run would. The generated script
+applies the same rule.
 
 **Best-effort steps** — Pruning, removal of the snapshot directory after a
 failed rsync, and orphan cleanup when `latest` is absent or the listing fails

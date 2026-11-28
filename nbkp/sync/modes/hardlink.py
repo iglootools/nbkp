@@ -108,11 +108,11 @@ def _prepare_snapshot_dir(
     Return the new snapshot's path, created on disk unless dry-running.
 
     A snapshot that would not come after *latest* is refused (see
-    :func:`~nbkp.snapshots.common.ensure_after_latest`).
+    :func:`~nbkp.snapshots.common.ensure_after_latest`), in a dry run too: the
+    check only reads, and a dry run must not report success for a run that will
+    be refused.
     """
     now = ctx.clock()
-    if ctx.dry_run:
-        return snapshot_path_for(sync, ctx.config, now=now, platform=ctx.platform)
     try:
         ensure_after_latest(
             sync,
@@ -122,13 +122,17 @@ def _prepare_snapshot_dir(
             latest=latest,
             op=SnapshotOp.MKDIR,
         )
-        return create_snapshot_dir(
-            sync,
-            ctx.config,
-            now=now,
-            platform=ctx.platform,
-            resolved_endpoints=ctx.resolved_endpoints,
-            run=ctx.run_command,
+        return (
+            snapshot_path_for(sync, ctx.config, now=now, platform=ctx.platform)
+            if ctx.dry_run
+            else create_snapshot_dir(
+                sync,
+                ctx.config,
+                now=now,
+                platform=ctx.platform,
+                resolved_endpoints=ctx.resolved_endpoints,
+                run=ctx.run_command,
+            )
         )
     except SnapshotOperationError as e:
         return SyncResult.failed(

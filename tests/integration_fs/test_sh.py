@@ -881,6 +881,21 @@ class TestGeneratedScriptExecution:
         assert _snapshot_names(tmp_path) == [future]
         assert str(Path(latest).readlink()) == f"{SNAPSHOTS_DIR}/{future}"
 
+    def test_dry_run_reports_snapshot_not_after_latest(self, tmp_path: Path) -> None:
+        """As in `nbkp run`: the dry run fails where the real run would."""
+        config = _seeded_chain(tmp_path)
+        future = "2099-01-01T00-00-00.000Z"
+        (_stage(tmp_path) / SNAPSHOTS_DIR / future).mkdir()
+        latest = _stage(tmp_path) / LATEST_LINK
+        latest.unlink()
+        latest.symlink_to(f"{SNAPSHOTS_DIR}/{future}")
+
+        result = _run_script(config, tmp_path, "--dry-run")
+
+        assert result.returncode == 1
+        assert "is the clock behind?" in result.stderr
+        assert _snapshot_names(tmp_path) == [future]
+
     def test_existing_snapshot_dir_is_not_reused(self, tmp_path: Path) -> None:
         """
         Mkdir without -p: a name collision fails the sync.

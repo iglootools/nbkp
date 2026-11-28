@@ -87,7 +87,7 @@ class TestHardLinkDryRun:
         orphan = "2099-01-01T00-00-00.000Z"
         (tmp_path / "dst" / SNAPSHOTS_DIR / orphan).mkdir()
 
-        results = _run(config, dry_run=True)
+        results = _run(config, dry_run=True, now=datetime(2026, 3, 7, tzinfo=UTC))
 
         assert results[0].outcome == SyncOutcome.SUCCESS
         assert _snapshots(tmp_path) == sorted([first, orphan])
@@ -171,6 +171,18 @@ class TestClockBehindLatest:
 
         assert later[0].outcome == SyncOutcome.SUCCESS
         assert complete in _snapshots(tmp_path)
+
+    def test_dry_run_reports_the_refusal(self, tmp_path: Path) -> None:
+        """A dry run must not report success for a run that will be refused."""
+        config = _config(tmp_path)
+        _run(config)
+        [complete] = _snapshots(tmp_path)
+
+        behind = _run(config, dry_run=True, now=datetime(2025, 1, 1, tzinfo=UTC))
+
+        assert behind[0].failure == SyncFailureKind.MKDIR
+        assert "is the clock behind?" in (behind[0].detail or "")
+        assert _snapshots(tmp_path) == [complete]
 
     def test_same_name_as_latest_is_refused(self, tmp_path: Path) -> None:
         config = _config(tmp_path)
