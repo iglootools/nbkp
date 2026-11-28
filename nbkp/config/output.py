@@ -39,6 +39,7 @@ class SelectedEndpoint(Protocol):
 
 
 type SelectedEndpoints = Mapping[str, SelectedEndpoint]
+"""Selected endpoint per remote volume slug (``remote.endpoints.SelectedEndpoints``)."""
 
 _CONFIG_REFERENCE_URL = (
     "https://github.com/iglootools/nbkp/blob/main/docs/config-reference.md"
@@ -46,7 +47,6 @@ _CONFIG_REFERENCE_URL = (
 _CONFIG_EXAMPLES_URL = (
     "https://github.com/iglootools/nbkp/tree/main/docs/config-examples"
 )
-"""Selected endpoint per remote volume slug (``remote.endpoints.SelectedEndpoints``)."""
 
 
 def format_volume_display(
