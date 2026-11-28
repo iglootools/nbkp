@@ -115,8 +115,9 @@ def sh_cmd(
             resolved_endpoints=resolved,
         )
     except VolumeWithoutPathError as e:
+        # A configuration error: the fix is to add `path` to the volume.
         typer.echo(_format_volume_without_path(e), err=True)
-        raise typer.Exit(1) from e
+        raise typer.Exit(2) from e
     if output_file is not None:
         try:
             write_script_file(output_file, script)
